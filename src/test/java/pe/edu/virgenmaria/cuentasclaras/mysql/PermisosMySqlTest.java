@@ -466,6 +466,315 @@ class PermisosMySqlTest {
 				+ "'a', NOW(6), 'b', NOW(6), 1, NOW(6), 'c', NOW(6))", anioId))).isEqualTo(1644);
 	}
 
+	// ================================================================== Sprint 3 · caja (tanda 1)
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioCobro cobro;
+
+	/** Familia con dos hermanos (Rosa) y otra familia (Pedro), con cuotas de un año libre (todas ya vencidas). */
+	private record FamiliasCaja(Long familia, Long hermano1, Long hermano2, Long otraFamilia, Long otroAlumno) {
+	}
+
+	/**
+	 * Un solo escenario para todas las pruebas de caja (cada una usa cuotas distintas): cada escenario gasta un año libre
+	 * y la regla de edad del alumno deja pocos años válidos en una base que no se limpia.
+	 */
+	private static FamiliasCaja familiasCompartidas;
+
+	private synchronized FamiliasCaja familiasDeCaja() {
+		if (familiasCompartidas == null) {
+			familiasCompartidas = crearFamiliasDeCaja();
+		}
+		return familiasCompartidas;
+	}
+
+	private FamiliasCaja crearFamiliasDeCaja() {
+		int anio = anioLibre();
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		Long anioId = estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
+				java.time.LocalDate.of(anio, 3, 2), java.time.LocalDate.of(anio, 12, 18), false));
+		Long seccion = estructura.crearSeccion(anioId, new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest(
+				pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "A"));
+		String base = String.format("%07d", Math.floorMod(System.nanoTime() + 41, 10_000_000L));
+		var uno = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoNuevo("7" + base, "Quispe", "Huamán", "Mateo", java.time.LocalDate.of(anio - 10, 6, 14),
+						"4" + base, "Huamán", "Ccori", "Rosa", "987654321", null, seccion));
+		var dos = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoRegistrado("8" + base, "Quispe", "Huamán", "Valeria", java.time.LocalDate.of(anio - 10, 1, 3),
+						"4" + base, seccion));
+		var otro = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoNuevo("6" + base, "Flores", "Rojas", "Sebastián", java.time.LocalDate.of(anio - 11, 8, 21),
+						"3" + base, "Flores", "Díaz", "Pedro", "912345678", null, seccion));
+		EscenarioCobranza.planAprobado(planes, anioId, anio, Nivel.PRIMARIA, "450", "350", null);
+		SecurityContextHolder.clearContext();
+		return new FamiliasCaja(uno.familiaId(), uno.alumnoId(), dos.alumnoId(), otro.familiaId(), otro.alumnoId());
+	}
+
+	private Long cuotaDe(Long alumno, int numero) {
+		return jdbc.queryForObject("SELECT id FROM cuota WHERE alumno_id = ? AND tipo = 'PENSION' AND numero = ?", Long.class,
+				alumno, numero);
+	}
+
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado cajera(String nombre) {
+		return UsuariosDePrueba.autenticado(1L, 300L, nombre + "." + sufijo, "Cajera " + nombre, false,
+				EnumSet.of(Rol.CAJA));
+	}
+
+	private Long cobrarEfectivo(Long familia, java.util.List<Long> cuotas, String total) {
+		return cobro.cobrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.efectivo(familia, cuotas, total,
+				total));
+	}
+
+	@Test
+	void deleteSobreTablasDeCajaFallaCon1142() {
+		for (String tabla : new String[] { "serie_comprobante", "comprobante", "comprobante_linea", "caja_diaria", "pago",
+				"aplicacion_pago" }) {
+			assertThat(codigoAl(() -> jdbc.update("DELETE FROM " + tabla + " WHERE 1 = 0"))).as(tabla).isEqualTo(1142);
+		}
+	}
+
+	@Test
+	void updateDeTablasDeSoloInsercionFallaCon1142() {
+		for (String tabla : new String[] { "comprobante_linea", "aplicacion_pago" }) {
+			assertThat(codigoAl(() -> jdbc.update("UPDATE " + tabla + " SET version = version WHERE 1 = 0"))).as(tabla)
+					.isEqualTo(1142);
+		}
+	}
+
+	@Test
+	void columnasInmutablesDePagoComprobanteYCajaFallanCon1143() {
+		for (String sentencia : new String[] { "UPDATE pago SET total = total WHERE 1 = 0",
+				"UPDATE pago SET familia_id = familia_id WHERE 1 = 0", "UPDATE pago SET comprobante_id = comprobante_id WHERE 1 = 0",
+				"UPDATE pago SET medio = medio WHERE 1 = 0", "UPDATE pago SET vuelto = vuelto WHERE 1 = 0",
+				"UPDATE pago SET caja_diaria_id = caja_diaria_id WHERE 1 = 0",
+				"UPDATE pago SET clave_idempotencia = clave_idempotencia WHERE 1 = 0",
+				"UPDATE comprobante SET numero = numero WHERE 1 = 0", "UPDATE comprobante SET total = total WHERE 1 = 0",
+				"UPDATE comprobante SET receptor_numero_documento = receptor_numero_documento WHERE 1 = 0",
+				"UPDATE serie_comprobante SET serie = serie WHERE 1 = 0", "UPDATE caja_diaria SET fecha = fecha WHERE 1 = 0",
+				"UPDATE caja_diaria SET cajero = cajero WHERE 1 = 0", "UPDATE caja_diaria SET fondo_fijo = fondo_fijo WHERE 1 = 0",
+				"UPDATE cuota SET monto = monto WHERE 1 = 0" }) {
+			assertThat(codigoAl(() -> jdbc.update(sentencia))).as(sentencia).isEqualTo(1143);
+		}
+		// Lo que sí cambia (envío al OSE, anulación, número de la serie, estado de la caja y lo pagado de la cuota).
+		assertThatCode(() -> {
+			jdbc.update("UPDATE comprobante SET estado_envio = estado_envio, intentos = intentos, respuesta = respuesta "
+					+ "WHERE 1 = 0");
+			jdbc.update("UPDATE pago SET estado = estado, operacion_vigente = operacion_vigente WHERE 1 = 0");
+			jdbc.update("UPDATE serie_comprobante SET ultimo_numero = ultimo_numero WHERE 1 = 0");
+			jdbc.update("UPDATE caja_diaria SET estado = estado WHERE 1 = 0");
+			jdbc.update("UPDATE cuota SET monto_pagado = monto_pagado, monto_descuento = monto_descuento WHERE 1 = 0");
+		}).doesNotThrowAnyException();
+	}
+
+	/** El pendiente del sprint 2: ni con SQL directo una cuota queda PAGADA (o PARCIAL) sin su pago en el libro. */
+	@Test
+	void cuotaPagadaSinAplicacionFallaCon1644() {
+		FamiliasCaja familias = familiasDeCaja();
+		Long cuota = cuotaDe(familias.hermano1(), 4);
+
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cuota SET estado = 'PAGADA', monto_pagado = monto WHERE id = ?",
+				cuota))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cuota SET estado = 'PARCIAL', monto_pagado = 100 WHERE id = ?",
+				cuota))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cuota SET estado = 'EXONERADA', monto_descuento = monto WHERE id = ?",
+				cuota))).isEqualTo(1644);
+		// Tampoco nace pagada.
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO cuota (colegio_id, alumno_id, anio_escolar_id, matricula_id, "
+				+ "plan_pension_id, tipo, numero, descripcion, monto, monto_pagado, monto_descuento, fecha_vencimiento, estado, "
+				+ "clave, obligacion, creado_en, creado_por, actualizado_en) SELECT colegio_id, alumno_id, anio_escolar_id, "
+				+ "matricula_id, plan_pension_id, tipo, numero, descripcion, monto, monto, 0, fecha_vencimiento, 'PAGADA', "
+				+ "CONCAT(clave, 'x'), NULL, creado_en, creado_por, actualizado_en FROM cuota WHERE id = ?", cuota)))
+				.isEqualTo(1644);
+		assertThat(jdbc.queryForMap("SELECT estado, monto_pagado FROM cuota WHERE id = ?", cuota))
+				.containsEntry("estado", "PENDIENTE");
+		// Cobrada de verdad, sí.
+		UsuariosDePrueba.iniciarSesion(cajera("caja.libro"));
+		cobrarEfectivo(familias.familia(), java.util.List.of(cuota), "450.00");
+		assertThat(jdbc.queryForObject("SELECT estado FROM cuota WHERE id = ?", String.class, cuota)).isEqualTo("PAGADA");
+	}
+
+	@Test
+	void aplicacionACuotaDeOtraFamiliaFallaCon1644() {
+		FamiliasCaja familias = familiasDeCaja();
+		UsuariosDePrueba.iniciarSesion(cajera("caja.familia"));
+		Long pago = cobrarEfectivo(familias.familia(), java.util.List.of(cuotaDe(familias.hermano1(), 3)), "450.00");
+
+		String aplicar = "INSERT INTO aplicacion_pago (colegio_id, pago_id, cuota_id, tipo, monto, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (1, ?, ?, 'APLICACION', ?, NOW(6), 'x', NOW(6))";
+		// A la cuota de otra familia.
+		assertThat(codigoAl(() -> jdbc.update(aplicar, pago, cuotaDe(familias.otroAlumno(), 3), 1))).isEqualTo(1644);
+		// Más de lo que se pagó (a otra cuota de la misma familia).
+		assertThat(codigoAl(() -> jdbc.update(aplicar, pago, cuotaDe(familias.hermano2(), 3), 1))).isEqualTo(1644);
+		// Una reversión sin anulación (tanda 1: aún no hay anulaciones).
+		Long original = jdbc.queryForObject("SELECT id FROM aplicacion_pago WHERE pago_id = ?", Long.class, pago);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO aplicacion_pago (colegio_id, pago_id, cuota_id, tipo, monto, "
+				+ "revierte_id, creado_en, creado_por, actualizado_en) SELECT colegio_id, pago_id, cuota_id, 'REVERSION', "
+				+ "-monto, id, NOW(6), 'x', NOW(6) FROM aplicacion_pago WHERE id = ?", original))).isEqualTo(1644);
+		// Ni un pago que cambia de estado sin su anulación.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE pago SET estado = 'ANULADO', operacion_vigente = NULL WHERE id = ?",
+				pago))).isEqualTo(1644);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM aplicacion_pago WHERE pago_id = ?", Long.class, pago))
+				.isEqualTo(1);
+	}
+
+	@Test
+	void pagoConTotalDistintoDeSuBoletaFallaCon1644() {
+		FamiliasCaja familias = familiasDeCaja();
+		UsuariosDePrueba.iniciarSesion(cajera("caja.total"));
+		Long pago = cobrarEfectivo(familias.familia(), java.util.List.of(cuotaDe(familias.hermano1(), 5)), "450.00");
+
+		// Un pago «de menos» que reusa la boleta de otro: el trigger lo rechaza antes que el UNIQUE.
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, "
+				+ "comprobante_id, medio, total, recibido, vuelto, origen, clave_idempotencia, estado, creado_en, creado_por, "
+				+ "actualizado_en) SELECT colegio_id, familia_id, caja_diaria_id, cajero, fecha, comprobante_id, medio, 100, "
+				+ "100, 0, origen, ?, estado, NOW(6), creado_por, NOW(6) FROM pago WHERE id = ?", "menos-" + sufijo, pago)))
+				.isEqualTo(1644);
+		// Ni nace anulado.
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, "
+				+ "comprobante_id, medio, total, recibido, vuelto, origen, clave_idempotencia, estado, creado_en, creado_por, "
+				+ "actualizado_en) SELECT colegio_id, familia_id, caja_diaria_id, cajero, fecha, comprobante_id, medio, total, "
+				+ "recibido, vuelto, origen, ?, 'ANULADO', NOW(6), creado_por, NOW(6) FROM pago WHERE id = ?",
+				"anulado-" + sufijo, pago))).isEqualTo(1644);
+	}
+
+	/** Tanda 1: el cierre ciego llega con V11. Hasta entonces la caja no se cierra (ni nace cerrada) por SQL. */
+	@Test
+	void cajaNoSeCierraSinCierreRegistradoFallaCon1644() {
+		FamiliasCaja familias = familiasDeCaja();
+		UsuariosDePrueba.iniciarSesion(cajera("caja.cierre"));
+		Long pago = cobrarEfectivo(familias.familia(), java.util.List.of(cuotaDe(familias.hermano1(), 6)), "450.00");
+		Long caja = jdbc.queryForObject("SELECT caja_diaria_id FROM pago WHERE id = ?", Long.class, pago);
+
+		assertThat(codigoAl(() -> jdbc.update("UPDATE caja_diaria SET estado = 'CERRADA', cierres = 1 WHERE id = ?", caja)))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE caja_diaria SET conteos = 1, primer_conteo = 10 WHERE id = ?", caja)))
+				.isEqualTo(1644);
+		assertThat(jdbc.queryForObject("SELECT estado FROM caja_diaria WHERE id = ?", String.class, caja))
+				.isEqualTo("ABIERTA");
+	}
+
+	@Test
+	void comprobanteQueSaltaUnNumeroFallaCon1644() {
+		FamiliasCaja familias = familiasDeCaja();
+		UsuariosDePrueba.iniciarSesion(cajera("caja.numero"));
+		Long pago = cobrarEfectivo(familias.familia(), java.util.List.of(cuotaDe(familias.hermano1(), 7)), "450.00");
+		Long comprobante = jdbc.queryForObject("SELECT comprobante_id FROM pago WHERE id = ?", Long.class, pago);
+		Long serie = jdbc.queryForObject("SELECT serie_id FROM comprobante WHERE id = ?", Long.class, comprobante);
+
+		String copia = "INSERT INTO comprobante (colegio_id, serie_id, tipo, serie, numero, fecha_emision, "
+				+ "receptor_tipo_documento, receptor_numero_documento, receptor_nombre, moneda, total, afectacion_igv, proveedor, "
+				+ "estado_envio, creado_en, creado_por, actualizado_en) SELECT colegio_id, serie_id, tipo, serie, numero + %d, "
+				+ "fecha_emision, receptor_tipo_documento, receptor_numero_documento, receptor_nombre, moneda, total, "
+				+ "afectacion_igv, proveedor, 'PENDIENTE', NOW(6), creado_por, NOW(6) FROM comprobante WHERE id = ?";
+		// Saltar un número (deja un hueco) o reusar uno: el trigger lo rechaza.
+		assertThat(codigoAl(() -> jdbc.update(String.format(copia, 2), comprobante))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(String.format(copia, -1), comprobante))).isEqualTo(1644);
+		// La serie solo avanza de uno en uno.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE serie_comprobante SET ultimo_numero = ultimo_numero + 2 WHERE id = ?",
+				serie))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE serie_comprobante SET ultimo_numero = ultimo_numero - 1 WHERE id = ?",
+				serie))).isEqualTo(1644);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM comprobante WHERE serie_id = ?", Long.class, serie))
+				.isEqualTo(jdbc.queryForObject("SELECT ultimo_numero FROM serie_comprobante WHERE id = ?", Long.class, serie));
+	}
+
+	/** Dos cajeras cobran la misma cuota a la vez en MySQL real (SELECT ... FOR UPDATE): solo una lo logra. */
+	@Test
+	void dobleCobroConcurrenteSoloUnoLoLograEnMySql() throws Exception {
+		FamiliasCaja familias = familiasDeCaja();
+		Long cuota = cuotaDe(familias.hermano2(), 8);
+		java.util.concurrent.CountDownLatch largada = new java.util.concurrent.CountDownLatch(1);
+		java.util.concurrent.ExecutorService hilos = java.util.concurrent.Executors.newFixedThreadPool(2);
+		java.util.List<Object> resultados = new java.util.ArrayList<>();
+		try {
+			java.util.List<java.util.concurrent.Future<Long>> futuros = new java.util.ArrayList<>();
+			for (String nombre : new String[] { "caja.a", "caja.b" }) {
+				var cajera = cajera(nombre);
+				futuros.add(hilos.submit(() -> {
+					largada.await();
+					UsuariosDePrueba.iniciarSesion(cajera);
+					try {
+						return cobrarEfectivo(familias.familia(), java.util.List.of(cuota), "450.00");
+					}
+					finally {
+						SecurityContextHolder.clearContext();
+					}
+				}));
+			}
+			largada.countDown();
+			for (var futuro : futuros) {
+				try {
+					resultados.add(futuro.get(60, java.util.concurrent.TimeUnit.SECONDS));
+				}
+				catch (java.util.concurrent.ExecutionException e) {
+					resultados.add(e.getCause());
+				}
+			}
+		}
+		finally {
+			hilos.shutdownNow();
+		}
+		assertThat(resultados).filteredOn(Long.class::isInstance).hasSize(1);
+		assertThat(resultados).filteredOn(pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException.class::isInstance)
+				.hasSize(1);
+		assertThat(jdbc.queryForMap("SELECT estado, monto_pagado FROM cuota WHERE id = ?", cuota))
+				.containsEntry("estado", "PAGADA");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM aplicacion_pago WHERE cuota_id = ?", Long.class, cuota))
+				.isEqualTo(1);
+	}
+
+	/**
+	 * Tanda 1 con los permisos mínimos de cc_app y los triggers: cobro en efectivo de dos hermanos (bloqueos FOR UPDATE
+	 * de caja, cuotas y serie; UPDATE por columna de cuota y serie), doble clic, Yape, factura y envío al OSE después del
+	 * commit. Es la prueba que detecta un saveAndFlush faltante (en H2 no hay triggers).
+	 */
+	@Test
+	void flujoCompletoDeCajaConPermisosMinimos() throws Exception {
+		FamiliasCaja familias = familiasDeCaja();
+		UsuariosDePrueba.iniciarSesion(cajera("caja.flujo"));
+		var revision = cobro.revisar(familias.familia(), new pe.edu.virgenmaria.cuentasclaras.caja.dto.SeleccionCobroRequest(
+				java.util.List.of(cuotaDe(familias.hermano1(), 9), cuotaDe(familias.hermano2(), 9)),
+				pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.EFECTIVO), null);
+		var solicitud = new pe.edu.virgenmaria.cuentasclaras.caja.dto.CobroRequest(revision.clave(), familias.familia(),
+				revision.cuotaIds(), pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.EFECTIVO, null,
+				new java.math.BigDecimal("1000"), null, revision.total(),
+				pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante.BOLETA, revision.receptorPorDefecto(),
+				null, null);
+		Long pago = cobro.cobrar(solicitud);
+		assertThat(cobro.cobrar(solicitud)).isEqualTo(pago);
+		assertThat(jdbc.queryForMap("SELECT total, vuelto, estado FROM pago WHERE id = ?", pago))
+				.containsEntry("estado", "VIGENTE")
+				.satisfies(p -> assertThat((java.math.BigDecimal) p.get("vuelto")).isEqualByComparingTo("100.00"));
+		assertThat(jdbc.queryForList("SELECT estado FROM cuota WHERE id IN (?, ?)", String.class,
+				revision.cuotaIds().get(0), revision.cuotaIds().get(1))).containsOnly("PAGADA");
+
+		// Yape y factura (serie F001 nueva) en la misma caja.
+		cobro.cobrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.digital(familias.familia(),
+				java.util.List.of(cuotaDe(familias.hermano1(), 10)), pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.YAPE,
+				"Y" + sufijo, "450.00"));
+		Long factura = cobro.cobrar(new pe.edu.virgenmaria.cuentasclaras.caja.dto.CobroRequest(java.util.UUID.randomUUID(),
+				familias.otraFamilia(), java.util.List.of(cuotaDe(familias.otroAlumno(), 9)),
+				pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.TRANSFERENCIA, "T" + sufijo, null, null,
+				new java.math.BigDecimal("450.00"), pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante.FACTURA,
+				null, "20131312955", "Comercial Flores S.A.C."));
+		assertThat(cobro.confirmacion(factura).comprobante()).startsWith("F001-");
+
+		// El envío al OSE (simulado) termina después del commit, en otro hilo.
+		Long comprobante = jdbc.queryForObject("SELECT comprobante_id FROM pago WHERE id = ?", Long.class, pago);
+		long limite = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(15);
+		while (!"ACEPTADO".equals(jdbc.queryForObject("SELECT estado_envio FROM comprobante WHERE id = ?", String.class,
+				comprobante)) && System.nanoTime() < limite) {
+			Thread.sleep(100);
+		}
+		assertThat(jdbc.queryForObject("SELECT estado_envio FROM comprobante WHERE id = ?", String.class, comprobante))
+				.isEqualTo("ACEPTADO");
+		// Ninguna serie tiene huecos.
+		assertThat(jdbc.queryForList("SELECT s.serie FROM serie_comprobante s WHERE s.colegio_id = 1 AND s.ultimo_numero <> "
+				+ "(SELECT COUNT(*) FROM comprobante c WHERE c.serie_id = s.id)", String.class)).isEmpty();
+		UsuariosDePrueba.iniciarSesion(guardar("verif.caja." + sufijo, Rol.PROMOTOR));
+		assertThat(verificador.verificar().integra()).isTrue();
+	}
+
 	private Integer codigoAl(Runnable sentencia) {
 		try {
 			sentencia.run();

@@ -24,6 +24,8 @@ import java.util.stream.Collectors;
  *       {@code UPDATE} y {@code DELETE} sobre {@code evento_auditoria} con el error 1142;</li>
  *   <li>que no puede borrar cuotas ({@code DELETE} sobre {@code cuota} → 1142) ni cambiar su monto
  *       ({@code UPDATE} de la columna {@code monto} → 1143, o 1142 si no tiene ningún UPDATE);</li>
+ *   <li>que no puede borrar ni editar el libro de pagos, los comprobantes ni las cajas, ni cambiar sus columnas
+ *       inmutables, y que están los triggers de caja (sprint 3);</li>
  *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes).</li>
  * </ul>
  * Si algo falla, la aplicación NO arranca. No hay interruptor para saltarse esta comprobación.
@@ -74,12 +76,49 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "'verificador', 1, 'CONFIRMADO', NOW(6), 'verificador', NOW(6))", "trg_lote_saldo_inicial_nace_borrador"),
 			trigger("INSERT INTO linea_saldo_inicial (colegio_id, lote_id, alumno_id, concepto, descripcion, monto, "
 					+ "fecha_vencimiento, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'OTRO', 'verificador', 1, "
-					+ "'2000-01-01', NOW(6), 'verificador', NOW(6))", "trg_linea_saldo_inicial_lote_abierto"));
+					+ "'2000-01-01', NOW(6), 'verificador', NOW(6))", "trg_linea_saldo_inicial_lote_abierto"),
+			// Sprint 3, tanda 1 (caja y comprobantes): nada se borra; el libro y las líneas son de solo inserción; los
+			// datos tributarios y del pago no cambian; y cada trigger rechaza su inserción imposible.
+			sinBorrado("serie_comprobante"), sinBorrado("comprobante"), sinBorrado("comprobante_linea"),
+			sinBorrado("caja_diaria"), sinBorrado("pago"), sinBorrado("aplicacion_pago"),
+			soloInsercion("comprobante_linea"), soloInsercion("aplicacion_pago"),
+			columna("UPDATE pago SET total = total WHERE 1 = 0", "pago"),
+			columna("UPDATE comprobante SET numero = numero WHERE 1 = 0", "comprobante"),
+			columna("UPDATE serie_comprobante SET serie = serie WHERE 1 = 0", "serie_comprobante"),
+			columna("UPDATE caja_diaria SET fecha = fecha WHERE 1 = 0", "caja_diaria"),
+			trigger("INSERT INTO cuota (colegio_id, alumno_id, anio_escolar_id, tipo, descripcion, monto, monto_pagado, "
+					+ "monto_descuento, fecha_vencimiento, estado, clave, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, "
+					+ "'PENSION', 'verificador', 1, 1, 0, '2000-01-01', 'PAGADA', 'verificador', NOW(6), 'verificador', NOW(6))",
+					"trg_cuota_nace_pendiente"),
+			trigger("INSERT INTO serie_comprobante (colegio_id, tipo, serie, proveedor, ultimo_numero, creado_en, creado_por, "
+					+ "actualizado_en) VALUES (0, 'BOLETA', 'B999', 'SIMULADO', 5, NOW(6), 'verificador', NOW(6))",
+					"trg_serie_comprobante_nace"),
+			trigger("INSERT INTO comprobante (colegio_id, serie_id, tipo, serie, numero, fecha_emision, receptor_tipo_documento, "
+					+ "receptor_numero_documento, receptor_nombre, moneda, total, afectacion_igv, proveedor, estado_envio, "
+					+ "creado_en, creado_por, actualizado_en) VALUES (0, 0, 'BOLETA', 'B999', 1, '2000-01-01', 'DNI', '00000000', "
+					+ "'verificador', 'PEN', 1, 'INAFECTO', 'SIMULADO', 'PENDIENTE', NOW(6), 'verificador', NOW(6))",
+					"trg_comprobante_correlativo"),
+			trigger("INSERT INTO caja_diaria (colegio_id, cajero, fecha, fondo_fijo, estado, cierres, conteos, creado_en, "
+					+ "creado_por, actualizado_en) VALUES (0, 'verificador', '2000-01-01', 0, 'CERRADA', 1, 0, NOW(6), "
+					+ "'verificador', NOW(6))", "trg_caja_diaria_nace"),
+			trigger("INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, comprobante_id, medio, total, "
+					+ "recibido, vuelto, origen, clave_idempotencia, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, "
+					+ "0, 'verificador', '2000-01-01', 0, 'EFECTIVO', 1, 1, 0, 'CAJA', 'verificador', 'ANULADO', NOW(6), "
+					+ "'verificador', NOW(6))", "trg_pago_registro"),
+			trigger("INSERT INTO aplicacion_pago (colegio_id, pago_id, cuota_id, tipo, monto, creado_en, creado_por, "
+					+ "actualizado_en) VALUES (0, 0, 0, 'APLICACION', 1, NOW(6), 'verificador', NOW(6))",
+					"trg_aplicacion_pago_registro"));
 
 	/** 1143 (columna sin GRANT) o 1142 (ningún UPDATE sobre la tabla, por ejemplo antes de aplicar el paso 2). */
 	private static SentenciaProhibida columna(String sql, String tabla) {
 		return new SentenciaProhibida(sql, Set.of(MYSQL_COLUMNA_DENEGADA, MYSQL_COMANDO_DENEGADO),
 				"las columnas inmutables de " + tabla + " se podrían cambiar por SQL (falta el GRANT por columna).");
+	}
+
+	/** Tabla de solo inserción: cc_app no tiene ningún UPDATE sobre ella (1142). */
+	private static SentenciaProhibida soloInsercion(String tabla) {
+		return new SentenciaProhibida("UPDATE " + tabla + " SET version = version WHERE 1 = 0",
+				Set.of(MYSQL_COMANDO_DENEGADO), "los registros de " + tabla + " se podrían editar (es de solo inserción).");
 	}
 
 	private static SentenciaProhibida sinBorrado(String tabla) {
@@ -124,6 +163,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		LOG.info("Permisos de la bitácora verificados: la aplicación no puede editar ni borrar eventos.");
 		LOG.info("Permisos de las cuotas verificados: la aplicación no puede borrarlas ni cambiar su monto.");
 		LOG.info("Permisos por columna y triggers de planes, lotes y solicitudes verificados.");
+		LOG.info("Permisos y triggers de caja y comprobantes verificados.");
 	}
 
 	public void verificarMigraciones() {

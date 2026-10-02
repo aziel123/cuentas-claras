@@ -68,9 +68,11 @@ class DatosDemoDevTest {
 		assertThat(datosDemo("jdbc:h2:mem:demo;MODE=MySQL", CLAVE_DEMO).crearSiCorresponde()).isTrue();
 
 		List<Usuario> enColegioPrincipal = ContextoColegio.en(1L, () -> usuarios.findAll());
-		assertThat(enColegioPrincipal).flatExtracting(Usuario::getRoles).containsExactlyInAnyOrder(Rol.values());
+		// Un usuario por rol, y una segunda cajera para demostrar dos cajas a la vez (sprint 3).
+		assertThat(enColegioPrincipal).flatExtracting(Usuario::getRoles).containsOnly(Rol.values())
+				.filteredOn(r -> r == Rol.CAJA).hasSize(2);
 		assertThat(enColegioPrincipal).extracting(Usuario::getNombreUsuario)
-				.containsExactlyInAnyOrder("promotor", "director", "administracion", "caja", "docente", "apoderado");
+				.containsExactlyInAnyOrder("promotor", "director", "administracion", "caja", "caja2", "docente", "apoderado");
 		assertThat(enColegioPrincipal).allSatisfy(u -> {
 			assertThat(u.isDebeCambiarClave()).isFalse();
 			assertThat(codificador.matches(CLAVE_DEMO, u.getClaveHash())).isTrue();
@@ -78,9 +80,9 @@ class DatosDemoDevTest {
 
 		long colegioB = jdbc.queryForObject("SELECT id FROM colegio WHERE nombre = 'Colegio de Prueba B'", Long.class);
 		assertThat(ContextoColegio.en(colegioB, () -> usuarios.findAll())).extracting(Usuario::getNombreUsuario)
-				.containsExactly("promotor.b");
+				.containsExactlyInAnyOrder("promotor.b", "caja.b");
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'USUARIO_CREADO'",
-				Long.class)).isEqualTo(7);
+				Long.class)).isEqualTo(9);
 	}
 
 	@Test
@@ -98,7 +100,7 @@ class DatosDemoDevTest {
 		datosDemo("jdbc:h2:mem:demo", CLAVE_DEMO).crearSiCorresponde();
 
 		assertThat(datosDemo("jdbc:h2:mem:demo", CLAVE_DEMO).crearSiCorresponde()).isFalse();
-		assertThat(ContextoColegio.comoSistema(() -> usuarios.count())).isEqualTo(7);
+		assertThat(ContextoColegio.comoSistema(() -> usuarios.count())).isEqualTo(9);
 	}
 
 	@Test

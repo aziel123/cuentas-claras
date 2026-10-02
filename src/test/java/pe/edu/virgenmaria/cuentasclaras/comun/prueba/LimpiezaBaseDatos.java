@@ -17,6 +17,16 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Sprint 3 (tanda 1): libro de pagos, cajas y comprobantes, de las hijas a las madres.
+		jdbc.update("DELETE FROM aplicacion_pago WHERE revierte_id IS NOT NULL");
+		jdbc.update("DELETE FROM aplicacion_pago");
+		jdbc.update("DELETE FROM pago WHERE reemplaza_pago_id IS NOT NULL");
+		jdbc.update("DELETE FROM pago");
+		jdbc.update("DELETE FROM caja_diaria");
+		jdbc.update("DELETE FROM comprobante_linea");
+		jdbc.update("DELETE FROM comprobante WHERE modifica_id IS NOT NULL");
+		jdbc.update("DELETE FROM comprobante");
+		jdbc.update("DELETE FROM serie_comprobante");
 		// Sprint 2: de las hijas a las madres (FK compuestas).
 		jdbc.update("DELETE FROM solicitud_cambio");
 		jdbc.update("DELETE FROM cuota");

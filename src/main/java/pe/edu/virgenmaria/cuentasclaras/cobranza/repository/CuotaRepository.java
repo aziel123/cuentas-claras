@@ -1,5 +1,7 @@
 package pe.edu.virgenmaria.cuentasclaras.cobranza.repository;
 
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
@@ -39,6 +41,26 @@ public interface CuotaRepository extends Repository<Cuota, Long> {
 	List<Cuota> findByMatriculaIdAndTipoOrderByFechaVencimientoAscIdAsc(Long matriculaId, TipoCuota tipo);
 
 	long countByAnioEscolarId(Long anioId);
+
+	/**
+	 * Cuotas a cobrar, bloqueadas ({@code SELECT ... FOR UPDATE}) en orden de id: así dos cajeras no cobran la misma
+	 * cuota y el orden de bloqueo es siempre el mismo. Sin {@code join fetch}: H2 no admite FOR UPDATE con uniones.
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select c from Cuota c where c.id in :ids order by c.id")
+	List<Cuota> bloquear(@Param("ids") Collection<Long> ids);
+
+	/** Cuotas por pagar (PENDIENTE o PARCIAL) de todos los hermanos de una familia, de la más antigua a la más nueva. */
+	@Query("select c from Cuota c join fetch c.alumno a where a.familia.id = :familia "
+			+ "and c.estado in (pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PENDIENTE, "
+			+ "pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PARCIAL) order by c.fechaVencimiento, c.id")
+	List<Cuota> porPagarDeFamilia(@Param("familia") Long familiaId);
+
+	/** Cuotas por pagar (PENDIENTE o PARCIAL) de estos alumnos: para el resumen de deuda en la búsqueda de caja. */
+	@Query("select c from Cuota c where c.alumno.id in :alumnos "
+			+ "and c.estado in (pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PENDIENTE, "
+			+ "pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PARCIAL)")
+	List<Cuota> porPagarDeAlumnos(@Param("alumnos") Collection<Long> alumnoIds);
 
 	List<Cuota> findByLineaSaldoInicialIdIn(Collection<Long> lineas);
 

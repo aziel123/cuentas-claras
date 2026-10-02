@@ -37,7 +37,12 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `lote_saldo_inicial` | INSERT y UPDATE **por columna** (estado, envío, confirmación, devolución, descarte) | Corte, referencia y total declarado inmutables |
 | `linea_saldo_inicial` | INSERT y UPDATE **solo** de `quitada` | Una deuda no se edita: se quita (y solo con el lote en preparación: trigger) |
 | `solicitud_cambio` | INSERT y UPDATE **solo** de su resolución | Tipo, datos, motivo y solicitante inmutables |
-| `cuota` | INSERT y UPDATE **solo** de `estado, monto_pagado, obligacion, anulacion_*, anulada_en, actualizado_en, version` | El monto, la fecha de vencimiento, el alumno, el origen y la clave no se cambian ni por SQL (error 1143) |
+| `cuota` | INSERT y UPDATE **solo** de `estado, monto_pagado, monto_descuento, obligacion, anulacion_*, anulada_en, actualizado_en, version` | El monto, la fecha de vencimiento, el alumno, el origen y la clave no se cambian ni por SQL (error 1143). Lo pagado y lo descontado solo pueden ser la suma de su libro (trigger) |
+| `serie_comprobante` | INSERT y UPDATE **solo** de `ultimo_numero` | La serie no cambia; el número avanza de uno en uno (trigger) |
+| `comprobante` | INSERT y UPDATE **solo** del envío al OSE (`estado_envio, intentos, enviado_en, respuesta, codigo_hash, enlace_pdf`) | Serie, número, receptor y total no cambian (1143); el número es el siguiente de la serie (trigger) |
+| `comprobante_linea`, `aplicacion_pago` | INSERT | **Solo inserción**: el libro de pagos no se edita ni se borra (1142) |
+| `caja_diaria` | INSERT y UPDATE **solo** de `estado, cierres, conteos, primer_conteo` | Cajero, fecha y fondo fijo no cambian (1143). Hasta la tanda 3 (cierre) la caja no se cierra por SQL (trigger) |
+| `pago` | INSERT y UPDATE **solo** de `estado, operacion_vigente` | Familia, caja, medio, operación, total, vuelto y comprobante no cambian (1143); nace VIGENTE con su boleta por el mismo total (trigger) |
 
 ## Triggers (paso 3, después de los permisos)
 Los aplica `cc_migrador` (no van en Flyway: H2 no los soporta):
@@ -49,6 +54,13 @@ mysql -h <host> -u cc_migrador -p cuentasclaras < scripts/mysql/03-triggers.sql
 - Un plan fuera de BORRADOR no cambia montos, fechas ni editores; un plan cerrado no cambia de estado.
 - Planes y lotes nacen en BORRADOR; un lote confirmado o descartado no cambia.
 - Las líneas solo se agregan o se quitan con su lote en preparación.
+- Sprint 3 (caja): una cuota nace PENDIENTE y lo pagado es siempre la suma de `aplicacion_pago` (**no existe una cuota
+  PAGADA sin pago**); las series nacen en 0 y avanzan de uno en uno; el comprobante usa el número que la serie acaba de
+  asignar; la caja nace ABIERTA; el pago nace VIGENTE con su boleta o factura por el mismo total; una aplicación solo va a
+  cuotas de la familia del pago y no supera su total.
+- **Los triggers del sprint 3 van por tanda** (`docs/arquitectura/sprint-3-caja.md`, sección 6.3): un trigger que nombra
+  una tabla que aún no existe hace fallar con 1146 todo UPDATE sobre su tabla. El script del repositorio es siempre el de
+  la última migración publicada: aplícalo DESPUÉS de migrar, nunca antes.
 
 Si `log_bin_trust_function_creators` no puede activarse, aplica el script como administrador.
 La aplicación en `prod` **no arranca** si faltan (los comprueba con un INSERT imposible que el trigger rechaza: 1644).
@@ -100,8 +112,11 @@ UPDATE lote_saldo_inicial SET total_declarado = total_declarado WHERE 1 = 0;
 UPDATE linea_saldo_inicial SET monto = monto WHERE 1 = 0;
 UPDATE solicitud_cambio SET datos = datos WHERE 1 = 0;
 ```
-Pendiente para el sprint 3: que una cuota pase a PAGADA solo con un pago registrado (hoy `estado` y `monto_pagado`
-tienen GRANT por columna; lo controlará el módulo de pagos).
+Sprint 3 (caja): `DELETE` sobre `serie_comprobante`, `comprobante`, `comprobante_linea`, `caja_diaria`, `pago` y
+`aplicacion_pago` da 1142; `UPDATE comprobante_linea|aplicacion_pago SET version = version` da 1142 (solo inserción);
+`UPDATE pago SET total = total`, `UPDATE comprobante SET numero = numero`, `UPDATE serie_comprobante SET serie = serie`
+y `UPDATE caja_diaria SET fecha = fecha` dan 1143; y `UPDATE cuota SET estado = 'PAGADA', monto_pagado = monto` da
+1644 (trigger `trg_cuota_libro`).
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

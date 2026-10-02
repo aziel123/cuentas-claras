@@ -1,0 +1,24 @@
+package pe.edu.virgenmaria.cuentasclaras.caja.repository;
+
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.Repository;
+import org.springframework.data.repository.query.Param;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.AplicacionPago;
+
+import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.List;
+
+/** Libro de aplicaciones del colegio actual ({@code @TenantId}). SOLO INSERCIÓN: sin borrados ni {@code @Modifying}. */
+public interface AplicacionPagoRepository extends Repository<AplicacionPago, Long> {
+
+	AplicacionPago save(AplicacionPago aplicacion);
+
+	/** Lo pagado de una cuota según el libro. {@code null} si no tiene aplicaciones. */
+	@Query("select sum(a.monto) from AplicacionPago a where a.cuota.id = :cuota")
+	BigDecimal sumaDeCuota(@Param("cuota") Long cuotaId);
+
+	@Query("select a from AplicacionPago a join fetch a.cuota c join fetch c.alumno where a.pago.id in :pagos "
+			+ "order by a.pago.id, a.id")
+	List<AplicacionPago> dePagos(@Param("pagos") Collection<Long> pagoIds);
+}

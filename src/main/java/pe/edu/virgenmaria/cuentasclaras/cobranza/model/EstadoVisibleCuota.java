@@ -7,6 +7,7 @@ public enum EstadoVisibleCuota {
 	VENCIDA("Vencida", "peligro"),
 	PARCIAL("Parcial", "alerta"),
 	PAGADA("Pagada", "exito"),
+	EXONERADA("Exonerada (beca)", "exito"),
 	ANULADA("Anulada", "neutro");
 
 	private final String etiqueta;

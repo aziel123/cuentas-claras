@@ -75,7 +75,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1: Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V9): Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Permisos por tabla de cc_app
@@ -117,6 +117,27 @@ jobs:
           comprobar 1143 "UPDATE linea_saldo_inicial SET monto = monto WHERE 1 = 0"
           comprobar 1143 "UPDATE solicitud_cambio SET datos = datos WHERE 1 = 0"
           comprobar 1644 "INSERT INTO linea_saldo_inicial (colegio_id, lote_id, alumno_id, concepto, descripcion, monto, fecha_vencimiento, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'OTRO', 'x', 1, '2000-01-01', NOW(6), 'x', NOW(6))"
+          # Sprint 3, tanda 1: caja, comprobantes y libro de pagos.
+          for tabla in serie_comprobante comprobante comprobante_linea caja_diaria pago aplicacion_pago; do
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          for tabla in comprobante_linea aplicacion_pago; do
+            comprobar 1142 "UPDATE $tabla SET version = version WHERE 1 = 0"
+          done
+          comprobar 1143 "UPDATE pago SET total = total WHERE 1 = 0"
+          comprobar 1143 "UPDATE pago SET familia_id = familia_id WHERE 1 = 0"
+          comprobar 1143 "UPDATE pago SET comprobante_id = comprobante_id WHERE 1 = 0"
+          comprobar 1143 "UPDATE comprobante SET numero = numero WHERE 1 = 0"
+          comprobar 1143 "UPDATE comprobante SET total = total WHERE 1 = 0"
+          comprobar 1143 "UPDATE serie_comprobante SET serie = serie WHERE 1 = 0"
+          comprobar 1143 "UPDATE caja_diaria SET fecha = fecha WHERE 1 = 0"
+          comprobar 1143 "UPDATE caja_diaria SET fondo_fijo = fondo_fijo WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO cuota (colegio_id, alumno_id, anio_escolar_id, tipo, descripcion, monto, monto_pagado, monto_descuento, fecha_vencimiento, estado, clave, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'PENSION', 'x', 1, 1, 0, '2000-01-01', 'PAGADA', 'x', NOW(6), 'x', NOW(6))"
+          comprobar 1644 "INSERT INTO serie_comprobante (colegio_id, tipo, serie, proveedor, ultimo_numero, creado_en, creado_por, actualizado_en) VALUES (0, 'BOLETA', 'B999', 'SIMULADO', 5, NOW(6), 'x', NOW(6))"
+          comprobar 1644 "INSERT INTO comprobante (colegio_id, serie_id, tipo, serie, numero, fecha_emision, receptor_tipo_documento, receptor_numero_documento, receptor_nombre, moneda, total, afectacion_igv, proveedor, estado_envio, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'BOLETA', 'B999', 1, '2000-01-01', 'DNI', '00000000', 'x', 'PEN', 1, 'INAFECTO', 'SIMULADO', 'PENDIENTE', NOW(6), 'x', NOW(6))"
+          comprobar 1644 "INSERT INTO caja_diaria (colegio_id, cajero, fecha, fondo_fijo, estado, cierres, conteos, creado_en, creado_por, actualizado_en) VALUES (0, 'x', '2000-01-01', 0, 'CERRADA', 1, 0, NOW(6), 'x', NOW(6))"
+          comprobar 1644 "INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, comprobante_id, medio, total, recibido, vuelto, origen, clave_idempotencia, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'x', '2000-01-01', 0, 'EFECTIVO', 1, 1, 0, 'CAJA', 'x', 'ANULADO', NOW(6), 'x', NOW(6))"
+          comprobar 1644 "INSERT INTO aplicacion_pago (colegio_id, pago_id, cuota_id, tipo, monto, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'APLICACION', 1, NOW(6), 'x', NOW(6))"
 
       - name: Arranque real en prod con cc_app (y rechazo con cc_migrador)
         env:
@@ -135,6 +156,7 @@ jobs:
           grep -q "Permisos de la bitácora verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos de las cuotas verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos por columna y triggers de planes, lotes y solicitudes verificados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Permisos y triggers de caja y comprobantes verificados" prod.log || { cat prod.log; exit 1; }
           kill "$PID_APP"
           if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \
                java -jar target/cuentas-claras-*.jar --server.port=18081 > prod-migrador.log 2>&1; then

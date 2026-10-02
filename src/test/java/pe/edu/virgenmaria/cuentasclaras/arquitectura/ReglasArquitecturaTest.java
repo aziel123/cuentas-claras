@@ -248,7 +248,9 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#devolver", APROBACION),
 			Map.entry(BASE + ".cobranza.service.ServicioAnulacionCuotas", LECTURA_ESCOLAR),
 			// Correcciones del sprint 2: la bandeja de solicitudes la resuelven Promotoría o Dirección.
-			Map.entry(BASE + ".aprobaciones.service.BandejaAprobaciones", APROBACION));
+			Map.entry(BASE + ".aprobaciones.service.BandejaAprobaciones", APROBACION),
+			// Sprint 3 (caja): solo Caja cobra. Promotoría, Dirección y Administración no cobran.
+			Map.entry(BASE + ".caja.service.ServicioCobro", "hasRole('CAJA')"));
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {
@@ -411,6 +413,99 @@ class ReglasArquitecturaTest {
 			.that().resideInAPackage("..cobranza..")
 			.should().dependOnClassesThat().resideInAPackage("..academico..")
 			.allowEmptyShould(true);
+
+	// ------------------------------------------------------------------ Sprint 3 · caja y comprobantes
+
+	/** Comprobantes es un servicio genérico: solo depende de comun (no conoce pagos, cuotas ni alumnos). */
+	@ArchTest
+	static final ArchRule comprobantesNoDependeDeCajaNiCobranza = noClasses()
+			.that().resideInAPackage(BASE + ".comprobantes..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".caja..", BASE + ".cobranza..",
+					BASE + ".alumnos..", BASE + ".aprobaciones..", BASE + ".auditoria..")
+			.because("comprobantes emite y numera; quien cobra (caja) le pasa los datos ya resueltos");
+
+	@ArchTest
+	static final ArchRule cobranzaNoDependeDeCaja = noClasses()
+			.that().resideInAPackage(BASE + ".cobranza..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".caja..", BASE + ".comprobantes..")
+			.because("caja usa las cuotas de cobranza; cobranza no conoce los pagos");
+
+	@ArchTest
+	static final ArchRule aprobacionesNoDependeDeCaja = noClasses()
+			.that().resideInAPackage(BASE + ".aprobaciones..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".caja..", BASE + ".comprobantes..")
+			.because("cada módulo aplica su cambio con un ManejadorSolicitud; aprobaciones no conoce los pagos");
+
+	@ArchTest
+	static final ArchRule baseNoDependeDeCaja = noClasses()
+			.that().resideInAnyPackage(BASE + ".seguridad..", BASE + ".auditoria..", BASE + ".comun..", BASE + ".colegio..",
+					BASE + ".alumnos..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".caja..", BASE + ".comprobantes..")
+			.because("caja y comprobantes usan la base común, nunca al revés");
+
+	/** Lo pagado de una cuota solo cambia desde el libro de pagos (después de insertar la aplicación). */
+	@ArchTest
+	static final ArchRule soloCajaServiceReflejaPagosEnCuotas = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".caja.service..")
+			.should().callMethod(BASE + ".cobranza.model.Cuota", "reflejarPagos", java.math.BigDecimal.class.getName())
+			.because("monto_pagado es la suma de aplicacion_pago: solo LibroPagos lo refleja");
+
+	/** Lo descontado de una cuota solo cambia al aprobarse un descuento (tanda 2). */
+	@ArchTest
+	static final ArchRule soloManejadorDescuentoReflejaDescuentos = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".cobranza.service.ManejadorDescuento")
+			.should().callMethod(BASE + ".cobranza.model.Cuota", "reflejarDescuentos", java.math.BigDecimal.class.getName())
+			.because("monto_descuento es la suma de ajuste_cuota: solo el manejador del descuento aprobado lo refleja");
+
+	/** LibroPagos y ServicioComprobantes escriben sin exigir rol: solo los usan los servicios de caja (que lo exigen). */
+	@ArchTest
+	static final ArchRule libroPagosYServicioComprobantesSoloDesdeCajaService = noClasses()
+			.that().resideOutsideOfPackages(BASE + ".caja.service..", BASE + ".comprobantes.service..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".caja.service.LibroPagos")
+			.orShould().dependOnClassesThat().haveFullyQualifiedName(BASE + ".comprobantes.service.ServicioComprobantes")
+			.orShould().dependOnClassesThat().haveFullyQualifiedName(BASE + ".comprobantes.service.AperturaSerie")
+			.orShould().dependOnClassesThat().haveFullyQualifiedName(BASE + ".caja.service.AperturaCaja")
+			.because("registran pagos, cajas y comprobantes sin @PreAuthorize: el rol lo exige quien los llama");
+
+	@ArchTest
+	static final ArchRule libroPagosYServicioComprobantesExigenTransaccion = classes()
+			.that().haveFullyQualifiedName(BASE + ".caja.service.LibroPagos")
+			.or().haveFullyQualifiedName(BASE + ".comprobantes.service.ServicioComprobantes")
+			.should(new ArchCondition<>("estar anotada con @Transactional(propagation = MANDATORY)") {
+				@Override
+				public void check(JavaClass clase, ConditionEvents eventos) {
+					boolean ok = clase.tryGetAnnotationOfType(Transactional.class)
+							.map(t -> t.propagation() == Propagation.MANDATORY).orElse(false);
+					if (!ok) {
+						eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " no exige transacción"));
+					}
+				}
+			})
+			.because("el pago, su comprobante y su número se guardan en la misma transacción (sin huecos)");
+
+	@ArchTest
+	static final ArchRule repositoriosDeCajaYComprobantesSinModifyingNiBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".caja.repository..",
+					BASE + ".comprobantes.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("el libro de pagos y los comprobantes son de solo inserción (salvo la anulación y el envío)");
+
+	@ArchTest
+	static final ArchRule repositoriosDeCajaYComprobantesNoHeredanBorrados = classes()
+			.that().resideInAnyPackage(BASE + ".caja.repository..", BASE + ".comprobantes.repository..")
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("CrudRepository trae delete*: los repositorios financieros declaran solo lo que usan");
+
+	@ArchTest
+	static final ArchRule entidadesDeCajaYComprobantesSinSettersPublicos = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".caja.model..", BASE + ".comprobantes.model..")
+			.and().areDeclaredInClassesThat().areAnnotatedWith(Entity.class)
+			.and().arePublic()
+			.should().haveNameMatching("set[A-Z].*")
+			.because("un pago, un comprobante o una caja cambian solo por sus métodos con regla");
 
 	private static DescribedPredicate<JavaAnnotation<?>> consultaNativa() {
 		return new DescribedPredicate<>("@Query(nativeQuery = true)") {

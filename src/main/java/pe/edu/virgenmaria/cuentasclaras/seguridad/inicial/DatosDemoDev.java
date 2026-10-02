@@ -57,10 +57,15 @@ public class DatosDemoDev implements ApplicationRunner {
 			new UsuarioDemo("director", "Jorge Salazar", Rol.DIRECTOR),
 			new UsuarioDemo("administracion", "Rosa Medina", Rol.ADMINISTRACION),
 			new UsuarioDemo("caja", "Lucía Ramos", Rol.CAJA),
+			// Segunda cajera (sprint 3): para demostrar que dos cajas a la vez no cobran dos veces la misma cuota.
+			new UsuarioDemo("caja2", "Pedro Huanca", Rol.CAJA),
 			new UsuarioDemo("docente", "Carlos Quispe", Rol.DOCENTE),
 			new UsuarioDemo("apoderado", "Rosa Huamán Ccori", Rol.APODERADO));
 
 	static final UsuarioDemo PROMOTOR_COLEGIO_B = new UsuarioDemo("promotor.b", "Promotor del Colegio B", Rol.PROMOTOR);
+
+	/** Cajera del colegio B (sprint 3): para ver que no encuentra familias ni pagos del colegio principal. */
+	static final UsuarioDemo CAJA_COLEGIO_B = new UsuarioDemo("caja.b", "Cajera del Colegio B", Rol.CAJA);
 
 	private final UsuarioRepository usuarios;
 
@@ -110,9 +115,10 @@ public class DatosDemoDev implements ApplicationRunner {
 		long colegioB = colegios.save(new Colegio(NOMBRE_COLEGIO_B)).getId();
 		USUARIOS_COLEGIO_PRINCIPAL.forEach(u -> crear(COLEGIO_PRINCIPAL, u));
 		crear(colegioB, PROMOTOR_COLEGIO_B);
+		crear(colegioB, CAJA_COLEGIO_B);
 		LOG.info("Usuarios de demostración creados: {} y {} (en {}). Clave: la de cuentasclaras.demo.clave (CC_DEMO_CLAVE).",
 				USUARIOS_COLEGIO_PRINCIPAL.stream().map(UsuarioDemo::nombreUsuario).toList(),
-				PROMOTOR_COLEGIO_B.nombreUsuario(), NOMBRE_COLEGIO_B);
+				List.of(PROMOTOR_COLEGIO_B.nombreUsuario(), CAJA_COLEGIO_B.nombreUsuario()), NOMBRE_COLEGIO_B);
 		return true;
 	}
 

@@ -83,6 +83,20 @@ cuentasclaras:
   saldo-inicial:
     # Únicos «otros conceptos» del reglamento que se cargan como saldo inicial (nunca pensiones ni matrículas).
     conceptos-otros: Taller de verano, Uniforme escolar, Materiales educativos, Excursión
+  caja:
+    fondo-fijo: 0.00                 # sencillo que Administración entrega a cada cajero (se copia a caja_diaria)
+    hora-limite-cierre: "19:00"      # después, «Caja sin cerrar» en Para revisar (tanda 3)
+    permitir-pago-a-cuenta: false    # pagos parciales: desactivados en el piloto
+    pago-a-cuenta-minimo: 50.00
+    cuentas-deposito: BCP Soles 191-XXXXXXX-0-XX
+    dias-sin-verificar: 1            # pagos digitales o depósitos sin verificar: alerta (tanda 3)
+  comprobantes:
+    proveedor: SIMULADO              # NUBEFACT en el sprint 4 o 6 (NUBEFACT_RUTA y NUBEFACT_TOKEN por variable de entorno)
+    afectacion-igv: INAFECTO         # TUO Ley IGV art. 2; confirmar con el contador
+    serie-boleta: B001
+    serie-factura: F001
+    serie-nota-boleta: BC01
+    serie-nota-factura: FC01
   auditoria:
     # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
     # aplicación no arranca. Nunca en el código: va en el gestor de secretos.

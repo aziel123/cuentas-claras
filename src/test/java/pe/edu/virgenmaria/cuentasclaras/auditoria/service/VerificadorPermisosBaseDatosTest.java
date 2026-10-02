@@ -134,6 +134,58 @@ class VerificadorPermisosBaseDatosTest {
 
 	private static final String SQL_MONTO_CUOTA = "UPDATE cuota SET monto = monto WHERE 1 = 0";
 
+	/** Tablas de solo inserción: cc_app no tiene ningún UPDATE sobre ellas (1142). */
+	private static final java.util.regex.Pattern SOLO_INSERCION = java.util.regex.Pattern
+			.compile("^UPDATE (comprobante_linea|aplicacion_pago) ");
+
+	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
+	@Test
+	void fallaSiSePuedeEditarElLibroDePagos() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doReturn(0).when(mysql).update("UPDATE aplicacion_pago SET version = version WHERE 1 = 0");
+
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("aplicacion_pago se podrían editar");
+	}
+
+	@Test
+	void fallaSiSePuedeBorrarUnPago() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doReturn(0).when(mysql).update("DELETE FROM pago WHERE 1 = 0");
+
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("pago se podrían borrar");
+	}
+
+	@Test
+	void fallaSiSePuedeCambiarElTotalDeUnPagoOElNumeroDeUnComprobante() {
+		for (String sql : new String[] { "UPDATE pago SET total = total WHERE 1 = 0",
+				"UPDATE comprobante SET numero = numero WHERE 1 = 0", "UPDATE serie_comprobante SET serie = serie WHERE 1 = 0",
+				"UPDATE caja_diaria SET fecha = fecha WHERE 1 = 0" }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(sql);
+
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(sql).isInstanceOf(IllegalStateException.class).hasMessageContaining("GRANT por columna");
+		}
+	}
+
+	/** Sin trg_cuota_nace_pendiente, la cuota PAGADA imposible falla por la FK (1452): no arranca. */
+	@Test
+	void fallaSiFaltanLosTriggersDeCaja() {
+		for (String[] caso : new String[][] { { "INSERT INTO cuota", "trg_cuota_nace_pendiente" },
+				{ "INSERT INTO serie_comprobante", "trg_serie_comprobante_nace" },
+				{ "INSERT INTO comprobante ", "trg_comprobante_correlativo" },
+				{ "INSERT INTO caja_diaria", "trg_caja_diaria_nace" }, { "INSERT INTO pago", "trg_pago_registro" },
+				{ "INSERT INTO aplicacion_pago", "trg_aplicacion_pago_registro" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doThrow(denegado(1452)).when(mysql).update(org.mockito.ArgumentMatchers.startsWith(caso[0]));
+
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+	}
+
 	/** Un MySQL bien configurado: DELETE → 1142, UPDATE de columnas inmutables → 1143, INSERT imposible → 1644. */
 	private static JdbcTemplate mysqlQueDeniega() {
 		JdbcTemplate mysql = mock(JdbcTemplate.class);
@@ -142,7 +194,7 @@ class VerificadorPermisosBaseDatosTest {
 			if (sql.startsWith("INSERT")) {
 				throw denegado(1644);
 			}
-			if (sql.startsWith("UPDATE") && !sql.contains("evento_auditoria")) {
+			if (sql.startsWith("UPDATE") && !sql.contains("evento_auditoria") && !SOLO_INSERCION.matcher(sql).find()) {
 				throw denegado(1143);
 			}
 			throw denegado(1142);

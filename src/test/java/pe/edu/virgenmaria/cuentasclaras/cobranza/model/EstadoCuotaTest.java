@@ -69,6 +69,27 @@ class EstadoCuotaTest {
 		assertThat(marzo.getMonto()).isEqualByComparingTo("450.00");
 	}
 
+	@Test
+	void exoneradaNoSeMuestraVencida() {
+		Cuota marzo = pensionDeMarzo();
+		marzo.reflejarDescuentos(marzo.getMonto());
+
+		assertThat(marzo.getEstado()).isEqualTo(EstadoCuota.EXONERADA);
+		assertThat(marzo.estadoAl(LocalDate.of(2030, 1, 1))).isEqualTo(EstadoVisibleCuota.EXONERADA);
+		assertThat(marzo.vencidaAl(LocalDate.of(2030, 1, 1))).isFalse();
+		assertThat(EstadoVisibleCuota.EXONERADA.etiqueta()).isEqualTo("Exonerada (beca)");
+	}
+
+	@Test
+	void saldoRestaElDescuento() {
+		Cuota marzo = pensionDeMarzo();
+		marzo.reflejarDescuentos(new BigDecimal("45.00"));
+		marzo.reflejarPagos(new BigDecimal("100.00"));
+
+		assertThat(marzo.saldo()).isEqualByComparingTo("305.00");
+		assertThat(marzo.getEstado()).isEqualTo(EstadoCuota.PARCIAL);
+	}
+
 	private static Cuota pensionDeMarzo() {
 		PlanPension plan = CuotasDePrueba.planAprobado("450.00", "0");
 		CuotaPlanificada marzo = CalculadoraCronograma.calcular(plan, 1L, LocalDate.of(2027, 3, 1)).get(0);

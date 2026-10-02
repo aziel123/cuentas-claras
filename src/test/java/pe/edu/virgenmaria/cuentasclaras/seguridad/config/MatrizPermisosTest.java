@@ -116,6 +116,36 @@ class MatrizPermisosTest {
 		mvc.perform(get("/auditoria")).andExpect(status().isForbidden());
 	}
 
+	/** Sprint 3: Caja entra a caja y a nada de lo que administra o aprueba dinero. */
+	@Test
+	@ComoUsuario(roles = Rol.CAJA)
+	void cajaSoloEntraACaja() throws Exception {
+		mvc.perform(get("/caja")).andExpect(status().isOk());
+		mvc.perform(get("/caja/hoy")).andExpect(status().isOk());
+		for (String ruta : new String[] { "/alumnos", "/pensiones", "/colegio", "/usuarios", "/auditoria" }) {
+			mvc.perform(get(ruta)).andExpect(status().isForbidden());
+		}
+	}
+
+	/** Quien cobra no aprueba (anulaciones, descuentos, cierres) ni verifica contra el banco. */
+	@Test
+	@ComoUsuario(roles = Rol.CAJA)
+	void cajaRecibe403EnAprobacionesDescuentosYConciliacion() throws Exception {
+		for (String ruta : new String[] { "/aprobaciones", "/aprobaciones/1/aprobar", "/descuentos", "/descuentos/nuevo",
+				"/conciliacion" }) {
+			mvc.perform(get(ruta)).andExpect(status().isForbidden());
+		}
+		mvc.perform(post("/aprobaciones/1/aprobar").with(csrf())).andExpect(status().isForbidden());
+	}
+
+	/** Y al revés: Promotoría, Dirección y Administración no cobran. */
+	@ParameterizedTest
+	@EnumSource(value = Rol.class, names = { "PROMOTOR", "DIRECTOR", "ADMINISTRACION", "DOCENTE", "APODERADO" })
+	void soloCajaCobra(Rol rol) throws Exception {
+		mvc.perform(get("/caja").with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+		mvc.perform(post("/caja/pagos").with(csrf()).with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+	}
+
 	@Test
 	@ComoUsuario(roles = Rol.CAJA)
 	void cajaRecibe403AlCrearUsuarios() throws Exception {

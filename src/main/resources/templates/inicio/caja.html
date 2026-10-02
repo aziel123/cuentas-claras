@@ -10,6 +10,15 @@
 		</div>
 	</div>
 
+	<section class="tarjeta total-cobro" aria-labelledby="titulo-cobrar">
+		<h2 id="titulo-cobrar">Cobrar</h2>
+		<p class="secundario">Busca al alumno o a su apoderado, marca las cuotas y entrega la boleta. El sistema calcula el total.</p>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Cobrar', @{/caja}, 'primario')}"></a>
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Pagos de hoy', @{/caja/hoy}, 'secundario')}"></a>
+		</div>
+	</section>
+
 	<th:block th:if="${avisoClave != null}">
 		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
 	</th:block>
@@ -23,7 +32,7 @@
 	<section class="tarjeta" aria-labelledby="titulo-controles">
 		<h2 id="titulo-controles">Cómo te cuida el sistema</h2>
 		<ul class="lista-controles">
-			<li>Cada pago emite su boleta y el apoderado recibe un aviso al instante: tienes respaldo de todo lo que cobras.</li>
+			<li>Cada pago emite su boleta al momento: tienes respaldo de todo lo que cobras. El aviso al apoderado por WhatsApp o correo llega en diciembre.</li>
 			<li>Si te equivocas, pides la anulación a Dirección: nadie borra pagos.</li>
 			<li>Tu cierre de caja compara lo que registraste con lo que cuentas: las diferencias se ven el mismo día.</li>
 		</ul>

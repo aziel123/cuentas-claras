@@ -418,4 +418,62 @@ input[type="file"].input { padding: var(--esp-2); }
 .fila-quitada td { color: var(--color-texto-secundario); text-decoration: line-through; }
 .fila-quitada td .badge, .fila-quitada td a { text-decoration: none; }
 
+/* Sprint 3 · Caja: celular primero, objetivos de 44 px, montos tabulares */
+.buscador { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--esp-3); align-items: end; }
+.buscador .btn { margin-bottom: 26px; }
+@media (max-width: 640px) {
+  .buscador { grid-template-columns: minmax(0, 1fr); }
+  .buscador .btn { margin-bottom: 0; width: 100%; }
+}
+.input-grande { min-height: 52px; font-size: var(--texto-lg); }
+.btn-grande { min-height: 52px; font-size: var(--texto-lg); padding: 0 var(--esp-6); }
+.lista-cuotas { display: grid; gap: var(--esp-2); }
+.grupo-opciones + .grupo-opciones { margin-top: var(--esp-4); }
+.cuota-opcion {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--esp-2) var(--esp-3); align-items: center;
+  min-height: 44px; padding: var(--esp-3); border: 1px solid var(--color-borde); border-radius: var(--radio); cursor: pointer;
+}
+.cuota-opcion input { width: 22px; height: 22px; accent-color: var(--color-primario); }
+.cuota-opcion:has(input:checked) { border-color: var(--color-primario-texto); background: var(--color-celeste-suave); }
+.cuota-datos { display: grid; gap: 2px; min-width: 0; }
+.cuota-saldo { font-weight: 700; font-size: var(--texto-lg); }
+.medios { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); gap: var(--esp-2); }
+.total-cobro { border-top: 3px solid var(--color-celeste); }
+.conteos-montos { grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); }
+.conteos-montos strong { white-space: nowrap; }
+.total-cobro-monto { font-size: var(--texto-2xl); font-weight: 700; color: var(--color-primario-texto); font-variant-numeric: tabular-nums; }
+.lista-imputacion { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--esp-2); }
+.lista-imputacion li {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--esp-1) var(--esp-3); align-items: baseline;
+  padding-bottom: var(--esp-2); border-bottom: 1px solid var(--color-borde);
+}
+.vuelto {
+  padding: var(--esp-4); border-radius: var(--radio); background: var(--color-exito-suave); color: var(--color-exito);
+  font-size: var(--texto-xl); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.comprobante-hoja {
+  width: 100%; max-width: 760px; display: grid; gap: var(--esp-4); padding: var(--esp-6);
+  background: var(--color-superficie); border: 1px solid var(--color-borde); border-radius: var(--radio);
+}
+.comprobante-cabecera { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--esp-3); }
+.comprobante-numero { display: grid; gap: var(--esp-1); padding: var(--esp-3); border: 2px solid var(--color-texto); border-radius: var(--radio); text-align: center; }
+.comprobante-numero h1 { font-size: var(--texto-base); }
+.comprobante-numero strong { font-size: var(--texto-lg); }
+.marca-simulado {
+  padding: var(--esp-2); border: 2px dashed var(--color-peligro); border-radius: var(--radio);
+  color: var(--color-peligro); text-align: center; font-weight: 700; letter-spacing: 0.08em;
+}
+.codigo-hash { font-size: var(--texto-xs); overflow-wrap: anywhere; }
+.tabla tfoot th, .tabla tfoot td { padding: var(--esp-2); }
+@media print {
+  .barra, .menu-lateral, .menu-movil, .pie, .saltar, .no-imprimir { display: none !important; }
+  body { background: var(--color-superficie); }
+  .armazon { display: block; padding: 0; max-width: none; }
+  .comprobante-hoja { border: 0; max-width: none; padding: 0; }
+  .tabla thead { display: table-header-group; }
+  .tabla tr { display: table-row; }
+  .tabla td { display: table-cell; }
+  .tabla td::before { content: none; }
+}
+
 .pie { text-align: center; color: var(--color-texto-secundario); font-size: var(--texto-sm); padding: var(--esp-6) var(--esp-4); }

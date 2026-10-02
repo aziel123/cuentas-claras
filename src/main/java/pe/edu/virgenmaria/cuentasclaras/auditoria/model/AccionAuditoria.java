@@ -97,6 +97,16 @@ public enum AccionAuditoria {
 	/** Se resalta: un ingreso tardío aprobado recorta el cronograma. */
 	MATRICULA_FECHA_CAMBIADA("Cambió la fecha de ingreso de una matrícula", true),
 
+	// Caja y comprobantes (sprint 3, tanda 1). Con comprobante, montos, medio, familia, alumnos y cuotas; los documentos
+	// van enmascarados.
+	PAGO_REGISTRADO("Registró un pago", false),
+	COMPROBANTE_EMITIDO("Emitió un comprobante", false),
+	/** Se resalta: un pago parcial deja deuda viva y es la vía para cobrar completo y registrar menos. */
+	PAGO_A_CUENTA("Registró un pago a cuenta (parcial)", true),
+	CAJA_ABIERTA("Abrió su caja del día", false),
+	/** Se resalta: intentó cobrar en efectivo con la caja ya cerrada. */
+	CAJA_EFECTIVO_RECHAZADO_CERRADA("Intentó cobrar en efectivo con la caja cerrada", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

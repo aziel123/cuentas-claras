@@ -74,6 +74,27 @@ public final class Dinero {
 		return normalizado;
 	}
 
+	/** S/ 0.10: desde 2019 no circulan monedas de 1 ni 5 céntimos (BCRP). */
+	public static final BigDecimal DECIMO = new BigDecimal("0.10");
+
+	/** {@code true} si el monto es múltiplo de S/ 0.10 (se puede pagar exacto en efectivo). */
+	public static boolean enDecimos(BigDecimal monto) {
+		return monto != null && monto.remainder(DECIMO).signum() == 0;
+	}
+
+	/**
+	 * Exige un múltiplo de S/ 0.10.
+	 *
+	 * @param mensaje lo que ve el usuario si no lo es
+	 */
+	public static BigDecimal exigirDecimos(BigDecimal monto, String mensaje) {
+		BigDecimal normalizado = normalizar(monto);
+		if (!enDecimos(normalizado)) {
+			throw new ReglaNegocioException(mensaje);
+		}
+		return normalizado;
+	}
+
 	public static BigDecimal sumar(Collection<BigDecimal> montos) {
 		BigDecimal total = CERO;
 		for (BigDecimal monto : montos) {

@@ -35,10 +35,25 @@ GRANT INSERT, UPDATE (quitada, actualizado_en, version) ON cuentasclaras.linea_s
 GRANT INSERT ON cuentasclaras.cuota TO 'cc_app'@'%';
 -- UPDATE de cuota SOLO por columna: monto, fecha de vencimiento, alumno, origen y clave quedan inmutables
 -- (MySQL responde 1143). Debe coincidir EXACTAMENTE con las columnas updatable=true de la entidad Cuota.
-GRANT UPDATE (estado, monto_pagado, obligacion, anulacion_motivo, anulacion_solicitada_por, anulacion_aprobada_por,
-    anulada_en, actualizado_en, version) ON cuentasclaras.cuota TO 'cc_app'@'%';
+-- Sprint 3: monto_descuento (libro de descuentos). monto_pagado y monto_descuento solo pueden ser la suma de su libro
+-- (aplicacion_pago y ajuste_cuota): lo exige el trigger trg_cuota_libro de 03-triggers.sql.
+GRANT UPDATE (estado, monto_pagado, monto_descuento, obligacion, anulacion_motivo, anulacion_solicitada_por,
+    anulacion_aprobada_por, anulada_en, actualizado_en, version) ON cuentasclaras.cuota TO 'cc_app'@'%';
 
 -- Sprint 2 · correcciones: solicitudes de cambio que aprueba otra persona. Nunca DELETE; tipo, entidad, datos, motivo y
 -- solicitante no cambian (solo se resuelven).
 GRANT INSERT, UPDATE (estado, pendiente, resuelto_por, resuelto_en, comentario, actualizado_en, version)
     ON cuentasclaras.solicitud_cambio TO 'cc_app'@'%';
+
+-- Sprint 3 · tanda 1: comprobantes, caja diaria, pagos y libro de aplicaciones. Tablas financieras: NUNCA DELETE.
+-- Serie: solo avanza su último número (y el trigger exige que sea de uno en uno).
+GRANT INSERT, UPDATE (ultimo_numero, actualizado_en, version) ON cuentasclaras.serie_comprobante TO 'cc_app'@'%';
+-- Comprobante: los datos tributarios (serie, número, receptor, total) no cambian; solo su envío al OSE.
+GRANT INSERT, UPDATE (estado_envio, intentos, enviado_en, respuesta, codigo_hash, enlace_pdf, actualizado_en, version)
+    ON cuentasclaras.comprobante TO 'cc_app'@'%';
+GRANT INSERT ON cuentasclaras.comprobante_linea TO 'cc_app'@'%';                  -- solo inserción
+-- Caja: cajero, fecha y fondo no cambian; solo abre/cierra y registra el conteo a ciegas (los triggers lo vigilan).
+GRANT INSERT, UPDATE (estado, cierres, conteos, primer_conteo, actualizado_en, version) ON cuentasclaras.caja_diaria TO 'cc_app'@'%';
+-- Pago: familia, caja, medio, operación, total, vuelto y comprobante no cambian; solo se anula.
+GRANT INSERT, UPDATE (estado, operacion_vigente, actualizado_en, version) ON cuentasclaras.pago TO 'cc_app'@'%';
+GRANT INSERT ON cuentasclaras.aplicacion_pago TO 'cc_app'@'%';                    -- solo inserción

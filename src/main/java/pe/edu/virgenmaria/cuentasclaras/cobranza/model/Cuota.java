@@ -30,6 +30,11 @@ import java.util.Objects;
  *       MySQL, un GRANT de UPDATE solo por columna. Las columnas que aquí se pueden actualizar deben coincidir
  *       EXACTAMENTE con ese GRANT (lo comprueba {@code InmutabilidadCuotasTest}).</li>
  *   <li>VENCIDA no se guarda: {@link #estadoAl(LocalDate)} la calcula con la fecha de Lima.</li>
+ *   <li>Lo pagado y lo descontado son libros (sprint 3): {@code monto_pagado} es la suma de {@code aplicacion_pago} y
+ *       {@code monto_descuento} la de {@code ajuste_cuota}. Solo cambian por {@link #reflejarPagos} y
+ *       {@link #reflejarDescuentos} (ArchUnit limita quién los llama) y, en MySQL, un trigger rechaza cualquier otro
+ *       valor: no puede existir una cuota PAGADA sin pago.</li>
+ *   <li>Saldo = monto − descuento − pagado. EXONERADA: descuento del 100 % (saldo 0 sin pagos).</li>
  * </ul>
  */
 @Entity
@@ -80,6 +85,9 @@ public class Cuota extends BaseEntity {
 
 	@Column(name = "monto_pagado", nullable = false, precision = 10, scale = 2)
 	private BigDecimal montoPagado;
+
+	@Column(name = "monto_descuento", nullable = false, precision = 10, scale = 2)
+	private BigDecimal montoDescuento;
 
 	@Column(length = 20)
 	private String obligacion;
@@ -142,6 +150,8 @@ public class Cuota extends BaseEntity {
 		cuota.obligacion = obligacion;
 		cuota.estado = EstadoCuota.PENDIENTE;
 		cuota.montoPagado = Dinero.CERO;
+		// Hibernate inserta el valor del campo, no el DEFAULT de la base: sin esto la columna NOT NULL falla.
+		cuota.montoDescuento = Dinero.CERO;
 		return cuota;
 	}
 
@@ -150,18 +160,69 @@ public class Cuota extends BaseEntity {
 		return switch (estado) {
 			case ANULADA -> EstadoVisibleCuota.ANULADA;
 			case PAGADA -> EstadoVisibleCuota.PAGADA;
+			case EXONERADA -> EstadoVisibleCuota.EXONERADA;
 			case PARCIAL -> vencidaAl(hoy) ? EstadoVisibleCuota.VENCIDA : EstadoVisibleCuota.PARCIAL;
 			case PENDIENTE -> vencidaAl(hoy) ? EstadoVisibleCuota.VENCIDA : EstadoVisibleCuota.PENDIENTE;
 		};
 	}
 
 	public boolean vencidaAl(LocalDate hoy) {
-		return estado != EstadoCuota.ANULADA && estado != EstadoCuota.PAGADA && hoy.isAfter(fechaVencimiento);
+		return (estado == EstadoCuota.PENDIENTE || estado == EstadoCuota.PARCIAL) && hoy.isAfter(fechaVencimiento);
 	}
 
-	/** Lo que falta pagar; una anulada no suma. */
+	/** Lo que falta pagar: monto − descuento − pagado. Una anulada no suma. */
 	public BigDecimal saldo() {
-		return estado == EstadoCuota.ANULADA ? Dinero.CERO : monto.subtract(montoPagado);
+		return estado == EstadoCuota.ANULADA ? Dinero.CERO : monto.subtract(montoDescuento).subtract(montoPagado);
+	}
+
+	/** Se puede cobrar: PENDIENTE o PARCIAL y sin una anulación esperando aprobación. */
+	public boolean admiteCobro() {
+		return (estado == EstadoCuota.PENDIENTE || estado == EstadoCuota.PARCIAL) && !anulacionPendiente();
+	}
+
+	/**
+	 * Refleja el libro de pagos: {@code totalLibro} es la suma de las aplicaciones de esta cuota (la calcula la base).
+	 * Recalcula el estado. Lo llama solo {@code caja.service} (regla ArchUnit); en MySQL un trigger exige que el valor
+	 * sea esa suma.
+	 *
+	 * @throws ReglaNegocioException si la cuota está anulada o lo pagado supera lo que se debe
+	 */
+	public void reflejarPagos(BigDecimal totalLibro) {
+		BigDecimal pagado = Dinero.normalizar(totalLibro);
+		exigirLibro(pagado, montoDescuento, "Lo pagado");
+		montoPagado = pagado;
+		estado = estadoSegun(montoPagado, montoDescuento);
+	}
+
+	/**
+	 * Refleja el libro de descuentos: {@code totalAjustes} es la suma de los ajustes aprobados de esta cuota. Lo llama
+	 * solo el manejador de descuentos (regla ArchUnit); en MySQL un trigger exige que el valor sea esa suma.
+	 */
+	public void reflejarDescuentos(BigDecimal totalAjustes) {
+		BigDecimal descuento = Dinero.normalizar(totalAjustes);
+		exigirLibro(montoPagado, descuento, "El descuento");
+		montoDescuento = descuento;
+		estado = estadoSegun(montoPagado, montoDescuento);
+	}
+
+	private void exigirLibro(BigDecimal pagado, BigDecimal descuento, String que) {
+		if (estado == EstadoCuota.ANULADA) {
+			throw new ReglaNegocioException("La cuota " + descripcion + " está anulada: no recibe pagos ni descuentos.");
+		}
+		if (pagado.signum() < 0 || descuento.signum() < 0) {
+			throw new ReglaNegocioException(que + " de la cuota " + descripcion + " no puede ser negativo.");
+		}
+		if (pagado.add(descuento).compareTo(monto) > 0) {
+			throw new ReglaNegocioException(que + " de la cuota " + descripcion + " supera lo que se debe ("
+					+ Dinero.formatear(monto) + ").");
+		}
+	}
+
+	private EstadoCuota estadoSegun(BigDecimal pagado, BigDecimal descuento) {
+		if (pagado.signum() == 0) {
+			return descuento.compareTo(monto) == 0 ? EstadoCuota.EXONERADA : EstadoCuota.PENDIENTE;
+		}
+		return pagado.add(descuento).compareTo(monto) == 0 ? EstadoCuota.PAGADA : EstadoCuota.PARCIAL;
 	}
 
 	public boolean anulada() {
@@ -278,6 +339,10 @@ public class Cuota extends BaseEntity {
 
 	public BigDecimal getMontoPagado() {
 		return montoPagado;
+	}
+
+	public BigDecimal getMontoDescuento() {
+		return montoDescuento;
 	}
 
 	public String getObligacion() {

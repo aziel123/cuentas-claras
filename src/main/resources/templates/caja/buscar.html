@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Caja', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="caja-buscar">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Caja</p>
+			<h1>Cobrar</h1>
+			<p class="secundario">Busca al alumno o a su apoderado. El sistema ya sabe cuánto debe cada familia.</p>
+		</div>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Pagos de hoy', @{/caja/hoy}, 'secundario')}"></a>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<th:block th:if="${busqueda.cajaAnteriorAbierta != null}">
+		<div th:replace="~{fragments/componentes :: alerta('error',
+			|Primero cierra tu caja del ${#temporals.format(busqueda.cajaAnteriorAbierta, 'dd/MM')}: no puedes cobrar con una caja anterior abierta.|)}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-buscar">
+		<h2 id="titulo-buscar" class="solo-lectores">Buscar alumno o apoderado</h2>
+		<form class="buscador" method="get" th:action="@{/caja}" role="search">
+			<div class="campo">
+				<label for="q">Buscar alumno o apoderado. Por nombre o DNI</label>
+				<input class="input input-grande" type="search" id="q" name="q" th:value="${busqueda.texto}"
+					autocomplete="off" autofocus maxlength="80" minlength="2" required aria-describedby="q-ayuda">
+				<p class="ayuda" id="q-ayuda">Por ejemplo: «quispe» o «7845». Escribe al menos 2 letras o números.</p>
+			</div>
+			<button type="submit" class="btn btn-primario">Buscar</button>
+		</form>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-resultados" th:if="${busqueda.buscado}">
+		<h2 id="titulo-resultados" th:text="${#lists.size(busqueda.resultados) == 1} ? '1 resultado' : |${#lists.size(busqueda.resultados)} resultados|">2 resultados</h2>
+		<th:block th:if="${#lists.isEmpty(busqueda.resultados)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('No encontramos a nadie con ese nombre o DNI',
+				'Revisa cómo se escribe o busca por el DNI del alumno o del apoderado.')}"></div>
+		</th:block>
+		<ul class="lista-tarjetas" th:unless="${#lists.isEmpty(busqueda.resultados)}">
+			<li th:each="r : ${busqueda.resultados}">
+				<a class="tarjeta-enlace" th:href="@{/caja/familias/{id}(id=${r.familiaId})}" th:data-familia="${r.familiaId}">
+					<strong th:text="${r.alumno}">Mateo Quispe Huamán</strong>
+					<span class="secundario" th:text="${r.grado} ?: 'Sin matrícula activa'">5.° Primaria A · 2026</span>
+					<span class="secundario" th:text="|${r.familia} · ${r.documento}|">Familia Quispe Huamán · DNI 78451236</span>
+					<span th:if="${r.debeVencido()}" class="badge badge-peligro"
+						th:text="|Debe S/ ${#numbers.formatDecimal(r.vencido, 1, 'COMMA', 2, 'POINT')} vencido|">Debe S/ 450.00 vencido</span>
+					<span th:unless="${r.debeVencido()}" class="badge badge-exito">Al día</span>
+					<span th:if="${r.porPagar.signum() > 0 and !r.debeVencido()}" class="secundario"
+						th:text="|Por pagar: S/ ${#numbers.formatDecimal(r.porPagar, 1, 'COMMA', 2, 'POINT')}|">Por pagar: S/ 450.00</span>
+				</a>
+			</li>
+		</ul>
+	</section>
+</main>
+</body>
+</html>

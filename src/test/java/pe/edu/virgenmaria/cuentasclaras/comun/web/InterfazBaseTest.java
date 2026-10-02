@@ -102,6 +102,16 @@ class InterfazBaseTest {
 				.andExpect(content().string(not(containsString("data-modulo=\"APROBACIONES\""))));
 	}
 
+	/** Sprint 3: el módulo Caja está disponible (enlace en el menú, sin «Próximamente») y el inicio lleva a cobrar. */
+	@Test
+	void menuDeCajaMuestraCaja() throws Exception {
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(Rol.CAJA)))
+				.andExpect(status().isOk())
+				.andExpect(content().string(containsString("class=\"menu-enlace\" href=\"/caja\" data-modulo=\"CAJA_COBRO\"")))
+				.andExpect(content().string(not(containsString("<span class=\"menu-proximo\" data-modulo=\"CAJA_COBRO\">"))))
+				.andExpect(content().string(containsString("href=\"/caja/hoy\"")));
+	}
+
 	@Test
 	void menuDePromotorMuestraUsuariosYAuditoria() throws Exception {
 		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(Rol.PROMOTOR)))

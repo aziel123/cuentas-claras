@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Comprobante', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="caja-comprobante" th:attr="data-imprimir-al-abrir=${imprimirAlAbrir} ? 'si' : null"
+	th:with="c=${comprobante}">
+	<div class="acciones acciones-izquierda no-imprimir">
+		<button type="button" class="btn btn-primario" data-imprimir>Imprimir</button>
+		<a class="btn btn-secundario" th:href="@{/caja/pagos/{id}(id=${c.pagoId})}">Volver al pago</a>
+		<a class="btn btn-secundario" th:href="@{/caja}">Nuevo cobro</a>
+	</div>
+
+	<article class="comprobante-hoja" aria-labelledby="titulo-comprobante">
+		<p class="marca-simulado" th:if="${c.simulado}">COMPROBANTE SIMULADO · SIN VALOR TRIBUTARIO</p>
+		<header class="comprobante-cabecera">
+			<div>
+				<strong class="bloque" th:text="${c.colegio}">Colegio Virgen María</strong>
+				<span class="secundario bloque">Servicios educativos</span>
+			</div>
+			<div class="comprobante-numero">
+				<h1 id="titulo-comprobante" th:text="${c.tipo}">Boleta de venta electrónica</h1>
+				<strong class="num" data-numero th:text="${c.numero}">B001-00000001</strong>
+			</div>
+		</header>
+		<dl class="datos">
+			<div><dt>Fecha de emisión</dt><dd th:text="${#temporals.format(c.fecha, 'dd/MM/yyyy')}">02/10/2026</dd></div>
+			<div><dt>Señor(a)</dt><dd th:text="${c.receptorNombre}">Rosa Huamán Ccori</dd></div>
+			<div><dt>Documento</dt><dd class="num" th:text="${c.receptorDocumento}">DNI 45678912</dd></div>
+			<div><dt>Moneda</dt><dd>Soles (PEN)</dd></div>
+		</dl>
+		<table class="tabla">
+			<thead><tr><th scope="col">Descripción</th><th scope="col" class="num">Importe</th></tr></thead>
+			<tbody>
+				<tr th:each="l : ${c.lineas}">
+					<td data-etiqueta="Descripción" th:text="${l.descripcion}">Pensión diciembre 2026 · Mateo Quispe Huamán</td>
+					<td data-etiqueta="Importe" class="num"><span th:replace="~{fragments/componentes :: monto(${l.monto})}"></span></td>
+				</tr>
+			</tbody>
+			<tfoot><tr><th scope="row">Total</th><td class="num"><strong th:text="|S/ ${#numbers.formatDecimal(c.total, 1, 'COMMA', 2, 'POINT')}|">S/ 900.00</strong></td></tr></tfoot>
+		</table>
+		<p class="secundario" th:text="${c.afectacion}">Operación inafecta al IGV</p>
+		<p class="secundario">
+			<span th:text="|Pagado en ${c.medio}|">Pagado en Efectivo</span>
+			<span th:if="${c.recibido != null}" th:text="| · recibido S/ ${#numbers.formatDecimal(c.recibido, 1, 'COMMA', 2, 'POINT')} · vuelto S/ ${#numbers.formatDecimal(c.vuelto, 1, 'COMMA', 2, 'POINT')}|"> · recibido</span>
+			<span th:if="${c.numeroOperacion != null}" th:text="| · operación ${c.numeroOperacion}|"> · operación</span>
+		</p>
+		<p class="secundario" th:text="|Atendió: ${c.cajero} · ${#temporals.format(c.registradoEn, 'dd/MM/yyyy HH:mm')}|">Atendió: caja</p>
+		<p class="secundario codigo-hash" th:if="${c.codigoHash != null}" th:text="|Código: ${c.codigoHash}|">Código</p>
+	</article>
+	<script src="/js/imprimir.js" th:src="@{/js/imprimir.js}" defer></script>
+</main>
+</body>
+</html>
