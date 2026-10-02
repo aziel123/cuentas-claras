@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="head(titulo)">
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title th:text="${titulo} + ' · Cuentas Claras'">Cuentas Claras</title>
+	<link rel="stylesheet" th:href="@{/css/tokens.css}">
+	<link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+	<header class="barra" th:fragment="barra(nombreColegio)">
+		<div class="barra-in">
+			<span class="monograma" aria-hidden="true">VM</span>
+			<div class="marca">
+				<strong th:text="${nombreColegio}">Colegio Virgen María</strong>
+				<small>Plataforma Cuentas Claras</small>
+			</div>
+		</div>
+	</header>
+
+	<footer class="pie" th:fragment="pie">
+		Cuentas Claras · gestión escolar transparente
+	</footer>
+</body>
+</html>

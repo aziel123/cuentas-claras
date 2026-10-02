@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Inicio')}"></head>
+<body>
+	<header th:replace="~{fragments/layout :: barra(${nombreColegio})}"></header>
+
+	<main class="contenido">
+		<div>
+			<h1>Bienvenido a la plataforma del <span th:text="${nombreColegio}">Colegio Virgen María</span></h1>
+			<p class="secundario">Estamos construyendo el sistema por etapas. Esta es la base técnica (sprint 0).</p>
+		</div>
+
+		<section class="tarjeta" aria-labelledby="estado-titulo">
+			<h2 id="estado-titulo">Estado del proyecto</h2>
+			<ul class="lista-estado">
+				<li><span>Proyecto base, base de datos y migraciones</span><span class="badge badge-exito">Listo</span></li>
+				<li><span>Usuarios, roles y auditoría</span><span class="badge badge-alerta">Sprint 1</span></li>
+				<li><span>Alumnos, apoderados y pensiones</span><span class="badge badge-alerta">Sprint 2</span></li>
+				<li><span>Caja y cierre de caja</span><span class="badge badge-alerta">Sprint 3</span></li>
+			</ul>
+		</section>
+	</main>
+
+	<footer th:replace="~{fragments/layout :: pie}"></footer>
+</body>
+</html>

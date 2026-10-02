@@ -1,0 +1,11 @@
+# Producción: MySQL 8. Las credenciales llegan por variables de entorno, nunca en el código.
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USUARIO}
+    password: ${DB_CLAVE}
+  flyway:
+    validate-on-migrate: true
+
+server:
+  forward-headers-strategy: framework

@@ -1,0 +1,24 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+### IDEs ###
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.classpath
+.project
+.settings/
+.factorypath
+.sts4-cache/
+.apt_generated
+
+### Sistema ###
+.DS_Store
+Thumbs.db
+
+### Secretos locales ###
+.env
+*.env
+application-local.yaml

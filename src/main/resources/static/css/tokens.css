@@ -1,0 +1,46 @@
+/* Tokens del sistema de diseño · Colegio Virgen María (azul y celeste).
+   Fuente de verdad: .claude/skills/sistema-diseno/SKILL.md. No usar colores sueltos fuera de este archivo. */
+:root {
+  --color-primario: #1b4f9c;
+  --color-primario-hover: #153f7e;
+  --color-primario-texto: #1b4f9c;
+  --color-sobre-primario: #ffffff;
+  --color-azul-profundo: #0f2c55;
+  --color-celeste: #38aee6;        /* solo decorativo, nunca texto */
+  --color-celeste-texto: #0a6ea8;
+  --color-celeste-suave: #e6f4fc;
+
+  --color-fondo: #f4f8fc;
+  --color-superficie: #ffffff;
+  --color-superficie-2: #eaf2fa;
+  --color-borde: #d8e3ef;
+  --color-texto: #0f172a;
+  --color-texto-secundario: #475569;
+
+  --color-exito: #15803d;   --color-exito-suave: #dcfce7;
+  --color-alerta: #a14a06;  --color-alerta-suave: #fef3c7;
+  --color-peligro: #b91c1c; --color-peligro-suave: #fee2e2;
+  --color-info: #0369a1;    --color-info-suave: #e0f2fe;
+
+  --fuente: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --texto-xs: 0.75rem; --texto-sm: 0.875rem; --texto-base: 1rem;
+  --texto-lg: 1.125rem; --texto-xl: 1.5rem; --texto-2xl: 2rem;
+
+  --esp-1: 4px; --esp-2: 8px; --esp-3: 12px; --esp-4: 16px;
+  --esp-6: 24px; --esp-8: 32px; --esp-12: 48px;
+
+  --radio: 8px;
+  --sombra: 0 1px 3px rgb(15 23 42 / 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-primario: #2a64c4; --color-primario-hover: #1f55ad; --color-primario-texto: #8fd0f5;
+    --color-azul-profundo: #0a1d3a; --color-celeste-texto: #8fd0f5; --color-celeste-suave: #12304a;
+    --color-fondo: #0b1626; --color-superficie: #111e33; --color-superficie-2: #172840; --color-borde: #233a5a;
+    --color-texto: #e6ecf5; --color-texto-secundario: #a9b6ca;
+    --color-exito: #4ade80; --color-exito-suave: #0f2e1d; --color-alerta: #fbbf24; --color-alerta-suave: #33250a;
+    --color-peligro: #f87171; --color-peligro-suave: #3a1515; --color-info: #38bdf8; --color-info-suave: #0c2a3e;
+    color-scheme: dark;
+  }
+}

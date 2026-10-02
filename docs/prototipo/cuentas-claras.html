@@ -1,0 +1,1098 @@
+<title>Plataforma Virgen María</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: barra superior con selector de rol; contenido en columna de 1180px; vistas de celular dentro de un marco de teléfono. Tokens del sistema de diseño del proyecto (.claude/skills/sistema-diseno), marca azul y celeste del Colegio Virgen María. */
+:root {
+  /* Marca Colegio Virgen María: azul institucional + celeste */
+  --primario: #1b4f9c;
+  --primario-hover: #153f7e;
+  --primario-suave: #e6f4fc;
+  --primario-texto: #1b4f9c;
+  --sobre-primario: #ffffff;
+  --azul-profundo: #0f2c55;
+  --celeste: #38aee6;
+  --celeste-texto: #0a6ea8;
+
+  --fondo: #f4f8fc;
+  --superficie: #ffffff;
+  --superficie-2: #eaf2fa;
+  --borde: #d8e3ef;
+  --texto: #0f172a;
+  --texto-2: #475569;
+  --texto-3: #64748b;
+
+  --exito: #15803d;  --exito-suave: #dcfce7;
+  --alerta: #a14a06; --alerta-suave: #fef3c7;
+  --peligro: #b91c1c; --peligro-suave: #fee2e2;
+  --info: #0369a1;   --info-suave: #e0f2fe;
+
+  --wa-fondo: #e7ded4;
+  --wa-burbuja: #ffffff;
+  --marco: #1e293b;
+  --velo: rgb(15 23 42 / 0.45);
+
+  --fuente: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radio: 8px;
+  --sombra: 0 1px 3px rgb(15 23 42 / 0.08);
+  --sombra-alta: 0 12px 32px rgb(15 23 42 / 0.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --primario: #2a64c4; --primario-hover: #1f55ad; --primario-suave: #12304a; --primario-texto: #8fd0f5; --sobre-primario: #ffffff; --azul-profundo: #0a1d3a; --celeste: #38aee6; --celeste-texto: #8fd0f5;
+    --fondo: #0b1626; --superficie: #111e33; --superficie-2: #172840; --borde: #233a5a;
+    --texto: #e6ecf5; --texto-2: #a9b6ca; --texto-3: #8796ad;
+    --exito: #4ade80; --exito-suave: #0f2e1d; --alerta: #fbbf24; --alerta-suave: #33250a;
+    --peligro: #f87171; --peligro-suave: #3a1515; --info: #38bdf8; --info-suave: #0c2a3e;
+    --wa-fondo: #0d1a17; --wa-burbuja: #1f2c33; --marco: #000000; --velo: rgb(0 0 0 / 0.6);
+    --sombra: 0 1px 3px rgb(0 0 0 / 0.4); --sombra-alta: 0 12px 32px rgb(0 0 0 / 0.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --primario: #2a64c4; --primario-hover: #1f55ad; --primario-suave: #12304a; --primario-texto: #8fd0f5; --sobre-primario: #ffffff; --azul-profundo: #0a1d3a; --celeste: #38aee6; --celeste-texto: #8fd0f5;
+  --fondo: #0b1626; --superficie: #111e33; --superficie-2: #172840; --borde: #233a5a;
+  --texto: #e6ecf5; --texto-2: #a9b6ca; --texto-3: #8796ad;
+  --exito: #4ade80; --exito-suave: #0f2e1d; --alerta: #fbbf24; --alerta-suave: #33250a;
+  --peligro: #f87171; --peligro-suave: #3a1515; --info: #38bdf8; --info-suave: #0c2a3e;
+  --wa-fondo: #0d1a17; --wa-burbuja: #1f2c33; --marco: #000000; --velo: rgb(0 0 0 / 0.6);
+  --sombra: 0 1px 3px rgb(0 0 0 / 0.4); --sombra-alta: 0 12px 32px rgb(0 0 0 / 0.5);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--fondo); color: var(--texto); font-family: var(--fuente); font-size: 15px; line-height: 1.5; }
+h1, h2, h3 { line-height: 1.25; text-wrap: balance; margin: 0; }
+h1 { font-size: 1.5rem; font-weight: 700; }
+h2 { font-size: 1.125rem; font-weight: 600; }
+h3 { font-size: 1rem; font-weight: 600; }
+p { margin: 0; }
+.num, td.num, .monto { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--primario-texto); outline-offset: 2px; border-radius: 4px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* Barra superior */
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; background: var(--superficie); border-bottom: 1px solid var(--borde); box-shadow: inset 0 3px 0 var(--celeste); }
+.topbar-in { max-width: 1180px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.marca { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.marca strong { font-size: 1rem; display: block; }
+.marca small { color: var(--texto-3); font-size: 0.75rem; display: block; }
+.logo { width: 34px; height: 34px; border-radius: 9px; background: var(--primario); border-bottom: 3px solid var(--celeste); display: grid; place-items: center; flex: none; }
+.pill-demo { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--alerta); background: var(--alerta-suave); padding: 2px 8px; border-radius: 99px; }
+.roles { display: flex; gap: 2px; background: var(--superficie-2); border: 1px solid var(--borde); border-radius: 10px; padding: 3px; overflow-x: auto; max-width: 100%; margin-left: auto; flex: 0 1 auto; min-width: 0; }
+.roles button { border: 0; background: transparent; padding: 7px 12px; border-radius: 7px; cursor: pointer; white-space: nowrap; font-size: 0.875rem; font-weight: 500; color: var(--texto-2); min-height: 36px; }
+.roles button[aria-pressed="true"] { background: var(--superficie); color: var(--texto); box-shadow: var(--sombra); font-weight: 600; }
+.acciones-top { display: flex; gap: 8px; }
+@media (max-width: 900px) { .roles { order: 3; width: 100%; margin-left: 0; } .acciones-top { margin-left: auto; } }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 64px; display: grid; gap: 20px; }
+.cabecera { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-end; justify-content: space-between; }
+.cabecera p { color: var(--texto-2); }
+
+/* Componentes */
+.card { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); padding: 16px; min-width: 0; }
+.card > * + * { margin-top: 12px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: var(--radio); border: 1px solid transparent; font-weight: 600; font-size: 0.9375rem; cursor: pointer; text-decoration: none; }
+.btn-primario { background: var(--primario); color: var(--sobre-primario); }
+.btn-primario:hover { background: var(--primario-hover); }
+.btn-secundario { background: var(--superficie); color: var(--texto); border-color: var(--borde); }
+.btn-secundario:hover { background: var(--superficie-2); }
+.btn-peligro { background: var(--peligro); color: #fff; }
+.btn-texto { background: transparent; color: var(--primario-texto); padding: 0 8px; min-height: 36px; }
+.btn-texto.peligro { color: var(--peligro); }
+.btn-chico { min-height: 36px; padding: 0 12px; font-size: 0.875rem; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn-bloque { width: 100%; }
+
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.b-ok { color: var(--exito); background: var(--exito-suave); }
+.b-warn { color: var(--alerta); background: var(--alerta-suave); }
+.b-bad { color: var(--peligro); background: var(--peligro-suave); }
+.b-info { color: var(--info); background: var(--info-suave); }
+.b-neutro { color: var(--texto-2); background: var(--superficie-2); }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--borde); overflow-x: auto; }
+.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; font-weight: 500; color: var(--texto-2); cursor: pointer; white-space: nowrap; min-height: 44px; }
+.tabs button[aria-selected="true"] { color: var(--primario-texto); border-bottom-color: var(--primario-texto); font-weight: 600; }
+
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+th { text-align: left; font-size: 0.6875rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--texto-3); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--borde); white-space: nowrap; }
+td { padding: 10px; border-bottom: 1px solid var(--borde); vertical-align: middle; }
+th.num, td.num { text-align: right; }
+tr.anulado td { color: var(--texto-3); }
+tr.anulado td.monto { text-decoration: line-through; }
+
+.nota { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--radio); font-size: 0.875rem; }
+.nota svg { flex: none; margin-top: 2px; }
+.nota-info { background: var(--info-suave); color: var(--texto); }
+.nota-info svg { color: var(--info); }
+.nota-ok { background: var(--exito-suave); }
+.nota-ok svg { color: var(--exito); }
+.nota-warn { background: var(--alerta-suave); }
+.nota-warn svg { color: var(--alerta); }
+.nota-bad { background: var(--peligro-suave); }
+.nota-bad svg { color: var(--peligro); }
+
+label.campo { display: grid; gap: 6px; font-size: 0.875rem; font-weight: 600; }
+.input { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--borde); border-radius: var(--radio); background: var(--superficie); }
+textarea.input { min-height: 80px; resize: vertical; }
+.ayuda { font-size: 0.8125rem; color: var(--texto-3); font-weight: 400; }
+.error { font-size: 0.8125rem; color: var(--peligro); font-weight: 600; }
+
+.etiqueta { font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--texto-3); font-weight: 600; }
+.muted { color: var(--texto-2); }
+.fila { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.entre { justify-content: space-between; }
+
+/* Inicio: antes y ahora */
+.comparativa { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 820px) { .comparativa { grid-template-columns: 1fr; } }
+.proceso { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.proceso li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-top: 1px dashed var(--borde); }
+.proceso li:first-child { border-top: 0; }
+.paso-n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; }
+.antes .paso-n { background: var(--peligro-suave); color: var(--peligro); }
+.ahora .paso-n { background: var(--exito-suave); color: var(--exito); }
+.proceso strong { display: block; font-size: 0.9375rem; }
+.proceso span.riesgo { display: block; font-size: 0.8125rem; color: var(--peligro); margin-top: 2px; }
+.proceso span.control { display: block; font-size: 0.8125rem; color: var(--exito); margin-top: 2px; }
+.semanas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .semanas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .semanas { grid-template-columns: 1fr; } }
+.semana { border-top: 3px solid var(--celeste); }
+.semana ul { margin: 0; padding-left: 18px; font-size: 0.875rem; color: var(--texto-2); display: grid; gap: 4px; }
+.roles-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1000px) { .roles-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .roles-grid { grid-template-columns: 1fr; } }
+.rol-card { display: grid; gap: 6px; align-content: start; text-align: left; cursor: pointer; }
+.rol-card:hover { border-color: var(--primario-texto); }
+.rol-card p { font-size: 0.875rem; color: var(--texto-2); }
+
+/* Caja */
+.grid-caja { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 880px) { .grid-caja { grid-template-columns: 1fr; } }
+.lista { display: grid; gap: 2px; max-height: 460px; overflow-y: auto; margin-inline: -8px; }
+.lista button { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; text-align: left; background: none; border: 0; border-radius: 6px; padding: 8px; cursor: pointer; }
+.lista button:hover { background: var(--superficie-2); }
+.lista button[aria-current="true"] { background: var(--primario-suave); }
+.lista small { color: var(--texto-3); grid-column: 1; }
+.lista .badge { grid-row: 1 / span 2; grid-column: 2; }
+.alumno-cab { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: flex-start; }
+.medios { display: flex; flex-wrap: wrap; gap: 8px; }
+.medios label { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--borde); border-radius: 99px; padding: 6px 12px; cursor: pointer; font-size: 0.875rem; font-weight: 500; min-height: 40px; }
+.medios input { accent-color: var(--primario); }
+.medios label:has(input:checked) { border-color: var(--primario-texto); background: var(--primario-suave); }
+.medios label:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
+.pie-cobro { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; border-top: 1px solid var(--borde); padding-top: 12px; }
+.total-grande { font-size: 1.5rem; font-weight: 700; }
+.cifra { font-size: 1.75rem; font-weight: 700; }
+.resumen-dia { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 600px) { .resumen-dia { grid-template-columns: 1fr; } }
+.cierre-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 820px) { .cierre-grid { grid-template-columns: 1fr; } }
+.dif { font-size: 1.25rem; font-weight: 700; }
+.dif.ok { color: var(--exito); }
+.dif.bad { color: var(--peligro); }
+
+/* Escenario de celular */
+.escenario { display: grid; grid-template-columns: minmax(0, 390px) minmax(0, 1fr); gap: 32px; align-items: start; }
+.telefono { border: 10px solid var(--marco); border-radius: 40px; overflow: hidden; background: var(--fondo); width: 100%; max-width: 390px; box-shadow: var(--sombra-alta); }
+.pantalla { height: 720px; overflow-y: auto; display: flex; flex-direction: column; }
+.notch { height: 26px; background: var(--superficie); display: flex; justify-content: space-between; align-items: center; padding: 0 18px; font-size: 0.75rem; font-weight: 600; flex: none; }
+.app-cab { background: var(--azul-profundo); color: #ffffff; padding: 14px 16px; flex: none; border-bottom: 4px solid var(--celeste); }
+.app-cab small { opacity: 0.85; display: block; font-size: 0.8125rem; }
+.app-cuerpo { padding: 14px; display: grid; gap: 12px; align-content: start; flex: 1; }
+.app-tabs { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--superficie); border-bottom: 1px solid var(--borde); flex: none; }
+.app-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 4px; font-size: 0.8125rem; font-weight: 500; color: var(--texto-2); cursor: pointer; min-height: 44px; }
+.app-tabs button[aria-selected="true"] { color: var(--primario-texto); border-bottom-color: var(--primario-texto); font-weight: 600; }
+.nota-lateral { display: grid; gap: 12px; }
+.nota-lateral ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--texto-2); }
+@media (max-width: 760px) {
+  .escenario { grid-template-columns: 1fr; gap: 16px; }
+  .telefono { border-width: 1px; border-color: var(--borde); border-radius: 16px; box-shadow: none; max-width: none; }
+  .pantalla { height: auto; }
+  .notch { display: none; }
+}
+.saldo-hero { border-radius: var(--radio); padding: 16px; display: grid; gap: 4px; }
+.saldo-hero.debe { background: var(--peligro-suave); }
+.saldo-hero.al-dia { background: var(--exito-suave); }
+.saldo-hero .cifra { font-size: 1.75rem; }
+.cuota-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--borde); }
+.cuota-item input { width: 20px; height: 20px; accent-color: var(--primario); }
+.cuota-item small { display: block; color: var(--texto-3); font-size: 0.75rem; }
+.cuota-item .der { text-align: right; display: grid; gap: 2px; justify-items: end; }
+.barra-pago { position: sticky; bottom: 0; background: var(--superficie); border-top: 1px solid var(--borde); padding: 12px 14px; flex: none; }
+.wa { background: var(--wa-fondo); flex: 1; padding: 14px; display: grid; gap: 10px; align-content: start; }
+.wa-cab { background: #075e54; color: #fff; padding: 12px 16px; flex: none; }
+.burbuja { background: var(--wa-burbuja); border-radius: 0 10px 10px 10px; padding: 8px 10px; font-size: 0.875rem; max-width: 92%; box-shadow: var(--sombra); }
+.burbuja time { display: block; text-align: right; font-size: 0.6875rem; color: var(--texto-3); margin-top: 2px; }
+.burbuja.nueva { outline: 2px solid var(--exito); }
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.kpi { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); padding: 12px; display: grid; gap: 2px; align-content: start; }
+.kpi .cifra { font-size: 1.25rem; }
+.kpi small { color: var(--texto-3); font-size: 0.75rem; }
+.alerta-item { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 10px 12px; border-radius: var(--radio); font-size: 0.875rem; }
+.alerta-item.critico { background: var(--peligro-suave); }
+.alerta-item.espera { background: var(--alerta-suave); }
+.alerta-item.bien { background: var(--exito-suave); }
+.grafico { position: relative; }
+.grafico svg { width: 100%; height: auto; display: block; }
+.grafico .eje { fill: var(--texto-3); font-size: 10px; font-family: var(--fuente); }
+.grafico .valor { fill: var(--texto); font-size: 11px; font-weight: 600; font-family: var(--fuente); }
+.grafico .grid { stroke: var(--borde); stroke-width: 1; }
+.grafico .meta { stroke: var(--texto-3); stroke-width: 1; stroke-dasharray: 4 3; }
+.grafico .barra { fill: var(--primario); }
+.grafico .hit { fill: transparent; cursor: default; }
+.grafico .hit:hover + .barra, .grafico g.activo .barra { fill: var(--primario-hover); }
+.tooltip { position: absolute; pointer-events: none; background: var(--texto); color: var(--fondo); font-size: 0.75rem; padding: 6px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -100%); }
+details summary { cursor: pointer; color: var(--primario-texto); font-size: 0.8125rem; font-weight: 600; }
+
+/* Dirección */
+.solicitud { display: grid; gap: 8px; }
+.audit-candado { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Docente */
+.asis { display: inline-flex; border: 1px solid var(--borde); border-radius: 8px; overflow: hidden; }
+.asis label { display: grid; place-items: center; min-width: 44px; min-height: 40px; cursor: pointer; font-size: 0.8125rem; font-weight: 600; color: var(--texto-2); border-left: 1px solid var(--borde); }
+.asis label:first-child { border-left: 0; }
+.asis input { position: absolute; opacity: 0; pointer-events: none; }
+.asis label:has(input:checked[value="P"]) { background: var(--exito-suave); color: var(--exito); }
+.asis label:has(input:checked[value="T"]) { background: var(--alerta-suave); color: var(--alerta); }
+.asis label:has(input:checked[value="F"]) { background: var(--peligro-suave); color: var(--peligro); }
+.asis label:has(input:focus-visible) { outline: 2px solid var(--primario-texto); outline-offset: -2px; }
+.grid-doc { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 880px) { .grid-doc { grid-template-columns: 1fr; } }
+
+/* Modal, guía y avisos */
+.velo { position: fixed; inset: 0; background: var(--velo); z-index: 50; display: grid; place-items: center; padding: 16px; }
+.modal { background: var(--superficie); border-radius: 12px; width: 100%; max-width: 480px; max-height: calc(100% - 32px); overflow-y: auto; padding: 20px; display: grid; gap: 14px; box-shadow: var(--sombra-alta); }
+.modal .acciones { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.resumen { display: grid; gap: 6px; padding: 12px; background: var(--superficie-2); border-radius: var(--radio); font-size: 0.875rem; }
+.resumen div { display: flex; justify-content: space-between; gap: 12px; }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 0.875rem; }
+.checks li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; align-items: start; }
+.checks svg { color: var(--exito); margin-top: 1px; }
+.qr { width: 180px; height: 180px; margin: 0 auto; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid var(--borde); }
+
+.guia { position: fixed; top: 0; right: 0; bottom: 0; width: min(400px, 100%); background: var(--superficie); border-left: 1px solid var(--borde); z-index: 40; box-shadow: var(--sombra-alta); display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.guia-cab { padding: 16px; border-bottom: 1px solid var(--borde); display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.guia-cuerpo { padding: 16px; overflow-y: auto; display: grid; gap: 16px; align-content: start; }
+.pasos { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pasos li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--borde); border-radius: var(--radio); }
+.pasos li.hecho { background: var(--exito-suave); border-color: transparent; }
+.pasos .n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; background: var(--superficie-2); color: var(--texto-2); }
+.pasos li.hecho .n { background: var(--exito); color: #fff; }
+.pasos p { font-size: 0.875rem; }
+.pasos small { color: var(--texto-3); display: block; font-size: 0.75rem; }
+
+.avisos { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 60; display: grid; gap: 8px; width: min(360px, calc(100% - 32px)); }
+.aviso { background: var(--superficie); border: 1px solid var(--borde); border-left: 4px solid var(--exito); border-radius: var(--radio); padding: 10px 12px; box-shadow: var(--sombra-alta); font-size: 0.875rem; animation: entra 0.25s ease-out; }
+.aviso strong { display: block; }
+.aviso.wa { border-left-color: #25d366; }
+.aviso.mal { border-left-color: var(--peligro); }
+@keyframes entra { from { transform: translateY(8px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .aviso { animation: none; } }
+.pie { color: var(--texto-3); font-size: 0.8125rem; text-align: center; }
+</style>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="marca">
+      <span class="logo" aria-hidden="true"><span style="color:#fff;font-weight:700;font-size:.8125rem;letter-spacing:.02em">VM</span></span>
+      <div>
+        <strong>Colegio Virgen María</strong>
+        <small>Plataforma Cuentas Claras · <span class="pill-demo">Prototipo · datos de ejemplo</span></small>
+      </div>
+    </div>
+    <nav class="roles" id="roles" aria-label="Cambiar de vista"></nav>
+    <div class="acciones-top">
+      <button class="btn btn-secundario btn-chico" data-a="guia">Guía</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" id="main"></main>
+<p class="pie">Prototipo navegable para presentación. Ningún dato es real; los comprobantes y mensajes de WhatsApp son simulados.</p>
+
+<div id="modal-raiz"></div>
+<aside class="guia" id="guia" hidden aria-label="Guía de demostración"></aside>
+<div class="avisos" id="avisos" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Constantes del colegio de ejemplo ----------
+  var HOY = "2026-10-02";
+  var HOY_TXT = "Viernes 2 de octubre de 2026";
+  var MESES = ["Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  var FIN_MES = ["2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30", "2026-07-31", "2026-08-31", "2026-09-30", "2026-10-31", "2026-11-30", "2026-12-31"];
+  var PENSION = { Inicial: 38000, Primaria: 45000, Secundaria: 48000 }; // en céntimos
+  var MEDIOS = { EFECTIVO: "Efectivo", YAPE: "Yape", PLIN: "Plin", TRANSFERENCIA: "Transferencia", TARJETA: "Tarjeta" };
+  var CAJERA = { nombre: "Lucía Ramos", rol: "Caja" };
+  var DIRECTOR = { nombre: "Jorge Salazar", rol: "Dirección" };
+  var CLAVE = "cuentas-claras-demo-v1";
+  // Cifras globales del colegio (ejemplo) para el panel de la promotora
+  var BASE_OCT = 1248000;       // recaudado el 1 de octubre, antes de hoy
+  var BASE_DEUDA = 1800000;     // deuda vencida del resto de familias
+  var BASE_FAMILIAS_DEUDA = 33; // familias con deuda fuera de la muestra
+  var TOTAL_FAMILIAS = 214;
+  var HISTORICO = [
+    { mes: "Mar", nombre: "Marzo", pct: 96 }, { mes: "Abr", nombre: "Abril", pct: 94 },
+    { mes: "May", nombre: "Mayo", pct: 91 }, { mes: "Jun", nombre: "Junio", pct: 89 },
+    { mes: "Jul", nombre: "Julio", pct: 92 }, { mes: "Ago", nombre: "Agosto", pct: 88 },
+    { mes: "Sep", nombre: "Septiembre", pct: 83 }
+  ];
+  var ESPERADO_MES = 13500000; // S/ 135,000 por mes
+
+  var PEN = new Intl.NumberFormat("es-PE", { style: "currency", currency: "PEN" });
+  function fmt(c) { return PEN.format(c / 100); }
+  function esc(t) { return String(t).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function hora() { var d = new Date(); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+
+  var ICON = {
+    info: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
+    ok: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    alerta: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+    candado: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
+  };
+
+  // ---------- Estado ----------
+  function semilla() {
+    var familias = [
+      { id: "f1", apoderado: "Rosa Huamán Ccori", corto: "Rosa", tel: "+51 987 654 321" },
+      { id: "f2", apoderado: "Pedro Flores Díaz", corto: "Pedro", tel: "+51 912 345 678" },
+      { id: "f3", apoderado: "Julia Paredes Soto", corto: "Julia", tel: "+51 934 112 908" },
+      { id: "f4", apoderado: "Martín Castillo Ruiz", corto: "Martín", tel: "+51 955 201 774" },
+      { id: "f5", apoderado: "Elena Ramírez Vela", corto: "Elena", tel: "+51 948 330 615" },
+      { id: "f6", apoderado: "Carlos Rojas Medina", corto: "Carlos", tel: "+51 976 540 129" },
+      { id: "f7", apoderado: "Silvia León Aguirre", corto: "Silvia", tel: "+51 921 677 403" }
+    ];
+    var alumnos = [
+      { id: "a1", nombre: "Mateo Quispe Huamán", corto: "Mateo", grado: "5.° Primaria A", nivel: "Primaria", fam: "f1", dni: "78451236", pagados: 6 },
+      { id: "a2", nombre: "Valeria Quispe Huamán", corto: "Valeria", grado: "2.° Primaria B", nivel: "Primaria", fam: "f1", dni: "80127745", pagados: 6 },
+      { id: "a3", nombre: "Sebastián Flores Rojas", corto: "Sebastián", grado: "3.° Secundaria A", nivel: "Secundaria", fam: "f2", dni: "75330981", pagados: 6 },
+      { id: "a4", nombre: "Camila Mendoza Paredes", corto: "Camila", grado: "Inicial 5 años", nivel: "Inicial", fam: "f3", dni: "81554203", pagados: 4 },
+      { id: "a5", nombre: "Diego Castillo Vargas", corto: "Diego", grado: "1.° Secundaria B", nivel: "Secundaria", fam: "f4", dni: "76902114", pagados: 6 },
+      { id: "a6", nombre: "Luciana Chávez Ramírez", corto: "Luciana", grado: "4.° Primaria A", nivel: "Primaria", fam: "f5", dni: "79215560", pagados: 6 },
+      { id: "a7", nombre: "Thiago Rojas Salazar", corto: "Thiago", grado: "5.° Secundaria A", nivel: "Secundaria", fam: "f6", dni: "74018832", pagados: 7 },
+      { id: "a8", nombre: "Ariana Gutiérrez León", corto: "Ariana", grado: "6.° Primaria A", nivel: "Primaria", fam: "f7", dni: "77640391", pagados: 5 }
+    ];
+    var cuotas = [];
+    alumnos.forEach(function (a) {
+      cuotas.push({ id: a.id + "-m", alumnoId: a.id, concepto: "Matrícula 2026", vence: "2026-02-27", monto: 35000, descuento: 0, pagado: 35000 });
+      MESES.forEach(function (m, i) {
+        var monto = PENSION[a.nivel];
+        cuotas.push({ id: a.id + "-" + i, alumnoId: a.id, concepto: "Pensión " + m, vence: FIN_MES[i], monto: monto, descuento: 0, pagado: i < a.pagados ? monto : 0 });
+      });
+    });
+    var s = {
+      familias: familias, alumnos: alumnos, cuotas: cuotas,
+      pagos: [], solicitudes: [], mensajes: [], auditoria: [], alertas: [],
+      cierre: null, asistencia: null, boleta: 1237, nid: 1, visto: {}
+    };
+    s.auditoria.push({ hora: "01/10 18:05", usuario: CAJERA.nombre, rol: CAJERA.rol, accion: "Cierre de caja", detalle: "Esperado S/ 1,350.00 · Contado S/ 1,350.00 · Sin diferencia" });
+    s.mensajes.push({ fam: "f1", hora: "28/08 16:20", texto: "Colegio Virgen María: recibimos S/ 900.00 por Pensión Agosto de Mateo y Valeria. Boleta B001-001105. Gracias por su puntualidad." });
+    aplicarPago(s, { cuotaIds: ["a3-6"], medio: "EFECTIVO", usuario: CAJERA.nombre, rol: CAJERA.rol, hora: "08:12" });
+    aplicarPago(s, { cuotaIds: ["a5-6"], medio: "YAPE", usuario: CAJERA.nombre, rol: CAJERA.rol, hora: "08:40" });
+    aplicarPago(s, { cuotaIds: ["a7-7"], medio: "EFECTIVO", usuario: CAJERA.nombre, rol: CAJERA.rol, hora: "09:05" });
+    s.solicitudes.push({
+      id: "s" + s.nid++, tipo: "DESCUENTO", alumnoId: "a2", estado: "PENDIENTE", hora: "08:30",
+      detalle: "Descuento por hermano: 10 % en las pensiones de octubre a diciembre", monto: 13500,
+      solicitante: "Patricia Gómez", rolSol: "Administración", motivo: "La familia tiene 2 hijos matriculados. Aplica la política de descuento por hermanos."
+    });
+    s.auditoria.push({ hora: "08:30", usuario: "Patricia Gómez", rol: "Administración", accion: "Solicitud de descuento", detalle: "Valeria Quispe · 10 % oct–dic (S/ 135.00) · pendiente de Dirección" });
+    return s;
+  }
+
+  var s;
+  try { var guardado = localStorage.getItem(CLAVE); s = guardado ? JSON.parse(guardado) : null; } catch (e) { s = null; }
+  if (!s || !s.cuotas) s = semilla();
+  function guardar() { try { localStorage.setItem(CLAVE, JSON.stringify(s)); } catch (e) { /* sin almacenamiento: la demo sigue en memoria */ } }
+
+  var ui = {
+    rol: "inicio", tabCaja: "cobrar", tabPadre: "cuenta", tabDir: "aprobaciones",
+    sel: "a1", busq: "", marcadas: [], medio: "EFECTIVO",
+    fam: "f1", padreSel: [], verPagadas: false, modal: null, guia: false, confirmarReinicio: false,
+    nuevosMensajes: {}
+  };
+
+  // ---------- Consultas ----------
+  function alumno(id) { return s.alumnos.find(function (a) { return a.id === id; }); }
+  function familia(id) { return s.familias.find(function (f) { return f.id === id; }); }
+  function cuota(id) { return s.cuotas.find(function (c) { return c.id === id; }); }
+  function cuotasDe(aid) { return s.cuotas.filter(function (c) { return c.alumnoId === aid; }); }
+  function saldo(c) { return c.monto - c.descuento - c.pagado; }
+  function estado(c) {
+    if (saldo(c) <= 0) return "pagado";
+    if (c.vence < HOY) return "vencido";
+    if (c.vence <= "2026-10-31") return "porvencer";
+    return "pendiente";
+  }
+  var EST = { pagado: ["b-ok", "Pagado"], vencido: ["b-bad", "Vencido"], porvencer: ["b-warn", "Por vencer"], pendiente: ["b-neutro", "Pendiente"] };
+  function badge(est) { return '<span class="badge ' + EST[est][0] + '">' + EST[est][1] + "</span>"; }
+  function vencidoDe(aid) { return cuotasDe(aid).filter(function (c) { return estado(c) === "vencido"; }).reduce(function (t, c) { return t + saldo(c); }, 0); }
+  function nombreCuota(c) { return c.concepto + " · " + alumno(c.alumnoId).corto; }
+  function pagosHoy() { return s.pagos.filter(function (p) { return p.fecha === HOY; }); }
+  function vigente(p) { return p.estado !== "ANULADO"; }
+  function efectivoEsperado() { return pagosHoy().filter(function (p) { return p.medio === "EFECTIVO" && vigente(p); }).reduce(function (t, p) { return t + p.total; }, 0); }
+  function pendientes() { return s.solicitudes.filter(function (x) { return x.estado === "PENDIENTE"; }); }
+
+  // ---------- Reglas de negocio ----------
+  function audit(st, usuario, rol, accion, detalle, h) { st.auditoria.push({ hora: h || hora(), usuario: usuario, rol: rol, accion: accion, detalle: detalle }); }
+
+  function aplicarPago(st, o) {
+    var cs = o.cuotaIds.map(function (id) { return st.cuotas.find(function (c) { return c.id === id; }); });
+    var montos = cs.map(function (c) { return c.monto - c.descuento - c.pagado; });
+    var total = montos.reduce(function (t, m) { return t + m; }, 0);
+    var al = st.alumnos.find(function (a) { return a.id === cs[0].alumnoId; });
+    var h = o.hora || hora();
+    var p = {
+      id: "p" + st.nid++, fecha: HOY, hora: h, cuotaIds: o.cuotaIds, montos: montos, total: total,
+      medio: o.medio, boleta: "B001-" + String(st.boleta++).padStart(6, "0"),
+      usuario: o.usuario, rol: o.rol, estado: "VIGENTE", fam: al.fam
+    };
+    cs.forEach(function (c, i) { c.pagado += montos[i]; });
+    st.pagos.push(p);
+    var detalle = cs.map(function (c) { return c.concepto + " de " + st.alumnos.find(function (a) { return a.id === c.alumnoId; }).corto; }).join(", ");
+    st.mensajes.push({ fam: al.fam, hora: h, pagoId: p.id, texto: "Colegio Virgen María: recibimos " + fmt(total) + " por " + detalle + ". Medio: " + MEDIOS[o.medio] + ". Boleta electrónica " + p.boleta + ". Si usted no realizó este pago, llame a Dirección." });
+    audit(st, o.usuario, o.rol, "Pago registrado", p.boleta + " · " + fmt(total) + " · " + MEDIOS[o.medio] + " · " + detalle + " · boleta enviada a SUNAT y WhatsApp a la familia", h);
+    return p;
+  }
+
+  function solicitarAnulacion(pagoId, motivo) {
+    var p = s.pagos.find(function (x) { return x.id === pagoId; });
+    p.estado = "ANULACION_SOLICITADA";
+    s.solicitudes.push({ id: "s" + s.nid++, tipo: "ANULACION", pagoId: p.id, estado: "PENDIENTE", hora: hora(), detalle: "Anular " + p.boleta + " (" + MEDIOS[p.medio] + ")", monto: p.total, solicitante: CAJERA.nombre, rolSol: CAJERA.rol, motivo: motivo });
+    audit(s, CAJERA.nombre, CAJERA.rol, "Solicitud de anulación", p.boleta + " · " + fmt(p.total) + " · motivo: " + motivo);
+  }
+
+  function resolver(solId, aprobar, comentario) {
+    var x = s.solicitudes.find(function (y) { return y.id === solId; });
+    x.estado = aprobar ? "APROBADA" : "RECHAZADA";
+    x.comentario = comentario; x.resuelto = hora();
+    if (x.tipo === "ANULACION") {
+      var p = s.pagos.find(function (y) { return y.id === x.pagoId; });
+      if (aprobar) {
+        p.estado = "ANULADO";
+        p.cuotaIds.forEach(function (id, i) { cuota(id).pagado -= p.montos[i]; });
+        s.mensajes.push({ fam: p.fam, hora: hora(), texto: "Colegio Virgen María: se anuló el pago " + p.boleta + " por " + fmt(p.total) + ". Motivo: " + x.motivo + ". Se emitió la nota de crédito. Si no reconoce esta anulación, comuníquese con Dirección." });
+      } else {
+        p.estado = "VIGENTE";
+      }
+      audit(s, DIRECTOR.nombre, DIRECTOR.rol, aprobar ? "Anulación aprobada" : "Anulación rechazada", p.boleta + " · " + fmt(p.total) + (aprobar ? " · nota de crédito emitida" : "") + (comentario ? " · comentario: " + comentario : ""));
+    } else {
+      if (aprobar) {
+        cuotasDe(x.alumnoId).forEach(function (c, i) { if (i >= 8 && saldo(c) > 0) c.descuento = Math.round(c.monto * 0.1); });
+        var al = alumno(x.alumnoId);
+        s.mensajes.push({ fam: al.fam, hora: hora(), texto: "Colegio Virgen María: se aprobó el descuento por hermano de 10 % para " + al.corto + " en las pensiones de octubre a diciembre. Su nueva pensión es " + fmt(PENSION[al.nivel] * 0.9) + "." });
+      }
+      audit(s, DIRECTOR.nombre, DIRECTOR.rol, aprobar ? "Descuento aprobado" : "Descuento rechazado", x.detalle + " · " + alumno(x.alumnoId).nombre + (comentario ? " · comentario: " + comentario : ""));
+    }
+  }
+
+  function cerrarCaja(contado, explicacion) {
+    var esperado = efectivoEsperado();
+    var dif = contado - esperado;
+    s.cierre = { hora: hora(), esperado: esperado, contado: contado, dif: dif, explicacion: explicacion };
+    audit(s, CAJERA.nombre, CAJERA.rol, "Cierre de caja", "Esperado " + fmt(esperado) + " · Contado " + fmt(contado) + " · " + (dif === 0 ? "Sin diferencia" : (dif < 0 ? "Faltante " : "Sobrante ") + fmt(Math.abs(dif)) + " · explicación: " + explicacion));
+    if (dif !== 0) {
+      s.alertas.push({ hora: s.cierre.hora, nivel: "critico", texto: (dif < 0 ? "Faltante de " : "Sobrante de ") + fmt(Math.abs(dif)) + " en la caja de " + CAJERA.nombre + ". Explicación: “" + explicacion + "”" });
+    }
+  }
+
+  // ---------- Avisos ----------
+  function aviso(titulo, cuerpo, tipo) {
+    var el = document.createElement("div");
+    el.className = "aviso" + (tipo ? " " + tipo : "");
+    el.innerHTML = "<strong>" + esc(titulo) + "</strong>" + (cuerpo ? '<span class="muted">' + esc(cuerpo) + "</span>" : "");
+    document.getElementById("avisos").appendChild(el);
+    setTimeout(function () { el.remove(); }, 5500);
+  }
+
+  // ---------- Vistas ----------
+  var ROLES = [
+    ["inicio", "Su nuevo proceso"], ["caja", "Caja"], ["padre", "Familia"],
+    ["director", "Dirección"], ["dueno", "Promotora"], ["docente", "Docente"]
+  ];
+
+  function vInicio() {
+    var antes = [
+      ["El padre paga en efectivo en secretaría.", "Nadie más ve ese dinero."],
+      ["Una sola persona cobra, anota y guarda.", "Puede no anotar un pago y nadie se entera."],
+      ["Recibo a mano o ninguno.", "El padre no tiene cómo probar que pagó."],
+      ["El cuaderno se puede corregir o perder.", "No queda rastro de quién cambió qué."],
+      ["Descuentos y “arreglos” de palabra.", "Sirven para tapar faltantes."],
+      ["El dueño se entera de los números semanas después.", "El robo se acumula durante meses."]
+    ];
+    var ahora = [
+      ["El sistema genera la deuda de cada alumno.", "Nadie decide cuánto cobrar."],
+      ["El padre paga con Yape, Plin, banco o en caja.", "La mayoría de pagos ya no pasa por manos de nadie."],
+      ["Cada pago emite boleta electrónica y avisa por WhatsApp.", "El padre se vuelve un control: si no le llega el mensaje, reclama."],
+      ["Caja no puede borrar ni anular: solo pedirlo.", "Dirección aprueba o rechaza; todo queda registrado."],
+      ["Cierre de caja diario contra lo que dice el sistema.", "Un faltante se ve el mismo día, no al año."],
+      ["La promotora ve los ingresos en su celular.", "En tiempo real, desde donde esté."]
+    ];
+    function lista(items, clase, cls2) {
+      return '<ol class="proceso ' + clase + '">' + items.map(function (it, i) {
+        return '<li><span class="paso-n">' + (i + 1) + "</span><div><strong>" + it[0] + '</strong><span class="' + cls2 + '">' + it[1] + "</span></div></li>";
+      }).join("") + "</ol>";
+    }
+    var semanas = [
+      ["Semana 1", "Ordenar la información", ["Cargamos alumnos, apoderados y pensiones.", "Se genera la deuda de cada familia.", "Se crean los usuarios y sus permisos."]],
+      ["Semana 2", "Caja acompañada", ["Secretaría registra todo en el sistema, con nosotros al lado.", "Primer cierre de caja diario.", "Se corrigen dudas en el momento."]],
+      ["Semana 3", "Las familias se suman", ["Mensaje a los padres con su estado de cuenta.", "Se activa el pago con Yape, Plin y banco.", "Comunicado explicando las boletas por WhatsApp."]],
+      ["Semana 4", "Control completo", ["Primer cierre de mes y conciliación bancaria.", "Dirección revisa la auditoría.", "Se deja el cuaderno: el sistema es la única fuente."]]
+    ];
+    var roles = [
+      ["caja", "Caja", "Cobra en segundos, sin cuadernos, y cierra la caja cada día."],
+      ["padre", "Familia", "Ve lo que debe, paga desde el celular y recibe su boleta."],
+      ["director", "Dirección", "Aprueba anulaciones y descuentos y revisa la auditoría."],
+      ["dueno", "Promotora", "Ve cuánto entró hoy, la morosidad y las alertas."],
+      ["docente", "Docente", "Pasa asistencia y el sistema avisa a los padres."]
+    ];
+    return '' +
+      '<div class="cabecera"><div><h1>Así cambia la cobranza del colegio</h1><p>De un proceso que depende de la confianza en una persona a uno donde cada sol queda a la vista.</p></div>' +
+      '<button class="btn btn-primario" data-a="guia">Empezar la demostración</button></div>' +
+      '<div class="comparativa">' +
+        '<section class="card antes"><div class="fila entre"><h2>Hoy</h2><span class="badge b-bad">Sin control</span></div>' + lista(antes, "antes", "riesgo") + "</section>" +
+        '<section class="card ahora"><div class="fila entre"><h2>Con Cuentas Claras</h2><span class="badge b-ok">Ordenado y transparente</span></div>' + lista(ahora, "ahora", "control") + "</section>" +
+      "</div>" +
+      '<section class="card"><h2>Cómo lo adoptan: un mes, paso a paso</h2><p class="muted">No se cambia todo de golpe. Cada semana tiene una meta y acompañamiento en el colegio.</p>' +
+        '<div class="semanas">' + semanas.map(function (w) {
+          return '<div class="card semana"><span class="etiqueta">' + w[0] + "</span><h3>" + w[1] + "</h3><ul>" + w[2].map(function (x) { return "<li>" + x + "</li>"; }).join("") + "</ul></div>";
+        }).join("") + "</div></section>" +
+      '<section class="card"><h2>Cada persona con su propia pantalla</h2><p class="muted">Toca un rol para ver lo que esa persona usaría en su día a día.</p>' +
+        '<div class="roles-grid">' + roles.map(function (r) {
+          return '<button class="card rol-card" data-a="rol" data-v="' + r[0] + '"><h3>' + r[1] + "</h3><p>" + r[2] + "</p></button>";
+        }).join("") + "</div></section>";
+  }
+
+  function vCaja() {
+    var tabs = [["cobrar", "Cobrar"], ["pagos", "Pagos de hoy (" + pagosHoy().length + ")"], ["cierre", "Cierre de caja"]];
+    var h = '<div class="cabecera"><div><h1>Caja</h1><p>' + CAJERA.nombre + " · " + HOY_TXT + "</p></div>" +
+      (s.cierre ? '<span class="badge b-neutro">Caja cerrada a las ' + s.cierre.hora + "</span>" : '<span class="badge b-ok">Caja abierta</span>') + "</div>" +
+      '<div class="tabs" role="tablist">' + tabs.map(function (t) { return '<button role="tab" aria-selected="' + (ui.tabCaja === t[0]) + '" data-a="tabCaja" data-v="' + t[0] + '">' + t[1] + "</button>"; }).join("") + "</div>";
+    if (ui.tabCaja === "cobrar") h += vCobrar();
+    if (ui.tabCaja === "pagos") h += vPagosHoy();
+    if (ui.tabCaja === "cierre") h += vCierre();
+    return h;
+  }
+
+  function listaAlumnos() {
+    var q = ui.busq.trim().toLowerCase();
+    var res = s.alumnos.filter(function (a) { return !q || a.nombre.toLowerCase().indexOf(q) >= 0 || a.dni.indexOf(q) >= 0; });
+    if (!res.length) return '<p class="muted" style="padding:8px">No hay alumnos con ese nombre o DNI.</p>';
+    return res.map(function (a) {
+      var v = vencidoDe(a.id);
+      return '<button data-a="sel" data-v="' + a.id + '" aria-current="' + (ui.sel === a.id) + '"><span>' + esc(a.nombre) + "</span><small>" + esc(a.grado) + " · DNI " + a.dni + "</small>" +
+        (v > 0 ? '<span class="badge b-bad">Debe ' + fmt(v) + "</span>" : '<span class="badge b-ok">Al día</span>') + "</button>";
+    }).join("");
+  }
+
+  function vCobrar() {
+    var a = alumno(ui.sel), f = familia(a.fam);
+    var cs = cuotasDe(a.id);
+    var total = ui.marcadas.reduce(function (t, id) { return t + saldo(cuota(id)); }, 0);
+    var filas = cs.map(function (c) {
+      var e = estado(c), libre = saldo(c) > 0;
+      var chk = libre ? '<input type="checkbox" id="c-' + c.id + '" data-a="marcar" data-v="' + c.id + '"' + (ui.marcadas.indexOf(c.id) >= 0 ? " checked" : "") + ' aria-label="Seleccionar ' + esc(c.concepto) + '">' : "";
+      var vence = c.vence.split("-").reverse().slice(0, 2).join("/");
+      return "<tr><td>" + chk + "</td><td>" + esc(c.concepto) + (c.descuento ? ' <span class="badge b-info">-10 %</span>' : "") + '</td><td class="num">' + vence + '</td><td class="num">' + fmt(c.monto - c.descuento) + "</td><td>" + badge(e) + "</td></tr>";
+    }).join("");
+    var medios = Object.keys(MEDIOS).map(function (k) {
+      var dis = k === "EFECTIVO" && s.cierre;
+      return '<label><input type="radio" name="medio" value="' + k + '" data-a="medio"' + (ui.medio === k ? " checked" : "") + (dis ? " disabled" : "") + "> " + MEDIOS[k] + "</label>";
+    }).join("");
+    return '<div class="grid-caja">' +
+      '<section class="card"><label class="campo" for="busq">Buscar alumno<span class="ayuda">Por nombre o DNI</span></label>' +
+        '<input class="input" id="busq" type="search" placeholder="Ej.: Quispe o 78451236" value="' + esc(ui.busq) + '" autocomplete="off">' +
+        '<div class="lista" id="lista">' + listaAlumnos() + "</div></section>" +
+      '<section class="card">' +
+        '<div class="alumno-cab"><div><h2>' + esc(a.nombre) + '</h2><p class="muted">' + esc(a.grado) + " · DNI " + a.dni + "</p>" +
+        '<p class="muted">Apoderada(o): ' + esc(f.apoderado) + " · " + f.tel + "</p></div>" +
+        (vencidoDe(a.id) > 0 ? '<span class="badge b-bad">Vencido: ' + fmt(vencidoDe(a.id)) + "</span>" : '<span class="badge b-ok">Al día</span>') + "</div>" +
+        '<div class="tbl-wrap"><table><thead><tr><th></th><th>Concepto</th><th class="num">Vence</th><th class="num">Monto</th><th>Estado</th></tr></thead><tbody>' + filas + "</tbody></table></div>" +
+        '<div><span class="etiqueta">Medio de pago</span><div class="medios" style="margin-top:6px">' + medios + "</div>" +
+        (s.cierre ? '<p class="ayuda" style="margin-top:6px">La caja de hoy ya se cerró: solo se aceptan pagos digitales hasta mañana.</p>' : "") + "</div>" +
+        '<div class="pie-cobro"><div><span class="etiqueta">Total a cobrar</span><div class="total-grande num">' + fmt(total) + "</div></div>" +
+        '<button class="btn btn-primario" data-a="confirmarPago"' + (total > 0 ? "" : " disabled") + ">Registrar pago</button></div>" +
+        '<div class="nota nota-info">' + ICON.info + "<span>Al registrar, el sistema emite la boleta electrónica y avisa por WhatsApp a " + esc(f.apoderado) + ". Caja no decide montos: la deuda la generó el sistema.</span></div>" +
+      "</section></div>";
+  }
+
+  function vPagosHoy() {
+    var ps = pagosHoy().slice().reverse();
+    var vig = ps.filter(vigente);
+    var tot = vig.reduce(function (t, p) { return t + p.total; }, 0);
+    var efe = vig.filter(function (p) { return p.medio === "EFECTIVO"; }).reduce(function (t, p) { return t + p.total; }, 0);
+    var filas = ps.map(function (p) {
+      var acc;
+      if (p.estado === "VIGENTE") acc = '<button class="btn btn-texto peligro btn-chico" data-a="pedirAnular" data-v="' + p.id + '">Solicitar anulación</button>';
+      else if (p.estado === "ANULACION_SOLICITADA") acc = '<span class="badge b-warn">Esperando a Dirección</span>';
+      else acc = '<span class="badge b-bad">Anulado</span>';
+      var al = alumno(cuota(p.cuotaIds[0]).alumnoId);
+      return '<tr class="' + (p.estado === "ANULADO" ? "anulado" : "") + '"><td class="num">' + p.hora + '</td><td class="num">' + p.boleta + "</td><td>" + esc(al.nombre) + "</td><td>" + p.cuotaIds.map(function (id) { return esc(cuota(id).concepto); }).join(", ") + "</td><td>" + MEDIOS[p.medio] + '</td><td class="num monto">' + fmt(p.total) + "</td><td>" + acc + "</td></tr>";
+    }).join("");
+    return '<div class="resumen-dia">' +
+      '<div class="card"><span class="etiqueta">Cobrado hoy</span><div class="cifra num">' + fmt(tot) + '</div><span class="muted">' + vig.length + " pagos vigentes</span></div>" +
+      '<div class="card"><span class="etiqueta">En efectivo (debe estar en caja)</span><div class="cifra num">' + fmt(efe) + "</div></div>" +
+      '<div class="card"><span class="etiqueta">Digital (directo al banco)</span><div class="cifra num">' + fmt(tot - efe) + "</div></div></div>" +
+      '<div class="nota nota-info">' + ICON.candado + "<span>Caja no puede borrar ni anular pagos. Solo puede <strong>solicitar</strong> una anulación con motivo; Dirección la aprueba o la rechaza.</span></div>" +
+      '<section class="card"><div class="tbl-wrap"><table><thead><tr><th class="num">Hora</th><th class="num">Boleta</th><th>Alumno</th><th>Concepto</th><th>Medio</th><th class="num">Monto</th><th>Acción</th></tr></thead><tbody>' + filas + "</tbody></table></div></section>";
+  }
+
+  function vCierre() {
+    var esperado = efectivoEsperado();
+    var efes = pagosHoy().filter(function (p) { return p.medio === "EFECTIVO"; });
+    if (s.cierre) {
+      var c = s.cierre, ok = c.dif === 0;
+      return '<section class="card"><h2>Cierre de caja de hoy</h2>' +
+        '<div class="resumen"><div><span>Esperado según el sistema</span><strong class="num">' + fmt(c.esperado) + "</strong></div><div><span>Contado por caja</span><strong class=\"num\">" + fmt(c.contado) + "</strong></div><div><span>Diferencia</span><strong class=\"num\">" + fmt(c.dif) + "</strong></div></div>" +
+        (ok ? '<div class="nota nota-ok">' + ICON.ok + "<span>La caja cuadró. La promotora recibió la confirmación en su celular.</span></div>"
+            : '<div class="nota nota-bad">' + ICON.alerta + "<span>Hay una diferencia de " + fmt(Math.abs(c.dif)) + ". Se envió una alerta a la promotora y a Dirección con la explicación de caja.</span></div>") +
+        "</section>";
+    }
+    return '<div class="cierre-grid">' +
+      '<section class="card"><h2>Efectivo que debe haber en caja</h2><div class="cifra num">' + fmt(esperado) + '</div><p class="muted">Suma de los pagos en efectivo registrados hoy. Lo calcula el sistema; caja no lo puede cambiar.</p>' +
+        '<div class="tbl-wrap"><table><thead><tr><th class="num">Hora</th><th class="num">Boleta</th><th>Estado</th><th class="num">Monto</th></tr></thead><tbody>' +
+        efes.map(function (p) { return '<tr class="' + (p.estado === "ANULADO" ? "anulado" : "") + '"><td class="num">' + p.hora + '</td><td class="num">' + p.boleta + "</td><td>" + (p.estado === "ANULADO" ? '<span class="badge b-bad">Anulado</span>' : '<span class="badge b-ok">Vigente</span>') + '</td><td class="num monto">' + fmt(p.total) + "</td></tr>"; }).join("") +
+        "</tbody></table></div></section>" +
+      '<section class="card"><h2>Contar y cerrar</h2>' +
+        '<label class="campo" for="contado">Efectivo contado (S/)<span class="ayuda">Cuenta billetes y monedas y escribe el total.</span></label>' +
+        '<input class="input num" id="contado" type="number" inputmode="decimal" min="0" step="0.10" placeholder="0.00">' +
+        '<div class="fila entre"><span class="muted">Diferencia</span><span class="dif num" id="dif">—</span></div>' +
+        '<label class="campo" for="expl">Explicación de la diferencia<span class="ayuda">Obligatoria si el contado no coincide.</span></label>' +
+        '<textarea class="input" id="expl" placeholder="Ej.: se dio vuelto de más a una familia"></textarea>' +
+        '<p class="error" id="err-cierre" hidden></p>' +
+        '<button class="btn btn-primario btn-bloque" data-a="cerrarCaja">Cerrar caja</button>' +
+        '<div class="nota nota-warn">' + ICON.info + "<span>Para la demostración, prueba con <strong>" + fmt(esperado - 5000) + "</strong>: un faltante de S/ 50.00. Verás la alerta en el celular de la promotora.</span></div>" +
+      "</section></div>";
+  }
+
+  function marcoTelefono(contenido, nota) {
+    return '<div class="escenario"><div class="telefono"><div class="pantalla"><div class="notch"><span>9:41</span><span>4G · 87 %</span></div>' + contenido + "</div></div>" +
+      '<aside class="nota-lateral">' + nota + "</aside></div>";
+  }
+
+  function vPadre() {
+    var f = familia(ui.fam);
+    var hijos = s.alumnos.filter(function (a) { return a.fam === f.id; });
+    var msgs = s.mensajes.filter(function (m) { return m.fam === f.id; });
+    var tabs = [["cuenta", "Mi cuenta"], ["mensajes", "WhatsApp (" + msgs.length + ")"], ["boletas", "Boletas"]];
+    var cuerpo = "";
+    if (ui.tabPadre === "cuenta") {
+      var venc = hijos.reduce(function (t, a) { return t + vencidoDe(a.id); }, 0);
+      cuerpo = '<div class="app-cuerpo">' +
+        (venc > 0 ? '<div class="saldo-hero debe"><span class="etiqueta">Tienes vencido</span><span class="cifra num">' + fmt(venc) + '</span><span class="muted">Selecciona las cuotas y paga desde aquí.</span></div>'
+                  : '<div class="saldo-hero al-dia"><span class="etiqueta">Estado de cuenta</span><span class="cifra">¡Estás al día!</span><span class="muted">Gracias por tu puntualidad.</span></div>');
+      hijos.forEach(function (a) {
+        var cs = cuotasDe(a.id);
+        var porPagar = cs.filter(function (c) { return saldo(c) > 0; });
+        var pagadas = cs.filter(function (c) { return saldo(c) <= 0; });
+        cuerpo += '<section class="card" style="padding:12px"><div><h3>' + esc(a.nombre) + '</h3><p class="muted" style="font-size:.8125rem">' + esc(a.grado) + "</p></div><div>" +
+          porPagar.map(function (c) {
+            return '<label class="cuota-item"><input type="checkbox" data-a="padreMarcar" data-v="' + c.id + '"' + (ui.padreSel.indexOf(c.id) >= 0 ? " checked" : "") + "><span>" + esc(c.concepto) + "<small>Vence " + c.vence.split("-").reverse().join("/") + '</small></span><span class="der"><strong class="num">' + fmt(saldo(c)) + "</strong>" + badge(estado(c)) + "</span></label>";
+          }).join("") +
+          (ui.verPagadas ? pagadas.map(function (c) { return '<div class="cuota-item"><span></span><span>' + esc(c.concepto) + '</span><span class="der">' + badge("pagado") + "</span></div>"; }).join("") : "") +
+          '</div><button class="btn btn-texto btn-chico" data-a="verPagadas">' + (ui.verPagadas ? "Ocultar pagadas" : "Ver pagadas (" + pagadas.length + ")") + "</button></section>";
+      });
+      cuerpo += "</div>";
+      var tot = ui.padreSel.reduce(function (t, id) { return t + saldo(cuota(id)); }, 0);
+      cuerpo += '<div class="barra-pago"><button class="btn btn-primario btn-bloque" data-a="padrePagar"' + (tot ? "" : " disabled") + ">" + (tot ? "Pagar " + fmt(tot) : "Selecciona qué pagar") + "</button></div>";
+    } else if (ui.tabPadre === "mensajes") {
+      cuerpo = '<div class="wa-cab"><strong>Colegio Virgen María</strong><small style="display:block;opacity:.85">Cuenta oficial verificada</small></div><div class="wa">' +
+        (msgs.length ? msgs.slice().reverse().map(function (m, i) {
+          return '<div class="burbuja' + (ui.nuevosMensajes[f.id] && i < ui.nuevosMensajes[f.id] ? " nueva" : "") + '">' + esc(m.texto) + "<time>" + m.hora + "</time></div>";
+        }).join("") : '<p class="muted">Aún no hay mensajes.</p>') + "</div>";
+    } else {
+      var ps = s.pagos.filter(function (p) { return p.fam === f.id; }).slice().reverse();
+      cuerpo = '<div class="app-cuerpo">' + (ps.length ? ps.map(function (p) {
+        return '<div class="card" style="padding:12px"><div class="fila entre"><strong class="num">' + p.boleta + '</strong><strong class="num">' + fmt(p.total) + '</strong></div><p class="muted" style="font-size:.8125rem">' +
+          p.cuotaIds.map(function (id) { return esc(nombreCuota(cuota(id))); }).join(", ") + " · " + MEDIOS[p.medio] + " · hoy " + p.hora + "</p>" +
+          (p.estado === "ANULADO" ? '<span class="badge b-bad">Anulada · nota de crédito emitida</span>' : '<span class="badge b-ok">Boleta electrónica válida</span>') + "</div>";
+      }).join("") : '<p class="muted">Los pagos de este año aparecerán aquí con su boleta.</p>') + "</div>";
+    }
+    var app = '<div class="app-cab"><small>Colegio Virgen María</small><strong>Hola, ' + esc(f.corto) + "</strong></div>" +
+      '<div class="app-tabs" role="tablist">' + tabs.map(function (t) { return '<button role="tab" aria-selected="' + (ui.tabPadre === t[0]) + '" data-a="tabPadre" data-v="' + t[0] + '">' + t[1] + "</button>"; }).join("") + "</div>" + cuerpo;
+    var opciones = s.familias.map(function (x) { return '<option value="' + x.id + '"' + (x.id === f.id ? " selected" : "") + ">" + esc(x.apoderado) + "</option>"; }).join("");
+    var nota = '<div><h1>Lo que ve la familia</h1><p class="muted">El celular de la apoderada o apoderado. Así se entera al instante de cada pago.</p></div>' +
+      '<label class="campo" for="fam">Ver como<select class="input" id="fam">' + opciones + "</select></label>" +
+      '<div class="card"><h3>Por qué esto evita el robo</h3><ul><li>Cada pago llega por WhatsApp con su número de boleta.</li><li>Si el padre pagó y no recibe el mensaje, reclama de inmediato.</li><li>El estado de cuenta muestra lo mismo que ve el colegio: no hay deudas inventadas ni pagos perdidos.</li><li>Pagar con Yape o Plin lleva el dinero directo a la cuenta del colegio.</li></ul></div>';
+    return marcoTelefono(app, nota);
+  }
+
+  function vDirector() {
+    var pend = pendientes();
+    var tabs = [["aprobaciones", "Aprobaciones (" + pend.length + ")"], ["auditoria", "Auditoría"]];
+    var h = '<div class="cabecera"><div><h1>Dirección</h1><p>' + DIRECTOR.nombre + " · " + HOY_TXT + "</p></div></div>" +
+      '<div class="tabs" role="tablist">' + tabs.map(function (t) { return '<button role="tab" aria-selected="' + (ui.tabDir === t[0]) + '" data-a="tabDir" data-v="' + t[0] + '">' + t[1] + "</button>"; }).join("") + "</div>";
+    if (ui.tabDir === "aprobaciones") {
+      h += '<div class="nota nota-info">' + ICON.info + "<span>Separación de funciones: quien cobra no puede aprobar. Toda anulación o descuento pasa por aquí y queda en la auditoría.</span></div>";
+      h += pend.length ? pend.map(function (x) {
+        return '<section class="card solicitud"><div class="fila entre"><span class="badge ' + (x.tipo === "ANULACION" ? "b-bad" : "b-info") + '">' + (x.tipo === "ANULACION" ? "Anulación de pago" : "Descuento") + '</span><span class="muted num">' + x.hora + "</span></div>" +
+          "<h3>" + esc(x.detalle) + '</h3><p class="num"><strong>' + fmt(x.monto) + '</strong></p><p class="muted">Solicita: ' + esc(x.solicitante) + " (" + x.rolSol + ")</p><p>Motivo: “" + esc(x.motivo) + "”</p>" +
+          '<div class="fila"><button class="btn btn-primario btn-chico" data-a="revisar" data-v="' + x.id + '">Revisar y decidir</button></div></section>';
+      }).join("") : '<section class="card"><p class="muted">No hay solicitudes pendientes. Todo lo que caja o administración pida aparecerá aquí.</p></section>';
+      var res = s.solicitudes.filter(function (x) { return x.estado !== "PENDIENTE"; });
+      if (res.length) {
+        h += '<section class="card"><h2>Resueltas hoy</h2><div class="tbl-wrap"><table><thead><tr><th>Solicitud</th><th class="num">Monto</th><th>Decisión</th><th>Comentario</th></tr></thead><tbody>' +
+          res.map(function (x) { return "<tr><td>" + esc(x.detalle) + '</td><td class="num">' + fmt(x.monto) + "</td><td>" + (x.estado === "APROBADA" ? '<span class="badge b-ok">Aprobada</span>' : '<span class="badge b-neutro">Rechazada</span>') + "</td><td>" + esc(x.comentario || "—") + "</td></tr>"; }).join("") +
+          "</tbody></table></div></section>";
+      }
+    } else {
+      h += '<div class="nota nota-info">' + ICON.candado + "<span><strong>Registro inmutable.</strong> Nadie, ni la promotora ni el administrador del sistema, puede editar o borrar estas filas. Es la evidencia ante cualquier auditoría.</span></div>" +
+        '<section class="card"><div class="tbl-wrap"><table><thead><tr><th class="num">Hora</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr></thead><tbody>' +
+        s.auditoria.slice().reverse().map(function (e) { return '<tr><td class="num">' + e.hora + "</td><td>" + esc(e.usuario) + '<br><small class="muted">' + e.rol + "</small></td><td><strong>" + esc(e.accion) + "</strong></td><td>" + esc(e.detalle) + "</td></tr>"; }).join("") +
+        "</tbody></table></div></section>";
+    }
+    return h;
+  }
+
+  function grafico() {
+    var W = 340, H = 190, L = 30, R = 8, T = 22, B = 24, ph = H - T - B, bw = (W - L - R) / HISTORICO.length, barW = 22;
+    function y(v) { return T + ph * (1 - v / 100); }
+    var svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Porcentaje cobrado de lo esperado, de marzo a septiembre">';
+    [0, 50, 100].forEach(function (v) { svg += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '"/><text class="eje" x="' + (L - 6) + '" y="' + (y(v) + 3) + '" text-anchor="end">' + v + "</text>"; });
+    svg += '<line class="meta" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(95) + '" y2="' + y(95) + '"/><text class="eje" x="' + (W - R) + '" y="' + (y(95) - 5) + '" text-anchor="end">Meta 95 %</text>';
+    HISTORICO.forEach(function (d, i) {
+      var cx = L + bw * i + bw / 2, x = cx - barW / 2, top = y(d.pct), base = y(0), r = 4;
+      var path = "M" + x + "," + base + " V" + (top + r) + " Q" + x + "," + top + " " + (x + r) + "," + top + " H" + (x + barW - r) + " Q" + (x + barW) + "," + top + " " + (x + barW) + "," + (top + r) + " V" + base + " Z";
+      svg += '<g data-bar="' + i + '"><rect class="hit" x="' + (L + bw * i) + '" y="' + T + '" width="' + bw + '" height="' + ph + '"/><path class="barra" d="' + path + '"/>' +
+        '<text class="eje" x="' + cx + '" y="' + (H - 8) + '" text-anchor="middle">' + d.mes + "</text>" +
+        (i === HISTORICO.length - 1 ? '<text class="valor" x="' + cx + '" y="' + (top - 6) + '" text-anchor="middle">' + d.pct + " %</text>" : "") + "</g>";
+    });
+    svg += "</svg>";
+    var tabla = "<details><summary>Ver como tabla</summary><table><thead><tr><th>Mes</th><th class=\"num\">Cobrado</th><th class=\"num\">% de lo esperado</th></tr></thead><tbody>" +
+      HISTORICO.map(function (d) { return "<tr><td>" + d.nombre + '</td><td class="num">' + fmt(ESPERADO_MES * d.pct / 100) + '</td><td class="num">' + d.pct + " %</td></tr>"; }).join("") + "</tbody></table></details>";
+    return '<div class="grafico" id="grafico">' + svg + '<div class="tooltip" id="tip" hidden></div></div>' + tabla;
+  }
+
+  function vDueno() {
+    var hoy = pagosHoy().filter(vigente);
+    var totHoy = hoy.reduce(function (t, p) { return t + p.total; }, 0);
+    var dig = hoy.filter(function (p) { return p.medio !== "EFECTIVO"; }).reduce(function (t, p) { return t + p.total; }, 0);
+    var deudaMuestra = s.alumnos.reduce(function (t, a) { return t + vencidoDe(a.id); }, 0);
+    var famMuestra = s.familias.filter(function (f) { return s.alumnos.some(function (a) { return a.fam === f.id && vencidoDe(a.id) > 0; }); }).length;
+    var alertas = s.alertas.slice().reverse().map(function (al) { return '<div class="alerta-item critico">' + ICON.alerta + "<span><strong>Caja con diferencia · " + al.hora + "</strong><br>" + esc(al.texto) + "</span></div>"; }).join("");
+    var pend = pendientes().length;
+    if (pend) alertas += '<div class="alerta-item espera">' + ICON.info + "<span><strong>" + pend + (pend === 1 ? " solicitud espera" : " solicitudes esperan") + " a Dirección</strong><br>Anulaciones o descuentos por aprobar.</span></div>";
+    if (s.cierre && s.cierre.dif === 0) alertas += '<div class="alerta-item bien">' + ICON.ok + "<span><strong>La caja de hoy cuadró</strong><br>Cierre a las " + s.cierre.hora + " sin diferencia.</span></div>";
+    if (!s.cierre) alertas += '<div class="alerta-item espera">' + ICON.info + "<span><strong>Caja de hoy abierta</strong><br>Efectivo esperado ahora: " + fmt(efectivoEsperado()) + ".</span></div>";
+    var app = '<div class="app-cab"><small>' + HOY_TXT + "</small><strong>Buenos días, Carmen</strong></div>" +
+      '<div class="app-cuerpo">' +
+        '<div style="display:grid;gap:8px">' + alertas + "</div>" +
+        '<div class="kpis">' +
+          '<div class="kpi"><span class="etiqueta">Cobrado hoy</span><span class="cifra num">' + fmt(totHoy) + "</span><small>" + hoy.length + " pagos</small></div>" +
+          '<div class="kpi"><span class="etiqueta">Octubre</span><span class="cifra num">' + fmt(BASE_OCT + totHoy) + "</span><small>de " + fmt(ESPERADO_MES) + " esperado</small></div>" +
+          '<div class="kpi"><span class="etiqueta">Deuda vencida</span><span class="cifra num">' + fmt(BASE_DEUDA + deudaMuestra) + "</span><small>" + (BASE_FAMILIAS_DEUDA + famMuestra) + " de " + TOTAL_FAMILIAS + " familias</small></div>" +
+          '<div class="kpi"><span class="etiqueta">Digital hoy</span><span class="cifra num">' + (totHoy ? Math.round(dig * 100 / totHoy) : 0) + ' %</span><small>Meta: 60 %</small></div>' +
+        "</div>" +
+        '<section class="card" style="padding:12px"><h3>Cobranza por mes</h3><p class="muted" style="font-size:.8125rem">% cobrado de lo esperado (S/ 135,000 al mes)</p>' + grafico() + "</section>" +
+        '<section class="card" style="padding:12px"><h3>Últimos pagos</h3>' +
+          hoy.slice().reverse().slice(0, 5).map(function (p) { var al = alumno(cuota(p.cuotaIds[0]).alumnoId); return '<div class="fila entre" style="padding:6px 0;border-top:1px solid var(--borde);font-size:.875rem"><span>' + esc(al.corto) + " · " + MEDIOS[p.medio] + '<br><small class="muted">' + p.hora + " · " + p.boleta + '</small></span><strong class="num">' + fmt(p.total) + "</strong></div>"; }).join("") +
+        "</section></div>";
+    var nota = '<div><h1>Lo que ve la promotora</h1><p class="muted">En su celular, en tiempo real, desde cualquier lugar.</p></div>' +
+      '<div class="card"><h3>Por qué esto evita el robo</h3><ul><li>Sabe cuánto entró hoy sin preguntarle a nadie.</li><li>Si la caja no cuadra, recibe la alerta el mismo día con la explicación.</li><li>Ve cuántas familias deben y cuánto, para cobrar a tiempo.</li><li>Ve si los pagos digitales están creciendo: menos efectivo, menos riesgo.</li></ul></div>' +
+      '<p class="ayuda">Las cifras del colegio completo son de ejemplo; los pagos de hoy cambian en vivo con la demostración.</p>';
+    return marcoTelefono(app, nota);
+  }
+
+  var SECCION = ["Mateo Quispe Huamán", "Sofía Ccama Rivas", "Joaquín Benites Lazo", "Isabella Torres Núñez", "Gabriel Salas Ortiz", "Mía Huerta Cárdenas", "Adrián Poma Villena"];
+  function vDocente() {
+    var marcas = (s.asistencia && s.asistencia.marcas) || {};
+    var filas = SECCION.map(function (n, i) {
+      var v = marcas[i] || "P";
+      return "<tr><td>" + (i + 1) + "</td><td>" + esc(n) + '</td><td><div class="asis" role="radiogroup" aria-label="Asistencia de ' + esc(n) + '">' +
+        [["P", "Presente"], ["T", "Tarde"], ["F", "Falta"]].map(function (o) { return '<label title="' + o[1] + '"><input type="radio" name="as-' + i + '" value="' + o[0] + '"' + (v === o[0] ? " checked" : "") + ' aria-label="' + o[1] + '">' + o[0] + "</label>"; }).join("") +
+        "</div></td></tr>";
+    }).join("");
+    return '<div class="cabecera"><div><h1>Asistencia · 5.° Primaria A</h1><p>Prof. Ana Torres · ' + HOY_TXT + "</p></div></div>" +
+      '<div class="grid-doc"><section class="card"><div class="tbl-wrap"><table><thead><tr><th>N.°</th><th>Alumno</th><th>Hoy</th></tr></thead><tbody>' + filas + "</tbody></table></div>" +
+        '<button class="btn btn-primario" data-a="guardarAsistencia">Guardar asistencia</button>' +
+        (s.asistencia ? '<div class="nota nota-ok">' + ICON.ok + "<span>Guardada a las " + s.asistencia.hora + ". " + (s.asistencia.avisos ? "Se avisó por WhatsApp a " + s.asistencia.avisos + (s.asistencia.avisos === 1 ? " familia." : " familias.") : "Todos presentes: no se envió ningún aviso.") + "</span></div>" : "") +
+      "</section>" +
+      '<aside class="card"><h3>Más que cobranza</h3><p class="muted">La misma plataforma ordena lo académico.</p><ul style="margin:0;padding-left:18px;display:grid;gap:6px;color:var(--texto-2)"><li>Asistencia con aviso automático a los padres.</li><li><strong>Siguiente fase:</strong> notas por competencias y libretas en PDF.</li><li>Exportación para SIAGIE, sin volver a digitar.</li><li>Comunicados con confirmación de lectura.</li></ul>' +
+        '<div class="nota nota-info">' + ICON.info + "<span>Prueba marcar a Mateo como <strong>Falta</strong> y guarda. Luego mira el WhatsApp en la vista Familia.</span></div></aside></div>";
+  }
+
+  // ---------- Guía ----------
+  function pasosGuia() {
+    var pagosNuevosCaja = s.pagos.some(function (p) { return p.rol === "Caja" && p.hora !== "08:12" && p.hora !== "08:40" && p.hora !== "09:05"; });
+    return [
+      ["inicio", null, "Muestra el antes y el después", "Su proceso actual frente al nuevo.", !!s.visto.inicio],
+      ["caja", "cobrar", "Caja registra un pago", "Elige a Mateo, marca Septiembre y registra en efectivo.", pagosNuevosCaja],
+      ["padre", "mensajes", "La familia recibe su WhatsApp", "Mira el mensaje con la boleta, al instante.", !!s.visto.padreMsg],
+      ["padre", "cuenta", "La familia paga con Yape", "Desde el celular, sin pasar por caja.", s.pagos.some(function (p) { return p.rol === "Automático"; })],
+      ["caja", "pagos", "Caja intenta anular un pago", "Solo puede solicitarlo, con motivo.", s.solicitudes.some(function (x) { return x.tipo === "ANULACION"; })],
+      ["director", "aprobaciones", "Dirección decide", "Aprueba o rechaza la anulación o el descuento.", s.solicitudes.some(function (x) { return x.estado !== "PENDIENTE"; })],
+      ["caja", "cierre", "Caja cierra con un faltante", "Escribe un monto menor al esperado.", !!s.cierre],
+      ["dueno", null, "La promotora ve la alerta", "En su celular, el mismo día.", !!s.visto.duenoAlerta],
+      ["director", "auditoria", "Todo quedó en la auditoría", "Quién hizo qué y a qué hora, sin poder borrarse.", !!s.visto.auditoria]
+    ];
+  }
+  function vGuia() {
+    var pasos = pasosGuia(), hechos = pasos.filter(function (p) { return p[4]; }).length;
+    return '<div class="guia-cab"><div><h2>Recorrido de demostración</h2><p class="muted" style="font-size:.875rem">' + hechos + " de " + pasos.length + " pasos. Cada paso se marca solo al hacerlo.</p></div>" +
+      '<button class="btn btn-secundario btn-chico" data-a="guia" aria-label="Cerrar guía">Cerrar</button></div>' +
+      '<div class="guia-cuerpo"><ol class="pasos">' + pasos.map(function (p, i) {
+        return '<li class="' + (p[4] ? "hecho" : "") + '"><span class="n">' + (p[4] ? "✓" : i + 1) + "</span><p>" + p[2] + "<small>" + p[3] + '</small></p><button class="btn btn-texto btn-chico" data-a="ir" data-v="' + i + '">Ir</button></li>';
+      }).join("") + "</ol>" +
+      '<section class="card"><h3>Mensaje para cerrar la reunión</h3><p class="muted" style="font-size:.875rem">“Con este sistema, lo que pasó no hubiera durado meses: el primer día que faltara dinero, usted lo habría sabido en su celular.”</p></section>' +
+      '<section class="card"><h3>Reiniciar la demostración</h3><p class="muted" style="font-size:.875rem">Vuelve a los datos de ejemplo iniciales.</p>' +
+        (ui.confirmarReinicio ? '<div class="fila"><button class="btn btn-peligro btn-chico" data-a="reiniciarSi">Sí, reiniciar</button><button class="btn btn-secundario btn-chico" data-a="reiniciarNo">Cancelar</button></div>'
+                              : '<button class="btn btn-secundario btn-chico" data-a="reiniciar">Reiniciar</button>') +
+      "</section></div>";
+  }
+
+  // ---------- Modales ----------
+  function qrSvg(semillaTxt) {
+    var n = 25, h = 0, i, j, out = "";
+    for (i = 0; i < semillaTxt.length; i++) h = (h * 31 + semillaTxt.charCodeAt(i)) >>> 0;
+    function rnd() { h = (h * 1103515245 + 12345) >>> 0; return (h >>> 16) & 1; }
+    function finder(x, y) { return '<rect x="' + x + '" y="' + y + '" width="7" height="7" fill="#000"/><rect x="' + (x + 1) + '" y="' + (y + 1) + '" width="5" height="5" fill="#fff"/><rect x="' + (x + 2) + '" y="' + (y + 2) + '" width="3" height="3" fill="#000"/>'; }
+    for (i = 0; i < n; i++) for (j = 0; j < n; j++) {
+      var enFinder = (i < 8 && j < 8) || (i < 8 && j > n - 9) || (i > n - 9 && j < 8);
+      if (!enFinder && rnd()) out += '<rect x="' + j + '" y="' + i + '" width="1" height="1" fill="#000"/>';
+    }
+    return '<svg class="qr" viewBox="0 0 ' + n + " " + n + '" shape-rendering="crispEdges" role="img" aria-label="Código QR de ejemplo">' + out + finder(0, 0) + finder(n - 7, 0) + finder(0, n - 7) + "</svg>";
+  }
+
+  function vModal() {
+    var m = ui.modal;
+    if (!m) return "";
+    var c = "";
+    if (m.tipo === "confirmarPago") {
+      var a = alumno(ui.sel), f = familia(a.fam), tot = ui.marcadas.reduce(function (t, id) { return t + saldo(cuota(id)); }, 0);
+      c = '<h2 id="m-t">Confirmar pago</h2><div class="resumen">' + ui.marcadas.map(function (id) { var q = cuota(id); return "<div><span>" + esc(q.concepto) + '</span><span class="num">' + fmt(saldo(q)) + "</span></div>"; }).join("") +
+        '<div><strong>Total</strong><strong class="num">' + fmt(tot) + "</strong></div></div>" +
+        '<p class="muted">Alumno: ' + esc(a.nombre) + "<br>Medio: " + MEDIOS[ui.medio] + "<br>Se avisará a: " + esc(f.apoderado) + " (" + f.tel + ")</p>" +
+        '<div class="acciones"><button class="btn btn-secundario" data-a="cerrarModal">Cancelar</button><button class="btn btn-primario" data-a="registrar">Registrar pago</button></div>';
+    } else if (m.tipo === "pagoOk") {
+      var p = s.pagos.find(function (x) { return x.id === m.pagoId; }), fp = familia(p.fam);
+      c = '<h2 id="m-t">Pago registrado</h2><p class="total-grande num">' + fmt(p.total) + "</p>" +
+        '<ul class="checks"><li>' + ICON.ok + "<span>Boleta electrónica <strong>" + p.boleta + "</strong> emitida y enviada a SUNAT</span></li>" +
+        "<li>" + ICON.ok + "<span>WhatsApp enviado a " + esc(fp.apoderado) + " (" + fp.tel + ")</span></li>" +
+        "<li>" + ICON.ok + "<span>Registrado en la auditoría a nombre de " + esc(p.usuario) + " a las " + p.hora + "</span></li></ul>" +
+        '<div class="acciones"><button class="btn btn-secundario" data-a="cerrarModal">Seguir cobrando</button><button class="btn btn-primario" data-a="verFamilia" data-v="' + p.fam + '">Ver lo que recibió la familia</button></div>';
+    } else if (m.tipo === "anular") {
+      var pa = s.pagos.find(function (x) { return x.id === m.pagoId; });
+      c = '<h2 id="m-t">Solicitar anulación</h2><div class="resumen"><div><span>Boleta</span><strong class="num">' + pa.boleta + '</strong></div><div><span>Monto</span><strong class="num">' + fmt(pa.total) + "</strong></div><div><span>Medio</span><span>" + MEDIOS[pa.medio] + "</span></div></div>" +
+        '<label class="campo" for="motivo">Motivo<span class="ayuda">Obligatorio. Dirección lo leerá antes de decidir.</span></label><textarea class="input" id="motivo" placeholder="Ej.: se registró en el alumno equivocado"></textarea>' +
+        '<p class="error" id="err-motivo" hidden>Escribe el motivo (mínimo 10 caracteres).</p>' +
+        '<div class="nota nota-info">' + ICON.info + "<span>El pago sigue vigente hasta que Dirección lo apruebe. Caja no puede anular por su cuenta.</span></div>" +
+        '<div class="acciones"><button class="btn btn-secundario" data-a="cerrarModal">Cancelar</button><button class="btn btn-peligro" data-a="enviarAnulacion" data-v="' + pa.id + '">Enviar solicitud</button></div>';
+    } else if (m.tipo === "revisar") {
+      var x = s.solicitudes.find(function (y) { return y.id === m.solId; });
+      c = '<h2 id="m-t">' + (x.tipo === "ANULACION" ? "Anulación de pago" : "Descuento") + "</h2><p>" + esc(x.detalle) + '</p><div class="resumen"><div><span>Monto</span><strong class="num">' + fmt(x.monto) + "</strong></div><div><span>Solicita</span><span>" + esc(x.solicitante) + " (" + x.rolSol + ")</span></div><div><span>Hora</span><span>" + x.hora + "</span></div></div>" +
+        "<p>Motivo: “" + esc(x.motivo) + "”</p>" +
+        '<label class="campo" for="coment">Comentario (opcional)</label><textarea class="input" id="coment" placeholder="Queda en la auditoría"></textarea>' +
+        (x.tipo === "ANULACION" ? '<p class="ayuda">Si apruebas: se emite la nota de crédito, la cuota vuelve a quedar pendiente y la familia recibe un aviso.</p>' : '<p class="ayuda">Si apruebas: se aplica el 10 % a las pensiones de octubre a diciembre y se avisa a la familia.</p>') +
+        '<div class="acciones"><button class="btn btn-secundario" data-a="decidir" data-v="no">Rechazar</button><button class="btn btn-primario" data-a="decidir" data-v="si">Aprobar</button></div>';
+    } else if (m.tipo === "padrePagar") {
+      var totp = ui.padreSel.reduce(function (t, id) { return t + saldo(cuota(id)); }, 0);
+      if (m.listo) {
+        var pp = s.pagos.find(function (y) { return y.id === m.pagoId; });
+        c = '<h2 id="m-t">¡Pago confirmado!</h2><ul class="checks"><li>' + ICON.ok + "<span>" + fmt(pp.total) + " recibidos en la cuenta del colegio</span></li><li>" + ICON.ok + "<span>Boleta " + pp.boleta + " enviada a tu WhatsApp</span></li><li>" + ICON.ok + "<span>Tu estado de cuenta ya está actualizado</span></li></ul>" +
+          '<div class="acciones"><button class="btn btn-primario" data-a="cerrarModal">Listo</button></div>';
+      } else {
+        c = '<h2 id="m-t">Pagar ' + fmt(totp) + '</h2><div class="medios">' + ["YAPE", "PLIN", "TARJETA"].map(function (k) { return '<label><input type="radio" name="mpadre" value="' + k + '" data-a="medioPadre"' + (m.medio === k ? " checked" : "") + "> " + MEDIOS[k] + "</label>"; }).join("") + "</div>" +
+          (m.medio === "TARJETA" ? '<p class="muted">Se abrirá la pasarela segura del banco (Niubiz, Izipay o Culqi) para ingresar la tarjeta.</p>'
+                                 : qrSvg(m.medio + totp) + '<p class="muted" style="text-align:center">Escanea con ' + MEDIOS[m.medio] + "<br><strong>I.E.P. Virgen María</strong> · cuenta empresarial</p>") +
+          '<div class="acciones"><button class="btn btn-secundario" data-a="cerrarModal">Cancelar</button><button class="btn btn-primario" data-a="simularPago">Simular pago confirmado</button></div>';
+      }
+    }
+    return '<div class="velo" data-a="velo"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-t">' + c + "</div></div>";
+  }
+
+  // ---------- Render ----------
+  function render() {
+    document.getElementById("roles").innerHTML = ROLES.map(function (r) { return '<button data-a="rol" data-v="' + r[0] + '" aria-pressed="' + (ui.rol === r[0]) + '">' + r[1] + "</button>"; }).join("");
+    var v = { inicio: vInicio, caja: vCaja, padre: vPadre, director: vDirector, dueno: vDueno, docente: vDocente }[ui.rol];
+    document.getElementById("main").innerHTML = v();
+    var g = document.getElementById("guia");
+    g.hidden = !ui.guia;
+    if (ui.guia) g.innerHTML = vGuia();
+    var mr = document.getElementById("modal-raiz");
+    var teniaModal = !!mr.firstChild;
+    mr.innerHTML = vModal();
+    if (ui.modal && !teniaModal) { var foco = mr.querySelector("textarea, .acciones .btn-primario, .acciones .btn"); if (foco) foco.focus(); }
+    marcarVistos();
+  }
+
+  function marcarVistos() {
+    var cambio = false;
+    function v(k, cond) { if (cond && !s.visto[k]) { s.visto[k] = true; cambio = true; } }
+    v("inicio", ui.rol === "inicio");
+    v("padreMsg", ui.rol === "padre" && ui.tabPadre === "mensajes" && s.pagos.some(function (p) { return p.rol === "Caja" && ["08:12", "08:40", "09:05"].indexOf(p.hora) < 0; }));
+    v("duenoAlerta", ui.rol === "dueno" && !!s.cierre);
+    v("auditoria", ui.rol === "director" && ui.tabDir === "auditoria");
+    if (cambio) { guardar(); if (ui.guia) document.getElementById("guia").innerHTML = vGuia(); }
+  }
+
+  function actualizarDif() {
+    var inp = document.getElementById("contado"), el = document.getElementById("dif");
+    if (!inp || !el) return;
+    if (inp.value === "") { el.textContent = "—"; el.className = "dif num"; return; }
+    var contado = Math.round(parseFloat(inp.value) * 100), d = contado - efectivoEsperado();
+    el.textContent = (d > 0 ? "+" : "") + fmt(d);
+    el.className = "dif num " + (d === 0 ? "ok" : "bad");
+  }
+
+  // ---------- Eventos ----------
+  document.addEventListener("click", function (ev) {
+    var t = ev.target.closest("[data-a]");
+    if (!t) return;
+    var a = t.getAttribute("data-a"), v = t.getAttribute("data-v");
+    if (a === "velo") { if (ev.target === t) { ui.modal = null; render(); } return; }
+    if (a === "marcar" || a === "padreMarcar" || a === "medio" || a === "medioPadre") return; // los maneja "change"
+    switch (a) {
+      case "rol": ui.rol = v; window.scrollTo(0, 0); break;
+      case "guia": ui.guia = !ui.guia; ui.confirmarReinicio = false; break;
+      case "tabCaja": ui.tabCaja = v; break;
+      case "tabPadre": ui.tabPadre = v; if (v === "mensajes") setTimeout(function () { ui.nuevosMensajes[ui.fam] = 0; }, 0); break;
+      case "tabDir": ui.tabDir = v; break;
+      case "sel": ui.sel = v; ui.marcadas = primeraPendiente(v); break;
+      case "confirmarPago": ui.modal = { tipo: "confirmarPago" }; break;
+      case "registrar": {
+        var p = aplicarPago(s, { cuotaIds: ui.marcadas.slice(), medio: ui.medio, usuario: CAJERA.nombre, rol: CAJERA.rol });
+        ui.nuevosMensajes[p.fam] = (ui.nuevosMensajes[p.fam] || 0) + 1;
+        ui.marcadas = primeraPendiente(ui.sel);
+        ui.modal = { tipo: "pagoOk", pagoId: p.id };
+        guardar();
+        aviso("WhatsApp enviado a " + familia(p.fam).apoderado, "Boleta " + p.boleta + " · " + fmt(p.total), "wa");
+        break;
+      }
+      case "verFamilia": ui.modal = null; ui.rol = "padre"; ui.fam = v; ui.tabPadre = "mensajes"; ui.padreSel = []; break;
+      case "pedirAnular": ui.modal = { tipo: "anular", pagoId: v }; break;
+      case "enviarAnulacion": {
+        var mot = document.getElementById("motivo").value.trim();
+        if (mot.length < 10) { document.getElementById("err-motivo").hidden = false; return; }
+        solicitarAnulacion(v, mot); ui.modal = null; guardar();
+        aviso("Solicitud enviada a Dirección", "El pago sigue vigente hasta que se decida.");
+        break;
+      }
+      case "revisar": ui.modal = { tipo: "revisar", solId: v }; break;
+      case "decidir": {
+        var com = document.getElementById("coment").value.trim();
+        resolver(ui.modal.solId, v === "si", com); ui.modal = null; guardar();
+        aviso(v === "si" ? "Solicitud aprobada" : "Solicitud rechazada", "Quedó registrado en la auditoría.");
+        break;
+      }
+      case "cerrarCaja": {
+        var inp = document.getElementById("contado"), ex = document.getElementById("expl").value.trim(), err = document.getElementById("err-cierre");
+        if (inp.value === "" || isNaN(parseFloat(inp.value))) { err.textContent = "Escribe el efectivo contado."; err.hidden = false; return; }
+        var contado = Math.round(parseFloat(inp.value) * 100);
+        if (contado !== efectivoEsperado() && ex.length < 10) { err.textContent = "Hay una diferencia: explica qué pasó (mínimo 10 caracteres)."; err.hidden = false; return; }
+        cerrarCaja(contado, ex); guardar();
+        if (s.cierre.dif !== 0) aviso("Alerta enviada a la promotora", "Diferencia de " + fmt(Math.abs(s.cierre.dif)) + " en caja.", "mal");
+        else aviso("Caja cerrada sin diferencia", "La promotora recibió la confirmación.");
+        if (ui.medio === "EFECTIVO") ui.medio = "YAPE";
+        break;
+      }
+      case "verPagadas": ui.verPagadas = !ui.verPagadas; break;
+      case "padrePagar": ui.modal = { tipo: "padrePagar", medio: "YAPE" }; break;
+      case "simularPago": {
+        var pp = aplicarPago(s, { cuotaIds: ui.padreSel.slice(), medio: ui.modal.medio, usuario: "Pasarela de pagos", rol: "Automático" });
+        ui.padreSel = []; ui.modal = { tipo: "padrePagar", listo: true, pagoId: pp.id }; guardar();
+        aviso("WhatsApp recibido", "Boleta " + pp.boleta + " · " + fmt(pp.total), "wa");
+        break;
+      }
+      case "guardarAsistencia": {
+        var marcas = {}, avisos = 0;
+        SECCION.forEach(function (n, i) { var r = document.querySelector('input[name="as-' + i + '"]:checked'); marcas[i] = r ? r.value : "P"; if (marcas[i] !== "P") avisos++; });
+        s.asistencia = { hora: hora(), marcas: marcas, avisos: avisos };
+        if (marcas[0] !== "P") {
+          s.mensajes.push({ fam: "f1", hora: hora(), texto: "Colegio Virgen María: Mateo " + (marcas[0] === "F" ? "no asistió hoy" : "llegó tarde hoy") + " (02/10). Si tiene una justificación, puede responder a este mensaje. Prof. Ana Torres." });
+          ui.nuevosMensajes.f1 = (ui.nuevosMensajes.f1 || 0) + 1;
+        }
+        audit(s, "Ana Torres", "Docente", "Asistencia registrada", "5.° Primaria A · " + avisos + " avisos enviados");
+        guardar();
+        aviso("Asistencia guardada", avisos ? "Se avisó a " + avisos + (avisos === 1 ? " familia." : " familias.") : "Todos presentes.");
+        break;
+      }
+      case "ir": {
+        var paso = pasosGuia()[+v];
+        ui.rol = paso[0];
+        if (paso[0] === "caja") ui.tabCaja = paso[1];
+        if (paso[0] === "padre") { ui.tabPadre = paso[1]; if (paso[1] === "mensajes") ui.fam = ultimaFamiliaPagada(); else ui.fam = "f1"; }
+        if (paso[0] === "director") ui.tabDir = paso[1];
+        if (window.innerWidth < 900) ui.guia = false;
+        window.scrollTo(0, 0);
+        break;
+      }
+      case "reiniciar": ui.confirmarReinicio = true; break;
+      case "reiniciarNo": ui.confirmarReinicio = false; break;
+      case "reiniciarSi":
+        s = semilla(); guardar();
+        ui.confirmarReinicio = false; ui.sel = "a1"; ui.marcadas = primeraPendiente("a1"); ui.padreSel = []; ui.medio = "EFECTIVO"; ui.nuevosMensajes = {}; ui.fam = "f1";
+        aviso("Demostración reiniciada", "Datos de ejemplo restaurados.");
+        break;
+      case "cerrarModal": ui.modal = null; break;
+      default: return;
+    }
+    render();
+  });
+
+  document.addEventListener("change", function (ev) {
+    var t = ev.target, a = t.getAttribute("data-a"), v = t.getAttribute("data-v");
+    if (a === "marcar") {
+      var i = ui.marcadas.indexOf(v);
+      if (t.checked && i < 0) ui.marcadas.push(v);
+      if (!t.checked && i >= 0) ui.marcadas.splice(i, 1);
+      render(); var el = document.getElementById("c-" + v); if (el) el.focus();
+    } else if (a === "padreMarcar") {
+      var j = ui.padreSel.indexOf(v);
+      if (t.checked && j < 0) ui.padreSel.push(v);
+      if (!t.checked && j >= 0) ui.padreSel.splice(j, 1);
+      var sc = document.querySelector(".pantalla"), top = sc ? sc.scrollTop : 0;
+      render(); sc = document.querySelector(".pantalla"); if (sc) sc.scrollTop = top;
+    } else if (a === "medio") { ui.medio = t.value; render(); }
+    else if (a === "medioPadre") { ui.modal.medio = t.value; render(); }
+    else if (t.id === "fam") { ui.fam = t.value; ui.padreSel = []; render(); }
+  });
+
+  document.addEventListener("input", function (ev) {
+    if (ev.target.id === "busq") { ui.busq = ev.target.value; document.getElementById("lista").innerHTML = listaAlumnos(); }
+    if (ev.target.id === "contado") actualizarDif();
+  });
+
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") {
+      if (ui.modal) { ui.modal = null; render(); }
+      else if (ui.guia) { ui.guia = false; render(); }
+    }
+  });
+
+  // Tooltip del gráfico
+  document.addEventListener("mouseover", function (ev) {
+    var g = ev.target.closest && ev.target.closest("[data-bar]");
+    var tip = document.getElementById("tip");
+    if (!tip) return;
+    document.querySelectorAll("#grafico g.activo").forEach(function (x) { x.classList.remove("activo"); });
+    if (!g) { tip.hidden = true; return; }
+    g.classList.add("activo");
+    var d = HISTORICO[+g.getAttribute("data-bar")];
+    var cont = document.getElementById("grafico").getBoundingClientRect(), b = g.querySelector(".barra").getBoundingClientRect();
+    tip.innerHTML = "<strong>" + d.nombre + "</strong>: " + d.pct + " % · " + fmt(ESPERADO_MES * d.pct / 100);
+    tip.style.left = (b.left + b.width / 2 - cont.left) + "px";
+    tip.style.top = (b.top - cont.top - 6) + "px";
+    tip.hidden = false;
+  });
+
+  function primeraPendiente(aid) {
+    var c = cuotasDe(aid).find(function (x) { return saldo(x) > 0; });
+    return c ? [c.id] : [];
+  }
+  function ultimaFamiliaPagada() {
+    var ps = s.pagos.filter(function (p) { return p.rol === "Caja"; });
+    return ps.length ? ps[ps.length - 1].fam : "f1";
+  }
+
+  ui.marcadas = primeraPendiente(ui.sel);
+  render();
+})();
+</script>

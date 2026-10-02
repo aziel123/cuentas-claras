@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: cuentas-claras
+  profiles:
+    default: dev
+  jpa:
+    open-in-view: false
+    hibernate:
+      # El esquema lo controla Flyway (src/main/resources/db/migration). Hibernate solo valida.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: America/Lima
+  thymeleaf:
+    cache: true
+  jackson:
+    time-zone: America/Lima
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
