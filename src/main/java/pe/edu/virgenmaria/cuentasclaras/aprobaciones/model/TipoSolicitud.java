@@ -11,7 +11,10 @@ public enum TipoSolicitud {
 	CAMBIO_CONTACTO_APODERADO("Cambio de celular o correo"),
 	CAMBIO_RESPONSABLE_PAGO("Cambio de responsable de pago"),
 	FECHA_MATRICULA("Ingreso tardío"),
-	ANULACION_CUOTA("Anulación de cuota");
+	ANULACION_CUOTA("Anulación de cuota"),
+	// Sprint 3, tanda 2 (caja y cobranza)
+	ANULACION_PAGO("Anulación de pago"),
+	DESCUENTO("Descuento o beca");
 
 	private final String etiqueta;
 

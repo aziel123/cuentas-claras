@@ -14,4 +14,7 @@ public interface ComprobanteRepository extends Repository<Comprobante, Long> {
 
 	/** Cuántos comprobantes tiene la serie: debe ser igual a su último número (si no, hay un hueco). */
 	long countBySerie(String serie);
+
+	/** La nota de crédito que anula ese comprobante (como máximo una). */
+	Optional<Comprobante> findByModificaId(Long comprobanteId);
 }

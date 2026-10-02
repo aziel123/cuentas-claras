@@ -18,6 +18,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.model.ImputacionPago.Imputacion;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.NumeroOperacion;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.Pago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.ReglasEfectivo;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAplicacion;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.AplicacionPagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.PagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
@@ -38,6 +39,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.time.LocalDate;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -124,23 +127,97 @@ public class LibroPagos {
 			// Valida lo recibido ANTES de emitir el comprobante.
 			ReglasEfectivo.vuelto(importe, orden.recibido());
 		}
-		List<Imputacion> imputaciones = ImputacionPago.imputar(importe, elegidas.stream()
-				.map(c -> new CuotaPorPagar(c.getId(), c.getFechaVencimiento(), c.saldo())).toList());
-		Map<Long, Cuota> porId = elegidas.stream().collect(Collectors.toMap(Cuota::getId, Function.identity()));
+		List<Imputacion> imputaciones = imputar(importe, elegidas);
 
 		// 4. Comprobante (bloquea la serie y toma el número siguiente, en esta misma transacción).
 		Receptor receptor = receptor(orden.comprobante(), familia, elegidas);
-		List<LineaDocumento> lineas = imputaciones.stream().map(i -> {
+		Comprobante comprobante = comprobantes.emitir(orden.comprobante().tipo(), receptor, caja.getFecha(),
+				lineas(imputaciones, elegidas));
+
+		// 5. Pago y aplicaciones; 6. cada cuota refleja su libro.
+		Pago pago = pagos.save(Pago.enCaja(caja, familia, comprobante, orden.medio(), operacion, importe,
+				orden.recibido(), aCuenta, orden.clave()));
+		List<String> detalleCuotas = aplicar(pago, imputaciones, elegidas);
+
+		// 7. Bitácora (al final: es el último bloqueo) y evento.
+		auditar(AccionAuditoria.PAGO_REGISTRADO, pago, comprobante, receptor, detalleCuotas, "");
+		eventos.publishEvent(new PagoRegistrado(pago.getId()));
+		return pago;
+	}
+
+	/**
+	 * Reversiones de un pago ya ANULADO (con su anulación registrada): una fila negativa por cada aplicación, nunca un
+	 * borrado. Cada cuota vuelve a reflejar su libro (vuelve a deberse). Las cuotas deben estar ya bloqueadas.
+	 *
+	 * @return el detalle de las cuotas que vuelven a deberse
+	 */
+	public List<String> revertir(Pago pago) {
+		if (pago.vigente()) {
+			throw new IllegalStateException("Primero se registra la anulación y se marca el pago como ANULADO");
+		}
+		List<String> detalle = new ArrayList<>();
+		for (AplicacionPago original : aplicaciones.findByPagoIdAndTipoOrderByIdAsc(pago.getId(),
+				TipoAplicacion.APLICACION)) {
+			aplicaciones.save(AplicacionPago.revertir(original));
+			Cuota cuota = original.getCuota();
+			cuota.reflejarPagos(Objects.requireNonNullElse(aplicaciones.sumaDeCuota(cuota.getId()), Dinero.CERO));
+			detalle.add(cuota.getDescripcion() + " de " + cuota.getAlumno().nombreCompleto() + " vuelve a deber "
+					+ Dinero.formatear(original.getMonto()) + " (" + cuota.getEstado().name() + ")");
+		}
+		return detalle;
+	}
+
+	/**
+	 * Pago de reemplazo de una corrección: el mismo dinero del pago ANULADO (misma caja, medio y total) aplicado a otras
+	 * cuotas de {@code familia}, con un comprobante nuevo. Lo registra quien aprueba. Las cuotas deben estar ya
+	 * bloqueadas (por id) y el pago anulado, guardado con flush.
+	 */
+	public Pago reemplazar(Pago anulado, Familia familia, List<Long> cuotaIds, DatosComprobante datos, LocalDate fecha) {
+		List<Long> ids = cuotaIds.stream().filter(Objects::nonNull).distinct().sorted().toList();
+		List<Cuota> elegidas = cuotas.bloquear(ids);
+		if (ids.isEmpty() || elegidas.size() != ids.size()) {
+			throw new ReglaNegocioException("Alguna cuota de la corrección ya no existe: recházala y pide otra.");
+		}
+		elegidas.forEach(c -> exigirCobrable(c, familia));
+		BigDecimal debe = Dinero.sumar(elegidas.stream().map(Cuota::saldo).toList());
+		BigDecimal importe = anulado.getTotal();
+		if (importe.compareTo(debe) > 0 || (importe.compareTo(debe) < 0 && !anulado.isACuenta())) {
+			throw new ReglaNegocioException("Las cuotas de la corrección ya no suman el pago: deben "
+					+ Dinero.formatear(debe) + " y el pago es de " + Dinero.formatear(importe)
+					+ ". Recházala y pide otra corrección.");
+		}
+		List<Imputacion> imputaciones = imputar(importe, elegidas);
+		Receptor receptor = receptor(datos, familia, elegidas);
+		Comprobante comprobante = comprobantes.emitir(datos.tipo(), receptor, fecha, lineas(imputaciones, elegidas));
+		Pago reemplazo = pagos.save(Pago.reemplazo(anulado, familia, comprobante, importe.compareTo(debe) < 0,
+				UUID.randomUUID()));
+		List<String> detalleCuotas = aplicar(reemplazo, imputaciones, elegidas);
+		boolean otraFamilia = !Objects.equals(anulado.getFamilia().getId(), familia.getId());
+		auditar(AccionAuditoria.PAGO_REEMPLAZO_REGISTRADO, reemplazo, comprobante, receptor, detalleCuotas,
+				" Reemplaza al pago " + anulado.getId() + " (" + anulado.getComprobante().numeroCompleto() + ") de "
+						+ anulado.getFamilia().getNombre() + (otraFamilia ? ": el dinero pasa a OTRA familia." : "."));
+		eventos.publishEvent(new PagoRegistrado(reemplazo.getId()));
+		return reemplazo;
+	}
+
+	private static List<Imputacion> imputar(BigDecimal importe, List<Cuota> elegidas) {
+		return ImputacionPago.imputar(importe, elegidas.stream()
+				.map(c -> new CuotaPorPagar(c.getId(), c.getFechaVencimiento(), c.saldo())).toList());
+	}
+
+	private static List<LineaDocumento> lineas(List<Imputacion> imputaciones, List<Cuota> elegidas) {
+		Map<Long, Cuota> porId = elegidas.stream().collect(Collectors.toMap(Cuota::getId, Function.identity()));
+		return imputaciones.stream().map(i -> {
 			Cuota cuota = porId.get(i.cuotaId());
 			boolean parcial = i.monto().compareTo(cuota.saldo()) < 0;
 			return new LineaDocumento(cuota.getDescripcion() + " · " + cuota.getAlumno().nombreCompleto()
 					+ (parcial ? " (a cuenta)" : ""), i.monto());
 		}).toList();
-		Comprobante comprobante = comprobantes.emitir(orden.comprobante().tipo(), receptor, caja.getFecha(), lineas);
+	}
 
-		// 5. Pago y aplicaciones; 6. cada cuota refleja su libro.
-		Pago pago = pagos.save(Pago.enCaja(caja, familia, comprobante, orden.medio(), operacion, importe,
-				orden.recibido(), aCuenta, orden.clave()));
+	/** Inserta las aplicaciones del pago y refleja el libro en cada cuota. */
+	private List<String> aplicar(Pago pago, List<Imputacion> imputaciones, List<Cuota> elegidas) {
+		Map<Long, Cuota> porId = elegidas.stream().collect(Collectors.toMap(Cuota::getId, Function.identity()));
 		List<String> detalleCuotas = new ArrayList<>();
 		for (Imputacion imputacion : imputaciones) {
 			Cuota cuota = porId.get(imputacion.cuotaId());
@@ -150,11 +227,7 @@ public class LibroPagos {
 					+ Calendario.formatear(cuota.getFechaVencimiento()) + ") " + Dinero.formatear(imputacion.monto())
 					+ " → " + cuota.getEstado().name() + ", saldo " + Dinero.formatear(cuota.saldo()));
 		}
-
-		// 7. Bitácora (al final: es el último bloqueo) y evento.
-		auditar(pago, comprobante, receptor, detalleCuotas);
-		eventos.publishEvent(new PagoRegistrado(pago.getId()));
-		return pago;
+		return detalleCuotas;
 	}
 
 	/** El responsable de pago del alumno de la cuota que vence primero: a su nombre sale la boleta por defecto. */
@@ -224,7 +297,8 @@ public class LibroPagos {
 		return Receptor.de(documentoDe(apoderado), apoderado.getDocumento().numero(), apoderado.nombreCompleto());
 	}
 
-	private void auditar(Pago pago, Comprobante comprobante, Receptor receptor, List<String> detalleCuotas) {
+	private void auditar(AccionAuditoria accion, Pago pago, Comprobante comprobante, Receptor receptor,
+			List<String> detalleCuotas, String extra) {
 		String medio = pago.getMedio().etiqueta() + (pago.getMedio().digital()
 				? " (operación " + pago.getNumeroOperacion() + ")"
 				: " (recibido " + Dinero.formatear(pago.getRecibido()) + ", vuelto " + Dinero.formatear(pago.getVuelto())
@@ -232,10 +306,10 @@ public class LibroPagos {
 		String detalle = comprobante.getTipo().etiqueta() + " " + comprobante.numeroCompleto() + " por "
 				+ Dinero.formatear(pago.getTotal()) + " en " + medio + ". " + pago.getFamilia().getNombre()
 				+ ". A nombre de " + receptor.nombre() + " (" + receptor.documentoEnmascarado() + "). Cuotas: "
-				+ String.join("; ", detalleCuotas) + ".";
+				+ String.join("; ", detalleCuotas) + "." + extra;
 		String nuevo = pago.getEstado().name() + " · " + Dinero.formatear(pago.getTotal()) + " · "
 				+ pago.getMedio().etiqueta() + " · " + comprobante.numeroCompleto();
-		auditoria.registrar(AccionAuditoria.PAGO_REGISTRADO, "pago", pago.getId().toString(), null, nuevo, detalle);
+		auditoria.registrar(accion, "pago", pago.getId().toString(), null, nuevo, detalle);
 		auditoria.registrar(AccionAuditoria.COMPROBANTE_EMITIDO, "comprobante", comprobante.getId().toString(), null,
 				comprobante.numeroCompleto() + " · " + Dinero.formatear(comprobante.getTotal()),
 				comprobante.getTipo().etiqueta() + " " + comprobante.numeroCompleto() + " del pago " + pago.getId()

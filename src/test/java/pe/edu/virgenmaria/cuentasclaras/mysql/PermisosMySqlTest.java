@@ -605,7 +605,7 @@ class PermisosMySqlTest {
 		assertThat(codigoAl(() -> jdbc.update(aplicar, pago, cuotaDe(familias.otroAlumno(), 3), 1))).isEqualTo(1644);
 		// Más de lo que se pagó (a otra cuota de la misma familia).
 		assertThat(codigoAl(() -> jdbc.update(aplicar, pago, cuotaDe(familias.hermano2(), 3), 1))).isEqualTo(1644);
-		// Una reversión sin anulación (tanda 1: aún no hay anulaciones).
+		// Una reversión sin anulación registrada.
 		Long original = jdbc.queryForObject("SELECT id FROM aplicacion_pago WHERE pago_id = ?", Long.class, pago);
 		assertThat(codigoAl(() -> jdbc.update("INSERT INTO aplicacion_pago (colegio_id, pago_id, cuota_id, tipo, monto, "
 				+ "revierte_id, creado_en, creado_por, actualizado_en) SELECT colegio_id, pago_id, cuota_id, 'REVERSION', "
@@ -772,6 +772,172 @@ class PermisosMySqlTest {
 		assertThat(jdbc.queryForList("SELECT s.serie FROM serie_comprobante s WHERE s.colegio_id = 1 AND s.ultimo_numero <> "
 				+ "(SELECT COUNT(*) FROM comprobante c WHERE c.serie_id = s.id)", String.class)).isEmpty();
 		UsuariosDePrueba.iniciarSesion(guardar("verif.caja." + sufijo, Rol.PROMOTOR));
+		assertThat(verificador.verificar().integra()).isTrue();
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// Sprint 3, tanda 2: anulaciones de pago y descuentos (V10 y la versión final de 03-triggers.sql).
+	// Cuotas libres del escenario compartido (la tanda 1 usa hermano1: 3-7, 9, 10; hermano2: 8, 9; otro: 9).
+	// ---------------------------------------------------------------------------------------------------------------
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioAnulacionPagos anulacionesPago;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioDescuentos descuentos;
+
+	private static final String MOTIVO = "Se cobró a la familia equivocada en ventanilla";
+
+	@Test
+	void anulacionesYDescuentosNoSeBorranNiCambianLoPedido() {
+		for (String tabla : new String[] { "anulacion_pago", "descuento", "ajuste_cuota" }) {
+			assertThat(codigoAl(() -> jdbc.update("DELETE FROM " + tabla + " WHERE 1 = 0"))).as(tabla).isEqualTo(1142);
+		}
+		for (String tabla : new String[] { "anulacion_pago", "ajuste_cuota" }) {
+			assertThat(codigoAl(() -> jdbc.update("UPDATE " + tabla + " SET version = version WHERE 1 = 0"))).as(tabla)
+					.isEqualTo(1142);
+		}
+		for (String columna : new String[] { "valor", "cuotas", "total_estimado", "alumno_id", "tipo", "modalidad",
+				"motivo", "sustento", "creado_por" }) {
+			assertThat(codigoAl(() -> jdbc.update("UPDATE descuento SET " + columna + " = " + columna + " WHERE 1 = 0")))
+					.as(columna).isEqualTo(1143);
+		}
+		assertThatCode(() -> jdbc.update("UPDATE descuento SET estado = estado, resuelto_por = resuelto_por, "
+				+ "resuelto_en = resuelto_en WHERE 1 = 0")).doesNotThrowAnyException();
+	}
+
+	@Test
+	void triggersDeAnulacionesYDescuentosFallanCon1644() {
+		FamiliasCaja familias = familiasDeCaja();
+		var cajera = cajera("caja.t2");
+		UsuariosDePrueba.iniciarSesion(cajera);
+		Long pago = cobrarEfectivo(familias.familia(), java.util.List.of(cuotaDe(familias.hermano2(), 4)), "450.00");
+		Long boleta = jdbc.queryForObject("SELECT comprobante_id FROM pago WHERE id = ?", Long.class, pago);
+
+		// Una anulación que apunta a la boleta (no a una nota de crédito que la anule): rechazada.
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO anulacion_pago (colegio_id, pago_id, solicitud_id, "
+				+ "nota_credito_id, tipo, motivo, monto, cajero_pago, solicitado_por, aprobado_por, posterior_al_cierre, "
+				+ "creado_en, creado_por, actualizado_en) VALUES (1, ?, 0, ?, 'DEVOLUCION', 'motivo de prueba', 450, ?, "
+				+ "'a', 'b', FALSE, NOW(6), 'b', NOW(6))", pago, boleta, cajera.getUsername()))).isEqualTo(1644);
+		// Un descuento que nace aprobado y un ajuste sin descuento aprobado: rechazados.
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO descuento (colegio_id, alumno_id, anio_escolar_id, tipo, "
+				+ "modalidad, valor, cuotas, total_estimado, motivo, sustento, estado, resuelto_por, resuelto_en, creado_en, "
+				+ "creado_por, actualizado_en) SELECT colegio_id, alumno_id, anio_escolar_id, 'BECA', 'PORCENTAJE', 100, "
+				+ "CONCAT(',', id, ','), monto, 'beca que nace aprobada', 'x', 'APROBADO', 'b', NOW(6), NOW(6), 'a', NOW(6) "
+				+ "FROM cuota WHERE id = ?", cuotaDe(familias.hermano2(), 5)))).isEqualTo(1644);
+
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		Long cuota = cuotaDe(familias.hermano2(), 5);
+		Long descuento = descuentos.solicitar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.descuento(
+				familias.hermano2(), pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoDescuento.HERMANOS, "10",
+				java.util.List.of(cuota)));
+		String ajuste = "INSERT INTO ajuste_cuota (colegio_id, cuota_id, descuento_id, monto, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (1, ?, ?, 45, NOW(6), 'x', NOW(6))";
+		assertThat(codigoAl(() -> jdbc.update(ajuste, cuota, descuento))).as("descuento sin aprobar").isEqualTo(1644);
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(EscenarioCobranza.DIRECCION, bandeja,
+				jdbc, "descuento", descuento);
+		assertThat(jdbc.queryForObject("SELECT monto_descuento FROM cuota WHERE id = ?", java.math.BigDecimal.class, cuota))
+				.isEqualByComparingTo("45.00");
+		// Aprobado: no cambia de estado, no se le agregan ajustes a otra cuota y la cuota no cambia su descuento.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE descuento SET estado = 'RECHAZADO' WHERE id = ?", descuento)))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(ajuste, cuotaDe(familias.hermano2(), 6), descuento))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cuota SET monto_descuento = 0 WHERE id = ?", cuota)))
+				.isEqualTo(1644);
+
+		// Un pago anulado de verdad no vuelve a estar vigente.
+		UsuariosDePrueba.iniciarSesion(cajera);
+		anulacionesPago.solicitarDevolucion(pago, MOTIVO);
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(EscenarioCobranza.PROMOTORIA, bandeja,
+				jdbc, "pago", pago);
+		assertThat(jdbc.queryForObject("SELECT estado FROM pago WHERE id = ?", String.class, pago)).isEqualTo("ANULADO");
+		assertThat(codigoAl(() -> jdbc.update("UPDATE pago SET estado = 'VIGENTE' WHERE id = ?", pago))).isEqualTo(1644);
+		// Ni se anula dos veces.
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO anulacion_pago (colegio_id, pago_id, solicitud_id, "
+				+ "nota_credito_id, tipo, motivo, monto, cajero_pago, solicitado_por, aprobado_por, posterior_al_cierre, "
+				+ "creado_en, creado_por, actualizado_en) SELECT colegio_id, pago_id, solicitud_id, nota_credito_id, tipo, "
+				+ "motivo, monto, cajero_pago, solicitado_por, aprobado_por, posterior_al_cierre, NOW(6), creado_por, NOW(6) "
+				+ "FROM anulacion_pago WHERE pago_id = ?", pago))).isEqualTo(1644);
+	}
+
+	/**
+	 * Tanda 2 con los permisos mínimos y los triggers finales: corrección con nota de crédito BC01 y boleta nueva,
+	 * devolución de un Yape (libera el número de operación), descuento por hermanos aprobado, cobro con descuento y beca
+	 * del 100 % (cuota EXONERADA). Detecta un saveAndFlush faltante o un orden de inserción que los triggers rechazan.
+	 */
+	@Test
+	void flujoCompletoDeAnulacionesYDescuentosConPermisosMinimos() throws Exception {
+		FamiliasCaja familias = familiasDeCaja();
+		var cajera = cajera("caja.t2f");
+		UsuariosDePrueba.iniciarSesion(cajera);
+		Long pago = cobro.cobrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.efectivo(familias.familia(),
+				java.util.List.of(cuotaDe(familias.hermano1(), 8)), "450.00", "500.00"));
+		Long destino = cuotaDe(familias.hermano1(), 11);
+		anulacionesPago.solicitarCorreccion(pago, pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones
+				.correccion(familias.familia(), java.util.List.of(destino)));
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(EscenarioCobranza.DIRECCION, bandeja,
+				jdbc, "pago", pago);
+
+		assertThat(jdbc.queryForObject("SELECT estado FROM pago WHERE id = ?", String.class, pago)).isEqualTo("ANULADO");
+		assertThat(jdbc.queryForObject("SELECT estado FROM cuota WHERE id = ?", String.class, cuotaDe(familias.hermano1(), 8)))
+				.isEqualTo("PENDIENTE");
+		assertThat(jdbc.queryForObject("SELECT estado FROM cuota WHERE id = ?", String.class, destino)).isEqualTo("PAGADA");
+		java.util.Map<String, Object> anulacion = jdbc.queryForMap("SELECT * FROM anulacion_pago WHERE pago_id = ?", pago);
+		assertThat(anulacion).containsEntry("tipo", "CORRECCION").containsEntry("aprobado_por", "director");
+		Long nota = ((Number) anulacion.get("nota_credito_id")).longValue();
+		assertThat(jdbc.queryForObject("SELECT serie FROM comprobante WHERE id = ?", String.class, nota)).isEqualTo("BC01");
+		java.util.Map<String, Object> reemplazo = jdbc.queryForMap("SELECT p.*, c.serie FROM pago p JOIN comprobante c "
+				+ "ON c.id = p.comprobante_id WHERE p.reemplaza_pago_id = ?", pago);
+		assertThat(reemplazo).containsEntry("serie", "B001").containsEntry("estado", "VIGENTE")
+				.containsEntry("origen", "REEMPLAZO");
+
+		// Devolución de un Yape: libera el número de operación.
+		UsuariosDePrueba.iniciarSesion(cajera);
+		Long yape = cobro.cobrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.digital(familias.otraFamilia(),
+				java.util.List.of(cuotaDe(familias.otroAlumno(), 4)), pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.YAPE,
+				"Y2" + sufijo, "450.00"));
+		anulacionesPago.solicitarDevolucion(yape, MOTIVO);
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(EscenarioCobranza.PROMOTORIA, bandeja,
+				jdbc, "pago", yape);
+		assertThat(jdbc.queryForMap("SELECT estado, operacion_vigente FROM pago WHERE id = ?", yape))
+				.containsEntry("estado", "ANULADO").containsEntry("operacion_vigente", null);
+
+		// Descuento por hermanos (10 %) y beca del 100 %.
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		Long junio = cuotaDe(familias.hermano2(), 6);
+		Long julio = cuotaDe(familias.hermano2(), 7);
+		Long octubre = cuotaDe(familias.hermano2(), 10);
+		Long hermanos = descuentos.solicitar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.descuento(
+				familias.hermano2(), pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoDescuento.HERMANOS, "10",
+				java.util.List.of(junio, julio)));
+		Long beca = descuentos.solicitar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.descuento(
+				familias.hermano2(), pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoDescuento.BECA, "100",
+				java.util.List.of(octubre)));
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(EscenarioCobranza.PROMOTORIA, bandeja,
+				jdbc, "descuento", hermanos);
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(EscenarioCobranza.DIRECCION, bandeja,
+				jdbc, "descuento", beca);
+		assertThat(jdbc.queryForObject("SELECT estado FROM cuota WHERE id = ?", String.class, octubre))
+				.isEqualTo("EXONERADA");
+		assertThat(jdbc.queryForObject("SELECT SUM(monto) FROM ajuste_cuota WHERE descuento_id = ?",
+				java.math.BigDecimal.class, hermanos)).isEqualByComparingTo("90.00");
+		// La caja ya cobra el monto con descuento.
+		UsuariosDePrueba.iniciarSesion(cajera);
+		cobrarEfectivo(familias.familia(), java.util.List.of(junio), "405.00");
+		assertThat(jdbc.queryForMap("SELECT estado, monto_pagado FROM cuota WHERE id = ?", junio))
+				.containsEntry("estado", "PAGADA");
+
+		// Las notas de crédito también se envían al OSE después del commit y ninguna serie tiene huecos.
+		long limite = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(15);
+		while (!"ACEPTADO".equals(jdbc.queryForObject("SELECT estado_envio FROM comprobante WHERE id = ?", String.class,
+				nota)) && System.nanoTime() < limite) {
+			Thread.sleep(100);
+		}
+		assertThat(jdbc.queryForObject("SELECT estado_envio FROM comprobante WHERE id = ?", String.class, nota))
+				.isEqualTo("ACEPTADO");
+		assertThat(jdbc.queryForList("SELECT s.serie FROM serie_comprobante s WHERE s.colegio_id = 1 AND s.ultimo_numero <> "
+				+ "(SELECT COUNT(*) FROM comprobante c WHERE c.serie_id = s.id)", String.class)).isEmpty();
+		UsuariosDePrueba.iniciarSesion(guardar("verif.t2." + sufijo, Rol.PROMOTOR));
 		assertThat(verificador.verificar().integra()).isTrue();
 	}
 

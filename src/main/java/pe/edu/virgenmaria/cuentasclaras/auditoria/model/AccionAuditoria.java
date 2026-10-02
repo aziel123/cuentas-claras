@@ -107,6 +107,16 @@ public enum AccionAuditoria {
 	/** Se resalta: intentó cobrar en efectivo con la caja ya cerrada. */
 	CAJA_EFECTIVO_RECHAZADO_CERRADA("Intentó cobrar en efectivo con la caja cerrada", true),
 
+	// Anulaciones de pago y descuentos (sprint 3, tanda 2). Todos resaltados salvo el rechazo de un descuento.
+	PAGO_ANULACION_SOLICITADA("Pidió anular un pago", true),
+	PAGO_ANULADO("Anuló un pago (aprobado por otra persona)", true),
+	NOTA_CREDITO_EMITIDA("Emitió una nota de crédito", true),
+	/** Se resalta: el dinero de un pago anulado se aplica a otras cuotas (quizás de otra familia). */
+	PAGO_REEMPLAZO_REGISTRADO("Registró el pago de reemplazo de una corrección", true),
+	DESCUENTO_SOLICITADO("Pidió un descuento o beca", true),
+	DESCUENTO_APROBADO("Aprobó un descuento o beca en una cuota", true),
+	DESCUENTO_RECHAZADO("Rechazó un descuento o beca", false),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

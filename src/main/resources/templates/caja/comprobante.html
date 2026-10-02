@@ -5,8 +5,8 @@
 	th:with="c=${comprobante}">
 	<div class="acciones acciones-izquierda no-imprimir">
 		<button type="button" class="btn btn-primario" data-imprimir>Imprimir</button>
-		<a class="btn btn-secundario" th:href="@{/caja/pagos/{id}(id=${c.pagoId})}">Volver al pago</a>
-		<a class="btn btn-secundario" th:href="@{/caja}">Nuevo cobro</a>
+		<a class="btn btn-secundario" th:href="@{${volverUrl}}" th:text="${volverTexto}">Volver al pago</a>
+		<a class="btn btn-secundario" th:if="${nuevoCobro}" th:href="@{/caja}">Nuevo cobro</a>
 	</div>
 
 	<article class="comprobante-hoja" aria-labelledby="titulo-comprobante">
@@ -38,12 +38,14 @@
 			<tfoot><tr><th scope="row">Total</th><td class="num"><strong th:text="|S/ ${#numbers.formatDecimal(c.total, 1, 'COMMA', 2, 'POINT')}|">S/ 900.00</strong></td></tr></tfoot>
 		</table>
 		<p class="secundario" th:text="${c.afectacion}">Operación inafecta al IGV</p>
-		<p class="secundario">
+		<p th:if="${c.anula != null}" data-anula><strong th:text="|Anula el comprobante ${c.anula}|">Anula B001-00000001</strong>
+			<span class="bloque secundario" th:text="${c.motivoNota}">Motivo</span></p>
+		<p class="secundario" th:if="${c.medio != null}">
 			<span th:text="|Pagado en ${c.medio}|">Pagado en Efectivo</span>
 			<span th:if="${c.recibido != null}" th:text="| · recibido S/ ${#numbers.formatDecimal(c.recibido, 1, 'COMMA', 2, 'POINT')} · vuelto S/ ${#numbers.formatDecimal(c.vuelto, 1, 'COMMA', 2, 'POINT')}|"> · recibido</span>
 			<span th:if="${c.numeroOperacion != null}" th:text="| · operación ${c.numeroOperacion}|"> · operación</span>
 		</p>
-		<p class="secundario" th:text="|Atendió: ${c.cajero} · ${#temporals.format(c.registradoEn, 'dd/MM/yyyy HH:mm')}|">Atendió: caja</p>
+		<p class="secundario" th:text="|Atendió: ${c.atendio} · ${#temporals.format(c.registradoEn, 'dd/MM/yyyy HH:mm')}|">Atendió: Lucía Ramos</p>
 		<p class="secundario codigo-hash" th:if="${c.codigoHash != null}" th:text="|Código: ${c.codigoHash}|">Código</p>
 	</article>
 	<script src="/js/imprimir.js" th:src="@{/js/imprimir.js}" defer></script>

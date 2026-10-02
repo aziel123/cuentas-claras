@@ -9,6 +9,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAlumnos;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoDescuento;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioDescuentos;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.SeleccionCobroRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension;
@@ -17,7 +20,9 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
+import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.Familias;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza;
@@ -61,6 +66,18 @@ class AislamientoCajaTest {
 	private ColegioRepository colegios;
 
 	@Autowired
+	private ServicioAnulacionPagos anulaciones;
+
+	@Autowired
+	private ServicioEstadoCuenta estadoCuenta;
+
+	@Autowired
+	private ServicioDescuentos descuentos;
+
+	@Autowired
+	private BandejaAprobaciones bandeja;
+
+	@Autowired
 	private JdbcTemplate jdbc;
 
 	private Familias a;
@@ -70,6 +87,10 @@ class AislamientoCajaTest {
 	private long colegioB;
 
 	private UsuarioAutenticado cajaB;
+
+	private UsuarioAutenticado administracionB;
+
+	private UsuarioAutenticado directorB;
 
 	private Long familiaB;
 
@@ -83,9 +104,9 @@ class AislamientoCajaTest {
 		pagoA = cobro.cobrar(efectivo(a.quispe(), List.of(cuota(jdbc, a.mateo(), "PEN-2027-03")), "450.00", "500.00"));
 
 		colegioB = colegios.save(new Colegio("Colegio de Prueba B")).getId();
-		UsuarioAutenticado administracionB = UsuariosDePrueba.autenticado(colegioB, 91L, "administracion.b",
+		administracionB = UsuariosDePrueba.autenticado(colegioB, 91L, "administracion.b",
 				"Administración B", false, EnumSet.of(Rol.ADMINISTRACION));
-		UsuarioAutenticado directorB = UsuariosDePrueba.autenticado(colegioB, 90L, "director.b", "Director B", false,
+		directorB = UsuariosDePrueba.autenticado(colegioB, 90L, "director.b", "Director B", false,
 				EnumSet.of(Rol.DIRECTOR));
 		cajaB = UsuariosDePrueba.autenticado(colegioB, 92L, "caja", "Caja B", false, EnumSet.of(Rol.CAJA));
 		como(administracionB);
@@ -150,6 +171,46 @@ class AislamientoCajaTest {
 				+ "CURRENT_TIMESTAMP)", colegioB, pagoB, cuota(jdbc, a.mateo(), "PEN-2027-04")))
 				.isInstanceOf(DataIntegrityViolationException.class);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM pago", Long.class)).isEqualTo(2);
+	}
+
+	/** Tanda 2: anulaciones, descuentos, estado de cuenta y comprobantes del A no existen para el B (404). */
+	@Test
+	void colegioBNoVeAnulacionesDescuentosNiEstadoDeCuentaDelA() {
+		Long marzoValeria = cuota(jdbc, a.valeria(), "PEN-2027-03");
+		como(EscenarioCaja.CAJA);
+		anulaciones.solicitarDevolucion(pagoA, EscenarioAprobaciones.MOTIVO_ANULACION);
+		como(EscenarioCobranza.ADMINISTRACION);
+		Long descuentoA = descuentos.solicitar(EscenarioAprobaciones.descuento(a.valeria(), TipoDescuento.HERMANOS, "10",
+				List.of(marzoValeria)));
+		Long comprobanteA = jdbc.queryForObject("SELECT comprobante_id FROM pago WHERE id = ?", Long.class, pagoA);
+
+		como(cajaB);
+		assertThatThrownBy(() -> anulaciones.solicitarDevolucion(pagoA, EscenarioAprobaciones.MOTIVO_ANULACION))
+				.isInstanceOf(RecursoNoEncontradoException.class);
+		assertThatThrownBy(() -> anulaciones.prepararCorreccion(pagoA, null, null))
+				.isInstanceOf(RecursoNoEncontradoException.class);
+		como(administracionB);
+		assertThatThrownBy(() -> anulaciones.solicitarDevolucion(pagoA, EscenarioAprobaciones.MOTIVO_ANULACION))
+				.isInstanceOf(RecursoNoEncontradoException.class);
+		assertThatThrownBy(() -> estadoCuenta.deAlumno(a.mateo())).isInstanceOf(RecursoNoEncontradoException.class);
+		assertThatThrownBy(() -> estadoCuenta.comprobante(comprobanteA)).isInstanceOf(RecursoNoEncontradoException.class);
+		assertThat(descuentos.lista()).isEmpty();
+		assertThatThrownBy(() -> descuentos.solicitar(EscenarioAprobaciones.descuento(a.valeria(), TipoDescuento.BECA,
+				"100", List.of(marzoValeria)))).isInstanceOf(RecursoNoEncontradoException.class);
+		// Con el DNI de Valeria del A no encuentra a nadie: en el B solo está su Mateo.
+		assertThatThrownBy(() -> descuentos.prepararSolicitud(jdbc.queryForObject("SELECT numero_documento FROM alumno "
+				+ "WHERE id = ?", String.class, a.valeria()))).isInstanceOf(ReglaNegocioException.class)
+				.hasMessage("No hay un alumno con ese documento.");
+		como(directorB);
+		assertThat(bandeja.bandeja().pendientes()).isEmpty();
+		assertThatThrownBy(() -> bandeja.aprobar(EscenarioAprobaciones.pendiente(jdbc, "pago", pagoA), null))
+				.isInstanceOf(RecursoNoEncontradoException.class);
+		assertThatThrownBy(() -> bandeja.aprobar(EscenarioAprobaciones.pendiente(jdbc, "descuento", descuentoA), null))
+				.isInstanceOf(RecursoNoEncontradoException.class);
+
+		assertThat(jdbc.queryForObject("SELECT estado FROM pago WHERE id = ?", String.class, pagoA)).isEqualTo("VIGENTE");
+		assertThat(jdbc.queryForObject("SELECT estado FROM descuento WHERE id = ?", String.class, descuentoA))
+				.isEqualTo("SOLICITADO");
 	}
 
 	@Test

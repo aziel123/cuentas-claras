@@ -7,10 +7,11 @@ import java.util.List;
 
 /**
  * Comprobante para imprimir y entregar al apoderado. {@code simulado}: lleva la marca «COMPROBANTE SIMULADO · SIN
- * VALOR TRIBUTARIO» mientras no haya OSE.
+ * VALOR TRIBUTARIO» mientras no haya OSE. Una nota de crédito no tiene pago ({@code pagoId} null) y dice qué comprobante
+ * anula ({@code anula}) y por qué ({@code motivoNota}). {@code atendio}: el nombre completo de quien lo emitió.
  */
 public record ComprobanteImprimible(Long pagoId, String colegio, String tipo, String numero, LocalDate fecha,
 		LocalDateTime registradoEn, String receptorNombre, String receptorDocumento, List<LineaComprobanteVista> lineas,
 		BigDecimal total, String moneda, String afectacion, String medio, BigDecimal recibido, BigDecimal vuelto,
-		String numeroOperacion, String cajero, boolean simulado, String codigoHash) {
+		String numeroOperacion, String atendio, boolean simulado, String codigoHash, String anula, String motivoNota) {
 }

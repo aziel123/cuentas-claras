@@ -139,6 +139,51 @@ public class Pago extends BaseEntity {
 		return pago;
 	}
 
+	/**
+	 * Pago de reemplazo de una corrección aprobada: mismo dinero (caja, medio, total, operación, recibido y vuelto) que
+	 * el pago ya ANULADO, aplicado a otras cuotas con una boleta nueva. Lo registra quien aprueba (no la cajera: CHECK en
+	 * la base). Entra en la misma caja aunque esté cerrada (única excepción del trigger).
+	 */
+	public static Pago reemplazo(Pago anulado, Familia familia, Comprobante comprobante, boolean aCuenta, UUID clave) {
+		Objects.requireNonNull(anulado, "anulado");
+		// Con getters: «anulado» puede ser un proxy perezoso de Hibernate (sus campos estarían vacíos).
+		if (anulado.getEstado() != EstadoPago.ANULADO) {
+			throw new IllegalStateException("Solo se reemplaza un pago ya anulado");
+		}
+		Objects.requireNonNull(comprobante, "comprobante");
+		if (comprobante.getTipo() == TipoComprobante.NOTA_CREDITO
+				|| !Dinero.iguales(comprobante.getTotal(), anulado.getTotal())) {
+			throw new IllegalStateException("El reemplazo necesita su boleta o factura por el mismo total");
+		}
+		Pago pago = new Pago();
+		pago.familia = Objects.requireNonNull(familia, "familia");
+		pago.caja = anulado.getCaja();
+		pago.cajero = anulado.getCajero();
+		pago.fecha = anulado.getFecha();
+		pago.comprobante = comprobante;
+		pago.medio = anulado.getMedio();
+		pago.numeroOperacion = anulado.getNumeroOperacion();
+		pago.operacionVigente = anulado.getNumeroOperacion();
+		pago.total = anulado.getTotal();
+		pago.recibido = anulado.getRecibido();
+		pago.vuelto = anulado.getVuelto();
+		pago.aCuenta = aCuenta;
+		pago.origen = OrigenPago.REEMPLAZO;
+		pago.reemplazaPagoId = anulado.getId();
+		pago.claveIdempotencia = Objects.requireNonNull(clave, "clave").toString();
+		pago.estado = EstadoPago.VIGENTE;
+		return pago;
+	}
+
+	/** Solo con la anulación aprobada ya registrada (en MySQL lo exige un trigger). Libera el número de operación. */
+	public void anular() {
+		if (estado != EstadoPago.VIGENTE) {
+			throw new ReglaNegocioException("El pago ya está anulado.");
+		}
+		estado = EstadoPago.ANULADO;
+		operacionVigente = null;
+	}
+
 	public boolean vigente() {
 		return estado == EstadoPago.VIGENTE;
 	}

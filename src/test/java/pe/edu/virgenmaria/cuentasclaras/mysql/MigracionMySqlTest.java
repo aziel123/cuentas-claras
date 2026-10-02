@@ -34,7 +34,7 @@ class MigracionMySqlTest {
 		List<String> versiones = jdbc.queryForList(
 				"SELECT version FROM flyway_schema_history WHERE success = 1 AND version IS NOT NULL ORDER BY installed_rank",
 				String.class);
-		assertThat(versiones).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9");
+		assertThat(versiones).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10");
 		assertThat(jdbc.queryForObject("SELECT ultima_secuencia FROM auditoria_cadena WHERE id = 1", Long.class))
 				.isNotNull();
 	}

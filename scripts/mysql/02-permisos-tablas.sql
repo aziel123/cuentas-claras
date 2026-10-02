@@ -57,3 +57,9 @@ GRANT INSERT, UPDATE (estado, cierres, conteos, primer_conteo, actualizado_en, v
 -- Pago: familia, caja, medio, operación, total, vuelto y comprobante no cambian; solo se anula.
 GRANT INSERT, UPDATE (estado, operacion_vigente, actualizado_en, version) ON cuentasclaras.pago TO 'cc_app'@'%';
 GRANT INSERT ON cuentasclaras.aplicacion_pago TO 'cc_app'@'%';                    -- solo inserción
+
+-- Sprint 3 · tanda 2: anulaciones de pago y descuentos. anulacion_pago y ajuste_cuota: SOLO INSERCIÓN.
+GRANT INSERT ON cuentasclaras.anulacion_pago TO 'cc_app'@'%';                     -- solo inserción
+-- Descuento: lo pedido (alumno, tipo, valor, cuotas, total, motivo, sustento) no cambia; solo se resuelve.
+GRANT INSERT, UPDATE (estado, resuelto_por, resuelto_en, actualizado_en, version) ON cuentasclaras.descuento TO 'cc_app'@'%';
+GRANT INSERT ON cuentasclaras.ajuste_cuota TO 'cc_app'@'%';                       -- solo inserción

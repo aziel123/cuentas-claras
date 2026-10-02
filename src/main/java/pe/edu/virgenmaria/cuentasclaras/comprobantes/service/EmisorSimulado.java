@@ -44,6 +44,10 @@ public class EmisorSimulado implements EmisorElectronico {
 				.append(d.numero()).append('|').append(d.fecha()).append('|').append(d.receptor().tipo().codigoSunat())
 				.append('|').append(d.receptor().numero()).append('|').append(d.moneda()).append('|')
 				.append(d.total().toPlainString()).append('|').append(d.afectacion().codigoSunat());
+		if (d.modifica() != null) {
+			texto.append("|modifica=").append(d.modifica().tipo().codigoSunat()).append('-').append(d.modifica().serie())
+					.append('-').append(d.modifica().numero()).append('-').append(d.modifica().codigoMotivo());
+		}
 		for (LineaDocumento linea : d.lineas()) {
 			texto.append('|').append(linea.descripcion()).append('=').append(linea.monto().toPlainString());
 		}

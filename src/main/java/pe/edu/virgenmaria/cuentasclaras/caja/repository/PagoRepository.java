@@ -1,6 +1,10 @@
 package pe.edu.virgenmaria.cuentasclaras.caja.repository;
 
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
+import org.springframework.data.repository.query.Param;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.Pago;
 
@@ -22,4 +26,24 @@ public interface PagoRepository extends Repository<Pago, Long> {
 	List<Pago> findByCajaIdOrderByIdDesc(Long cajaId);
 
 	List<Pago> findTop5ByFamiliaIdOrderByIdDesc(Long familiaId);
+
+	Pago saveAndFlush(Pago pago);
+
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select p from Pago p where p.id = :id")
+	Optional<Pago> bloquear(@Param("id") Long id);
+
+	/** La caja del pago, sin cargarlo (para bloquear la caja ANTES que el pago). */
+	@Query("select p.caja.id from Pago p where p.id = :id")
+	Optional<Long> cajaDe(@Param("id") Long pagoId);
+
+	/** Efectivo VIGENTE de una caja (lo que la cajera debe tener, sin el fondo). {@code null} si no hay. */
+	@Query("select sum(p.total) from Pago p where p.caja.id = :caja "
+			+ "and p.medio = pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.EFECTIVO "
+			+ "and p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE")
+	java.math.BigDecimal efectivoVigente(@Param("caja") Long cajaId);
+
+	Optional<Pago> findByComprobanteId(Long comprobanteId);
+
+	List<Pago> findByIdIn(java.util.Collection<Long> ids);
 }

@@ -6,8 +6,9 @@
 		<div>
 			<p class="etiqueta">Aprobaciones</p>
 			<h1>Solicitudes por aprobar</h1>
-			<p class="secundario">Cambios que una sola persona no puede hacer: retiros, celulares y correos de apoderados,
-				responsables de pago, ingresos tardíos y anulaciones. Quien los pide no los aprueba.</p>
+			<p class="secundario">Cambios que una sola persona no puede hacer: anulaciones y correcciones de pagos,
+				descuentos y becas, retiros, celulares y correos de apoderados, responsables de pago, ingresos tardíos y
+				anulaciones de cuotas. Quien los pide (o cobró el pago) no los aprueba.</p>
 		</div>
 	</div>
 
@@ -25,6 +26,12 @@
 					<span th:replace="~{fragments/componentes :: badge(${s.estadoEtiqueta}, ${s.estadoVariante})}"></span>
 				</p>
 				<p th:text="${s.resumen}">Retirar a Mateo Quispe Huamán desde el 01/10/2026</p>
+				<th:block th:if="${s.advertencia != null}">
+					<div th:replace="~{fragments/componentes :: alerta('advertencia', ${s.advertencia})}"></div>
+				</th:block>
+				<ul class="detalle-solicitud" th:unless="${#lists.isEmpty(s.detalle)}">
+					<li th:each="linea : ${s.detalle}" th:text="${linea}">Boleta B001-00000001 · S/ 900.00 · Efectivo</li>
+				</ul>
 				<p class="secundario" th:text="|Motivo: ${s.motivo}|">Motivo</p>
 				<p class="secundario" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM/yyyy HH:mm')}|">Pedida por administracion</p>
 				<div class="fila" th:if="${s.puedeResolver}">
@@ -35,7 +42,7 @@
 						'No se cambia nada. Quien la pidió verá tu motivo en la bitácora.',
 						@{/aprobaciones/{id}/rechazar(id=${s.id})}, 'Rechazar', 'secundario', 'Rechazar solicitud')}"></th:block>
 				</div>
-				<p class="secundario" th:unless="${s.puedeResolver}">La pediste tú (o preparaste esa cuenta): debe resolverla otra persona.</p>
+				<p class="secundario" th:unless="${s.puedeResolver}">La pediste tú, cobraste ese pago o preparaste esa cuenta: debe resolverla otra persona.</p>
 			</li>
 		</ul>
 	</section>

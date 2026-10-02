@@ -250,7 +250,14 @@ class ReglasArquitecturaTest {
 			// Correcciones del sprint 2: la bandeja de solicitudes la resuelven Promotoría o Dirección.
 			Map.entry(BASE + ".aprobaciones.service.BandejaAprobaciones", APROBACION),
 			// Sprint 3 (caja): solo Caja cobra. Promotoría, Dirección y Administración no cobran.
-			Map.entry(BASE + ".caja.service.ServicioCobro", "hasRole('CAJA')"));
+			Map.entry(BASE + ".caja.service.ServicioCobro", "hasRole('CAJA')"),
+			// Sprint 3, tanda 2: la cajera (sus pagos) o Administración PIDEN anular; descuentos los pide Administración.
+			Map.entry(BASE + ".caja.service.ServicioAnulacionPagos", "hasAnyRole('CAJA','ADMINISTRACION')"),
+			Map.entry(BASE + ".caja.service.ServicioEstadoCuenta", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".cobranza.service.ServicioDescuentos", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".cobranza.service.ServicioDescuentos#prepararSolicitud", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioDescuentos#revisar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioDescuentos#solicitar", SOLO_ADMINISTRACION));
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {
@@ -309,7 +316,7 @@ class ReglasArquitecturaTest {
 	@ArchTest
 	static final ArchRule registroSolicitudesSoloDesdeServicios = noClasses()
 			.that().resideOutsideOfPackages(BASE + ".aprobaciones.service..", BASE + ".alumnos.service..",
-					BASE + ".cobranza.service..")
+					BASE + ".cobranza.service..", BASE + ".caja.service..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".aprobaciones.service.RegistroSolicitudes")
 			.because("la solicitud la crea el servicio protegido que valida el cambio pedido");
 
@@ -482,6 +489,23 @@ class ReglasArquitecturaTest {
 				}
 			})
 			.because("el pago, su comprobante y su número se guardan en la misma transacción (sin huecos)");
+
+	/** Anular, revertir y reemplazar un pago solo ocurre al aplicar una anulación aprobada (LibroPagos y su manejador). */
+	@ArchTest
+	static final ArchRule soloLaAnulacionAprobadaAnulaRevierteYReemplaza = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".caja.service.LibroPagos")
+			.and().doNotHaveFullyQualifiedName(BASE + ".caja.service.ManejadorAnulacionPago")
+			.should().callMethod(BASE + ".caja.model.AplicacionPago", "revertir", BASE + ".caja.model.AplicacionPago")
+			.orShould().callMethod(BASE + ".caja.model.Pago", "anular")
+			.orShould().callMethodWhere(new DescribedPredicate<>("Pago.reemplazo") {
+				@Override
+				public boolean test(JavaMethodCall llamada) {
+					return llamada.getTargetOwner().getName().equals(BASE + ".caja.model.Pago")
+							&& llamada.getName().equals("reemplazo");
+				}
+			})
+			.because("anular, revertir y reemplazar un pago solo ocurre dentro de la anulación aprobada")
+			.allowEmptyShould(true);
 
 	@ArchTest
 	static final ArchRule repositoriosDeCajaYComprobantesSinModifyingNiBorrados = noMethods()

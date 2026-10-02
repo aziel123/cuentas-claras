@@ -43,6 +43,8 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `comprobante_linea`, `aplicacion_pago` | INSERT | **Solo inserción**: el libro de pagos no se edita ni se borra (1142) |
 | `caja_diaria` | INSERT y UPDATE **solo** de `estado, cierres, conteos, primer_conteo` | Cajero, fecha y fondo fijo no cambian (1143). Hasta la tanda 3 (cierre) la caja no se cierra por SQL (trigger) |
 | `pago` | INSERT y UPDATE **solo** de `estado, operacion_vigente` | Familia, caja, medio, operación, total, vuelto y comprobante no cambian (1143); nace VIGENTE con su boleta por el mismo total (trigger) |
+| `anulacion_pago`, `ajuste_cuota` | INSERT | **Solo inserción** (tanda 2): la anulación aprobada de un pago y cada ajuste de un descuento no se editan ni se borran (1142) |
+| `descuento` | INSERT y UPDATE **solo** de `estado, resuelto_por, resuelto_en` | Alumno, tipo, valor, cuotas, total, motivo y sustento no cambian (1143); nace SOLICITADO y, resuelto, no cambia (trigger) |
 
 ## Triggers (paso 3, después de los permisos)
 Los aplica `cc_migrador` (no van en Flyway: H2 no los soporta):
@@ -58,6 +60,11 @@ mysql -h <host> -u cc_migrador -p cuentasclaras < scripts/mysql/03-triggers.sql
   PAGADA sin pago**); las series nacen en 0 y avanzan de uno en uno; el comprobante usa el número que la serie acaba de
   asignar; la caja nace ABIERTA; el pago nace VIGENTE con su boleta o factura por el mismo total; una aplicación solo va a
   cuotas de la familia del pago y no supera su total.
+- Sprint 3, tanda 2 (anulaciones y descuentos, requiere V10): lo descontado de una cuota es siempre la suma de
+  `ajuste_cuota`; un ajuste solo nace de un descuento APROBADO que incluye esa cuota; un pago solo pasa a ANULADO con su
+  `anulacion_pago` registrada (y nunca vuelve a VIGENTE); una reversión solo existe con esa anulación y por el monto
+  exacto de la aplicación original; la anulación corresponde al pago vigente, a su cajero y a una nota de crédito que
+  anula su comprobante por el mismo total.
 - **Los triggers del sprint 3 van por tanda** (`docs/arquitectura/sprint-3-caja.md`, sección 6.3): un trigger que nombra
   una tabla que aún no existe hace fallar con 1146 todo UPDATE sobre su tabla. El script del repositorio es siempre el de
   la última migración publicada: aplícalo DESPUÉS de migrar, nunca antes.
@@ -117,6 +124,9 @@ Sprint 3 (caja): `DELETE` sobre `serie_comprobante`, `comprobante`, `comprobante
 `UPDATE pago SET total = total`, `UPDATE comprobante SET numero = numero`, `UPDATE serie_comprobante SET serie = serie`
 y `UPDATE caja_diaria SET fecha = fecha` dan 1143; y `UPDATE cuota SET estado = 'PAGADA', monto_pagado = monto` da
 1644 (trigger `trg_cuota_libro`).
+Tanda 2: `DELETE` sobre `anulacion_pago`, `descuento` y `ajuste_cuota` da 1142; `UPDATE anulacion_pago|ajuste_cuota
+SET version = version` da 1142; `UPDATE descuento SET valor = valor` (o `cuotas`, `total_estimado`) da 1143; un
+`descuento` que nace APROBADO y un `ajuste_cuota` sin descuento aprobado dan 1644.
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

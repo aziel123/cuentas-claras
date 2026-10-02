@@ -68,6 +68,21 @@ public class AplicacionPago extends BaseEntity {
 		return aplicacion;
 	}
 
+	/** Reversión de una aplicación de un pago ya ANULADO: el negativo exacto, que apunta a la original. */
+	public static AplicacionPago revertir(AplicacionPago original) {
+		Objects.requireNonNull(original, "original");
+		if (original.getTipo() != TipoAplicacion.APLICACION || original.getPago().vigente()) {
+			throw new IllegalStateException("Solo se revierte una aplicación de un pago anulado");
+		}
+		AplicacionPago reversion = new AplicacionPago();
+		reversion.pago = original.getPago();
+		reversion.cuota = original.getCuota();
+		reversion.tipo = TipoAplicacion.REVERSION;
+		reversion.monto = original.getMonto().negate();
+		reversion.revierteId = Objects.requireNonNull(original.getId(), "la aplicación original debe estar guardada");
+		return reversion;
+	}
+
 	@PreRemove
 	void impedirBorrado() {
 		throw new IllegalStateException("El libro de pagos no se borra.");

@@ -14,7 +14,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAlumnos;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.PagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioCobro;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.model.AjusteCuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Descuento;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.Comprobante;
@@ -108,19 +110,23 @@ class InmutabilidadCajaTest {
 				.containsExactlyInAnyOrder("ultimo_numero", "actualizado_en", "version");
 		assertThat(ColumnasActualizables.de(Cuota.class)).isEqualTo(ColumnasActualizables.concedidas(script, "cuota"))
 				.contains("monto_pagado", "monto_descuento");
+		// Tanda 2: del descuento solo cambia su estado al resolverse (nunca el valor, las cuotas ni el total).
+		assertThat(ColumnasActualizables.de(Descuento.class))
+				.isEqualTo(ColumnasActualizables.concedidas(script, "descuento"))
+				.containsExactlyInAnyOrder("estado", "resuelto_por", "resuelto_en", "actualizado_en", "version");
 		// Solo inserción: ningún UPDATE en su GRANT y la entidad es @Immutable.
-		for (String tabla : new String[] { "aplicacion_pago", "comprobante_linea" }) {
+		for (String tabla : new String[] { "aplicacion_pago", "comprobante_linea", "anulacion_pago", "ajuste_cuota" }) {
 			assertThat(script).containsPattern("GRANT INSERT ON cuentasclaras\\." + tabla + " ")
 					.doesNotContainPattern("(?i)GRANT[^;]*UPDATE[^;]*ON cuentasclaras\\." + tabla + "\\b");
 		}
 		assertThat(script).doesNotContainPattern("(?i)GRANT[^;]*DELETE[^;]*ON cuentasclaras\\.(serie_comprobante|"
-				+ "comprobante|comprobante_linea|caja_diaria|pago|aplicacion_pago)\\b");
+				+ "comprobante|comprobante_linea|caja_diaria|pago|aplicacion_pago|anulacion_pago|descuento|ajuste_cuota)\\b");
 	}
 
 	@Test
 	void pagoYAplicacionNoTienenSetters() {
 		for (Class<?> entidad : List.of(Pago.class, AplicacionPago.class, CajaDiaria.class, Comprobante.class,
-				ComprobanteLinea.class, SerieComprobante.class)) {
+				ComprobanteLinea.class, SerieComprobante.class, AnulacionPago.class, Descuento.class, AjusteCuota.class)) {
 			assertThat(Arrays.stream(entidad.getDeclaredMethods())
 					.filter(m -> Modifier.isPublic(m.getModifiers()) && m.getName().startsWith("set"))
 					.map(Method::getName)).as(entidad.getSimpleName()).isEmpty();
@@ -140,6 +146,8 @@ class InmutabilidadCajaTest {
 	void aplicacionEsImmutable() {
 		assertThat(AplicacionPago.class.isAnnotationPresent(Immutable.class)).isTrue();
 		assertThat(ComprobanteLinea.class.isAnnotationPresent(Immutable.class)).isTrue();
+		assertThat(AnulacionPago.class.isAnnotationPresent(Immutable.class)).isTrue();
+		assertThat(AjusteCuota.class.isAnnotationPresent(Immutable.class)).isTrue();
 		Long aplicacion = jdbc.queryForObject("SELECT id FROM aplicacion_pago WHERE pago_id = ?", Long.class, pagoId);
 
 		Throwable error = catchThrowable(() -> new TransactionTemplate(transacciones).executeWithoutResult(estado -> {

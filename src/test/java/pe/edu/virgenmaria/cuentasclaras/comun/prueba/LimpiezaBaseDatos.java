@@ -17,6 +17,10 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Sprint 3 (tanda 2): descuentos y anulaciones.
+		jdbc.update("DELETE FROM ajuste_cuota");
+		jdbc.update("DELETE FROM descuento");
+		jdbc.update("DELETE FROM anulacion_pago");
 		// Sprint 3 (tanda 1): libro de pagos, cajas y comprobantes, de las hijas a las madres.
 		jdbc.update("DELETE FROM aplicacion_pago WHERE revierte_id IS NOT NULL");
 		jdbc.update("DELETE FROM aplicacion_pago");

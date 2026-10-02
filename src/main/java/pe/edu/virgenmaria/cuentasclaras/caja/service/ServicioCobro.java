@@ -37,7 +37,9 @@ import pe.edu.virgenmaria.cuentasclaras.caja.model.ImputacionPago.Imputacion;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.Pago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.ReglasEfectivo;
+import pe.edu.virgenmaria.cuentasclaras.caja.repository.AnulacionPagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.AplicacionPagoRepository;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.RegistroSolicitudes;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.CajaDiariaRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.PagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
@@ -110,6 +112,14 @@ public class ServicioCobro {
 
 	private final AuditoriaService auditoria;
 
+	private final BusquedaFamilias busqueda;
+
+	private final NombresUsuarios nombres;
+
+	private final RegistroSolicitudes solicitudes;
+
+	private final AnulacionPagoRepository anulaciones;
+
 	private final ColegioService colegios;
 
 	private final PropiedadesCaja propiedades;
@@ -122,7 +132,12 @@ public class ServicioCobro {
 			MatriculaRepository matriculas, CuotaRepository cuotas, PagoRepository pagos,
 			AplicacionPagoRepository aplicaciones, CajaDiariaRepository cajas, AperturaCaja aperturaCaja,
 			AperturaSerie aperturaSerie, LibroPagos libro, AuditoriaService auditoria, ColegioService colegios,
-			PropiedadesCaja propiedades, PlatformTransactionManager transacciones, Clock reloj) {
+			PropiedadesCaja propiedades, PlatformTransactionManager transacciones, Clock reloj, BusquedaFamilias busqueda,
+			NombresUsuarios nombres, RegistroSolicitudes solicitudes, AnulacionPagoRepository anulaciones) {
+		this.busqueda = busqueda;
+		this.nombres = nombres;
+		this.solicitudes = solicitudes;
+		this.anulaciones = anulaciones;
 		this.alumnos = alumnos;
 		this.apoderados = apoderados;
 		this.familias = familias;
@@ -151,41 +166,7 @@ public class ServicioCobro {
 		if (limpio == null || limpio.length() < 2) {
 			return new BusquedaCaja(limpio, List.of(), limpio != null, anterior);
 		}
-		String[] palabras = { null, null, null };
-		String documento = null;
-		String compacto = limpio.replace(" ", "");
-		if (compacto.matches("[0-9A-Za-z]+") && compacto.chars().anyMatch(Character::isDigit)) {
-			documento = Normalizador.escaparLike(compacto.toUpperCase(Locale.ROOT)) + "%";
-		}
-		else {
-			String[] partes = Normalizador.paraBusqueda(limpio).split(" ");
-			for (int i = 0; i < Math.min(partes.length, MAX_PALABRAS); i++) {
-				palabras[i] = "%" + Normalizador.escaparLike(partes[i]) + "%";
-			}
-		}
-		Map<Long, Alumno> encontrados = new LinkedHashMap<>();
-		alumnos.buscar(palabras[0], palabras[1], palabras[2], documento, null, null, null,
-				PageRequest.of(0, MAX_RESULTADOS)).forEach(a -> encontrados.putIfAbsent(a.getId(), a));
-		if (encontrados.size() < MAX_RESULTADOS) {
-			Set<Long> familiasDeApoderados = new LinkedHashSet<>();
-			apoderados.buscar(palabras[0], palabras[1], palabras[2], documento, PageRequest.of(0, MAX_RESULTADOS))
-					.forEach(a -> familiasDeApoderados.add(a.getFamilia().getId()));
-			for (Long familia : familiasDeApoderados) {
-				alumnos.findByFamiliaIdOrderByFechaNacimientoAsc(familia).forEach(a -> encontrados.putIfAbsent(a.getId(), a));
-			}
-		}
-		List<Alumno> lista = encontrados.values().stream().limit(MAX_RESULTADOS).toList();
-		LocalDate hoy = hoy();
-		Map<Long, List<Cuota>> deudas = lista.isEmpty() ? Map.of()
-				: cuotas.porPagarDeAlumnos(lista.stream().map(Alumno::getId).toList()).stream()
-						.collect(Collectors.groupingBy(c -> c.getAlumno().getId()));
-		List<ResultadoBusqueda> resultados = lista.stream().map(a -> {
-			List<Cuota> debe = deudas.getOrDefault(a.getId(), List.of());
-			BigDecimal vencido = Dinero.sumar(debe.stream().filter(c -> c.vencidaAl(hoy)).map(Cuota::saldo).toList());
-			BigDecimal porPagar = Dinero.sumar(debe.stream().map(Cuota::saldo).toList());
-			return new ResultadoBusqueda(a.getFamilia().getId(), a.getId(), a.nombreCompleto(), a.getDocumento().texto(),
-					grado(a), a.getFamilia().getNombre(), vencido, porPagar);
-		}).toList();
+		List<ResultadoBusqueda> resultados = busqueda.buscar(limpio, hoy());
 		return new BusquedaCaja(limpio, resultados, true, anterior);
 	}
 
@@ -400,37 +381,57 @@ public class ServicioCobro {
 	@Transactional(readOnly = true)
 	public ComprobanteImprimible imprimible(Long pagoId) {
 		Pago pago = pagoPropio(pagoId);
-		Comprobante c = pago.getComprobante();
-		return new ComprobanteImprimible(pago.getId(), colegios.nombreDe(pago.getColegioId()), c.getTipo().etiqueta(),
-				c.numeroCompleto(), c.getFechaEmision(), pago.getCreadoEn(), c.getReceptor().nombre(),
-				c.getReceptor().documentoTexto(), lineas(c), c.getTotal(), c.getMoneda(), c.getAfectacionIgv().etiqueta(),
-				pago.getMedio().etiqueta(), pago.getRecibido(), pago.getVuelto(), pago.getNumeroOperacion(),
-				pago.getCajero(), c.getProveedor() == ProveedorComprobantes.SIMULADO, c.getCodigoHash());
+		return imprimibleDe(pago.getComprobante(), pago, colegios.nombreDe(pago.getColegioId()), nombres, null);
+	}
+
+	/** El impreso de un comprobante (de su pago, si tiene) o de una nota de crédito (con el comprobante que anula). */
+	static ComprobanteImprimible imprimibleDe(Comprobante c, Pago pago, String colegio, NombresUsuarios nombres,
+			Comprobante anulado) {
+		return new ComprobanteImprimible(pago == null ? null : pago.getId(), colegio, c.getTipo().etiqueta(),
+				c.numeroCompleto(), c.getFechaEmision(), pago == null ? c.getCreadoEn() : pago.getCreadoEn(),
+				c.getReceptor().nombre(), c.getReceptor().documentoTexto(), lineas(c), c.getTotal(), c.getMoneda(),
+				c.getAfectacionIgv().etiqueta(), pago == null ? null : pago.getMedio().etiqueta(),
+				pago == null ? null : pago.getRecibido(), pago == null ? null : pago.getVuelto(),
+				pago == null ? null : pago.getNumeroOperacion(),
+				nombres.de(pago == null ? c.getCreadoPor() : pago.getCajero()),
+				c.getProveedor() == ProveedorComprobantes.SIMULADO, c.getCodigoHash(),
+				anulado == null ? null : anulado.numeroCompleto(), c.getMotivoNota());
 	}
 
 	/** Los pagos de hoy de SU caja, sin totales: la cajera no ve el efectivo esperado con la caja abierta. */
 	@Transactional(readOnly = true)
 	public PagosDelDia pagosDelDia() {
 		LocalDate hoy = hoy();
+		String cajera = nombres.de(SesionCaja.usuario());
 		CajaDiaria caja = cajas.findByCajeroAndFecha(SesionCaja.usuario(), hoy).orElse(null);
 		if (caja == null) {
-			return new PagosDelDia(hoy, List.of());
+			return new PagosDelDia(hoy, cajera, List.of());
 		}
 		List<Pago> delDia = pagos.findByCajaIdOrderByIdDesc(caja.getId());
 		Map<Long, List<AplicacionPago>> porPago = delDia.isEmpty() ? Map.of()
 				: aplicaciones.dePagos(delDia.stream().map(Pago::getId).toList()).stream()
 						.collect(Collectors.groupingBy(a -> a.getPago().getId()));
+		Map<Long, String> notas = delDia.isEmpty() ? Map.of()
+				: anulaciones.findByPagoIdIn(delDia.stream().map(Pago::getId).toList()).stream()
+						.collect(Collectors.toMap(a -> a.getPago().getId(), a -> a.getNotaCredito().numeroCompleto()));
+		Map<Long, String> comprobantesDelDia = delDia.stream()
+				.collect(Collectors.toMap(Pago::getId, p -> p.getComprobante().numeroCompleto()));
 		List<PagosDelDia.PagoDelDia> filas = delDia.stream().map(p -> {
 			List<AplicacionPago> suyas = porPago.getOrDefault(p.getId(), List.of());
 			String alumnosDelPago = suyas.stream().map(a -> a.getCuota().getAlumno().nombreCompleto()).distinct()
 					.collect(Collectors.joining(", "));
 			String conceptos = suyas.stream().map(a -> a.getCuota().getDescripcion()).distinct()
 					.collect(Collectors.joining(", "));
+			boolean pendiente = p.vigente() && !solicitudes.pendientesDe("pago", p.getId()).isEmpty();
+			String estado = !p.vigente() ? "Anulado" : pendiente ? "Esperando aprobación" : "Vigente";
+			String variante = !p.vigente() ? "neutro" : pendiente ? "alerta" : "exito";
+			String reemplaza = p.getReemplazaPagoId() == null ? null
+					: comprobantesDelDia.getOrDefault(p.getReemplazaPagoId(), "pago " + p.getReemplazaPagoId());
 			return new PagosDelDia.PagoDelDia(p.getId(), p.getCreadoEn().toLocalTime().withNano(0),
 					p.getComprobante().numeroCompleto(), alumnosDelPago, conceptos, p.getMedio().etiqueta(), p.getTotal(),
-					p.vigente() ? "Vigente" : "Anulado", p.vigente() ? "exito" : "neutro", !p.vigente());
+					estado, variante, !p.vigente(), p.vigente() && !pendiente, notas.get(p.getId()), reemplaza);
 		}).toList();
-		return new PagosDelDia(hoy, filas);
+		return new PagosDelDia(hoy, cajera, filas);
 	}
 
 	// ------------------------------------------------------------------ ayudas
@@ -454,10 +455,8 @@ public class ServicioCobro {
 				.map(CajaDiaria::getFecha).orElse(null);
 	}
 
-	/** «5.° Primaria A · 2026»: su matrícula activa más reciente. */
 	private String grado(Alumno alumno) {
-		return matriculas.findByAlumnoIdOrderByAnioEscolarAnioDesc(alumno.getId()).stream().filter(Matricula::activa)
-				.findFirst().map(m -> m.getSeccion().etiqueta() + " · " + m.getAnioEscolar().getAnio()).orElse(null);
+		return busqueda.grado(alumno);
 	}
 
 	private LocalDate hoy() {

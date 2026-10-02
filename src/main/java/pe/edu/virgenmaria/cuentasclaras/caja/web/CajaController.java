@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CobroRequest;
+import pe.edu.virgenmaria.cuentasclaras.caja.dto.CorreccionRequest;
+import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioAnulacionPagos;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.SeleccionCobroRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioCobro;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
@@ -25,8 +27,11 @@ public class CajaController {
 
 	private final ServicioCobro cobro;
 
-	public CajaController(ServicioCobro cobro) {
+	private final ServicioAnulacionPagos anulaciones;
+
+	public CajaController(ServicioCobro cobro, ServicioAnulacionPagos anulaciones) {
 		this.cobro = cobro;
+		this.anulaciones = anulaciones;
 	}
 
 	@GetMapping("/caja")
@@ -108,7 +113,39 @@ public class CajaController {
 			@RequestParam(name = "imprimir", required = false, defaultValue = "false") boolean imprimir, Model model) {
 		model.addAttribute("comprobante", cobro.imprimible(id));
 		model.addAttribute("imprimirAlAbrir", imprimir);
+		model.addAttribute("volverUrl", "/caja/pagos/" + id);
+		model.addAttribute("volverTexto", "Volver al pago");
+		model.addAttribute("nuevoCobro", true);
 		return "caja/comprobante";
+	}
+
+	/** La cajera PIDE anular (devolver) uno de sus pagos: lo aprueba otra persona en la bandeja. */
+	@PostMapping("/caja/pagos/{id:\\d+}/devolucion")
+	public String devolucion(@PathVariable Long id, @RequestParam(required = false) String motivo,
+			RedirectAttributes avisos) {
+		try {
+			anulaciones.solicitarDevolucion(id, motivo);
+			avisos.addFlashAttribute("exito", "Listo: pediste la anulación. Promotoría o Dirección la revisarán; "
+					+ "mientras tanto el pago sigue vigente.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/caja/hoy";
+	}
+
+	@GetMapping("/caja/pagos/{id:\\d+}/correccion")
+	public String correccion(@PathVariable Long id, @RequestParam(name = "q", required = false) String texto,
+			@RequestParam(name = "familia", required = false) Long familia, Model model) {
+		return EstadoCuentaController.vistaCorreccion(model, anulaciones.prepararCorreccion(id, familia, texto),
+				"/caja/pagos", "/caja/hoy", "Pagos de hoy");
+	}
+
+	@PostMapping("/caja/pagos/{id:\\d+}/correccion")
+	public String pedirCorreccion(@PathVariable Long id, @Valid CorreccionRequest pedido, BindingResult validacion,
+			RedirectAttributes avisos) {
+		return EstadoCuentaController.pedirCorreccion(anulaciones, id, pedido, validacion, avisos, "/caja/pagos",
+				"/caja/hoy");
 	}
 
 	@GetMapping("/caja/hoy")

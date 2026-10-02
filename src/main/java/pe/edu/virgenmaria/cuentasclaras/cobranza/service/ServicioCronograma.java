@@ -88,7 +88,8 @@ public class ServicioCronograma {
 			String origen = c.getPlanPensionId() != null ? origenPlan.get(c.getPlanPensionId())
 					: origenSaldo(origenSaldo.get(c.getLineaSaldoInicialId()));
 			vistas.add(new CuotaVista(c.getId(), c.getDescripcion(), c.getTipo().etiqueta(), c.getFechaVencimiento(),
-					c.getMonto(), c.getMontoPagado(), c.saldo(), estado, origen, c.anulacionPendiente()));
+					c.getMonto(), c.getMontoDescuento(), c.getMontoPagado(), c.saldo(), estado, origen,
+					c.anulacionPendiente()));
 			if (!c.anulada()) {
 				total = total.add(c.getMonto());
 				pagado = pagado.add(c.getMontoPagado());

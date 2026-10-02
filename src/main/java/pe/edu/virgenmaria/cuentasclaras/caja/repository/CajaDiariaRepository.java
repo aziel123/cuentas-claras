@@ -30,6 +30,10 @@ public interface CajaDiariaRepository extends Repository<CajaDiaria, Long> {
 	@Query("select c from CajaDiaria c where c.cajero = :cajero and c.fecha = :fecha")
 	Optional<CajaDiaria> bloquear(@Param("cajero") String cajero, @Param("fecha") LocalDate fecha);
 
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select c from CajaDiaria c where c.id = :id")
+	Optional<CajaDiaria> bloquearPorId(@Param("id") Long id);
+
 	/** La caja más antigua del cajero que sigue abierta antes de esa fecha: no se cobra sin cerrarla. */
 	Optional<CajaDiaria> findFirstByCajeroAndEstadoAndFechaBeforeOrderByFechaAsc(String cajero, EstadoCaja estado,
 			LocalDate fecha);

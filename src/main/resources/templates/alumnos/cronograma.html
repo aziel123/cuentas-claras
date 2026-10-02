@@ -17,6 +17,7 @@
 	<nav class="pestanas" aria-label="Ficha del alumno">
 		<a th:href="@{/alumnos/{id}(id=${c.id})}">Datos</a>
 		<a th:href="@{/alumnos/{id}/cronograma(id=${c.id})}" aria-current="page">Cronograma</a>
+		<a th:href="@{/alumnos/{id}/estado-cuenta(id=${c.id})}">Estado de cuenta</a>
 	</nav>
 
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
@@ -42,13 +43,14 @@
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(k.cuotas)}">
 			<thead><tr><th scope="col">Cuota</th><th scope="col">Vence</th><th scope="col" class="num">Monto</th>
-				<th scope="col" class="num">Pagado</th><th scope="col" class="num">Saldo</th><th scope="col">Estado</th>
+				<th scope="col" class="num">Descuento</th><th scope="col" class="num">Pagado</th><th scope="col" class="num">Saldo</th><th scope="col">Estado</th>
 				<th scope="col">Origen</th></tr></thead>
 			<tbody>
 				<tr th:each="q : ${k.cuotas}" th:data-cuota="${q.id}" th:data-estado="${q.estado}">
 					<td data-etiqueta="Cuota" th:text="${q.descripcion}">Pensión setiembre 2027</td>
 					<td data-etiqueta="Vence" th:text="${#temporals.format(q.vencimiento, 'dd/MM/yyyy')}">30/09/2027</td>
 					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${q.monto})}"></span></td>
+					<td data-etiqueta="Descuento" class="num"><span th:replace="~{fragments/componentes :: monto(${q.descuento})}"></span></td>
 					<td data-etiqueta="Pagado" class="num"><span th:replace="~{fragments/componentes :: monto(${q.pagado})}"></span></td>
 					<td data-etiqueta="Saldo" class="num"><span th:replace="~{fragments/componentes :: monto(${q.saldo})}"></span></td>
 					<td data-etiqueta="Estado">

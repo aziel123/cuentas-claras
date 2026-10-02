@@ -29,7 +29,12 @@ public class AperturaSerie {
 
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void crearSiFalta(TipoComprobante tipo) {
-		String serie = propiedades.serieDe(tipo);
+		crearSiFalta(tipo, propiedades.serieDe(tipo));
+	}
+
+	/** Para las series de notas de crédito (BC01, FC01), que dependen de la letra del comprobante que anulan. */
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public void crearSiFalta(TipoComprobante tipo, String serie) {
 		if (!series.existsBySerie(serie)) {
 			series.save(SerieComprobante.nueva(tipo, serie, propiedades.proveedor()));
 		}

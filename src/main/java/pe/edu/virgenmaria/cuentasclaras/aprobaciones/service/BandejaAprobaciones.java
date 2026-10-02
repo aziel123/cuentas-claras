@@ -20,6 +20,8 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -53,14 +55,17 @@ public class BandejaAprobaciones {
 		this.reloj = reloj;
 	}
 
+	/** Pendientes con las anulaciones de pago primero (mueven dinero ya cobrado); después, en orden de llegada. */
 	public BandejaVista bandeja() {
 		String usuario = usuario();
 		return new BandejaVista(
-				solicitudes.findByEstadoOrderByIdAsc(EstadoSolicitud.PENDIENTE).stream().map(s -> vista(s, usuario)).toList(),
+				solicitudes.findByEstadoOrderByIdAsc(EstadoSolicitud.PENDIENTE).stream()
+						.sorted(Comparator.comparing((SolicitudCambio s) -> s.getTipo() != TipoSolicitud.ANULACION_PAGO))
+						.map(s -> vista(s, usuario, true)).toList(),
 				solicitudes.findTop30ByEstadoNotOrderByResueltoEnDescIdDesc(EstadoSolicitud.PENDIENTE).stream()
-						.map(s -> vista(s, usuario)).toList(),
-				solicitudes.findByTipoOrderByIdDesc(TipoSolicitud.FECHA_MATRICULA).stream().map(s -> vista(s, usuario))
-						.toList());
+						.map(s -> vista(s, usuario, false)).toList(),
+				solicitudes.findByTipoOrderByIdDesc(TipoSolicitud.FECHA_MATRICULA).stream()
+						.map(s -> vista(s, usuario, false)).toList());
 	}
 
 	@Transactional(noRollbackFor = AutoaprobacionSolicitudException.class)
@@ -107,22 +112,33 @@ public class BandejaAprobaciones {
 		return solicitud;
 	}
 
+	/** Quien la pidió y los involucrados que dice su manejador (la cajera del pago), más quienes prepararon esas cuentas. */
+	private Set<String> participantesDe(SolicitudCambio solicitud) {
+		Set<String> autores = new LinkedHashSet<>();
+		autores.add(solicitud.getSolicitadoPor());
+		autores.addAll(manejadorDe(solicitud.getTipo()).involucrados(solicitud));
+		return participantes.ampliar(autores);
+	}
+
 	private void exigirOtraPersona(SolicitudCambio solicitud, String usuario, String accion) {
-		Set<String> involucrados = participantes.ampliar(Set.of(solicitud.getSolicitadoPor()));
+		Set<String> involucrados = participantesDe(solicitud);
 		if (involucrados.contains(usuario)) {
 			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "solicitud_cambio",
 					solicitud.getId().toString(), null, solicitud.getTipo().etiqueta() + ": " + solicitud.getResumen(),
-					"Intentó " + accion + " una solicitud que pidió (o pidió una cuenta que preparó). Se rechazó.");
-			throw new AutoaprobacionSolicitudException("No puedes " + accion + " una solicitud que tú pediste (o que "
-					+ "pidió una cuenta que creaste o a la que le restableciste la clave): debe hacerlo otra persona.");
+					"Intentó " + accion + " una solicitud que pidió o en la que participó (o una cuenta que preparó). Se rechazó.");
+			throw new AutoaprobacionSolicitudException("No puedes " + accion + " una solicitud que tú pediste o en la que "
+					+ "participaste (por ejemplo, el pago que cobraste), ni la de una cuenta que creaste o a la que le "
+					+ "restableciste la clave: debe hacerlo otra persona.");
 		}
 	}
 
-	private SolicitudVista vista(SolicitudCambio s, String usuario) {
-		boolean puede = s.estaPendiente() && !participantes.ampliar(Set.of(s.getSolicitadoPor())).contains(usuario);
+	private SolicitudVista vista(SolicitudCambio s, String usuario, boolean conDetalle) {
+		boolean puede = s.estaPendiente() && !participantesDe(s).contains(usuario);
+		ManejadorSolicitud manejador = conDetalle ? manejadorDe(s.getTipo()) : null;
 		return new SolicitudVista(s.getId(), s.getTipo().name(), s.getTipo().etiqueta(), s.getResumen(), s.getMotivo(),
 				s.getEstado().name(), s.getEstado().etiqueta(), s.getEstado().variante(), s.getSolicitadoPor(),
-				s.getCreadoEn(), s.getResueltoPor(), s.getResueltoEn(), s.getComentario(), puede);
+				s.getCreadoEn(), s.getResueltoPor(), s.getResueltoEn(), s.getComentario(), puede,
+				manejador == null ? List.of() : manejador.detalle(s), manejador == null ? null : manejador.advertencia(s));
 	}
 
 	private LocalDateTime ahora() {

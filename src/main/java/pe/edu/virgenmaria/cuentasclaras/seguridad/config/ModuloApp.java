@@ -45,9 +45,10 @@ public enum ModuloApp {
 
 	CAJA_COBRO("Caja", "Cobra en segundos, entrega la boleta al momento y cierra tu caja cada día.", "Sprint 3",
 			true, "/caja", new String[] { "/caja", "/caja/**" }, EnumSet.of(CAJA)),
-	DESCUENTOS("Descuentos y becas", "Solicita descuentos y becas para que Dirección los apruebe.", "Sprint 3", false,
+	DESCUENTOS("Descuentos y becas", "Solicita descuentos y becas para que Dirección los apruebe.", "Sprint 3", true,
 			"/descuentos", new String[] { "/descuentos", "/descuentos/**" }, EnumSet.of(ADMINISTRACION)),
-	APROBACIONES("Aprobaciones", "Aprueba o rechaza retiros, cambios de contacto, ingresos tardíos y anulaciones.",
+	APROBACIONES("Aprobaciones", "Aprueba o rechaza anulaciones de pagos, descuentos y becas, retiros, cambios de "
+			+ "contacto e ingresos tardíos.",
 			"Sprint 2", true,
 			"/aprobaciones", new String[] { "/aprobaciones", "/aprobaciones/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
 

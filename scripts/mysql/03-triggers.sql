@@ -75,12 +75,12 @@ END$$
 
 DELIMITER ;
 
--- ===================== Sprint 3 · Caja (tanda 1: cobro, comprobante y libro de pagos) =====================
+-- ===================== Sprint 3 · Caja (tandas 1 y 2: cobro, comprobante, libro, anulaciones y descuentos) ==
 -- Todas las comparaciones usan <=> o COALESCE: en un trigger, «IF NULL THEN» NO entra (igual que un CHECK con NULL pasa).
--- Versión de la TANDA 1 (docs/arquitectura/sprint-3-caja.md, sección 6.3): un trigger NUNCA nombra una tabla que aún
--- no existe (desde ese momento todo UPDATE sobre su tabla falla con 1146). Por eso trg_cuota_libro,
--- trg_pago_anulacion, trg_aplicacion_pago_registro y trg_caja_diaria_estado van en su versión reducida hasta que
--- V10 (anulaciones y descuentos) y V11 (cierres) creen sus tablas. NO apliques la versión final sobre una base sin V10/V11.
+-- Versión de la TANDA 2 (docs/arquitectura/sprint-3-caja.md, sección 6.3): un trigger NUNCA nombra una tabla que aún
+-- no existe (desde ese momento todo UPDATE sobre su tabla falla con 1146). Requiere V10 (anulacion_pago, descuento y
+-- ajuste_cuota). trg_caja_diaria_estado sigue en su versión reducida hasta que V11 (cierres) cree cierre_caja y
+-- deposito_caja. NO apliques este script sobre una base sin V10.
 
 DELIMITER $$
 
@@ -93,9 +93,8 @@ BEGIN
     END IF;
 END$$
 
--- Lo pagado de una cuota es SIEMPRE la suma de su libro (aplicacion_pago). Cierra el pendiente del sprint 2: «cuota
--- PAGADA sin pago». Una cuota anulada ya no cambia.
--- Tanda 1 (reducido): aún no hay descuentos (ajuste_cuota llega en V10), así que monto_descuento no cambia.
+-- Lo pagado y lo descontado de una cuota son SIEMPRE la suma de su libro (aplicacion_pago y ajuste_cuota).
+-- Cierra el pendiente del sprint 2: «cuota PAGADA sin pago». Una cuota anulada ya no cambia.
 DROP TRIGGER IF EXISTS trg_cuota_libro$$
 CREATE TRIGGER trg_cuota_libro BEFORE UPDATE ON cuota FOR EACH ROW
 BEGIN
@@ -106,7 +105,8 @@ BEGIN
             (SELECT COALESCE(SUM(a.monto), 0.00) FROM aplicacion_pago a WHERE a.cuota_id = NEW.id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el monto pagado no coincide con el libro de pagos';
     END IF;
-    IF NOT (NEW.monto_descuento <=> OLD.monto_descuento) THEN
+    IF NOT (NEW.monto_descuento <=> OLD.monto_descuento) AND NOT (NEW.monto_descuento <=>
+            (SELECT COALESCE(SUM(j.monto), 0.00) FROM ajuste_cuota j WHERE j.cuota_id = NEW.id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el descuento no coincide con los ajustes aprobados';
     END IF;
 END$$
@@ -184,18 +184,24 @@ BEGIN
     END IF;
 END$$
 
--- Tanda 1 (reducido): la anulación de pagos llega con V10 (anulacion_pago). Hasta entonces un pago no cambia de estado
--- ni de número de operación.
+-- Un pago solo pasa a ANULADO (nunca vuelve) y solo si ya está registrada su anulación aprobada.
 DROP TRIGGER IF EXISTS trg_pago_anulacion$$
 CREATE TRIGGER trg_pago_anulacion BEFORE UPDATE ON pago FOR EACH ROW
 BEGIN
-    IF NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.operacion_vigente <=> OLD.operacion_vigente) THEN
+    IF OLD.estado = 'ANULADO' AND NOT (NEW.estado <=> 'ANULADO') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un pago anulado no vuelve';
+    END IF;
+    IF OLD.estado = 'VIGENTE' AND NEW.estado = 'ANULADO'
+            AND NOT EXISTS (SELECT 1 FROM anulacion_pago n WHERE n.pago_id = NEW.id) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: falta la anulación aprobada del pago';
+    END IF;
+    IF NEW.estado = 'VIGENTE' AND NOT (NEW.operacion_vigente <=> OLD.operacion_vigente) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el número de operación no cambia';
     END IF;
 END$$
 
--- Libro de aplicaciones: solo a cuotas de la familia del pago y sin pasar el total del pago.
--- Tanda 1 (reducido): sin anulaciones no hay reversiones (llegan con V10).
+-- Libro de aplicaciones: solo a cuotas de la familia del pago, sin pasar el total del pago, y una reversión solo con la
+-- anulación registrada y por el monto exacto (negativo) de la aplicación original.
 DROP TRIGGER IF EXISTS trg_aplicacion_pago_registro$$
 CREATE TRIGGER trg_aplicacion_pago_registro BEFORE INSERT ON aplicacion_pago FOR EACH ROW
 BEGIN
@@ -210,7 +216,50 @@ BEGIN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las aplicaciones superan el total del pago';
         END IF;
     ELSE
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: reversión sin anulación o por otro monto';
+        IF NOT EXISTS (SELECT 1 FROM anulacion_pago n WHERE n.pago_id = NEW.pago_id)
+                OR NOT (NEW.monto <=> -(SELECT o.monto FROM aplicacion_pago o WHERE o.id = NEW.revierte_id
+                    AND o.tipo = 'APLICACION')) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: reversión sin anulación o por otro monto';
+        END IF;
+    END IF;
+END$$
+
+-- La anulación corresponde al pago vigente, a su cajero y a una nota de crédito que anula SU comprobante.
+DROP TRIGGER IF EXISTS trg_anulacion_pago_registro$$
+CREATE TRIGGER trg_anulacion_pago_registro BEFORE INSERT ON anulacion_pago FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pago p JOIN comprobante n ON n.id = NEW.nota_credito_id
+            WHERE p.id = NEW.pago_id AND p.estado = 'VIGENTE' AND p.cajero = NEW.cajero_pago AND p.total = NEW.monto
+            AND n.tipo = 'NOTA_CREDITO' AND n.modifica_id = p.comprobante_id AND n.total = p.total) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: anulación que no corresponde al pago o a su nota de crédito';
+    END IF;
+END$$
+
+-- Un ajuste solo nace de un descuento APROBADO del mismo alumno de la cuota.
+DROP TRIGGER IF EXISTS trg_ajuste_cuota_registro$$
+CREATE TRIGGER trg_ajuste_cuota_registro BEFORE INSERT ON ajuste_cuota FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM descuento d JOIN cuota c ON c.id = NEW.cuota_id
+            WHERE d.id = NEW.descuento_id AND d.estado = 'APROBADO' AND d.alumno_id = c.alumno_id
+            AND d.cuotas LIKE CONCAT('%,', NEW.cuota_id, ',%')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el ajuste necesita un descuento aprobado para esa cuota';
+    END IF;
+END$$
+
+-- Un descuento nace SOLICITADO; resuelto no vuelve a cambiar.
+DROP TRIGGER IF EXISTS trg_descuento_nace$$
+CREATE TRIGGER trg_descuento_nace BEFORE INSERT ON descuento FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> 'SOLICITADO') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un descuento nace SOLICITADO';
+    END IF;
+END$$
+
+DROP TRIGGER IF EXISTS trg_descuento_resuelto$$
+CREATE TRIGGER trg_descuento_resuelto BEFORE UPDATE ON descuento FOR EACH ROW
+BEGIN
+    IF OLD.estado <> 'SOLICITADO' AND NOT (NEW.estado <=> OLD.estado) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un descuento resuelto no cambia';
     END IF;
 END$$
 

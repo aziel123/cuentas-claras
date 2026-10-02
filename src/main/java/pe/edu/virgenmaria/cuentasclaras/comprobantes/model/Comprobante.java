@@ -174,6 +174,51 @@ public class Comprobante extends BaseEntity {
 		return comprobante;
 	}
 
+	/**
+	 * Nota de crédito que anula por completo {@code modificado} (una sola por comprobante: UNIQUE en la base). Usa la
+	 * serie de notas de su letra (BC01 para boletas, FC01 para facturas), el mismo receptor y las mismas líneas.
+	 */
+	public static Comprobante notaDeCredito(SerieComprobante serie, int numero, LocalDate fecha, Comprobante modificado,
+			String motivo) {
+		Objects.requireNonNull(serie, "serie");
+		Objects.requireNonNull(modificado, "modificado");
+		if (serie.getTipo() != TipoComprobante.NOTA_CREDITO || modificado.getTipo() == TipoComprobante.NOTA_CREDITO
+				|| serie.getSerie().charAt(0) != modificado.getSerie().charAt(0)) {
+			throw new IllegalArgumentException("La nota de crédito usa una serie de notas con la letra del comprobante");
+		}
+		if (numero != serie.getUltimoNumero()) {
+			throw new IllegalStateException("El número " + numero + " no es el que asignó la serie " + serie.getSerie());
+		}
+		String texto = Normalizador.limpiar(motivo);
+		if (texto == null) {
+			throw new ReglaNegocioException("La nota de crédito necesita un motivo.");
+		}
+		Comprobante nota = new Comprobante();
+		nota.serieComprobante = serie;
+		nota.tipo = TipoComprobante.NOTA_CREDITO;
+		nota.serie = serie.getSerie();
+		nota.numero = numero;
+		nota.fechaEmision = Objects.requireNonNull(fecha, "fecha");
+		// Con getters: «modificado» suele llegar como proxy perezoso de Hibernate (sus campos estarían vacíos).
+		Receptor receptor = modificado.getReceptor();
+		nota.receptorTipoDocumento = receptor.tipo();
+		nota.receptorNumeroDocumento = receptor.numero();
+		nota.receptorNombre = receptor.nombre();
+		nota.moneda = modificado.getMoneda();
+		nota.afectacionIgv = modificado.getAfectacionIgv();
+		nota.modificaId = Objects.requireNonNull(modificado.getId(), "el comprobante anulado debe estar guardado");
+		nota.motivoNota = recortar(TextoSeguro.exigir(texto, "el motivo"));
+		nota.proveedor = serie.getProveedor();
+		nota.estadoEnvio = EstadoEnvio.PENDIENTE;
+		nota.intentos = 0;
+		int orden = 1;
+		for (ComprobanteLinea linea : modificado.getLineas()) {
+			nota.lineas.add(ComprobanteLinea.de(nota, orden++, linea.getDescripcion(), linea.getMonto()));
+		}
+		nota.total = modificado.getTotal();
+		return nota;
+	}
+
 	private static String recortar(String texto) {
 		return texto.length() <= MAX_DESCRIPCION ? texto : texto.substring(0, MAX_DESCRIPCION - 1) + "…";
 	}

@@ -138,6 +138,28 @@ class MatrizPermisosTest {
 		mvc.perform(post("/aprobaciones/1/aprobar").with(csrf())).andExpect(status().isForbidden());
 	}
 
+	/** Tanda 2: la cajera pide anular solo sus pagos desde la caja; el estado de cuenta es de Administración y Dirección. */
+	@Test
+	@ComoUsuario(roles = Rol.CAJA)
+	void cajaRecibe403EnEstadoDeCuentaYEnLasAnulacionesDeAdministracion() throws Exception {
+		mvc.perform(get("/alumnos/1/estado-cuenta")).andExpect(status().isForbidden());
+		mvc.perform(get("/alumnos/comprobantes/1")).andExpect(status().isForbidden());
+		mvc.perform(get("/alumnos/pagos/1/correccion")).andExpect(status().isForbidden());
+		mvc.perform(post("/alumnos/pagos/1/devolucion").with(csrf()).param("alumno", "1")).andExpect(status().isForbidden());
+		mvc.perform(post("/alumnos/pagos/1/correccion").with(csrf())).andExpect(status().isForbidden());
+		mvc.perform(post("/descuentos").with(csrf())).andExpect(status().isForbidden());
+		mvc.perform(post("/descuentos/revisar").with(csrf())).andExpect(status().isForbidden());
+	}
+
+	/** Quien aprueba no pide anulaciones por la caja (las rutas de caja son solo de Caja). */
+	@ParameterizedTest
+	@EnumSource(value = Rol.class, names = { "PROMOTOR", "DIRECTOR", "ADMINISTRACION", "DOCENTE", "APODERADO" })
+	void soloCajaPideAnulacionesDesdeLaCaja(Rol rol) throws Exception {
+		mvc.perform(post("/caja/pagos/1/devolucion").with(csrf()).with(UsuariosDePrueba.como(rol)))
+				.andExpect(status().isForbidden());
+		mvc.perform(get("/caja/pagos/1/correccion").with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+	}
+
 	/** Y al revés: Promotoría, Dirección y Administración no cobran. */
 	@ParameterizedTest
 	@EnumSource(value = Rol.class, names = { "PROMOTOR", "DIRECTOR", "ADMINISTRACION", "DOCENTE", "APODERADO" })

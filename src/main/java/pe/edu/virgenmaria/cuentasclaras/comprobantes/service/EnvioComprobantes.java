@@ -90,7 +90,9 @@ public class EnvioComprobantes {
 		}
 		LocalDateTime ahora = LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS);
 		try {
-			ResultadoEnvio resultado = emisor.enviar(DocumentoElectronico.de(comprobante));
+			Comprobante modificado = comprobante.getModificaId() == null ? null
+					: comprobantes.findById(comprobante.getModificaId()).orElse(null);
+			ResultadoEnvio resultado = emisor.enviar(DocumentoElectronico.de(comprobante, modificado));
 			comprobante.registrarEnvio(resultado, ahora);
 		}
 		catch (RuntimeException e) {

@@ -21,4 +21,16 @@ public interface AplicacionPagoRepository extends Repository<AplicacionPago, Lon
 	@Query("select a from AplicacionPago a join fetch a.cuota c join fetch c.alumno where a.pago.id in :pagos "
 			+ "order by a.pago.id, a.id")
 	List<AplicacionPago> dePagos(@Param("pagos") Collection<Long> pagoIds);
+
+	/** Las aplicaciones originales (no reversiones) de un pago, en orden. */
+	List<AplicacionPago> findByPagoIdAndTipoOrderByIdAsc(Long pagoId, pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAplicacion tipo);
+
+	/** Las cuotas a las que se aplicó un pago, sin cargarlas (para bloquearlas primero). */
+	@Query("select a.cuota.id from AplicacionPago a where a.pago.id = :pago "
+			+ "and a.tipo = pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAplicacion.APLICACION")
+	List<Long> cuotasDePago(@Param("pago") Long pagoId);
+
+	/** Los pagos que tocaron cuotas de un alumno (aplicaciones y reversiones). */
+	@Query("select distinct a.pago.id from AplicacionPago a where a.cuota.alumno.id = :alumno")
+	List<Long> pagosDeAlumno(@Param("alumno") Long alumnoId);
 }

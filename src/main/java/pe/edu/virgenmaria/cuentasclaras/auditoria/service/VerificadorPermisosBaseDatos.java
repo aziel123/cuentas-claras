@@ -107,7 +107,21 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "'verificador', NOW(6))", "trg_pago_registro"),
 			trigger("INSERT INTO aplicacion_pago (colegio_id, pago_id, cuota_id, tipo, monto, creado_en, creado_por, "
 					+ "actualizado_en) VALUES (0, 0, 0, 'APLICACION', 1, NOW(6), 'verificador', NOW(6))",
-					"trg_aplicacion_pago_registro"));
+					"trg_aplicacion_pago_registro"),
+			// Sprint 3, tanda 2 (anulaciones y descuentos).
+			sinBorrado("anulacion_pago"), sinBorrado("descuento"), sinBorrado("ajuste_cuota"),
+			soloInsercion("anulacion_pago"), soloInsercion("ajuste_cuota"),
+			columna("UPDATE descuento SET valor = valor WHERE 1 = 0", "descuento"),
+			trigger("INSERT INTO anulacion_pago (colegio_id, pago_id, solicitud_id, nota_credito_id, tipo, motivo, monto, "
+					+ "cajero_pago, solicitado_por, aprobado_por, posterior_al_cierre, creado_en, creado_por, actualizado_en) "
+					+ "VALUES (0, 0, 0, 0, 'DEVOLUCION', 'verificador de permisos', 1, 'a', 'b', 'c', FALSE, NOW(6), 'c', "
+					+ "NOW(6))", "trg_anulacion_pago_registro"),
+			trigger("INSERT INTO descuento (colegio_id, alumno_id, anio_escolar_id, tipo, modalidad, valor, cuotas, "
+					+ "total_estimado, motivo, sustento, estado, resuelto_por, resuelto_en, creado_en, creado_por, "
+					+ "actualizado_en) VALUES (0, 0, 0, 'OTRO', 'MONTO', 1, ',0,', 1, 'verificador de permisos', "
+					+ "'verificador', 'APROBADO', 'b', NOW(6), NOW(6), 'a', NOW(6))", "trg_descuento_nace"),
+			trigger("INSERT INTO ajuste_cuota (colegio_id, cuota_id, descuento_id, monto, creado_en, creado_por, "
+					+ "actualizado_en) VALUES (0, 0, 0, 1, NOW(6), 'verificador', NOW(6))", "trg_ajuste_cuota_registro"));
 
 	/** 1143 (columna sin GRANT) o 1142 (ningún UPDATE sobre la tabla, por ejemplo antes de aplicar el paso 2). */
 	private static SentenciaProhibida columna(String sql, String tabla) {
@@ -163,7 +177,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		LOG.info("Permisos de la bitácora verificados: la aplicación no puede editar ni borrar eventos.");
 		LOG.info("Permisos de las cuotas verificados: la aplicación no puede borrarlas ni cambiar su monto.");
 		LOG.info("Permisos por columna y triggers de planes, lotes y solicitudes verificados.");
-		LOG.info("Permisos y triggers de caja y comprobantes verificados.");
+		LOG.info("Permisos y triggers de caja, comprobantes, anulaciones y descuentos verificados.");
 	}
 
 	public void verificarMigraciones() {

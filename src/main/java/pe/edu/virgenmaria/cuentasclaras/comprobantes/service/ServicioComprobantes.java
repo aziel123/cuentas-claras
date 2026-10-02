@@ -62,16 +62,43 @@ public class ServicioComprobantes {
 		return comprobante;
 	}
 
+	/**
+	 * Nota de crédito que anula {@code original} (boleta → BC01, factura → FC01), con su propio correlativo sin huecos.
+	 * El número del original no se reutiliza nunca.
+	 */
+	public Comprobante emitirNotaCredito(Comprobante original, String motivo, LocalDate fecha) {
+		Objects.requireNonNull(original, "original");
+		String serieNota = serieNotaDe(original);
+		SerieComprobante serie = bloquear(TipoComprobante.NOTA_CREDITO, serieNota);
+		int numero = serie.siguiente();
+		series.saveAndFlush(serie);
+		Comprobante nota = comprobantes.save(Comprobante.notaDeCredito(serie, numero, fecha, original, motivo));
+		eventos.publishEvent(new ComprobanteEmitido(nota.getId(), nota.getColegioId()));
+		return nota;
+	}
+
+	/** BC01 para una boleta, FC01 para una factura (la letra del comprobante que se anula). */
+	public String serieNotaDe(Comprobante original) {
+		return switch (original.getTipo()) {
+			case BOLETA -> propiedades.serieNotaBoleta();
+			case FACTURA -> propiedades.serieNotaFactura();
+			case NOTA_CREDITO -> throw new IllegalArgumentException("Una nota de crédito no se anula con otra");
+		};
+	}
+
 	/** El proveedor configurado (para la marca «simulado» del impreso). */
 	public boolean simulado() {
 		return propiedades.proveedor() == pe.edu.virgenmaria.cuentasclaras.comprobantes.model.ProveedorComprobantes.SIMULADO;
 	}
 
 	private SerieComprobante bloquear(TipoComprobante tipo) {
-		String serie = propiedades.serieDe(tipo);
+		return bloquear(tipo, propiedades.serieDe(tipo));
+	}
+
+	private SerieComprobante bloquear(TipoComprobante tipo, String serie) {
 		return series.bloquear(serie).orElseGet(() -> {
 			try {
-				apertura.crearSiFalta(tipo);
+				apertura.crearSiFalta(tipo, serie);
 			}
 			catch (DataIntegrityViolationException otraLaCreo) {
 				// Otro cobro la creó a la vez: se usa esa.

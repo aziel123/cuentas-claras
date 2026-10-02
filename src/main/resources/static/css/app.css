@@ -417,6 +417,9 @@ input[type="file"].input { padding: var(--esp-2); }
 .conteos .monto { font-size: var(--texto-lg); color: inherit; }
 .fila-quitada td { color: var(--color-texto-secundario); text-decoration: line-through; }
 .fila-quitada td .badge, .fila-quitada td a { text-decoration: none; }
+/* El tachado se hereda a todo lo de la celda: el estado (y su nota de crédito) y las acciones se leen sin tachar. */
+.fila-quitada td[data-etiqueta="Estado"], .fila-quitada td[data-etiqueta="Acciones"] { text-decoration: none; }
+.fila-quitada td[data-etiqueta="Estado"] a { text-decoration: underline; }
 
 /* Sprint 3 · Caja: celular primero, objetivos de 44 px, montos tabulares */
 .buscador { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--esp-3); align-items: end; }
@@ -441,6 +444,7 @@ input[type="file"].input { padding: var(--esp-2); }
 .total-cobro { border-top: 3px solid var(--color-celeste); }
 .conteos-montos { grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); }
 .conteos-montos strong { white-space: nowrap; }
+.detalle-solicitud { margin: 0; padding-left: var(--esp-4); display: grid; gap: var(--esp-1); font-size: var(--texto-sm); }
 .total-cobro-monto { font-size: var(--texto-2xl); font-weight: 700; color: var(--color-primario-texto); font-variant-numeric: tabular-nums; }
 .lista-imputacion { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--esp-2); }
 .lista-imputacion li {
