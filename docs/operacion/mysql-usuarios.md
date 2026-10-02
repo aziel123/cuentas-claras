@@ -31,6 +31,10 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `usuario_rol` | INSERT, UPDATE, DELETE | La colección de roles se reescribe al cambiarlos |
 | `evento_auditoria` | INSERT | **Solo inserción** |
 | `auditoria_cadena` | UPDATE | Avanzar el eslabón; MySQL también lo exige para `SELECT ... FOR UPDATE` |
+| `anio_escolar`, `seccion`, `familia`, `apoderado`, `alumno`, `matricula` | INSERT, UPDATE | Nada se borra: se desactiva, se retira o se mueve |
+| `importacion_alumnos` | INSERT | **Solo inserción** |
+| `plan_pension`, `lote_saldo_inicial`, `linea_saldo_inicial` | INSERT, UPDATE | Financieras: **nunca DELETE** (se descartan, se reemplazan o se quitan con un flag) |
+| `cuota` | INSERT y UPDATE **solo** de `estado, monto_pagado, obligacion, anulacion_*, anulada_en, actualizado_en, version` | El monto, la fecha de vencimiento, el alumno, el origen y la clave no se cambian ni por SQL (error 1143) |
 
 ## Despliegue (cada versión)
 La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **nunca** recibe las credenciales de `cc_migrador`. Cada despliegue tiene dos pasos separados:
@@ -42,7 +46,7 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
    java -jar cuentas-claras.jar migrar
    ```
    Si una migración crea una tabla, aplica después su GRANT (paso 3 de la instalación).
-2. **Arrancar** la aplicación con `SPRING_PROFILES_ACTIVE=prod` y **solo** `DB_USUARIO=cc_app` / `DB_CLAVE`. Antes de aceptar peticiones comprueba que no falten migraciones y que `cc_app` no pueda editar ni borrar la bitácora (error 1142). Si algo falla, **no arranca**.
+2. **Arrancar** la aplicación con `SPRING_PROFILES_ACTIVE=prod` y **solo** `DB_USUARIO=cc_app` / `DB_CLAVE`. Antes de aceptar peticiones comprueba que no falten migraciones, que `cc_app` no pueda editar ni borrar la bitácora ni borrar cuotas (error 1142) y que no pueda cambiar el monto de una cuota (error 1143). Si algo falla, **no arranca**.
 
 ## Cada migración nueva
 - Si crea una tabla, agrega su GRANT en `scripts/mysql/02-permisos-tablas.sql` y aplícalo después de migrar.
@@ -60,10 +64,15 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
 | `CC_COLEGIO_ID`, `CC_PROMOTOR_USUARIO`, `CC_PROMOTOR_NOMBRE`, `CC_PROMOTOR_CLAVE` | Primer PROMOTOR, solo si no hay usuarios. Retira `CC_PROMOTOR_CLAVE` después del primer ingreso |
 
 ## Cómo comprobarlo
-Conectado como `cc_app`, estas dos sentencias deben fallar con **ERROR 1142** (comando denegado):
+Conectado como `cc_app`, estas sentencias deben fallar con **ERROR 1142** (comando denegado):
 ```sql
 UPDATE evento_auditoria SET ip = ip WHERE 1 = 0;
 DELETE FROM evento_auditoria WHERE 1 = 0;
+DELETE FROM cuota WHERE 1 = 0;
+```
+Y esta, con **ERROR 1143** (columna denegada: el GRANT de `cuota` es por columna):
+```sql
+UPDATE cuota SET monto = monto WHERE 1 = 0;
 ```
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 

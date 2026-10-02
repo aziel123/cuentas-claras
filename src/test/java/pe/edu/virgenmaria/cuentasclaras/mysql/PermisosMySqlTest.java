@@ -18,6 +18,8 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.model.EventoAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.VerificadorIntegridadAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.VerificadorPermisosBaseDatos;
+import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.CambiarRolesRequest;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
@@ -38,7 +40,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * FASE 2 del job "mysql" del CI (después de scripts/mysql/02-permisos-tablas.sql): la aplicación funciona con
- * los permisos mínimos de cc_app y MySQL rechaza editar o borrar la bitácora con el error 1142.
+ * los permisos mínimos de cc_app; MySQL rechaza editar o borrar la bitácora y borrar datos financieros con el error
+ * 1142, y cambiar el monto, la fecha o el alumno de una cuota con el error 1143 (GRANT por columna).
  * No limpia la base: cc_app no puede borrar eventos (la base del CI es desechable). Usa nombres únicos.
  */
 @SpringBootTest
@@ -87,6 +90,21 @@ class PermisosMySqlTest {
 
 	@Autowired
 	private pe.edu.virgenmaria.cuentasclaras.alumnos.importacion.ServicioImportacionAlumnos importacion;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension planes;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioSaldoInicial saldoInicial;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioAnulacionCuotas anulaciones;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository cuotas;
+
+	@Autowired
+	private org.springframework.transaction.PlatformTransactionManager transacciones;
 
 	@AfterEach
 	void limpiar() {
@@ -283,6 +301,97 @@ class PermisosMySqlTest {
 		assertThat(otraVez.resumen().sinCambios()).isTrue();
 		assertThat(otraVez.importadoAntesEn()).isNotNull();
 		UsuariosDePrueba.iniciarSesion(guardar("verif.importa." + sufijo, Rol.PROMOTOR));
+		assertThat(verificador.verificar().integra()).isTrue();
+	}
+
+	@Test
+	void deleteSobreTablasFinancierasFallaCon1142() {
+		for (String tabla : new String[] { "cuota", "plan_pension", "lote_saldo_inicial", "linea_saldo_inicial" }) {
+			assertThatThrownBy(() -> jdbc.update("DELETE FROM " + tabla + " WHERE 1 = 0"))
+					.isInstanceOf(DataAccessException.class)
+					.satisfies(e -> assertThat(codigoMySql(e)).as(tabla).isEqualTo(1142));
+		}
+	}
+
+	/** GRANT UPDATE por columna: el monto, la fecha, el alumno, el origen y la clave de una cuota no se cambian. */
+	@Test
+	void updateDeMontoFechaYAlumnoDeUnaCuotaFallaCon1143() {
+		for (String columna : new String[] { "monto", "fecha_vencimiento", "alumno_id", "clave", "matricula_id",
+				"plan_pension_id", "descripcion", "tipo", "colegio_id" }) {
+			assertThatThrownBy(() -> jdbc.update("UPDATE cuota SET " + columna + " = " + columna + " WHERE 1 = 0"))
+					.isInstanceOf(DataAccessException.class)
+					.satisfies(e -> assertThat(codigoMySql(e)).as(columna).isEqualTo(1143));
+		}
+		// Las columnas del estado de pago y de la anulación sí (las que la entidad Cuota puede actualizar).
+		assertThatCode(() -> jdbc.update("UPDATE cuota SET estado = estado, monto_pagado = monto_pagado, "
+				+ "obligacion = obligacion, anulacion_motivo = anulacion_motivo, actualizado_en = actualizado_en, "
+				+ "version = version WHERE 1 = 0")).doesNotThrowAnyException();
+	}
+
+	/**
+	 * Sprint 2, tanda 3, con los permisos mínimos de cc_app: plan (propuesta, aprobación y versión nueva), matrícula
+	 * con cronograma, lote de saldo inicial (envío y confirmación de otra persona) y el gancho de anulación (solicitud
+	 * y aprobación). Usa un año libre y documentos únicos.
+	 */
+	@Test
+	void flujoCompletoConPermisosMinimos() {
+		java.util.Set<Integer> usados = new java.util.HashSet<>(
+				jdbc.queryForList("SELECT anio FROM anio_escolar WHERE colegio_id = 1", Integer.class));
+		int anio = java.util.stream.IntStream.iterate(2025, a -> a >= 2000, a -> a - 1).filter(a -> !usados.contains(a))
+				.findFirst().orElseThrow();
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		Long anioId = estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
+				java.time.LocalDate.of(anio, 3, 2), java.time.LocalDate.of(anio, 12, 18), false));
+		Long seccion = estructura.crearSeccion(anioId, new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest(
+				pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "A"));
+		String base = String.format("%07d", Math.floorMod(System.nanoTime() + 13, 10_000_000L));
+
+		// Plan: lo propone Administración y lo aprueba Dirección (UPDATE de plan_pension).
+		Long plan = EscenarioCobranza.planAprobado(planes, anioId, anio, Nivel.PRIMARIA, "450", "350", null);
+		// Matrícula: el cronograma se genera en la misma transacción (INSERT en cuota).
+		Long mateo = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoNuevo("7" + base, "Quispe", "Huamán", "Mateo", java.time.LocalDate.of(anio - 10, 6, 14),
+						"4" + base, "Huamán", "Ccori", "Rosa", "987654321", null, seccion)).alumnoId();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cuota WHERE alumno_id = ?", Long.class, mateo)).isEqualTo(11);
+		// Versión nueva aprobada por Promotoría: reemplaza la anterior (UPDATE con vigente = NULL) sin tocar cuotas.
+		Long v2 = planes.nuevaVersion(plan, "Reajuste aprobado por la asamblea de padres");
+		planes.editarBorrador(v2, EscenarioCobranza.plan(anio, "465", "350", null));
+		EscenarioCobranza.como(EscenarioCobranza.PROMOTORIA);
+		planes.aprobar(v2);
+		assertThat(jdbc.queryForObject("SELECT estado FROM plan_pension WHERE id = ?", String.class, plan))
+				.isEqualTo("REEMPLAZADO");
+
+		// Saldo inicial: lo arma y envía Administración, lo confirma Dirección.
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		Long lote = saldoInicial.crearLote(new pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LoteRequest(anioId,
+				java.time.LocalDate.of(anio, 9, 30), "Informe MySQL " + sufijo, new java.math.BigDecimal("80.00")));
+		Long linea = saldoInicial.agregarLinea(lote, new pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LineaSaldoRequest(
+				"7" + base, pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConceptoSaldo.OTRO, null, "Taller de verano",
+				new java.math.BigDecimal("30.00"), java.time.LocalDate.of(anio, 2, 15)));
+		saldoInicial.quitarLinea(lote, linea, "Se cargó con otro monto");
+		saldoInicial.agregarLinea(lote, new pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LineaSaldoRequest("7" + base,
+				pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConceptoSaldo.OTRO, null, "Taller de verano",
+				new java.math.BigDecimal("80.00"), java.time.LocalDate.of(anio, 2, 15)));
+		saldoInicial.enviar(lote);
+		EscenarioCobranza.como(EscenarioCobranza.DIRECCION);
+		assertThat(saldoInicial.confirmar(lote)).isEqualTo(1);
+
+		// Gancho de anulación: la solicitud (UPDATE de columnas permitidas) y la aprobación de otra persona.
+		Long setiembre = jdbc.queryForObject("SELECT id FROM cuota WHERE alumno_id = ? AND numero = 9", Long.class, mateo);
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		anulaciones.solicitar(setiembre, "Prueba de anulación en MySQL real");
+		new org.springframework.transaction.support.TransactionTemplate(transacciones).executeWithoutResult(estado ->
+				cuotas.findById(setiembre).orElseThrow().anular("Prueba de anulación en MySQL real", "administracion",
+						"director", LocalDateTime.of(anio, 10, 2, 9, 0)));
+		assertThat(jdbc.queryForMap("SELECT estado, obligacion, monto FROM cuota WHERE id = ?", setiembre))
+				.containsEntry("estado", "ANULADA").containsEntry("obligacion", null);
+		// La base sigue rechazando la autoaprobación (CHECK) aunque cc_app pueda actualizar esas columnas.
+		Long octubre = jdbc.queryForObject("SELECT id FROM cuota WHERE alumno_id = ? AND numero = 10", Long.class, mateo);
+		assertThatThrownBy(() -> jdbc.update("UPDATE cuota SET estado = 'ANULADA', obligacion = NULL, "
+				+ "anulada_en = NOW(), anulacion_motivo = 'Autoaprobación por SQL', anulacion_solicitada_por = 'x', "
+				+ "anulacion_aprobada_por = 'x' WHERE id = ?", octubre)).isInstanceOf(DataAccessException.class);
+
+		UsuariosDePrueba.iniciarSesion(guardar("verif.cobranza." + sufijo, Rol.PROMOTOR));
 		assertThat(verificador.verificar().integra()).isTrue();
 	}
 

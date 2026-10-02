@@ -37,6 +37,15 @@ public final class Calendario {
 		return Month.of(mes).getDisplayName(TextStyle.FULL, PERU);
 	}
 
+	/** Los 12 meses en español del Perú, de enero a diciembre («setiembre»). */
+	public static List<String> nombresDeMeses() {
+		List<String> meses = new ArrayList<>(12);
+		for (int mes = 1; mes <= 12; mes++) {
+			meses.add(nombreMes(mes));
+		}
+		return List.copyOf(meses);
+	}
+
 	public static LocalDate ultimoDiaDelMes(int anio, int mes) {
 		return YearMonth.of(anio, mes).atEndOfMonth();
 	}

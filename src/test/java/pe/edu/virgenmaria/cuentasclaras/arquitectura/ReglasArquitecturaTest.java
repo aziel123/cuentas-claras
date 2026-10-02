@@ -190,6 +190,10 @@ class ReglasArquitecturaTest {
 
 	private static final String ESCRITURA_ESCOLAR = "hasAnyRole('DIRECTOR','ADMINISTRACION')";
 
+	private static final String SOLO_ADMINISTRACION = "hasRole('ADMINISTRACION')";
+
+	private static final String APROBACION = "hasAnyRole('PROMOTOR','DIRECTOR')";
+
 	private static final Map<String, String> EXPRESIONES_EXIGIDAS = Map.ofEntries(
 			Map.entry(BASE + ".seguridad.service.ServicioUsuarios", "hasAnyRole('PROMOTOR','DIRECTOR')"),
 			Map.entry(BASE + ".auditoria.service.ConsultaAuditoriaService", "hasAnyRole('PROMOTOR','DIRECTOR')"),
@@ -214,7 +218,27 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".alumnos.service.ServicioFamilias#desactivarApoderado", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".alumnos.service.ServicioFamilias#renombrar", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".alumnos.service.ServicioMatriculas", ESCRITURA_ESCOLAR),
-			Map.entry(BASE + ".alumnos.importacion.ServicioImportacionAlumnos", ESCRITURA_ESCOLAR));
+			Map.entry(BASE + ".alumnos.importacion.ServicioImportacionAlumnos", ESCRITURA_ESCOLAR),
+			// Sprint 2, tanda 3: Administración propone y arma; Promotoría o Dirección aprueban y confirman.
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#propuestaPorDefecto", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#datosParaEditar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#crearBorrador", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#editarBorrador", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#nuevaVersion", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#descartar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#aprobar", APROBACION),
+			Map.entry(BASE + ".cobranza.service.ServicioCronograma", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".cobranza.service.GeneradorCronograma#generarPendientes", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#crearLote", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#agregarLinea", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#quitarLinea", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#enviar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#descartar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#confirmar", APROBACION),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#devolver", APROBACION),
+			Map.entry(BASE + ".cobranza.service.ServicioAnulacionCuotas", LECTURA_ESCOLAR));
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {
@@ -291,6 +315,55 @@ class ReglasArquitecturaTest {
 				}
 			})
 			.because("alumnos, apoderados y matrículas se guardan con RegistroAlumnos");
+
+	/** Cobranza (sprint 2, tanda 3): las cuotas, los planes y los lotes no se borran ni se cambian con SQL masivo. */
+	@ArchTest
+	static final ArchRule repositoriosDeCobranzaSinModifyingNiBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAPackage(BASE + ".cobranza.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("una cuota solo cambia por sus métodos (y en MySQL el UPDATE está limitado por columna)");
+
+	@ArchTest
+	static final ArchRule repositoriosDeCobranzaNoHeredanBorrados = classes()
+			.that().resideInAPackage(BASE + ".cobranza.repository..")
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("CrudRepository trae delete*: los repositorios financieros declaran solo lo que usan");
+
+	/** En ningún módulo hay JPQL «update ... Cuota»: el monto y la fecha no se tocan ni en bloque. */
+	@ArchTest
+	static final ArchRule nadieHaceUpdateJpqlSobreCuota = noMethods()
+			.should().beAnnotatedWith(new DescribedPredicate<JavaAnnotation<?>>("@Query(\"update Cuota ...\")") {
+				@Override
+				public boolean test(JavaAnnotation<?> anotacion) {
+					return anotacion.getRawType().isEquivalentTo(Query.class) && anotacion.get("value")
+							.map(v -> v.toString().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").contains("update cuota"))
+							.orElse(false);
+				}
+			})
+			.because("las cuotas son inmutables salvo su estado de pago y anulación");
+
+	@ArchTest
+	static final ArchRule entidadesDeCobranzaSinSettersPublicos = noMethods()
+			.that().areDeclaredInClassesThat().resideInAPackage(BASE + ".cobranza.model..")
+			.and().areDeclaredInClassesThat().areAnnotatedWith(Entity.class)
+			.and().arePublic()
+			.should().haveNameMatching("set[A-Z].*")
+			.because("cada cambio de una cuota, un plan o un lote es un método con su regla");
+
+	/** Cobranza solo se conoce desde alumnos por el puerto ConsultaCuotasMatricula, que implementa cobranza. */
+	@ArchTest
+	static final ArchRule puertoDeCuotasLoImplementaCobranza = classes()
+			.that().implement(BASE + ".alumnos.service.ConsultaCuotasMatricula")
+			.should().resideInAPackage(BASE + ".cobranza..")
+			.because("alumnos define el puerto y cobranza lo implementa");
+
+	@ArchTest
+	static final ArchRule seguridadYAuditoriaNoDependenDeCobranza = noClasses()
+			.that().resideInAnyPackage(BASE + ".seguridad..", BASE + ".auditoria..", BASE + ".comun..")
+			.should().dependOnClassesThat().resideInAPackage(BASE + ".cobranza..")
+			.because("cobranza usa la base común, nunca al revés");
 
 	@ArchTest
 	static final ArchRule cobranzaNoDependeDeAcademico = noClasses()

@@ -83,6 +83,10 @@
 <span th:fragment="badge(texto, variante)" class="badge" th:classappend="'badge-' + ${variante}"
 	th:text="${texto}">Pagado</span>
 
+<!--/* Monto en soles: «S/ 1,250.00» (coma de miles, punto decimal, siempre 2 decimales). Nunca pasa por double. */-->
+<span th:fragment="monto(valor)" class="monto num"
+	th:text="${valor == null} ? '' : ('S/ ' + ${#numbers.formatDecimal(valor, 1, 'COMMA', 2, 'POINT')})">S/ 1,250.00</span>
+
 <!--/* Alerta con ícono y texto. tipo: exito, info, advertencia o error. Los errores usan role="alert". */-->
 <div th:fragment="alerta(tipo, mensaje)" class="alerta" th:classappend="'alerta-' + ${tipo}"
 	th:attr="role=${tipo == 'error'} ? 'alert' : 'status'">

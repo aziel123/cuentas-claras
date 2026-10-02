@@ -16,6 +16,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -50,6 +52,60 @@ class VerificadorPermisosBaseDatosTest {
 
 		assertThatCode(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
 				.doesNotThrowAnyException();
+	}
+
+	@Test
+	void arrancaSiMysqlDeniegaElMontoDeLaCuotaPorColumnaCon1143() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doThrow(denegado(1143)).when(mysql).update(SQL_MONTO_CUOTA);
+
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.doesNotThrowAnyException();
+	}
+
+	@Test
+	void fallaElArranqueSiLaAppPuedeBorrarCuotas() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doReturn(0).when(mysql).update(SQL_BORRAR_CUOTA);
+
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("PUEDE ejecutar «" + SQL_BORRAR_CUOTA + "»")
+				.hasMessageContaining("cuotas se podrían borrar");
+	}
+
+	@Test
+	void fallaSiPuedeCambiarElMontoDeUnaCuota() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doReturn(0).when(mysql).update(SQL_MONTO_CUOTA);
+
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("PUEDE ejecutar «" + SQL_MONTO_CUOTA + "»")
+				.hasMessageContaining("GRANT por columna");
+	}
+
+	@Test
+	void borrarCuotasDenegadoConOtroCodigoTambienImpideArrancar() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doThrow(denegado(1143)).when(mysql).update(SQL_BORRAR_CUOTA);
+
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("1143");
+	}
+
+	private static final String SQL_BORRAR_CUOTA = "DELETE FROM cuota WHERE 1 = 0";
+
+	private static final String SQL_MONTO_CUOTA = "UPDATE cuota SET monto = monto WHERE 1 = 0";
+
+	private static JdbcTemplate mysqlQueDeniega() {
+		JdbcTemplate mysql = mock(JdbcTemplate.class);
+		when(mysql.update(anyString())).thenThrow(denegado(1142));
+		return mysql;
+	}
+
+	private static UncategorizedSQLException denegado(int codigo) {
+		return new UncategorizedSQLException("verificar", "SQL", new SQLException("command denied", "42000", codigo));
 	}
 
 	@Test

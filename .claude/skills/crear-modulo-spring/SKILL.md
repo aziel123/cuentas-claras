@@ -30,7 +30,10 @@ Las vistas van en `src/main/resources/templates/<modulo>/` y usan `fragments/lay
    - Hibernate solo valida (`ddl-auto: validate`). Nunca edites una migración publicada: crea una nueva.
    - SQL compatible con MySQL 8 y con H2 en modo MySQL. Fechas en `DATETIME(6)` y dinero en `DECIMAL(10,2)`.
    - Toda tabla de negocio lleva `colegio_id BIGINT NOT NULL` (FK a `colegio`), `creado_en`, `creado_por`, `actualizado_en` y `version BIGINT NOT NULL DEFAULT 0`.
+   - **FK compuestas con `colegio_id`**: cada tabla padre tiene `UNIQUE (id, colegio_id)` y cada hija la referencia con `FOREIGN KEY (padre_id, colegio_id) REFERENCES padre (id, colegio_id)`. Así la base rechaza que un registro apunte a otro colegio aunque falle el filtro de `@TenantId`.
+   - **CHECK con columnas que admiten NULL**: escribe `col IS NOT NULL AND col ...`. En SQL, un CHECK que evalúa NULL **pasa**: `aprobado_por <> creado_por` no protege nada si `aprobado_por` es NULL. Ejemplo: `CHECK (estado <> 'ANULADA' OR (anulacion_aprobada_por IS NOT NULL AND anulacion_aprobada_por <> anulacion_solicitada_por))`.
    - **Agrega el GRANT de la tabla** en `scripts/mysql/02-permisos-tablas.sql`. Tablas financieras: INSERT y UPDATE, **nunca DELETE**. El job `mysql` del CI falla si falta.
+   - **GRANT por columna para los campos financieros**: si un monto, una fecha de vencimiento, el alumno o la clave de idempotencia no deben cambiar, no des `UPDATE` sobre la tabla sino `GRANT UPDATE (estado, monto_pagado, ..., actualizado_en, version) ON cuentasclaras.<tabla>`. MySQL responde 1143 si alguien intenta cambiar otra columna. La lista debe coincidir **exactamente** con las columnas `updatable = true` de la entidad (incluidas `actualizado_en` y `version` de `BaseEntity`); compruébalo con una prueba (ver `InmutabilidadCuotasTest`), en `PermisosMySqlTest` (1143) y en `VerificadorPermisosBaseDatos` si la columna es crítica.
    - En producción la aplicación **no migra**: se despliega con `java -jar cuentas-claras.jar migrar` (usuario `cc_migrador`) y después se arranca con `cc_app`. Si faltan migraciones, la aplicación no arranca.
 2. **Entidad** en `model/`:
    - Extiende `BaseEntity`: id, `colegioId` con `@TenantId`, `creadoEn`, `creadoPor`, `actualizadoEn` y `@Version version`.
@@ -41,6 +44,7 @@ Las vistas van en `src/main/resources/templates/<modulo>/` y usan `fragments/lay
    - **Nada de SQL nativo**: Hibernate no filtra las consultas nativas por colegio (regla ArchUnit). Usa consultas derivadas o JPQL.
    - Nada de `delete*`: lo financiero se anula y los usuarios se desactivan (regla ArchUnit).
    - Para contadores o saldos que cambian en paralelo: `@Lock(PESSIMISTIC_WRITE)` en una consulta JPQL.
+   - Tablas financieras: extiende `Repository<Entidad, Long>` y declara solo lo que usas (así no hereda `delete*`), sin `@Modifying` ni JPQL `update` (reglas ArchUnit de `cobranza`).
 4. **DTOs** (`record`): `XxxRequest` (`@NotNull`, `@Positive`, `@Size`, con mensajes en español) y `XxxResponse` o `XxxVista`. **Nunca** expongas una entidad en un controlador (regla ArchUnit).
 5. **Servicio**:
    - Toda la lógica, con `@Transactional` en los métodos que escriben.
@@ -72,6 +76,7 @@ Las vistas van en `src/main/resources/templates/<modulo>/` y usan `fragments/lay
 - [ ] Ningún borrado físico de datos financieros; la anulación tiene motivo y aprobador distinto de quien cobra.
 - [ ] Toda operación financiera o sensible queda auditada.
 - [ ] El módulo está en `ModuloApp` y el servicio tiene `@PreAuthorize`.
-- [ ] El GRANT de cada tabla nueva está en `scripts/mysql/02-permisos-tablas.sql`.
+- [ ] El GRANT de cada tabla nueva está en `scripts/mysql/02-permisos-tablas.sql`; los campos financieros inmutables usan GRANT por columna.
+- [ ] Las FK a tablas de negocio son compuestas con `colegio_id`, y los CHECK sobre columnas que admiten NULL dicen `col IS NOT NULL AND ...`.
 - [ ] Ninguna entidad se expone en un controlador.
 - [ ] Hay pruebas de aislamiento y de auditoría, pasan, y la salida real queda reportada.

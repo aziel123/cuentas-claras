@@ -168,6 +168,53 @@ class MatrizPermisosTest {
 		}
 	}
 
+	@ParameterizedTest
+	@EnumSource(value = Rol.class, names = { "CAJA", "DOCENTE", "APODERADO" })
+	void cajaDocenteYApoderadoReciben403EnPensiones(Rol rol) throws Exception {
+		for (String ruta : List.of("/pensiones", "/pensiones/planes/1", "/pensiones/planes/1/editar",
+				"/pensiones/planes/nuevo?anio=1&nivel=PRIMARIA", "/pensiones/cronogramas", "/pensiones/saldo-inicial",
+				"/pensiones/saldo-inicial/1", "/alumnos/1/cronograma")) {
+			mvc.perform(get(ruta).with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+		}
+		for (String ruta : List.of("/pensiones/planes/nuevo?anio=1&nivel=PRIMARIA", "/pensiones/planes/1",
+				"/pensiones/planes/1/aprobar", "/pensiones/planes/1/nueva-version", "/pensiones/planes/1/descartar",
+				"/pensiones/cronogramas/generar?anio=1", "/pensiones/saldo-inicial", "/pensiones/saldo-inicial/1/lineas",
+				"/pensiones/saldo-inicial/1/lineas/1/quitar", "/pensiones/saldo-inicial/1/enviar",
+				"/pensiones/saldo-inicial/1/confirmar", "/pensiones/saldo-inicial/1/devolver",
+				"/pensiones/saldo-inicial/1/descartar")) {
+			mvc.perform(post(ruta).with(UsuariosDePrueba.como(rol)).with(csrf())).andExpect(status().isForbidden());
+		}
+	}
+
+	@Test
+	@ComoUsuario(roles = Rol.PROMOTOR)
+	void promotorVePensionesPeroNoProponeNiGeneraNiArmaLotes() throws Exception {
+		mvc.perform(get("/pensiones")).andExpect(status().isOk());
+		mvc.perform(get("/pensiones/cronogramas")).andExpect(status().isOk());
+		mvc.perform(get("/pensiones/saldo-inicial")).andExpect(status().isOk())
+				.andExpect(content().string(not(containsString("Nuevo lote"))));
+		mvc.perform(get("/pensiones/planes/nuevo").param("anio", "1").param("nivel", "PRIMARIA"))
+				.andExpect(status().isForbidden());
+		mvc.perform(post("/pensiones/planes/nuevo").with(csrf()).param("anio", "1").param("nivel", "PRIMARIA")
+				.param("montoMatricula", "350").param("vencimientoMatricula", "2027-02-28").param("montoPension", "450")
+				.param("vencimientos[0]", "2027-03-31")).andExpect(status().isForbidden());
+		mvc.perform(post("/pensiones/cronogramas/generar").with(csrf()).param("anio", "1"))
+				.andExpect(status().isForbidden());
+		mvc.perform(post("/pensiones/saldo-inicial").with(csrf()).param("anioId", "1").param("fechaCorte", "2026-09-30")
+				.param("documentoReferencia", "Informe").param("totalDeclarado", "100.00")).andExpect(status().isForbidden());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plan_pension", Long.class)).isZero();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM lote_saldo_inicial", Long.class)).isZero();
+	}
+
+	@Test
+	@ComoUsuario(roles = Rol.ADMINISTRACION)
+	void administracionNoApruebaPlanesNiConfirmaLotes() throws Exception {
+		mvc.perform(post("/pensiones/planes/1/aprobar").with(csrf())).andExpect(status().isForbidden());
+		mvc.perform(post("/pensiones/saldo-inicial/1/confirmar").with(csrf())).andExpect(status().isForbidden());
+		mvc.perform(post("/pensiones/saldo-inicial/1/devolver").with(csrf()).param("motivo", "Intento de Administración"))
+				.andExpect(status().isForbidden());
+	}
+
 	@Test
 	@ComoUsuario(roles = Rol.PROMOTOR)
 	void promotorVeAlumnosPeroRecibe403AlRegistrar() throws Exception {

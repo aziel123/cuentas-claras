@@ -15,6 +15,11 @@
 		<a class="btn btn-secundario" th:if="${puedeEditar and c.activo()}" th:href="@{/alumnos/{id}/editar(id=${c.id})}">Corregir datos</a>
 	</div>
 
+	<nav class="pestanas" aria-label="Ficha del alumno">
+		<a th:href="@{/alumnos/{id}(id=${c.id})}" aria-current="page">Datos</a>
+		<a th:href="@{/alumnos/{id}/cronograma(id=${c.id})}">Cronograma</a>
+	</nav>
+
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
 
 	<th:block th:unless="${c.activo()}">

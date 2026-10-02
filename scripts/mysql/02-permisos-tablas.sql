@@ -17,3 +17,13 @@ GRANT INSERT, UPDATE ON cuentasclaras.matricula TO 'cc_app'@'%';
 
 -- Sprint 2 · tanda 2: registro de importaciones de alumnos desde Excel. SOLO inserción (sin UPDATE ni DELETE).
 GRANT INSERT ON cuentasclaras.importacion_alumnos TO 'cc_app'@'%';
+
+-- Sprint 2 · tanda 3: planes de pensiones, saldo inicial y cuotas. Tablas financieras: NUNCA DELETE.
+GRANT INSERT, UPDATE ON cuentasclaras.plan_pension TO 'cc_app'@'%';           -- aprobado = inmutable (en la app)
+GRANT INSERT, UPDATE ON cuentasclaras.lote_saldo_inicial TO 'cc_app'@'%';
+GRANT INSERT, UPDATE ON cuentasclaras.linea_saldo_inicial TO 'cc_app'@'%';    -- se "quita" con un flag
+GRANT INSERT ON cuentasclaras.cuota TO 'cc_app'@'%';
+-- UPDATE de cuota SOLO por columna: monto, fecha de vencimiento, alumno, origen y clave quedan inmutables
+-- (MySQL responde 1143). Debe coincidir EXACTAMENTE con las columnas updatable=true de la entidad Cuota.
+GRANT UPDATE (estado, monto_pagado, obligacion, anulacion_motivo, anulacion_solicitada_por, anulacion_aprobada_por,
+    anulada_en, actualizado_en, version) ON cuentasclaras.cuota TO 'cc_app'@'%';

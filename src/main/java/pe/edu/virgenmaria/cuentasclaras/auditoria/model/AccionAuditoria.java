@@ -59,7 +59,33 @@ public enum AccionAuditoria {
 	MATRICULA_SECCION_CAMBIADA("Cambió de sección a un alumno", false),
 
 	// Importación desde Excel (sprint 2): con la huella SHA-256 del archivo y los conteos.
-	IMPORTACION_CONFIRMADA("Importó alumnos desde Excel", false);
+	IMPORTACION_CONFIRMADA("Importó alumnos desde Excel", false),
+
+	// Planes de pensiones (sprint 2): montos y vencimientos completos en cada evento.
+	PLAN_PENSION_CREADO("Propuso un plan de pensiones", false),
+	PLAN_PENSION_EDITADO("Editó un plan de pensiones en borrador", false),
+	PLAN_PENSION_APROBADO("Aprobó un plan de pensiones", false),
+	PLAN_PENSION_DESCARTADO("Descartó un plan de pensiones en borrador", false),
+
+	// Cuotas (sprint 2)
+	/** Uno por matrícula: plan, cuotas, vencimientos y total. */
+	CRONOGRAMA_GENERADO("Generó el cronograma de cuotas de una matrícula", false),
+	/** Se resalta: pedir que una deuda deje de cobrarse. La aprobación llega en el sprint 3. */
+	CUOTA_ANULACION_SOLICITADA("Solicitó anular una cuota", true),
+	CUOTA_ANULADA("Anuló una cuota", true),
+
+	// Saldo inicial (sprint 2): doble control y total de control.
+	SALDO_INICIAL_LOTE_CREADO("Creó un lote de saldo inicial", false),
+	SALDO_INICIAL_LINEA_AGREGADA("Agregó una deuda a un lote de saldo inicial", false),
+	SALDO_INICIAL_LINEA_QUITADA("Quitó una deuda de un lote de saldo inicial", true),
+	SALDO_INICIAL_ENVIADO("Envió un lote de saldo inicial para confirmación", false),
+	SALDO_INICIAL_CONFIRMADO("Confirmó un lote de saldo inicial", false),
+	SALDO_INICIAL_DEVUELTO("Devolvió un lote de saldo inicial", false),
+	SALDO_INICIAL_DESCARTADO("Descartó un lote de saldo inicial", false),
+
+	// Control de segregación de funciones
+	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
+	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);
 
 	/** Altas y cambios de roles: se revisan si dan un rol que maneja dinero o permisos. */
 	public static final Set<AccionAuditoria> CON_ROLES = EnumSet.of(USUARIO_CREADO, ROLES_CAMBIADOS);

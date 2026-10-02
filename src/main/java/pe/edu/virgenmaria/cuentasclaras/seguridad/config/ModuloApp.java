@@ -40,7 +40,7 @@ public enum ModuloApp {
 	ALUMNOS("Alumnos y apoderados", "Fichas de alumnos y familias, y matrícula en cada año.", "Sprint 2", true,
 			"/alumnos", new String[] { "/alumnos", "/alumnos/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 	PENSIONES("Pensiones", "Configura las pensiones y genera el cronograma de cuotas de cada alumno.", "Sprint 2",
-			false, "/pensiones", new String[] { "/pensiones", "/pensiones/**" },
+			true, "/pensiones", new String[] { "/pensiones", "/pensiones/**" },
 			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 
 	CAJA_COBRO("Caja", "Cobra en segundos, entrega la boleta al momento y cierra tu caja cada día.", "Sprint 3",

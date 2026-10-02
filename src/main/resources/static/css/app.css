@@ -404,4 +404,18 @@ textarea.input { min-height: 96px; resize: vertical; }
 .acciones-izquierda { justify-content: flex-start; }
 input[type="file"].input { padding: var(--esp-2); }
 
+/* Sprint 2 · Pensiones y cronograma */
+.pestanas { display: flex; gap: var(--esp-1); border-bottom: 1px solid var(--color-borde); overflow-x: auto; }
+.pestanas a {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--esp-4);
+  color: var(--color-texto-secundario); font-weight: 600; text-decoration: none;
+  border-bottom: 3px solid transparent; margin-bottom: -1px;
+}
+.pestanas a:hover { color: var(--color-primario-texto); }
+.pestanas a[aria-current="page"] { color: var(--color-primario-texto); border-bottom-color: var(--color-primario); }
+.monto { white-space: nowrap; }
+.conteos .monto { font-size: var(--texto-lg); color: inherit; }
+.fila-quitada td { color: var(--color-texto-secundario); text-decoration: line-through; }
+.fila-quitada td .badge, .fila-quitada td a { text-decoration: none; }
+
 .pie { text-align: center; color: var(--color-texto-secundario); font-size: var(--texto-sm); padding: var(--esp-6) var(--esp-4); }

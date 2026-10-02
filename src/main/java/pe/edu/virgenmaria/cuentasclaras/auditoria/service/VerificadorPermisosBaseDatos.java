@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
 import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -20,6 +22,8 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>que el usuario de la aplicación NO puede editar ni borrar la bitácora: MySQL debe rechazar
  *       {@code UPDATE} y {@code DELETE} sobre {@code evento_auditoria} con el error 1142;</li>
+ *   <li>que no puede borrar cuotas ({@code DELETE} sobre {@code cuota} → 1142) ni cambiar su monto
+ *       ({@code UPDATE} de la columna {@code monto} → 1143, o 1142 si no tiene ningún UPDATE);</li>
  *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes).</li>
  * </ul>
  * Si algo falla, la aplicación NO arranca. No hay interruptor para saltarse esta comprobación.
@@ -32,9 +36,22 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 
 	static final int MYSQL_COMANDO_DENEGADO = 1142;
 
-	static final String[] SENTENCIAS_PROHIBIDAS = {
-			"UPDATE evento_auditoria SET ip = ip WHERE 1 = 0",
-			"DELETE FROM evento_auditoria WHERE 1 = 0" };
+	static final int MYSQL_COLUMNA_DENEGADA = 1143;
+
+	/** Sentencia que la base DEBE rechazar, con los códigos de error aceptados y lo que significaría si no. */
+	record SentenciaProhibida(String sql, Set<Integer> codigosAceptados, String riesgo) {
+	}
+
+	static final List<SentenciaProhibida> SENTENCIAS_PROHIBIDAS = List.of(
+			new SentenciaProhibida("UPDATE evento_auditoria SET ip = ip WHERE 1 = 0", Set.of(MYSQL_COMANDO_DENEGADO),
+					"la bitácora no está protegida en la base."),
+			new SentenciaProhibida("DELETE FROM evento_auditoria WHERE 1 = 0", Set.of(MYSQL_COMANDO_DENEGADO),
+					"la bitácora no está protegida en la base."),
+			new SentenciaProhibida("DELETE FROM cuota WHERE 1 = 0", Set.of(MYSQL_COMANDO_DENEGADO),
+					"las cuotas se podrían borrar."),
+			new SentenciaProhibida("UPDATE cuota SET monto = monto WHERE 1 = 0",
+					Set.of(MYSQL_COLUMNA_DENEGADA, MYSQL_COMANDO_DENEGADO),
+					"el monto de una cuota se podría cambiar por SQL (falta el GRANT por columna)."));
 
 	private static final Logger LOG = LoggerFactory.getLogger(VerificadorPermisosBaseDatos.class);
 
@@ -54,13 +71,14 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 	}
 
 	public void verificarPermisos() {
-		for (String sentencia : SENTENCIAS_PROHIBIDAS) {
+		for (SentenciaProhibida sentencia : SENTENCIAS_PROHIBIDAS) {
 			String problema = comprobarDenegada(sentencia);
 			if (problema != null) {
 				throw new IllegalStateException(problema + " Revisa docs/operacion/mysql-usuarios.md.");
 			}
 		}
 		LOG.info("Permisos de la bitácora verificados: la aplicación no puede editar ni borrar eventos.");
+		LOG.info("Permisos de las cuotas verificados: la aplicación no puede borrarlas ni cambiar su monto.");
 	}
 
 	public void verificarMigraciones() {
@@ -73,18 +91,19 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		}
 	}
 
-	/** @return {@code null} si la base la rechazó con 1142; si no, la descripción del problema */
-	private String comprobarDenegada(String sentencia) {
+	/** @return {@code null} si la base la rechazó con un código aceptado; si no, la descripción del problema */
+	private String comprobarDenegada(SentenciaProhibida sentencia) {
 		try {
-			jdbc.update(sentencia);
-			return "El usuario de la aplicación PUEDE ejecutar «" + sentencia + "»: la bitácora no está protegida en la base.";
+			jdbc.update(sentencia.sql());
+			return "El usuario de la aplicación PUEDE ejecutar «" + sentencia.sql() + "»: " + sentencia.riesgo();
 		}
 		catch (DataAccessException e) {
 			Integer codigo = codigoMySql(e);
-			if (codigo != null && codigo == MYSQL_COMANDO_DENEGADO) {
+			if (codigo != null && sentencia.codigosAceptados().contains(codigo)) {
 				return null;
 			}
-			return "No se pudo comprobar «" + sentencia + "» (código " + codigo + "): " + e.getMostSpecificCause().getMessage();
+			return "No se pudo comprobar «" + sentencia.sql() + "» (código " + codigo + "): "
+					+ e.getMostSpecificCause().getMessage();
 		}
 	}
 

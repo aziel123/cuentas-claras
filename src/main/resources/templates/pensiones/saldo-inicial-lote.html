@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Lote de saldo inicial', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" th:with="l=${lote}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/pensiones/saldo-inicial}">Saldo inicial</a></p>
+			<h1 th:text="|Lote ${l.id} · ${l.anio}|">Lote 1 · 2026</h1>
+			<p class="fila">
+				<span th:replace="~{fragments/componentes :: badge(${l.estadoEtiqueta}, ${l.estadoVariante})}"></span>
+				<span class="secundario" th:text="|Creado por ${l.creadoPor}|">Creado por administracion</span>
+			</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<th:block th:if="${l.avisoConfirmacion != null}">
+		<div th:replace="~{fragments/componentes :: alerta('info', ${l.avisoConfirmacion})}"></div>
+	</th:block>
+	<th:block th:if="${l.motivoDevolucion != null and l.estado == 'BORRADOR'}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', |Devuelto por ${l.devueltoPor}: ${l.motivoDevolucion}|)}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-control">
+		<div class="fila entre">
+			<h2 id="titulo-control">Total de control</h2>
+			<span id="cuadre" th:replace="~{fragments/componentes :: badge(${l.cuadra} ? 'Cuadra' : 'No cuadra', ${l.cuadra} ? 'exito' : 'peligro')}"></span>
+		</div>
+		<dl class="datos">
+			<div><dt>Total declarado</dt><dd><span th:replace="~{fragments/componentes :: monto(${l.totalDeclarado})}"></span></dd></div>
+			<div><dt>Suma de líneas</dt><dd><span th:replace="~{fragments/componentes :: monto(${l.totalLineas})}"></span></dd></div>
+			<div th:unless="${l.cuadra}"><dt>Diferencia</dt><dd><span th:replace="~{fragments/componentes :: monto(${l.diferencia})}"></span></dd></div>
+			<div><dt>Fecha de corte</dt><dd th:text="${#temporals.format(l.fechaCorte, 'dd/MM/yyyy')}">30/09/2026</dd></div>
+			<div><dt>Informe del contador</dt><dd th:text="${l.documentoReferencia}">Informe</dd></div>
+			<div th:if="${l.enviadoPor != null}"><dt>Enviado por</dt>
+				<dd th:text="|${l.enviadoPor} · ${#temporals.format(l.enviadoEn, 'dd/MM/yyyy HH:mm')}|">administracion</dd></div>
+			<div th:if="${l.confirmadoPor != null}"><dt>Confirmado por</dt>
+				<dd th:text="|${l.confirmadoPor} · ${#temporals.format(l.confirmadoEn, 'dd/MM/yyyy HH:mm')}|">promotor</dd></div>
+			<div th:if="${l.descartadoPor != null}"><dt>Descartado</dt>
+				<dd th:text="|${l.descartadoPor}: ${l.motivoDescarte}|">Motivo</dd></div>
+		</dl>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-lineas">
+		<h2 id="titulo-lineas">Deudas</h2>
+		<th:block th:if="${#lists.isEmpty(l.lineas)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('El lote no tiene deudas', 'Agrégalas con el formulario de abajo, una por alumno y concepto.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(l.lineas)}">
+			<thead><tr><th scope="col">Alumno</th><th scope="col">Deuda</th><th scope="col">Vence</th>
+				<th scope="col" class="num">Monto</th><th scope="col">Agregó</th><th scope="col"><span class="solo-lectores">Acciones</span></th></tr></thead>
+			<tbody>
+				<tr th:each="d : ${l.lineas}" th:data-linea="${d.id}" th:classappend="${d.quitada} ? 'fila-quitada'">
+					<td data-etiqueta="Alumno"><a th:href="@{/alumnos/{id}/cronograma(id=${d.alumnoId})}" th:text="${d.alumno}">Mateo</a>
+						<span class="secundario num" th:text="${d.documento}">DNI 78451236</span></td>
+					<td data-etiqueta="Deuda"><span th:text="${d.descripcion}">Pensión setiembre 2026</span>
+						<span th:if="${d.quitada}" class="badge badge-neutro">Quitada</span></td>
+					<td data-etiqueta="Vence" th:text="${#temporals.format(d.vencimiento, 'dd/MM/yyyy')}">30/09/2026</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${d.monto})}"></span></td>
+					<td data-etiqueta="Agregó" th:text="${d.agregadaPor}">administracion</td>
+					<td data-etiqueta="Acciones">
+						<th:block th:if="${l.puedeEditar and !d.quitada}">
+							<th:block th:replace="~{fragments/componentes :: modalMotivo(|modal-quitar-${d.id}|, '¿Quitar esta deuda?',
+								'La línea queda visible como quitada (no se borra) y deja de sumar.',
+								@{/pensiones/saldo-inicial/{id}/lineas/{lin}/quitar(id=${l.id},lin=${d.id})}, 'Quitar', 'texto', 'Quitar deuda')}"></th:block>
+						</th:block>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta formulario-angosto" th:if="${l.puedeEditar}" aria-labelledby="titulo-linea">
+		<h2 id="titulo-linea">Agregar deuda</h2>
+		<form class="formulario" method="post" th:action="@{/pensiones/saldo-inicial/{id}/lineas(id=${l.id})}" th:object="${linea}">
+			<div th:replace="~{fragments/componentes :: campoDe('documentoAlumno', 'DNI o documento del alumno', null, 'text', true)}"></div>
+			<div class="formulario-doble">
+				<div class="campo">
+					<label for="concepto">Concepto</label>
+					<select class="input" th:field="*{concepto}" required>
+						<option th:each="c : ${conceptos}" th:value="${c}" th:text="${c.etiqueta()}">Pensión</option>
+					</select>
+				</div>
+				<div class="campo">
+					<label for="mes">Mes (solo pensiones)</label>
+					<select class="input" th:field="*{mes}">
+						<option value="">—</option>
+						<option th:each="m, i : ${meses}" th:value="${i.count}" th:text="${#strings.capitalize(m)}">Setiembre</option>
+					</select>
+					<p class="error" th:if="${#fields.hasErrors('mes')}" th:errors="*{mes}">Error</p>
+				</div>
+			</div>
+			<div class="campo">
+				<label for="monto">Monto (S/)</label>
+				<input type="text" inputmode="decimal" class="input num" th:field="*{monto}" th:errorclass="input-con-error" required autocomplete="off">
+				<p class="error" th:if="${#fields.hasErrors('monto')}" th:errors="*{monto}">Error</p>
+			</div>
+			<div class="formulario-doble">
+				<div th:replace="~{fragments/componentes :: campoDe('vencimiento', 'Vencimiento', 'En una pensión, si lo dejas vacío, el último día del mes.', 'date', false)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('descripcion', 'Descripción (opcional en pensión y matrícula)', null, 'text', false)}"></div>
+			</div>
+			<div class="acciones">
+				<button th:replace="~{fragments/componentes :: boton('Agregar deuda', 'secundario')}"></button>
+			</div>
+		</form>
+	</section>
+
+	<section class="tarjeta" th:if="${l.puedeEditar or l.puedeConfirmar or l.puedeDevolver}" aria-labelledby="titulo-acciones">
+		<h2 id="titulo-acciones">Siguiente paso</h2>
+		<th:block th:if="${l.puedeEditar}">
+			<p class="secundario" th:unless="${l.puedeEnviar}">Para enviarlo, la suma de las deudas debe ser exactamente el total declarado.</p>
+			<form method="post" th:action="@{/pensiones/saldo-inicial/{id}/enviar(id=${l.id})}" th:if="${l.puedeEnviar}">
+				<p class="secundario">Al enviarlo ya no se puede cambiar. Lo confirma otra persona de Promotoría o Dirección.</p>
+				<button th:replace="~{fragments/componentes :: boton('Enviar para confirmación', 'primario')}"></button>
+			</form>
+		</th:block>
+		<form method="post" th:action="@{/pensiones/saldo-inicial/{id}/confirmar(id=${l.id})}" th:if="${l.puedeConfirmar}">
+			<p class="secundario">Revisa las deudas contra el informe del contador. Al confirmar se crean las cuotas en el
+				cronograma de cada alumno.</p>
+			<button th:replace="~{fragments/componentes :: boton('Confirmar lote', 'primario')}"></button>
+		</form>
+		<div class="fila">
+			<th:block th:if="${l.puedeDevolver}">
+				<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-devolver', '¿Devolver el lote?',
+					'Vuelve a Administración para que lo corrija. No se crea ninguna cuota.',
+					@{/pensiones/saldo-inicial/{id}/devolver(id=${l.id})}, 'Devolver', 'secundario', 'Devolver lote')}"></th:block>
+			</th:block>
+			<th:block th:if="${l.puedeDescartar}">
+				<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-descartar', '¿Descartar el lote?',
+					'Queda en la lista como descartado (no se borra) y no crea cuotas.',
+					@{/pensiones/saldo-inicial/{id}/descartar(id=${l.id})}, 'Descartar', 'peligro', 'Descartar lote')}"></th:block>
+			</th:block>
+		</div>
+	</section>
+</main>
+</body>
+</html>
