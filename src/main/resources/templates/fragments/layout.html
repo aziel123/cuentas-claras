@@ -94,7 +94,7 @@
 <ul class="menu" th:fragment="menuLista">
 	<li th:each="m : ${menu}">
 		<a th:if="${m.disponible}" class="menu-enlace" th:href="@{${m.ruta}}" th:data-modulo="${m.codigo}"
-			th:aria-current="${rutaActual == m.ruta} ? 'page'" th:text="${m.etiqueta}">Inicio</a>
+			th:aria-current="${rutaActual == m.ruta or #strings.startsWith(rutaActual, m.ruta + '/')} ? 'page'" th:text="${m.etiqueta}">Inicio</a>
 		<span th:unless="${m.disponible}" class="menu-proximo" th:data-modulo="${m.codigo}">
 			<span th:text="${m.etiqueta}">Módulo</span>
 			<span class="badge badge-neutro">Próximamente</span>

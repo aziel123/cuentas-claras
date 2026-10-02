@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Corregir datos del apoderado', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/alumnos/familias/{id}(id=${apoderado.familiaId})}" th:text="${apoderado.familia}">Familia</a></p>
+			<h1 th:text="|Corregir datos de ${apoderado.nombreCompleto}|">Corregir datos</h1>
+			<p class="secundario">Si cambias el celular o el correo, el cambio quedará resaltado en la bitácora: es a donde llegan los avisos de pago.</p>
+		</div>
+	</div>
+
+	<section class="tarjeta formulario-angosto" aria-label="Datos del apoderado">
+		<th:block th:if="${error != null}">
+			<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+		</th:block>
+		<form class="formulario" th:action="@{/alumnos/apoderados/{id}(id=${apoderado.id})}" th:object="${solicitud}" method="post">
+			<div th:replace="~{alumnos/campos-apoderado :: campos}"></div>
+			<div class="campo">
+				<label for="motivo">Motivo de la corrección (obligatorio)</label>
+				<textarea class="input" th:field="*{motivo}" required minlength="10" maxlength="500" th:errorclass="input-con-error"
+					aria-describedby="motivo-ayuda"></textarea>
+				<p class="ayuda" id="motivo-ayuda">Por ejemplo: «La madre cambió de número; lo confirmó en persona en secretaría».</p>
+				<p class="error" th:if="${#fields.hasErrors('motivo')}" th:errors="*{motivo}">Error</p>
+			</div>
+			<div class="acciones">
+				<a class="btn btn-secundario" th:href="@{/alumnos/familias/{id}(id=${apoderado.familiaId})}">Cancelar</a>
+				<button th:replace="~{fragments/componentes :: boton('Guardar corrección', 'primario')}"></button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

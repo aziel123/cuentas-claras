@@ -113,6 +113,20 @@ class InterfazBaseTest {
 				.andExpect(content().string(containsString("Próximamente")));
 	}
 
+	@Test
+	void menuDeAdministracionMuestraColegioYAlumnos() throws Exception {
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(Rol.ADMINISTRACION)))
+				.andExpect(status().isOk())
+				.andExpect(content().string(containsString("href=\"/colegio\" data-modulo=\"COLEGIO\"")))
+				.andExpect(content().string(containsString("href=\"/alumnos\" data-modulo=\"ALUMNOS\"")))
+				.andExpect(content().string(not(containsString("href=\"/pensiones\""))))
+				.andExpect(content().string(not(containsString("data-modulo=\"USUARIOS\""))));
+		// En una página del módulo, el menú marca el módulo actual.
+		mvc.perform(get("/alumnos").with(UsuariosDePrueba.como(Rol.ADMINISTRACION)))
+				.andExpect(content().string(org.hamcrest.Matchers.matchesPattern(
+						"(?s).*href=\"/alumnos\" data-modulo=\"ALUMNOS\"\\s+aria-current=\"page\".*")));
+	}
+
 	@ParameterizedTest
 	@EnumSource(Rol.class)
 	void cadaRolVeSuPaginaDeInicio(Rol rol) throws Exception {

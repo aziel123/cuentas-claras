@@ -186,11 +186,34 @@ class ReglasArquitecturaTest {
 	 * Los servicios sensibles exigen rol también por método, no solo por URL, y con la expresión EXACTA:
 	 * ni {@code permitAll} ni roles de más.
 	 */
-	private static final Map<String, String> EXPRESIONES_EXIGIDAS = Map.of(
-			BASE + ".seguridad.service.ServicioUsuarios", "hasAnyRole('PROMOTOR','DIRECTOR')",
-			BASE + ".auditoria.service.ConsultaAuditoriaService", "hasAnyRole('PROMOTOR','DIRECTOR')",
-			BASE + ".auditoria.service.ConsultaAuditoriaService#paraRevisar", "hasRole('PROMOTOR')",
-			BASE + ".auditoria.service.VerificadorIntegridadAuditoria#verificar", "hasRole('PROMOTOR')");
+	private static final String LECTURA_ESCOLAR = "hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION')";
+
+	private static final String ESCRITURA_ESCOLAR = "hasAnyRole('DIRECTOR','ADMINISTRACION')";
+
+	private static final Map<String, String> EXPRESIONES_EXIGIDAS = Map.ofEntries(
+			Map.entry(BASE + ".seguridad.service.ServicioUsuarios", "hasAnyRole('PROMOTOR','DIRECTOR')"),
+			Map.entry(BASE + ".auditoria.service.ConsultaAuditoriaService", "hasAnyRole('PROMOTOR','DIRECTOR')"),
+			Map.entry(BASE + ".auditoria.service.ConsultaAuditoriaService#paraRevisar", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".auditoria.service.VerificadorIntegridadAuditoria#verificar", "hasRole('PROMOTOR')"),
+			// Sprint 2: Promotoría consulta; Dirección y Administración registran y corrigen.
+			Map.entry(BASE + ".colegio.service.ServicioEstructura", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".colegio.service.ServicioEstructura#crearAnio", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".colegio.service.ServicioEstructura#crearSeccion", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".colegio.service.ServicioEstructura#desactivarSeccion", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioAlumnos", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioAlumnos#prepararRegistro", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioAlumnos#registrar", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioAlumnos#datosParaEditar", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioAlumnos#actualizar", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioAlumnos#cambiarResponsablePago", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioAlumnos#retirar", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioFamilias", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioFamilias#obtenerApoderado", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioFamilias#agregarApoderado", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioFamilias#actualizarApoderado", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioFamilias#desactivarApoderado", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioFamilias#renombrar", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioMatriculas", ESCRITURA_ESCOLAR));
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {
@@ -223,6 +246,27 @@ class ReglasArquitecturaTest {
 			problemas.add(donde + ": esperaba @PreAuthorize(\"" + esperada + "\") y tiene " + encontrada);
 		}
 	}
+
+	/** Sprint 2: las dependencias entre módulos van en un solo sentido, colegio ← alumnos ← cobranza. */
+	@ArchTest
+	static final ArchRule colegioNoDependeDeAlumnosNiCobranza = noClasses()
+			.that().resideInAPackage(BASE + ".colegio..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".alumnos..", BASE + ".cobranza..")
+			.because("colegio es la base: alumnos y cobranza dependen de él, nunca al revés (usa un puerto, "
+					+ "como ConteoMatriculas)");
+
+	@ArchTest
+	static final ArchRule alumnosNoDependeDeCobranza = noClasses()
+			.that().resideInAPackage(BASE + ".alumnos..")
+			.should().dependOnClassesThat().resideInAPackage(BASE + ".cobranza..")
+			.because("cobranza escucha MatriculaRegistrada e implementa ConsultaCuotasMatricula; alumnos no la conoce");
+
+	/** RegistroAlumnos no tiene @PreAuthorize: solo lo usan los servicios protegidos de alumnos y la demo de dev. */
+	@ArchTest
+	static final ArchRule registroAlumnosSoloDesdeServiciosDeAlumnos = noClasses()
+			.that().resideOutsideOfPackages(BASE + ".alumnos.service..", BASE + ".alumnos.inicial..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".alumnos.service.RegistroAlumnos")
+			.because("RegistroAlumnos escribe sin exigir rol: el permiso lo exige el servicio que lo llama");
 
 	@ArchTest
 	static final ArchRule cobranzaNoDependeDeAcademico = noClasses()

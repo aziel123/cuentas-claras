@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<!--/* Campos del apoderado (ApoderadoRequest), dentro de un formulario con th:object. Requiere tiposDocumento y parentescos. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="campos" class="formulario-doble">
+	<div class="campo">
+		<label for="tipoDocumento">Tipo de documento</label>
+		<select class="input" th:field="*{tipoDocumento}" required>
+			<option th:each="t : ${tiposDocumento}" th:value="${t}" th:text="${t.etiqueta()}">DNI</option>
+		</select>
+	</div>
+	<div th:replace="~{fragments/componentes :: campoDe('numeroDocumento', 'Número de documento', null, 'text', true)}"></div>
+	<div th:replace="~{fragments/componentes :: campoDe('apellidoPaterno', 'Apellido paterno', null, 'text', true)}"></div>
+	<div th:replace="~{fragments/componentes :: campoDe('apellidoMaterno', 'Apellido materno (opcional)', null, 'text', false)}"></div>
+	<div th:replace="~{fragments/componentes :: campoDe('nombres', 'Nombres', null, 'text', true)}"></div>
+	<div class="campo">
+		<label for="parentesco">Parentesco</label>
+		<select class="input" th:field="*{parentesco}" required th:errorclass="input-con-error">
+			<option value="">Elige el parentesco</option>
+			<option th:each="p : ${parentescos}" th:value="${p}" th:text="${p.etiqueta()}">Madre</option>
+		</select>
+		<p class="error" th:if="${#fields.hasErrors('parentesco')}" th:errors="*{parentesco}">Error</p>
+	</div>
+	<div th:replace="~{fragments/componentes :: campoDe('telefonoWhatsapp', 'Celular para WhatsApp',
+		'9 dígitos, por ejemplo 987 654 321. Si es del extranjero, con + y el código del país.', 'tel', false)}"></div>
+	<div th:replace="~{fragments/componentes :: campoDe('correo', 'Correo', 'El celular o el correo: al menos uno.', 'email', false)}"></div>
+</div>
+</body>
+</html>

@@ -17,6 +17,13 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Sprint 2: de las hijas a las madres (FK compuestas).
+		jdbc.update("DELETE FROM matricula");
+		jdbc.update("DELETE FROM alumno");
+		jdbc.update("DELETE FROM apoderado");
+		jdbc.update("DELETE FROM familia");
+		jdbc.update("DELETE FROM seccion");
+		jdbc.update("DELETE FROM anio_escolar");
 		jdbc.update("DELETE FROM evento_auditoria");
 		jdbc.update("UPDATE auditoria_cadena SET ultima_secuencia = 0, ultimo_hash = ? WHERE id = 1", HASH_INICIAL);
 		jdbc.update("DELETE FROM usuario_rol");

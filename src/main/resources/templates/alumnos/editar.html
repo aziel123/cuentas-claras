@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Corregir datos del alumno', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/alumnos/{id}(id=${cabecera.id})}" th:text="${cabecera.nombreCompleto}">Mateo Quispe Huamán</a></p>
+			<h1>Corregir datos del alumno</h1>
+			<p class="secundario">Cada corrección queda en la bitácora con el motivo.</p>
+		</div>
+	</div>
+
+	<section class="tarjeta formulario-angosto" aria-label="Datos del alumno">
+		<th:block th:if="${error != null}">
+			<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+		</th:block>
+		<form class="formulario" th:action="@{/alumnos/{id}/editar(id=${cabecera.id})}" th:object="${solicitud}" method="post">
+			<div class="campo">
+				<label for="tipoDocumento">Tipo de documento</label>
+				<select class="input" th:field="*{tipoDocumento}" required>
+					<option th:each="t : ${tiposDocumento}" th:value="${t}" th:text="${t.etiqueta()}">DNI</option>
+				</select>
+			</div>
+			<div th:replace="~{fragments/componentes :: campoDe('numeroDocumento', 'Número de documento', null, 'text', true)}"></div>
+			<div th:replace="~{fragments/componentes :: campoDe('apellidoPaterno', 'Apellido paterno', null, 'text', true)}"></div>
+			<div th:replace="~{fragments/componentes :: campoDe('apellidoMaterno', 'Apellido materno (opcional)', null, 'text', false)}"></div>
+			<div th:replace="~{fragments/componentes :: campoDe('nombres', 'Nombres', null, 'text', true)}"></div>
+			<div th:replace="~{fragments/componentes :: campoDe('fechaNacimiento', 'Fecha de nacimiento', null, 'date', true)}"></div>
+			<div class="campo">
+				<label for="motivo">Motivo de la corrección (obligatorio)</label>
+				<textarea class="input" th:field="*{motivo}" required minlength="10" maxlength="500" th:errorclass="input-con-error"
+					aria-describedby="motivo-ayuda"></textarea>
+				<p class="ayuda" id="motivo-ayuda">Por ejemplo: «El DNI estaba mal escrito; se corrigió con la copia del DNI».</p>
+				<p class="error" th:if="${#fields.hasErrors('motivo')}" th:errors="*{motivo}">Error</p>
+			</div>
+			<div class="acciones">
+				<a class="btn btn-secundario" th:href="@{/alumnos/{id}(id=${cabecera.id})}">Cancelar</a>
+				<button th:replace="~{fragments/componentes :: boton('Guardar corrección', 'primario')}"></button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

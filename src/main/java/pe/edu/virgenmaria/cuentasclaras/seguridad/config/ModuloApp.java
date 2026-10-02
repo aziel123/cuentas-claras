@@ -35,9 +35,9 @@ public enum ModuloApp {
 			"Sprint 1", true, "/auditoria", new String[] { "/auditoria", "/auditoria/**" },
 			EnumSet.of(PROMOTOR, DIRECTOR)),
 
-	COLEGIO("Colegio", "Año escolar, niveles, grados y secciones.", "Sprint 2", false, "/colegio",
+	COLEGIO("Colegio", "Años escolares, grados y secciones.", "Sprint 2", true, "/colegio",
 			new String[] { "/colegio", "/colegio/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
-	ALUMNOS("Alumnos y apoderados", "Fichas de alumnos y familias, e importación desde Excel.", "Sprint 2", false,
+	ALUMNOS("Alumnos y apoderados", "Fichas de alumnos y familias, y matrícula en cada año.", "Sprint 2", true,
 			"/alumnos", new String[] { "/alumnos", "/alumnos/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 	PENSIONES("Pensiones", "Configura las pensiones y genera el cronograma de cuotas de cada alumno.", "Sprint 2",
 			false, "/pensiones", new String[] { "/pensiones", "/pensiones/**" },

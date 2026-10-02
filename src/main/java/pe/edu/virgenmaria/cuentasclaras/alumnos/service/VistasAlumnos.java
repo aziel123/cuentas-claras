@@ -1,0 +1,56 @@
+package pe.edu.virgenmaria.cuentasclaras.alumnos.service;
+
+import org.springframework.stereotype.Component;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.ApoderadoVista;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.HermanoVista;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Alumno;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Apoderado;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Matricula;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.MatriculaRepository;
+import pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoAnioEscolar;
+import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Telefono;
+
+import java.util.List;
+
+/**
+ * Armado de las vistas de alumnos y apoderados que comparten {@link ServicioAlumnos} y {@link ServicioFamilias}.
+ * Solo lo usan esos servicios, dentro de su transacción y después de su control de permisos.
+ */
+@Component
+class VistasAlumnos {
+
+	private final AnioEscolarRepository anios;
+
+	private final MatriculaRepository matriculas;
+
+	VistasAlumnos(AnioEscolarRepository anios, MatriculaRepository matriculas) {
+		this.anios = anios;
+		this.matriculas = matriculas;
+	}
+
+	/** «5.° Primaria A · 2026» si tiene matrícula activa en el año en curso; si no, {@code null}. */
+	String seccionEnCurso(Alumno alumno) {
+		return anios.findByEstado(EstadoAnioEscolar.EN_CURSO)
+				.flatMap(anio -> matriculas.findByAlumnoIdAndAnioEscolarId(alumno.getId(), anio.getId()))
+				.filter(Matricula::activa)
+				.map(m -> m.getSeccion().etiqueta() + " · " + m.getAnioEscolar().getAnio())
+				.orElse(null);
+	}
+
+	HermanoVista hermano(Alumno a) {
+		return new HermanoVista(a.getId(), a.nombreCompleto(), seccionEnCurso(a), a.getEstado(),
+				a.getEstado().etiqueta(), a.getResponsablePago().nombreCompleto());
+	}
+
+	/** El apoderado y de qué alumnos activos de la familia es responsable de pago. */
+	static ApoderadoVista apoderado(Apoderado a, List<Alumno> alumnosDeLaFamilia) {
+		List<String> responsableDe = alumnosDeLaFamilia.stream()
+				.filter(al -> al.activo() && al.getResponsablePago().getId().equals(a.getId()))
+				.map(Alumno::nombreCompleto)
+				.toList();
+		return new ApoderadoVista(a.getId(), a.nombreCompleto(), a.getDocumento().texto(), a.getParentesco(),
+				a.getParentesco().etiqueta(), Telefono.formatear(a.getTelefonoWhatsapp()), a.getCorreo(), a.isActivo(),
+				responsableDe);
+	}
+}

@@ -20,6 +20,11 @@ spring:
         tenant_identifier_resolver: pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ResolutorColegioActual
   thymeleaf:
     cache: true
+  mvc:
+    format:
+      # Fechas de los formularios (input type="date") en ISO: 2026-03-02. Sin esto, al volver a mostrar un formulario
+      # con errores se formatearían con el estilo corto del idioma (12/1/26) y el navegador las descartaría.
+      date: iso
   jackson:
     time-zone: America/Lima
 

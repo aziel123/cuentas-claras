@@ -73,6 +73,18 @@ class PermisosMySqlTest {
 	@Autowired
 	private javax.sql.DataSource fuenteDatos;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura estructura;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAlumnos servicioAlumnos;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioFamilias servicioFamilias;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioMatriculas servicioMatriculas;
+
 	@AfterEach
 	void limpiar() {
 		SecurityContextHolder.clearContext();
@@ -143,6 +155,81 @@ class PermisosMySqlTest {
 		LocalDateTime enBase = jdbc.queryForObject("SELECT ocurrido_en FROM evento_auditoria WHERE secuencia = ?",
 				LocalDateTime.class, evento.getSecuencia());
 		assertThat(enBase).isEqualTo(evento.getOcurridoEn());
+	}
+
+	@Test
+	void deleteSobreTablasEscolaresFallaCon1142() {
+		for (String tabla : new String[] { "anio_escolar", "seccion", "familia", "apoderado", "alumno", "matricula" }) {
+			assertThatThrownBy(() -> jdbc.update("DELETE FROM " + tabla + " WHERE 1 = 0"))
+					.isInstanceOf(DataAccessException.class)
+					.satisfies(e -> assertThat(codigoMySql(e)).as(tabla).isEqualTo(1142));
+		}
+	}
+
+	/**
+	 * Sprint 2, tanda 1: año, secciones, hermanos con un apoderado, matrícula, cambio de sección, corrección del
+	 * celular, búsqueda (LIKE con escape) y retiro, todo con los permisos mínimos de cc_app. No limpia: usa un año
+	 * libre y documentos únicos.
+	 */
+	@Test
+	void estructuraYAlumnosFuncionanConLosPermisosMinimos() {
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.ADMINISTRACION));
+		java.util.Set<Integer> usados = new java.util.HashSet<>(
+				jdbc.queryForList("SELECT anio FROM anio_escolar WHERE colegio_id = 1", Integer.class));
+		int anio = java.util.stream.IntStream.iterate(2025, a -> a >= 2000, a -> a - 1).filter(a -> !usados.contains(a))
+				.findFirst().orElseThrow();
+		Long anioId = estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
+				java.time.LocalDate.of(anio, 3, 2), java.time.LocalDate.of(anio, 12, 18), false));
+		Long seccionA = estructura.crearSeccion(anioId, new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest(
+				pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "A"));
+		Long seccionB = estructura.crearSeccion(anioId, new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest(
+				pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "B"));
+		// En MySQL «a» y «A» son iguales para el índice único: el servicio lo avisa antes.
+		assertThatThrownBy(() -> estructura.crearSeccion(anioId, new pe.edu.virgenmaria.cuentasclaras.colegio.dto
+				.CrearSeccionRequest(pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "a")))
+				.hasMessageContaining("Ya existe la sección");
+
+		String base = String.format("%07d", Math.floorMod(System.nanoTime(), 10_000_000L));
+		String dniApoderado = "4" + base;
+		var mateo = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoNuevo("7" + base, "Quispe", "Huamán", "Mateo", java.time.LocalDate.of(anio - 10, 6, 14),
+						dniApoderado, "Huamán", "Ccori", "Rosa", "987654321", "rosa@example.com", seccionA));
+		var valeria = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoRegistrado("8" + base, "Quispe", "Huamán", "Valeria", java.time.LocalDate.of(anio - 10, 1, 3),
+						dniApoderado, seccionA));
+		assertThat(valeria.familiaId()).isEqualTo(mateo.familiaId());
+
+		Long matricula = jdbc.queryForObject("SELECT id FROM matricula WHERE alumno_id = ?", Long.class, mateo.alumnoId());
+		servicioMatriculas.cambiarSeccion(matricula, new pe.edu.virgenmaria.cuentasclaras.alumnos.dto.CambiarSeccionRequest(
+				seccionB, "Prueba en MySQL real"));
+		Long rosa = jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class,
+				mateo.alumnoId());
+		servicioFamilias.actualizarApoderado(rosa, new pe.edu.virgenmaria.cuentasclaras.alumnos.dto.ApoderadoRequest(
+				pe.edu.virgenmaria.cuentasclaras.alumnos.model.TipoDocumento.DNI, dniApoderado, "Huamán", "Ccori", "Rosa",
+				pe.edu.virgenmaria.cuentasclaras.alumnos.model.Parentesco.MADRE, "999888777", "rosa@example.com",
+				"Prueba en MySQL real"));
+		assertThat(servicioAlumnos.buscar(new pe.edu.virgenmaria.cuentasclaras.alumnos.dto.BusquedaAlumnos("7" + base,
+				null, null, null), 0).getContent()).hasSize(1);
+		assertThat(servicioAlumnos.buscar(new pe.edu.virgenmaria.cuentasclaras.alumnos.dto.BusquedaAlumnos("quispe huaman",
+				anioId, null, null), 0).getContent()).hasSize(2);
+		assertThat(servicioAlumnos.buscar(new pe.edu.virgenmaria.cuentasclaras.alumnos.dto.BusquedaAlumnos("%", anioId,
+				null, null), 0).getContent()).isEmpty();
+		servicioAlumnos.retirar(valeria.alumnoId(), new pe.edu.virgenmaria.cuentasclaras.alumnos.dto.RetirarAlumnoRequest(
+				java.time.LocalDate.of(anio, 12, 1), "Prueba en MySQL real"));
+
+		// La base rechaza un responsable de pago de otra familia y una sección de otro año (FK compuestas).
+		Long otraFamilia = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoNuevo("6" + base, "Flores", "Rojas", "Sebastián", java.time.LocalDate.of(anio - 12, 8, 21),
+						"3" + base, "Flores", "Díaz", "Pedro", "912345678", null, null)).familiaId();
+		Long pedro = jdbc.queryForObject("SELECT id FROM apoderado WHERE familia_id = ?", Long.class, otraFamilia);
+		assertThatThrownBy(() -> jdbc.update("UPDATE alumno SET responsable_pago_id = ? WHERE id = ?", pedro,
+				mateo.alumnoId())).isInstanceOf(DataAccessException.class);
+		assertThat(jdbc.queryForObject("SELECT estado FROM alumno WHERE id = ?", String.class, valeria.alumnoId()))
+				.isEqualTo("RETIRADO");
+		assertThat(jdbc.queryForObject("SELECT seccion_id FROM matricula WHERE id = ?", Long.class, matricula))
+				.isEqualTo(seccionB);
+		UsuariosDePrueba.iniciarSesion(guardar("verif.alumnos." + sufijo, Rol.PROMOTOR));
+		assertThat(verificador.verificar().integra()).isTrue();
 	}
 
 	private Usuario guardar(String nombre, Rol rol) {

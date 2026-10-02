@@ -154,6 +154,41 @@ class MatrizPermisosTest {
 		}
 	}
 
+	@ParameterizedTest
+	@EnumSource(value = Rol.class, names = { "CAJA", "DOCENTE", "APODERADO" })
+	void cajaDocenteYApoderadoReciben403EnColegioYAlumnos(Rol rol) throws Exception {
+		for (String ruta : List.of("/colegio", "/colegio/anios/1", "/alumnos", "/alumnos/1", "/alumnos/1/editar",
+				"/alumnos/familias/1", "/alumnos/apoderados/1", "/alumnos/nuevo")) {
+			mvc.perform(get(ruta).with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+		}
+		for (String ruta : List.of("/colegio/anios", "/colegio/anios/1/secciones", "/colegio/secciones/1/desactivar",
+				"/alumnos/nuevo", "/alumnos/1/matricula", "/alumnos/1/responsable", "/alumnos/1/retirar",
+				"/alumnos/matriculas/1/seccion", "/alumnos/familias/1/apoderados", "/alumnos/apoderados/1")) {
+			mvc.perform(post(ruta).with(UsuariosDePrueba.como(rol)).with(csrf())).andExpect(status().isForbidden());
+		}
+	}
+
+	@Test
+	@ComoUsuario(roles = Rol.PROMOTOR)
+	void promotorVeAlumnosPeroRecibe403AlRegistrar() throws Exception {
+		mvc.perform(get("/alumnos")).andExpect(status().isOk());
+		mvc.perform(get("/colegio")).andExpect(status().isOk())
+				.andExpect(content().string(not(containsString("Nuevo año escolar"))));
+		mvc.perform(get("/alumnos/nuevo")).andExpect(status().isForbidden());
+		mvc.perform(post("/alumnos/nuevo").with(csrf()).param("tipoDocumento", "DNI").param("numeroDocumento", "78451236")
+				.param("apellidoPaterno", "Quispe").param("nombres", "Mateo").param("fechaNacimiento", "2015-06-14")
+				.param("documentoApoderadoExistente", "45678912")).andExpect(status().isForbidden());
+		mvc.perform(post("/colegio/anios").with(csrf()).param("anio", "2026").param("inicioClases", "2026-03-02")
+				.param("finClases", "2026-12-18")).andExpect(status().isForbidden());
+		mvc.perform(post("/colegio/anios/1/secciones").with(csrf()).param("grado", "PRIMARIA_1").param("nombre", "A"))
+				.andExpect(status().isForbidden());
+		mvc.perform(post("/alumnos/1/retirar").with(csrf()).param("fecha", "2026-10-01")
+				.param("motivo", "Intento de Promotoría")).andExpect(status().isForbidden());
+		mvc.perform(post("/alumnos/1/matricula").with(csrf()).param("seccionId", "1")).andExpect(status().isForbidden());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM anio_escolar", Long.class)).isZero();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM alumno", Long.class)).isZero();
+	}
+
 	@Test
 	void elMenuSaleDeLaMismaMatriz() {
 		assertThat(ModuloApp.para(UsuariosDePrueba.autenticado(Rol.CAJA).getAuthorities()))

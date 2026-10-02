@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Registrar alumno', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">
+				<a th:unless="${opciones.desdeFamilia()}" th:href="@{/alumnos}">Alumnos</a>
+				<a th:if="${opciones.desdeFamilia()}" th:href="@{/alumnos/familias/{id}(id=${opciones.familiaId})}" th:text="${opciones.familia}">Familia</a>
+			</p>
+			<h1 th:text="${opciones.desdeFamilia()} ? 'Registrar hermano' : 'Registrar alumno'">Registrar alumno</h1>
+			<p class="secundario">Solo pedimos los datos necesarios para la matrícula y la cobranza.</p>
+		</div>
+	</div>
+
+	<th:block th:if="${error != null}">
+		<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+	</th:block>
+
+	<form class="formulario" th:action="@{/alumnos/nuevo}" th:object="${solicitud}" method="post">
+		<input type="hidden" name="familia" th:if="${opciones.desdeFamilia()}" th:value="${opciones.familiaId}">
+
+		<section class="tarjeta" aria-labelledby="titulo-alumno">
+			<h2 id="titulo-alumno">Datos del alumno</h2>
+			<div class="formulario-doble">
+				<div class="campo">
+					<label for="tipoDocumento">Tipo de documento</label>
+					<select class="input" th:field="*{tipoDocumento}" required>
+						<option th:each="t : ${tiposDocumento}" th:value="${t}" th:text="${t.etiqueta()}">DNI</option>
+					</select>
+					<p class="error" th:if="${#fields.hasErrors('tipoDocumento')}" th:errors="*{tipoDocumento}">Error</p>
+				</div>
+				<div th:replace="~{fragments/componentes :: campoDe('numeroDocumento', 'Número de documento', 'El DNI tiene 8 dígitos.', 'text', true)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('apellidoPaterno', 'Apellido paterno', null, 'text', true)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('apellidoMaterno', 'Apellido materno (opcional)', null, 'text', false)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('nombres', 'Nombres', null, 'text', true)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('fechaNacimiento', 'Fecha de nacimiento', null, 'date', true)}"></div>
+			</div>
+		</section>
+
+		<section class="tarjeta" aria-labelledby="titulo-responsable">
+			<div>
+				<h2 id="titulo-responsable">Responsable de pago</h2>
+				<p class="secundario">Es el apoderado a quien se le cobra y quien recibe los avisos de cada pago.</p>
+			</div>
+
+			<th:block th:if="${opciones.desdeFamilia()}">
+				<div class="campo">
+					<label for="apoderadoExistenteId">Apoderado de la familia</label>
+					<select class="input" th:field="*{apoderadoExistenteId}" required>
+						<option th:each="ap : ${opciones.apoderadosFamilia}" th:value="${ap.id}" th:text="${ap.etiqueta}">Rosa Huamán Ccori · Madre</option>
+					</select>
+					<p class="ayuda">Si el responsable es otra persona, primero agrégala como apoderado en la familia.</p>
+				</div>
+			</th:block>
+
+			<th:block th:unless="${opciones.desdeFamilia()}">
+				<div th:replace="~{fragments/componentes :: alerta('info', 'Completa solo una de las dos opciones.')}"></div>
+				<fieldset class="grupo-formulario">
+					<legend>Opción 1 · El apoderado ya está registrado</legend>
+					<p class="ayuda">Por ejemplo, porque ya tiene otro hijo en el colegio. Así los hermanos quedan en la misma familia.</p>
+					<div th:replace="~{fragments/componentes :: campoDe('documentoApoderadoExistente', 'Número de documento del apoderado', null, 'text', false)}"></div>
+				</fieldset>
+				<fieldset class="grupo-formulario">
+					<legend>Opción 2 · Apoderado nuevo</legend>
+					<div class="formulario-doble">
+						<div class="campo">
+							<label for="apoderadoTipoDocumento">Tipo de documento</label>
+							<select class="input" th:field="*{apoderadoTipoDocumento}">
+								<option th:each="t : ${tiposDocumento}" th:value="${t}" th:text="${t.etiqueta()}">DNI</option>
+							</select>
+						</div>
+						<div th:replace="~{fragments/componentes :: campoDe('apoderadoNumeroDocumento', 'Número de documento', null, 'text', false)}"></div>
+						<div th:replace="~{fragments/componentes :: campoDe('apoderadoApellidoPaterno', 'Apellido paterno', null, 'text', false)}"></div>
+						<div th:replace="~{fragments/componentes :: campoDe('apoderadoApellidoMaterno', 'Apellido materno (opcional)', null, 'text', false)}"></div>
+						<div th:replace="~{fragments/componentes :: campoDe('apoderadoNombres', 'Nombres', null, 'text', false)}"></div>
+						<div class="campo">
+							<label for="apoderadoParentesco">Parentesco</label>
+							<select class="input" th:field="*{apoderadoParentesco}" th:errorclass="input-con-error">
+								<option value="">Elige el parentesco</option>
+								<option th:each="p : ${parentescos}" th:value="${p}" th:text="${p.etiqueta()}">Madre</option>
+							</select>
+							<p class="error" th:if="${#fields.hasErrors('apoderadoParentesco')}" th:errors="*{apoderadoParentesco}">Error</p>
+						</div>
+						<div th:replace="~{fragments/componentes :: campoDe('apoderadoTelefonoWhatsapp', 'Celular para WhatsApp',
+							'9 dígitos, por ejemplo 987 654 321. Si es del extranjero, con + y el código del país.', 'tel', false)}"></div>
+						<div th:replace="~{fragments/componentes :: campoDe('apoderadoCorreo', 'Correo', 'El celular o el correo: al menos uno.', 'email', false)}"></div>
+					</div>
+				</fieldset>
+			</th:block>
+		</section>
+
+		<section class="tarjeta" aria-labelledby="titulo-matricula">
+			<div>
+				<h2 id="titulo-matricula">Matrícula (opcional)</h2>
+				<p class="secundario">Puedes matricularlo ahora o después, desde su ficha.</p>
+			</div>
+			<th:block th:if="${#lists.isEmpty(opciones.secciones)}">
+				<p class="secundario">Todavía no hay secciones abiertas. Créalas en <a th:href="@{/colegio}">Colegio</a>.</p>
+			</th:block>
+			<div class="formulario-doble" th:unless="${#lists.isEmpty(opciones.secciones)}">
+				<div class="campo">
+					<label for="seccionId">Sección</label>
+					<select class="input" th:field="*{seccionId}">
+						<option value="">Sin matrícula por ahora</option>
+						<option th:each="s : ${opciones.secciones}" th:value="${s.id}" th:text="${s.etiquetaConAnio()}">2026 · 5.° Primaria A</option>
+					</select>
+				</div>
+				<div th:replace="~{fragments/componentes :: campoDe('fechaMatricula', 'Fecha de matrícula (opcional)',
+					'Si la dejas vacía: hoy, o el inicio de clases si ya pasó.', 'date', false)}"></div>
+			</div>
+		</section>
+
+		<div class="acciones">
+			<a class="btn btn-secundario" th:href="${opciones.desdeFamilia()} ? @{/alumnos/familias/{id}(id=${opciones.familiaId})} : @{/alumnos}">Cancelar</a>
+			<button th:replace="~{fragments/componentes :: boton('Registrar alumno', 'primario')}"></button>
+		</div>
+	</form>
+</main>
+</body>
+</html>

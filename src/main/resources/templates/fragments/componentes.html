@@ -32,6 +32,53 @@
 	<p class="error" th:if="${#fields.hasErrors(nombre)}" th:errors="*{__${nombre}__}">Error</p>
 </div>
 
+<!--/* Campo de cualquier tipo (text, date, number, email, tel, search) dentro de un formulario con th:object.
+     requerido: true o false. La etiqueta siempre visible; ayuda y error debajo. */-->
+<div th:fragment="campoDe(nombre, etiqueta, ayuda, tipo, requerido)" class="campo">
+	<label th:for="${nombre}" th:text="${etiqueta}">Etiqueta</label>
+	<input th:type="${tipo}" class="input" th:field="*{__${nombre}__}" th:errorclass="input-con-error"
+		autocomplete="off" th:aria-describedby="${ayuda != null} ? ${nombre + '-ayuda'}"
+		th:aria-invalid="${#fields.hasErrors(nombre)} ? 'true'" th:required="${requerido}">
+	<p class="ayuda" th:if="${ayuda != null}" th:id="${nombre + '-ayuda'}" th:text="${ayuda}">Ayuda</p>
+	<p class="error" th:if="${#fields.hasErrors(nombre)}" th:errors="*{__${nombre}__}">Error</p>
+</div>
+
+<!--/* Acción sensible con motivo obligatorio, sin JavaScript (popover). A diferencia de modalConfirmacion, el botón
+     que abre el modal puede ser discreto. textoAbrir: texto del botón que abre; variante: secundario, texto o peligro. */-->
+<th:block th:fragment="modalMotivo(id, titulo, consecuencia, accion, textoAbrir, variante, textoBoton)">
+	<button type="button" class="btn btn-chico" th:classappend="'btn-' + ${variante}" th:popovertarget="${id}"
+		th:text="${textoAbrir}">Desactivar</button>
+	<div class="modal" th:id="${id}" popover role="dialog" aria-modal="true" th:aria-labelledby="${id + '-titulo'}">
+		<form method="post" th:action="${accion}" class="modal-cuerpo">
+			<h2 th:id="${id + '-titulo'}" th:text="${titulo}">¿Confirmas?</h2>
+			<p th:text="${consecuencia}">Esta acción queda registrada.</p>
+			<div class="campo">
+				<label th:for="${id + '-motivo'}">Motivo (obligatorio)</label>
+				<textarea class="input" th:id="${id + '-motivo'}" name="motivo" required minlength="10" maxlength="500"
+					th:aria-describedby="${id + '-motivo-ayuda'}"></textarea>
+				<p class="ayuda" th:id="${id + '-motivo-ayuda'}">Explica por qué, en al menos 10 caracteres. Quedará en la auditoría.</p>
+			</div>
+			<div class="acciones">
+				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
+				<button type="submit" class="btn btn-peligro" th:text="${textoBoton}">Desactivar</button>
+			</div>
+		</form>
+	</div>
+</th:block>
+
+<!--/* Avisos de la petición anterior (redirect) o de esta: éxito, advertencia y error. */-->
+<th:block th:fragment="avisos">
+	<th:block th:if="${exito != null}">
+		<div th:replace="~{fragments/componentes :: alerta('exito', ${exito})}"></div>
+	</th:block>
+	<th:block th:if="${advertencia != null}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${advertencia})}"></div>
+	</th:block>
+	<th:block th:if="${error != null}">
+		<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+	</th:block>
+</th:block>
+
 <!--/* Etiqueta de estado: siempre con texto, nunca solo color. variante: exito, alerta, peligro, info o neutro. */-->
 <span th:fragment="badge(texto, variante)" class="badge" th:classappend="'badge-' + ${variante}"
 	th:text="${texto}">Pagado</span>

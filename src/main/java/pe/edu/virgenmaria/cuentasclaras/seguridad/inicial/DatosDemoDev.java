@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -36,13 +37,14 @@ import java.util.Set;
  */
 @Component
 @Profile("dev")
+@Order(1)
 public class DatosDemoDev implements ApplicationRunner {
 
 	static final String PREFIJO_H2_MEMORIA = "jdbc:h2:mem:";
 
-	static final long COLEGIO_PRINCIPAL = 1L;
+	public static final long COLEGIO_PRINCIPAL = 1L;
 
-	static final String NOMBRE_COLEGIO_B = "Colegio de Prueba B";
+	public static final String NOMBRE_COLEGIO_B = "Colegio de Prueba B";
 
 	private static final Logger LOG = LoggerFactory.getLogger(DatosDemoDev.class);
 

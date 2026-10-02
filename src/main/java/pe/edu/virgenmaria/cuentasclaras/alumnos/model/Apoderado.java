@@ -1,0 +1,158 @@
+package pe.edu.virgenmaria.cuentasclaras.alumnos.model;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.model.BaseEntity;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Apoderado: pertenece a una sola familia (no cambia) y debe poder recibir avisos (WhatsApp o correo, también lo
+ * exige la base). No se borra: se desactiva, y no si es responsable de pago de un alumno activo.
+ */
+@Entity
+@Table(name = "apoderado")
+public class Apoderado extends BaseEntity {
+
+	@ManyToOne(fetch = FetchType.LAZY, optional = false)
+	@JoinColumn(name = "familia_id", nullable = false, updatable = false)
+	private Familia familia;
+
+	@Embedded
+	private DocumentoIdentidad documento;
+
+	@Column(name = "apellido_paterno", nullable = false, length = 60)
+	private String apellidoPaterno;
+
+	@Column(name = "apellido_materno", length = 60)
+	private String apellidoMaterno;
+
+	@Column(nullable = false, length = 60)
+	private String nombres;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 20)
+	private Parentesco parentesco;
+
+	@Column(name = "telefono_whatsapp", length = 16)
+	private String telefonoWhatsapp;
+
+	@Column(length = 150)
+	private String correo;
+
+	@Column(name = "nombre_busqueda", nullable = false, length = 190)
+	private String nombreBusqueda;
+
+	@Column(nullable = false)
+	private boolean activo = true;
+
+	protected Apoderado() {
+		// requerido por JPA
+	}
+
+	public static Apoderado nuevo(Familia familia, DatosApoderado datos) {
+		Apoderado apoderado = new Apoderado();
+		apoderado.familia = Objects.requireNonNull(familia, "familia");
+		apoderado.asignar(datos);
+		return apoderado;
+	}
+
+	/** @return los campos que cambiaron (vacía si no cambió nada) */
+	public List<String> actualizar(DatosApoderado datos) {
+		List<String> cambios = new ArrayList<>();
+		if (!documento.equals(datos.documento())) {
+			cambios.add("documento");
+		}
+		if (!Objects.equals(apellidoPaterno, datos.apellidoPaterno())
+				|| !Objects.equals(apellidoMaterno, datos.apellidoMaterno())
+				|| !Objects.equals(nombres, datos.nombres())) {
+			cambios.add("nombre");
+		}
+		if (parentesco != datos.parentesco()) {
+			cambios.add("parentesco");
+		}
+		if (!Objects.equals(telefonoWhatsapp, datos.telefonoWhatsapp())) {
+			cambios.add("celular");
+		}
+		if (!Objects.equals(correo, datos.correo())) {
+			cambios.add("correo");
+		}
+		if (!cambios.isEmpty()) {
+			asignar(datos);
+		}
+		return cambios;
+	}
+
+	public void desactivar() {
+		if (!activo) {
+			throw new ReglaNegocioException(nombreCompleto() + " ya está desactivado.");
+		}
+		activo = false;
+	}
+
+	public String nombreCompleto() {
+		return nombres + " " + apellidoPaterno + (apellidoMaterno == null ? "" : " " + apellidoMaterno);
+	}
+
+	private void asignar(DatosApoderado datos) {
+		Objects.requireNonNull(datos, "datos");
+		if (datos.telefonoWhatsapp() == null && datos.correo() == null) {
+			throw new ReglaNegocioException("El apoderado necesita un celular para WhatsApp o un correo.");
+		}
+		documento = Objects.requireNonNull(datos.documento(), "documento");
+		apellidoPaterno = Objects.requireNonNull(datos.apellidoPaterno(), "apellidoPaterno");
+		apellidoMaterno = datos.apellidoMaterno();
+		nombres = Objects.requireNonNull(datos.nombres(), "nombres");
+		parentesco = Objects.requireNonNull(datos.parentesco(), "parentesco");
+		telefonoWhatsapp = datos.telefonoWhatsapp();
+		correo = datos.correo();
+		nombreBusqueda = Normalizador.paraBusqueda(apellidoPaterno, apellidoMaterno, nombres);
+	}
+
+	public Familia getFamilia() {
+		return familia;
+	}
+
+	public DocumentoIdentidad getDocumento() {
+		return documento;
+	}
+
+	public String getApellidoPaterno() {
+		return apellidoPaterno;
+	}
+
+	public String getApellidoMaterno() {
+		return apellidoMaterno;
+	}
+
+	public String getNombres() {
+		return nombres;
+	}
+
+	public Parentesco getParentesco() {
+		return parentesco;
+	}
+
+	public String getTelefonoWhatsapp() {
+		return telefonoWhatsapp;
+	}
+
+	public String getCorreo() {
+		return correo;
+	}
+
+	public boolean isActivo() {
+		return activo;
+	}
+}
