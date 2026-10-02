@@ -6,3 +6,8 @@ spring:
     password: ""
   thymeleaf:
     cache: false
+
+cuentasclaras:
+  auditoria:
+    # Clave fija SOLO para desarrollo local. Producción usa AUDITORIA_CLAVE_HMAC.
+    clave-hmac: clave-hmac-de-desarrollo-no-usar-en-produccion-01

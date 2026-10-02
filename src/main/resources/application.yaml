@@ -12,6 +12,9 @@ spring:
       hibernate:
         jdbc:
           time_zone: America/Lima
+        # Multi-colegio (@TenantId). Se registra por NOMBRE DE CLASE para que Hibernate lo
+        # use también en @DataJpaTest; registrado como bean de Spring no se aplica ahí.
+        tenant_identifier_resolver: pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ResolutorColegioActual
   thymeleaf:
     cache: true
   jackson:
@@ -30,3 +33,9 @@ management:
   endpoint:
     health:
       show-details: never
+
+cuentasclaras:
+  auditoria:
+    # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
+    # aplicación no arranca. Nunca en el código: va en el gestor de secretos.
+    clave-hmac: ${AUDITORIA_CLAVE_HMAC}
