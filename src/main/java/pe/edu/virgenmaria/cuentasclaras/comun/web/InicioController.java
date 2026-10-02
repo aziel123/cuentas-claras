@@ -1,9 +1,11 @@
 package pe.edu.virgenmaria.cuentasclaras.comun.web;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioInicio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
@@ -19,8 +21,11 @@ public class InicioController {
 
 	private final ServicioInicio servicioInicio;
 
-	public InicioController(ServicioInicio servicioInicio) {
+	private final ObjectProvider<AlertasRevision> alertas;
+
+	public InicioController(ServicioInicio servicioInicio, ObjectProvider<AlertasRevision> alertas) {
 		this.servicioInicio = servicioInicio;
+		this.alertas = alertas;
 	}
 
 	@GetMapping("/")
@@ -34,6 +39,7 @@ public class InicioController {
 		Rol principal = usuario.rolPrincipal();
 		if (principal == Rol.PROMOTOR) {
 			model.addAttribute("paraRevisar", servicioInicio.paraRevisar());
+			model.addAttribute("alertasRevision", alertas.orderedStream().flatMap(a -> a.alertas().stream()).toList());
 		}
 		return "inicio/" + principal.name().toLowerCase(Locale.ROOT);
 	}

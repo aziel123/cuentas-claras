@@ -1,9 +1,14 @@
 package pe.edu.virgenmaria.cuentasclaras.cobranza.model;
 
-/** BORRADOR (Administración) → APROBADO (otra persona) → REEMPLAZADO cuando se aprueba otra versión. */
+/**
+ * BORRADOR (Administración lo edita) → ENVIADO (bloqueado) → APROBADO (otra persona) → REEMPLAZADO cuando se aprueba
+ * otra versión. Un ENVIADO puede volver a BORRADOR (devuelto con motivo).
+ */
 public enum EstadoPlan {
 
-	BORRADOR("Borrador, por aprobar", "alerta"),
+	BORRADOR("En preparación", "neutro"),
+	/** Bloqueado: nadie lo edita mientras otra persona lo revisa. */
+	ENVIADO("Enviado, por aprobar", "alerta"),
 	APROBADO("Aprobado y vigente", "exito"),
 	REEMPLAZADO("Reemplazado", "neutro"),
 	DESCARTADO("Descartado", "neutro");

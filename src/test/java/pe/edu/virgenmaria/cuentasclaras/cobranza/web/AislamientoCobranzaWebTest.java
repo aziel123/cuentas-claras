@@ -88,10 +88,10 @@ class AislamientoCobranzaWebTest {
 		EscenarioCobranza.planAprobado(planes, escuelaA.anio2027(), 2027, Nivel.PRIMARIA, "450", "350", null);
 		borradorA = planes.crearBorrador(escuelaA.anio2027(), Nivel.SECUNDARIA, EscenarioCobranza.plan(2027, "480", "350",
 				null));
-		loteA = saldo.crearLote(new LoteRequest(escuelaA.anio2026(), LocalDate.of(2026, 9, 30), "Informe A",
+		loteA = saldo.crearLote(new LoteRequest(escuelaA.anio2027(), LocalDate.of(2026, 9, 30), "Informe A",
 				new BigDecimal("450.00")));
-		saldo.agregarLinea(loteA, new LineaSaldoRequest(EscenarioEscolar.DNI_MATEO, ConceptoSaldo.OTRO, null, "Deuda A",
-				new BigDecimal("450.00"), LocalDate.of(2026, 9, 1)));
+		saldo.agregarLinea(loteA, new LineaSaldoRequest(EscenarioEscolar.DNI_MATEO, ConceptoSaldo.OTRO, null, null,
+				"Taller de verano", new BigDecimal("450.00"), LocalDate.of(2026, 9, 1)));
 		saldo.enviar(loteA);
 
 		long colegioB = colegios.save(new Colegio("Colegio de Prueba B")).getId();

@@ -227,6 +227,9 @@ public class ServicioAlumnos {
 		if (solicitud.seccionId() != null) {
 			seccion = secciones.findById(solicitud.seccionId())
 					.orElseThrow(() -> new RecursoNoEncontradoException("Sección no encontrada"));
+			// El año se bloquea ANTES de la primera escritura auditada: la bitácora también se bloquea al auditar, y
+			// tomar los dos en otro orden que aprobar un plan (año → bitácora) causaría un bloqueo mutuo.
+			registro.bloquearAnio(seccion.getAnioEscolar());
 		}
 		int anioReferencia = seccion != null ? seccion.getAnioEscolar().getAnio() : hoy.getYear();
 		DatosAlumno datos = datosAlumno(solicitud.tipoDocumento(), solicitud.numeroDocumento(),

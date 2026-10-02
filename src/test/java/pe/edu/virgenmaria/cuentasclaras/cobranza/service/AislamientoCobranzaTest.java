@@ -135,14 +135,14 @@ class AislamientoCobranzaTest {
 		Long cuotaA = jdbc.queryForObject("SELECT MIN(id) FROM cuota", Long.class);
 
 		como(directorB);
-		assertThatThrownBy(() -> planes.aprobar(borrador)).isInstanceOf(RecursoNoEncontradoException.class);
+		assertThatThrownBy(() -> planes.aprobar(borrador, 0L)).isInstanceOf(RecursoNoEncontradoException.class);
 		assertThatThrownBy(() -> generador.generarPendientes(escuelaA.anio2027()))
 				.isInstanceOf(RecursoNoEncontradoException.class);
 		assertThatThrownBy(() -> anulaciones.solicitar(cuotaA, "Intento desde otro colegio"))
 				.isInstanceOf(RecursoNoEncontradoException.class);
 		como(administracionB);
 		assertThatThrownBy(() -> saldo.agregarLinea(loteA, new LineaSaldoRequest(EscenarioEscolar.DNI_MATEO,
-				ConceptoSaldo.PENSION, 9, null, BigDecimal.TEN, null))).isInstanceOf(RecursoNoEncontradoException.class);
+				ConceptoSaldo.PENSION, 2026, 9, null, BigDecimal.TEN, null))).isInstanceOf(RecursoNoEncontradoException.class);
 		assertThatThrownBy(() -> saldo.crearLote(new LoteRequest(escuelaA.anio2026(), LocalDate.of(2026, 9, 30),
 				"Informe", BigDecimal.TEN))).isInstanceOf(RecursoNoEncontradoException.class);
 		assertThatThrownBy(() -> planes.crearBorrador(escuelaA.anio2027(), Nivel.PRIMARIA,
@@ -159,7 +159,7 @@ class AislamientoCobranzaTest {
 		como(administracionB);
 		Long loteB = saldo.crearLote(new LoteRequest(anioB, LocalDate.of(2026, 9, 30), "Informe B", BigDecimal.TEN));
 		assertThatThrownBy(() -> saldo.agregarLinea(loteB, new LineaSaldoRequest(EscenarioEscolar.DNI_MATEO,
-				ConceptoSaldo.OTRO, null, "Deuda", BigDecimal.TEN, LocalDate.of(2026, 9, 1))))
+				ConceptoSaldo.OTRO, null, null, "Excursión", BigDecimal.TEN, LocalDate.of(2026, 9, 1))))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("No hay un alumno con el documento");
 	}
 

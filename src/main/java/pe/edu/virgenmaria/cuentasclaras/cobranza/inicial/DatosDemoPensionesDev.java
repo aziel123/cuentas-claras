@@ -124,8 +124,12 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 			ConfiguracionPlan porDefecto = ConfiguracionPlan.porDefecto(anio.anio(), MATRICULA, PENSIONES.get(nivel));
 			PlanRequest solicitud = new PlanRequest(porDefecto.montoMatricula(), porDefecto.vencimientoMatricula(),
 					porDefecto.montoPension(), porDefecto.vencimientos(), anio.anio() == 2026 ? COBRO_DESDE_2026 : null);
-			Long id = como("administracion", "ADMINISTRACION", () -> planes.crearBorrador(anio.id(), nivel, solicitud));
-			como("director", "DIRECTOR", () -> planes.aprobar(id));
+			Long id = como("administracion", "ADMINISTRACION", () -> {
+				Long creado = planes.crearBorrador(anio.id(), nivel, solicitud);
+				planes.enviar(creado);
+				return creado;
+			});
+			como("director", "DIRECTOR", () -> planes.aprobar(id, planes.obtener(id).version()));
 		}
 	}
 
@@ -137,8 +141,8 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 			Long lote = saldoInicial.crearLote(new LoteRequest(anio.id(), corte.isAfter(hoy) ? hoy : corte,
 					"Informe del contador N.° 014-2026 (ejemplo)", total));
 			for (DeudaDemo deuda : DEUDAS) {
-				saldoInicial.agregarLinea(lote, new LineaSaldoRequest(deuda.dni(), ConceptoSaldo.PENSION, deuda.mes(),
-						null, new BigDecimal(deuda.monto()), null));
+				saldoInicial.agregarLinea(lote, new LineaSaldoRequest(deuda.dni(), ConceptoSaldo.PENSION, 2026,
+						deuda.mes(), null, new BigDecimal(deuda.monto()), null));
 			}
 			saldoInicial.enviar(lote);
 			return lote;

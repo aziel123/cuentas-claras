@@ -17,6 +17,6 @@ public final class Motivo {
 		if (texto == null || texto.length() < MINIMO || texto.length() > MAXIMO) {
 			throw new ReglaNegocioException("El motivo debe tener entre " + MINIMO + " y " + MAXIMO + " caracteres.");
 		}
-		return texto;
+		return TextoSeguro.exigir(texto, "el motivo");
 	}
 }

@@ -20,6 +20,11 @@
 			<p class="secundario">Claves restablecidas, usuarios creados y cambios de roles de los últimos 7 días. Si algo no lo
 				reconoces, revísalo con quien lo hizo: así se detecta una cuenta falsa a tiempo.</p>
 		</div>
+		<ul class="lista-simple alertas-revision" th:unless="${#lists.isEmpty(alertasRevision)}" data-alertas-revision>
+			<li th:each="a : ${alertasRevision}">
+				<span class="badge badge-peligro">Cobranza</span> <span th:text="${a}">3 matrículas sin cronograma</span>
+			</li>
+		</ul>
 		<th:block th:if="${#lists.isEmpty(paraRevisar)}">
 			<div th:replace="~{fragments/componentes :: estadoVacio('Nada para revisar', 'No hubo cambios de claves ni de usuarios en los últimos 7 días.')}"></div>
 		</th:block>

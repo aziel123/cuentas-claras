@@ -18,8 +18,12 @@ import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Plan de pensiones de un nivel en un año, versionado:
@@ -75,6 +79,25 @@ public class PlanPension extends BaseEntity {
 	@Column(name = "editado_por", nullable = false, length = 60)
 	private String editadoPor;
 
+	/** Todos los que editaron alguna vez: «,usuario1,usuario2,». Ninguno puede aprobar (también CHECK en la base). */
+	@Column(nullable = false, length = 1000)
+	private String editores;
+
+	@Column(name = "enviado_por", length = 60)
+	private String enviadoPor;
+
+	@Column(name = "enviado_en")
+	private LocalDateTime enviadoEn;
+
+	@Column(name = "devuelto_por", length = 60)
+	private String devueltoPor;
+
+	@Column(name = "devuelto_en")
+	private LocalDateTime devueltoEn;
+
+	@Column(name = "motivo_devolucion", length = 500)
+	private String motivoDevolucion;
+
 	@Column(name = "aprobado_por", length = 60)
 	private String aprobadoPor;
 
@@ -100,6 +123,7 @@ public class PlanPension extends BaseEntity {
 		plan.estado = EstadoPlan.BORRADOR;
 		plan.aplicar(configuracion);
 		plan.editadoPor = Objects.requireNonNull(editor, "editor");
+		plan.editores = "," + editor + ",";
 		return plan;
 	}
 
@@ -140,15 +164,50 @@ public class PlanPension extends BaseEntity {
 		exigirBorrador("editar");
 		aplicar(configuracion);
 		editadoPor = Objects.requireNonNull(editor, "editor");
+		if (!editores.contains("," + editor + ",")) {
+			editores = editores + editor + ",";
+		}
 	}
 
-	/** {@code true} si el usuario creó el plan o lo editó por última vez: no puede aprobarlo. */
+	/** Quien lo creó, todos los que lo editaron alguna vez y quien lo envió: ninguno puede aprobarlo. */
+	public Set<String> participantes() {
+		Set<String> personas = new LinkedHashSet<>();
+		if (getCreadoPor() != null) {
+			personas.add(getCreadoPor());
+		}
+		Arrays.stream(editores.split(",")).filter(e -> !e.isBlank()).forEach(personas::add);
+		if (enviadoPor != null) {
+			personas.add(enviadoPor);
+		}
+		return Collections.unmodifiableSet(personas);
+	}
+
+	/** {@code true} si el usuario participó en el plan (lo creó, lo editó alguna vez o lo envió): no puede aprobarlo. */
 	public boolean esAutor(String usuario) {
-		return Objects.equals(usuario, getCreadoPor()) || Objects.equals(usuario, editadoPor);
+		return participantes().contains(usuario);
+	}
+
+	/** Lo bloquea para que otra persona lo revise: desde aquí nadie lo edita. */
+	public void enviar(String por, LocalDateTime ahora) {
+		exigirBorrador("enviar");
+		estado = EstadoPlan.ENVIADO;
+		enviadoPor = Objects.requireNonNull(por, "por");
+		enviadoEn = Objects.requireNonNull(ahora, "ahora");
+	}
+
+	/** Quien revisa lo devuelve a Administración con un motivo: vuelve a BORRADOR. */
+	public void devolver(String por, String motivo, LocalDateTime ahora) {
+		exigirEnviado("devolver");
+		motivoDevolucion = Motivo.exigir(motivo);
+		estado = EstadoPlan.BORRADOR;
+		enviadoPor = null;
+		enviadoEn = null;
+		devueltoPor = por;
+		devueltoEn = ahora;
 	}
 
 	public void aprobar(String aprobador, LocalDateTime ahora) {
-		exigirBorrador("aprobar");
+		exigirEnviado("aprobar");
 		if (esAutor(aprobador)) {
 			throw new AutoaprobacionException("No puedes aprobar un plan que tú creaste o editaste: debe aprobarlo "
 					+ "otra persona de Promotoría o Dirección.");
@@ -194,6 +253,15 @@ public class PlanPension extends BaseEntity {
 		return estado == EstadoPlan.BORRADOR;
 	}
 
+	public boolean enviado() {
+		return estado == EstadoPlan.ENVIADO;
+	}
+
+	/** En preparación o por aprobar: todavía no rige. */
+	public boolean pendiente() {
+		return estado == EstadoPlan.BORRADOR || estado == EstadoPlan.ENVIADO;
+	}
+
 	private void aplicar(ConfiguracionPlan configuracion) {
 		Objects.requireNonNull(configuracion, "configuracion");
 		montoMatricula = configuracion.montoMatricula();
@@ -201,6 +269,13 @@ public class PlanPension extends BaseEntity {
 		montoPension = configuracion.montoPension();
 		vencimientos = List.copyOf(configuracion.vencimientos());
 		cobroDesde = configuracion.cobroDesde();
+	}
+
+	private void exigirEnviado(String accion) {
+		if (estado != EstadoPlan.ENVIADO) {
+			throw new ReglaNegocioException("Solo se puede " + accion + " un plan enviado (este está "
+					+ estado.etiqueta().toLowerCase() + ").");
+		}
 	}
 
 	private void exigirBorrador(String accion) {
@@ -253,6 +328,26 @@ public class PlanPension extends BaseEntity {
 
 	public String getEditadoPor() {
 		return editadoPor;
+	}
+
+	public String getEditores() {
+		return editores;
+	}
+
+	public String getEnviadoPor() {
+		return enviadoPor;
+	}
+
+	public LocalDateTime getEnviadoEn() {
+		return enviadoEn;
+	}
+
+	public String getDevueltoPor() {
+		return devueltoPor;
+	}
+
+	public String getMotivoDevolucion() {
+		return motivoDevolucion;
 	}
 
 	public String getAprobadoPor() {

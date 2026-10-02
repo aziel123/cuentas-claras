@@ -130,7 +130,7 @@ class ServicioAnulacionCuotasTest {
 		anulaciones.solicitar(setiembre, MOTIVO);
 		var cuota = cuotas.findById(setiembre).orElseThrow();
 
-		assertThatThrownBy(() -> cuota.anular(MOTIVO, "administracion", "administracion", LocalDateTime.now()))
+		assertThatThrownBy(() -> cuota.anular(MOTIVO, "administracion", "administracion", LocalDateTime.of(2026, 10, 2, 9, 0)))
 				.isInstanceOf(AutoaprobacionException.class).hasMessage("Quien solicita la anulación no puede aprobarla.");
 	}
 

@@ -21,10 +21,12 @@ import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.model.BaseEntity;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.TextoSeguro;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -64,6 +66,10 @@ public class LoteSaldoInicial extends BaseEntity {
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
 	private EstadoLote estado;
+
+	/** El total del informe que escribió a ciegas quien confirmó (igual al declarado: CHECK en la base). */
+	@Column(name = "total_confirmado", precision = 10, scale = 2)
+	private BigDecimal totalConfirmado;
 
 	@Column(name = "enviado_por", length = 60)
 	private String enviadoPor;
@@ -112,7 +118,7 @@ public class LoteSaldoInicial extends BaseEntity {
 		if (fechaCorte == null || fechaCorte.isAfter(hoy)) {
 			throw new ReglaNegocioException("La fecha de corte no puede ser futura.");
 		}
-		String referencia = Normalizador.limpiar(documento);
+		String referencia = TextoSeguro.exigir(Normalizador.limpiar(documento), "la referencia al informe");
 		if (referencia == null || referencia.length() > MAX_DOCUMENTO) {
 			throw new ReglaNegocioException("Escribe la referencia al informe del contador (hasta " + MAX_DOCUMENTO
 					+ " caracteres).");
@@ -128,51 +134,112 @@ public class LoteSaldoInicial extends BaseEntity {
 	}
 
 	/**
-	 * Agrega una deuda. Una PENSION del mes m vence por defecto el último día del mes y se describe
-	 * «Pensión {mes} {año}». El vencimiento debe estar dentro del año del lote o del anterior.
+	 * Agrega una deuda previa al corte. Reglas (auditoría antifraude, C1 y A2):
+	 * <ul>
+	 *   <li>PENSION y MATRICULA llevan su año real, que debe ser el del lote; la pensión, además, su mes. La
+	 *       descripción la pone el sistema («Pensión setiembre 2026», «Matrícula 2026»).</li>
+	 *   <li>La deuda vence en o antes de la fecha de corte: una pensión de un mes posterior al corte no es saldo
+	 *       inicial (la cobra el plan). El vencimiento de una pensión cae en su propio mes (por defecto, el último día).</li>
+	 *   <li>OTRO solo con un concepto de la lista del reglamento ({@code conceptosOtros}), nunca algo que parezca una
+	 *       pensión o una matrícula; vence en el año del lote o el anterior.</li>
+	 * </ul>
 	 */
-	public LineaSaldoInicial agregarLinea(Alumno alumno, ConceptoSaldo concepto, Integer mes, String descripcion,
-			BigDecimal monto, LocalDate vencimiento) {
+	public LineaSaldoInicial agregarLinea(Alumno alumno, ConceptoSaldo concepto, Integer anioDeuda, Integer mes,
+			String descripcion, BigDecimal monto, LocalDate vencimiento, List<String> conceptosOtros) {
 		exigirBorrador();
 		Objects.requireNonNull(concepto, "concepto");
 		int anio = anioEscolar.getAnio();
+		Integer anioLinea = null;
 		Integer mesLinea = null;
-		if (concepto == ConceptoSaldo.PENSION) {
-			if (mes == null || mes < 1 || mes > 12) {
-				throw new ReglaNegocioException("Indica el mes de la pensión (1 a 12).");
-			}
-			mesLinea = mes;
-		}
-		String texto = Normalizador.limpiar(descripcion);
-		if (texto == null) {
-			texto = switch (concepto) {
-				case PENSION -> CalculadoraCronograma.descripcionPension(anio, mesLinea);
-				case MATRICULA -> "Matrícula " + anio;
-				case OTRO -> throw new ReglaNegocioException("Describe la deuda (por ejemplo «Taller de verano 2026»).");
-			};
-		}
-		if (texto.length() > 80) {
-			throw new ReglaNegocioException("La descripción admite hasta 80 caracteres.");
-		}
+		String texto;
 		LocalDate vence = vencimiento;
-		if (vence == null && concepto == ConceptoSaldo.PENSION) {
-			vence = Calendario.ultimoDiaDelMes(anio, mesLinea);
+		if (concepto == ConceptoSaldo.OTRO) {
+			texto = conceptoPermitido(descripcion, conceptosOtros);
+			if (vence == null) {
+				throw new ReglaNegocioException("Indica el vencimiento de la deuda.");
+			}
+			if (vence.getYear() != anio && vence.getYear() != anio - 1) {
+				throw new ReglaNegocioException("El vencimiento debe estar en " + (anio - 1) + " o " + anio + ".");
+			}
 		}
-		if (vence == null) {
-			throw new ReglaNegocioException("Indica el vencimiento de la deuda.");
+		else {
+			if (anioDeuda == null) {
+				throw new ReglaNegocioException("Indica el año de la deuda.");
+			}
+			if (anioDeuda != anio) {
+				throw new ReglaNegocioException("La deuda es de " + anioDeuda + " y el lote es de " + anio
+						+ ": cada deuda va en un lote de su propio año.");
+			}
+			anioLinea = anioDeuda;
+			if (concepto == ConceptoSaldo.PENSION) {
+				if (mes == null || mes < 1 || mes > 12) {
+					throw new ReglaNegocioException("Indica el mes de la pensión (1 a 12).");
+				}
+				mesLinea = mes;
+				YearMonth mesDeuda = YearMonth.of(anioLinea, mesLinea);
+				if (mesDeuda.isAfter(YearMonth.from(fechaCorte))) {
+					throw new ReglaNegocioException("La pensión de " + Calendario.nombreMes(mesLinea) + " " + anioLinea
+							+ " es posterior al corte (" + Calendario.formatear(fechaCorte) + "): no es saldo inicial, la "
+							+ "cobra el plan de pensiones.");
+				}
+				if (vence == null) {
+					vence = mesDeuda.atEndOfMonth().isAfter(fechaCorte) ? fechaCorte : mesDeuda.atEndOfMonth();
+				}
+				if (!YearMonth.from(vence).equals(mesDeuda)) {
+					throw new ReglaNegocioException("La pensión de " + Calendario.nombreMes(mesLinea)
+							+ " debe vencer en ese mismo mes.");
+				}
+				texto = CalculadoraCronograma.descripcionPension(anioLinea, mesLinea);
+			}
+			else {
+				if (vence == null) {
+					throw new ReglaNegocioException("Indica el vencimiento de la matrícula adeudada.");
+				}
+				if (vence.getYear() != anioLinea && vence.getYear() != anioLinea - 1) {
+					throw new ReglaNegocioException("La matrícula " + anioLinea + " debe vencer en " + (anioLinea - 1)
+							+ " o " + anioLinea + ".");
+				}
+				texto = "Matrícula " + anioLinea;
+			}
 		}
-		if (vence.getYear() != anio && vence.getYear() != anio - 1) {
-			throw new ReglaNegocioException("El vencimiento debe estar en " + (anio - 1) + " o " + anio + ".");
+		if (vence.isAfter(fechaCorte)) {
+			throw new ReglaNegocioException("La deuda vence el " + Calendario.formatear(vence) + ", después del corte ("
+					+ Calendario.formatear(fechaCorte) + "): el saldo inicial solo tiene deudas ya vencidas al corte.");
 		}
-		LineaSaldoInicial linea = LineaSaldoInicial.nueva(this, alumno, concepto, mesLinea, texto,
+		LineaSaldoInicial linea = LineaSaldoInicial.nueva(this, alumno, concepto, anioLinea, mesLinea, texto,
 				Dinero.positivo(monto, "el monto de la deuda"), vence);
 		String obligacion = linea.obligacion();
-		if (obligacion != null && lineasVigentes().stream()
+		if (lineasVigentes().stream()
 				.anyMatch(l -> l.getAlumno().getId().equals(alumno.getId()) && obligacion.equals(l.obligacion()))) {
 			throw new ReglaNegocioException("Este alumno ya tiene en el lote la deuda «" + linea.getDescripcion() + "».");
 		}
 		lineas.add(linea);
 		return linea;
+	}
+
+	/** Palabras que delatan una pensión o una matrícula disfrazada de «otro concepto». */
+	private static final java.util.regex.Pattern PARECE_CUOTA = java.util.regex.Pattern.compile(
+			"(?iuU).*\\b(pensi[oó]n|pensiones|matr[ií]cula|mensualidad|cuota|enero|febrero|marzo|abril|mayo|junio|julio|"
+					+ "agosto|setiembre|septiembre|octubre|noviembre|diciembre)\\b.*");
+
+	/** {@code true} si el texto parece una pensión, una matrícula o un mes (no se acepta como «otro concepto»). */
+	public static boolean pareceCuota(String texto) {
+		return texto != null && PARECE_CUOTA.matcher(texto).matches();
+	}
+
+	private static String conceptoPermitido(String descripcion, List<String> conceptosOtros) {
+		String texto = Normalizador.limpiar(descripcion);
+		if (texto == null) {
+			throw new ReglaNegocioException("Elige el concepto de la deuda.");
+		}
+		if (pareceCuota(texto)) {
+			throw new ReglaNegocioException("«" + texto + "» parece una pensión o una matrícula: regístrala con ese "
+					+ "concepto (con su año y mes), no como «otro».");
+		}
+		return conceptosOtros.stream().filter(c -> Normalizador.paraBusqueda(c).equals(Normalizador.paraBusqueda(texto)))
+				.findFirst()
+				.orElseThrow(() -> new ReglaNegocioException("«" + texto + "» no está entre los otros conceptos del "
+						+ "reglamento: " + String.join(", ", conceptosOtros) + "."));
 	}
 
 	public LineaSaldoInicial quitarLinea(Long lineaId) {
@@ -226,7 +293,11 @@ public class LoteSaldoInicial extends BaseEntity {
 		enviadoEn = Objects.requireNonNull(ahora, "ahora");
 	}
 
-	public void confirmar(String por, LocalDateTime ahora) {
+	/**
+	 * @param totalInforme el total del informe del contador que escribe, a ciegas, quien confirma: debe ser igual al
+	 *                     declarado
+	 */
+	public void confirmar(String por, BigDecimal totalInforme, LocalDateTime ahora) {
 		if (estado != EstadoLote.ENVIADO) {
 			throw new ReglaNegocioException("Solo se confirma un lote enviado (está " + estado.etiqueta().toLowerCase()
 					+ ").");
@@ -235,6 +306,11 @@ public class LoteSaldoInicial extends BaseEntity {
 			throw new AutoaprobacionException("No puedes confirmar un lote que tú creaste, enviaste o al que le "
 					+ "agregaste líneas: debe confirmarlo otra persona de Promotoría o Dirección.");
 		}
+		if (totalInforme == null || Dinero.normalizar(totalInforme).compareTo(totalDeclarado) != 0) {
+			throw new TotalNoCoincideException("El total que escribiste no coincide con el que declaró quien armó el "
+					+ "lote. Revisa el informe del contador: no se confirmó nada.");
+		}
+		totalConfirmado = Dinero.normalizar(totalInforme);
 		estado = EstadoLote.CONFIRMADO;
 		confirmadoPor = por;
 		confirmadoEn = Objects.requireNonNull(ahora, "ahora");
@@ -324,6 +400,10 @@ public class LoteSaldoInicial extends BaseEntity {
 
 	public String getMotivoDescarte() {
 		return motivoDescarte;
+	}
+
+	public BigDecimal getTotalConfirmado() {
+		return totalConfirmado;
 	}
 
 	public List<LineaSaldoInicial> getLineas() {

@@ -36,6 +36,10 @@ public class LineaSaldoInicial extends BaseEntity {
 	@Column(nullable = false, updatable = false, length = 20)
 	private ConceptoSaldo concepto;
 
+	/** Año real de la deuda (PENSION y MATRICULA). La obligación se calcula con él, nunca con el año del lote. */
+	@Column(name = "anio_deuda", updatable = false)
+	private Integer anioDeuda;
+
 	@Column(updatable = false)
 	private Integer mes;
 
@@ -55,12 +59,13 @@ public class LineaSaldoInicial extends BaseEntity {
 		// requerido por JPA
 	}
 
-	static LineaSaldoInicial nueva(LoteSaldoInicial lote, Alumno alumno, ConceptoSaldo concepto, Integer mes,
-			String descripcion, BigDecimal monto, LocalDate vencimiento) {
+	static LineaSaldoInicial nueva(LoteSaldoInicial lote, Alumno alumno, ConceptoSaldo concepto, Integer anioDeuda,
+			Integer mes, String descripcion, BigDecimal monto, LocalDate vencimiento) {
 		LineaSaldoInicial linea = new LineaSaldoInicial();
 		linea.lote = Objects.requireNonNull(lote, "lote");
 		linea.alumno = Objects.requireNonNull(alumno, "alumno");
 		linea.concepto = Objects.requireNonNull(concepto, "concepto");
+		linea.anioDeuda = concepto == ConceptoSaldo.OTRO ? null : Objects.requireNonNull(anioDeuda, "anioDeuda");
 		linea.mes = mes;
 		linea.descripcion = Objects.requireNonNull(descripcion, "descripcion");
 		linea.monto = Objects.requireNonNull(monto, "monto");
@@ -68,13 +73,15 @@ public class LineaSaldoInicial extends BaseEntity {
 		return linea;
 	}
 
-	/** La deuda que representa: «PEN-2026-05», «MAT-2026» o nula si es otro concepto (no choca con nada). */
+	/**
+	 * La deuda que representa, con su año REAL: «PEN-2026-05», «MAT-2026» u «OT-2026-1a2b3c4d» (otro concepto del
+	 * reglamento en el año del lote). Es única por alumno: la misma deuda no se cobra dos veces.
+	 */
 	public String obligacion() {
-		int anio = lote.getAnioEscolar().getAnio();
 		return switch (concepto) {
-			case MATRICULA -> Obligaciones.matricula(anio);
-			case PENSION -> Obligaciones.pension(anio, mes);
-			case OTRO -> null;
+			case MATRICULA -> Obligaciones.matricula(anioDeuda);
+			case PENSION -> Obligaciones.pension(anioDeuda, mes);
+			case OTRO -> Obligaciones.otro(lote.getAnioEscolar().getAnio(), descripcion);
 		};
 	}
 
@@ -102,6 +109,10 @@ public class LineaSaldoInicial extends BaseEntity {
 
 	public ConceptoSaldo getConcepto() {
 		return concepto;
+	}
+
+	public Integer getAnioDeuda() {
+		return anioDeuda;
 	}
 
 	public Integer getMes() {

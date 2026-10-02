@@ -14,8 +14,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * Una deuda previa. El alumno se busca por su número de documento. En una PENSION, si no se indica el vencimiento,
- * es el último día del mes; si no se indica la descripción, «Pensión {mes} {año}».
+ * Una deuda previa. El alumno se busca por su número de documento. PENSION y MATRICULA llevan el año real de la deuda
+ * (y la pensión su mes); su descripción la pone el sistema. En una PENSION sin vencimiento, vence el último día del mes
+ * (o el día del corte). En OTRO la descripción es uno de los conceptos del reglamento.
  */
 public record LineaSaldoRequest(
 		@NotBlank(message = "Escribe el DNI o documento del alumno.")
@@ -23,6 +24,8 @@ public record LineaSaldoRequest(
 		String documentoAlumno,
 		@NotNull(message = "Elige el concepto.")
 		ConceptoSaldo concepto,
+		@Min(value = 2000, message = "Revisa el año de la deuda.") @Max(value = 2100, message = "Revisa el año de la deuda.")
+		Integer anio,
 		@Min(value = 1, message = "El mes va de 1 a 12.") @Max(value = 12, message = "El mes va de 1 a 12.")
 		Integer mes,
 		@Size(max = 80, message = "La descripción admite hasta 80 caracteres.")

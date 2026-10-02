@@ -5,6 +5,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -78,6 +79,14 @@ class ConfiguracionPlanTest {
 	}
 
 	@Test
+	void vencimientosRepetidosYMatriculaNegativaSonRechazados() {
+		LocalDate marzo = LocalDate.of(2027, 3, 31);
+		assertThatThrownBy(() -> conVencimientos(List.of(marzo, marzo)).validar(ANIO_2027)).hasMessageContaining("uno por mes");
+		assertThatThrownBy(() -> porDefecto("-0.01", "450").validar(ANIO_2027))
+				.hasMessage("La matrícula debe estar entre S/ 0.00 y S/ 99,999.99.");
+	}
+
+	@Test
 	void vencimientosDesordenadosOEnElMismoMesSonRechazados() {
 		List<LocalDate> desordenados = new ArrayList<>(porDefecto("0", "450").vencimientos());
 		desordenados.set(2, LocalDate.of(2027, 4, 15));
@@ -130,6 +139,18 @@ class ConfiguracionPlanTest {
 				.hasMessageContaining("día 1 de un mes de 2027");
 		assertThat(conCobroDesde(base, LocalDate.of(2027, 9, 1)).validar(ANIO_2027).descripcionCobroDesde())
 				.isEqualTo("setiembre 2027");
+	}
+
+	/** QA: «cobrar desde» después de la última pensión se aprobaba y generaba cero pensiones en silencio. */
+	@Test
+	void cobroDesdeDespuesDeLaUltimaPensionEsRechazado() {
+		assertThat(conCobroDesde(porDefecto("350", "450"), LocalDate.of(2027, 12, 1)).validar(ANIO_2027).cobroDesde())
+				.isEqualTo(LocalDate.of(2027, 12, 1));
+		ConfiguracionPlan hastaNoviembre = new ConfiguracionPlan(BigDecimal.ZERO, LocalDate.of(2027, 2, 28),
+				new BigDecimal("450"), Calendario.vencimientosPorDefecto(2027, 3, 9), LocalDate.of(2027, 12, 1));
+		assertThatThrownBy(() -> hastaNoviembre.validar(ANIO_2027)).isInstanceOf(ReglaNegocioException.class)
+				.hasMessage("Cobrando desde el 01/12/2027 no se cobraría ninguna pensión del plan: la última vence el "
+						+ "30/11/2027.");
 	}
 
 	@Test

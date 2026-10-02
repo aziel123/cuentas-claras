@@ -15,6 +15,7 @@ import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.MatriculaRepository;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Seccion;
+import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.SeccionRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
@@ -44,11 +45,14 @@ public class ServicioMatriculas {
 
 	private final ObjectProvider<ConsultaCuotasMatricula> consultaCuotas;
 
+	private final AnioEscolarRepository anios;
+
 	private final Clock reloj;
 
 	public ServicioMatriculas(AlumnoRepository alumnos, MatriculaRepository matriculas, SeccionRepository secciones,
-			RegistroAlumnos registro, AuditoriaService auditoria, ObjectProvider<ConsultaCuotasMatricula> consultaCuotas,
-			Clock reloj) {
+			AnioEscolarRepository anios, RegistroAlumnos registro, AuditoriaService auditoria,
+			ObjectProvider<ConsultaCuotasMatricula> consultaCuotas, Clock reloj) {
+		this.anios = anios;
 		this.alumnos = alumnos;
 		this.matriculas = matriculas;
 		this.secciones = secciones;
@@ -83,7 +87,12 @@ public class ServicioMatriculas {
 	 */
 	@Transactional
 	public Long cambiarSeccion(Long matriculaId, CambiarSeccionRequest solicitud) {
-		Matricula matricula = matriculas.findById(matriculaId)
+		// Primero el año, luego la matrícula: si se aprueba un plan al mismo tiempo, o se generan sus cuotas antes
+		// (y entonces no cambia de nivel) o se generan después, ya en el nivel nuevo.
+		Long anioId = matriculas.anioDe(matriculaId)
+				.orElseThrow(() -> new RecursoNoEncontradoException("Matrícula no encontrada"));
+		anios.bloquear(anioId);
+		Matricula matricula = matriculas.bloquear(matriculaId)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Matrícula no encontrada"));
 		String motivo = Motivo.exigir(solicitud.motivo());
 		if (solicitud.seccionId() == null) {

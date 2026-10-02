@@ -1,6 +1,12 @@
 spring:
   application:
     name: cuentas-claras
+  datasource:
+    hikari:
+      # READ COMMITTED también en MySQL (allí el defecto es REPEATABLE READ): después de bloquear el año escolar con
+      # SELECT ... FOR UPDATE, cada consulta ve lo que otra transacción acaba de confirmar (planes aprobados,
+      # matrículas nuevas). Con REPEATABLE READ una matrícula podía «no ver» el plan aprobado en paralelo.
+      transaction-isolation: TRANSACTION_READ_COMMITTED
   jpa:
     open-in-view: false
     hibernate:
@@ -73,6 +79,10 @@ cuentasclaras:
     max-filas: 2000           # filas de datos
     max-descomprimido: 20MB   # suma de todas las entradas del zip
     max-entradas-zip: 200
+    max-textos-compartidos: 20000   # textos distintos dentro del archivo (contra archivos inflados)
+  saldo-inicial:
+    # Únicos «otros conceptos» del reglamento que se cargan como saldo inicial (nunca pensiones ni matrículas).
+    conceptos-otros: Taller de verano, Uniforme escolar, Materiales educativos, Excursión
   auditoria:
     # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
     # aplicación no arranca. Nunca en el código: va en el gestor de secretos.

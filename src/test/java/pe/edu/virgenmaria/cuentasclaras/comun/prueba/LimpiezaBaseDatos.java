@@ -18,6 +18,7 @@ public final class LimpiezaBaseDatos {
 
 	public static void limpiar(JdbcTemplate jdbc) {
 		// Sprint 2: de las hijas a las madres (FK compuestas).
+		jdbc.update("DELETE FROM solicitud_cambio");
 		jdbc.update("DELETE FROM cuota");
 		jdbc.update("DELETE FROM linea_saldo_inicial");
 		jdbc.update("DELETE FROM lote_saldo_inicial");

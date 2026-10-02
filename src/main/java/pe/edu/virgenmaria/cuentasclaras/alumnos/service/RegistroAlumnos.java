@@ -19,6 +19,7 @@ import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.MatriculaRepository;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
+import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Seccion;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
@@ -48,6 +49,8 @@ public class RegistroAlumnos {
 
 	private final MatriculaRepository matriculas;
 
+	private final AnioEscolarRepository anios;
+
 	private final AuditoriaService auditoria;
 
 	private final ApplicationEventPublisher eventos;
@@ -55,7 +58,9 @@ public class RegistroAlumnos {
 	private final Clock reloj;
 
 	public RegistroAlumnos(FamiliaRepository familias, ApoderadoRepository apoderados, AlumnoRepository alumnos,
-			MatriculaRepository matriculas, AuditoriaService auditoria, ApplicationEventPublisher eventos, Clock reloj) {
+			MatriculaRepository matriculas, AnioEscolarRepository anios, AuditoriaService auditoria,
+			ApplicationEventPublisher eventos, Clock reloj) {
+		this.anios = anios;
 		this.familias = familias;
 		this.apoderados = apoderados;
 		this.alumnos = alumnos;
@@ -168,11 +173,23 @@ public class RegistroAlumnos {
 	}
 
 	/**
+	 * Bloquea el año escolar (SELECT ... FOR UPDATE). Regla de orden de bloqueos: primero el año y después la bitácora
+	 * (que se bloquea al auditar). Quien vaya a matricular después de auditar algo debe llamarlo antes.
+	 */
+	public void bloquearAnio(AnioEscolar anio) {
+		anios.bloquear(anio.getId());
+	}
+
+	/**
 	 * Matricula al alumno en la sección (una matrícula por alumno y año) y publica {@link MatriculaRegistrada} en la
 	 * misma transacción.
 	 */
 	public Matricula matricular(Alumno alumno, Seccion seccion, LocalDate fecha) {
 		AnioEscolar anio = seccion.getAnioEscolar();
+		// Primero el año (SELECT ... FOR UPDATE), igual que aprobar un plan o generar cronogramas: así una matrícula y
+		// una aprobación simultáneas se serializan (nadie queda sin cronograma) y siempre en el mismo orden (sin
+		// bloqueo mutuo en MySQL).
+		anios.bloquear(anio.getId());
 		if (!alumno.activo()) {
 			throw new ReglaNegocioException(alumno.nombreCompleto() + " no está activo: no se puede matricular.");
 		}

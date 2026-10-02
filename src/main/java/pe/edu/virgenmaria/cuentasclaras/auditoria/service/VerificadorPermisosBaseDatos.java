@@ -38,6 +38,9 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 
 	static final int MYSQL_COLUMNA_DENEGADA = 1143;
 
+	/** SIGNAL SQLSTATE '45000' de un trigger (scripts/mysql/03-triggers.sql). */
+	static final int MYSQL_SIGNAL = 1644;
+
 	/** Sentencia que la base DEBE rechazar, con los códigos de error aceptados y lo que significaría si no. */
 	record SentenciaProhibida(String sql, Set<Integer> codigosAceptados, String riesgo) {
 	}
@@ -51,7 +54,42 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					"las cuotas se podrían borrar."),
 			new SentenciaProhibida("UPDATE cuota SET monto = monto WHERE 1 = 0",
 					Set.of(MYSQL_COLUMNA_DENEGADA, MYSQL_COMANDO_DENEGADO),
-					"el monto de una cuota se podría cambiar por SQL (falta el GRANT por columna)."));
+					"el monto de una cuota se podría cambiar por SQL (falta el GRANT por columna)."),
+			// Correcciones del sprint 2: el resto de tablas financieras, también por columna y sin DELETE.
+			columna("UPDATE plan_pension SET numero_version = numero_version WHERE 1 = 0", "plan_pension"),
+			columna("UPDATE lote_saldo_inicial SET total_declarado = total_declarado WHERE 1 = 0", "lote_saldo_inicial"),
+			columna("UPDATE linea_saldo_inicial SET monto = monto WHERE 1 = 0", "linea_saldo_inicial"),
+			columna("UPDATE solicitud_cambio SET datos = datos WHERE 1 = 0", "solicitud_cambio"),
+			sinBorrado("plan_pension"), sinBorrado("lote_saldo_inicial"), sinBorrado("linea_saldo_inicial"),
+			sinBorrado("solicitud_cambio"),
+			// Triggers de 03-triggers.sql: un INSERT imposible (colegio 0) que el trigger rechaza antes de tocar la fila.
+			// Sin el trigger, MySQL respondería otro error (FK o CHECK) y la aplicación no arranca.
+			trigger("INSERT INTO plan_pension (colegio_id, anio_escolar_id, nivel, numero_version, estado, vigente, "
+					+ "monto_matricula, vencimiento_matricula, monto_pension, vencimientos_pension, editado_por, editores, "
+					+ "creado_en, creado_por, actualizado_en) VALUES (0, 0, 'PRIMARIA', 1, 'APROBADO', TRUE, 0, "
+					+ "'2000-02-28', 1, '2000-03-31', 'verificador', ',verificador,', NOW(6), 'verificador', NOW(6))",
+					"trg_plan_pension_nace_borrador"),
+			trigger("INSERT INTO lote_saldo_inicial (colegio_id, anio_escolar_id, fecha_corte, documento_referencia, "
+					+ "total_declarado, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, '2000-01-01', "
+					+ "'verificador', 1, 'CONFIRMADO', NOW(6), 'verificador', NOW(6))", "trg_lote_saldo_inicial_nace_borrador"),
+			trigger("INSERT INTO linea_saldo_inicial (colegio_id, lote_id, alumno_id, concepto, descripcion, monto, "
+					+ "fecha_vencimiento, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'OTRO', 'verificador', 1, "
+					+ "'2000-01-01', NOW(6), 'verificador', NOW(6))", "trg_linea_saldo_inicial_lote_abierto"));
+
+	private static SentenciaProhibida columna(String sql, String tabla) {
+		return new SentenciaProhibida(sql, Set.of(MYSQL_COLUMNA_DENEGADA),
+				"las columnas inmutables de " + tabla + " se podrían cambiar por SQL (falta el GRANT por columna).");
+	}
+
+	private static SentenciaProhibida sinBorrado(String tabla) {
+		return new SentenciaProhibida("DELETE FROM " + tabla + " WHERE 1 = 0", Set.of(MYSQL_COMANDO_DENEGADO),
+				"los registros de " + tabla + " se podrían borrar.");
+	}
+
+	private static SentenciaProhibida trigger(String sql, String nombre) {
+		return new SentenciaProhibida(sql, Set.of(MYSQL_SIGNAL), "falta el trigger " + nombre
+				+ " (aplica scripts/mysql/03-triggers.sql con cc_migrador).");
+	}
 
 	private static final Logger LOG = LoggerFactory.getLogger(VerificadorPermisosBaseDatos.class);
 
@@ -79,6 +117,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		}
 		LOG.info("Permisos de la bitácora verificados: la aplicación no puede editar ni borrar eventos.");
 		LOG.info("Permisos de las cuotas verificados: la aplicación no puede borrarlas ni cambiar su monto.");
+		LOG.info("Permisos por columna y triggers de planes, lotes y solicitudes verificados.");
 	}
 
 	public void verificarMigraciones() {
@@ -103,7 +142,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 				return null;
 			}
 			return "No se pudo comprobar «" + sentencia.sql() + "» (código " + codigo + "): "
-					+ e.getMostSpecificCause().getMessage();
+					+ e.getMostSpecificCause().getMessage() + ". Si no se rechaza como se espera, " + sentencia.riesgo();
 		}
 	}
 

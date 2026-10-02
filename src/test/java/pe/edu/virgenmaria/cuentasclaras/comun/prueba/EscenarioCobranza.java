@@ -1,6 +1,10 @@
 package pe.edu.virgenmaria.cuentasclaras.comun.prueba;
 
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.PlanRequest;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.ResultadoGeneracion;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioSaldoInicial;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
@@ -35,6 +39,9 @@ public final class EscenarioCobranza {
 
 	public static final UsuarioAutenticado CAJA = persona(16, "caja", Rol.CAJA);
 
+	/** Quien envía los planes a aprobación en las pruebas que no tratan del envío. */
+	public static final UsuarioAutenticado ADMINISTRACION_ENVIO = persona(17, "administracion.envio", Rol.ADMINISTRACION);
+
 	private EscenarioCobranza() {
 	}
 
@@ -52,14 +59,33 @@ public final class EscenarioCobranza {
 				Calendario.vencimientosPorDefecto(anio, 3, 10), cobroDesde);
 	}
 
-	/** Administración propone y Dirección aprueba. Deja la sesión en Administración. */
+	/** Administración propone y envía; Dirección aprueba. Deja la sesión en Administración. */
 	public static Long planAprobado(ServicioPlanesPension planes, Long anioId, int anio, Nivel nivel, String pension,
 			String matricula, LocalDate cobroDesde) {
 		como(ADMINISTRACION);
 		Long id = planes.crearBorrador(anioId, nivel, plan(anio, pension, matricula, cobroDesde));
 		como(DIRECCION);
-		planes.aprobar(id);
+		aprobar(planes, id);
 		como(ADMINISTRACION);
 		return id;
+	}
+
+	/**
+	 * Aprueba como el usuario en sesión la versión que este ve. Si el plan aún está en preparación, antes lo envía
+	 * {@link #ADMINISTRACION_ENVIO} (y la sesión vuelve a quien aprueba).
+	 */
+	public static ResultadoGeneracion aprobar(ServicioPlanesPension planes, Long id) {
+		Authentication aprobador = SecurityContextHolder.getContext().getAuthentication();
+		como(ADMINISTRACION_ENVIO);
+		if ("BORRADOR".equals(planes.obtener(id).estado())) {
+			planes.enviar(id);
+		}
+		SecurityContextHolder.getContext().setAuthentication(aprobador);
+		return planes.aprobar(id, planes.obtener(id).version());
+	}
+
+	/** Confirma como el usuario en sesión, con la versión que ve y el total del informe que escribe a ciegas. */
+	public static int confirmar(ServicioSaldoInicial saldo, Long lote, String totalInforme) {
+		return saldo.confirmar(lote, saldo.obtener(lote).version(), new BigDecimal(totalInforme));
 	}
 }

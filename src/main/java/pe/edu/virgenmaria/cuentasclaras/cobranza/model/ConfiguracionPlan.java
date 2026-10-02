@@ -62,6 +62,11 @@ public record ConfiguracionPlan(BigDecimal montoMatricula, LocalDate vencimiento
 			throw new ReglaNegocioException("«Cobrar desde» debe ser el día 1 de un mes de " + a
 					+ " (por ejemplo 01/12/" + a + ").");
 		}
+		if (cobroDesde != null && vencimientos.stream().allMatch(v -> v.isBefore(cobroDesde))) {
+			throw new ReglaNegocioException("Cobrando desde el " + Calendario.formatear(cobroDesde)
+					+ " no se cobraría ninguna pensión del plan: la última vence el "
+					+ Calendario.formatear(vencimientos.get(vencimientos.size() - 1)) + ".");
+		}
 		return new ConfiguracionPlan(matricula, vencimientoMatricula, pension, vencimientos, cobroDesde);
 	}
 

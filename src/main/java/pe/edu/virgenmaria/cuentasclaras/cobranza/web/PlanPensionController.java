@@ -1,6 +1,7 @@
 package pe.edu.virgenmaria.cuentasclaras.cobranza.web;
 
 import jakarta.validation.Valid;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -29,6 +30,8 @@ import pe.edu.virgenmaria.cuentasclaras.comun.web.Formularios;
 public class PlanPensionController {
 
 	private static final String VISTA_FORMULARIO = "pensiones/plan-formulario";
+
+	static final String CAMBIO_SIMULTANEO = "Otra persona acaba de cambiar o resolver esto al mismo tiempo; revísalo de nuevo.";
 
 	private final ServicioPlanesPension servicio;
 
@@ -123,10 +126,44 @@ public class PlanPensionController {
 		}
 	}
 
-	@PostMapping("/planes/{id:\\d+}/aprobar")
-	public String aprobar(@PathVariable Long id, RedirectAttributes avisos) {
+	@PostMapping("/planes/{id:\\d+}/enviar")
+	public String enviar(@PathVariable Long id, RedirectAttributes avisos) {
 		try {
-			ResultadoGeneracion resultado = servicio.aprobar(id);
+			servicio.enviar(id);
+			avisos.addFlashAttribute("exito", "Listo: enviaste el plan. Ya no se puede editar; lo aprueba otra persona "
+					+ "de Promotoría o Dirección.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/pensiones/planes/" + id;
+	}
+
+	@PostMapping("/planes/{id:\\d+}/devolver")
+	public String devolver(@PathVariable Long id, @RequestParam(required = false) Long version,
+			@Valid MotivoRequest solicitud, BindingResult validacion, RedirectAttributes avisos) {
+		if (validacion.hasErrors()) {
+			avisos.addFlashAttribute("error", Formularios.primerError(validacion));
+			return "redirect:/pensiones/planes/" + id;
+		}
+		try {
+			servicio.devolver(id, version, solicitud.motivo());
+			avisos.addFlashAttribute("exito", "Listo: devolviste el plan a Administración para que lo corrija.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		catch (OptimisticLockingFailureException e) {
+			avisos.addFlashAttribute("error", CAMBIO_SIMULTANEO);
+		}
+		return "redirect:/pensiones/planes/" + id;
+	}
+
+	@PostMapping("/planes/{id:\\d+}/aprobar")
+	public String aprobar(@PathVariable Long id, @RequestParam(required = false) Long version,
+			RedirectAttributes avisos) {
+		try {
+			ResultadoGeneracion resultado = servicio.aprobar(id, version);
 			avisos.addFlashAttribute("exito", "Listo: aprobaste el plan. Se generaron " + resultado.cuotas()
 					+ " cuotas para " + resultado.matriculas() + " matrículas (" + Dinero.formatear(resultado.total())
 					+ ").");
@@ -137,6 +174,9 @@ public class PlanPensionController {
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		catch (OptimisticLockingFailureException e) {
+			avisos.addFlashAttribute("error", CAMBIO_SIMULTANEO);
 		}
 		return "redirect:/pensiones/planes/" + id;
 	}

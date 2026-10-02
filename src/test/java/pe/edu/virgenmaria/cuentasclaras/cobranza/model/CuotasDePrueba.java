@@ -30,6 +30,7 @@ final class CuotasDePrueba {
 	static PlanPension planAprobado(String pension, String matricula) {
 		PlanPension plan = PlanPension.borrador(ANIO_2027, Nivel.PRIMARIA, ConfiguracionPlan
 				.porDefecto(2027, new BigDecimal(matricula), new BigDecimal(pension)).validar(ANIO_2027), "administracion");
+		plan.enviar("administracion", LocalDateTime.of(2026, 10, 2, 7, 0));
 		plan.aprobar("director", LocalDateTime.of(2026, 10, 2, 8, 0));
 		return plan;
 	}

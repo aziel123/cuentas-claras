@@ -64,6 +64,8 @@ public enum AccionAuditoria {
 	// Planes de pensiones (sprint 2): montos y vencimientos completos en cada evento.
 	PLAN_PENSION_CREADO("Propuso un plan de pensiones", false),
 	PLAN_PENSION_EDITADO("Editó un plan de pensiones en borrador", false),
+	PLAN_PENSION_ENVIADO("Envió un plan de pensiones para su aprobación", false),
+	PLAN_PENSION_DEVUELTO("Devolvió un plan de pensiones sin aprobarlo", false),
 	PLAN_PENSION_APROBADO("Aprobó un plan de pensiones", false),
 	PLAN_PENSION_DESCARTADO("Descartó un plan de pensiones en borrador", false),
 
@@ -73,6 +75,8 @@ public enum AccionAuditoria {
 	/** Se resalta: pedir que una deuda deje de cobrarse. La aprobación llega en el sprint 3. */
 	CUOTA_ANULACION_SOLICITADA("Solicitó anular una cuota", true),
 	CUOTA_ANULADA("Anuló una cuota", true),
+	/** Se resalta: una cuota del plan no se generó porque esa deuda ya existía (por ejemplo, como saldo inicial). */
+	CUOTA_OMITIDA_DEUDA_EXISTENTE("No generó una cuota porque la deuda ya existía", true),
 
 	// Saldo inicial (sprint 2): doble control y total de control.
 	SALDO_INICIAL_LOTE_CREADO("Creó un lote de saldo inicial", false),
@@ -80,8 +84,18 @@ public enum AccionAuditoria {
 	SALDO_INICIAL_LINEA_QUITADA("Quitó una deuda de un lote de saldo inicial", true),
 	SALDO_INICIAL_ENVIADO("Envió un lote de saldo inicial para confirmación", false),
 	SALDO_INICIAL_CONFIRMADO("Confirmó un lote de saldo inicial", false),
+	/** Se resalta: quien confirmaba escribió un total del informe del contador distinto del declarado. */
+	SALDO_INICIAL_TOTAL_NO_COINCIDE("El total del informe no coincidió al confirmar", true),
 	SALDO_INICIAL_DEVUELTO("Devolvió un lote de saldo inicial", false),
 	SALDO_INICIAL_DESCARTADO("Descartó un lote de saldo inicial", false),
+
+	// Solicitudes de cambio que aprueba otra persona (sprint 2, correcciones)
+	/** Se resalta: retiros, contactos, responsables de pago, fechas de matrícula y anulaciones pedidas. */
+	SOLICITUD_CREADA("Pidió un cambio que aprueba otra persona", true),
+	SOLICITUD_APROBADA("Aprobó una solicitud de cambio", false),
+	SOLICITUD_RECHAZADA("Rechazó una solicitud de cambio", false),
+	/** Se resalta: un ingreso tardío aprobado recorta el cronograma. */
+	MATRICULA_FECHA_CAMBIADA("Cambió la fecha de ingreso de una matrícula", true),
 
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */

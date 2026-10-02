@@ -45,19 +45,45 @@ class VerificadorPermisosBaseDatosTest {
 	}
 
 	@Test
-	void arrancaSiMysqlDeniegaConError1142() {
-		JdbcTemplate mysql = mock(JdbcTemplate.class);
-		when(mysql.update(anyString())).thenThrow(new UncategorizedSQLException("verificar", "UPDATE ...",
-				new SQLException("UPDATE command denied to user 'cc_app'", "42000", 1142)));
-
-		assertThatCode(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
+	void arrancaSiMysqlDeniegaComoDebe() {
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(mysqlQueDeniega(), fuenteDatos).afterPropertiesSet())
 				.doesNotThrowAnyException();
 	}
 
 	@Test
-	void arrancaSiMysqlDeniegaElMontoDeLaCuotaPorColumnaCon1143() {
+	void fallaSiFaltanLosTriggers() {
 		JdbcTemplate mysql = mysqlQueDeniega();
-		doThrow(denegado(1143)).when(mysql).update(SQL_MONTO_CUOTA);
+		// Sin el trigger, el INSERT imposible falla por la FK (1452), no por el trigger (1644).
+		doThrow(denegado(1452)).when(mysql).update(org.mockito.ArgumentMatchers.startsWith("INSERT INTO plan_pension"));
+
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("trg_plan_pension_nace_borrador").hasMessageContaining("1452");
+	}
+
+	@Test
+	void fallaSiLasColumnasDelPlanEstanAbiertas() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doReturn(0).when(mysql).update("UPDATE plan_pension SET numero_version = numero_version WHERE 1 = 0");
+
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("plan_pension")
+				.hasMessageContaining("GRANT por columna");
+	}
+
+	@Test
+	void fallaSiSePuedeBorrarUnaSolicitud() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doReturn(0).when(mysql).update("DELETE FROM solicitud_cambio WHERE 1 = 0");
+
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("solicitud_cambio se podrían borrar");
+	}
+
+	@Test
+	void arrancaSiMysqlDeniegaElMontoDeLaCuotaSinNingunUpdateCon1142() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doThrow(denegado(1142)).when(mysql).update(SQL_MONTO_CUOTA);
 
 		assertThatCode(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
 				.doesNotThrowAnyException();
@@ -98,9 +124,19 @@ class VerificadorPermisosBaseDatosTest {
 
 	private static final String SQL_MONTO_CUOTA = "UPDATE cuota SET monto = monto WHERE 1 = 0";
 
+	/** Un MySQL bien configurado: DELETE → 1142, UPDATE de columnas inmutables → 1143, INSERT imposible → 1644. */
 	private static JdbcTemplate mysqlQueDeniega() {
 		JdbcTemplate mysql = mock(JdbcTemplate.class);
-		when(mysql.update(anyString())).thenThrow(denegado(1142));
+		when(mysql.update(anyString())).thenAnswer(invocacion -> {
+			String sql = invocacion.getArgument(0);
+			if (sql.startsWith("INSERT")) {
+				throw denegado(1644);
+			}
+			if (sql.startsWith("UPDATE") && !sql.contains("evento_auditoria")) {
+				throw denegado(1143);
+			}
+			throw denegado(1142);
+		});
 		return mysql;
 	}
 

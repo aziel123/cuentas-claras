@@ -21,15 +21,28 @@
 		<div th:replace="~{fragments/componentes :: alerta('advertencia', |Devuelto por ${l.devueltoPor}: ${l.motivoDevolucion}|)}"></div>
 	</th:block>
 
+	<th:block th:unless="${#lists.isEmpty(l.bloqueos)}">
+		<div class="alerta alerta-error" role="alert" data-bloqueos>
+			<p>Este lote bloquearía cuotas del cronograma y no se puede enviar ni confirmar:</p>
+			<ul><li th:each="b : ${l.bloqueos}" th:text="${b}">Mateo: Pensión diciembre 2026 la cobra también el plan</li></ul>
+		</div>
+	</th:block>
+
 	<section class="tarjeta" aria-labelledby="titulo-control">
 		<div class="fila entre">
 			<h2 id="titulo-control">Total de control</h2>
-			<span id="cuadre" th:replace="~{fragments/componentes :: badge(${l.cuadra} ? 'Cuadra' : 'No cuadra', ${l.cuadra} ? 'exito' : 'peligro')}"></span>
+			<th:block th:if="${l.mostrarTotales}">
+				<span id="cuadre" th:replace="~{fragments/componentes :: badge(${l.cuadra} ? 'Cuadra' : 'No cuadra', ${l.cuadra} ? 'exito' : 'peligro')}"></span>
+			</th:block>
 		</div>
+		<p class="secundario" th:unless="${l.mostrarTotales}">El total declarado y la suma no se muestran a quien confirma: vas a
+			escribir el total que figura en el informe del contador.</p>
 		<dl class="datos">
+			<th:block th:if="${l.mostrarTotales}">
 			<div><dt>Total declarado</dt><dd><span th:replace="~{fragments/componentes :: monto(${l.totalDeclarado})}"></span></dd></div>
 			<div><dt>Suma de líneas</dt><dd><span th:replace="~{fragments/componentes :: monto(${l.totalLineas})}"></span></dd></div>
 			<div th:unless="${l.cuadra}"><dt>Diferencia</dt><dd><span th:replace="~{fragments/componentes :: monto(${l.diferencia})}"></span></dd></div>
+			</th:block>
 			<div><dt>Fecha de corte</dt><dd th:text="${#temporals.format(l.fechaCorte, 'dd/MM/yyyy')}">30/09/2026</dd></div>
 			<div><dt>Informe del contador</dt><dd th:text="${l.documentoReferencia}">Informe</dd></div>
 			<div th:if="${l.enviadoPor != null}"><dt>Enviado por</dt>
@@ -48,15 +61,18 @@
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(l.lineas)}">
 			<thead><tr><th scope="col">Alumno</th><th scope="col">Deuda</th><th scope="col">Vence</th>
-				<th scope="col" class="num">Monto</th><th scope="col">Agregó</th><th scope="col"><span class="solo-lectores">Acciones</span></th></tr></thead>
+				<th scope="col" class="num">Monto</th><th scope="col">Su cronograma</th><th scope="col">Agregó</th>
+				<th scope="col"><span class="solo-lectores">Acciones</span></th></tr></thead>
 			<tbody>
 				<tr th:each="d : ${l.lineas}" th:data-linea="${d.id}" th:classappend="${d.quitada} ? 'fila-quitada'">
 					<td data-etiqueta="Alumno"><a th:href="@{/alumnos/{id}/cronograma(id=${d.alumnoId})}" th:text="${d.alumno}">Mateo</a>
 						<span class="secundario num" th:text="${d.documento}">DNI 78451236</span></td>
 					<td data-etiqueta="Deuda"><span th:text="${d.descripcion}">Pensión setiembre 2026</span>
-						<span th:if="${d.quitada}" class="badge badge-neutro">Quitada</span></td>
+						<span th:if="${d.quitada}" class="badge badge-neutro">Quitada</span>
+						<span th:if="${d.alerta != null}" class="badge badge-peligro" th:text="${d.alerta}">Duplicada</span></td>
 					<td data-etiqueta="Vence" th:text="${#temporals.format(d.vencimiento, 'dd/MM/yyyy')}">30/09/2026</td>
 					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${d.monto})}"></span></td>
+					<td data-etiqueta="Su cronograma" class="secundario" th:text="${d.cronograma}">2026: 1 cuota</td>
 					<td data-etiqueta="Agregó" th:text="${d.agregadaPor}">administracion</td>
 					<td data-etiqueta="Acciones">
 						<th:block th:if="${l.puedeEditar and !d.quitada}">
@@ -82,6 +98,11 @@
 					</select>
 				</div>
 				<div class="campo">
+					<label for="anio">Año de la deuda (pensión o matrícula)</label>
+					<input type="number" class="input num" th:field="*{anio}" th:placeholder="${l.anio}" min="2000" max="2100">
+					<p class="error" th:if="${#fields.hasErrors('anio')}" th:errors="*{anio}">Error</p>
+				</div>
+				<div class="campo">
 					<label for="mes">Mes (solo pensiones)</label>
 					<select class="input" th:field="*{mes}">
 						<option value="">—</option>
@@ -96,8 +117,16 @@
 				<p class="error" th:if="${#fields.hasErrors('monto')}" th:errors="*{monto}">Error</p>
 			</div>
 			<div class="formulario-doble">
-				<div th:replace="~{fragments/componentes :: campoDe('vencimiento', 'Vencimiento', 'En una pensión, si lo dejas vacío, el último día del mes.', 'date', false)}"></div>
-				<div th:replace="~{fragments/componentes :: campoDe('descripcion', 'Descripción (opcional en pensión y matrícula)', null, 'text', false)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('vencimiento', 'Vencimiento', 'En una pensión, si lo dejas vacío, el último día del mes (o el corte). Nunca después del corte.', 'date', false)}"></div>
+				<div class="campo">
+					<label for="descripcion">Otro concepto (solo «Otro concepto»)</label>
+					<select class="input" th:field="*{descripcion}">
+						<option value="">—</option>
+						<option th:each="c : ${l.conceptosOtros}" th:value="${c}" th:text="${c}">Taller de verano</option>
+					</select>
+					<p class="ayuda">Solo los conceptos del reglamento. Las pensiones y la matrícula llevan su propio concepto.</p>
+					<p class="error" th:if="${#fields.hasErrors('descripcion')}" th:errors="*{descripcion}">Error</p>
+				</div>
 			</div>
 			<div class="acciones">
 				<button th:replace="~{fragments/componentes :: boton('Agregar deuda', 'secundario')}"></button>
@@ -114,16 +143,25 @@
 				<button th:replace="~{fragments/componentes :: boton('Enviar para confirmación', 'primario')}"></button>
 			</form>
 		</th:block>
-		<form method="post" th:action="@{/pensiones/saldo-inicial/{id}/confirmar(id=${l.id})}" th:if="${l.puedeConfirmar}">
-			<p class="secundario">Revisa las deudas contra el informe del contador. Al confirmar se crean las cuotas en el
-				cronograma de cada alumno.</p>
+		<form method="post" class="formulario formulario-angosto" th:action="@{/pensiones/saldo-inicial/{id}/confirmar(id=${l.id})}"
+			th:if="${l.puedeConfirmar}">
+			<input type="hidden" name="version" th:value="${l.version}">
+			<p class="secundario">Revisa cada deuda contra el informe del contador y contra el cronograma del alumno. Al
+				confirmar se crean las cuotas.</p>
+			<div class="campo">
+				<label for="totalInforme">Total del informe del contador (S/)</label>
+				<input type="text" inputmode="decimal" class="input num" id="totalInforme" name="totalInforme" required
+					autocomplete="off" aria-describedby="totalInforme-ayuda">
+				<p class="ayuda" id="totalInforme-ayuda">Cópialo del informe (no se muestra aquí a propósito). Con punto decimal,
+					sin comas: 5280.00</p>
+			</div>
 			<button th:replace="~{fragments/componentes :: boton('Confirmar lote', 'primario')}"></button>
 		</form>
 		<div class="fila">
 			<th:block th:if="${l.puedeDevolver}">
 				<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-devolver', '¿Devolver el lote?',
 					'Vuelve a Administración para que lo corrija. No se crea ninguna cuota.',
-					@{/pensiones/saldo-inicial/{id}/devolver(id=${l.id})}, 'Devolver', 'secundario', 'Devolver lote')}"></th:block>
+					@{/pensiones/saldo-inicial/{id}/devolver(id=${l.id},version=${l.version})}, 'Devolver', 'secundario', 'Devolver lote')}"></th:block>
 			</th:block>
 			<th:block th:if="${l.puedeDescartar}">
 				<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-descartar', '¿Descartar el lote?',

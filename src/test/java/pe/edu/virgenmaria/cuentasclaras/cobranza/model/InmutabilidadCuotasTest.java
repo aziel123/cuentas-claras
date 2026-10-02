@@ -115,24 +115,37 @@ class InmutabilidadCuotasTest {
 
 	@Test
 	void columnasActualizablesCoincidenConElGrantPorColumna() throws IOException {
-		Set<String> actualizables = Stream.concat(Arrays.stream(BaseEntity.class.getDeclaredFields()),
-						Arrays.stream(Cuota.class.getDeclaredFields()))
+		String script = Files.readString(Path.of("scripts/mysql/02-permisos-tablas.sql"));
+		assertThat(actualizables(Cuota.class)).isEqualTo(concedidas(script, "cuota"))
+				.doesNotContain("monto", "fecha_vencimiento", "alumno_id", "clave", "matricula_id", "plan_pension_id");
+		// Correcciones del sprint 2 (M2): también por columna en planes, lotes y líneas.
+		assertThat(actualizables(PlanPension.class)).isEqualTo(concedidas(script, "plan_pension"))
+				.doesNotContain("anio_escolar_id", "nivel", "numero_version", "motivo_cambio");
+		assertThat(actualizables(LoteSaldoInicial.class)).isEqualTo(concedidas(script, "lote_saldo_inicial"))
+				.doesNotContain("total_declarado", "fecha_corte", "documento_referencia", "anio_escolar_id");
+		assertThat(actualizables(LineaSaldoInicial.class)).isEqualTo(concedidas(script, "linea_saldo_inicial"))
+				.containsExactlyInAnyOrder("quitada", "actualizado_en", "version");
+		assertThat(script).doesNotContainPattern("(?i)GRANT[^;]*DELETE[^;]*ON cuentasclaras\\.(cuota|plan_pension|"
+				+ "lote_saldo_inicial|linea_saldo_inicial|solicitud_cambio)\\b");
+		assertThat(script).doesNotContainPattern(
+				"(?i)GRANT[^;(]*UPDATE ON cuentasclaras\\.(cuota|plan_pension|lote_saldo_inicial|linea_saldo_inicial)\\b");
+	}
+
+	static Set<String> actualizables(Class<?> entidad) {
+		return Stream.concat(Arrays.stream(BaseEntity.class.getDeclaredFields()), Arrays.stream(entidad.getDeclaredFields()))
 				.filter(f -> !Modifier.isStatic(f.getModifiers()) && !f.isAnnotationPresent(Id.class))
+				.filter(f -> !f.isAnnotationPresent(jakarta.persistence.OneToMany.class))
 				.filter(InmutabilidadCuotasTest::actualizable)
 				.map(InmutabilidadCuotasTest::columna)
 				.collect(Collectors.toCollection(TreeSet::new));
+	}
 
-		String script = Files.readString(Path.of("scripts/mysql/02-permisos-tablas.sql"));
-		Matcher grant = Pattern.compile("GRANT UPDATE \\(([^)]*)\\) ON cuentasclaras\\.cuota ").matcher(script);
-		assertThat(grant.find()).as("GRANT UPDATE por columna sobre cuota").isTrue();
-		Set<String> concedidas = Arrays.stream(grant.group(1).split(",")).map(String::strip)
+	static Set<String> concedidas(String script, String tabla) {
+		Matcher grant = Pattern.compile("GRANT (?:INSERT, )?UPDATE \\(([^)]*)\\)\\s+ON cuentasclaras\\." + tabla + " ")
+				.matcher(script);
+		assertThat(grant.find()).as("GRANT UPDATE por columna sobre " + tabla).isTrue();
+		return Arrays.stream(grant.group(1).split(",")).map(String::strip)
 				.collect(Collectors.toCollection(TreeSet::new));
-
-		assertThat(actualizables).isEqualTo(concedidas)
-				.doesNotContain("monto", "fecha_vencimiento", "alumno_id", "clave", "matricula_id", "plan_pension_id");
-		assertThat(script).doesNotContainPattern("(?i)GRANT[^;]*DELETE[^;]*ON cuentasclaras\\.(cuota|plan_pension|"
-				+ "lote_saldo_inicial|linea_saldo_inicial)\\b");
-		assertThat(script).doesNotContainPattern("(?i)GRANT[^;(]*UPDATE ON cuentasclaras\\.cuota\\b");
 	}
 
 	@Test
@@ -174,9 +187,9 @@ class InmutabilidadCuotasTest {
 	@Test
 	void anularExigeMotivoYAprobadorDistintoTambienEnLaBase() {
 		Cuota cuota = cuotas.findById(setiembre).orElseThrow();
-		assertThatThrownBy(() -> cuota.anular(MOTIVO, "administracion", "administracion", LocalDateTime.now()))
+		assertThatThrownBy(() -> cuota.anular(MOTIVO, "administracion", "administracion", LocalDateTime.of(2026, 10, 2, 9, 0)))
 				.isInstanceOf(AutoaprobacionException.class);
-		assertThatThrownBy(() -> cuota.anular("corto", "administracion", "director", LocalDateTime.now()))
+		assertThatThrownBy(() -> cuota.anular("corto", "administracion", "director", LocalDateTime.of(2026, 10, 2, 9, 0)))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("entre 10 y 500");
 
 		// En la base: el mismo solicitante y aprobador, o sin motivo, se rechaza.
@@ -202,7 +215,7 @@ class InmutabilidadCuotasTest {
 		jdbc.update("UPDATE cuota SET estado = 'PARCIAL', monto_pagado = 100.00 WHERE id = ?", setiembre);
 		Cuota cuota = cuotas.findById(setiembre).orElseThrow();
 
-		assertThatThrownBy(() -> cuota.anular(MOTIVO, "administracion", "director", LocalDateTime.now()))
+		assertThatThrownBy(() -> cuota.anular(MOTIVO, "administracion", "director", LocalDateTime.of(2026, 10, 2, 9, 0)))
 				.isInstanceOf(ReglaNegocioException.class).hasMessage("La cuota tiene pagos: primero se anulan los pagos.");
 		assertThatThrownBy(() -> cuota.solicitarAnulacion(MOTIVO, "administracion"))
 				.hasMessage("La cuota tiene pagos: primero se anulan los pagos.");
@@ -235,12 +248,30 @@ class InmutabilidadCuotasTest {
 				.isInstanceOf(DataIntegrityViolationException.class);
 		assertThatThrownBy(() -> jdbc.update("UPDATE cuota SET estado = 'PAGADA', monto_pagado = 450.01 WHERE id = ?",
 				setiembre)).isInstanceOf(DataIntegrityViolationException.class);
-		// La misma deuda dos veces para el mismo alumno, tampoco.
-		assertThatThrownBy(() -> jdbc.update("INSERT INTO cuota (colegio_id, alumno_id, anio_escolar_id, matricula_id, "
-				+ "plan_pension_id, tipo, numero, descripcion, monto, fecha_vencimiento, estado, clave, obligacion, creado_en, "
-				+ "creado_por, actualizado_en) SELECT colegio_id, alumno_id, anio_escolar_id, matricula_id, plan_pension_id, "
-				+ "tipo, numero, descripcion, monto, fecha_vencimiento, estado, 'OTRA-CLAVE', obligacion, creado_en, creado_por, "
-				+ "actualizado_en FROM cuota WHERE id = ?", setiembre)).isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	/** QA (mutación): la clave de idempotencia es única por colegio, aunque la obligación sea otra. */
+	@Test
+	void laBaseRechazaDosCuotasConLaMismaClave() {
+		assertThatThrownBy(() -> jdbc.update(copiaDeSetiembre("clave", "'PEN-OTRA-OBLIG'"), setiembre))
+				.isInstanceOf(DataIntegrityViolationException.class);
+		// Con otra clave y otra obligación sí entra (la prueba de arriba falla solo por la clave).
+		assertThat(jdbc.update(copiaDeSetiembre("'OTRA-CLAVE'", "'PEN-2027-13X'"), setiembre)).isEqualTo(1);
+	}
+
+	/** QA (mutación): la misma deuda (obligación) dos veces para el mismo alumno, aunque con otra clave. */
+	@Test
+	void laBaseRechazaLaMismaObligacionDosVeces() {
+		assertThatThrownBy(() -> jdbc.update(copiaDeSetiembre("'OTRA-CLAVE'", "obligacion"), setiembre))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	private static String copiaDeSetiembre(String clave, String obligacion) {
+		return "INSERT INTO cuota (colegio_id, alumno_id, anio_escolar_id, matricula_id, plan_pension_id, tipo, numero, "
+				+ "descripcion, monto, fecha_vencimiento, estado, clave, obligacion, creado_en, creado_por, actualizado_en) "
+				+ "SELECT colegio_id, alumno_id, anio_escolar_id, matricula_id, plan_pension_id, tipo, numero, descripcion, "
+				+ "monto, fecha_vencimiento, estado, " + clave + ", " + obligacion + ", creado_en, creado_por, actualizado_en "
+				+ "FROM cuota WHERE id = ?";
 	}
 
 	private static boolean actualizable(Field campo) {

@@ -19,7 +19,15 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoLote;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.LineaSaldoInicial;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.LoteSaldoInicial;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Matricula;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.config.PropiedadesSaldoInicial;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.model.CalculadoraCronograma;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConceptoSaldo;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.model.PlanPension;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.model.TotalNoCoincideException;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.PlanPensionRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.LineaSaldoInicialRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.LoteSaldoInicialRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
@@ -37,6 +45,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Optional;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -71,11 +81,22 @@ public class ServicioSaldoInicial {
 
 	private final AuditoriaService auditoria;
 
+	private final PlanPensionRepository planes;
+
+	private final ControlParticipantes participantes;
+
+	private final PropiedadesSaldoInicial propiedades;
+
 	private final Clock reloj;
 
 	public ServicioSaldoInicial(LoteSaldoInicialRepository lotes, LineaSaldoInicialRepository lineas,
 			CuotaRepository cuotas, AnioEscolarRepository anios,
-			AlumnoRepository alumnos, MatriculaRepository matriculas, AuditoriaService auditoria, Clock reloj) {
+			AlumnoRepository alumnos, MatriculaRepository matriculas, AuditoriaService auditoria,
+			PlanPensionRepository planes, ControlParticipantes participantes, PropiedadesSaldoInicial propiedades,
+			Clock reloj) {
+		this.planes = planes;
+		this.participantes = participantes;
+		this.propiedades = propiedades;
 		this.lotes = lotes;
 		this.lineas = lineas;
 		this.cuotas = cuotas;
@@ -111,31 +132,93 @@ public class ServicioSaldoInicial {
 		String usuario = SesionActual.usuario();
 		boolean administracion = SesionActual.tieneAlgunRol("ADMINISTRACION");
 		boolean confirmador = SesionActual.tieneAlgunRol("PROMOTOR", "DIRECTOR");
-		boolean participo = lote.participantes().contains(usuario);
+		boolean participo = participantes.ampliar(lote.participantes()).contains(usuario);
 		boolean borrador = lote.getEstado() == EstadoLote.BORRADOR;
 		boolean enviado = lote.getEstado() == EstadoLote.ENVIADO;
 		Map<Long, Long> cuotaPorLinea = lote.getLineas().isEmpty() ? Map.of()
 				: cuotas.findByLineaSaldoInicialIdIn(lote.getLineas().stream().map(LineaSaldoInicial::getId).toList())
 						.stream().collect(Collectors.toMap(Cuota::getLineaSaldoInicialId, Cuota::getId));
+		Map<Long, List<Cuota>> cronogramas = new HashMap<>();
+		Long anioId = lote.getAnioEscolar().getId();
 		List<LineaVista> vistas = lote.getLineas().stream()
-				.map(l -> new LineaVista(l.getId(), l.getAlumno().getId(), l.getAlumno().nombreCompleto(),
-						l.getAlumno().getDocumento().texto(), l.getConcepto().etiqueta(), l.getDescripcion(),
-						l.getMonto(), l.getFechaVencimiento(), l.isQuitada(), l.getCreadoPor(),
-						cuotaPorLinea.get(l.getId())))
+				.map(l -> {
+					List<Cuota> delAlumno = cronogramas.computeIfAbsent(l.getAlumno().getId(),
+							a -> cuotas.findByAlumnoIdAndAnioEscolarId(a, anioId));
+					return new LineaVista(l.getId(), l.getAlumno().getId(), l.getAlumno().nombreCompleto(),
+							l.getAlumno().getDocumento().texto(), l.getConcepto().etiqueta(), l.getDescripcion(),
+							l.getMonto(), l.getFechaVencimiento(), l.isQuitada(), l.getCreadoPor(),
+							cuotaPorLinea.get(l.getId()), resumenCronograma(delAlumno, lote.getAnioEscolar().getAnio()),
+							l.isQuitada() ? null : alerta(l, lote, delAlumno, cuotaPorLinea.get(l.getId())));
+				})
 				.toList();
+		boolean aciegas = enviado && confirmador && !participo;
 		String aviso = enviado && confirmador && participo
-				? "Tú participaste en este lote (lo creaste, lo enviaste o le agregaste líneas): debe confirmarlo otra "
-						+ "persona de Promotoría o Dirección." : null;
+				? "Tú participaste en este lote (lo creaste, lo enviaste, le agregaste líneas o preparaste la cuenta de "
+						+ "quien lo hizo): debe confirmarlo otra persona de Promotoría o Dirección." : null;
+		List<String> bloqueos = enviado || borrador ? bloqueos(lote) : List.of();
 		BigDecimal suma = lote.totalLineas();
-		return new LoteDetalle(lote.getId(), lote.getAnioEscolar().getId(), lote.getAnioEscolar().getAnio(),
-				lote.getFechaCorte(), lote.getDocumentoReferencia(), lote.getTotalDeclarado(), suma,
-				lote.getTotalDeclarado().subtract(suma), lote.cuadra(), lote.getEstado().name(),
-				lote.getEstado().etiqueta(), lote.getEstado().variante(), lote.getCreadoPor(), lote.getCreadoEn(),
-				lote.getEnviadoPor(), lote.getEnviadoEn(), lote.getConfirmadoPor(), lote.getConfirmadoEn(),
-				lote.getDevueltoPor(), lote.getMotivoDevolucion(), lote.getDescartadoPor(), lote.getMotivoDescarte(),
-				vistas, borrador && administracion, borrador && administracion && lote.cuadra()
-						&& !lote.lineasVigentes().isEmpty(),
-				enviado && confirmador && !participo, enviado && confirmador, borrador && administracion, aviso);
+		return new LoteDetalle(lote.getId(), anioId, lote.getAnioEscolar().getAnio(),
+				lote.getFechaCorte(), lote.getDocumentoReferencia(), aciegas ? null : lote.getTotalDeclarado(),
+				aciegas ? null : suma, aciegas ? null : lote.getTotalDeclarado().subtract(suma), lote.cuadra(),
+				lote.getEstado().name(), lote.getEstado().etiqueta(), lote.getEstado().variante(), lote.getCreadoPor(),
+				lote.getCreadoEn(), lote.getEnviadoPor(), lote.getEnviadoEn(), lote.getConfirmadoPor(),
+				lote.getConfirmadoEn(), lote.getDevueltoPor(), lote.getMotivoDevolucion(), lote.getDescartadoPor(),
+				lote.getMotivoDescarte(), vistas, borrador && administracion, borrador && administracion && lote.cuadra()
+						&& !lote.lineasVigentes().isEmpty() && bloqueos.isEmpty(),
+				aciegas && bloqueos.isEmpty(), enviado && confirmador, borrador && administracion, aviso, !aciegas,
+				bloqueos, propiedades.conceptosOtros(), lote.getVersion());
+	}
+
+	/** «2026: 3 cuotas, saldo S/ 1,350.00» (lo que el alumno ya debe ese año). */
+	private static String resumenCronograma(List<Cuota> delAlumno, int anio) {
+		List<Cuota> vigentes = delAlumno.stream().filter(c -> !c.anulada()).toList();
+		if (vigentes.isEmpty()) {
+			return anio + ": sin cuotas";
+		}
+		return anio + ": " + vigentes.size() + (vigentes.size() == 1 ? " cuota" : " cuotas") + ", saldo "
+				+ Dinero.formatear(Dinero.sumar(vigentes.stream().map(Cuota::saldo).toList()));
+	}
+
+	/** Duplicada en el lote o ya en el cronograma del alumno (misma deuda o misma descripción). */
+	private static String alerta(LineaSaldoInicial linea, LoteSaldoInicial lote, List<Cuota> delAlumno, Long propia) {
+		boolean duplicadaEnLote = lote.lineasVigentes().stream().anyMatch(o -> !o.getId().equals(linea.getId())
+				&& o.getAlumno().getId().equals(linea.getAlumno().getId())
+				&& (o.obligacion().equals(linea.obligacion()) || o.getDescripcion().equalsIgnoreCase(linea.getDescripcion())));
+		if (duplicadaEnLote) {
+			return "Duplicada en el lote";
+		}
+		boolean enCronograma = delAlumno.stream().anyMatch(c -> !c.anulada() && !c.getId().equals(propia)
+				&& (linea.obligacion().equals(c.getObligacion()) || c.getDescripcion().equalsIgnoreCase(linea.getDescripcion())));
+		return enCronograma ? "Ya está en su cronograma" : null;
+	}
+
+	/**
+	 * Cuotas que esta confirmación bloquearía (auditoría C1): la deuda coincide con una cuota que el alumno ya tiene o
+	 * que el plan vigente de su nivel le generaría. Si hay alguna, el lote no se confirma.
+	 */
+	private List<String> bloqueos(LoteSaldoInicial lote) {
+		List<String> bloqueos = new ArrayList<>();
+		for (LineaSaldoInicial linea : lote.lineasVigentes()) {
+			String obligacion = linea.obligacion();
+			String quien = linea.getAlumno().nombreCompleto() + ": " + linea.getDescripcion();
+			if (cuotas.existsByClave(linea.clave())
+					|| !cuotas.findByAlumnoIdAndObligacionIn(linea.getAlumno().getId(), List.of(obligacion)).isEmpty()) {
+				bloqueos.add(quien + " ya está en su cronograma");
+				continue;
+			}
+			if (linea.getConcepto() == ConceptoSaldo.OTRO) {
+				continue;
+			}
+			Optional<Matricula> matricula = anios.findByAnio(linea.getAnioDeuda()).flatMap(a -> matriculas
+					.findByAlumnoIdAndAnioEscolarId(linea.getAlumno().getId(), a.getId()));
+			matricula.flatMap(m -> planes.findByAnioEscolarIdAndNivelAndVigenteTrue(m.getAnioEscolar().getId(), m.nivel())
+					.filter(plan -> CalculadoraCronograma.calcular(plan, m.getId(), m.getFechaMatricula()).stream()
+							.anyMatch(c -> c.obligacion().equals(obligacion)))
+					.map(PlanPension::nombre))
+					.ifPresent(plan -> bloqueos.add(quien + " la cobra también el " + plan
+							+ ": confirmarla bloquearía esa cuota"));
+		}
+		return bloqueos;
 	}
 
 	@Transactional
@@ -158,10 +241,13 @@ public class ServicioSaldoInicial {
 	public Long agregarLinea(Long loteId, LineaSaldoRequest solicitud) {
 		LoteSaldoInicial lote = bloquear(loteId);
 		Alumno alumno = alumnoPorDocumento(solicitud.documentoAlumno());
-		LineaSaldoInicial linea = lote.agregarLinea(alumno, solicitud.concepto(), solicitud.mes(),
-				solicitud.descripcion(), solicitud.monto(), solicitud.vencimiento());
+		// Primero las reglas de la deuda (año, mes, corte, concepto); luego, que el alumno esté matriculado ese año
+		// (que es el del lote: la entidad ya exigió que coincidan).
+		LineaSaldoInicial linea = lote.agregarLinea(alumno, solicitud.concepto(), solicitud.anio(), solicitud.mes(),
+				solicitud.descripcion(), solicitud.monto(), solicitud.vencimiento(), propiedades.conceptosOtros());
+		exigirMatriculaActiva(alumno, lote.getAnioEscolar().getAnio());
 		String obligacion = linea.obligacion();
-		if (obligacion != null && !cuotas.findByAlumnoIdAndObligacionIn(alumno.getId(), List.of(obligacion)).isEmpty()) {
+		if (!cuotas.findByAlumnoIdAndObligacionIn(alumno.getId(), List.of(obligacion)).isEmpty()) {
 			throw new ReglaNegocioException(alumno.nombreCompleto() + " ya tiene la cuota «" + linea.getDescripcion()
 					+ "» en su cronograma: no la cargues también como saldo inicial.");
 		}
@@ -171,6 +257,20 @@ public class ServicioSaldoInicial {
 						+ Dinero.formatear(lote.totalLineas()) + " de " + Dinero.formatear(lote.getTotalDeclarado())
 						+ " declarados.");
 		return linea.getId();
+	}
+
+	/** Auditoría A2 (c): solo alumnos activos y matriculados (activos) en el año de la deuda. */
+	private void exigirMatriculaActiva(Alumno alumno, int anio) {
+		if (!alumno.activo()) {
+			throw new ReglaNegocioException(alumno.nombreCompleto() + " está retirado: no se le carga saldo inicial.");
+		}
+		boolean matriculado = anios.findByAnio(anio)
+				.flatMap(a -> matriculas.findByAlumnoIdAndAnioEscolarId(alumno.getId(), a.getId()))
+				.filter(Matricula::activa).isPresent();
+		if (!matriculado) {
+			throw new ReglaNegocioException(alumno.nombreCompleto() + " no tiene una matrícula activa en " + anio
+					+ ": no se le carga una deuda de ese año.");
+		}
 	}
 
 	@Transactional
@@ -195,39 +295,43 @@ public class ServicioSaldoInicial {
 	}
 
 	/**
-	 * Confirma el lote y crea las cuotas SALDO_INICIAL, todo o nada: si alguna deuda ya existe para el alumno (por
-	 * ejemplo, la pensión ya se generó), no se confirma nada.
+	 * Confirma el lote y crea las cuotas SALDO_INICIAL, todo o nada. Exige: la versión que vio quien confirma (el lote
+	 * no cambió), el total del informe del contador escrito a ciegas (igual al declarado), que quien confirma no haya
+	 * participado (ni preparado la cuenta de quien participó) y que ninguna deuda bloquee una cuota existente o futura.
+	 * Los intentos de autoaprobación y de total distinto quedan auditados aunque se rechacen.
 	 */
-	@Transactional(noRollbackFor = AutoaprobacionException.class)
+	@Transactional(noRollbackFor = { AutoaprobacionException.class, TotalNoCoincideException.class })
 	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
-	public int confirmar(Long loteId) {
-		LoteSaldoInicial lote = bloquear(loteId);
+	public int confirmar(Long loteId, Long version, BigDecimal totalInforme) {
+		LoteSaldoInicial lote = bloquearConAnio(loteId);
 		String usuario = SesionActual.usuario();
 		if (lote.getEstado() != EstadoLote.ENVIADO) {
 			throw new ReglaNegocioException("Solo se confirma un lote enviado (este está "
 					+ lote.getEstado().etiqueta().toLowerCase() + ").");
 		}
-		if (lote.participantes().contains(usuario)) {
+		exigirVersion(lote, version);
+		if (participantes.ampliar(lote.participantes()).contains(usuario)) {
 			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "lote_saldo_inicial", loteId.toString(), null,
-					cabecera(lote), "Intentó confirmar el lote " + loteId
-							+ ", en el que participó (lo creó, lo envió o le agregó líneas). Se rechazó.");
-			throw new AutoaprobacionException("No puedes confirmar un lote que tú creaste, enviaste o al que le "
-					+ "agregaste líneas: debe confirmarlo otra persona de Promotoría o Dirección.");
+					cabecera(lote), "Intentó confirmar el lote " + loteId + ", en el que participó (lo creó, lo envió, "
+							+ "le agregó líneas o preparó la cuenta de quien lo hizo). Se rechazó.");
+			throw new AutoaprobacionException("No puedes confirmar un lote en el que participaste: debe confirmarlo "
+					+ "otra persona de Promotoría o Dirección.");
+		}
+		List<String> bloqueos = bloqueos(lote);
+		if (!bloqueos.isEmpty()) {
+			throw new ReglaNegocioException("No se confirmó nada: " + String.join("; ", bloqueos)
+					+ ". Devuelve el lote para que Administración quite esas deudas.");
+		}
+		try {
+			lote.confirmar(usuario, totalInforme, ahora());
+		}
+		catch (TotalNoCoincideException e) {
+			auditoria.registrar(AccionAuditoria.SALDO_INICIAL_TOTAL_NO_COINCIDE, "lote_saldo_inicial", loteId.toString(),
+					null, "Total escrito: " + (totalInforme == null ? "—" : Dinero.formatear(totalInforme)),
+					cabecera(lote) + ". Quien confirmaba escribió otro total: no se confirmó.");
+			throw e;
 		}
 		List<LineaSaldoInicial> vigentes = lote.lineasVigentes();
-		List<String> conflictos = new ArrayList<>();
-		for (LineaSaldoInicial linea : vigentes) {
-			String obligacion = linea.obligacion();
-			if (cuotas.existsByClave(linea.clave()) || obligacion != null && !cuotas
-					.findByAlumnoIdAndObligacionIn(linea.getAlumno().getId(), List.of(obligacion)).isEmpty()) {
-				conflictos.add(linea.getAlumno().nombreCompleto() + ": " + linea.getDescripcion());
-			}
-		}
-		if (!conflictos.isEmpty()) {
-			throw new ReglaNegocioException("No se confirmó nada: estas deudas ya están en el cronograma de los alumnos. "
-					+ "Devuelve el lote para que Administración las quite: " + String.join("; ", conflictos) + ".");
-		}
-		lote.confirmar(usuario, ahora());
 		Long anioId = lote.getAnioEscolar().getId();
 		for (LineaSaldoInicial linea : vigentes) {
 			cuotas.save(Cuota.deSaldoInicial(linea,
@@ -235,15 +339,29 @@ public class ServicioSaldoInicial {
 		}
 		auditoria.registrar(AccionAuditoria.SALDO_INICIAL_CONFIRMADO, "lote_saldo_inicial", loteId.toString(),
 				EstadoLote.ENVIADO.name(), cabecera(lote) + " · " + vigentes.size() + " cuotas creadas por "
-						+ Dinero.formatear(lote.totalLineas()),
+						+ Dinero.formatear(lote.totalLineas()) + " · total del informe confirmado a ciegas",
 				"Lote creado por " + lote.getCreadoPor() + " y enviado por " + lote.getEnviadoPor() + ".");
 		return vigentes.size();
 	}
 
+	/** Bloquea primero el año y luego el lote (mismo orden que matricular y aprobar planes: sin bloqueo mutuo). */
+	private LoteSaldoInicial bloquearConAnio(Long loteId) {
+		Long anioId = lotes.anioDe(loteId).orElseThrow(() -> new RecursoNoEncontradoException("Lote no encontrado"));
+		anios.bloquear(anioId);
+		return bloquear(loteId);
+	}
+
+	private static void exigirVersion(LoteSaldoInicial lote, Long version) {
+		if (version == null || !version.equals(lote.getVersion())) {
+			throw new ReglaNegocioException("El lote cambió desde que lo abriste; revísalo de nuevo.");
+		}
+	}
+
 	@Transactional
 	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
-	public void devolver(Long loteId, String motivo) {
+	public void devolver(Long loteId, Long version, String motivo) {
 		LoteSaldoInicial lote = bloquear(loteId);
+		exigirVersion(lote, version);
 		lote.devolver(SesionActual.usuario(), motivo, ahora());
 		auditoria.registrar(AccionAuditoria.SALDO_INICIAL_DEVUELTO, "lote_saldo_inicial", loteId.toString(),
 				EstadoLote.ENVIADO.name(), EstadoLote.BORRADOR.name(), "Motivo: " + lote.getMotivoDevolucion());

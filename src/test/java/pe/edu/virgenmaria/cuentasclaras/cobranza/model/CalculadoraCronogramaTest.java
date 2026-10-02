@@ -92,6 +92,39 @@ class CalculadoraCronogramaTest {
 		assertThat(cuotas).extracting(CuotaPlanificada::numero).containsExactly(9, 10, 11, 12);
 	}
 
+	/** QA (mutación «>» en vez de «>=»): una pensión que vence el mismo día que «cobrar desde» se cobra. */
+	@Test
+	void pensionQueVenceElMismoDiaDeCobroDesdeSeGenera() {
+		ConfiguracionPlan plan = new ConfiguracionPlan(BigDecimal.ZERO, LocalDate.of(2027, 2, 28), new BigDecimal("450.00"),
+				List.of(LocalDate.of(2027, 8, 31), LocalDate.of(2027, 9, 1), LocalDate.of(2027, 10, 1)),
+				LocalDate.of(2027, 9, 1));
+		assertThat(calcular(plan, LocalDate.of(2027, 1, 15))).extracting(CuotaPlanificada::numero).containsExactly(9, 10);
+	}
+
+	@Test
+	void matriculaQueVenceElMismoDiaDeCobroDesdeSeGenera() {
+		ConfiguracionPlan plan = new ConfiguracionPlan(new BigDecimal("350.00"), LocalDate.of(2027, 9, 1),
+				new BigDecimal("450.00"), List.of(LocalDate.of(2027, 9, 30)), LocalDate.of(2027, 9, 1));
+		assertThat(calcular(plan, LocalDate.of(2027, 1, 15))).extracting(CuotaPlanificada::tipo)
+				.containsExactly(TipoCuota.MATRICULA, TipoCuota.PENSION);
+		ConfiguracionPlan unDiaAntes = new ConfiguracionPlan(new BigDecimal("350.00"), LocalDate.of(2027, 8, 31),
+				new BigDecimal("450.00"), List.of(LocalDate.of(2027, 9, 30)), LocalDate.of(2027, 9, 1));
+		assertThat(calcular(unDiaAntes, LocalDate.of(2027, 1, 15))).extracting(CuotaPlanificada::tipo)
+				.containsExactly(TipoCuota.PENSION);
+	}
+
+	/** Auditoría A3: con fecha igual o anterior al inicio de clases el ingreso es regular (cronograma completo). */
+	@Test
+	void ingresoRegularConElInicioDeClasesCobraTodoYLaMatriculaVenceComoDiceElPlan() {
+		List<CuotaPlanificada> cuotas = CalculadoraCronograma.calcular(plan("350.00", null), ANIO, 41L,
+				LocalDate.of(2027, 3, 1), LocalDate.of(2027, 3, 1));
+		assertThat(cuotas).hasSize(11);
+		assertThat(cuotas.get(0).vencimiento()).isEqualTo(LocalDate.of(2027, 2, 28));
+		// Ingreso tardío (02/04): se cobra desde abril y la matrícula vence ese día.
+		assertThat(CalculadoraCronograma.calcular(plan("350.00", null), ANIO, 41L, LocalDate.of(2027, 4, 2),
+				LocalDate.of(2027, 3, 1))).extracting(CuotaPlanificada::numero).startsWith(null, 4);
+	}
+
 	@Test
 	void clavesYObligacionesSonDeterministas() {
 		List<CuotaPlanificada> primera = calcular(plan("350.00", null), LocalDate.of(2027, 1, 15));

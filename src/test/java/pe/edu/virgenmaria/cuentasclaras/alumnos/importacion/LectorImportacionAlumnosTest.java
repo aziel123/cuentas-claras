@@ -68,6 +68,16 @@ class LectorImportacionAlumnosTest {
 						+ "una fórmula: escribe el valor (o usa Pegado especial → Valores)."));
 	}
 
+	/** QA (mutación): no solo «=»; también «+», «-» y «@» al inicio de un texto se reportan (inyección en Excel). */
+	@Test
+	void celdaQueEmpiezaConMasMenosOArrobaSeReporta() {
+		LecturaImportacion lectura = lector.leer(archivo(con(mateo(), 2, "+Quispe"), con(valeria(), 2, "-Quispe"),
+				con(sebastian(), 2, "@Flores")), 2026, HOY);
+
+		assertThat(lectura.filas()).allSatisfy(f -> assertThat(f.errores()).singleElement()
+				.satisfies(e -> assertThat(e.texto()).contains("columna C (Apellido paterno del alumno)")));
+	}
+
 	@Test
 	void dniGuardadoComoNumeroConCeroPerdidoSeExplica() {
 		LecturaImportacion lectura = lector.leer(archivo(con(mateo(), 1, 1234567), con(valeria(), 1, 80127745)), 2026,

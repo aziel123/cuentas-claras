@@ -18,6 +18,9 @@
 	<th:block th:if="${p.avisoAutor != null}">
 		<div th:replace="~{fragments/componentes :: alerta('info', ${p.avisoAutor})}"></div>
 	</th:block>
+	<th:block th:if="${p.motivoDevolucion != null and p.estado == 'BORRADOR'}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', |Devuelto por ${p.devueltoPor}: ${p.motivoDevolucion}|)}"></div>
+	</th:block>
 
 	<section class="tarjeta" aria-labelledby="titulo-montos">
 		<h2 id="titulo-montos">Montos y fechas</h2>
@@ -30,6 +33,9 @@
 			<div th:if="${p.aprobadoPor != null}"><dt>Aprobado por</dt>
 				<dd th:text="|${p.aprobadoPor} · ${#temporals.format(p.aprobadoEn, 'dd/MM/yyyy HH:mm')}|">director</dd></div>
 			<div th:if="${p.motivoCambio != null}"><dt>Motivo del cambio</dt><dd th:text="${p.motivoCambio}">Reajuste</dd></div>
+			<div th:if="${p.enviadoPor != null}"><dt>Enviado por</dt>
+				<dd th:text="|${p.enviadoPor} · ${#temporals.format(p.enviadoEn, 'dd/MM/yyyy HH:mm')}|">administracion</dd></div>
+			<div><dt>Participaron (no aprueban)</dt><dd th:text="${p.editores}">administracion</dd></div>
 		</dl>
 		<h3 th:text="|${#lists.size(p.vencimientos)} pensiones|">10 pensiones</h3>
 		<table class="tabla">
@@ -44,14 +50,27 @@
 		</table>
 	</section>
 
-	<section class="tarjeta" th:if="${p.puedeAprobar or p.puedeDescartar or p.puedeNuevaVersion}" aria-labelledby="titulo-acciones">
+	<section class="tarjeta" th:if="${p.puedeAprobar or p.puedeDevolver or p.puedeEnviar or p.puedeDescartar or p.puedeNuevaVersion}"
+		aria-labelledby="titulo-acciones">
 		<h2 id="titulo-acciones">Acciones</h2>
+		<form method="post" th:if="${p.puedeEnviar}" th:action="@{/pensiones/planes/{id}/enviar(id=${p.id})}" class="fila">
+			<p class="secundario">Al enviarlo queda bloqueado: nadie lo edita mientras otra persona de Promotoría o Dirección lo
+				revisa. Si hay que corregirlo, te lo devolverán.</p>
+			<button th:replace="~{fragments/componentes :: boton('Enviar para aprobación', 'primario')}"></button>
+		</form>
 		<form method="post" th:if="${p.puedeAprobar}" th:action="@{/pensiones/planes/{id}/aprobar(id=${p.id})}" class="fila">
+			<input type="hidden" name="version" th:value="${p.version}">
 			<p class="secundario">Al aprobar, este plan reemplaza a la versión vigente (sus cuotas ya generadas no cambian) y se
-				generan los cronogramas de las matrículas de este nivel que aún no lo tienen.</p>
+				generan los cronogramas de las matrículas de este nivel que aún no lo tienen. Se aprueba exactamente lo que
+				ves: si alguien lo cambió mientras tanto, se te pedirá revisarlo de nuevo.</p>
 			<button th:replace="~{fragments/componentes :: boton('Aprobar plan', 'primario')}"></button>
 		</form>
 		<div class="fila">
+			<th:block th:if="${p.puedeDevolver}">
+				<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-devolver', '¿Devolver el plan?',
+					'Vuelve a Administración para que lo corrija. No se aprueba ni se genera ninguna cuota.',
+					@{/pensiones/planes/{id}/devolver(id=${p.id},version=${p.version})}, 'Devolver', 'secundario', 'Devolver plan')}"></th:block>
+			</th:block>
 			<th:block th:if="${p.puedeNuevaVersion}">
 				<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-version', 'Cambiar montos',
 					'Se crea una versión nueva en borrador con estos valores. El plan actual sigue vigente hasta que otra persona apruebe la nueva; las cuotas ya generadas no cambian.',

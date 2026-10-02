@@ -103,14 +103,24 @@ class PensionesWebTest {
 				.isEqualTo("2027-03-31,2027-04-30,2027-05-31,2027-06-30,2027-07-31,2027-08-31,2027-09-30,2027-10-31,"
 						+ "2027-11-30,2027-12-31");
 
-		// Quien lo propuso ve el plan, pero no el botón de aprobar.
+		// Quien lo propuso ve el plan y lo envía; nunca ve el botón de aprobar.
 		mvc.perform(get(ruta).with(UsuariosDePrueba.como(ADMINISTRACION))).andExpect(status().isOk())
 				.andExpect(content().string(containsString("setiembre")))
+				.andExpect(content().string(containsString("Enviar para aprobación")))
 				.andExpect(content().string(not(containsString("Aprobar plan"))));
+		mvc.perform(get(ruta).with(UsuariosDePrueba.como(DIRECCION)))
+				.andExpect(content().string(not(containsString("Aprobar plan"))));
+		mvc.perform(post(ruta + "/enviar").with(UsuariosDePrueba.como(ADMINISTRACION)).with(csrf()))
+				.andExpect(flash().attribute("exito", containsString("enviaste el plan")));
 		mvc.perform(get(ruta).with(UsuariosDePrueba.como(DIRECCION))).andExpect(status().isOk())
 				.andExpect(content().string(containsString("Aprobar plan")))
+				.andExpect(content().string(containsString("name=\"version\"")))
 				.andExpect(content().string(containsString("S/ 450.00")));
+		// Sin la versión que vio (o con otra), no se aprueba.
 		mvc.perform(post(ruta + "/aprobar").with(UsuariosDePrueba.como(DIRECCION)).with(csrf()))
+				.andExpect(flash().attribute("error", "El plan cambió desde que lo abriste; revísalo de nuevo."));
+		mvc.perform(post(ruta + "/aprobar").param("version", version("plan_pension")).with(UsuariosDePrueba.como(DIRECCION))
+						.with(csrf()))
 				.andExpect(status().is3xxRedirection())
 				.andExpect(flash().attribute("exito", "Listo: aprobaste el plan. Se generaron 11 cuotas para 1 matrículas "
 						+ "(S/ 4,850.00)."));
@@ -182,32 +192,38 @@ class PensionesWebTest {
 	@Test
 	void loteQueNoCuadraNoSeEnviaYElQueCuadraLoConfirmaPromotoria() throws Exception {
 		MvcResult creado = mvc.perform(post("/pensiones/saldo-inicial").with(UsuariosDePrueba.como(ADMINISTRACION)).with(csrf())
-						.param("anioId", escuela.anio2026().toString()).param("fechaCorte", "2026-09-30")
+						.param("anioId", escuela.anio2027().toString()).param("fechaCorte", "2026-09-30")
 						.param("documentoReferencia", "Informe CPC 014-2026").param("totalDeclarado", "500.00"))
 				.andExpect(status().is3xxRedirection()).andReturn();
 		String lote = creado.getResponse().getRedirectedUrl();
 		mvc.perform(post(lote + "/lineas").with(UsuariosDePrueba.como(ADMINISTRACION)).with(csrf())
-						.param("documentoAlumno", EscenarioEscolar.DNI_MATEO).param("concepto", "PENSION").param("mes", "9")
-						.param("monto", "450.00"))
+						.param("documentoAlumno", EscenarioEscolar.DNI_MATEO).param("concepto", "OTRO")
+						.param("descripcion", "Uniforme escolar").param("monto", "450.00").param("vencimiento", "2026-04-30"))
 				.andExpect(status().is3xxRedirection());
 
 		mvc.perform(get(lote).with(UsuariosDePrueba.como(ADMINISTRACION))).andExpect(status().isOk())
 				.andExpect(content().string(containsString("No cuadra")))
-				.andExpect(content().string(containsString("Pensión setiembre 2026")))
+				.andExpect(content().string(containsString("Uniforme escolar")))
 				.andExpect(content().string(not(containsString("Enviar para confirmación"))));
 		mvc.perform(post(lote + "/enviar").with(UsuariosDePrueba.como(ADMINISTRACION)).with(csrf()))
 				.andExpect(flash().attribute("error", containsString("No cuadra")));
 
 		mvc.perform(post(lote + "/lineas").with(UsuariosDePrueba.como(ADMINISTRACION)).with(csrf())
 						.param("documentoAlumno", EscenarioEscolar.DNI_MATEO).param("concepto", "OTRO")
-						.param("descripcion", "Taller de verano 2026").param("monto", "50.00").param("vencimiento", "2026-02-15"))
+						.param("descripcion", "Taller de verano").param("monto", "50.00").param("vencimiento", "2026-02-15"))
 				.andExpect(status().is3xxRedirection());
 		mvc.perform(post(lote + "/enviar").with(UsuariosDePrueba.como(ADMINISTRACION)).with(csrf()))
 				.andExpect(flash().attribute("exito", containsString("enviaste el lote")));
+		// Quien confirma no ve el total declarado ni la suma: escribe a ciegas el del informe del contador.
 		mvc.perform(get(lote).with(UsuariosDePrueba.como(PROMOTORIA))).andExpect(status().isOk())
-				.andExpect(content().string(containsString("Cuadra")))
+				.andExpect(content().string(not(containsString("S/ 500.00"))))
+				.andExpect(content().string(containsString("name=\"totalInforme\"")))
 				.andExpect(content().string(containsString("Confirmar lote")));
-		mvc.perform(post(lote + "/confirmar").with(UsuariosDePrueba.como(PROMOTORIA)).with(csrf()))
+		mvc.perform(post(lote + "/confirmar").param("version", version("lote_saldo_inicial")).param("totalInforme", "550.00")
+						.with(UsuariosDePrueba.como(PROMOTORIA)).with(csrf()))
+				.andExpect(flash().attribute("error", containsString("no coincide")));
+		mvc.perform(post(lote + "/confirmar").param("version", version("lote_saldo_inicial")).param("totalInforme", "500.00")
+						.with(UsuariosDePrueba.como(PROMOTORIA)).with(csrf()))
 				.andExpect(flash().attribute("exito", containsString("Se crearon 2 cuotas")));
 
 		assertThat(jdbc.queryForObject("SELECT SUM(monto) FROM cuota WHERE tipo = 'SALDO_INICIAL'", BigDecimal.class))
@@ -216,11 +232,32 @@ class PensionesWebTest {
 				.andExpect(content().string(containsString("confirmado por promotor")));
 	}
 
+	/** Red de seguridad (QA y auditoría A6): Promotoría ve matrículas sin cronograma o retiradas sin ninguna cuota. */
+	@Test
+	void promotoriaVeAlertasDeMatriculasSinCronogramaORetiradasSinCuotas() throws Exception {
+		crearYAprobar("450.00");
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(PROMOTORIA)))
+				.andExpect(content().string(not(containsString("data-alertas-revision"))));
+
+		jdbc.update("DELETE FROM cuota");
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(PROMOTORIA)))
+				.andExpect(content().string(containsString("sin cronograma aunque hay plan aprobado: Mateo Quispe Huamán")));
+		jdbc.update("UPDATE matricula SET estado = 'RETIRADA', retirada_en = DATE '2027-03-15'");
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(PROMOTORIA)))
+				.andExpect(content().string(containsString("retirada(s) sin ninguna cuota: Mateo Quispe Huamán")));
+	}
+
 	private void crearYAprobar(String pension) throws Exception {
 		MvcResult creado = mvc.perform(planValido(post("/pensiones/planes/nuevo"), pension)
 				.with(UsuariosDePrueba.como(ADMINISTRACION))).andReturn();
-		mvc.perform(post(creado.getResponse().getRedirectedUrl() + "/aprobar").with(UsuariosDePrueba.como(DIRECCION))
-				.with(csrf())).andExpect(status().is3xxRedirection());
+		String ruta = creado.getResponse().getRedirectedUrl();
+		mvc.perform(post(ruta + "/enviar").with(UsuariosDePrueba.como(ADMINISTRACION)).with(csrf()));
+		mvc.perform(post(ruta + "/aprobar").param("version", version("plan_pension")).with(UsuariosDePrueba.como(DIRECCION))
+				.with(csrf())).andExpect(flash().attributeExists("exito"));
+	}
+
+	private String version(String tabla) {
+		return jdbc.queryForObject("SELECT MAX(version) FROM " + tabla, Long.class).toString();
 	}
 
 	private MockHttpServletRequestBuilder planValido(MockHttpServletRequestBuilder peticion, String pension) {

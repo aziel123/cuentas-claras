@@ -56,6 +56,8 @@ class AccesoDenegadoLimitadoTest {
 
 	@AfterEach
 	void limpiar() {
+		// El reloj se comparte con las demás clases de prueba: se devuelve a su inicio.
+		reloj.fijar(ConfiguracionRelojAjustable.INICIO);
 		LimpiezaBaseDatos.limpiar(jdbc);
 	}
 

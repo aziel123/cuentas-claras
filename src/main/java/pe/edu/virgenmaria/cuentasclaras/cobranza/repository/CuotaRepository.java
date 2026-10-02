@@ -28,6 +28,8 @@ public interface CuotaRepository extends Repository<Cuota, Long> {
 
 	boolean existsByClave(String clave);
 
+	List<Cuota> findByAlumnoIdAndAnioEscolarId(Long alumnoId, Long anioId);
+
 	List<Cuota> findByAlumnoIdAndObligacionIn(Long alumnoId, Collection<String> obligaciones);
 
 	boolean existsByMatriculaIdAndTipoIn(Long matriculaId, Collection<TipoCuota> tipos);
@@ -45,4 +47,10 @@ public interface CuotaRepository extends Repository<Cuota, Long> {
 			+ "and c.tipo in (pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoCuota.MATRICULA, "
 			+ "pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoCuota.PENSION)) order by m.id")
 	List<Matricula> matriculasSinCronograma(@Param("anio") Long anioId, @Param("grados") Collection<Grado> grados);
+
+	/** Matrículas RETIRADAS del año, de esos grados, que no tienen ninguna cuota (un retiro que evitó todo el cobro). */
+	@Query("select m from Matricula m join fetch m.alumno join fetch m.seccion s "
+			+ "where m.anioEscolar.id = :anio and m.estado = pe.edu.virgenmaria.cuentasclaras.alumnos.model.EstadoMatricula.RETIRADA "
+			+ "and s.grado in :grados and not exists (select c.id from Cuota c where c.matriculaId = m.id) order by m.id")
+	List<Matricula> retiradasSinCuotas(@Param("anio") Long anioId, @Param("grados") Collection<Grado> grados);
 }

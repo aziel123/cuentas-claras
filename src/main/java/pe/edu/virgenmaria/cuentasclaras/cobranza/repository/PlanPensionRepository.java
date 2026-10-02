@@ -1,5 +1,7 @@
 package pe.edu.virgenmaria.cuentasclaras.cobranza.repository;
 
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
@@ -29,6 +31,14 @@ public interface PlanPensionRepository extends Repository<PlanPension, Long> {
 	Optional<PlanPension> findByAnioEscolarIdAndNivelAndVigenteTrue(Long anioId, Nivel nivel);
 
 	List<PlanPension> findByAnioEscolarIdAndVigenteTrue(Long anioId);
+
+	@Query("select p.anioEscolar.id from PlanPension p where p.id = :id")
+	Optional<Long> anioDe(@Param("id") Long id);
+
+	/** Lee el plan con bloqueo: dos aprobaciones simultáneas se serializan y la segunda ve el estado nuevo. */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select p from PlanPension p where p.id = :id")
+	Optional<PlanPension> bloquear(@Param("id") Long id);
 
 	boolean existsByAnioEscolarIdAndNivelAndEstado(Long anioId, Nivel nivel, EstadoPlan estado);
 

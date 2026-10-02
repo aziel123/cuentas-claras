@@ -25,6 +25,7 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Seccion;
+import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.SeccionRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 
@@ -63,6 +64,9 @@ class ServicioMatriculasUnitarioTest {
 	private SeccionRepository secciones;
 
 	@Mock
+	private AnioEscolarRepository anios;
+
+	@Mock
 	private RegistroAlumnos registro;
 
 	@Mock
@@ -84,7 +88,7 @@ class ServicioMatriculasUnitarioTest {
 
 	@BeforeEach
 	void preparar() {
-		servicio = new ServicioMatriculas(alumnos, matriculas, secciones, registro, auditoria, proveedorConsulta, reloj);
+		servicio = new ServicioMatriculas(alumnos, matriculas, secciones, anios, registro, auditoria, proveedorConsulta, reloj);
 		anio2026 = conId(AnioEscolar.nuevo(2026, true, LocalDate.of(2026, 3, 2), LocalDate.of(2026, 12, 18)), 1L);
 		anio2027 = conId(AnioEscolar.nuevo(2027, false, LocalDate.of(2027, 3, 1), LocalDate.of(2027, 12, 17)), 2L);
 		Apoderado rosa = conId(Apoderado.nuevo(Familia.nueva("Familia Quispe Huamán"), new DatosApoderado(
@@ -100,7 +104,8 @@ class ServicioMatriculasUnitarioTest {
 	void cambioDeNivelConCuotasEsRechazadoYNoSeAudita() {
 		Matricula matricula = matriculaEn(seccion(anio2026, Grado.PRIMARIA_5, "A", 10L), 20L);
 		Seccion secundaria = seccion(anio2026, Grado.SECUNDARIA_1, "A", 11L);
-		when(matriculas.findById(20L)).thenReturn(Optional.of(matricula));
+		when(matriculas.anioDe(20L)).thenReturn(Optional.of(1L));
+		when(matriculas.bloquear(20L)).thenReturn(Optional.of(matricula));
 		when(secciones.findById(11L)).thenReturn(Optional.of(secundaria));
 		when(consulta.tieneCuotas(20L)).thenReturn(true);
 
@@ -113,7 +118,8 @@ class ServicioMatriculasUnitarioTest {
 	@Test
 	void sinCuotasCambiaDeNivelYAudita() {
 		Matricula matricula = matriculaEn(seccion(anio2026, Grado.PRIMARIA_5, "A", 10L), 20L);
-		when(matriculas.findById(20L)).thenReturn(Optional.of(matricula));
+		when(matriculas.anioDe(20L)).thenReturn(Optional.of(1L));
+		when(matriculas.bloquear(20L)).thenReturn(Optional.of(matricula));
 		when(secciones.findById(11L)).thenReturn(Optional.of(seccion(anio2026, Grado.SECUNDARIA_1, "A", 11L)));
 		when(consulta.tieneCuotas(20L)).thenReturn(false);
 
@@ -127,7 +133,8 @@ class ServicioMatriculasUnitarioTest {
 	void sinImplementacionDelPuertoNingunaMatriculaTieneCuotas() {
 		consulta = null;
 		Matricula matricula = matriculaEn(seccion(anio2026, Grado.PRIMARIA_5, "A", 10L), 20L);
-		when(matriculas.findById(20L)).thenReturn(Optional.of(matricula));
+		when(matriculas.anioDe(20L)).thenReturn(Optional.of(1L));
+		when(matriculas.bloquear(20L)).thenReturn(Optional.of(matricula));
 		when(secciones.findById(11L)).thenReturn(Optional.of(seccion(anio2026, Grado.SECUNDARIA_1, "A", 11L)));
 
 		servicio.cambiarSeccion(20L, new CambiarSeccionRequest(11L, MOTIVO));

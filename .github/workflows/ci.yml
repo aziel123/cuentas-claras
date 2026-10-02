@@ -81,10 +81,17 @@ jobs:
       - name: Permisos por tabla de cc_app
         run: $MYSQL_ADMIN < scripts/mysql/02-permisos-tablas.sql
 
+      - name: Triggers con cc_migrador (03-triggers.sql)
+        run: |
+          # Una sola vez por servidor (como administrador): el binlog está activo.
+          $MYSQL_ADMIN -e "SET PERSIST log_bin_trust_function_creators = 1"
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras \
+            < scripts/mysql/03-triggers.sql
+
       - name: "Fase 2: la aplicación funciona con los permisos mínimos de cc_app"
         run: ./mvnw -B test -Dtest=PermisosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
-      - name: "cc_app no edita la bitácora ni borra datos financieros (1142) ni cambia montos de cuotas (1143)"
+      - name: "cc_app no edita la bitácora ni borra datos financieros (1142), ni cambia columnas inmutables (1143); triggers (1644)"
         run: |
           comprobar() {
             codigo="$1"; sql="$2"
@@ -104,6 +111,12 @@ jobs:
           comprobar 1143 "UPDATE cuota SET fecha_vencimiento = fecha_vencimiento WHERE 1 = 0"
           comprobar 1143 "UPDATE cuota SET alumno_id = alumno_id WHERE 1 = 0"
           comprobar 1143 "UPDATE cuota SET clave = clave WHERE 1 = 0"
+          comprobar 1142 "DELETE FROM solicitud_cambio WHERE 1 = 0"
+          comprobar 1143 "UPDATE plan_pension SET numero_version = numero_version WHERE 1 = 0"
+          comprobar 1143 "UPDATE lote_saldo_inicial SET total_declarado = total_declarado WHERE 1 = 0"
+          comprobar 1143 "UPDATE linea_saldo_inicial SET monto = monto WHERE 1 = 0"
+          comprobar 1143 "UPDATE solicitud_cambio SET datos = datos WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO linea_saldo_inicial (colegio_id, lote_id, alumno_id, concepto, descripcion, monto, fecha_vencimiento, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'OTRO', 'x', 1, '2000-01-01', NOW(6), 'x', NOW(6))"
 
       - name: Arranque real en prod con cc_app (y rechazo con cc_migrador)
         env:
@@ -121,6 +134,7 @@ jobs:
           curl -sf http://127.0.0.1:18080/actuator/health | grep -q UP || { cat prod.log; exit 1; }
           grep -q "Permisos de la bitácora verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos de las cuotas verificados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Permisos por columna y triggers de planes, lotes y solicitudes verificados" prod.log || { cat prod.log; exit 1; }
           kill "$PID_APP"
           if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \
                java -jar target/cuentas-claras-*.jar --server.port=18081 > prod-migrador.log 2>&1; then

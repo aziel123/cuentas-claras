@@ -84,6 +84,8 @@ class ClaveTemporalTest {
 
 	@AfterEach
 	void limpiar() {
+		// El reloj se comparte con las demás clases de prueba: se devuelve a su inicio.
+		reloj.fijar(ConfiguracionRelojAjustable.INICIO);
 		SecurityContextHolder.clearContext();
 		LimpiezaBaseDatos.limpiar(jdbc);
 	}

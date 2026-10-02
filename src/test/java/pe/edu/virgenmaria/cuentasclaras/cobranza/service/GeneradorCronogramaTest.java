@@ -13,7 +13,14 @@ import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.MatricularRequest;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.RetirarAlumnoRequest;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAlumnos;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioMatriculas;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LineaSaldoRequest;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.PlanRequest;
+import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LoteRequest;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.ResultadoGeneracion;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConceptoSaldo;
@@ -23,6 +30,7 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.Estructura;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.LimpiezaBaseDatos;
@@ -30,7 +38,10 @@ import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PruebaIntegracion;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.util.Collections;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -79,8 +90,18 @@ class GeneradorCronogramaTest {
 
 	private Estructura escuela;
 
+	@Autowired
+	private AnioEscolarRepository anios;
+
+	@Autowired
+	private PlatformTransactionManager transacciones;
+
+	@Autowired
+	private Clock reloj;
+
 	@BeforeEach
 	void preparar() {
+		((RelojAjustable) reloj).fijar(ConfiguracionRelojAjustable.INICIO);
 		LimpiezaBaseDatos.limpiar(jdbc);
 		como(ADMINISTRACION);
 		escuela = EscenarioEscolar.crearEstructura(estructura);
@@ -92,21 +113,31 @@ class GeneradorCronogramaTest {
 		LimpiezaBaseDatos.limpiar(jdbc);
 	}
 
+	/**
+	 * Misma transacción de verdad: dentro de una transacción que luego se revierte, las cuotas ya existen al terminar la
+	 * matrícula; al revertir, no queda ni la matrícula ni sus cuotas. (GeneracionTodoONadaTest prueba la falla.)
+	 */
 	@Test
 	void matricularConPlanAprobadoGeneraElCronogramaEnLaMismaTransaccion() {
 		planAprobado2027(Nivel.PRIMARIA, "450");
 
-		Long mateo = alumnos.registrar(EscenarioEscolar.mateoConRosa(escuela.primaria6A2027())).alumnoId();
+		Long dentro = new TransactionTemplate(transacciones).execute(estado -> {
+			Long mateo = alumnos.registrar(EscenarioEscolar.mateoConRosa(escuela.primaria6A2027())).alumnoId();
+			long cuotas = contar(jdbc, "cuota WHERE alumno_id = " + mateo);
+			estado.setRollbackOnly();
+			return cuotas;
+		});
 
+		assertThat(dentro).isEqualTo(11);
+		assertThat(contar(jdbc, "cuota")).isZero();
+		assertThat(contar(jdbc, "matricula")).isZero();
+		Long mateo = alumnos.registrar(EscenarioEscolar.mateoConRosa(escuela.primaria6A2027())).alumnoId();
 		List<Map<String, Object>> cuotas = jdbc.queryForList(
 				"SELECT * FROM cuota WHERE alumno_id = ? ORDER BY fecha_vencimiento", mateo);
 		assertThat(cuotas).hasSize(11);
 		assertThat(cuotas.get(0)).containsEntry("tipo", "MATRICULA").containsEntry("clave",
 				"MAT:" + cuotas.get(0).get("matricula_id")).containsEntry("estado", "PENDIENTE");
 		assertThat(cuotas).extracting(c -> c.get("descripcion")).contains("Pensión setiembre 2027");
-		// La misma transacción: la matrícula y sus cuotas tienen la misma marca de tiempo de creación.
-		assertThat(jdbc.queryForObject("SELECT COUNT(DISTINCT c.creado_en) FROM cuota c JOIN matricula m "
-				+ "ON m.id = c.matricula_id WHERE m.creado_en = c.creado_en", Long.class)).isEqualTo(1);
 	}
 
 	@Test
@@ -151,41 +182,138 @@ class GeneradorCronogramaTest {
 				.isInstanceOf(AuthorizationDeniedException.class);
 	}
 
+	/** Las dos generaciones esperan al mismo bloqueo del año (lo retiene un tercer hilo): se solapan de verdad. */
 	@Test
 	void dosGeneracionesConcurrentesNoDuplican() throws Exception {
 		Long seccion = escuela.primaria6A2027();
-		for (int i = 0; i < 5; i++) {
+		for (int i = 0; i < 8; i++) {
 			alumnos.registrar(EscenarioEscolar.conApoderadoNuevo("7100000" + i, "Ramos", "Paz", "Hijo " + (char) ('A' + i),
 					LocalDate.of(2015, 3, 10), "4100000" + i, "Paz", "Lima", "Ana", "98765432" + i, null, seccion));
 		}
 		planAprobado2027(Nivel.PRIMARIA, "450");
 		jdbc.update("DELETE FROM cuota");
 
-		CountDownLatch salida = new CountDownLatch(1);
-		ExecutorService hilos = Executors.newFixedThreadPool(2);
+		List<Integer> generadas = Collections.synchronizedList(new ArrayList<>());
+		conElAnioBloqueado(escuela.anio2027(),
+				() -> generadas.add(generador.generarPendientes(escuela.anio2027()).cuotas()),
+				() -> generadas.add(generador.generarPendientes(escuela.anio2027()).cuotas()));
+
+		assertThat(generadas).containsExactlyInAnyOrder(88, 0);
+		assertThat(contar(jdbc, "cuota")).isEqualTo(88);
+		assertThat(jdbc.queryForObject("SELECT COUNT(DISTINCT clave) FROM cuota", Long.class)).isEqualTo(88);
+	}
+
+	/** QA: una matrícula y la aprobación del plan al mismo tiempo; el alumno no puede quedar sin cronograma. */
+	@Test
+	void matriculaSimultaneaConAprobacionDelPlanRecibeSuCronograma() throws Exception {
+		Long plan = planes.crearBorrador(escuela.anio2027(), Nivel.PRIMARIA, plan(2027, "450", "350", null));
+		planes.enviar(plan);
+		como(DIRECCION);
+		Long version = planes.obtener(plan).version();
+		como(ADMINISTRACION);
+
+		conElAnioBloqueado(escuela.anio2027(),
+				() -> alumnos.registrar(EscenarioEscolar.mateoConRosa(escuela.primaria6A2027())),
+				() -> {
+					UsuariosDePrueba.iniciarSesion(DIRECCION);
+					planes.aprobar(plan, version);
+				});
+
+		assertThat(contar(jdbc, "cuota c JOIN alumno a ON a.id = c.alumno_id WHERE a.numero_documento = '"
+				+ EscenarioEscolar.DNI_MATEO + "'")).isEqualTo(11);
+	}
+
+	/** QA: cambiar de nivel mientras se aprueba el plan no deja cuotas de un nivel que ya no es el suyo. */
+	@Test
+	void cambioDeNivelSimultaneoConAprobacionNoDejaCuotasDeOtroNivel() throws Exception {
+		Long secundaria2027 = estructura.crearSeccion(escuela.anio2027(), new CrearSeccionRequest(Grado.SECUNDARIA_1, "A"));
+		Long mateo = alumnos.registrar(EscenarioEscolar.mateoConRosa(escuela.primaria6A2027())).alumnoId();
+		Long matricula = jdbc.queryForObject("SELECT id FROM matricula WHERE alumno_id = ?", Long.class, mateo);
+		Long plan = planes.crearBorrador(escuela.anio2027(), Nivel.PRIMARIA, plan(2027, "450", "350", null));
+		planes.enviar(plan);
+		como(DIRECCION);
+		Long version = planes.obtener(plan).version();
+		como(ADMINISTRACION);
+
+		List<Throwable> errores = Collections.synchronizedList(new ArrayList<>());
+		conElAnioBloqueado(escuela.anio2027(),
+				() -> {
+					try {
+						matriculas.cambiarSeccion(matricula, new CambiarSeccionRequest(secundaria2027, MOTIVO));
+					}
+					catch (ReglaNegocioException e) {
+						errores.add(e);
+					}
+				},
+				() -> {
+					UsuariosDePrueba.iniciarSesion(DIRECCION);
+					planes.aprobar(plan, version);
+				});
+
+		Long seccionFinal = jdbc.queryForObject("SELECT seccion_id FROM matricula WHERE id = ?", Long.class, matricula);
+		long cuotasPrimaria = contar(jdbc, "cuota WHERE alumno_id = " + mateo);
+		if (seccionFinal.equals(secundaria2027)) {
+			assertThat(cuotasPrimaria).as("se movió a Secundaria: sin cuotas del plan de Primaria").isZero();
+			assertThat(errores).isEmpty();
+		}
+		else {
+			assertThat(cuotasPrimaria).isEqualTo(11);
+			assertThat(errores).singleElement().asString().contains("ya tiene cuotas de Primaria");
+		}
+	}
+
+	/**
+	 * Un tercer hilo retiene el bloqueo del año mientras las dos acciones arrancan (con la sesión de Administración);
+	 * luego lo suelta. Así las dos compiten por el mismo bloqueo, en cualquier orden.
+	 */
+	private void conElAnioBloqueado(Long anioId, Runnable primera, Runnable segunda) throws Exception {
+		CountDownLatch bloqueado = new CountDownLatch(1);
+		CountDownLatch arrancaron = new CountDownLatch(2);
+		ExecutorService hilos = Executors.newFixedThreadPool(3);
 		try {
-			Callable<ResultadoGeneracion> generar = () -> {
+			Future<?> retenedor = hilos.submit(() -> {
 				UsuariosDePrueba.iniciarSesion(ADMINISTRACION);
 				try {
-					salida.await();
-					return generador.generarPendientes(escuela.anio2027());
+					new TransactionTemplate(transacciones).executeWithoutResult(estado -> {
+						anios.bloquear(anioId);
+						bloqueado.countDown();
+						try {
+							arrancaron.await(10, TimeUnit.SECONDS);
+							Thread.sleep(300);
+						}
+						catch (InterruptedException e) {
+							Thread.currentThread().interrupt();
+						}
+					});
 				}
 				finally {
 					SecurityContextHolder.clearContext();
 				}
-			};
-			Future<ResultadoGeneracion> a = hilos.submit(generar);
-			Future<ResultadoGeneracion> b = hilos.submit(generar);
-			salida.countDown();
-			int generadas = a.get(60, TimeUnit.SECONDS).cuotas() + b.get(60, TimeUnit.SECONDS).cuotas();
-
-			assertThat(generadas).isEqualTo(55);
+				return null;
+			});
+			bloqueado.await(10, TimeUnit.SECONDS);
+			List<Future<?>> acciones = new ArrayList<>();
+			for (Runnable accion : List.of(primera, segunda)) {
+				acciones.add(hilos.submit(() -> {
+					UsuariosDePrueba.iniciarSesion(ADMINISTRACION);
+					try {
+						arrancaron.countDown();
+						accion.run();
+					}
+					finally {
+						SecurityContextHolder.clearContext();
+					}
+					return null;
+				}));
+			}
+			retenedor.get(60, TimeUnit.SECONDS);
+			for (Future<?> accion : acciones) {
+				accion.get(60, TimeUnit.SECONDS);
+			}
 		}
 		finally {
 			hilos.shutdownNow();
 		}
-		assertThat(contar(jdbc, "cuota")).isEqualTo(55);
-		assertThat(jdbc.queryForObject("SELECT COUNT(DISTINCT clave) FROM cuota", Long.class)).isEqualTo(55);
 	}
 
 	@Test
@@ -216,25 +344,37 @@ class GeneradorCronogramaTest {
 		assertThat(contar(jdbc, "cuota")).isZero();
 	}
 
+	/**
+	 * Una deuda que ya está en el cronograma (aquí, la matrícula 2026 cargada como saldo inicial) no se vuelve a
+	 * generar, y la omisión queda en la bitácora resaltada, por alumno (auditoría C1: nunca en silencio).
+	 */
 	@Test
-	void noGeneraUnaPensionYaCargadaComoSaldoInicial() {
-		Long mateo = alumnos.registrar(EscenarioEscolar.mateoConRosa(escuela.primaria6A2027())).alumnoId();
+	void noGeneraUnaDeudaYaCargadaComoSaldoInicialYLoAudita() {
+		Long mateo = alumnos.registrar(EscenarioEscolar.mateoConRosa(escuela.primaria5A2026())).alumnoId();
 		como(ADMINISTRACION);
-		Long lote = saldoInicial.crearLote(new LoteRequest(escuela.anio2027(), LocalDate.of(2026, 9, 30),
-				"Informe del contador 001", new BigDecimal("450.00")));
-		saldoInicial.agregarLinea(lote, new LineaSaldoRequest(EscenarioEscolar.DNI_MATEO, ConceptoSaldo.PENSION, 9, null,
-				new BigDecimal("450.00"), null));
+		Long lote = saldoInicial.crearLote(new LoteRequest(escuela.anio2026(), LocalDate.of(2026, 9, 30),
+				"Informe del contador 001", new BigDecimal("350.00")));
+		saldoInicial.agregarLinea(lote, new LineaSaldoRequest(EscenarioEscolar.DNI_MATEO, ConceptoSaldo.MATRICULA, 2026,
+				null, null, new BigDecimal("350.00"), LocalDate.of(2026, 2, 28)));
 		saldoInicial.enviar(lote);
 		como(PROMOTORIA);
-		saldoInicial.confirmar(lote);
+		EscenarioCobranza.confirmar(saldoInicial, lote, "350.00");
+		// Plan 2026 que cobra desde octubre, con la matrícula venciendo en octubre: la generaría otra vez.
+		como(ADMINISTRACION);
+		Long plan = planes.crearBorrador(escuela.anio2026(), Nivel.PRIMARIA, new PlanRequest(new BigDecimal("350"),
+				LocalDate.of(2026, 10, 15), new BigDecimal("450"), Calendario.vencimientosPorDefecto(2026, 3, 10),
+				LocalDate.of(2026, 10, 1)));
+		como(DIRECCION);
+		ResultadoGeneracion resultado = EscenarioCobranza.aprobar(planes, plan);
 
-		ResultadoGeneracion resultado = planAprobado2027(Nivel.PRIMARIA, "450");
-
-		assertThat(resultado.cuotas()).isEqualTo(10);
-		assertThat(resultado.omitidas()).singleElement().asString().contains("Pensión setiembre 2027");
-		assertThat(jdbc.queryForList("SELECT tipo FROM cuota WHERE alumno_id = ? AND obligacion = 'PEN-2027-09'",
+		assertThat(resultado.cuotas()).isEqualTo(3);
+		assertThat(resultado.omitidas()).singleElement().asString().contains("Matrícula 2026");
+		assertThat(jdbc.queryForList("SELECT tipo FROM cuota WHERE alumno_id = ? AND obligacion = 'MAT-2026'",
 				String.class, mateo)).containsExactly("SALDO_INICIAL");
-		assertThat(contar(jdbc, "cuota WHERE alumno_id = " + mateo)).isEqualTo(11);
+		Map<String, Object> evento = ultimoEvento(jdbc, "CUOTA_OMITIDA_DEUDA_EXISTENTE");
+		assertThat(evento.get("detalle").toString()).contains("Mateo Quispe Huamán").contains("Matrícula 2026")
+				.contains("Saldo inicial");
+		assertThat(AccionAuditoria.CUOTA_OMITIDA_DEUDA_EXISTENTE.requiereAtencion()).isTrue();
 	}
 
 	@Test
@@ -263,7 +403,7 @@ class GeneradorCronogramaTest {
 		Long plan = planes.crearBorrador(escuela.anio2026(), Nivel.PRIMARIA, plan(2026, "450", "350",
 				LocalDate.of(2026, 12, 1)));
 		como(DIRECCION);
-		planes.aprobar(plan);
+		EscenarioCobranza.aprobar(planes, plan);
 		assertThat(contar(jdbc, "cuota WHERE alumno_id = " + mateo)).isEqualTo(1);
 
 		como(ADMINISTRACION);
@@ -275,6 +415,40 @@ class GeneradorCronogramaTest {
 		matriculas.cambiarSeccion(matricula, new CambiarSeccionRequest(escuela.primaria5B2026(), MOTIVO));
 	}
 
+	/** QA (mutación): basta una cuota de matrícula o de saldo inicial para que no cambie de nivel. */
+	@Test
+	void cambioDeNivelConSoloMatriculaOSaldoInicialEsRechazado() {
+		Long mateo = alumnos.registrar(EscenarioEscolar.mateoConRosa(escuela.primaria5A2026())).alumnoId();
+		Long matricula = jdbc.queryForObject("SELECT id FROM matricula WHERE alumno_id = ?", Long.class, mateo);
+		como(ADMINISTRACION);
+		Long lote = saldoInicial.crearLote(new LoteRequest(escuela.anio2026(), LocalDate.of(2026, 9, 30),
+				"Informe del contador 001", new BigDecimal("120.00")));
+		saldoInicial.agregarLinea(lote, new LineaSaldoRequest(EscenarioEscolar.DNI_MATEO, ConceptoSaldo.OTRO, null, null,
+				"Excursión", new BigDecimal("120.00"), LocalDate.of(2026, 5, 10)));
+		saldoInicial.enviar(lote);
+		como(PROMOTORIA);
+		EscenarioCobranza.confirmar(saldoInicial, lote, "120.00");
+		como(ADMINISTRACION);
+		assertThatThrownBy(() -> matriculas.cambiarSeccion(matricula,
+				new CambiarSeccionRequest(escuela.secundaria1A2026(), MOTIVO))).hasMessageContaining("ya tiene cuotas");
+
+		// Solo con la cuota de matrícula (sin pensiones), también.
+		Long valeria = alumnos.registrar(EscenarioEscolar.valeriaConRosaRegistrada(escuela.primaria2B2026())).alumnoId();
+		como(ADMINISTRACION);
+		Long plan = planes.crearBorrador(escuela.anio2026(), Nivel.PRIMARIA, new PlanRequest(new BigDecimal("350"),
+				LocalDate.of(2026, 10, 15), new BigDecimal("450"), Calendario.vencimientosPorDefecto(2026, 3, 10),
+				LocalDate.of(2026, 10, 1)));
+		como(DIRECCION);
+		EscenarioCobranza.aprobar(planes, plan);
+		jdbc.update("DELETE FROM cuota WHERE alumno_id = ? AND tipo = 'PENSION'", valeria);
+		assertThat(jdbc.queryForList("SELECT tipo FROM cuota WHERE alumno_id = ?", String.class, valeria))
+				.containsExactly("MATRICULA");
+		Long matriculaValeria = jdbc.queryForObject("SELECT id FROM matricula WHERE alumno_id = ?", Long.class, valeria);
+		como(ADMINISTRACION);
+		assertThatThrownBy(() -> matriculas.cambiarSeccion(matriculaValeria,
+				new CambiarSeccionRequest(escuela.secundaria1A2026(), MOTIVO))).hasMessageContaining("ya tiene cuotas");
+	}
+
 	@Test
 	void matricula2026SoloGeneraDesdeElCorte() {
 		Long mateo = alumnos.registrar(EscenarioEscolar.mateoConRosa(escuela.primaria5A2026())).alumnoId();
@@ -282,7 +456,7 @@ class GeneradorCronogramaTest {
 		Long id = planes.crearBorrador(escuela.anio2026(), Nivel.PRIMARIA, plan(2026, "450", "350",
 				LocalDate.of(2026, 12, 1)));
 		como(DIRECCION);
-		planes.aprobar(id);
+		EscenarioCobranza.aprobar(planes, id);
 
 		assertThat(jdbc.queryForList("SELECT descripcion FROM cuota WHERE alumno_id = ?", String.class, mateo))
 				.containsExactly("Pensión diciembre 2026");
@@ -302,7 +476,7 @@ class GeneradorCronogramaTest {
 		como(ADMINISTRACION);
 		Long id = planes.crearBorrador(escuela.anio2027(), nivel, plan(2027, pension, "350", null));
 		como(DIRECCION);
-		ResultadoGeneracion resultado = planes.aprobar(id);
+		ResultadoGeneracion resultado = EscenarioCobranza.aprobar(planes, id);
 		como(ADMINISTRACION);
 		return resultado;
 	}

@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -119,16 +120,25 @@ public class GeneradorCronograma {
 		}
 		List<CuotaPlanificada> planificadas = CalculadoraCronograma.calcular(plan, matricula.getId(),
 				matricula.getFechaMatricula());
-		Set<String> existentes = cuotas
+		Map<String, Cuota> existentes = cuotas
 				.findByAlumnoIdAndObligacionIn(matricula.getAlumno().getId(),
 						planificadas.stream().map(CuotaPlanificada::obligacion).toList())
-				.stream().map(Cuota::getObligacion).collect(Collectors.toSet());
+				.stream().collect(Collectors.toMap(Cuota::getObligacion, c -> c, (a, b) -> a));
 		List<CuotaPlanificada> generadas = new ArrayList<>();
 		List<String> omitidas = new ArrayList<>();
 		for (CuotaPlanificada planificada : planificadas) {
-			if (existentes.contains(planificada.obligacion())) {
+			Cuota existente = existentes.get(planificada.obligacion());
+			if (existente != null) {
 				omitidas.add(planificada.descripcion() + " de " + matricula.getAlumno().nombreCompleto()
 						+ ": ya existía (por ejemplo, como saldo inicial)");
+				// Nunca en silencio (auditoría C1): cada omisión queda resaltada, por alumno.
+				auditoria.registrar(AccionAuditoria.CUOTA_OMITIDA_DEUDA_EXISTENTE, "matricula",
+						matricula.getId().toString(), null, planificada.descripcion() + " "
+								+ Dinero.formatear(planificada.monto()),
+						"Alumno " + matricula.getAlumno().nombreCompleto() + ": " + plan.nombre() + " no generó «"
+								+ planificada.descripcion() + "» porque ya existe la cuota " + existente.getId() + " ("
+								+ existente.getTipo().etiqueta() + ", " + existente.getDescripcion() + ", "
+								+ Dinero.formatear(existente.getMonto()) + ").");
 				continue;
 			}
 			if (cuotas.existsByClave(planificada.clave())) {

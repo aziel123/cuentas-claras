@@ -19,11 +19,26 @@ GRANT INSERT, UPDATE ON cuentasclaras.matricula TO 'cc_app'@'%';
 GRANT INSERT ON cuentasclaras.importacion_alumnos TO 'cc_app'@'%';
 
 -- Sprint 2 · tanda 3: planes de pensiones, saldo inicial y cuotas. Tablas financieras: NUNCA DELETE.
-GRANT INSERT, UPDATE ON cuentasclaras.plan_pension TO 'cc_app'@'%';           -- aprobado = inmutable (en la app)
-GRANT INSERT, UPDATE ON cuentasclaras.lote_saldo_inicial TO 'cc_app'@'%';
-GRANT INSERT, UPDATE ON cuentasclaras.linea_saldo_inicial TO 'cc_app'@'%';    -- se "quita" con un flag
+-- UPDATE solo por columna (correcciones del sprint 2): deben coincidir EXACTAMENTE con las columnas updatable=true
+-- de cada entidad (lo comprueba InmutabilidadCuotasTest). Año, nivel, versión, motivo, creador: inmutables (1143).
+-- Los montos y fechas del plan solo cambian en BORRADOR: lo impide scripts/mysql/03-triggers.sql (el GRANT por
+-- columna no distingue estados).
+GRANT INSERT, UPDATE (estado, vigente, monto_matricula, vencimiento_matricula, monto_pension, vencimientos_pension,
+    cobro_desde, editado_por, editores, enviado_por, enviado_en, devuelto_por, devuelto_en, motivo_devolucion,
+    aprobado_por, aprobado_en, cerrado_por, cerrado_en, actualizado_en, version) ON cuentasclaras.plan_pension TO 'cc_app'@'%';
+-- Corte, referencia y total declarado del lote: inmutables.
+GRANT INSERT, UPDATE (estado, total_confirmado, enviado_por, enviado_en, confirmado_por, confirmado_en, devuelto_por,
+    devuelto_en, motivo_devolucion, descartado_por, descartado_en, motivo_descarte, actualizado_en, version)
+    ON cuentasclaras.lote_saldo_inicial TO 'cc_app'@'%';
+-- Una línea solo se «quita» (flag): su alumno, concepto, año, mes, monto y vencimiento no cambian.
+GRANT INSERT, UPDATE (quitada, actualizado_en, version) ON cuentasclaras.linea_saldo_inicial TO 'cc_app'@'%';
 GRANT INSERT ON cuentasclaras.cuota TO 'cc_app'@'%';
 -- UPDATE de cuota SOLO por columna: monto, fecha de vencimiento, alumno, origen y clave quedan inmutables
 -- (MySQL responde 1143). Debe coincidir EXACTAMENTE con las columnas updatable=true de la entidad Cuota.
 GRANT UPDATE (estado, monto_pagado, obligacion, anulacion_motivo, anulacion_solicitada_por, anulacion_aprobada_por,
     anulada_en, actualizado_en, version) ON cuentasclaras.cuota TO 'cc_app'@'%';
+
+-- Sprint 2 · correcciones: solicitudes de cambio que aprueba otra persona. Nunca DELETE; tipo, entidad, datos, motivo y
+-- solicitante no cambian (solo se resuelven).
+GRANT INSERT, UPDATE (estado, pendiente, resuelto_por, resuelto_en, comentario, actualizado_en, version)
+    ON cuentasclaras.solicitud_cambio TO 'cc_app'@'%';

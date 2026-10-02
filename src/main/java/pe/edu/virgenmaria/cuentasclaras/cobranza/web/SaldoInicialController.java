@@ -1,6 +1,7 @@
 package pe.edu.virgenmaria.cuentasclaras.cobranza.web;
 
 import jakarta.validation.Valid;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LineaSaldoRequest;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LoteRequest;
@@ -19,6 +21,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.web.Formularios;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 
@@ -68,7 +71,7 @@ public class SaldoInicialController {
 	@GetMapping("/{id:\\d+}")
 	public String lote(@PathVariable Long id, Model model) {
 		if (!model.containsAttribute("linea")) {
-			model.addAttribute("linea", new LineaSaldoRequest(null, ConceptoSaldo.PENSION, null, null, null, null));
+			model.addAttribute("linea", new LineaSaldoRequest(null, ConceptoSaldo.PENSION, null, null, null, null, null));
 		}
 		prepararLote(model, id);
 		return VISTA_LOTE;
@@ -105,22 +108,26 @@ public class SaldoInicialController {
 	}
 
 	@PostMapping("/{id:\\d+}/confirmar")
-	public String confirmar(@PathVariable Long id, RedirectAttributes avisos) {
+	public String confirmar(@PathVariable Long id, @RequestParam(required = false) Long version,
+			@RequestParam(required = false) BigDecimal totalInforme, RedirectAttributes avisos) {
 		try {
-			int creadas = servicio.confirmar(id);
+			int creadas = servicio.confirmar(id, version, totalInforme);
 			avisos.addFlashAttribute("exito", "Listo: confirmaste el lote. Se crearon " + creadas
 					+ " cuotas de saldo inicial en los cronogramas.");
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());
 		}
+		catch (OptimisticLockingFailureException e) {
+			avisos.addFlashAttribute("error", PlanPensionController.CAMBIO_SIMULTANEO);
+		}
 		return "redirect:/pensiones/saldo-inicial/" + id;
 	}
 
 	@PostMapping("/{id:\\d+}/devolver")
-	public String devolver(@PathVariable Long id, @Valid MotivoRequest solicitud, BindingResult validacion,
-			RedirectAttributes avisos) {
-		return conMotivo(id, solicitud, validacion, avisos, () -> servicio.devolver(id, solicitud.motivo()),
+	public String devolver(@PathVariable Long id, @RequestParam(required = false) Long version,
+			@Valid MotivoRequest solicitud, BindingResult validacion, RedirectAttributes avisos) {
+		return conMotivo(id, solicitud, validacion, avisos, () -> servicio.devolver(id, version, solicitud.motivo()),
 				"Listo: devolviste el lote a Administración para que lo corrija.");
 	}
 

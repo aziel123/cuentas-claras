@@ -306,7 +306,8 @@ class PermisosMySqlTest {
 
 	@Test
 	void deleteSobreTablasFinancierasFallaCon1142() {
-		for (String tabla : new String[] { "cuota", "plan_pension", "lote_saldo_inicial", "linea_saldo_inicial" }) {
+		for (String tabla : new String[] { "cuota", "plan_pension", "lote_saldo_inicial", "linea_saldo_inicial",
+				"solicitud_cambio" }) {
 			assertThatThrownBy(() -> jdbc.update("DELETE FROM " + tabla + " WHERE 1 = 0"))
 					.isInstanceOf(DataAccessException.class)
 					.satisfies(e -> assertThat(codigoMySql(e)).as(tabla).isEqualTo(1142));
@@ -357,7 +358,7 @@ class PermisosMySqlTest {
 		Long v2 = planes.nuevaVersion(plan, "Reajuste aprobado por la asamblea de padres");
 		planes.editarBorrador(v2, EscenarioCobranza.plan(anio, "465", "350", null));
 		EscenarioCobranza.como(EscenarioCobranza.PROMOTORIA);
-		planes.aprobar(v2);
+		EscenarioCobranza.aprobar(planes, v2);
 		assertThat(jdbc.queryForObject("SELECT estado FROM plan_pension WHERE id = ?", String.class, plan))
 				.isEqualTo("REEMPLAZADO");
 
@@ -366,15 +367,15 @@ class PermisosMySqlTest {
 		Long lote = saldoInicial.crearLote(new pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LoteRequest(anioId,
 				java.time.LocalDate.of(anio, 9, 30), "Informe MySQL " + sufijo, new java.math.BigDecimal("80.00")));
 		Long linea = saldoInicial.agregarLinea(lote, new pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LineaSaldoRequest(
-				"7" + base, pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConceptoSaldo.OTRO, null, "Taller de verano",
+				"7" + base, pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConceptoSaldo.OTRO, null, null, "Taller de verano",
 				new java.math.BigDecimal("30.00"), java.time.LocalDate.of(anio, 2, 15)));
 		saldoInicial.quitarLinea(lote, linea, "Se cargó con otro monto");
 		saldoInicial.agregarLinea(lote, new pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LineaSaldoRequest("7" + base,
-				pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConceptoSaldo.OTRO, null, "Taller de verano",
+				pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConceptoSaldo.OTRO, null, null, "Taller de verano",
 				new java.math.BigDecimal("80.00"), java.time.LocalDate.of(anio, 2, 15)));
 		saldoInicial.enviar(lote);
 		EscenarioCobranza.como(EscenarioCobranza.DIRECCION);
-		assertThat(saldoInicial.confirmar(lote)).isEqualTo(1);
+		assertThat(EscenarioCobranza.confirmar(saldoInicial, lote, "80.00")).isEqualTo(1);
 
 		// Gancho de anulación: la solicitud (UPDATE de columnas permitidas) y la aprobación de otra persona.
 		Long setiembre = jdbc.queryForObject("SELECT id FROM cuota WHERE alumno_id = ? AND numero = 9", Long.class, mateo);
@@ -393,6 +394,85 @@ class PermisosMySqlTest {
 
 		UsuariosDePrueba.iniciarSesion(guardar("verif.cobranza." + sufijo, Rol.PROMOTOR));
 		assertThat(verificador.verificar().integra()).isTrue();
+	}
+
+	/** Correcciones del sprint 2 (M2): GRANT por columna también en planes, lotes, líneas y solicitudes. */
+	@Test
+	void columnasInmutablesDePlanesLotesLineasYSolicitudesFallanCon1143() {
+		for (String sentencia : new String[] {
+				"UPDATE plan_pension SET nivel = nivel WHERE 1 = 0",
+				"UPDATE plan_pension SET numero_version = numero_version WHERE 1 = 0",
+				"UPDATE plan_pension SET anio_escolar_id = anio_escolar_id WHERE 1 = 0",
+				"UPDATE lote_saldo_inicial SET total_declarado = total_declarado WHERE 1 = 0",
+				"UPDATE lote_saldo_inicial SET fecha_corte = fecha_corte WHERE 1 = 0",
+				"UPDATE linea_saldo_inicial SET monto = monto WHERE 1 = 0",
+				"UPDATE linea_saldo_inicial SET alumno_id = alumno_id WHERE 1 = 0",
+				"UPDATE linea_saldo_inicial SET anio_deuda = anio_deuda WHERE 1 = 0",
+				"UPDATE solicitud_cambio SET datos = datos WHERE 1 = 0",
+				"UPDATE solicitud_cambio SET solicitado_por = solicitado_por WHERE 1 = 0" }) {
+			assertThatThrownBy(() -> jdbc.update(sentencia))
+					.isInstanceOf(DataAccessException.class)
+					.satisfies(e -> assertThat(codigoMySql(e)).as(sentencia).isEqualTo(1143));
+		}
+	}
+
+	/**
+	 * Triggers de scripts/mysql/03-triggers.sql (el CI los aplica con cc_migrador antes de esta fase): un plan aprobado
+	 * no cambia de montos, una línea de un lote enviado no se quita, y nada nace ya aprobado o confirmado.
+	 */
+	@Test
+	void triggersImpidenCambiarPlanesAprobadosYLotesEnviados() {
+		int anio = anioLibre();
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		Long anioId = estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
+				java.time.LocalDate.of(anio, 3, 2), java.time.LocalDate.of(anio, 12, 18), false));
+		estructura.crearSeccion(anioId, new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest(
+				pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "A"));
+		Long seccion = jdbc.queryForObject("SELECT id FROM seccion WHERE anio_escolar_id = ?", Long.class, anioId);
+		String base = String.format("%07d", Math.floorMod(System.nanoTime() + 29, 10_000_000L));
+		servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.conApoderadoNuevo(
+				"7" + base, "Rojas", "Paz", "Iris", java.time.LocalDate.of(anio - 10, 4, 4), "4" + base, "Paz", "Lima",
+				"Ana", "987000111", null, seccion));
+		Long plan = EscenarioCobranza.planAprobado(planes, anioId, anio, Nivel.PRIMARIA, "450", "350", null);
+
+		assertThat(codigoAl(() -> jdbc.update("UPDATE plan_pension SET monto_pension = monto_pension - 100 WHERE id = ?",
+				plan))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE plan_pension SET estado = 'BORRADOR', vigente = NULL WHERE id = ?",
+				plan))).isEqualTo(1644);
+		assertThat(jdbc.queryForObject("SELECT monto_pension FROM plan_pension WHERE id = ?", java.math.BigDecimal.class,
+				plan)).isEqualByComparingTo("450.00");
+
+		Long lote = saldoInicial.crearLote(new pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LoteRequest(anioId,
+				java.time.LocalDate.of(anio, 9, 30), "Informe triggers " + sufijo, new java.math.BigDecimal("80.00")));
+		Long linea = saldoInicial.agregarLinea(lote, new pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LineaSaldoRequest(
+				"7" + base, pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConceptoSaldo.OTRO, null, null, "Excursión",
+				new java.math.BigDecimal("80.00"), java.time.LocalDate.of(anio, 5, 10)));
+		saldoInicial.enviar(lote);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE linea_saldo_inicial SET quitada = TRUE WHERE id = ?", linea)))
+				.isEqualTo(1644);
+		assertThat(jdbc.queryForObject("SELECT quitada FROM linea_saldo_inicial WHERE id = ?", Boolean.class, linea))
+				.isFalse();
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO lote_saldo_inicial (colegio_id, anio_escolar_id, fecha_corte, "
+				+ "documento_referencia, total_declarado, estado, enviado_por, enviado_en, confirmado_por, confirmado_en, "
+				+ "total_confirmado, creado_en, creado_por, actualizado_en) VALUES (1, ?, '2000-01-01', 'x', 1, 'CONFIRMADO', "
+				+ "'a', NOW(6), 'b', NOW(6), 1, NOW(6), 'c', NOW(6))", anioId))).isEqualTo(1644);
+	}
+
+	private Integer codigoAl(Runnable sentencia) {
+		try {
+			sentencia.run();
+			return null;
+		}
+		catch (DataAccessException e) {
+			return codigoMySql(e);
+		}
+	}
+
+	private int anioLibre() {
+		java.util.Set<Integer> usados = new java.util.HashSet<>(
+				jdbc.queryForList("SELECT anio FROM anio_escolar WHERE colegio_id = 1", Integer.class));
+		return java.util.stream.IntStream.iterate(2025, a -> a >= 2000, a -> a - 1).filter(a -> !usados.contains(a))
+				.findFirst().orElseThrow();
 	}
 
 	private Usuario guardar(String nombre, Rol rol) {

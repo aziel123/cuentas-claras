@@ -18,12 +18,23 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.Estructura;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.LimpiezaBaseDatos;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PruebaIntegracion;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,8 +70,12 @@ class ServicioPlanesPensionTest {
 
 	private Estructura escuela;
 
+	@Autowired
+	private java.time.Clock reloj;
+
 	@BeforeEach
 	void preparar() {
+		((RelojAjustable) reloj).fijar(ConfiguracionRelojAjustable.INICIO);
 		LimpiezaBaseDatos.limpiar(jdbc);
 		como(ADMINISTRACION);
 		escuela = EscenarioEscolar.crearEstructura(estructura);
@@ -79,10 +94,15 @@ class ServicioPlanesPensionTest {
 		assertThat(jdbc.queryForObject("SELECT vigente FROM plan_pension WHERE id = ?", Boolean.class, id)).isNull();
 
 		como(DIRECCION);
+		assertThat(planes.obtener(id).puedeAprobar()).as("en preparación aún no se aprueba").isFalse();
+		como(ADMINISTRACION);
+		planes.enviar(id);
+		assertThat(estado(id)).isEqualTo("ENVIADO");
+		como(DIRECCION);
 		PlanDetalle antes = planes.obtener(id);
 		assertThat(antes.puedeAprobar()).isTrue();
 		assertThat(antes.avisoAutor()).isNull();
-		planes.aprobar(id);
+		planes.aprobar(id, antes.version());
 
 		Map<String, Object> fila = jdbc.queryForMap("SELECT * FROM plan_pension WHERE id = ?", id);
 		assertThat(fila).containsEntry("estado", "APROBADO").containsEntry("vigente", true)
@@ -99,21 +119,23 @@ class ServicioPlanesPensionTest {
 		assertThat(planes.obtener(id).avisoAutor()).contains("debe aprobarlo otra persona");
 		assertThat(planes.obtener(id).puedeAprobar()).isFalse();
 
-		assertThatThrownBy(() -> planes.aprobar(id)).isInstanceOf(AutoaprobacionException.class)
-				.hasMessageContaining("No puedes aprobar un plan que tú creaste o editaste");
+		planes.enviar(id);
+		assertThatThrownBy(() -> planes.aprobar(id, planes.obtener(id).version()))
+				.isInstanceOf(AutoaprobacionException.class)
+				.hasMessageContaining("No puedes aprobar un plan en el que participaste");
 		// El intento queda en la bitácora aunque se lance la excepción (noRollbackFor), y el plan no cambia.
 		assertThat(ultimoEvento(jdbc, "AUTOAPROBACION_RECHAZADA")).containsEntry("nombre_usuario", "subdirector")
 				.containsEntry("entidad", "plan_pension").containsEntry("entidad_id", id.toString());
-		assertThat(estado(id)).isEqualTo("BORRADOR");
+		assertThat(estado(id)).isEqualTo("ENVIADO");
 
 		// Quien solo editó (Promotoría que también es Administración) tampoco.
 		como(ADMINISTRACION);
 		Long otro = planes.crearBorrador(escuela.anio2027(), Nivel.SECUNDARIA, plan(2027, "480", "350", null));
 		como(PROMOTORIA_Y_ADMINISTRACION);
 		planes.editarBorrador(otro, plan(2027, "485", "350", null));
-		assertThatThrownBy(() -> planes.aprobar(otro)).isInstanceOf(AutoaprobacionException.class);
+		assertThatThrownBy(() -> EscenarioCobranza.aprobar(planes, otro)).isInstanceOf(AutoaprobacionException.class);
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'AUTOAPROBACION_RECHAZADA'")).isEqualTo(2);
-		assertThat(estado(otro)).isEqualTo("BORRADOR");
+		assertThat(estado(otro)).isEqualTo("ENVIADO");
 
 		// Y la base también lo impide: aprobado_por no puede ser el creador ni el último editor.
 		assertThatThrownBy(() -> jdbc.update("UPDATE plan_pension SET estado = 'APROBADO', vigente = TRUE, "
@@ -133,7 +155,7 @@ class ServicioPlanesPensionTest {
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("«Cambiar montos»");
 		assertThatThrownBy(() -> planes.datosParaEditar(id)).isInstanceOf(ReglaNegocioException.class);
 		como(DIRECCION);
-		assertThatThrownBy(() -> planes.aprobar(id)).hasMessageContaining("Solo se aprueba un plan en borrador");
+		assertThatThrownBy(() -> EscenarioCobranza.aprobar(planes, id)).hasMessageContaining("Solo se aprueba un plan enviado");
 		assertThat(jdbc.queryForObject("SELECT monto_pension FROM plan_pension WHERE id = ?", BigDecimal.class, id))
 				.isEqualByComparingTo("450.00");
 	}
@@ -168,7 +190,7 @@ class ServicioPlanesPensionTest {
 		planes.editarBorrador(v2, plan(2027, "465", "350", null));
 
 		como(PROMOTORIA);
-		ResultadoGeneracion resultado = planes.aprobar(v2);
+		ResultadoGeneracion resultado = EscenarioCobranza.aprobar(planes, v2);
 
 		assertThat(estado(v1)).isEqualTo("REEMPLAZADO");
 		assertThat(estado(v2)).isEqualTo("APROBADO");
@@ -217,9 +239,116 @@ class ServicioPlanesPensionTest {
 		como(ADMINISTRACION);
 		Long id = planes.crearBorrador(escuela.anio2027(), Nivel.PRIMARIA, plan(2027, "450", "350", null));
 		// Administración no aprueba (ni siquiera lo ajeno).
+		planes.enviar(id);
 		como(ADMINISTRACION_2);
-		assertThatThrownBy(() -> planes.aprobar(id)).isInstanceOf(AuthorizationDeniedException.class);
-		assertThat(contar(jdbc, "plan_pension WHERE estado = 'BORRADOR'")).isEqualTo(1);
+		assertThatThrownBy(() -> planes.aprobar(id, 1L)).isInstanceOf(AuthorizationDeniedException.class);
+		assertThatThrownBy(() -> planes.devolver(id, 1L, MOTIVO)).isInstanceOf(AuthorizationDeniedException.class);
+		assertThat(contar(jdbc, "plan_pension WHERE estado = 'ENVIADO'")).isEqualTo(1);
+	}
+
+	/** QA (M1): guardar solo el último editor dejaba aprobar a quien editó antes. */
+	@Test
+	void quienEditoAntesTampocoPuedeAprobarAunqueOtroEditeDespues() {
+		como(ADMINISTRACION);
+		Long id = planes.crearBorrador(escuela.anio2027(), Nivel.PRIMARIA, plan(2027, "450", "350", null));
+		como(PROMOTORIA_Y_ADMINISTRACION);
+		planes.editarBorrador(id, plan(2027, "460", "350", null));
+		como(ADMINISTRACION_2);
+		planes.editarBorrador(id, plan(2027, "470", "350", null));
+		planes.enviar(id);
+
+		como(PROMOTORIA_Y_ADMINISTRACION);
+		assertThat(planes.obtener(id).puedeAprobar()).isFalse();
+		assertThatThrownBy(() -> planes.aprobar(id, planes.obtener(id).version()))
+				.isInstanceOf(AutoaprobacionException.class);
+		assertThat(jdbc.queryForObject("SELECT editores FROM plan_pension WHERE id = ?", String.class, id))
+				.isEqualTo(",administracion,promotora.adm,administracion2,");
+		// La base también lo impide: nadie de la lista de editores aprueba.
+		assertThatThrownBy(() -> jdbc.update("UPDATE plan_pension SET estado = 'APROBADO', vigente = TRUE, "
+				+ "aprobado_por = 'promotora.adm', aprobado_en = CURRENT_TIMESTAMP WHERE id = ?", id))
+				.isInstanceOf(DataIntegrityViolationException.class);
+		como(DIRECCION);
+		planes.aprobar(id, planes.obtener(id).version());
+		assertThat(estado(id)).isEqualTo("APROBADO");
+	}
+
+	/** Auditoría A1 (cebo y cambio): enviado no se edita, y se aprueba exactamente la versión que se vio. */
+	@Test
+	void ceboYCambioElPlanEnviadoNoSeEditaYSeApruebaLaVersionVista() {
+		como(ADMINISTRACION);
+		Long id = planes.crearBorrador(escuela.anio2027(), Nivel.PRIMARIA, plan(2027, "450", "350", null));
+		planes.enviar(id);
+		assertThatThrownBy(() -> planes.editarBorrador(id, plan(2027, "300", "300", null)))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("enviado, por aprobar");
+		como(DIRECCION);
+		Long vista = planes.obtener(id).version();
+		// Mientras Dirección revisa, Promotoría lo devuelve y Administración baja la pensión y lo reenvía.
+		como(PROMOTORIA);
+		planes.devolver(id, vista, "Revisar los vencimientos de la matrícula");
+		como(ADMINISTRACION);
+		planes.editarBorrador(id, plan(2027, "300", "300", null));
+		planes.enviar(id);
+
+		como(DIRECCION);
+		assertThatThrownBy(() -> planes.aprobar(id, vista))
+				.hasMessage("El plan cambió desde que lo abriste; revísalo de nuevo.");
+		assertThat(estado(id)).isEqualTo("ENVIADO");
+		assertThatThrownBy(() -> planes.aprobar(id, null)).hasMessageContaining("cambió desde que lo abriste");
+		assertThat(ultimoEvento(jdbc, "PLAN_PENSION_DEVUELTO").get("detalle").toString())
+				.contains("Revisar los vencimientos");
+	}
+
+	/** QA: dos aprobaciones simultáneas del mismo plan: se aprueba una vez y la otra recibe un mensaje claro. */
+	@Test
+	void aprobarElMismoPlanDosVecesEnParaleloApruebaUnaVez() throws Exception {
+		como(ADMINISTRACION);
+		Long id = planes.crearBorrador(escuela.anio2027(), Nivel.PRIMARIA, plan(2027, "450", "350", null));
+		planes.enviar(id);
+		como(DIRECCION);
+		Long version = planes.obtener(id).version();
+
+		List<Throwable> errores = Collections.synchronizedList(new ArrayList<>());
+		CountDownLatch salida = new CountDownLatch(1);
+		ExecutorService hilos = Executors.newFixedThreadPool(2);
+		try {
+			List<Future<?>> futuros = new ArrayList<>();
+			for (var quien : List.of(DIRECCION, PROMOTORIA)) {
+				futuros.add(hilos.submit(() -> {
+					UsuariosDePrueba.iniciarSesion(quien);
+					try {
+						salida.await();
+						planes.aprobar(id, version);
+					}
+					catch (RuntimeException e) {
+						errores.add(e);
+					}
+					finally {
+						SecurityContextHolder.clearContext();
+					}
+					return null;
+				}));
+			}
+			salida.countDown();
+			for (Future<?> futuro : futuros) {
+				futuro.get(60, TimeUnit.SECONDS);
+			}
+		}
+		finally {
+			hilos.shutdownNow();
+		}
+		assertThat(errores).singleElement().satisfies(e -> assertThat(e).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("Solo se aprueba un plan enviado"));
+		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'PLAN_PENSION_APROBADO'")).isEqualTo(1);
+	}
+
+	@Test
+	void laBaseNoAceptaUnaMatriculaMayorQueLaPension() {
+		como(ADMINISTRACION);
+		Long id = planes.crearBorrador(escuela.anio2027(), Nivel.PRIMARIA, plan(2027, "450", "350", null));
+		assertThatThrownBy(() -> jdbc.update("UPDATE plan_pension SET monto_matricula = 451 WHERE id = ?", id))
+				.isInstanceOf(DataIntegrityViolationException.class);
+		assertThatThrownBy(() -> planes.crearBorrador(escuela.anio2027(), Nivel.SECUNDARIA, plan(2027, "450", "-1", null)))
+				.hasMessage("La matrícula debe estar entre S/ 0.00 y S/ 99,999.99.");
 	}
 
 	@Test
@@ -250,7 +379,7 @@ class ServicioPlanesPensionTest {
 		como(ADMINISTRACION);
 		Long id2026 = planes.crearBorrador(escuela.anio2026(), Nivel.PRIMARIA, plan(2026, "440", "340", null));
 		como(DIRECCION);
-		planes.aprobar(id2026);
+		EscenarioCobranza.aprobar(planes, id2026);
 		como(ADMINISTRACION);
 
 		PlanRequest propuesta = planes.propuestaPorDefecto(escuela.anio2027(), Nivel.PRIMARIA);
@@ -265,7 +394,7 @@ class ServicioPlanesPensionTest {
 		como(ADMINISTRACION);
 		Long id = planes.crearBorrador(escuela.anio2027(), nivel, plan(2027, pension, "350", null));
 		como(DIRECCION);
-		planes.aprobar(id);
+		EscenarioCobranza.aprobar(planes, id);
 		return id;
 	}
 

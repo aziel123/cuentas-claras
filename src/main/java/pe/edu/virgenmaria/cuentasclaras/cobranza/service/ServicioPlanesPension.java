@@ -18,7 +18,9 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConfiguracionPlan;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoPlan;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.PlanPension;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.LoteSaldoInicialRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.PlanPensionRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoAnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado;
@@ -62,12 +64,19 @@ public class ServicioPlanesPension {
 
 	private final GeneradorCronograma generador;
 
+	private final LoteSaldoInicialRepository lotes;
+
+	private final ControlParticipantes participantes;
+
 	private final AuditoriaService auditoria;
 
 	private final Clock reloj;
 
 	public ServicioPlanesPension(PlanPensionRepository planes, AnioEscolarRepository anios, CuotaRepository cuotas,
-			GeneradorCronograma generador, AuditoriaService auditoria, Clock reloj) {
+			GeneradorCronograma generador, LoteSaldoInicialRepository lotes, ControlParticipantes participantes,
+			AuditoriaService auditoria, Clock reloj) {
+		this.lotes = lotes;
+		this.participantes = participantes;
 		this.planes = planes;
 		this.anios = anios;
 		this.cuotas = cuotas;
@@ -95,7 +104,7 @@ public class ServicioPlanesPension {
 			List<PlanPension> delNivel = delAnio.stream().filter(p -> p.getNivel() == nivel).toList();
 			PlanResumen vigente = delNivel.stream().filter(PlanPension::aprobado).findFirst()
 					.map(ServicioPlanesPension::resumenDe).orElse(null);
-			List<PlanResumen> borradores = delNivel.stream().filter(PlanPension::borrador)
+			List<PlanResumen> borradores = delNivel.stream().filter(PlanPension::pendiente)
 					.map(ServicioPlanesPension::resumenDe).toList();
 			long sinCronograma = cuotas.matriculasSinCronograma(anio.getId(), grados(nivel)).size();
 			totalSinCronograma += sinCronograma;
@@ -111,11 +120,11 @@ public class ServicioPlanesPension {
 		String usuario = SesionActual.usuario();
 		boolean aprobador = SesionActual.tieneAlgunRol("PROMOTOR", "DIRECTOR");
 		boolean administracion = SesionActual.tieneAlgunRol("ADMINISTRACION");
-		boolean autor = plan.esAutor(usuario);
-		boolean hayBorrador = planes.existsByAnioEscolarIdAndNivelAndEstado(plan.getAnioEscolar().getId(),
-				plan.getNivel(), EstadoPlan.BORRADOR);
-		String avisoAutor = plan.borrador() && aprobador && autor
-				? "Tú creaste o editaste este plan: debe aprobarlo otra persona de Promotoría o Dirección." : null;
+		boolean autor = participantes.ampliar(plan.participantes()).contains(usuario);
+		boolean hayBorrador = hayPendiente(plan.getAnioEscolar(), plan.getNivel());
+		String avisoAutor = plan.pendiente() && aprobador && autor
+				? "Tú creaste, editaste o enviaste este plan (o preparaste la cuenta de quien lo hizo): debe aprobarlo "
+						+ "otra persona de Promotoría o Dirección." : null;
 		List<PlanResumen> historial = planes
 				.findByAnioEscolarIdAndNivelOrderByNumeroVersionDesc(plan.getAnioEscolar().getId(), plan.getNivel())
 				.stream().map(ServicioPlanesPension::resumenDe).toList();
@@ -127,9 +136,11 @@ public class ServicioPlanesPension {
 				plan.getMontoMatricula(), plan.getVencimientoMatricula(), plan.getMontoPension(), vencimientos,
 				plan.getCobroDesde(), plan.getMotivoCambio(), plan.getCreadoPor(), plan.getCreadoEn(),
 				plan.getEditadoPor(), plan.getAprobadoPor(), plan.getAprobadoEn(), plan.getCerradoPor(),
-				plan.getCerradoEn(), plan.borrador() && administracion, plan.borrador() && aprobador && !autor,
+				plan.getCerradoEn(), plan.borrador() && administracion, plan.enviado() && aprobador && !autor,
 				plan.aprobado() && administracion && !hayBorrador && !plan.getAnioEscolar().cerrado(),
-				plan.borrador() && administracion, avisoAutor, historial);
+				plan.borrador() && administracion, avisoAutor, historial, plan.borrador() && administracion,
+				plan.enviado() && aprobador, plan.getEnviadoPor(), plan.getEnviadoEn(), plan.getDevueltoPor(),
+				plan.getMotivoDevolucion(), String.join(", ", plan.participantes()), plan.getVersion());
 	}
 
 	/** Valores del borrador para su formulario de edición. */
@@ -207,25 +218,59 @@ public class ServicioPlanesPension {
 		return nueva.getId();
 	}
 
+	/** Lo bloquea para que otra persona lo revise: desde aquí nadie lo edita (auditoría A1, «cebo y cambio»). */
+	@Transactional
+	@PreAuthorize("hasRole('ADMINISTRACION')")
+	public void enviar(Long planId) {
+		PlanPension plan = buscar(planId);
+		plan.configuracion().validar(plan.getAnioEscolar());
+		plan.enviar(SesionActual.usuario(), ahora());
+		auditoria.registrar(AccionAuditoria.PLAN_PENSION_ENVIADO, "plan_pension", plan.getId().toString(), null,
+				DescripcionCobranza.plan(plan), plan.nombre() + " enviado. Ya no se puede editar; lo aprueba otra persona.");
+	}
+
+	/** Quien revisa lo devuelve con motivo (vuelve a BORRADOR para corregirlo). */
+	@Transactional
+	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
+	public void devolver(Long planId, Long version, String motivo) {
+		PlanPension plan = bloquearConAnio(planId);
+		exigirVersion(plan, version);
+		plan.devolver(SesionActual.usuario(), motivo, ahora());
+		auditoria.registrar(AccionAuditoria.PLAN_PENSION_DEVUELTO, "plan_pension", plan.getId().toString(),
+				EstadoPlan.ENVIADO.name(), EstadoPlan.BORRADOR.name(), plan.nombre() + ". Motivo: "
+						+ plan.getMotivoDevolucion());
+	}
+
 	/**
-	 * Aprueba el borrador: reemplaza la versión vigente (sus cuotas no cambian) y genera los cronogramas pendientes
-	 * del nivel. Quien creó o editó el plan no puede aprobarlo, aunque sea de Dirección: el intento queda auditado.
+	 * Aprueba el plan enviado: reemplaza la versión vigente (sus cuotas no cambian) y genera los cronogramas pendientes
+	 * del nivel. Exige la versión que vio el aprobador (si el plan cambió, se rechaza). No aprueba quien lo creó, lo
+	 * editó alguna vez, lo envió o preparó la cuenta de alguno de ellos: el intento queda auditado. Bloquea primero el
+	 * año escolar (mismo orden que matricular y confirmar lotes) y después el plan.
 	 */
 	@Transactional(noRollbackFor = AutoaprobacionException.class)
 	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
-	public ResultadoGeneracion aprobar(Long planId) {
-		PlanPension plan = buscar(planId);
+	public ResultadoGeneracion aprobar(Long planId, Long version) {
+		PlanPension plan = bloquearConAnio(planId);
 		String usuario = SesionActual.usuario();
-		if (!plan.borrador()) {
-			throw new ReglaNegocioException("Solo se aprueba un plan en borrador (este está "
+		if (!plan.enviado()) {
+			throw new ReglaNegocioException("Solo se aprueba un plan enviado (este está "
 					+ plan.getEstado().etiqueta().toLowerCase() + ").");
 		}
-		if (plan.esAutor(usuario)) {
+		exigirVersion(plan, version);
+		if (participantes.ampliar(plan.participantes()).contains(usuario)) {
 			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "plan_pension", plan.getId().toString(),
 					null, DescripcionCobranza.plan(plan), "Intentó aprobar " + plan.nombre()
-							+ ", que creó o editó. Se rechazó: debe aprobarlo otra persona.");
-			throw new AutoaprobacionException("No puedes aprobar un plan que tú creaste o editaste: debe aprobarlo "
+							+ ", en el que participó (lo creó, lo editó, lo envió o preparó la cuenta de quien lo hizo). "
+							+ "Se rechazó: debe aprobarlo otra persona.");
+			throw new AutoaprobacionException("No puedes aprobar un plan en el que participaste: debe aprobarlo "
 					+ "otra persona de Promotoría o Dirección.");
+		}
+		LocalDate corte = lotes.ultimoCorteConfirmado(plan.getAnioEscolar().getId());
+		if (corte != null && (plan.getCobroDesde() == null || !plan.getCobroDesde().isAfter(corte))) {
+			throw new ReglaNegocioException("El año " + plan.getAnioEscolar().getAnio() + " tiene saldo inicial "
+					+ "confirmado hasta el " + Calendario.formatear(corte) + ": el plan debe cobrar desde después de esa "
+					+ "fecha (por ejemplo el 01/" + String.format("%02d", corte.plusMonths(1).getMonthValue()) + "/"
+					+ corte.plusMonths(1).getYear() + "). Devuélvelo para corregirlo.");
 		}
 		LocalDateTime ahora = ahora();
 		Optional<PlanPension> anterior = planes.findByAnioEscolarIdAndNivelAndVigenteTrue(plan.getAnioEscolar().getId(),
@@ -244,6 +289,24 @@ public class ServicioPlanesPension {
 		return generador.generarPendientesDelNivel(plan.getAnioEscolar().getId(), plan.getNivel());
 	}
 
+	/** Bloquea primero el año escolar y después el plan (lectura con bloqueo: ve el estado más reciente). */
+	private PlanPension bloquearConAnio(Long planId) {
+		Long anioId = planes.anioDe(planId).orElseThrow(() -> new RecursoNoEncontradoException("Plan no encontrado"));
+		anios.bloquear(anioId);
+		return planes.bloquear(planId).orElseThrow(() -> new RecursoNoEncontradoException("Plan no encontrado"));
+	}
+
+	private static void exigirVersion(PlanPension plan, Long version) {
+		if (version == null || !version.equals(plan.getVersion())) {
+			throw new ReglaNegocioException("El plan cambió desde que lo abriste; revísalo de nuevo.");
+		}
+	}
+
+	private boolean hayPendiente(AnioEscolar anio, Nivel nivel) {
+		return planes.existsByAnioEscolarIdAndNivelAndEstado(anio.getId(), nivel, EstadoPlan.BORRADOR)
+				|| planes.existsByAnioEscolarIdAndNivelAndEstado(anio.getId(), nivel, EstadoPlan.ENVIADO);
+	}
+
 	@Transactional
 	@PreAuthorize("hasRole('ADMINISTRACION')")
 	public void descartar(Long id, String motivo) {
@@ -255,7 +318,7 @@ public class ServicioPlanesPension {
 	}
 
 	private void exigirSinBorrador(AnioEscolar anio, Nivel nivel) {
-		if (planes.existsByAnioEscolarIdAndNivelAndEstado(anio.getId(), nivel, EstadoPlan.BORRADOR)) {
+		if (hayPendiente(anio, nivel)) {
 			throw new ReglaNegocioException("Ya hay un borrador de " + nivel.etiqueta() + " " + anio.getAnio()
 					+ " por aprobar: edítalo o descártalo antes de proponer otro.");
 		}

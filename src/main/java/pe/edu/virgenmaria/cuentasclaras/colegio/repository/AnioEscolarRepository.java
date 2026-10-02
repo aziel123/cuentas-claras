@@ -20,6 +20,8 @@ public interface AnioEscolarRepository extends JpaRepository<AnioEscolar, Long> 
 
 	boolean existsByAnio(int anio);
 
+	Optional<AnioEscolar> findByAnio(int anio);
+
 	/** Lee y bloquea el año: serializa operaciones que dependen de él (generación de cuotas, importación). */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select a from AnioEscolar a where a.id = :id")

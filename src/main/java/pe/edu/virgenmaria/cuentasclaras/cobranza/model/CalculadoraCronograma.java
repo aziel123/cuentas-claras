@@ -23,12 +23,27 @@ public final class CalculadoraCronograma {
 	}
 
 	public static List<CuotaPlanificada> calcular(PlanPension plan, long matriculaId, LocalDate fechaMatricula) {
-		return calcular(plan.configuracion(), plan.getAnioEscolar().getAnio(), matriculaId, fechaMatricula);
+		return calcular(plan.configuracion(), plan.getAnioEscolar().getAnio(), matriculaId, fechaMatricula,
+				plan.getAnioEscolar().getInicioClases());
 	}
 
 	public static List<CuotaPlanificada> calcular(ConfiguracionPlan plan, int anio, long matriculaId,
 			LocalDate fechaMatricula) {
+		return calcular(plan, anio, matriculaId, fechaMatricula, null);
+	}
+
+	/**
+	 * @param inicioClases si la matrícula es de esa fecha o anterior es un ingreso regular: cronograma completo y la
+	 *                     matrícula vence cuando dice el plan. Solo un ingreso posterior (tardío, aprobado por otra
+	 *                     persona) recorta pensiones. {@code null}: se usa solo la fecha de matrícula.
+	 */
+	public static List<CuotaPlanificada> calcular(ConfiguracionPlan plan, int anio, long matriculaId,
+			LocalDate fechaMatricula, LocalDate inicioClases) {
 		Objects.requireNonNull(fechaMatricula, "fechaMatricula");
+		if (inicioClases != null && !fechaMatricula.isAfter(inicioClases)) {
+			fechaMatricula = plan.vencimientoMatricula().isBefore(fechaMatricula) ? plan.vencimientoMatricula()
+					: fechaMatricula;
+		}
 		LocalDate inicioCobro = Calendario.primerDiaDelMes(fechaMatricula);
 		if (plan.cobroDesde() != null && plan.cobroDesde().isAfter(inicioCobro)) {
 			inicioCobro = plan.cobroDesde();
