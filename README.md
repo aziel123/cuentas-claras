@@ -29,18 +29,28 @@ Al arrancar con H2 en memoria y sin usuarios se crean estos usuarios, todos con 
 | `promotor.b` | Promotoría | Colegio de Prueba B (para ver el aislamiento entre colegios) |
 
 ## Producción
-Perfil `prod` con MySQL 8 (base con `utf8mb4`):
+Perfil `prod` con MySQL 8 (base `cuentasclaras`, `utf8mb4`). Antes del primer arranque crea los usuarios `cc_migrador` y `cc_app` con los scripts de `scripts/mysql/`, como explica `docs/operacion/mysql-usuarios.md`.
 ```bash
 SPRING_PROFILES_ACTIVE=prod \
-DB_URL="jdbc:mysql://HOST:3306/cuentas_claras" \
-DB_USUARIO="..." DB_CLAVE="..." \
+DB_URL="jdbc:mysql://HOST:3306/cuentasclaras" \
+DB_USUARIO="cc_app" DB_CLAVE="..." \
+DB_MIGRADOR_USUARIO="cc_migrador" DB_MIGRADOR_CLAVE="..." \
 AUDITORIA_CLAVE_HMAC="..." \
 CC_PROMOTOR_USUARIO="..." CC_PROMOTOR_NOMBRE="..." CC_PROMOTOR_CLAVE="..." \
 java -jar target/cuentas-claras-*.jar
 ```
-- `AUDITORIA_CLAVE_HMAC` (obligatoria, mínimo 32 caracteres): sella la bitácora de auditoría. Guárdala en el gestor de secretos; si se pierde, no se puede verificar la bitácora.
-- `CC_PROMOTOR_*` (y `CC_COLEGIO_ID`, por defecto 1): crean al primer PROMOTOR solo si no hay ningún usuario. Debe cambiar la clave al ingresar; luego retira `CC_PROMOTOR_CLAVE` del entorno.
-- Si la bitácora queda bloqueada: `docs/operacion/incidente-auditoria.md`.
+
+| Variable | Obligatoria | Para qué |
+|---|---|---|
+| `DB_URL` | Sí | Conexión JDBC a MySQL |
+| `DB_USUARIO`, `DB_CLAVE` | Sí | Usuario de la aplicación (`cc_app`): sin UPDATE ni DELETE sobre la bitácora. Si los tiene, la aplicación no arranca |
+| `DB_MIGRADOR_USUARIO`, `DB_MIGRADOR_CLAVE` | Sí | Usuario de Flyway (`cc_migrador`), el único que crea o cambia tablas |
+| `AUDITORIA_CLAVE_HMAC` | Sí | Sella la bitácora (32 caracteres o más). Guárdala en el gestor de secretos: si se pierde, no se puede verificar la bitácora |
+| `CC_PROMOTOR_USUARIO`, `CC_PROMOTOR_NOMBRE`, `CC_PROMOTOR_CLAVE` | Solo si no hay usuarios | Crean al primer PROMOTOR, que debe cambiar la clave al ingresar. Luego retira `CC_PROMOTOR_CLAVE` |
+| `CC_COLEGIO_ID` | No (1) | Colegio del primer PROMOTOR |
+
+- Si la bitácora queda bloqueada, sigue `docs/operacion/incidente-auditoria.md`.
+- El CI tiene un job `mysql` que aplica las migraciones y corre pruebas contra MySQL 8 real con estos mismos permisos.
 
 ## Documentación
 - `docs/plan-de-desarrollo.md`: sprints, hitos y decisiones.

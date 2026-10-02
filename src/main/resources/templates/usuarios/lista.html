@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Usuarios', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Usuarios y roles</p>
+			<h1>Usuarios del colegio</h1>
+			<p class="secundario">Cada persona usa su propia cuenta. Nadie se borra: si alguien deja el colegio, se desactiva.</p>
+		</div>
+		<a th:replace="~{fragments/componentes :: enlaceBoton('Nuevo usuario', @{/usuarios/nuevo}, 'primario')}"></a>
+	</div>
+
+	<section class="tarjeta" aria-labelledby="titulo-lista">
+		<h2 id="titulo-lista" th:text="|${#lists.size(usuarios)} usuarios|">Usuarios</h2>
+		<th:block th:if="${#lists.isEmpty(usuarios)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay usuarios', 'Crea el primero con «Nuevo usuario».')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(usuarios)}">
+			<thead>
+				<tr><th scope="col">Nombre</th><th scope="col">Usuario</th><th scope="col">Roles</th><th scope="col">Estado</th><th scope="col"><span class="solo-lectores">Acciones</span></th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="u : ${usuarios}">
+					<td data-etiqueta="Nombre" th:text="${u.nombreCompleto}">Lucía Ramos</td>
+					<td data-etiqueta="Usuario" th:text="${u.nombreUsuario}">lucia.ramos</td>
+					<td data-etiqueta="Roles" th:text="${u.roles}">Caja</td>
+					<td data-etiqueta="Estado"><th:block th:replace="~{usuarios/estado :: estado(${u.estado})}"></th:block></td>
+					<td><a class="btn btn-texto btn-chico" th:href="@{/usuarios/{id}(id=${u.id})}"
+						th:aria-label="|Ver a ${u.nombreCompleto}|">Ver</a></td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

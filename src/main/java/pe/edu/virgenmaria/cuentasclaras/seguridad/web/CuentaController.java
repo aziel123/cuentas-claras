@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.ModuloApp;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.CambiarClaveRequest;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ClaveActualIncorrectaException;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioCuenta;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 
@@ -55,6 +56,14 @@ public class CuentaController {
 		}
 		try {
 			servicioCuenta.cambiarClave(usuario.usuarioId(), solicitud);
+		}
+		catch (ClaveActualIncorrectaException e) {
+			if (e.cuentaBloqueada()) {
+				cierreSesion.logout(request, response, autenticacion);
+				return "redirect:/login?bloqueada";
+			}
+			model.addAttribute("error", e.getMessage());
+			return VISTA;
 		}
 		catch (ReglaNegocioException e) {
 			model.addAttribute("error", e.getMessage());

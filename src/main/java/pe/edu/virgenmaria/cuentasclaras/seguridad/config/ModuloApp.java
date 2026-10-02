@@ -29,11 +29,10 @@ public enum ModuloApp {
 	INICIO("Inicio", "Tu resumen del día.", "Sprint 1", true, "/inicio",
 			new String[] { "/", "/inicio" }, EnumSet.allOf(Rol.class)),
 
-	// TODO(sprint1-tanda3): disponible = true cuando existan UsuarioController (paso 8) y AuditoriaController (paso 9).
-	USUARIOS("Usuarios y roles", "Crea cuentas, asigna roles y desactiva accesos.", "Sprint 1", false,
+	USUARIOS("Usuarios y roles", "Crea cuentas, asigna roles y desactiva accesos.", "Sprint 1", true,
 			"/usuarios", new String[] { "/usuarios", "/usuarios/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
 	AUDITORIA("Bitácora de auditoría", "Revisa quién hizo qué y cuándo, y comprueba que nadie alteró el registro.",
-			"Sprint 1", false, "/auditoria", new String[] { "/auditoria", "/auditoria/**" },
+			"Sprint 1", true, "/auditoria", new String[] { "/auditoria", "/auditoria/**" },
 			EnumSet.of(PROMOTOR, DIRECTOR)),
 
 	COLEGIO("Colegio", "Año escolar, niveles, grados y secciones.", "Sprint 2", false, "/colegio",

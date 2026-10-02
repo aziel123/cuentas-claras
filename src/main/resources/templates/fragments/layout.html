@@ -36,17 +36,27 @@
 	</header>
 
 	<div class="armazon" th:classappend="${#lists.isEmpty(menu)} ? 'sin-menu'">
-		<th:block th:unless="${#lists.isEmpty(menu)}">
-			<nav class="menu-lateral" aria-label="Menú principal">
+		<nav class="menu-lateral" aria-label="Menú principal" th:unless="${#lists.isEmpty(menu)}">
+			<ul th:replace="~{fragments/layout :: menuLista}"></ul>
+		</nav>
+		<!--/* Celular: el menú y las acciones de la cuenta van juntos en un desplegable para que la cabecera sea corta. */-->
+		<details class="menu-movil" th:if="${usuarioActual != null}">
+			<summary>
+				<span>Menú</span>
+				<span class="menu-movil-usuario" th:text="${usuarioActual.nombreCompleto}">Nombre</span>
+			</summary>
+			<nav aria-label="Menú principal" th:unless="${#lists.isEmpty(menu)}">
 				<ul th:replace="~{fragments/layout :: menuLista}"></ul>
 			</nav>
-			<details class="menu-movil">
-				<summary>Menú</summary>
-				<nav aria-label="Menú principal">
-					<ul th:replace="~{fragments/layout :: menuLista}"></ul>
-				</nav>
-			</details>
-		</th:block>
+			<div class="sesion-movil">
+				<p><strong th:text="${usuarioActual.nombreCompleto}">Nombre</strong>
+					<small class="bloque secundario" th:text="${usuarioActual.clavePendiente} ? 'Debes cambiar tu clave' : ${usuarioActual.rol}">Rol</small></p>
+				<a class="btn btn-secundario btn-bloque" th:href="@{/cuenta/cambiar-clave}">Cambiar clave</a>
+				<form th:action="@{/salir}" method="post">
+					<button type="submit" class="btn btn-secundario btn-bloque">Cerrar sesión</button>
+				</form>
+			</div>
+		</details>
 
 		<main id="contenido" class="contenido" th:replace="${contenido}">Contenido</main>
 	</div>

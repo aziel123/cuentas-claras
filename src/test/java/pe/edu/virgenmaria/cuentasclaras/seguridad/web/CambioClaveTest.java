@@ -106,12 +106,31 @@ class CambioClaveTest {
 	}
 
 	@Test
+	void cincoClavesActualesIncorrectasBloqueanLaCuentaYCierranLaSesion() throws Exception {
+		for (int i = 0; i < 4; i++) {
+			cambiar("no es mi clave actual", NUEVA, NUEVA)
+					.andExpect(status().isOk())
+					.andExpect(content().string(containsString("Tu clave actual no es correcta.")));
+		}
+		assertThat(jdbc.queryForObject("SELECT intentos_fallidos FROM usuario WHERE nombre_usuario = 'nuevo'",
+				Integer.class)).isEqualTo(4);
+
+		cambiar("no es mi clave actual", NUEVA, NUEVA).andExpect(redirectedUrl("/login?bloqueada"));
+
+		assertThat(sesion.isInvalid()).isTrue();
+		ingresar(TEMPORAL).andExpect(redirectedUrl("/login?bloqueada"));
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'CUENTA_BLOQUEADA'",
+				Long.class)).isEqualTo(1);
+	}
+
+	@Test
 	void cambioQuedaAuditadoSinLaClave() throws Exception {
 		cambiar(TEMPORAL, NUEVA, NUEVA);
 
 		Map<String, Object> evento = jdbc.queryForMap(
 				"SELECT * FROM evento_auditoria WHERE accion = 'CLAVE_CAMBIADA'");
 		assertThat(evento.get("nombre_usuario")).isEqualTo("nuevo");
+		assertThat(evento.get("roles")).as("con clave pendiente igual se registra su rol").isEqualTo("DOCENTE");
 		assertThat(evento.get("valor_anterior")).isNull();
 		assertThat(evento.get("valor_nuevo")).isNull();
 		assertThat(String.valueOf(evento.get("detalle"))).contains("temporal").doesNotContain(NUEVA)

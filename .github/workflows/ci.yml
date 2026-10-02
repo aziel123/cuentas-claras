@@ -23,3 +23,61 @@ jobs:
 
       - name: Compilar, migrar y probar
         run: ./mvnw -B verify
+
+  mysql:
+    name: Migraciones y permisos en MySQL 8
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root-ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot-ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    env:
+      # Claves SOLO para la base desechable de este job. Producción usa el gestor de secretos.
+      CC_PRUEBA_MYSQL: "true"
+      CC_MYSQL_URL: "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false"
+      CC_MYSQL_CLAVE_MIGRADOR: "migrador-solo-ci-1"
+      CC_MYSQL_CLAVE_APP: "app-solo-ci-1"
+      MYSQL_ADMIN: "mysql --protocol=TCP -h 127.0.0.1 -P 3306 -uroot -proot-ci"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Crear la base y los usuarios cc_migrador y cc_app
+        run: |
+          sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" \
+              -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
+              scripts/mysql/01-usuarios.sql | $MYSQL_ADMIN
+
+      - name: "Fase 1: Flyway aplica V1-V3 con cc_migrador e Hibernate valida el esquema con cc_app"
+        run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: Permisos por tabla de cc_app
+        run: $MYSQL_ADMIN < scripts/mysql/02-permisos-tablas.sql
+
+      - name: "Fase 2: la aplicación funciona con los permisos mínimos de cc_app"
+        run: ./mvnw -B test -Dtest=PermisosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: UPDATE y DELETE sobre evento_auditoria fallan con el error 1142
+        run: |
+          for sql in "UPDATE evento_auditoria SET ip = ip WHERE 1 = 0" "DELETE FROM evento_auditoria WHERE 1 = 0"; do
+            if salida=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -e "$sql" 2>&1); then
+              echo "ERROR: cc_app pudo ejecutar: $sql"
+              exit 1
+            fi
+            echo "$salida" | grep -q "ERROR 1142" || { echo "Error inesperado: $salida"; exit 1; }
+            echo "OK (1142): $sql"
+          done

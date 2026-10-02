@@ -31,6 +31,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .fila { display: flex; flex-wrap: wrap; gap: var(--esp-2) var(--esp-3); align-items: center; }
 .entre { justify-content: space-between; }
 
+/* Solo para lectores de pantalla */
+.solo-lectores {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.bloque { display: block; }
+
 /* Enlace para saltar al contenido (teclado y lectores de pantalla) */
 .saltar {
   position: absolute; left: var(--esp-2); top: -100px; z-index: 100;
@@ -93,11 +100,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: var(--esp-2);
 }
 .menu-movil { display: none; }
-.menu { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+/* minmax(0, 1fr): una etiqueta larga ("Conciliación bancaria" + "Próximamente") no ensancha la columna
+   y el resaltado del elemento activo no se sale del contenedor. */
+.menu { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.menu li { min-width: 0; }
 .menu-enlace, .menu-proximo {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--esp-2);
-  min-height: 44px; padding: var(--esp-2) var(--esp-3);
-  border-radius: 6px; font-size: var(--texto-sm);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-1) var(--esp-2);
+  min-height: 44px; min-width: 0; padding: var(--esp-2) var(--esp-3);
+  border-radius: 6px; font-size: var(--texto-sm); overflow-wrap: anywhere;
 }
 .menu-enlace { color: var(--color-texto); text-decoration: none; font-weight: 500; }
 .menu-enlace:hover { background: var(--color-superficie-2); }
@@ -109,6 +119,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (max-width: 860px) {
   .armazon { grid-template-columns: minmax(0, 1fr); gap: var(--esp-4); padding-top: var(--esp-4); }
   .menu-lateral { display: none; }
+  /* Cabecera corta en celular: el usuario, "Cambiar clave" y "Cerrar sesión" pasan al desplegable. */
+  .barra .sesion { display: none; }
+  .barra-in { padding-block: var(--esp-2); }
+  .marca-texto small { display: none; }
   .menu-movil {
     display: block;
     background: var(--color-superficie);
@@ -117,10 +131,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
   }
   .menu-movil summary {
     min-height: 44px; padding: var(--esp-2) var(--esp-4);
-    display: flex; align-items: center;
+    display: flex; align-items: center; justify-content: space-between; gap: var(--esp-3);
     cursor: pointer; font-weight: 600; color: var(--color-primario-texto);
   }
+  .menu-movil-usuario {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--color-texto-secundario); font-weight: 500; font-size: var(--texto-sm);
+  }
   .menu-movil nav { padding: 0 var(--esp-2) var(--esp-2); }
+  .sesion-movil {
+    display: grid; gap: var(--esp-2);
+    padding: var(--esp-3) var(--esp-4) var(--esp-4);
+    border-top: 1px solid var(--color-borde);
+  }
+  .sesion-movil form { margin: 0; }
 }
 
 /* Contenido */
@@ -260,5 +284,38 @@ textarea.input { min-height: 96px; resize: vertical; }
   .tabla td { border: 0; padding: 0; display: flex; justify-content: space-between; gap: var(--esp-3); }
   .tabla td::before { content: attr(data-etiqueta); color: var(--color-texto-secundario); font-weight: 600; }
 }
+
+/* Ficha de datos */
+.datos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--esp-3) var(--esp-6); margin: 0; }
+.datos dt { font-size: var(--texto-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-texto-secundario); }
+.datos dd { margin: 0; }
+
+/* Casillas (roles) */
+.grupo-opciones { border: 0; padding: 0; margin: 0; }
+.grupo-opciones legend { font-size: var(--texto-sm); font-weight: 600; padding: 0; margin-bottom: var(--esp-2); }
+.opcion {
+  display: flex; align-items: center; gap: var(--esp-2);
+  min-height: 44px; padding: 0 var(--esp-3);
+  border: 1px solid var(--color-borde); border-radius: var(--radio); cursor: pointer;
+}
+.opcion input { width: 20px; height: 20px; accent-color: var(--color-primario); }
+.opcion:has(input:checked) { border-color: var(--color-primario-texto); background: var(--color-celeste-suave); }
+
+/* Clave temporal: se muestra una sola vez */
+.clave-temporal {
+  display: grid; gap: var(--esp-1); justify-items: start;
+  padding: var(--esp-4); border-radius: var(--radio);
+  background: var(--color-superficie-2); border-left: 4px solid var(--color-celeste);
+}
+.clave-temporal-valor {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: var(--texto-xl); font-weight: 700; letter-spacing: 0.08em; user-select: all;
+}
+
+/* Bitácora */
+.filtros { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--esp-3); }
+.filtros .campo { min-width: 160px; }
+.fila-atencion td:first-child { box-shadow: inset 3px 0 0 var(--color-alerta); }
+.paginacion { margin-top: var(--esp-2); }
 
 .pie { text-align: center; color: var(--color-texto-secundario); font-size: var(--texto-sm); padding: var(--esp-6) var(--esp-4); }

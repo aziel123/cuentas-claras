@@ -91,6 +91,11 @@ public final class UsuarioAutenticado implements UserDetails, CredentialsContain
 	}
 
 	@Override
+	public String rolesParaAuditoria() {
+		return rolesComoTexto();
+	}
+
+	@Override
 	public Long colegioId() {
 		return colegioId;
 	}

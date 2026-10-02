@@ -38,6 +38,21 @@ public final class UsuariosDePrueba {
 		return autenticado(1L, 1L, "usuario.prueba", "Usuario de Prueba", false, EnumSet.copyOf(List.of(roles)));
 	}
 
+	/** El usuario de la base, como estaría en sesión. */
+	public static UsuarioAutenticado autenticado(Usuario usuario) {
+		return UsuarioAutenticado.de(usuario, LocalDateTime.now());
+	}
+
+	/** Deja al usuario de la base en el contexto de seguridad del hilo (pruebas de servicios). */
+	public static void iniciarSesion(Usuario usuario) {
+		org.springframework.security.core.context.SecurityContextHolder.getContext()
+				.setAuthentication(autenticacion(autenticado(usuario)));
+	}
+
+	public static RequestPostProcessor como(Usuario usuario) {
+		return authentication(autenticacion(autenticado(usuario)));
+	}
+
 	public static Authentication autenticacion(UsuarioAutenticado usuario) {
 		return UsernamePasswordAuthenticationToken.authenticated(usuario, null, usuario.getAuthorities());
 	}

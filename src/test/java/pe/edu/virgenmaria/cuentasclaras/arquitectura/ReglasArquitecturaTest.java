@@ -29,19 +29,32 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.model.Colegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.model.BaseEntity;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 
+import jakarta.persistence.MappedSuperclass;
+import org.springframework.security.access.prepost.PreAuthorize;
+import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EslabonCadenaRepository;
+import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EventoAuditoriaRepository;
+import pe.edu.virgenmaria.cuentasclaras.auditoria.service.ConsultaAuditoriaService;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioUsuarios;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.Locale;
 import java.util.Set;
 import java.util.function.Supplier;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noFields;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 
 /**
  * Reglas de arquitectura que protegen las garantías del sprint 1 (multi-colegio y auditoría).
  * Analiza solo el código de producción.
  * <p>
- * TODO(paso 10): completar con el resto de reglas del diseño a medida que existan las clases.
+ * Cada regla nueva del diseño o de la skill {@code crear-modulo-spring} debería tener aquí su guardián.
  */
 @AnalyzeClasses(packagesOf = CuentasClarasApplication.class, importOptions = ImportOption.DoNotIncludeTests.class)
 class ReglasArquitecturaTest {
@@ -128,6 +141,50 @@ class ReglasArquitecturaTest {
 			.or().areMetaAnnotatedWith(org.springframework.web.bind.annotation.ControllerAdvice.class)
 			.should().dependOnClassesThat().areAssignableTo(Repository.class)
 			.because("los controladores no tienen lógica: delegan en servicios");
+
+	/** Las fechas salen del {@code Clock} de la aplicación (hora de Lima y ajustable en pruebas). */
+	@ArchTest
+	static final ArchRule nadieUsaLaHoraDelSistemaSinReloj = noClasses()
+			.should().callMethod(LocalDateTime.class, "now")
+			.orShould().callMethod(LocalDate.class, "now")
+			.orShould().callMethod(Instant.class, "now")
+			.orShould().callMethod(ZonedDateTime.class, "now")
+			.orShould().callMethod(Clock.class, "systemDefaultZone")
+			.because("la hora se toma del Clock de ConfiguracionTiempo (America/Lima), así las pruebas la controlan");
+
+	/** Los controladores trabajan con DTOs: una entidad JPA nunca llega a la vista ni a la API. */
+	@ArchTest
+	static final ArchRule controladoresNoExponenEntidades = noClasses()
+			.that().areMetaAnnotatedWith(Controller.class)
+			.or().areMetaAnnotatedWith(org.springframework.web.bind.annotation.ControllerAdvice.class)
+			.should().dependOnClassesThat().areAnnotatedWith(Entity.class)
+			.because("las entidades JPA no se exponen: se usan DTOs");
+
+	/** El dinero va en BigDecimal: ninguna entidad tiene campos double o float. */
+	@ArchTest
+	static final ArchRule entidadesSinDoubleNiFloat = noFields()
+			.that().areDeclaredInClassesThat().areAnnotatedWith(Entity.class)
+			.or().areDeclaredInClassesThat().areAnnotatedWith(MappedSuperclass.class)
+			.should().haveRawType(double.class)
+			.orShould().haveRawType(Double.class)
+			.orShould().haveRawType(float.class)
+			.orShould().haveRawType(Float.class)
+			.because("el dinero se guarda en BigDecimal con escala 2");
+
+	/** Solo el paquete de auditoría escribe en la bitácora y su cadena: todos los demás usan AuditoriaService. */
+	@ArchTest
+	static final ArchRule soloAuditoriaServiceEscribeEnLaBitacora = noClasses()
+			.that().resideOutsideOfPackage("..auditoria.service..")
+			.and().resideOutsideOfPackage("..auditoria.repository..")
+			.should().dependOnClassesThat().belongToAnyOf(EventoAuditoriaRepository.class, EslabonCadenaRepository.class)
+			.because("cada evento debe pasar por el sellado HMAC y la secuencia de AuditoriaService");
+
+	/** Los servicios de gestión exigen rol también por método, no solo por URL. */
+	@ArchTest
+	static final ArchRule serviciosSensiblesExigenRol = classes()
+			.that().areTopLevelClasses().and().belongToAnyOf(ServicioUsuarios.class, ConsultaAuditoriaService.class)
+			.should().beAnnotatedWith(PreAuthorize.class)
+			.because("la matriz de URL no basta: el servicio también se protege (@PreAuthorize)");
 
 	@ArchTest
 	static final ArchRule cobranzaNoDependeDeAcademico = noClasses()

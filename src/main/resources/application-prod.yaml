@@ -6,12 +6,19 @@ spring:
     password: ${DB_CLAVE}
   flyway:
     validate-on-migrate: true
+    # Flyway migra con un usuario propio (cc_migrador, con DDL). La aplicación usa cc_app, sin UPDATE ni
+    # DELETE sobre la bitácora. Ver docs/operacion/mysql-usuarios.md.
+    user: ${DB_MIGRADOR_USUARIO}
+    password: ${DB_MIGRADOR_CLAVE}
 
 server:
   forward-headers-strategy: framework
 
-# Primer PROMOTOR: se crea al arrancar SOLO si no hay ningún usuario. Debe cambiar la clave al ingresar.
 cuentasclaras:
+  auditoria:
+    # Si la aplicación puede editar o borrar la bitácora, no arranca (VerificadorPermisosBaseDatos).
+    exigir-permisos-restringidos: true
+  # Primer PROMOTOR: se crea al arrancar SOLO si no hay ningún usuario. Debe cambiar la clave al ingresar.
   inicial:
     colegio-id: ${CC_COLEGIO_ID:1}
     promotor-usuario: ${CC_PROMOTOR_USUARIO:}

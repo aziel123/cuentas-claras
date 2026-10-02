@@ -24,10 +24,13 @@ import java.util.EnumSet;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -119,6 +122,29 @@ class MatrizPermisosTest {
 	void cajaRecibe403AlCrearUsuarios() throws Exception {
 		mvc.perform(get("/usuarios/nuevo")).andExpect(status().isForbidden());
 		mvc.perform(post("/usuarios").with(csrf()).param("nombreUsuario", "intruso")).andExpect(status().isForbidden());
+	}
+
+	@Test
+	@ComoUsuario(roles = Rol.DIRECTOR)
+	void directorNoPuedeAsignarRolPromotor() throws Exception {
+		mvc.perform(get("/usuarios/nuevo"))
+				.andExpect(status().isOk())
+				.andExpect(content().string(not(containsString("value=\"PROMOTOR\""))))
+				.andExpect(content().string(not(containsString("value=\"DIRECTOR\""))));
+		mvc.perform(post("/usuarios").with(csrf())
+						.param("nombreCompleto", "Nueva Promotora").param("nombreUsuario", "nueva.promotora")
+						.param("roles", "PROMOTOR"))
+				.andExpect(status().isForbidden());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM usuario WHERE nombre_usuario = 'nueva.promotora'",
+				Long.class)).isZero();
+	}
+
+	@Test
+	@ComoUsuario(roles = Rol.DIRECTOR)
+	void direccionVeLaBitacoraPeroSoloPromotoriaVerificaLaIntegridad() throws Exception {
+		mvc.perform(get("/auditoria")).andExpect(status().isOk())
+				.andExpect(content().string(not(containsString("verificar-integridad"))));
+		mvc.perform(post("/auditoria/verificar-integridad").with(csrf())).andExpect(status().isForbidden());
 	}
 
 	@ParameterizedTest

@@ -11,4 +11,12 @@ public interface PrincipalConColegio {
 
 	/** Id del usuario autenticado, para la auditoría. */
 	Long usuarioId();
+
+	/**
+	 * Roles para la auditoría ("CAJA,DOCENTE"). Por defecto {@code null}: se toman de las autoridades.
+	 * Sirve cuando las autoridades no reflejan los roles (por ejemplo, con la clave pendiente).
+	 */
+	default String rolesParaAuditoria() {
+		return null;
+	}
 }

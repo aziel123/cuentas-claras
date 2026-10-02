@@ -35,6 +35,9 @@ import java.util.Optional;
 @Service
 public class ServicioIntentosIngreso {
 
+	/** Se registra en lugar de un nombre de usuario con forma inválida. */
+	public static final String NOMBRE_NO_VALIDO = "(nombre no válido)";
+
 	private final UsuarioRepository usuarios;
 
 	private final ServicioDetallesUsuario detalles;
@@ -140,9 +143,13 @@ public class ServicioIntentosIngreso {
 		return ServicioDetallesUsuario.normalizar(autenticacion.getName());
 	}
 
-	/** Lo que escribió un visitante como usuario (nunca la clave); vacío se registra como {@code anonimo}. */
-	private static String nombreParaAuditoria(String nombre) {
-		return nombre.isEmpty() ? Actor.ANONIMO : nombre;
+	/**
+	 * Lo que escribió un visitante como usuario, solo si tiene forma de nombre de usuario. Si no (por
+	 * ejemplo, escribió su clave en el campo equivocado), se registra {@value #NOMBRE_NO_VALIDO}: una
+	 * clave nunca debe quedar en la bitácora.
+	 */
+	static String nombreParaAuditoria(String nombre) {
+		return Usuario.esNombreUsuarioValido(nombre) ? nombre : NOMBRE_NO_VALIDO;
 	}
 
 	private LocalDateTime ahora() {

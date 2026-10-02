@@ -171,9 +171,89 @@ class EventosSeguridadAuditadosTest {
 				.doesNotContain(CLAVE_NUEVA)
 				.doesNotContain("{bcrypt}")
 				.doesNotContain("$2a$");
-		// Lo único que no se puede evitar: si alguien escribe su clave en el campo de usuario, queda como nombre intentado.
+		// La clave escrita por error en el campo de usuario no tiene forma de usuario: no se guarda.
 		List<String> nombres = jdbc.queryForList("SELECT DISTINCT nombre_usuario FROM evento_auditoria", String.class);
-		assertThat(nombres).contains("caja");
+		assertThat(nombres).contains("caja", ServicioIntentosIngreso.NOMBRE_NO_VALIDO)
+				.doesNotContain(CLAVE_EQUIVOCADA);
+	}
+
+	@Test
+	void unTextoQueNoEsUnUsuarioNoSeGuardaEnLaBitacora() throws Exception {
+		ingresar("Mi Clave Secreta!", CLAVE).andExpect(redirectedUrl("/login?error"));
+		ingresar("", CLAVE);
+		ingresar("no.existe", CLAVE);
+
+		assertThat(jdbc.queryForList("SELECT nombre_usuario FROM evento_auditoria ORDER BY secuencia", String.class))
+				.containsExactly(ServicioIntentosIngreso.NOMBRE_NO_VALIDO, ServicioIntentosIngreso.NOMBRE_NO_VALIDO,
+						"no.existe");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE nombre_usuario LIKE '%Secreta%'",
+				Long.class)).isZero();
+	}
+
+	@Test
+	void usuarioCreadoQuedaAuditado() throws Exception {
+		mvc.perform(post("/usuarios").with(UsuariosDePrueba.como(promotora())).with(csrf())
+				.param("nombreCompleto", "Ana Torres").param("nombreUsuario", "ana.torres").param("roles", "DOCENTE"))
+				.andExpect(status().isOk());
+
+		Map<String, Object> evento = ultimo("USUARIO_CREADO");
+		assertThat(evento.get("nombre_usuario")).isEqualTo("promotora");
+		assertThat((String) evento.get("valor_nuevo")).contains("roles=DOCENTE");
+		assertThat((String) evento.get("detalle")).contains("ana.torres");
+	}
+
+	@Test
+	void rolesCambiadosQuedanAuditados() throws Exception {
+		accionSobreCaja("roles", "roles", "DOCENTE");
+		Map<String, Object> evento = ultimo("ROLES_CAMBIADOS");
+		assertThat(evento.get("valor_anterior")).isEqualTo("CAJA");
+		assertThat(evento.get("valor_nuevo")).isEqualTo("DOCENTE");
+	}
+
+	@Test
+	void usuarioDesactivadoYReactivadoQuedanAuditados() throws Exception {
+		accionSobreCaja("desactivar");
+		accionSobreCaja("reactivar");
+		assertThat(ultimo("USUARIO_DESACTIVADO").get("valor_nuevo")).isEqualTo("inactivo");
+		assertThat(ultimo("USUARIO_REACTIVADO").get("valor_nuevo")).isEqualTo("activo");
+	}
+
+	@Test
+	void claveRestablecidaQuedaAuditadaSinLaClave() throws Exception {
+		String html = accionSobreCaja("restablecer-clave").andExpect(status().isOk()).andReturn().getResponse()
+				.getContentAsString();
+		java.util.regex.Matcher clave = java.util.regex.Pattern.compile("clave-temporal-valor[^>]*>([^<]+)<").matcher(html);
+		assertThat(clave.find()).isTrue();
+
+		Map<String, Object> evento = ultimo("CLAVE_RESTABLECIDA");
+		assertThat(evento.get("entidad_id")).isEqualTo(caja.getId().toString());
+		assertThat(evento.values().stream().map(String::valueOf)).noneMatch(v -> v.contains(clave.group(1)));
+	}
+
+	@Test
+	void cuentaDesbloqueadaQuedaAuditada() throws Exception {
+		jdbc.update("UPDATE usuario SET bloqueado_hasta = ? WHERE id = ?", LocalDateTime.now().plusHours(1), caja.getId());
+		accionSobreCaja("desbloquear");
+		assertThat(ultimo("CUENTA_DESBLOQUEADA").get("nombre_usuario")).isEqualTo("promotora");
+	}
+
+	private Usuario promotoraGuardada;
+
+	private Usuario promotora() {
+		if (promotoraGuardada == null) {
+			promotoraGuardada = UsuariosDePrueba.guardar(usuarios, codificador, 1L, "promotora", CLAVE, false,
+					Rol.PROMOTOR);
+		}
+		return promotoraGuardada;
+	}
+
+	private ResultActions accionSobreCaja(String accion, String... parametros) throws Exception {
+		var peticion = post("/usuarios/" + caja.getId() + "/" + accion).with(UsuariosDePrueba.como(promotora()))
+				.with(csrf()).param("motivo", "Motivo de prueba suficiente");
+		for (int i = 0; i + 1 < parametros.length; i += 2) {
+			peticion.param(parametros[i], parametros[i + 1]);
+		}
+		return mvc.perform(peticion);
 	}
 
 	@Test

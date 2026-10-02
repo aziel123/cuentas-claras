@@ -19,6 +19,7 @@ import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Usuario del sistema. Nunca se borra: se desactiva. El nombre de usuario es único en toda
@@ -27,6 +28,9 @@ import java.util.Set;
 @Entity
 @Table(name = "usuario")
 public class Usuario extends BaseEntity {
+
+	/** Nombre de usuario válido, ya normalizado: minúsculas, números, punto, guion y guion bajo; de 3 a 60. */
+	public static final Pattern PATRON_NOMBRE_USUARIO = Pattern.compile("^[a-z0-9._-]{3,60}$");
 
 	@Column(name = "nombre_usuario", nullable = false, updatable = false, length = 60)
 	private String nombreUsuario;
@@ -89,6 +93,11 @@ public class Usuario extends BaseEntity {
 		usuario.roles = EnumSet.copyOf(roles);
 		usuario.debeCambiarClave = true;
 		return usuario;
+	}
+
+	/** {@code true} si el nombre (ya normalizado) cumple {@link #PATRON_NOMBRE_USUARIO}. */
+	public static boolean esNombreUsuarioValido(String normalizado) {
+		return normalizado != null && PATRON_NOMBRE_USUARIO.matcher(normalizado).matches();
 	}
 
 	/** Minúsculas y sin espacios alrededor: así se guarda y así se busca. */

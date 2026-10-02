@@ -24,6 +24,11 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 	@Query("select u from Usuario u where u.nombreUsuario = :nombreUsuario")
 	Optional<Usuario> bloquearPorNombreUsuario(@Param("nombreUsuario") String nombreUsuario);
 
+	/** Lee y bloquea la fila del usuario por id (cambio de clave: el contador de intentos se actualiza sin carreras). */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select u from Usuario u where u.id = :id")
+	Optional<Usuario> bloquearPorId(@Param("id") Long id);
+
 	@Query("select count(distinct u) from Usuario u join u.roles r where u.activo = true and r = :rol")
 	long contarActivosConRol(@Param("rol") Rol rol);
 

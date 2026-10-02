@@ -122,6 +122,28 @@ class InterfazBaseTest {
 	}
 
 	@Test
+	void enCelularLaCuentaVaDentroDelMenuDesplegable() throws Exception {
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(Rol.CAJA)))
+				.andExpect(content().string(containsString("<details class=\"menu-movil\">")))
+				.andExpect(content().string(containsString("class=\"sesion-movil\"")));
+		// Con clave pendiente no hay menú, pero en celular igual debe poder cerrar sesión.
+		mvc.perform(get("/cuenta/cambiar-clave").with(UsuariosDePrueba.como(UsuariosDePrueba.autenticado(1L, 1L,
+						"nuevo", "Nuevo Usuario", true, java.util.EnumSet.of(Rol.DOCENTE)))))
+				.andExpect(content().string(containsString("class=\"sesion-movil\"")))
+				.andExpect(content().string(not(containsString("class=\"menu-lateral\""))));
+	}
+
+	@Test
+	void elMenuNoSeDesbordaYLaCabeceraSeCompactaEnCelular() throws IOException {
+		String css = new PathMatchingResourcePatternResolver().getResource("classpath:static/css/app.css")
+				.getContentAsString(StandardCharsets.UTF_8);
+		assertThat(css).as("la columna del menú no crece con etiquetas largas")
+				.containsPattern("\\.menu \\{[^}]*grid-template-columns: minmax\\(0, 1fr\\)");
+		assertThat(css).as("en celular la barra no muestra las acciones de la cuenta")
+				.containsPattern("@media \\(max-width: 860px\\)[\\s\\S]*\\.barra \\.sesion \\{ display: none; \\}");
+	}
+
+	@Test
 	void plantillasNoUsanThUtext() throws IOException {
 		assertThat(buscarEnPlantillas(Pattern.compile("th:utext"))).isEmpty();
 	}

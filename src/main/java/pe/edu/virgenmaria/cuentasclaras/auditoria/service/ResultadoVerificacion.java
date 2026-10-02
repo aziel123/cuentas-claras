@@ -1,5 +1,7 @@
 package pe.edu.virgenmaria.cuentasclaras.auditoria.service;
 
+import java.io.Serializable;
+
 /**
  * Resultado de verificar la cadena de auditoría.
  *
@@ -9,7 +11,7 @@ package pe.edu.virgenmaria.cuentasclaras.auditoria.service;
  * @param detalle            descripción en español del resultado
  */
 public record ResultadoVerificacion(boolean integra, long eventosRevisados, Long secuenciaConProblema,
-		String detalle) {
+		String detalle) implements Serializable {
 
 	static ResultadoVerificacion integra(long eventosRevisados) {
 		return new ResultadoVerificacion(true, eventosRevisados, null,

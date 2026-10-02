@@ -18,6 +18,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PruebaIntegracion;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 
 import java.time.Duration;
@@ -136,6 +137,25 @@ class BloqueoCuentaTest {
 		}
 		ingresar(CLAVE).andExpect(redirectedUrl("/inicio"));
 		assertThat(contar("CUENTA_BLOQUEADA")).isZero();
+	}
+
+	@Test
+	void directorDesbloqueaYQuedaAuditado() throws Exception {
+		Usuario director = UsuariosDePrueba.guardar(usuarios, codificador, 1L, "director", CLAVE, false, Rol.DIRECTOR);
+		long idCaja = jdbc.queryForObject("SELECT id FROM usuario WHERE nombre_usuario = 'caja'", Long.class);
+		bloquear();
+		ingresar(CLAVE).andExpect(redirectedUrl("/login?bloqueada"));
+
+		mvc.perform(post("/usuarios/" + idCaja + "/desbloquear").with(UsuariosDePrueba.como(director)).with(csrf())
+						.param("motivo", "Confirmé su identidad en persona"))
+				.andExpect(redirectedUrl("/usuarios/" + idCaja));
+
+		ingresar(CLAVE).andExpect(redirectedUrl("/inicio"));
+		Map<String, Object> evento = jdbc.queryForMap(
+				"SELECT * FROM evento_auditoria WHERE accion = 'CUENTA_DESBLOQUEADA'");
+		assertThat(evento.get("nombre_usuario")).isEqualTo("director");
+		assertThat(evento.get("entidad_id")).isEqualTo(String.valueOf(idCaja));
+		assertThat((String) evento.get("detalle")).contains("Confirmé su identidad en persona");
 	}
 
 	@Test

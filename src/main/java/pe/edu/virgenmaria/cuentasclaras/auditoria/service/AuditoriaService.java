@@ -96,8 +96,13 @@ public class AuditoriaService {
 		if (autenticacion instanceof AnonymousAuthenticationToken) {
 			return new Actor(colegioId, null, Actor.ANONIMO, null, ip);
 		}
-		Long usuarioId = autenticacion.getPrincipal() instanceof PrincipalConColegio principal
-				? principal.usuarioId() : null;
+		Long usuarioId = null;
+		if (autenticacion.getPrincipal() instanceof PrincipalConColegio principal) {
+			usuarioId = principal.usuarioId();
+			if (principal.rolesParaAuditoria() != null && !principal.rolesParaAuditoria().isBlank()) {
+				return new Actor(colegioId, usuarioId, autenticacion.getName(), principal.rolesParaAuditoria(), ip);
+			}
+		}
 		String roles = autenticacion.getAuthorities().stream()
 				.map(GrantedAuthority::getAuthority)
 				.filter(a -> a != null && a.startsWith(PREFIJO_ROL))
