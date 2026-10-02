@@ -47,6 +47,9 @@ class CambioClaveTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private java.time.Clock reloj;
+
 	private MockHttpSession sesion;
 
 	@BeforeEach
@@ -115,12 +118,26 @@ class CambioClaveTest {
 		assertThat(jdbc.queryForObject("SELECT intentos_fallidos FROM usuario WHERE nombre_usuario = 'nuevo'",
 				Integer.class)).isEqualTo(4);
 
-		cambiar("no es mi clave actual", NUEVA, NUEVA).andExpect(redirectedUrl("/login?bloqueada"));
+		cambiar("no es mi clave actual", NUEVA, NUEVA).andExpect(redirectedUrl("/login?error"));
 
 		assertThat(sesion.isInvalid()).isTrue();
-		ingresar(TEMPORAL).andExpect(redirectedUrl("/login?bloqueada"));
+		ingresar(TEMPORAL).andExpect(redirectedUrl("/login?error"));
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'INGRESO_RECHAZADO_BLOQUEADA'",
+				Long.class)).isEqualTo(1);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'CUENTA_BLOQUEADA'",
 				Long.class)).isEqualTo(1);
+	}
+
+	@Test
+	void cuentaBloqueadaNoPuedeCambiarLaClaveNiConLaActualCorrecta() throws Exception {
+		String hashAntes = hashGuardado();
+		jdbc.update("UPDATE usuario SET bloqueado_hasta = ? WHERE nombre_usuario = 'nuevo'",
+				java.time.LocalDateTime.now(reloj).plusMinutes(10));
+
+		cambiar(TEMPORAL, NUEVA, NUEVA).andExpect(redirectedUrl("/login?error"));
+
+		assertThat(sesion.isInvalid()).isTrue();
+		assertThat(hashGuardado()).isEqualTo(hashAntes);
 	}
 
 	@Test

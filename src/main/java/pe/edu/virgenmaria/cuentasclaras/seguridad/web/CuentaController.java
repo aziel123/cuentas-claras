@@ -60,7 +60,7 @@ public class CuentaController {
 		catch (ClaveActualIncorrectaException e) {
 			if (e.cuentaBloqueada()) {
 				cierreSesion.logout(request, response, autenticacion);
-				return "redirect:/login?bloqueada";
+				return "redirect:/login?error";
 			}
 			model.addAttribute("error", e.getMessage());
 			return VISTA;

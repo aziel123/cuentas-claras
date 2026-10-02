@@ -43,6 +43,9 @@ class AuditoriaControllerTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private java.time.Clock reloj;
+
 	@BeforeEach
 	void preparar() {
 		LimpiezaBaseDatos.limpiar(jdbc);
@@ -62,7 +65,7 @@ class AuditoriaControllerTest {
 
 	@Test
 	void laBitacoraSeLeeEnLenguajeClaroYHoraDeLima() throws Exception {
-		String hoy = LocalDate.now(ConfiguracionTiempo.ZONA_LIMA).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+		String hoy = LocalDate.now(reloj).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
 		mvc.perform(get("/auditoria").with(UsuariosDePrueba.como(Rol.PROMOTOR)))
 				.andExpect(status().isOk())
 				.andExpect(content().string(containsString("Ingresó al sistema")))
@@ -91,11 +94,11 @@ class AuditoriaControllerTest {
 
 	@Test
 	void elFiltroPorFechasExcluyeLoQueEstaFuera() throws Exception {
-		LocalDate ayer = LocalDate.now(ConfiguracionTiempo.ZONA_LIMA).minusDays(1);
+		LocalDate ayer = LocalDate.now(reloj).minusDays(1);
 		mvc.perform(get("/auditoria").with(UsuariosDePrueba.como(Rol.PROMOTOR))
 						.param("desde", ayer.minusDays(5).toString()).param("hasta", ayer.toString()))
-				.andExpect(content().string(containsString("No hay eventos en estas fechas")))
-				.andExpect(content().string(not(containsString("Ingresó al sistema"))));
+				.andExpect(content().string(containsString("No hay eventos con estos filtros")))
+				.andExpect(content().string(not(containsString("class=\"tabla\""))));
 	}
 
 	@Test
@@ -126,6 +129,49 @@ class AuditoriaControllerTest {
 		mvc.perform(get("/auditoria").with(UsuariosDePrueba.como(Rol.PROMOTOR)).flashAttrs(resultado.getFlashMap()))
 				.andExpect(content().string(containsString("La bitácora está íntegra: se revisaron 3 eventos")))
 				.andExpect(content().string(containsString("Verificó la integridad de la bitácora")));
+	}
+
+	@Test
+	void seFiltraPorUsuarioPorAccionYSoloRevisar() throws Exception {
+		mvc.perform(get("/auditoria").param("usuario", "Director").with(UsuariosDePrueba.como(Rol.PROMOTOR)))
+				.andExpect(content().string(containsString("Desactivó un usuario")))
+				.andExpect(content().string(not(containsString("<td data-etiqueta=\"IP\" class=\"num\">190.40.1.2</td>"))));
+		mvc.perform(get("/auditoria").param("accion", "INGRESO_EXITOSO").with(UsuariosDePrueba.como(Rol.PROMOTOR)))
+				.andExpect(content().string(containsString("190.40.1.2")))
+				.andExpect(content().string(not(containsString("activo → inactivo"))));
+		mvc.perform(get("/auditoria").param("soloRevisar", "true").with(UsuariosDePrueba.como(Rol.PROMOTOR)))
+				.andExpect(content().string(containsString("GET /usuarios")))
+				.andExpect(content().string(not(containsString("activo → inactivo"))));
+	}
+
+	@Test
+	void laVerificacionMuestraLaHuellaParaAnotar() throws Exception {
+		MvcResult resultado = mvc.perform(post("/auditoria/verificar-integridad")
+						.with(UsuariosDePrueba.como(Rol.PROMOTOR)).with(csrf()))
+				.andReturn();
+		String codigo = jdbc.queryForObject("SELECT SUBSTRING(hash, 1, 16) FROM evento_auditoria WHERE secuencia = 4",
+				String.class);
+
+		mvc.perform(get("/auditoria").with(UsuariosDePrueba.como(Rol.PROMOTOR)).flashAttrs(resultado.getFlashMap()))
+				.andExpect(content().string(containsString("Anota esta huella")))
+				.andExpect(content().string(containsString(codigo)))
+				.andExpect(content().string(containsString("sprint 4")));
+	}
+
+	@Test
+	void unaHuellaMalEscritaOQueNoEstaSeAvisa() throws Exception {
+		MvcResult malEscrita = mvc.perform(post("/auditoria/verificar-integridad").with(UsuariosDePrueba.como(Rol.PROMOTOR))
+						.with(csrf()).param("huellaSecuencia", "2").param("huellaCodigo", "xyz"))
+				.andReturn();
+		mvc.perform(get("/auditoria").with(UsuariosDePrueba.como(Rol.PROMOTOR)).flashAttrs(malEscrita.getFlashMap()))
+				.andExpect(content().string(containsString("El código de la huella son 16 caracteres")));
+
+		MvcResult inexistente = mvc.perform(post("/auditoria/verificar-integridad").with(UsuariosDePrueba.como(Rol.PROMOTOR))
+						.with(csrf()).param("huellaSecuencia", "999").param("huellaCodigo", "0123456789abcdef"))
+				.andReturn();
+		mvc.perform(get("/auditoria").with(UsuariosDePrueba.como(Rol.PROMOTOR)).flashAttrs(inexistente.getFlashMap()))
+				.andExpect(content().string(containsString("La bitácora fue ALTERADA")))
+				.andExpect(content().string(containsString("recortada")));
 	}
 
 	@Test

@@ -51,6 +51,12 @@ class LoginTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private java.time.Clock reloj;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioUsuarios servicioUsuarios;
+
 	@BeforeEach
 	void crearUsuarios() {
 		LimpiezaBaseDatos.limpiar(jdbc);
@@ -58,7 +64,7 @@ class LoginTest {
 		UsuariosDePrueba.guardar(usuarios, codificador, 1L, "nuevo", CLAVE, true, Rol.DOCENTE);
 		Usuario inactivo = UsuariosDePrueba.guardar(usuarios, codificador, 1L, "inactivo", CLAVE, false, Rol.CAJA);
 		ContextoColegio.en(1L, () -> {
-			inactivo.desactivar("director", LocalDateTime.now());
+			inactivo.desactivar("director", LocalDateTime.now(reloj));
 			usuarios.save(inactivo);
 		});
 	}
@@ -159,6 +165,25 @@ class LoginTest {
 
 		mvc.perform(get("/inicio").session(primera)).andExpect(redirectedUrl("/login?expirada"));
 		mvc.perform(get("/inicio").session(segunda)).andExpect(status().isOk());
+	}
+
+	@Test
+	void directorDegradadoEsExpulsadoEnSuSiguientePeticion() throws Exception {
+		Usuario promotora = UsuariosDePrueba.guardar(usuarios, codificador, 1L, "promotora", CLAVE, false, Rol.PROMOTOR);
+		Usuario director = UsuariosDePrueba.guardar(usuarios, codificador, 1L, "director", CLAVE, false, Rol.DIRECTOR);
+		MockHttpSession sesionDirector = sesionDe(ingresar("director", CLAVE).andReturn());
+		mvc.perform(get("/usuarios").session(sesionDirector)).andExpect(status().isOk());
+
+		UsuariosDePrueba.iniciarSesion(promotora);
+		try {
+			servicioUsuarios.cambiarRoles(director.getId(), new pe.edu.virgenmaria.cuentasclaras.seguridad.dto
+					.CambiarRolesRequest(java.util.EnumSet.of(Rol.DOCENTE), "Ya no es director del colegio"));
+		}
+		finally {
+			org.springframework.security.core.context.SecurityContextHolder.clearContext();
+		}
+
+		mvc.perform(get("/usuarios").session(sesionDirector)).andExpect(redirectedUrl("/login?expirada"));
 	}
 
 	@Test

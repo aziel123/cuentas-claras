@@ -15,6 +15,11 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EslabonCadenaReposi
 import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EventoAuditoriaRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.LimpiezaBaseDatos;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PruebaJpa;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
+import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.util.EnumSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -58,6 +63,7 @@ class VerificadorIntegridadAuditoriaTest {
 
 	@AfterEach
 	void limpiar() {
+		SecurityContextHolder.clearContext();
 		LimpiezaBaseDatos.limpiar(jdbc);
 	}
 
@@ -143,6 +149,87 @@ class VerificadorIntegridadAuditoriaTest {
 
 		assertThat(resultado.integra()).isFalse();
 		assertThat(resultado.secuenciaConProblema()).isEqualTo(1L);
+	}
+
+	@Test
+	void alterarSoloElHashDelEslabonSeDetecta() {
+		jdbc.update("UPDATE auditoria_cadena SET ultimo_hash = ? WHERE id = 1", "f".repeat(64));
+
+		ResultadoVerificacion resultado = verificador.verificar();
+
+		assertThat(resultado.integra()).isFalse();
+		assertThat(resultado.detalle()).contains("eslabón");
+	}
+
+	@Test
+	void laVerificacionDaUnaHuellaParaAnotar() {
+		ResultadoVerificacion resultado = verificador.verificar();
+
+		HuellaBitacora huella = resultado.huella();
+		assertThat(huella).isNotNull();
+		assertThat(huella.secuencia()).isEqualTo(EVENTOS + 1L);
+		assertThat(huella.codigo()).hasSize(16)
+				.isEqualTo(hashDe(EVENTOS + 1).substring(0, 16));
+		assertThat(huella.ocurridoEn()).isNotNull();
+	}
+
+	@Test
+	void unaHuellaAnotadaQueSigueEnLaCadenaEsIntegra() {
+		HuellaBitacora huella = verificador.verificar().huella();
+		auditoria.registrar(Actor.sistema(1L), AccionAuditoria.SESION_CERRADA, null, null, null, null, null);
+
+		ResultadoVerificacion resultado = verificador.verificar(HuellaBitacora.anotada(huella.secuencia(),
+				huella.codigo().toUpperCase()));
+
+		assertThat(resultado.integra()).isTrue();
+	}
+
+	@Test
+	void unRecortePorElFinalSoloSeDetectaConLaHuella() {
+		HuellaBitacora huella = verificador.verificar().huella();
+		// Alguien con acceso a la base borra los últimos eventos y retrocede el eslabón: la cadena sigue calzando.
+		jdbc.update("DELETE FROM evento_auditoria WHERE secuencia > 3");
+		jdbc.update("UPDATE auditoria_cadena SET ultima_secuencia = 3, ultimo_hash = ? WHERE id = 1", hashDe(3));
+
+		assertThat(verificador.verificar().integra()).as("sin huella el recorte no se ve").isTrue();
+		jdbc.update("DELETE FROM evento_auditoria WHERE secuencia > 3");
+		jdbc.update("UPDATE auditoria_cadena SET ultima_secuencia = 3, ultimo_hash = ? WHERE id = 1", hashDe(3));
+
+		ResultadoVerificacion conHuella = verificador.verificar(huella);
+		assertThat(conHuella.integra()).isFalse();
+		assertThat(conHuella.detalle()).contains("recortada").contains("evento " + huella.secuencia());
+	}
+
+	@Test
+	void unaHuellaConOtroCodigoDaAlterada() {
+		verificador.verificar();
+
+		ResultadoVerificacion resultado = verificador.verificar(HuellaBitacora.anotada(EVENTOS + 1L, "0".repeat(16)));
+
+		assertThat(resultado.integra()).isFalse();
+	}
+
+	@Test
+	void cadaColegioSoloVeSusEventosYNoLasSecuenciasDeOtro() {
+		jdbc.update("INSERT INTO colegio (nombre) VALUES ('Colegio de Prueba B')");
+		long colegioB = jdbc.queryForObject("SELECT id FROM colegio WHERE nombre = 'Colegio de Prueba B'", Long.class);
+		auditoria.registrar(Actor.sistema(colegioB), AccionAuditoria.USUARIO_CREADO, "usuario", "99", null, null, null);
+		SecurityContextHolder.getContext().setAuthentication(UsuariosDePrueba.autenticacion(UsuariosDePrueba
+				.autenticado(colegioB, 50L, "promotora.b", "Promotora B", false, EnumSet.of(Rol.PROMOTOR))));
+
+		ResultadoVerificacion integra = verificador.verificar();
+		assertThat(integra.eventosRevisados()).as("solo el evento propio del colegio B").isEqualTo(1);
+		assertThat(integra.detalle()).doesNotContain(String.valueOf(EVENTOS));
+
+		jdbc.update("UPDATE evento_auditoria SET valor_nuevo = 'alterado' WHERE secuencia = 2");
+		ResultadoVerificacion alterada = verificador.verificar();
+		assertThat(alterada.integra()).isFalse();
+		assertThat(alterada.secuenciaConProblema()).as("el evento alterado es del colegio A").isNull();
+		assertThat(alterada.detalle()).contains("de otro colegio").doesNotContain("secuencia 2");
+	}
+
+	private String hashDe(long secuencia) {
+		return jdbc.queryForObject("SELECT hash FROM evento_auditoria WHERE secuencia = ?", String.class, secuencia);
 	}
 
 	private void insertarEventoFalso(long secuencia, String hash) {

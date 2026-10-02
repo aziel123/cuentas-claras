@@ -10,27 +10,53 @@
 		</div>
 	</div>
 
+	<th:block th:if="${errorHuella != null}">
+		<div th:replace="~{fragments/componentes :: alerta('error', ${errorHuella})}"></div>
+	</th:block>
 	<th:block th:if="${verificacion != null}">
 		<th:block th:if="${verificacion.integra}">
 			<div th:replace="~{fragments/componentes :: alerta('exito',
-				|La bitácora está íntegra: se revisaron ${verificacion.eventosRevisados} eventos y ninguno fue alterado.|)}"></div>
+				|La bitácora está íntegra: se revisaron ${verificacion.eventosRevisados} eventos de tu colegio y ninguno fue alterado.|)}"></div>
 		</th:block>
 		<th:block th:unless="${verificacion.integra}">
 			<div th:replace="~{fragments/componentes :: alerta('error',
-				|La bitácora fue ALTERADA desde el evento ${verificacion.secuenciaConProblema}. ${verificacion.detalle} Avisa de inmediato al responsable técnico y no borres ni cambies nada.|)}"></div>
+				|La bitácora fue ALTERADA${verificacion.secuenciaConProblema != null ? ' desde el evento ' + verificacion.secuenciaConProblema : ''}. ${verificacion.detalle} Avisa de inmediato al responsable técnico y no borres ni cambies nada.|)}"></div>
 		</th:block>
+		<section class="tarjeta huella" th:if="${verificacion.huella != null}" aria-labelledby="titulo-huella">
+			<h2 id="titulo-huella">Anota esta huella</h2>
+			<p class="huella-valor">
+				<span>Evento <strong class="num" th:text="${verificacion.huella.secuencia}">123</strong></span>
+				<span th:text="${#temporals.format(verificacion.huella.ocurridoEn, 'dd/MM/yyyy HH:mm')}">02/10/2026 08:15</span>
+				<span>Código <strong class="codigo" th:text="${verificacion.huella.codigo}">1a2b3c4d5e6f7a8b</strong></span>
+			</p>
+			<p class="secundario">Guárdala fuera del sistema, por ejemplo en un cuaderno o en tu celular. Desde el sprint 4 te la
+				enviaremos cada día por WhatsApp o correo. En la próxima verificación escríbela abajo: si el número de evento
+				de una verificación nueva es menor que el de una huella anotada, o la huella ya no está, la bitácora fue recortada.</p>
+		</section>
 	</th:block>
 
 	<section class="tarjeta" th:if="${puedeVerificar}" aria-labelledby="titulo-integridad">
-		<div class="fila entre">
-			<div>
-				<h2 id="titulo-integridad">Verificar integridad</h2>
-				<p class="secundario">Comprueba que nadie editó, borró ni agregó eventos directamente en la base de datos.</p>
-			</div>
-			<form method="post" th:action="@{/auditoria/verificar-integridad}">
-				<button type="submit" class="btn btn-primario">Verificar integridad</button>
-			</form>
+		<div>
+			<h2 id="titulo-integridad">Verificar integridad</h2>
+			<p class="secundario">Comprueba que nadie editó, borró ni agregó eventos directamente en la base de datos.</p>
 		</div>
+		<form class="filtros" method="post" th:action="@{/auditoria/verificar-integridad}">
+			<fieldset class="grupo-opciones">
+				<legend>Última huella que anotaste (opcional)</legend>
+				<div class="filtros">
+					<div class="campo">
+						<label for="huellaSecuencia">Evento</label>
+						<input class="input" type="text" inputmode="numeric" id="huellaSecuencia" name="huellaSecuencia" autocomplete="off">
+					</div>
+					<div class="campo">
+						<label for="huellaCodigo">Código</label>
+						<input class="input" type="text" id="huellaCodigo" name="huellaCodigo" maxlength="16" autocomplete="off"
+							spellcheck="false" autocapitalize="none">
+					</div>
+				</div>
+			</fieldset>
+			<button type="submit" class="btn btn-primario">Verificar integridad</button>
+		</form>
 	</section>
 
 	<section class="tarjeta" aria-labelledby="titulo-eventos">
@@ -38,12 +64,29 @@
 		<form class="filtros" method="get" th:action="@{/auditoria}">
 			<div class="campo">
 				<label for="desde">Desde</label>
-				<input class="input" type="date" id="desde" name="desde" th:value="${desde}">
+				<input class="input" type="date" id="desde" name="desde" th:value="${filtro.desde}">
 			</div>
 			<div class="campo">
 				<label for="hasta">Hasta</label>
-				<input class="input" type="date" id="hasta" name="hasta" th:value="${hasta}">
+				<input class="input" type="date" id="hasta" name="hasta" th:value="${filtro.hasta}">
 			</div>
+			<div class="campo">
+				<label for="usuario">Usuario</label>
+				<input class="input" type="text" id="usuario" name="usuario" th:value="${filtro.nombreUsuario}"
+					autocapitalize="none" spellcheck="false">
+			</div>
+			<div class="campo">
+				<label for="accion">Acción</label>
+				<select class="input" id="accion" name="accion">
+					<option value="">Todas</option>
+					<option th:each="a : ${acciones}" th:value="${a}" th:text="${a.descripcion()}"
+						th:selected="${filtro.accion == a}">Acción</option>
+				</select>
+			</div>
+			<label class="opcion">
+				<input type="checkbox" name="soloRevisar" value="true" th:checked="${filtro.soloRevisar}">
+				<span>Solo «Revisar»</span>
+			</label>
 			<button type="submit" class="btn btn-secundario">Filtrar</button>
 		</form>
 
@@ -53,7 +96,7 @@
 
 		<th:block th:if="${eventos != null}">
 			<th:block th:if="${eventos.empty}">
-				<div th:replace="~{fragments/componentes :: estadoVacio('No hay eventos en estas fechas', 'Prueba con un rango de fechas más amplio.')}"></div>
+				<div th:replace="~{fragments/componentes :: estadoVacio('No hay eventos con estos filtros', 'Prueba con un rango de fechas más amplio o quita filtros.')}"></div>
 			</th:block>
 
 			<table class="tabla" th:unless="${eventos.empty}">
@@ -83,10 +126,10 @@
 
 			<nav class="paginacion fila entre" aria-label="Páginas" th:if="${eventos.totalPages > 1}">
 				<a class="btn btn-secundario btn-chico" th:if="${eventos.hasPrevious()}"
-					th:href="@{/auditoria(desde=${desde}, hasta=${hasta}, pagina=${eventos.number - 1})}">Más recientes</a>
+					th:href="@{/auditoria(desde=${filtro.desde}, hasta=${filtro.hasta}, usuario=${filtro.nombreUsuario}, accion=${filtro.accion}, soloRevisar=${filtro.soloRevisar}, pagina=${eventos.number - 1})}">Más recientes</a>
 				<span class="secundario" th:text="|Página ${eventos.number + 1} de ${eventos.totalPages}|">Página 1 de 3</span>
 				<a class="btn btn-secundario btn-chico" th:if="${eventos.hasNext()}"
-					th:href="@{/auditoria(desde=${desde}, hasta=${hasta}, pagina=${eventos.number + 1})}">Más antiguos</a>
+					th:href="@{/auditoria(desde=${filtro.desde}, hasta=${filtro.hasta}, usuario=${filtro.nombreUsuario}, accion=${filtro.accion}, soloRevisar=${filtro.soloRevisar}, pagina=${eventos.number + 1})}">Más antiguos</a>
 			</nav>
 		</th:block>
 	</section>

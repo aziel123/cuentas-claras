@@ -1,45 +1,28 @@
 package pe.edu.virgenmaria.cuentasclaras.seguridad.service;
 
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Carga el usuario que intenta ingresar. El login no pide colegio (el nombre de usuario es único
- * en la plataforma), por eso busca con {@link ContextoColegio#comoSistema}: es una de las pocas
- * clases autorizadas (regla ArchUnit). No es {@code @Transactional}: cambiar de colegio con una
- * transacción abierta no está permitido.
+ * Busca usuarios por nombre en toda la plataforma (el login no pide colegio; el nombre es único).
+ * Usa {@link ContextoColegio#comoSistema}: es una de las pocas clases autorizadas (regla ArchUnit).
+ * No es {@code @Transactional}: cambiar de colegio con una transacción abierta no está permitido.
  */
 @Service
-public class ServicioDetallesUsuario implements UserDetailsService {
+public class ServicioDetallesUsuario {
 
 	private final UsuarioRepository usuarios;
 
-	private final Clock reloj;
-
-	public ServicioDetallesUsuario(UsuarioRepository usuarios, Clock reloj) {
+	public ServicioDetallesUsuario(UsuarioRepository usuarios) {
 		this.usuarios = usuarios;
-		this.reloj = reloj;
 	}
 
-	@Override
-	public UserDetails loadUserByUsername(String nombreUsuario) {
-		String normalizado = normalizar(nombreUsuario);
-		Usuario usuario = buscar(normalizado)
-				.orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
-		return UsuarioAutenticado.de(usuario, LocalDateTime.now(reloj));
-	}
-
-	/** Colegio de un usuario, para auditar intentos de ingreso. Vacío si no existe. */
+	/** Colegio de un usuario (para ingresar y para detectar nombres repetidos). Vacío si no existe. */
 	public Optional<Long> colegioDe(String nombreUsuario) {
 		return buscar(normalizar(nombreUsuario)).map(Usuario::getColegioId);
 	}

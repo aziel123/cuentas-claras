@@ -36,6 +36,16 @@ class PoliticaClavesTest {
 	}
 
 	@Test
+	void aceptaLosLimitesExactos() {
+		assertThatCode(() -> PoliticaClaves.validar("a".repeat(63) + "b", "caja")).doesNotThrowAnyException();
+		String setentaYDosBytes = "ñ".repeat(36);
+		assertThat(setentaYDosBytes.getBytes(StandardCharsets.UTF_8)).hasSize(72);
+		assertThatCode(() -> PoliticaClaves.validar(setentaYDosBytes, "caja")).doesNotThrowAnyException();
+		assertThatThrownBy(() -> PoliticaClaves.validar("ñ".repeat(36) + "a", "caja"))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("demasiado larga");
+	}
+
+	@Test
 	void rechazaClaveConElNombreDeUsuario() {
 		assertThatThrownBy(() -> PoliticaClaves.validar("soy Lucia.Ramos 2026", "lucia.ramos"))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("nombre de usuario");

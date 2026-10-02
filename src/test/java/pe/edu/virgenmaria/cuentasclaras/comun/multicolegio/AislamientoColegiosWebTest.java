@@ -3,6 +3,8 @@ package pe.edu.virgenmaria.cuentasclaras.comun.multicolegio;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -52,6 +54,9 @@ class AislamientoColegiosWebTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private java.time.Clock reloj;
+
 	private Usuario cajaA;
 
 	private Usuario promotoraA;
@@ -93,6 +98,25 @@ class AislamientoColegiosWebTest {
 		assertThat(jdbc.queryForObject("SELECT activo FROM usuario WHERE id = ?", Boolean.class, cajaA.getId())).isTrue();
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'USUARIO_DESACTIVADO'",
 				Long.class)).isZero();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "roles", "reactivar", "restablecer-clave", "desbloquear" })
+	void ningunaAccionDelColegioBTocaAUnUsuarioDelColegioA(String accion) throws Exception {
+		jdbc.update("UPDATE usuario SET bloqueado_hasta = ? WHERE id = ?",
+				java.time.LocalDateTime.now(reloj).plusHours(1), cajaA.getId());
+		java.util.Map<String, Object> antes = jdbc.queryForMap("SELECT * FROM usuario WHERE id = ?", cajaA.getId());
+		long eventosAntes = jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria", Long.class);
+
+		mvc.perform(post("/usuarios/" + cajaA.getId() + "/" + accion).with(UsuariosDePrueba.como(directorB))
+						.with(csrf()).param("motivo", "Intento desde otro colegio").param("roles", "DOCENTE"))
+				.andExpect(status().isNotFound())
+				.andExpect(content().string(not(containsString("clave-temporal-valor"))));
+
+		assertThat(jdbc.queryForMap("SELECT * FROM usuario WHERE id = ?", cajaA.getId())).isEqualTo(antes);
+		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ?", String.class, cajaA.getId()))
+				.containsExactly("CAJA");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria", Long.class)).isEqualTo(eventosAntes);
 	}
 
 	@Test

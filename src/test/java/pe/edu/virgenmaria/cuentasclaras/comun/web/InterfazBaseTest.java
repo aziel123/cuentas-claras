@@ -52,7 +52,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@org.springframework.context.annotation.Import(InterfazBaseTest.ControladorQueFalla.class)
 class InterfazBaseTest {
+
+	/** Solo para la prueba: una ruta permitida para Caja que falla de verdad con una excepción. */
+	@org.springframework.stereotype.Controller
+	static class ControladorQueFalla {
+
+		static final String RUTA = "/caja/prueba-de-falla-interna";
+
+		@org.springframework.web.bind.annotation.GetMapping(RUTA)
+		String fallar() {
+			throw new IllegalStateException("java.lang.IllegalStateException: detalle técnico secreto");
+		}
+	}
 
 	private static final Pattern TOKEN_CSRF = Pattern.compile("<input[^>]*name=\"_csrf\"[^>]*value=\"([^\"]+)\"");
 
@@ -115,9 +128,9 @@ class InterfazBaseTest {
 
 	@Test
 	void conVariosRolesManaElDeMayorPrioridadYElMenuLosSuma() throws Exception {
-		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(Rol.DIRECTOR, Rol.ADMINISTRACION)))
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(Rol.DIRECTOR, Rol.DOCENTE)))
 				.andExpect(view().name("inicio/director"))
-				.andExpect(content().string(containsString("data-modulo=\"DESCUENTOS\"")))
+				.andExpect(content().string(containsString("data-modulo=\"ACADEMICO\"")))
 				.andExpect(content().string(containsString("data-modulo=\"APROBACIONES\"")));
 	}
 
@@ -200,14 +213,15 @@ class InterfazBaseTest {
 		assertThat(inexistente.statusCode()).isEqualTo(404);
 		assertThat(inexistente.body()).contains("No encontramos esta página");
 
-		HttpResponse<String> falla = pedir(cliente, "/error");
+		HttpResponse<String> falla = pedir(cliente, ControladorQueFalla.RUTA);
 		assertThat(falla.statusCode()).isEqualTo(500);
 		assertThat(falla.body()).contains("Algo salió mal");
 
 		for (HttpResponse<String> respuesta : List.of(prohibida, inexistente, falla)) {
 			assertThat(respuesta.body())
 					.contains("lang=\"es\"", "Volver al inicio")
-					.doesNotContain("Whitelabel", "Exception", "exception", "org.springframework", "trace",
+					.doesNotContain("Whitelabel", "Exception", "exception", "org.springframework", "trace", "secreto",
+							"ControladorQueFalla",
 							"Forbidden", "Not Found", "Internal Server Error", "timestamp");
 			assertThat(respuesta.headers().firstValue("Content-Security-Policy")).isPresent();
 		}

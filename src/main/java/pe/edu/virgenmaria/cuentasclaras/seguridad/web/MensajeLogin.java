@@ -9,20 +9,22 @@ package pe.edu.virgenmaria.cuentasclaras.seguridad.web;
 public record MensajeLogin(String tipo, String texto) {
 
 	/**
-	 * Clave incorrecta, usuario inexistente o desactivado muestran el MISMO mensaje: así no se revela
-	 * qué usuarios existen.
+	 * Clave incorrecta, usuario inexistente, cuenta desactivada o bloqueada muestran el MISMO mensaje: así no
+	 * se revela qué usuarios existen ni cuáles están bloqueados.
 	 */
-	static MensajeLogin para(String error, String bloqueada, String salio, String expirada, String claveCambiada) {
-		if (bloqueada != null) {
-			return new MensajeLogin("advertencia", "Tu cuenta está bloqueada por varios intentos fallidos. "
-					+ "Espera 15 minutos o pide a Dirección que la desbloquee.");
-		}
+	static MensajeLogin para(String error, String vencida, String salio, String expirada, String claveCambiada,
+			int intentosMaximos, long minutosBloqueo, long horasClaveTemporal) {
 		if (error != null) {
-			return new MensajeLogin("error", "Usuario o clave incorrectos. Revisa e intenta de nuevo.");
+			return new MensajeLogin("error", "Usuario o clave incorrectos. Después de " + intentosMaximos
+					+ " intentos fallidos la cuenta se bloquea " + minutosBloqueo + " minutos.");
+		}
+		if (vencida != null) {
+			return new MensajeLogin("advertencia", "Tu clave temporal venció: dura " + horasClaveTemporal + " horas. "
+					+ "Pide a Promotoría o Dirección que te den una nueva.");
 		}
 		if (expirada != null) {
-			return new MensajeLogin("info", "Tu sesión se cerró porque ingresaste desde otro equipo "
-					+ "o pasó mucho tiempo sin actividad. Vuelve a ingresar.");
+			return new MensajeLogin("info", "Tu sesión se cerró porque ingresaste desde otro equipo, cambiaron tus "
+					+ "permisos o pasó mucho tiempo sin actividad. Vuelve a ingresar.");
 		}
 		if (claveCambiada != null) {
 			return new MensajeLogin("exito", "Listo, tu clave se cambió. Ingresa con tu nueva clave.");

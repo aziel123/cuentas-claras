@@ -1,23 +1,24 @@
 # Producción: MySQL 8. Las credenciales llegan por variables de entorno, nunca en el código.
+# La aplicación usa cc_app (sin UPDATE ni DELETE sobre la bitácora) y NO migra: antes de cada despliegue se
+# ejecuta «java -jar cuentas-claras.jar migrar» con cc_migrador (docs/operacion/mysql-usuarios.md).
 spring:
   datasource:
     url: ${DB_URL}
     username: ${DB_USUARIO}
     password: ${DB_CLAVE}
   flyway:
-    validate-on-migrate: true
-    # Flyway migra con un usuario propio (cc_migrador, con DDL). La aplicación usa cc_app, sin UPDATE ni
-    # DELETE sobre la bitácora. Ver docs/operacion/mysql-usuarios.md.
-    user: ${DB_MIGRADOR_USUARIO}
-    password: ${DB_MIGRADOR_CLAVE}
+    enabled: false
 
 server:
-  forward-headers-strategy: framework
+  # IP real del visitante: solo se cree la cabecera X-Forwarded-For si la petición llega desde un proxy de
+  # confianza (internal-proxies). Si un visitante la envía directamente, se ignora.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      # Expresión regular de las IP de tus proxies. Por defecto: loopback y redes privadas típicas.
+      internal-proxies: ${CC_PROXIES_INTERNOS:10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|127\.\d+\.\d+\.\d+|0:0:0:0:0:0:0:1|::1}
 
 cuentasclaras:
-  auditoria:
-    # Si la aplicación puede editar o borrar la bitácora, no arranca (VerificadorPermisosBaseDatos).
-    exigir-permisos-restringidos: true
   # Primer PROMOTOR: se crea al arrancar SOLO si no hay ningún usuario. Debe cambiar la clave al ingresar.
   inicial:
     colegio-id: ${CC_COLEGIO_ID:1}

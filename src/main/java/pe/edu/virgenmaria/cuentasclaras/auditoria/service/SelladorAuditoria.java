@@ -54,6 +54,23 @@ public class SelladorAuditoria {
 		}
 	}
 
+	/**
+	 * Código corto (12 hexadecimales) que identifica un texto sin revelarlo: HMAC con la misma clave.
+	 * Se usa para registrar el nombre que escribió alguien que no es usuario (podría ser su clave tecleada
+	 * en el campo equivocado): los intentos repetidos con el mismo texto tienen el mismo código.
+	 */
+	public String codigoDeTexto(String texto) {
+		try {
+			Mac mac = Mac.getInstance(ALGORITMO);
+			mac.init(clave);
+			byte[] firma = mac.doFinal(("texto-intentado|" + (texto == null ? "" : texto)).getBytes(StandardCharsets.UTF_8));
+			return HexFormat.of().formatHex(firma).substring(0, 12);
+		}
+		catch (GeneralSecurityException e) {
+			throw new IllegalStateException("No se pudo calcular el HMAC de auditoría", e);
+		}
+	}
+
 	/** Comparación en tiempo constante del hash guardado contra el recalculado. */
 	public boolean esValido(String hashAnterior, EventoAuditoria evento) {
 		String esperado = sellar(hashAnterior, evento);

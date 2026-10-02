@@ -68,6 +68,16 @@ public class Usuario extends BaseEntity {
 	@Column(name = "desactivado_por", length = 60)
 	private String desactivadoPor;
 
+	/** Hasta cuándo sirve la clave temporal; {@code null}: no vence (o la clave no es temporal). */
+	@Column(name = "clave_temporal_hasta")
+	private LocalDateTime claveTemporalHasta;
+
+	@Column(name = "clave_restablecida_por", length = 60)
+	private String claveRestablecidaPor;
+
+	@Column(name = "clave_restablecida_en")
+	private LocalDateTime claveRestablecidaEn;
+
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "usuario_rol", joinColumns = @JoinColumn(name = "usuario_id"))
 	@Enumerated(EnumType.STRING)
@@ -143,6 +153,34 @@ public class Usuario extends BaseEntity {
 		claveHash = requerido(nuevoHash, "La clave es obligatoria.");
 		claveCambiadaEn = ahora;
 		debeCambiarClave = temporal;
+		if (!temporal) {
+			claveTemporalHasta = null;
+		}
+	}
+
+	/** La clave temporal actual deja de servir en {@code hasta} (el titular debe pedir otra). */
+	public void vencerClaveTemporalEn(LocalDateTime hasta) {
+		if (!debeCambiarClave) {
+			throw new IllegalStateException("Solo vence una clave temporal");
+		}
+		claveTemporalHasta = hasta;
+	}
+
+	/**
+	 * Otra persona le genera una clave temporal nueva: desbloquea la cuenta y deja rastro de quién y cuándo,
+	 * para avisar al titular.
+	 */
+	public void restablecerClave(String hashTemporal, LocalDateTime ahora, LocalDateTime vence, String por) {
+		cambiarClave(hashTemporal, ahora, true);
+		claveTemporalHasta = vence;
+		claveRestablecidaPor = requerido(por, "Falta quién restablece la clave.");
+		claveRestablecidaEn = ahora;
+		desbloquear();
+	}
+
+	/** {@code true} si debe cambiar su clave temporal y esta ya venció. */
+	public boolean claveTemporalVencida(LocalDateTime ahora) {
+		return debeCambiarClave && claveTemporalHasta != null && !ahora.isBefore(claveTemporalHasta);
 	}
 
 	public void cambiarRoles(Set<Rol> nuevosRoles) {
@@ -222,6 +260,18 @@ public class Usuario extends BaseEntity {
 
 	public String getDesactivadoPor() {
 		return desactivadoPor;
+	}
+
+	public LocalDateTime getClaveTemporalHasta() {
+		return claveTemporalHasta;
+	}
+
+	public String getClaveRestablecidaPor() {
+		return claveRestablecidaPor;
+	}
+
+	public LocalDateTime getClaveRestablecidaEn() {
+		return claveRestablecidaEn;
 	}
 
 	public Set<Rol> getRoles() {

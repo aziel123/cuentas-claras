@@ -1,6 +1,7 @@
 package pe.edu.virgenmaria.cuentasclaras.seguridad.config;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -50,6 +51,7 @@ class MatrizPermisosTest {
 	@Qualifier("requestMappingHandlerMapping")
 	private RequestMappingHandlerMapping mapeos;
 
+	@BeforeEach
 	@AfterEach
 	void limpiar() {
 		// El manejador de acceso denegado audita cada 403.
@@ -63,13 +65,10 @@ class MatrizPermisosTest {
 		for (ModuloApp modulo : ModuloApp.values()) {
 			int estado = mvc.perform(get(modulo.ruta()).with(UsuariosDePrueba.como(rol))).andReturn()
 					.getResponse().getStatus();
-			boolean permitido = modulo.permite(rol);
-			// Permitido: 200, o 404 si el módulo aún no tiene controlador. Negado: 403.
-			if (permitido && (estado == 403 || estado / 100 == 3)) {
-				errores.add(rol + " debería entrar a " + modulo.ruta() + " y recibió " + estado);
-			}
-			if (!permitido && estado != 403) {
-				errores.add(rol + " NO debería entrar a " + modulo.ruta() + " y recibió " + estado);
+			// Permitido: 200 si el módulo ya existe, 404 si aún no tiene controlador. Negado: 403. Nunca otro.
+			int esperado = !modulo.permite(rol) ? 403 : modulo.disponible() ? 200 : 404;
+			if (estado != esperado) {
+				errores.add(rol + " en " + modulo.ruta() + ": esperaba " + esperado + " y recibió " + estado);
 			}
 		}
 		assertThat(errores).isEmpty();
@@ -159,8 +158,8 @@ class MatrizPermisosTest {
 	void elMenuSaleDeLaMismaMatriz() {
 		assertThat(ModuloApp.para(UsuariosDePrueba.autenticado(Rol.CAJA).getAuthorities()))
 				.containsExactly(ModuloApp.INICIO, ModuloApp.CAJA_COBRO);
-		assertThat(ModuloApp.para(UsuariosDePrueba.autenticado(Rol.DIRECTOR, Rol.ADMINISTRACION).getAuthorities()))
-				.contains(ModuloApp.USUARIOS, ModuloApp.DESCUENTOS)
+		assertThat(ModuloApp.para(UsuariosDePrueba.autenticado(Rol.DIRECTOR, Rol.DOCENTE).getAuthorities()))
+				.contains(ModuloApp.USUARIOS, ModuloApp.ACADEMICO)
 				.doesNotContain(ModuloApp.CAJA_COBRO, ModuloApp.FAMILIA);
 		assertThat(ModuloApp.para(UsuariosDePrueba.autenticado(1L, 1L, "x", "X", true, EnumSet.of(Rol.PROMOTOR))
 				.getAuthorities())).as("con clave pendiente no hay menú").isEmpty();

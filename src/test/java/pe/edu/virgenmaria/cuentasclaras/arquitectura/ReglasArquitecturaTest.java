@@ -4,6 +4,7 @@ import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaAnnotation;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
@@ -33,18 +34,20 @@ import jakarta.persistence.MappedSuperclass;
 import org.springframework.security.access.prepost.PreAuthorize;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EslabonCadenaRepository;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EventoAuditoriaRepository;
-import pe.edu.virgenmaria.cuentasclaras.auditoria.service.ConsultaAuditoriaService;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioUsuarios;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noFields;
@@ -179,12 +182,47 @@ class ReglasArquitecturaTest {
 			.should().dependOnClassesThat().belongToAnyOf(EventoAuditoriaRepository.class, EslabonCadenaRepository.class)
 			.because("cada evento debe pasar por el sellado HMAC y la secuencia de AuditoriaService");
 
-	/** Los servicios de gestión exigen rol también por método, no solo por URL. */
+	/**
+	 * Los servicios sensibles exigen rol también por método, no solo por URL, y con la expresión EXACTA:
+	 * ni {@code permitAll} ni roles de más.
+	 */
+	private static final Map<String, String> EXPRESIONES_EXIGIDAS = Map.of(
+			BASE + ".seguridad.service.ServicioUsuarios", "hasAnyRole('PROMOTOR','DIRECTOR')",
+			BASE + ".auditoria.service.ConsultaAuditoriaService", "hasAnyRole('PROMOTOR','DIRECTOR')",
+			BASE + ".auditoria.service.ConsultaAuditoriaService#paraRevisar", "hasRole('PROMOTOR')",
+			BASE + ".auditoria.service.VerificadorIntegridadAuditoria#verificar", "hasRole('PROMOTOR')");
+
 	@ArchTest
-	static final ArchRule serviciosSensiblesExigenRol = classes()
-			.that().areTopLevelClasses().and().belongToAnyOf(ServicioUsuarios.class, ConsultaAuditoriaService.class)
-			.should().beAnnotatedWith(PreAuthorize.class)
-			.because("la matriz de URL no basta: el servicio también se protege (@PreAuthorize)");
+	static void serviciosSensiblesExigenRol(JavaClasses clases) {
+		List<String> problemas = new ArrayList<>();
+		EXPRESIONES_EXIGIDAS.forEach((objetivo, esperada) -> {
+			String[] partes = objetivo.split("#");
+			JavaClass clase = clases.get(partes[0]);
+			if (partes.length == 1) {
+				revisar(problemas, objetivo, clase.tryGetAnnotationOfType(PreAuthorize.class).map(PreAuthorize::value)
+						.orElse(null), esperada);
+			}
+			else {
+				List<JavaMethod> metodos = clase.getMethods().stream().filter(m -> m.getName().equals(partes[1])).toList();
+				if (metodos.isEmpty()) {
+					problemas.add(objetivo + ": no existe");
+				}
+				metodos.forEach(m -> revisar(problemas, objetivo + m.getRawParameterTypes(),
+						m.tryGetAnnotationOfType(PreAuthorize.class).map(PreAuthorize::value).orElse(null), esperada));
+			}
+		});
+		// Ningún @PreAuthorize del código deja pasar a todos.
+		clases.forEach(c -> c.getMethods().forEach(m -> m.tryGetAnnotationOfType(PreAuthorize.class)
+				.filter(a -> a.value().contains("permitAll"))
+				.ifPresent(a -> problemas.add(m.getFullName() + ": permitAll"))));
+		assertThat(problemas).as("expresiones de @PreAuthorize").isEmpty();
+	}
+
+	private static void revisar(List<String> problemas, String donde, String encontrada, String esperada) {
+		if (!esperada.equals(encontrada == null ? null : encontrada.replace(" ", ""))) {
+			problemas.add(donde + ": esperaba @PreAuthorize(\"" + esperada + "\") y tiene " + encontrada);
+		}
+	}
 
 	@ArchTest
 	static final ArchRule cobranzaNoDependeDeAcademico = noClasses()

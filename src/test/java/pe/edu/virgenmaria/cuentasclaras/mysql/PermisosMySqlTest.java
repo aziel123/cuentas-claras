@@ -70,6 +70,9 @@ class PermisosMySqlTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private javax.sql.DataSource fuenteDatos;
+
 	@AfterEach
 	void limpiar() {
 		SecurityContextHolder.clearContext();
@@ -83,7 +86,8 @@ class PermisosMySqlTest {
 					.isInstanceOf(DataAccessException.class)
 					.satisfies(e -> assertThat(codigoMySql(e)).isEqualTo(1142));
 		}
-		assertThatCode(() -> new VerificadorPermisosBaseDatos(jdbc, true).verificar()).doesNotThrowAnyException();
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(jdbc, fuenteDatos).afterPropertiesSet())
+				.doesNotThrowAnyException();
 	}
 
 	@Test
@@ -105,6 +109,30 @@ class PermisosMySqlTest {
 		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ?", String.class, caja.getId()))
 				.containsExactly("DOCENTE");
 		assertThat(verificador.verificar().integra()).isTrue();
+	}
+
+	@Test
+	void tildesYEmojiSeGuardanEnUtf8mb4YLaCadenaSigueIntegra() {
+		String texto = "Pagó S/ 1,250.00 ✅🎉 · ñandú «Año» " + sufijo;
+		EventoAuditoria evento = auditoria.registrar(Actor.sistema(1L), AccionAuditoria.USUARIO_CREADO, "usuario", "1",
+				null, texto, texto);
+
+		assertThat(jdbc.queryForObject("SELECT detalle FROM evento_auditoria WHERE secuencia = ?", String.class,
+				evento.getSecuencia())).isEqualTo(texto);
+		UsuariosDePrueba.iniciarSesion(guardar("verificadora." + sufijo, Rol.PROMOTOR));
+		assertThat(verificador.verificar().integra()).isTrue();
+	}
+
+	@Test
+	void elConteoDePromotoresConBloqueoFuncionaEnMySql() {
+		Usuario primera = guardar("promo1." + sufijo, Rol.PROMOTOR);
+		Usuario segunda = guardar("promo2." + sufijo, Rol.PROMOTOR);
+		UsuariosDePrueba.iniciarSesion(primera);
+
+		servicioUsuarios.desactivar(segunda.getId(), "Prueba de bloqueo en MySQL");
+
+		assertThat(jdbc.queryForObject("SELECT activo FROM usuario WHERE id = ?", Boolean.class, segunda.getId()))
+				.isFalse();
 	}
 
 	@Test

@@ -11,6 +11,8 @@ import java.util.Set;
  *   <li>Todo usuario tiene al menos un rol.</li>
  *   <li>CAJA no se combina con PROMOTOR, DIRECTOR ni ADMINISTRACION.</li>
  *   <li>APODERADO no se combina con ningún otro rol: un trabajador que además es padre usa dos cuentas.</li>
+ *   <li>DIRECTOR no se combina con ADMINISTRACION: quien registra descuentos no los aprueba
+ *       (decisión por defecto, por confirmar con el colegio; diseño, sección 12).</li>
  * </ul>
  */
 public final class ReglasSegregacion {
@@ -27,6 +29,10 @@ public final class ReglasSegregacion {
 		if (roles.contains(Rol.CAJA) && roles.stream().anyMatch(INCOMPATIBLES_CON_CAJA::contains)) {
 			throw new ReglaNegocioException(
 					"Caja no puede combinarse con Promotoría, Dirección ni Administración: quien cobra no aprueba.");
+		}
+		if (roles.contains(Rol.DIRECTOR) && roles.contains(Rol.ADMINISTRACION)) {
+			throw new ReglaNegocioException(
+					"Dirección no puede combinarse con Administración: quien registra descuentos no los aprueba.");
 		}
 		if (roles.contains(Rol.APODERADO) && roles.size() > 1) {
 			throw new ReglaNegocioException(

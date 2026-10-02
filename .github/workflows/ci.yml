@@ -24,10 +24,13 @@ jobs:
       - name: Compilar, migrar y probar
         run: ./mvnw -B verify
 
+      - name: Las pruebas no dependen de la zona horaria del servidor
+        run: ./mvnw -B test -DargLine=-Duser.timezone=America/Los_Angeles
+
   mysql:
-    name: Migraciones y permisos en MySQL 8
+    name: Migraciones, permisos y arranque en MySQL 8
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     services:
       mysql:
         image: mysql:8
@@ -56,13 +59,23 @@ jobs:
           java-version: "21"
           cache: maven
 
+      - name: Empaquetar la aplicación
+        run: ./mvnw -B -q -DskipTests package
+
       - name: Crear la base y los usuarios cc_migrador y cc_app
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" \
               -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               scripts/mysql/01-usuarios.sql | $MYSQL_ADMIN
 
-      - name: "Fase 1: Flyway aplica V1-V3 con cc_migrador e Hibernate valida el esquema con cc_app"
+      - name: Migrar con cc_migrador (modo migrar, sin servidor web)
+        env:
+          DB_URL: ${{ env.CC_MYSQL_URL }}
+          DB_MIGRADOR_USUARIO: cc_migrador
+          DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
+        run: java -jar target/cuentas-claras-*.jar migrar
+
+      - name: "Fase 1: Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Permisos por tabla de cc_app
@@ -81,3 +94,26 @@ jobs:
             echo "$salida" | grep -q "ERROR 1142" || { echo "Error inesperado: $salida"; exit 1; }
             echo "OK (1142): $sql"
           done
+
+      - name: Arranque real en prod con cc_app (y rechazo con cc_migrador)
+        env:
+          SPRING_PROFILES_ACTIVE: prod
+          DB_URL: ${{ env.CC_MYSQL_URL }}
+          AUDITORIA_CLAVE_HMAC: "clave-hmac-del-job-de-integracion-continua-0001"
+        run: |
+          DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" \
+            java -jar target/cuentas-claras-*.jar --server.port=18080 > prod.log 2>&1 &
+          PID_APP=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:18080/actuator/health | grep -q UP && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:18080/actuator/health | grep -q UP || { cat prod.log; exit 1; }
+          grep -q "Permisos de la bitácora verificados" prod.log || { cat prod.log; exit 1; }
+          kill "$PID_APP"
+          if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \
+               java -jar target/cuentas-claras-*.jar --server.port=18081 > prod-migrador.log 2>&1; then
+            echo "ERROR: la aplicación arrancó con un usuario que puede editar la bitácora"; exit 1
+          fi
+          grep -q "PUEDE ejecutar" prod-migrador.log || { cat prod-migrador.log; exit 1; }
+          echo "OK: arranca con cc_app y se niega con cc_migrador"

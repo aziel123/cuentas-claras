@@ -70,6 +70,8 @@ Cada funcionalidad sigue el flujo de agentes del proyecto:
 
 ### Sprint 4 · Familias y matrícula 2027 (30 nov – 11 dic) → **H2**
 - Notificación por WhatsApp (y correo de respaldo) en cada pago, anulación y descuento.
+- **Clave temporal directo al titular** (cierra el hallazgo A2 de la auditoría del sprint 1): al crear un usuario o restablecer su clave, la clave temporal se envía por WhatsApp o correo al titular y **ya no se muestra a quien la generó**. Así Promotoría o Dirección no pueden usar la cuenta de otra persona ni crear cuentas fantasma de Caja. Mientras tanto rige la mitigación del sprint 1: la clave temporal vence a las 48 horas, el titular ve quién restableció su clave, Promotoría tiene la tarjeta «Para revisar» y la bitácora marca esos cambios para revisar.
+- **Huella diaria de la bitácora** a Promotoría por WhatsApp o correo (número de evento, fecha y código), para detectar un recorte de la bitácora sin depender de que la anote a mano.
 - Portal de familias, pensado para celular: estado de cuenta, cuotas, comprobantes descargables e historial de mensajes.
 - Proceso de **matrícula 2027**: renovación, generación del cronograma 2027 y cobro de la matrícula.
 - **Terminado cuando:** una familia real paga la matrícula 2027 y recibe su comprobante por WhatsApp. El cuaderno se archiva.

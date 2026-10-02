@@ -10,10 +10,12 @@ Plataforma de gestión escolar del **Colegio Virgen María**. Empieza por la cob
 ## Uso
 ```bash
 ./mvnw -B verify          # compila, aplica migraciones y corre las pruebas
-./mvnw spring-boot:run    # levanta la app en http://localhost:8080
+./mvnw spring-boot:run    # levanta la app en http://localhost:8080 con el perfil dev
 ```
 
 Salud de la aplicación: `GET /actuator/health`.
+
+No hay perfil por defecto: `./mvnw spring-boot:run` ya usa `dev`, pero el jar necesita el perfil explícito (`SPRING_PROFILES_ACTIVE=dev java -jar ...` en local). Sin perfil, o en producción con la clave HMAC de desarrollo, la aplicación no arranca.
 
 ### Usuarios de demostración (solo perfil `dev`)
 Al arrancar con H2 en memoria y sin usuarios se crean estos usuarios, todos con la clave `demo-cuentas-claras-2026` (se cambia con la variable `CC_DEMO_CLAVE`):
@@ -29,12 +31,15 @@ Al arrancar con H2 en memoria y sin usuarios se crean estos usuarios, todos con 
 | `promotor.b` | Promotoría | Colegio de Prueba B (para ver el aislamiento entre colegios) |
 
 ## Producción
-Perfil `prod` con MySQL 8 (base `cuentasclaras`, `utf8mb4`). Antes del primer arranque crea los usuarios `cc_migrador` y `cc_app` con los scripts de `scripts/mysql/`, como explica `docs/operacion/mysql-usuarios.md`.
+Perfil `prod` con MySQL 8 (base `cuentasclaras`, `utf8mb4`). La primera vez, crea los usuarios `cc_migrador` y `cc_app` con los scripts de `scripts/mysql/` (`docs/operacion/mysql-usuarios.md`). En cada despliegue hay dos pasos separados, y la aplicación nunca recibe la clave del migrador:
 ```bash
+# 1. Migrar (Flyway con cc_migrador) y terminar, sin servidor web
+DB_URL="jdbc:mysql://HOST:3306/cuentasclaras" DB_MIGRADOR_USUARIO="cc_migrador" DB_MIGRADOR_CLAVE="..." \
+java -jar target/cuentas-claras-*.jar migrar
+
+# 2. Arrancar la aplicación con cc_app
 SPRING_PROFILES_ACTIVE=prod \
-DB_URL="jdbc:mysql://HOST:3306/cuentasclaras" \
-DB_USUARIO="cc_app" DB_CLAVE="..." \
-DB_MIGRADOR_USUARIO="cc_migrador" DB_MIGRADOR_CLAVE="..." \
+DB_URL="jdbc:mysql://HOST:3306/cuentasclaras" DB_USUARIO="cc_app" DB_CLAVE="..." \
 AUDITORIA_CLAVE_HMAC="..." \
 CC_PROMOTOR_USUARIO="..." CC_PROMOTOR_NOMBRE="..." CC_PROMOTOR_CLAVE="..." \
 java -jar target/cuentas-claras-*.jar
@@ -44,8 +49,9 @@ java -jar target/cuentas-claras-*.jar
 |---|---|---|
 | `DB_URL` | Sí | Conexión JDBC a MySQL |
 | `DB_USUARIO`, `DB_CLAVE` | Sí | Usuario de la aplicación (`cc_app`): sin UPDATE ni DELETE sobre la bitácora. Si los tiene, la aplicación no arranca |
-| `DB_MIGRADOR_USUARIO`, `DB_MIGRADOR_CLAVE` | Sí | Usuario de Flyway (`cc_migrador`), el único que crea o cambia tablas |
-| `AUDITORIA_CLAVE_HMAC` | Sí | Sella la bitácora (32 caracteres o más). Guárdala en el gestor de secretos: si se pierde, no se puede verificar la bitácora |
+| `DB_MIGRADOR_USUARIO`, `DB_MIGRADOR_CLAVE` | Solo para `migrar` | Usuario de Flyway (`cc_migrador`), el único que crea o cambia tablas. **No** van en el entorno de la aplicación |
+| `AUDITORIA_CLAVE_HMAC` | Sí | Sella la bitácora (32 caracteres o más). Custodia: `docs/operacion/custodia-clave-auditoria.md` |
+| `CC_PROXIES_INTERNOS` | No | Expresión regular con las IP de tus proxies inversos; solo de ellos se acepta X-Forwarded-For (por defecto: loopback y redes privadas) |
 | `CC_PROMOTOR_USUARIO`, `CC_PROMOTOR_NOMBRE`, `CC_PROMOTOR_CLAVE` | Solo si no hay usuarios | Crean al primer PROMOTOR, que debe cambiar la clave al ingresar. Luego retira `CC_PROMOTOR_CLAVE` |
 | `CC_COLEGIO_ID` | No (1) | Colegio del primer PROMOTOR |
 

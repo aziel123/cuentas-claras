@@ -41,10 +41,16 @@ class ReglasSegregacionTest {
 		return Stream.concat(
 				EnumSet.allOf(Rol.class).stream().map(EnumSet::of),
 				Stream.of(
-						EnumSet.of(Rol.DIRECTOR, Rol.ADMINISTRACION),
 						EnumSet.of(Rol.PROMOTOR, Rol.DIRECTOR),
 						EnumSet.of(Rol.DIRECTOR, Rol.DOCENTE),
 						EnumSet.of(Rol.CAJA, Rol.DOCENTE)));
+	}
+
+	@Test
+	void direccionNoSeCombinaConAdministracion() {
+		assertThatThrownBy(() -> ReglasSegregacion.validar(EnumSet.of(Rol.DIRECTOR, Rol.ADMINISTRACION)))
+				.isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("quien registra descuentos no los aprueba");
 	}
 
 	@Test

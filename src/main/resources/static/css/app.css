@@ -317,5 +317,8 @@ textarea.input { min-height: 96px; resize: vertical; }
 .filtros .campo { min-width: 160px; }
 .fila-atencion td:first-child { box-shadow: inset 3px 0 0 var(--color-alerta); }
 .paginacion { margin-top: var(--esp-2); }
+.huella { border-left: 4px solid var(--color-celeste); }
+.huella-valor { display: flex; flex-wrap: wrap; gap: var(--esp-2) var(--esp-6); font-size: var(--texto-lg); }
+.huella-valor .codigo { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; letter-spacing: 0.05em; user-select: all; }
 
 .pie { text-align: center; color: var(--color-texto-secundario); font-size: var(--texto-sm); padding: var(--esp-6) var(--esp-4); }

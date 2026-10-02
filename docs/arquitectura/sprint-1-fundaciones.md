@@ -541,7 +541,7 @@ Imports:
 | # | Tema | Decisión por defecto |
 |---|---|---|
 | 1 | Combinaciones de roles prohibidas | CAJA con PROM, DIR o ADM; APODERADO con el personal. Validar con el organigrama real. |
-| 2 | DIRECTOR + ADMINISTRACION | Permitido. La autoaprobación se bloquea por operación en el sprint 3. |
+| 2 | DIRECTOR + ADMINISTRACION | **Prohibido** desde la auditoría de seguridad del sprint 1 (`ReglasSegregacion`): quien registra descuentos no los aprueba. Confirmar con el colegio; si una sola persona cumple ambas funciones, usará dos cuentas. |
 | 3 | Una sesión por usuario | Sí. Confirmar si hay PC compartidas. |
 | 4 | Bloqueo | 5 intentos y 15 minutos; Dirección desbloquea. |
 | 5 | Clave HMAC de auditoría | En el gestor de secretos, con una copia sellada para la promotora. Sin rotación por ahora. |

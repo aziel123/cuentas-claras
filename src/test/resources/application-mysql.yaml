@@ -1,10 +1,9 @@
 # Pruebas contra MySQL 8 real (job "mysql" del CI). Se activa junto con el perfil test: @ActiveProfiles({"test", "mysql"}).
-# La aplicación usa cc_app (permisos mínimos) y Flyway usa cc_migrador, como en producción.
+# Como en producción: la aplicación usa cc_app y NO migra (el CI corre antes «java -jar ... migrar» con cc_migrador).
 spring:
   datasource:
     url: ${CC_MYSQL_URL:jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false}
     username: cc_app
     password: ${CC_MYSQL_CLAVE_APP:}
   flyway:
-    user: cc_migrador
-    password: ${CC_MYSQL_CLAVE_MIGRADOR:}
+    enabled: false

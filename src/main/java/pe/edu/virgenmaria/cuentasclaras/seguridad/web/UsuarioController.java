@@ -132,7 +132,11 @@ public class UsuarioController {
 	}
 
 	private static String primerError(BindingResult validacion) {
-		return validacion.getAllErrors().getFirst().getDefaultMessage();
+		var error = validacion.getAllErrors().getFirst();
+		// Un valor que no se pudo convertir (por ejemplo, un rol inventado) no muestra el mensaje técnico.
+		boolean conversion = error.getCodes() != null && java.util.Arrays.stream(error.getCodes())
+				.anyMatch(c -> c.startsWith("typeMismatch"));
+		return conversion ? "Revisa los datos: elige roles de la lista." : error.getDefaultMessage();
 	}
 
 	private static String redirigirADetalle(Long id) {

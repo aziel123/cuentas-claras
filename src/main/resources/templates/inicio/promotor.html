@@ -10,6 +10,37 @@
 		</div>
 	</div>
 
+	<th:block th:if="${avisoClave != null}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
+	</th:block>
+
+	<section class="tarjeta revisar" aria-labelledby="titulo-revisar">
+		<div>
+			<h2 id="titulo-revisar">Para revisar</h2>
+			<p class="secundario">Claves restablecidas, usuarios creados y cambios de roles de los últimos 7 días. Si algo no lo
+				reconoces, revísalo con quien lo hizo: así se detecta una cuenta falsa a tiempo.</p>
+		</div>
+		<th:block th:if="${#lists.isEmpty(paraRevisar)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Nada para revisar', 'No hubo cambios de claves ni de usuarios en los últimos 7 días.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(paraRevisar)}">
+			<caption class="solo-lectores">Cambios de claves y usuarios de los últimos 7 días</caption>
+			<thead><tr><th scope="col">Cuándo</th><th scope="col">Quién</th><th scope="col">Qué hizo</th><th scope="col">A quién</th></tr></thead>
+			<tbody>
+				<tr th:each="r : ${paraRevisar}">
+					<td data-etiqueta="Cuándo" class="num" th:text="${#temporals.format(r.cuando, 'dd/MM HH:mm')}">02/10 08:15</td>
+					<td data-etiqueta="Quién" th:text="${r.quien}">director</td>
+					<td data-etiqueta="Qué hizo">
+						<span th:text="${r.accion}">Restableció la clave de un usuario</span>
+						<small class="bloque secundario" th:if="${r.cambio != null}" th:text="${r.cambio}">Roles: Caja</small>
+					</td>
+					<td data-etiqueta="A quién" th:text="${r.aQuien}">Lucía Ramos (lucia.ramos)</td>
+				</tr>
+			</tbody>
+		</table>
+		<a class="btn btn-texto btn-chico" th:href="@{/auditoria(soloRevisar=true)}">Ver todo lo marcado «Revisar» en la bitácora</a>
+	</section>
+
 	<section class="tarjeta" aria-labelledby="titulo-modulos">
 		<h2 id="titulo-modulos">Lo que podrás hacer aquí</h2>
 		<p class="secundario">Estamos construyendo la plataforma por etapas. Cada módulo se activa cuando está listo.</p>

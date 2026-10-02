@@ -14,9 +14,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
- * FASE 1 del job "mysql" del CI (antes de los permisos por tabla). Al levantar el contexto:
- * Flyway aplica V1–V3 en MySQL 8 con cc_migrador y Hibernate valida el esquema ({@code ddl-auto: validate})
- * con cc_app. Solo corre si {@code CC_PRUEBA_MYSQL=true}; en el build normal (H2) se omite.
+ * FASE 1 del job "mysql" del CI (antes de los permisos por tabla). Antes corre «java -jar ... migrar» con
+ * cc_migrador; aquí la aplicación arranca con cc_app y sin Flyway: Hibernate valida el esquema
+ * ({@code ddl-auto: validate}) y no deben faltar migraciones. Solo corre si {@code CC_PRUEBA_MYSQL=true}.
  */
 @SpringBootTest
 @ActiveProfiles({ "test", "mysql" })
@@ -26,18 +26,22 @@ class MigracionMySqlTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private javax.sql.DataSource fuenteDatos;
+
 	@Test
 	void lasMigracionesSeAplicaronYHibernateValidoElEsquema() {
 		List<String> versiones = jdbc.queryForList(
 				"SELECT version FROM flyway_schema_history WHERE success = 1 AND version IS NOT NULL ORDER BY installed_rank",
 				String.class);
-		assertThat(versiones).containsExactly("1", "2", "3");
+		assertThat(versiones).containsExactly("1", "2", "3", "4");
 		assertThat(jdbc.queryForObject("SELECT ultima_secuencia FROM auditoria_cadena WHERE id = 1", Long.class))
 				.isNotNull();
 	}
 
 	@Test
-	void elUsuarioDeLaAplicacionNoPuedeEditarNiBorrarLaBitacora() {
-		assertThatCode(() -> new VerificadorPermisosBaseDatos(jdbc, true).verificar()).doesNotThrowAnyException();
+	void elUsuarioDeLaAplicacionNoPuedeEditarNiBorrarLaBitacoraYNoFaltanMigraciones() {
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(jdbc, fuenteDatos).afterPropertiesSet())
+				.doesNotThrowAnyException();
 	}
 }

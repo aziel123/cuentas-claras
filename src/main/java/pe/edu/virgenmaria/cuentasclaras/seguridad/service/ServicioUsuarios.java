@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.seguridad.service;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -13,6 +14,7 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.config.PropiedadesSeguridad;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.CambiarRolesRequest;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.CrearUsuarioRequest;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.UsuarioCreado;
@@ -63,11 +65,14 @@ public class ServicioUsuarios {
 
 	private final TransactionTemplate transaccion;
 
+	private final PropiedadesSeguridad propiedades;
+
 	private final Clock reloj;
 
 	public ServicioUsuarios(UsuarioRepository usuarios, ServicioDetallesUsuario detalles, PasswordEncoder codificador,
 			GeneradorClaveTemporal generador, AuditoriaService auditoria, SesionesUsuario sesiones,
-			PlatformTransactionManager transacciones, Clock reloj) {
+			PropiedadesSeguridad propiedades, PlatformTransactionManager transacciones, Clock reloj) {
+		this.propiedades = propiedades;
 		this.usuarios = usuarios;
 		this.detalles = detalles;
 		this.codificador = codificador;
@@ -114,26 +119,49 @@ public class ServicioUsuarios {
 	 */
 	public UsuarioCreado crear(CrearUsuarioRequest solicitud) {
 		UsuarioAutenticado actor = actor();
-		exigirPuedeAsignar(actor, solicitud.roles());
+		Set<Rol> roles = rolesValidos(solicitud.roles());
+		exigirPuedeAsignar(actor, roles);
 		String nombreUsuario = Usuario.normalizarNombreUsuario(solicitud.nombreUsuario());
 		if (!Usuario.esNombreUsuarioValido(nombreUsuario)) {
 			throw new ReglaNegocioException("El usuario debe tener de 3 a 60 caracteres: letras minúsculas sin tildes, "
 					+ "números, punto, guion o guion bajo. Por ejemplo: lucia.ramos");
 		}
 		if (detalles.colegioDe(nombreUsuario).isPresent()) {
-			throw new ReglaNegocioException("Ya existe un usuario «" + nombreUsuario + "» en la plataforma. "
-					+ "Elige otro, por ejemplo agregando la inicial del segundo apellido.");
+			throw nombreRepetido(nombreUsuario);
 		}
 		String claveTemporal = generador.generar();
-		Usuario usuario = transaccion.execute(estado -> {
-			Usuario nuevo = usuarios.save(Usuario.nuevo(nombreUsuario, solicitud.nombreCompleto(), solicitud.correo(),
-					codificador.encode(claveTemporal), solicitud.roles()));
-			auditoria.registrar(AccionAuditoria.USUARIO_CREADO, "usuario", nuevo.getId().toString(), null,
-					"roles=" + roles(nuevo.getRoles()) + "; activo; clave temporal",
-					"Usuario " + nuevo.getNombreUsuario() + " (" + nuevo.getNombreCompleto() + ").");
-			return nuevo;
-		});
+		Usuario usuario;
+		try {
+			usuario = transaccion.execute(estado -> {
+				LocalDateTime ahora = ahora();
+				Usuario nuevo = Usuario.nuevo(nombreUsuario, solicitud.nombreCompleto(), solicitud.correo(),
+						codificador.encode(claveTemporal), roles);
+				nuevo.vencerClaveTemporalEn(ahora.plus(propiedades.vigenciaClaveTemporal()));
+				usuarios.save(nuevo);
+				auditoria.registrar(AccionAuditoria.USUARIO_CREADO, "usuario", nuevo.getId().toString(), null,
+						"roles=" + roles(nuevo.getRoles()) + "; activo; clave temporal",
+						"Usuario " + nuevo.getNombreUsuario() + " (" + nuevo.getNombreCompleto() + ").");
+				return nuevo;
+			});
+		}
+		catch (DataIntegrityViolationException e) {
+			// Otra persona creó el mismo nombre al mismo tiempo: lo detiene la restricción única de la base.
+			throw nombreRepetido(nombreUsuario);
+		}
 		return new UsuarioCreado(usuario.getId(), usuario.getNombreUsuario(), usuario.getNombreCompleto(), claveTemporal);
+	}
+
+	private static ReglaNegocioException nombreRepetido(String nombreUsuario) {
+		return new ReglaNegocioException("Ya existe un usuario «" + nombreUsuario + "» en la plataforma. "
+				+ "Elige otro, por ejemplo agregando la inicial del segundo apellido.");
+	}
+
+	/** Al menos un rol válido; si no, un mensaje claro (nunca un error 500). */
+	private static Set<Rol> rolesValidos(Set<Rol> roles) {
+		if (roles == null || roles.isEmpty() || roles.stream().anyMatch(java.util.Objects::isNull)) {
+			throw new ReglaNegocioException("Elige al menos un rol.");
+		}
+		return EnumSet.copyOf(roles);
 	}
 
 	@Transactional
@@ -141,7 +169,7 @@ public class ServicioUsuarios {
 		UsuarioAutenticado actor = actor();
 		Usuario usuario = buscar(id);
 		exigirNoEsUnoMismo(actor, usuario, "No puedes cambiar tus propios roles.");
-		Set<Rol> nuevos = EnumSet.copyOf(solicitud.roles());
+		Set<Rol> nuevos = rolesValidos(solicitud.roles());
 		if (!nuevos.contains(Rol.PROMOTOR)) {
 			exigirNoEsElUltimoPromotor(usuario, "No puedes quitarle Promotoría al último usuario de Promotoría activo.");
 		}
@@ -190,8 +218,9 @@ public class ServicioUsuarios {
 		exigirPuedeTocar(actor, usuario);
 		String texto = motivo(motivo);
 		String claveTemporal = generador.generar();
-		usuario.cambiarClave(codificador.encode(claveTemporal), ahora(), true);
-		usuario.desbloquear();
+		LocalDateTime ahora = ahora();
+		usuario.restablecerClave(codificador.encode(claveTemporal), ahora, ahora.plus(propiedades.vigenciaClaveTemporal()),
+				actor.getUsername());
 		auditoria.registrar(AccionAuditoria.CLAVE_RESTABLECIDA, "usuario", id.toString(), null, "clave temporal",
 				detalle(usuario, texto));
 		sesiones.expirar(id);
@@ -254,7 +283,7 @@ public class ServicioUsuarios {
 
 	private void exigirNoEsElUltimoPromotor(Usuario objetivo, String mensaje) {
 		if (objetivo.isActivo() && objetivo.getRoles().contains(Rol.PROMOTOR)
-				&& usuarios.contarActivosConRol(Rol.PROMOTOR) <= 1) {
+				&& usuarios.bloquearActivosConRol(Rol.PROMOTOR).size() <= 1) {
 			throw new ReglaNegocioException(mensaje);
 		}
 	}

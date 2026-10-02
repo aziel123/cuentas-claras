@@ -58,6 +58,9 @@ class EventosSeguridadAuditadosTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private java.time.Clock reloj;
+
 	private Usuario caja;
 
 	@BeforeEach
@@ -107,14 +110,14 @@ class EventosSeguridadAuditadosTest {
 		for (int i = 0; i < 5; i++) {
 			ingresar("caja", CLAVE_EQUIVOCADA);
 		}
-		ingresar("caja", CLAVE).andExpect(redirectedUrl("/login?bloqueada"));
+		ingresar("caja", CLAVE).andExpect(redirectedUrl("/login?error"));
 		assertThat(ultimo("INGRESO_RECHAZADO_BLOQUEADA").get("usuario_id")).isEqualTo(caja.getId());
 	}
 
 	@Test
 	void ingresoRechazadoPorCuentaInactivaQuedaAuditado() throws Exception {
 		ContextoColegio.en(1L, () -> {
-			caja.desactivar("director", LocalDateTime.now());
+			caja.desactivar("director", LocalDateTime.now(reloj));
 			usuarios.save(caja);
 		});
 		ingresar("caja", CLAVE).andExpect(redirectedUrl("/login?error"));
@@ -173,21 +176,24 @@ class EventosSeguridadAuditadosTest {
 				.doesNotContain("$2a$");
 		// La clave escrita por error en el campo de usuario no tiene forma de usuario: no se guarda.
 		List<String> nombres = jdbc.queryForList("SELECT DISTINCT nombre_usuario FROM evento_auditoria", String.class);
-		assertThat(nombres).contains("caja", ServicioIntentosIngreso.NOMBRE_NO_VALIDO)
-				.doesNotContain(CLAVE_EQUIVOCADA);
+		assertThat(nombres).contains("caja").doesNotContain(CLAVE_EQUIVOCADA)
+				.anySatisfy(n -> assertThat(n).startsWith(ProveedorAutenticacion.PREFIJO_DESCONOCIDO));
 	}
 
 	@Test
-	void unTextoQueNoEsUnUsuarioNoSeGuardaEnLaBitacora() throws Exception {
+	void elTextoEscritoPorQuienNoEsUsuarioNuncaSeGuarda() throws Exception {
 		ingresar("Mi Clave Secreta!", CLAVE).andExpect(redirectedUrl("/login?error"));
-		ingresar("", CLAVE);
+		ingresar("Mi Clave Secreta!", CLAVE);
 		ingresar("no.existe", CLAVE);
 
-		assertThat(jdbc.queryForList("SELECT nombre_usuario FROM evento_auditoria ORDER BY secuencia", String.class))
-				.containsExactly(ServicioIntentosIngreso.NOMBRE_NO_VALIDO, ServicioIntentosIngreso.NOMBRE_NO_VALIDO,
-						"no.existe");
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE nombre_usuario LIKE '%Secreta%'",
-				Long.class)).isZero();
+		List<String> nombres = jdbc.queryForList("SELECT nombre_usuario FROM evento_auditoria ORDER BY secuencia",
+				String.class);
+		assertThat(nombres).hasSize(3).allSatisfy(n -> assertThat(n).matches("desconocido-[0-9a-f]{12}"));
+		assertThat(nombres.get(0)).as("el mismo texto da el mismo código").isEqualTo(nombres.get(1));
+		assertThat(nombres.get(2)).isNotEqualTo(nombres.get(0));
+		String bitacora = String.join("\n", jdbc.queryForList("SELECT CONCAT_WS('|', nombre_usuario, detalle, valor_nuevo) "
+				+ "FROM evento_auditoria", String.class));
+		assertThat(bitacora).doesNotContainIgnoringCase("secreta").doesNotContain("no.existe");
 	}
 
 	@Test
@@ -232,7 +238,8 @@ class EventosSeguridadAuditadosTest {
 
 	@Test
 	void cuentaDesbloqueadaQuedaAuditada() throws Exception {
-		jdbc.update("UPDATE usuario SET bloqueado_hasta = ? WHERE id = ?", LocalDateTime.now().plusHours(1), caja.getId());
+		jdbc.update("UPDATE usuario SET bloqueado_hasta = ? WHERE id = ?", LocalDateTime.now(reloj).plusHours(1),
+				caja.getId());
 		accionSobreCaja("desbloquear");
 		assertThat(ultimo("CUENTA_DESBLOQUEADA").get("nombre_usuario")).isEqualTo("promotora");
 	}

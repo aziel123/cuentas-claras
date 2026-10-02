@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.security.autoconfigure.web.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.LockedException;
+import org.springframework.security.authentication.CredentialsExpiredException;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -26,8 +26,8 @@ import java.util.Map;
  * Seguridad web (diseño, sección 7).
  * <ul>
  *   <li>Permisos: solo los de {@link ModuloApp}; toda otra ruta se niega ({@code denyAll}).</li>
- *   <li>Login propio en {@code /login} con BCrypt; los usuarios los carga {@code ServicioDetallesUsuario}
- *       (al existir ese bean, Boot ya no genera el usuario {@code user}).</li>
+ *   <li>Login propio en {@code /login} con BCrypt; autentica {@code ProveedorAutenticacion}, que serializa los
+ *       intentos por usuario (al existir ese bean, Boot ya no genera el usuario {@code user}).</li>
  *   <li>Una sesión por usuario: un segundo ingreso expira el primero. Cambio de id de sesión al ingresar.</li>
  *   <li>Cierre de sesión solo por POST (con CSRF) en {@code /salir}.</li>
  *   <li>Cabeceras: CSP sin estilos ni scripts en línea, sin iframes, Referrer-Policy y Permissions-Policy.</li>
@@ -76,11 +76,15 @@ public class ConfiguracionSeguridad {
 		return http.build();
 	}
 
-	/** Clave incorrecta, usuario inexistente o desactivado: el mismo mensaje. Cuenta bloqueada: aviso propio. */
+	/**
+	 * Clave incorrecta, usuario inexistente, cuenta desactivada o BLOQUEADA: el mismo mensaje genérico, para no
+	 * revelar qué usuarios existen ni cuáles están bloqueados. La clave temporal vencida tiene su aviso: solo se
+	 * llega ahí con la clave correcta.
+	 */
 	private static ExceptionMappingAuthenticationFailureHandler manejadorFallo() {
 		ExceptionMappingAuthenticationFailureHandler fallo = new ExceptionMappingAuthenticationFailureHandler();
 		fallo.setDefaultFailureUrl("/login?error");
-		fallo.setExceptionMappings(Map.of(LockedException.class.getName(), "/login?bloqueada"));
+		fallo.setExceptionMappings(Map.of(CredentialsExpiredException.class.getName(), "/login?vencida"));
 		return fallo;
 	}
 

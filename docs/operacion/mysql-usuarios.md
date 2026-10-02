@@ -12,14 +12,14 @@ Así, aunque alguien robe la clave de la aplicación o encuentre una falla en el
 ## Instalación (una sola vez)
 Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` del CI.
 
-1. **Antes de la primera migración**, como administrador. Reemplaza `__CLAVE_MIGRADOR__` y `__CLAVE_APP__` por claves del gestor de secretos y **no guardes el archivo modificado**:
+1. **Usuarios y base**, como administrador. Reemplaza `__CLAVE_MIGRADOR__` y `__CLAVE_APP__` por claves del gestor de secretos y **no guardes el archivo modificado**:
    ```bash
    sed -e 's/__CLAVE_MIGRADOR__/<clave-migrador>/' -e 's/__CLAVE_APP__/<clave-app>/' \
        scripts/mysql/01-usuarios.sql | mysql -h <host> -u root -p
    ```
    Crea la base `cuentasclaras` (utf8mb4), `cc_migrador` con todos los permisos sobre ella y `cc_app` solo con SELECT.
-2. **Arranca la aplicación una vez.** Flyway crea las tablas con `cc_migrador`. La aplicación arranca con `cc_app` solo leyendo. El `VerificadorPermisosBaseDatos` ya comprueba que no puede editar la bitácora.
-3. **Después de esa primera migración**, aplica los permisos por tabla. MySQL no acepta un GRANT sobre una tabla que todavía no existe:
+2. **Primera migración** (ver «Despliegue»): crea las tablas con `cc_migrador`.
+3. **Permisos por tabla**, después de esa primera migración. MySQL no acepta un GRANT sobre una tabla que todavía no existe:
    ```bash
    mysql -h <host> -u root -p < scripts/mysql/02-permisos-tablas.sql
    ```
@@ -32,6 +32,18 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `evento_auditoria` | INSERT | **Solo inserción** |
 | `auditoria_cadena` | UPDATE | Avanzar el eslabón; MySQL también lo exige para `SELECT ... FOR UPDATE` |
 
+## Despliegue (cada versión)
+La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **nunca** recibe las credenciales de `cc_migrador`. Cada despliegue tiene dos pasos separados:
+
+1. **Migrar**: el mismo jar en modo migración. Aplica Flyway con `cc_migrador` y termina, sin servidor web:
+   ```bash
+   DB_URL="jdbc:mysql://<host>:3306/cuentasclaras" \
+   DB_MIGRADOR_USUARIO="cc_migrador" DB_MIGRADOR_CLAVE="..." \
+   java -jar cuentas-claras.jar migrar
+   ```
+   Si una migración crea una tabla, aplica después su GRANT (paso 3 de la instalación).
+2. **Arrancar** la aplicación con `SPRING_PROFILES_ACTIVE=prod` y **solo** `DB_USUARIO=cc_app` / `DB_CLAVE`. Antes de aceptar peticiones comprueba que no falten migraciones y que `cc_app` no pueda editar ni borrar la bitácora (error 1142). Si algo falla, **no arranca**.
+
 ## Cada migración nueva
 - Si crea una tabla, agrega su GRANT en `scripts/mysql/02-permisos-tablas.sql` y aplícalo después de migrar.
 - **Tablas financieras** (pago, cuota, comprobante, cierre de caja): INSERT y UPDATE (para anular con estado), **nunca DELETE**.
@@ -42,8 +54,9 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 |---|---|
 | `DB_URL` | `jdbc:mysql://<host>:3306/cuentasclaras` |
 | `DB_USUARIO`, `DB_CLAVE` | `cc_app` y su clave |
-| `DB_MIGRADOR_USUARIO`, `DB_MIGRADOR_CLAVE` | `cc_migrador` y su clave |
-| `AUDITORIA_CLAVE_HMAC` | Clave de la cadena de auditoría, de 32 caracteres o más. Si se pierde, la bitácora no se puede verificar |
+| `DB_MIGRADOR_USUARIO`, `DB_MIGRADOR_CLAVE` | `cc_migrador` y su clave. **Solo** para `java -jar cuentas-claras.jar migrar`, nunca en el entorno de la aplicación |
+| `AUDITORIA_CLAVE_HMAC` | Clave de la cadena de auditoría, de 32 caracteres o más. Custodia: `custodia-clave-auditoria.md` |
+| `CC_PROXIES_INTERNOS` | Expresión regular con las IP de tus proxies inversos. Solo de ellos se acepta la cabecera X-Forwarded-For. Por defecto: loopback y redes privadas (10.x, 172.16-31.x, 192.168.x) |
 | `CC_COLEGIO_ID`, `CC_PROMOTOR_USUARIO`, `CC_PROMOTOR_NOMBRE`, `CC_PROMOTOR_CLAVE` | Primer PROMOTOR, solo si no hay usuarios. Retira `CC_PROMOTOR_CLAVE` después del primer ingreso |
 
 ## Cómo comprobarlo
@@ -52,6 +65,6 @@ Conectado como `cc_app`, estas dos sentencias deben fallar con **ERROR 1142** (c
 UPDATE evento_auditoria SET ip = ip WHERE 1 = 0;
 DELETE FROM evento_auditoria WHERE 1 = 0;
 ```
-La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`). Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Para desactivar esta comprobación en un entorno de pruebas existe `cuentasclaras.auditoria.exigir-permisos-restringidos=false`; nunca lo uses en producción.
+La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

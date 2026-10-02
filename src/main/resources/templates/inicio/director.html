@@ -10,6 +10,10 @@
 		</div>
 	</div>
 
+	<th:block th:if="${avisoClave != null}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
+	</th:block>
+
 	<section class="tarjeta" aria-labelledby="titulo-modulos">
 		<h2 id="titulo-modulos">Lo que podrás hacer aquí</h2>
 		<p class="secundario">Estamos construyendo la plataforma por etapas. Cada módulo se activa cuando está listo.</p>

@@ -1,10 +1,12 @@
 package pe.edu.virgenmaria.cuentasclaras.auditoria.service;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.EventoAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EventoAuditoriaRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
@@ -13,9 +15,13 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -32,6 +38,11 @@ public class ConsultaAuditoriaService {
 	static final int DIAS_POR_DEFECTO = 7;
 
 	static final int MAXIMO_DIAS = 366;
+
+	static final int MAXIMO_PARA_REVISAR = 20;
+
+	static final Set<AccionAuditoria> ACCIONES_PARA_REVISAR = EnumSet.of(AccionAuditoria.CLAVE_RESTABLECIDA,
+			AccionAuditoria.USUARIO_CREADO, AccionAuditoria.ROLES_CAMBIADOS);
 
 	private final EventoAuditoriaRepository eventos;
 
@@ -50,28 +61,68 @@ public class ConsultaAuditoriaService {
 
 	@Transactional(readOnly = true)
 	public Page<EventoVista> listar(LocalDate desde, LocalDate hasta, int pagina) {
+		return listar(FiltroBitacora.fechas(desde, hasta), pagina);
+	}
+
+	@Transactional(readOnly = true)
+	public Page<EventoVista> listar(FiltroBitacora filtro, int pagina) {
 		RangoFechas rango = rangoPorDefecto();
-		LocalDate inicio = desde == null ? rango.desde() : desde;
-		LocalDate fin = hasta == null ? rango.hasta() : hasta;
+		LocalDate inicio = filtro.desde() == null ? rango.desde() : filtro.desde();
+		LocalDate fin = filtro.hasta() == null ? rango.hasta() : filtro.hasta();
 		if (fin.isBefore(inicio)) {
 			throw new ReglaNegocioException("La fecha «hasta» no puede ser anterior a «desde».");
 		}
 		if (ChronoUnit.DAYS.between(inicio, fin) >= MAXIMO_DIAS) {
 			throw new ReglaNegocioException("Consulta como máximo un año a la vez.");
 		}
-		Long colegioId = ContextoColegio.actual();
-		if (colegioId == null || colegioId <= 0) {
-			return Page.empty(PageRequest.of(0, TAMANO_PAGINA));
+		Long colegioId = colegioActual();
+		PageRequest pedido = PageRequest.of(Math.max(pagina, 0), TAMANO_PAGINA);
+		if (colegioId == null) {
+			return Page.empty(pedido);
 		}
-		return eventos.findByColegioIdAndOcurridoEnBetweenOrderBySecuenciaDesc(colegioId, inicio.atStartOfDay(),
-						fin.atTime(LocalTime.MAX).truncatedTo(ChronoUnit.MICROS),
-						PageRequest.of(Math.max(pagina, 0), TAMANO_PAGINA))
+		return eventos.buscar(colegioId, inicio.atStartOfDay(), fin.atTime(LocalTime.MAX).truncatedTo(ChronoUnit.MICROS),
+						filtro.nombreUsuario(), filtro.accion(), filtro.soloRevisar(), AccionAuditoria.siempreRevisar(),
+						AccionAuditoria.CON_ROLES, pedido)
 				.map(ConsultaAuditoriaService::vista);
+	}
+
+	/**
+	 * Restablecimientos de clave, altas y cambios de roles del colegio en los últimos 7 días: quién, a quién y
+	 * cuándo. Es la vigilancia de Promotoría contra cuentas fantasma o suplantaciones.
+	 */
+	@PreAuthorize("hasRole('PROMOTOR')")
+	@Transactional(readOnly = true)
+	public List<EventoRevision> paraRevisar() {
+		Long colegioId = colegioActual();
+		if (colegioId == null) {
+			return List.of();
+		}
+		LocalDateTime desde = LocalDate.now(reloj).minusDays(DIAS_POR_DEFECTO - 1L).atStartOfDay();
+		return eventos.findByColegioIdAndAccionInAndOcurridoEnGreaterThanEqualOrderBySecuenciaDesc(colegioId,
+						ACCIONES_PARA_REVISAR, desde, Limit.of(MAXIMO_PARA_REVISAR))
+				.stream()
+				.map(e -> new EventoRevision(e.getOcurridoEn(), e.getNombreUsuario(), e.getAccion().descripcion(),
+						idDeUsuario(e.getEntidadId()), e.getValorNuevo() == null ? null : legible(e.getValorNuevo())))
+				.toList();
+	}
+
+	private static Long idDeUsuario(String entidadId) {
+		try {
+			return entidadId == null ? null : Long.valueOf(entidadId);
+		}
+		catch (NumberFormatException e) {
+			return null;
+		}
+	}
+
+	private static Long colegioActual() {
+		Long colegioId = ContextoColegio.actual();
+		return colegioId == null || colegioId <= 0 ? null : colegioId;
 	}
 
 	private static EventoVista vista(EventoAuditoria e) {
 		return new EventoVista(e.getSecuencia(), e.getOcurridoEn(), e.getNombreUsuario(), rolesLegibles(e.getRoles()),
-				e.getAccion().descripcion(), e.getAccion().requiereAtencion(),
+				e.getAccion().descripcion(), e.getAccion().requiereRevision(e.getValorNuevo()),
 				cambio(e.getValorAnterior(), e.getValorNuevo()), e.getDetalle(), e.getIp());
 	}
 

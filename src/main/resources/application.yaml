@@ -1,8 +1,6 @@
 spring:
   application:
     name: cuentas-claras
-  profiles:
-    default: dev
   jpa:
     open-in-view: false
     hibernate:
@@ -53,6 +51,8 @@ cuentasclaras:
     # Intentos fallidos seguidos antes de bloquear la cuenta, y cuánto dura el bloqueo.
     intentos-maximos: 5
     duracion-bloqueo: 15m
+    # Una clave temporal (alta o restablecimiento) deja de servir pasado este tiempo.
+    vigencia-clave-temporal: 48h
   auditoria:
     # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
     # aplicación no arranca. Nunca en el código: va en el gestor de secretos.

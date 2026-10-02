@@ -29,6 +29,14 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 	@Query("select u from Usuario u where u.id = :id")
 	Optional<Usuario> bloquearPorId(@Param("id") Long id);
 
+	/**
+	 * Usuarios activos con el rol, con sus filas bloqueadas: dos cambios simultáneos no pueden dejar al colegio
+	 * sin ese rol (por ejemplo, sin Promotoría).
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select u from Usuario u where u.activo = true and :rol member of u.roles")
+	List<Usuario> bloquearActivosConRol(@Param("rol") Rol rol);
+
 	@Query("select count(distinct u) from Usuario u join u.roles r where u.activo = true and r = :rol")
 	long contarActivosConRol(@Param("rol") Rol rol);
 

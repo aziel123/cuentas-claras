@@ -22,6 +22,10 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
  */
 public final class UsuariosDePrueba {
 
+	/** Mismo reloj que la aplicación (hora de Lima), sin depender de la zona horaria de la JVM. */
+	private static final java.time.Clock RELOJ = java.time.Clock.system(
+			pe.edu.virgenmaria.cuentasclaras.comun.config.ConfiguracionTiempo.ZONA_LIMA);
+
 	/** Clave que cumple la política, para los usuarios guardados en la base. */
 	public static final String CLAVE = "una clave de prueba larga";
 
@@ -40,7 +44,13 @@ public final class UsuariosDePrueba {
 
 	/** El usuario de la base, como estaría en sesión. */
 	public static UsuarioAutenticado autenticado(Usuario usuario) {
-		return UsuarioAutenticado.de(usuario, LocalDateTime.now());
+		return UsuarioAutenticado.de(usuario, LocalDateTime.now(RELOJ));
+	}
+
+	/** Deja al usuario autenticado en el contexto de seguridad del hilo (pruebas de servicios). */
+	public static void iniciarSesion(UsuarioAutenticado usuario) {
+		org.springframework.security.core.context.SecurityContextHolder.getContext()
+				.setAuthentication(autenticacion(usuario));
 	}
 
 	/** Deja al usuario de la base en el contexto de seguridad del hilo (pruebas de servicios). */
@@ -78,7 +88,7 @@ public final class UsuariosDePrueba {
 			Usuario usuario = Usuario.nuevo(nombreUsuario, "Nombre de " + nombreUsuario, null, hash,
 					EnumSet.copyOf(List.of(roles)));
 			if (!temporal) {
-				usuario.cambiarClave(hash, LocalDateTime.now(), false);
+				usuario.cambiarClave(hash, LocalDateTime.now(RELOJ), false);
 			}
 			return usuarios.save(usuario);
 		});

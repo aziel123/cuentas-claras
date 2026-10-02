@@ -1,31 +1,34 @@
 package pe.edu.virgenmaria.cuentasclaras.auditoria.service;
 
+import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.context.annotation.Profile;
-import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import javax.sql.DataSource;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 /**
- * En producción comprueba al arrancar que el usuario de la aplicación NO puede editar ni borrar la
- * bitácora: MySQL debe rechazar {@code UPDATE} y {@code DELETE} sobre {@code evento_auditoria} con el
- * error 1142 (comando denegado). Si los permite, la aplicación no arranca
- * (ver {@code docs/operacion/mysql-usuarios.md}).
- * <p>
+ * En producción, al crearse (antes de que el servidor web acepte peticiones), comprueba:
+ * <ul>
+ *   <li>que el usuario de la aplicación NO puede editar ni borrar la bitácora: MySQL debe rechazar
+ *       {@code UPDATE} y {@code DELETE} sobre {@code evento_auditoria} con el error 1142;</li>
+ *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes).</li>
+ * </ul>
+ * Si algo falla, la aplicación NO arranca. No hay interruptor para saltarse esta comprobación.
  * Las sentencias usan {@code WHERE 1 = 0}: aunque MySQL las permitiera, no tocan ninguna fila.
  * Es la ÚNICA clase autorizada a usar {@link JdbcTemplate} (regla ArchUnit).
  */
 @Component
 @Profile("prod")
-@Order(0)
-public class VerificadorPermisosBaseDatos implements ApplicationRunner {
+public class VerificadorPermisosBaseDatos implements InitializingBean {
 
 	static final int MYSQL_COMANDO_DENEGADO = 1142;
 
@@ -37,31 +40,37 @@ public class VerificadorPermisosBaseDatos implements ApplicationRunner {
 
 	private final JdbcTemplate jdbc;
 
-	private final boolean exigir;
+	private final DataSource fuenteDatos;
 
-	public VerificadorPermisosBaseDatos(JdbcTemplate jdbc,
-			@Value("${cuentasclaras.auditoria.exigir-permisos-restringidos:true}") boolean exigir) {
+	public VerificadorPermisosBaseDatos(JdbcTemplate jdbc, DataSource fuenteDatos) {
 		this.jdbc = jdbc;
-		this.exigir = exigir;
+		this.fuenteDatos = fuenteDatos;
 	}
 
 	@Override
-	public void run(ApplicationArguments argumentos) {
-		verificar();
+	public void afterPropertiesSet() {
+		verificarMigraciones();
+		verificarPermisos();
 	}
 
-	public void verificar() {
+	public void verificarPermisos() {
 		for (String sentencia : SENTENCIAS_PROHIBIDAS) {
 			String problema = comprobarDenegada(sentencia);
-			if (problema == null) {
-				continue;
-			}
-			if (exigir) {
+			if (problema != null) {
 				throw new IllegalStateException(problema + " Revisa docs/operacion/mysql-usuarios.md.");
 			}
-			LOG.warn("{} (no se exige porque cuentasclaras.auditoria.exigir-permisos-restringidos=false)", problema);
 		}
 		LOG.info("Permisos de la bitácora verificados: la aplicación no puede editar ni borrar eventos.");
+	}
+
+	public void verificarMigraciones() {
+		MigrationInfo[] pendientes = Flyway.configure().dataSource(fuenteDatos).locations("classpath:db/migration")
+				.load().info().pending();
+		if (pendientes.length > 0) {
+			throw new IllegalStateException("Faltan migraciones de la base: "
+					+ Arrays.stream(pendientes).map(m -> "V" + m.getVersion()).collect(Collectors.joining(", "))
+					+ ". Antes de arrancar ejecuta «java -jar cuentas-claras.jar migrar» con el usuario cc_migrador.");
+		}
 	}
 
 	/** @return {@code null} si la base la rechazó con 1142; si no, la descripción del problema */

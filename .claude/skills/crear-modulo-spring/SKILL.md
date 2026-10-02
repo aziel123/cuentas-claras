@@ -31,6 +31,7 @@ Las vistas van en `src/main/resources/templates/<modulo>/` y usan `fragments/lay
    - SQL compatible con MySQL 8 y con H2 en modo MySQL. Fechas en `DATETIME(6)` y dinero en `DECIMAL(10,2)`.
    - Toda tabla de negocio lleva `colegio_id BIGINT NOT NULL` (FK a `colegio`), `creado_en`, `creado_por`, `actualizado_en` y `version BIGINT NOT NULL DEFAULT 0`.
    - **Agrega el GRANT de la tabla** en `scripts/mysql/02-permisos-tablas.sql`. Tablas financieras: INSERT y UPDATE, **nunca DELETE**. El job `mysql` del CI falla si falta.
+   - En producción la aplicación **no migra**: se despliega con `java -jar cuentas-claras.jar migrar` (usuario `cc_migrador`) y después se arranca con `cc_app`. Si faltan migraciones, la aplicación no arranca.
 2. **Entidad** en `model/`:
    - Extiende `BaseEntity`: id, `colegioId` con `@TenantId`, `creadoEn`, `creadoPor`, `actualizadoEn` y `@Version version`.
    - Hibernate asigna `colegioId` al guardar y **filtra por él toda consulta JPA** (`findById`, consultas derivadas y JPQL). No pongas setter de `colegioId`.
@@ -54,12 +55,15 @@ Las vistas van en `src/main/resources/templates/<modulo>/` y usan `fragments/lay
    - El usuario en sesión llega con `@AuthenticationPrincipal UsuarioAutenticado`.
    - **Permisos**: agrega o activa el módulo en `ModuloApp` (rutas y roles). De ahí salen las reglas de URL y el menú. Toda ruta fuera de la matriz se niega.
 8. **Vista**: usa `fragments/layout :: pagina(titulo, ~{::main})` y los componentes (`campo`, `boton`, `badge`, `alerta`, `estadoVacio`, `modalConfirmacion` con motivo obligatorio). Usa `th:text`, nunca `th:utext`. Sin `style=`, `<style>`, `<script>` en línea ni `onclick` (CSP; lo revisa `InterfazBaseTest`). CSS solo con variables de `tokens.css`.
-9. **Pruebas** (siempre con el perfil `test`):
+9. **Pruebas** (siempre con el perfil `test`; no hay perfil por defecto):
    - Servicio puro: JUnit 5 + Mockito.
    - JPA: `@PruebaJpa`. Si la prueba usa `ContextoColegio.en(...)`, ponle `@Transactional(propagation = NOT_SUPPORTED)` y limpia con `LimpiezaBaseDatos`.
    - Web o integración: `@PruebaIntegracion` (aplicación completa con MockMvc) con `@ComoUsuario(roles = ..., colegioId = ...)` o `UsuariosDePrueba.como(...)`. No uses `@WithMockUser`: deja el colegio en NINGUNO.
    - Siempre: una prueba de **aislamiento** (el colegio B no ve ni toca datos del A, y recibe 404) y una de **auditoría** (el evento queda con su valor anterior y nuevo).
    - Si la funcionalidad depende de MySQL (permisos o tipos), cúbrela en `PermisosMySqlTest` (job `mysql` del CI).
+   - Hora y fechas: usa el `Clock` inyectado o `@Import(ConfiguracionRelojAjustable.class)` con `RelojAjustable`, nunca `LocalDateTime.now()`. La suite debe pasar con `-DargLine=-Duser.timezone=America/Los_Angeles`.
+   - Si llamas a un servicio con `UsuariosDePrueba.iniciarSesion(...)` en una prueba con MockMvc, limpia el contexto después: MockMvc lo reutiliza.
+   - Cada corrección de seguridad lleva una prueba que falle sin ella.
 10. **Verifica**: `./mvnw -B verify` (compila, aplica las migraciones sobre H2, corre las pruebas y las reglas ArchUnit).
 
 ## Lista de control antes de terminar

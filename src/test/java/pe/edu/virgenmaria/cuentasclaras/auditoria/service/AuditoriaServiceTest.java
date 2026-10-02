@@ -71,6 +71,9 @@ class AuditoriaServiceTest {
 	@Autowired
 	private TransactionTemplate transaccion;
 
+	@Autowired
+	private java.time.Clock reloj;
+
 	@BeforeEach
 	@AfterEach
 	void limpiar() {
@@ -110,8 +113,7 @@ class AuditoriaServiceTest {
 		MockHttpServletRequest peticion = new MockHttpServletRequest();
 		peticion.setRemoteAddr("190.40.1.2");
 		RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(peticion));
-		LocalDateTime antes = LocalDateTime.now(java.time.Clock.system(java.time.ZoneId.of("America/Lima")))
-				.truncatedTo(ChronoUnit.MICROS);
+		LocalDateTime antes = LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS);
 
 		auditoria.registrar(AccionAuditoria.USUARIO_DESACTIVADO, "usuario", "9", "activo", "inactivo",
 				"Dejó de trabajar en el colegio");
@@ -154,6 +156,29 @@ class AuditoriaServiceTest {
 		assertThat(evento.getValorNuevo()).hasSize(EventoAuditoria.MAX_VALOR);
 		assertThat(evento.getDetalle()).hasSize(EventoAuditoria.MAX_DETALLE);
 		assertThat(sellador.esValido(VerificadorIntegridadAuditoria.HASH_INICIAL, evento)).isTrue();
+	}
+
+	@Test
+	void recortaElNombreLosRolesYDescartaUnaIpQueNoEsIp() {
+		auditoria.registrar(new Actor(1L, 1L, "u".repeat(80), "R".repeat(200), "9".repeat(60)),
+				AccionAuditoria.INGRESO_EXITOSO, null, null, null, null, null);
+
+		EventoAuditoria evento = todos().get(0);
+		assertThat(evento.getNombreUsuario()).hasSize(EventoAuditoria.MAX_NOMBRE_USUARIO);
+		assertThat(evento.getRoles()).hasSize(EventoAuditoria.MAX_ROLES);
+		assertThat(evento.getIp()).isEqualTo(Actor.IP_NO_VALIDA);
+		assertThat(sellador.esValido(VerificadorIntegridadAuditoria.HASH_INICIAL, evento)).isTrue();
+	}
+
+	@Test
+	void tildesEmojiYSimbolosSeGuardanTalCualYLaCadenaSigueIntegra() {
+		String texto = "Pagó S/ 1,250.00 ✅🎉 · ñandú «Año» — 中文";
+		auditoria.registrar(Actor.sistema(1L), AccionAuditoria.USUARIO_CREADO, "usuario", "1", "José", texto, texto);
+
+		assertThat(jdbc.queryForObject("SELECT detalle FROM evento_auditoria WHERE secuencia = 1", String.class))
+				.isEqualTo(texto);
+		assertThat(sellador.esValido(VerificadorIntegridadAuditoria.HASH_INICIAL, todos().get(0))).isTrue();
+		assertThat(verificador.verificar().integra()).isTrue();
 	}
 
 	@Test
@@ -202,8 +227,8 @@ class AuditoriaServiceTest {
 		auditoria.registrar(Actor.sistema(colegioB), AccionAuditoria.USUARIO_CREADO, "usuario", "2", null, null, null);
 		auditoria.registrar(new Actor(null, null, "desconocido", null, "10.0.0.9"), AccionAuditoria.INGRESO_FALLIDO,
 				null, null, null, null, null);
-		LocalDateTime desde = LocalDateTime.now().minusDays(2);
-		LocalDateTime hasta = LocalDateTime.now().plusDays(2);
+		LocalDateTime desde = LocalDateTime.now(reloj).minusDays(2);
+		LocalDateTime hasta = LocalDateTime.now(reloj).plusDays(2);
 
 		assertThat(eventos.findByColegioIdAndOcurridoEnBetweenOrderBySecuenciaDesc(1L, desde, hasta,
 				PageRequest.of(0, 10)).getContent())

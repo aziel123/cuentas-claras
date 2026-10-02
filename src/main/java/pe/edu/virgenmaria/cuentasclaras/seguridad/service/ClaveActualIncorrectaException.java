@@ -12,7 +12,7 @@ public class ClaveActualIncorrectaException extends ReglaNegocioException {
 
 	public ClaveActualIncorrectaException(boolean cuentaBloqueada) {
 		super(cuentaBloqueada
-				? "Tu cuenta se bloqueó por varios intentos fallidos. Espera 15 minutos o pide a Dirección que la desbloquee."
+				? "Tu cuenta se bloqueó por varios intentos fallidos."
 				: "Tu clave actual no es correcta.");
 		this.cuentaBloqueada = cuentaBloqueada;
 	}

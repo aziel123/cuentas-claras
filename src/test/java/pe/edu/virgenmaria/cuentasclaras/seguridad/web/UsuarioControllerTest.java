@@ -147,6 +147,53 @@ class UsuarioControllerTest {
 	}
 
 	@Test
+	void direccionNoPuedeRestablecerLaClaveDeUnaPromotora() throws Exception {
+		Usuario director = UsuariosDePrueba.guardar(usuarios, codificador, 1L, "director", UsuariosDePrueba.CLAVE, false,
+				Rol.DIRECTOR);
+		String hashAntes = jdbc.queryForObject("SELECT clave_hash FROM usuario WHERE id = ?", String.class,
+				promotora.getId());
+
+		mvc.perform(post("/usuarios/" + promotora.getId() + "/restablecer-clave").with(UsuariosDePrueba.como(director))
+						.with(csrf()).param("motivo", "Intento de suplantación"))
+				.andExpect(status().isForbidden())
+				.andExpect(content().string(not(containsString("clave-temporal-valor"))));
+		assertThat(jdbc.queryForObject("SELECT clave_hash FROM usuario WHERE id = ?", String.class, promotora.getId()))
+				.isEqualTo(hashAntes);
+	}
+
+	@Test
+	void rolesInvalidosOVaciosMuestranUnMensajeClaro() throws Exception {
+		mvc.perform(post("/usuarios").with(UsuariosDePrueba.como(promotora)).with(csrf())
+						.param("nombreCompleto", "Rol Inventado").param("nombreUsuario", "rol.inventado")
+						.param("roles", "SUPERUSUARIO"))
+				.andExpect(status().isOk())
+				.andExpect(view().name("usuarios/formulario"))
+				.andExpect(content().string(containsString("Elige roles de la lista.")));
+
+		MvcResult sinRoles = mvc.perform(post("/usuarios/" + caja.getId() + "/roles").with(UsuariosDePrueba.como(promotora))
+						.with(csrf()).param("motivo", "Motivo suficiente"))
+				.andExpect(redirectedUrl("/usuarios/" + caja.getId()))
+				.andReturn();
+		mvc.perform(get("/usuarios/" + caja.getId()).with(UsuariosDePrueba.como(promotora))
+						.flashAttrs(sinRoles.getFlashMap()))
+				.andExpect(content().string(containsString("Elige al menos un rol.")));
+	}
+
+	@Test
+	void elNombreDeUsuarioSeNormalizaYElNombreCompletoSeEscapa() throws Exception {
+		mvc.perform(post("/usuarios").with(UsuariosDePrueba.como(promotora)).with(csrf())
+						.param("nombreCompleto", "<script>alert(1)</script> Ramos").param("nombreUsuario", "  Lucia.RAMOS ")
+						.param("roles", "DOCENTE"))
+				.andExpect(status().isOk());
+
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM usuario WHERE nombre_usuario = 'lucia.ramos'", Long.class))
+				.isEqualTo(1);
+		mvc.perform(get("/usuarios").with(UsuariosDePrueba.como(promotora)))
+				.andExpect(content().string(containsString("&lt;script&gt;alert(1)&lt;/script&gt; Ramos")))
+				.andExpect(content().string(not(containsString("<script>alert(1)</script>"))));
+	}
+
+	@Test
 	void nadieVeAccionesSobreSiMismo() throws Exception {
 		mvc.perform(get("/usuarios/" + promotora.getId()).with(UsuariosDePrueba.como(promotora)))
 				.andExpect(content().string(containsString("Este es tu usuario")))

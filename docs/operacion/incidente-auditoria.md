@@ -13,6 +13,8 @@ Qué hacer si alguien insertó directamente en la base un evento falso con la se
   ```
   Si la segunda consulta devuelve filas, son eventos que la aplicación nunca registró.
 
+- **Recorte por el final:** si alguien con acceso a la base borró los últimos eventos y retrocedió `auditoria_cadena`, la cadena sigue calzando. Lo delata la **huella** que Promotoría anotó: al escribirla en «Verificar integridad», el resultado sale ALTERADA (ver `custodia-clave-auditoria.md`).
+
 ## 2. A quién avisar (de inmediato)
 1. **Promotoría** (dueña del colegio) y **Dirección**.
 2. El **responsable técnico** de la plataforma.
@@ -37,6 +39,6 @@ Solo con un **acta firmada** por Promotoría y el responsable técnico, y con el
    DELETE FROM evento_auditoria WHERE secuencia > (SELECT ultima_secuencia FROM auditoria_cadena);
    ```
 2. Si además alteraron `auditoria_cadena`, devuélvela al último evento legítimo, que es el último cuyo hash verifica. El responsable técnico lo identifica con la verificación de integridad.
-3. Cambia las claves de `cc_migrador` y `cc_app` y revisa los permisos (ver `mysql-usuarios.md`, paso 9 del sprint 1).
+3. Cambia las claves de `cc_migrador` y `cc_app` y revisa los permisos (ver `mysql-usuarios.md`).
 4. Comprueba que se puede ingresar y ejecuta **Verificar integridad**, que debe salir "íntegra". La pantalla llega en el paso 9; mientras tanto la verificación la corre el responsable técnico.
 5. Registra el incidente en el acta: hora de detección, evidencia tomada, filas puestas en cuarentena y acciones siguientes.

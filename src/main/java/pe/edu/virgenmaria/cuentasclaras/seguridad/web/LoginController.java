@@ -6,6 +6,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.config.PropiedadesSeguridad;
 
 /**
  * Formulario de ingreso. El POST a {@code /login} lo procesa Spring Security.
@@ -13,10 +14,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 @Controller
 public class LoginController {
 
+	private final PropiedadesSeguridad propiedades;
+
+	public LoginController(PropiedadesSeguridad propiedades) {
+		this.propiedades = propiedades;
+	}
+
 	@GetMapping("/login")
 	public String login(Authentication autenticacion,
 			@RequestParam(required = false) String error,
-			@RequestParam(required = false) String bloqueada,
+			@RequestParam(required = false) String vencida,
 			@RequestParam(required = false) String salio,
 			@RequestParam(required = false) String expirada,
 			@RequestParam(name = "clave-cambiada", required = false) String claveCambiada,
@@ -25,7 +32,9 @@ public class LoginController {
 				&& !(autenticacion instanceof AnonymousAuthenticationToken)) {
 			return "redirect:/inicio";
 		}
-		model.addAttribute("mensaje", MensajeLogin.para(error, bloqueada, salio, expirada, claveCambiada));
+		model.addAttribute("mensaje", MensajeLogin.para(error, vencida, salio, expirada, claveCambiada,
+				propiedades.intentosMaximos(), propiedades.duracionBloqueo().toMinutes(),
+				propiedades.vigenciaClaveTemporal().toHours()));
 		return "seguridad/login";
 	}
 }
