@@ -8,9 +8,10 @@
 			<h1>Alumnos</h1>
 			<p class="secundario">Busca por nombre o por DNI. Abre la ficha para ver su familia, su responsable de pago y sus matrículas.</p>
 		</div>
-		<th:block th:if="${puedeEditar}">
+		<div class="fila" th:if="${puedeEditar}">
+			<a class="btn btn-secundario" th:href="@{/alumnos/importar}">Importar desde Excel</a>
 			<a th:replace="~{fragments/componentes :: enlaceBoton('Registrar alumno', @{/alumnos/nuevo}, 'primario')}"></a>
-		</th:block>
+		</div>
 	</div>
 
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
@@ -61,7 +62,7 @@
 			</th:block>
 			<th:block th:unless="${busqueda.conFiltros()}">
 				<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay alumnos',
-					${puedeEditar} ? 'Registra el primero con «Registrar alumno». Muy pronto también podrás importarlos desde Excel.' : 'Dirección o Administración los registran.')}"></div>
+					${puedeEditar} ? 'Impórtalos con «Importar desde Excel» o registra el primero con «Registrar alumno».' : 'Dirección o Administración los registran.')}"></div>
 			</th:block>
 		</th:block>
 

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Importar alumnos', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/alumnos}">Alumnos</a></p>
+			<h1>Importar alumnos desde Excel</h1>
+			<p class="secundario">Paso 1 de 3: sube el archivo. Antes de guardar verás una revisión fila por fila.</p>
+		</div>
+		<a class="btn btn-secundario" th:href="@{/alumnos/importaciones}">Ver importaciones</a>
+	</div>
+
+	<ol class="pasos" aria-label="Pasos de la importación">
+		<li class="paso-actual" aria-current="step">Subir</li>
+		<li>Revisar</li>
+		<li>Confirmar</li>
+	</ol>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-plantilla">
+		<h2 id="titulo-plantilla">1. Descarga la plantilla</h2>
+		<p class="secundario">Llénala con un alumno por fila. Los hermanos llevan el mismo apoderado (mismo documento):
+			así quedan en la misma familia. Las instrucciones y un ejemplo están en la hoja «Instrucciones».</p>
+		<div class="fila">
+			<a class="btn btn-secundario" th:href="@{/alumnos/importar/plantilla}" download>Descargar plantilla</a>
+		</div>
+	</section>
+
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-subir">
+		<h2 id="titulo-subir">2. Sube el archivo lleno</h2>
+		<th:block th:if="${#lists.isEmpty(anios)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Primero crea el año escolar',
+				'Los alumnos se matriculan en las secciones de un año. Créalo en Colegio y vuelve aquí.')}"></div>
+		</th:block>
+		<form th:unless="${#lists.isEmpty(anios)}" class="formulario" method="post" th:action="@{/alumnos/importar}"
+			enctype="multipart/form-data">
+			<div class="campo">
+				<label for="anioId">Año escolar</label>
+				<select class="input" id="anioId" name="anioId" required>
+					<option th:each="a : ${anios}" th:value="${a.id}" th:text="|${a.anio} · ${a.estadoEtiqueta}|"
+						th:selected="${a.id == anioPorDefecto}">2026 · En curso</option>
+				</select>
+				<p class="ayuda">Las secciones del archivo deben existir en ese año.</p>
+			</div>
+			<div class="campo">
+				<label for="archivo">Archivo de Excel (.xlsx)</label>
+				<input class="input" type="file" id="archivo" name="archivo" required
+					accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-describedby="archivo-ayuda">
+				<p class="ayuda" id="archivo-ayuda" th:text="|Hasta ${maximo} y ${maxFilas} alumnos. Sin fórmulas, macros ni contraseña.|">Hasta 2 MB.</p>
+			</div>
+			<div class="acciones">
+				<a class="btn btn-secundario" th:href="@{/alumnos}">Volver</a>
+				<button type="submit" class="btn btn-primario">Subir y revisar</button>
+			</div>
+		</form>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-recientes" th:unless="${#lists.isEmpty(recientes)}">
+		<h2 id="titulo-recientes">Últimas importaciones</h2>
+		<ul class="lista-simple">
+			<li th:each="i : ${recientes}">
+				<span th:text="${#temporals.format(i.creadoEn, 'dd/MM/yyyy HH:mm')}">02/10/2026 08:15</span>
+				<span th:text="${i.archivoNombre}">alumnos.xlsx</span>
+				<span class="secundario" th:text="|${i.conteos.alumnosNuevos} nuevos · ${i.conteos.alumnosActualizados} con cambios · por ${i.creadoPor}|">3 nuevos</span>
+			</li>
+		</ul>
+	</section>
+</main>
+</body>
+</html>

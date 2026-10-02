@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Importaciones', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/alumnos}">Alumnos</a></p>
+			<h1>Importaciones desde Excel</h1>
+			<p class="secundario">Cada importación confirmada, con quién la hizo y qué cambió. No se guarda el archivo: solo su huella.</p>
+		</div>
+		<a th:replace="~{fragments/componentes :: enlaceBoton('Importar alumnos', @{/alumnos/importar}, 'primario')}"></a>
+	</div>
+
+	<section class="tarjeta" aria-labelledby="titulo-historial">
+		<h2 id="titulo-historial" class="solo-lectores">Historial</h2>
+		<th:block th:if="${#lists.isEmpty(importaciones)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay importaciones', 'Cuando confirmes una, aparecerá aquí.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(importaciones)}">
+			<thead>
+				<tr><th scope="col">Fecha</th><th scope="col">Archivo</th><th scope="col">Año</th><th scope="col">Resultado</th><th scope="col">Quién</th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="i : ${importaciones}" th:data-importacion="${i.id}">
+					<td data-etiqueta="Fecha" th:text="${#temporals.format(i.creadoEn, 'dd/MM/yyyy HH:mm')}">02/10/2026 08:15</td>
+					<td data-etiqueta="Archivo">
+						<span th:text="${i.archivoNombre}">alumnos.xlsx</span>
+						<small class="bloque secundario" th:text="|Huella ${i.sha256Corto}…|">Huella</small>
+					</td>
+					<td data-etiqueta="Año" th:text="${i.anio} ?: '—'">2026</td>
+					<td data-etiqueta="Resultado" th:text="|${i.conteos.alumnosNuevos} nuevos, ${i.conteos.alumnosActualizados} con cambios, ${i.conteos.alumnosSinCambios} sin cambios, ${i.conteos.matriculasNuevas} matrículas|">8 nuevos</td>
+					<td data-etiqueta="Quién" th:text="${i.creadoPor}">administracion</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

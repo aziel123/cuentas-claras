@@ -14,3 +14,6 @@ GRANT INSERT, UPDATE ON cuentasclaras.familia TO 'cc_app'@'%';
 GRANT INSERT, UPDATE ON cuentasclaras.apoderado TO 'cc_app'@'%';
 GRANT INSERT, UPDATE ON cuentasclaras.alumno TO 'cc_app'@'%';
 GRANT INSERT, UPDATE ON cuentasclaras.matricula TO 'cc_app'@'%';
+
+-- Sprint 2 · tanda 2: registro de importaciones de alumnos desde Excel. SOLO inserción (sin UPDATE ni DELETE).
+GRANT INSERT ON cuentasclaras.importacion_alumnos TO 'cc_app'@'%';

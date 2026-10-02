@@ -56,7 +56,10 @@ public enum AccionAuditoria {
 	/** Se resalta: decide a quién se le cobra y quién recibe los avisos de pago. */
 	RESPONSABLE_PAGO_CAMBIADO("Cambió el responsable de pago de un alumno", true),
 	MATRICULA_REGISTRADA("Matriculó a un alumno", false),
-	MATRICULA_SECCION_CAMBIADA("Cambió de sección a un alumno", false);
+	MATRICULA_SECCION_CAMBIADA("Cambió de sección a un alumno", false),
+
+	// Importación desde Excel (sprint 2): con la huella SHA-256 del archivo y los conteos.
+	IMPORTACION_CONFIRMADA("Importó alumnos desde Excel", false);
 
 	/** Altas y cambios de roles: se revisan si dan un rol que maneja dinero o permisos. */
 	public static final Set<AccionAuditoria> CON_ROLES = EnumSet.of(USUARIO_CREADO, ROLES_CAMBIADOS);

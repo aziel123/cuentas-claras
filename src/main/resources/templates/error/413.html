@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: publica('Archivo demasiado grande', ~{::main})}">
+<body>
+<main id="contenido" class="contenido-publico">
+	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-error">
+		<h1 id="titulo-error">El archivo es demasiado grande</h1>
+		<p class="secundario">No lo recibimos y no se guardó nada. Un archivo de alumnos puede pesar hasta 2 MB: si tienes
+			más alumnos, haz un archivo por nivel y súbelos uno por uno.</p>
+		<div class="fila">
+			<a class="btn btn-primario" th:href="@{/alumnos/importar}">Volver a subir</a>
+			<a class="btn btn-secundario" th:href="@{/inicio}">Volver al inicio</a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

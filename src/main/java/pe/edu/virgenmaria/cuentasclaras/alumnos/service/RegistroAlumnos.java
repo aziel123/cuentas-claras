@@ -148,6 +148,26 @@ public class RegistroAlumnos {
 	}
 
 	/**
+	 * Cambia el responsable de pago. Si es de otra familia, el alumno pasa a esa familia. Queda RESALTADO en la
+	 * bitácora: decide a quién se cobra y quién recibe los avisos de pago.
+	 */
+	public void cambiarResponsable(Alumno alumno, Apoderado nuevo, String motivo) {
+		Apoderado anterior = alumno.getResponsablePago();
+		Familia familiaAnterior = alumno.getFamilia();
+		alumno.cambiarResponsable(nuevo);
+		boolean cambioDeFamilia = !familiaAnterior.getId().equals(nuevo.getFamilia().getId());
+		auditoria.registrar(AccionAuditoria.RESPONSABLE_PAGO_CAMBIADO, "alumno", alumno.getId().toString(),
+				responsableTexto(anterior, familiaAnterior), responsableTexto(nuevo, nuevo.getFamilia()),
+				"Alumno " + alumno.nombreCompleto() + "." + (cambioDeFamilia ? " Pasó a otra familia." : "")
+						+ " Motivo: " + motivo);
+	}
+
+	private static String responsableTexto(Apoderado apoderado, Familia familia) {
+		return apoderado.nombreCompleto() + " (" + apoderado.getParentesco().etiqueta() + ", " + familia.getNombre()
+				+ ")";
+	}
+
+	/**
 	 * Matricula al alumno en la sección (una matrícula por alumno y año) y publica {@link MatriculaRegistrada} en la
 	 * misma transacción.
 	 */

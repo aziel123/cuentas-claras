@@ -85,6 +85,9 @@ class PermisosMySqlTest {
 	@Autowired
 	private pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioMatriculas servicioMatriculas;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.alumnos.importacion.ServicioImportacionAlumnos importacion;
+
 	@AfterEach
 	void limpiar() {
 		SecurityContextHolder.clearContext();
@@ -229,6 +232,57 @@ class PermisosMySqlTest {
 		assertThat(jdbc.queryForObject("SELECT seccion_id FROM matricula WHERE id = ?", Long.class, matricula))
 				.isEqualTo(seccionB);
 		UsuariosDePrueba.iniciarSesion(guardar("verif.alumnos." + sufijo, Rol.PROMOTOR));
+		assertThat(verificador.verificar().integra()).isTrue();
+	}
+
+	@Test
+	void importacionSoloAdmiteInsercion() {
+		for (String sentencia : new String[] { "UPDATE importacion_alumnos SET filas = filas WHERE 1 = 0",
+				"DELETE FROM importacion_alumnos WHERE 1 = 0" }) {
+			assertThatThrownBy(() -> jdbc.update(sentencia))
+					.isInstanceOf(DataAccessException.class)
+					.satisfies(e -> assertThat(codigoMySql(e)).as(sentencia).isEqualTo(1142));
+		}
+	}
+
+	/**
+	 * Sprint 2, tanda 2: importación desde Excel con los permisos mínimos de cc_app (vista previa, confirmación con el
+	 * año bloqueado, registro de la importación y reimportación «sin cambios»). Usa un año libre y documentos únicos.
+	 */
+	@Test
+	void importacionDesdeExcelFuncionaConLosPermisosMinimos() {
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.ADMINISTRACION));
+		java.util.Set<Integer> usados = new java.util.HashSet<>(
+				jdbc.queryForList("SELECT anio FROM anio_escolar WHERE colegio_id = 1", Integer.class));
+		int anio = java.util.stream.IntStream.iterate(2025, a -> a >= 2000, a -> a - 1).filter(a -> !usados.contains(a))
+				.findFirst().orElseThrow();
+		Long anioId = estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
+				java.time.LocalDate.of(anio, 3, 2), java.time.LocalDate.of(anio, 12, 18), false));
+		estructura.crearSeccion(anioId, new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest(
+				pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "A"));
+		String base = String.format("%07d", Math.floorMod(System.nanoTime() + 7, 10_000_000L));
+		String nacimiento = "14/06/" + (anio - 10);
+		byte[] libro = pe.edu.virgenmaria.cuentasclaras.alumnos.importacion.ArchivoImportacion.archivo(
+				pe.edu.virgenmaria.cuentasclaras.alumnos.importacion.ArchivoImportacion.fila("7" + base, "Quispe", "Huamán",
+						"Mateo", nacimiento, "Primaria", "5", "A", "4" + base, "Huamán", "Ccori", "Rosa", "Madre",
+						"987654321", null),
+				pe.edu.virgenmaria.cuentasclaras.alumnos.importacion.ArchivoImportacion.fila("8" + base, "Quispe", "Huamán",
+						"Valeria", nacimiento, "Primaria", "5", "a", "4" + base, "Huamán", "Ccori", "Rosa", "Madre",
+						"987654321", null));
+
+		var previa = importacion.previsualizar(anioId, "alumnos-mysql.xlsx", libro);
+		assertThat(previa.resumen().filasConErrores()).isZero();
+		var resultado = importacion.confirmar(previa, previa.token());
+
+		assertThat(resultado.resumen().alumnosNuevos()).isEqualTo(2);
+		assertThat(jdbc.queryForObject("SELECT COUNT(DISTINCT familia_id) FROM alumno WHERE numero_documento IN (?, ?)",
+				Long.class, "7" + base, "8" + base)).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT alumnos_nuevos FROM importacion_alumnos WHERE id = ?", Integer.class,
+				resultado.importacionId())).isEqualTo(2);
+		var otraVez = importacion.previsualizar(anioId, "alumnos-mysql.xlsx", libro);
+		assertThat(otraVez.resumen().sinCambios()).isTrue();
+		assertThat(otraVez.importadoAntesEn()).isNotNull();
+		UsuariosDePrueba.iniciarSesion(guardar("verif.importa." + sufijo, Rol.PROMOTOR));
 		assertThat(verificador.verificar().integra()).isTrue();
 	}
 

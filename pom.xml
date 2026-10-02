@@ -17,6 +17,7 @@
 	<properties>
 		<java.version>21</java.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<poi.version>5.5.1</poi.version>
 	</properties>
 
 	<dependencies>
@@ -51,6 +52,13 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+
+		<!-- Excel (.xlsx): solo lo usa comun.excel, en modo streaming y endurecido (regla ArchUnit) -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>${poi.version}</version>
 		</dependency>
 
 		<!-- Base de datos: MySQL en producción, H2 (modo MySQL) en desarrollo y pruebas -->

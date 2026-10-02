@@ -306,14 +306,7 @@ public class ServicioAlumnos {
 		}
 		Apoderado nuevo = apoderadoExistente(solicitud.apoderadoId(), solicitud.documentoApoderado(),
 				"documentoApoderado");
-		Apoderado anterior = alumno.getResponsablePago();
-		Familia familiaAnterior = alumno.getFamilia();
-		alumno.cambiarResponsable(nuevo);
-		boolean cambioDeFamilia = !familiaAnterior.getId().equals(nuevo.getFamilia().getId());
-		auditoria.registrar(AccionAuditoria.RESPONSABLE_PAGO_CAMBIADO, "alumno", alumnoId.toString(),
-				responsableTexto(anterior, familiaAnterior), responsableTexto(nuevo, nuevo.getFamilia()),
-				"Alumno " + alumno.nombreCompleto() + "." + (cambioDeFamilia ? " Pasó a otra familia." : "")
-						+ " Motivo: " + motivo);
+		registro.cambiarResponsable(alumno, nuevo, motivo);
 	}
 
 	/** Retira al alumno y sus matrículas activas. Queda resaltado en la bitácora. */
@@ -416,11 +409,6 @@ public class ServicioAlumnos {
 		return new CabeceraAlumno(alumno.getId(), alumno.nombreCompleto(), alumno.getDocumento().texto(),
 				alumno.getEstado(), alumno.getEstado().etiqueta(), alumno.getFamilia().getId(),
 				alumno.getFamilia().getNombre(), vistas.seccionEnCurso(alumno));
-	}
-
-	private static String responsableTexto(Apoderado apoderado, Familia familia) {
-		return apoderado.nombreCompleto() + " (" + apoderado.getParentesco().etiqueta() + ", " + familia.getNombre()
-				+ ")";
 	}
 
 	private static String usuarioActual() {

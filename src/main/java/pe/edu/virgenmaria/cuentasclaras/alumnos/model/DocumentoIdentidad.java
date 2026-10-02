@@ -15,7 +15,8 @@ import java.util.Objects;
 @Embeddable
 public record DocumentoIdentidad(
 		@Enumerated(EnumType.STRING) @Column(name = "tipo_documento", nullable = false, length = 20) TipoDocumento tipo,
-		@Column(name = "numero_documento", nullable = false, length = 12) String numero) {
+		@Column(name = "numero_documento", nullable = false, length = 12) String numero)
+		implements java.io.Serializable {
 
 	public DocumentoIdentidad {
 		Objects.requireNonNull(tipo, "tipo");

@@ -213,7 +213,8 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".alumnos.service.ServicioFamilias#actualizarApoderado", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".alumnos.service.ServicioFamilias#desactivarApoderado", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".alumnos.service.ServicioFamilias#renombrar", ESCRITURA_ESCOLAR),
-			Map.entry(BASE + ".alumnos.service.ServicioMatriculas", ESCRITURA_ESCOLAR));
+			Map.entry(BASE + ".alumnos.service.ServicioMatriculas", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.importacion.ServicioImportacionAlumnos", ESCRITURA_ESCOLAR));
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {
@@ -264,9 +265,32 @@ class ReglasArquitecturaTest {
 	/** RegistroAlumnos no tiene @PreAuthorize: solo lo usan los servicios protegidos de alumnos y la demo de dev. */
 	@ArchTest
 	static final ArchRule registroAlumnosSoloDesdeServiciosDeAlumnos = noClasses()
-			.that().resideOutsideOfPackages(BASE + ".alumnos.service..", BASE + ".alumnos.inicial..")
+			.that().resideOutsideOfPackages(BASE + ".alumnos.service..", BASE + ".alumnos.importacion..",
+					BASE + ".alumnos.inicial..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".alumnos.service.RegistroAlumnos")
 			.because("RegistroAlumnos escribe sin exigir rol: el permiso lo exige el servicio que lo llama");
+
+	/** Apache POI solo detrás del lector endurecido: nadie más abre un Excel por su cuenta. */
+	@ArchTest
+	static final ArchRule soloComunExcelUsaApachePoi = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".comun.excel..")
+			.should().dependOnClassesThat().resideInAnyPackage("org.apache.poi..", "org.apache.xmlbeans..",
+					"org.openxmlformats..")
+			.because("el Excel se lee solo con LectorXlsxSeguro (streaming, sin fórmulas, contra zip bombs y XXE)");
+
+	/** La importación no tiene un camino propio de escritura: pasa por RegistroAlumnos (mismas reglas y auditoría). */
+	@ArchTest
+	static final ArchRule importacionNoUsaRepositoriosParaEscribir = noClasses()
+			.that().resideInAPackage(BASE + ".alumnos.importacion..")
+			.should().callMethodWhere(new DescribedPredicate<>("save* de un repositorio que no sea el de importaciones") {
+				@Override
+				public boolean test(JavaMethodCall llamada) {
+					return llamada.getTargetOwner().isAssignableTo(Repository.class)
+							&& llamada.getName().startsWith("save")
+							&& !llamada.getTargetOwner().getSimpleName().equals("ImportacionAlumnosRepository");
+				}
+			})
+			.because("alumnos, apoderados y matrículas se guardan con RegistroAlumnos");
 
 	@ArchTest
 	static final ArchRule cobranzaNoDependeDeAcademico = noClasses()

@@ -20,6 +20,12 @@ spring:
         tenant_identifier_resolver: pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ResolutorColegioActual
   thymeleaf:
     cache: true
+  servlet:
+    multipart:
+      # Límite del contenedor, holgado: el de 2 MB (cuentasclaras.excel.max-bytes) lo valida la aplicación con un
+      # mensaje claro. Por encima de esto el contenedor no lee el archivo (ver ManejadorAccesoDenegado).
+      max-file-size: 5MB
+      max-request-size: 6MB
   mvc:
     format:
       # Fechas de los formularios (input type="date") en ISO: 2026-03-02. Sin esto, al volver a mostrar un formulario
@@ -29,6 +35,10 @@ spring:
     time-zone: America/Lima
 
 server:
+  tomcat:
+    # Descarta (sin procesar) hasta 20 MB de un envío rechazado, para que el navegador reciba la respuesta con el
+    # mensaje en vez de un corte de conexión.
+    max-swallow-size: 20MB
   error:
     include-stacktrace: never
     include-message: never
@@ -58,6 +68,11 @@ cuentasclaras:
     duracion-bloqueo: 15m
     # Una clave temporal (alta o restablecimiento) deja de servir pasado este tiempo.
     vigencia-clave-temporal: 48h
+  excel:
+    max-bytes: 2MB            # archivo subido
+    max-filas: 2000           # filas de datos
+    max-descomprimido: 20MB   # suma de todas las entradas del zip
+    max-entradas-zip: 200
   auditoria:
     # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
     # aplicación no arranca. Nunca en el código: va en el gestor de secretos.

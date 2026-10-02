@@ -283,6 +283,9 @@ textarea.input { min-height: 96px; resize: vertical; }
   .tabla tr { display: grid; gap: var(--esp-1); padding: var(--esp-3) 0; border-bottom: 1px solid var(--color-borde); }
   .tabla td { border: 0; padding: 0; display: flex; justify-content: space-between; gap: var(--esp-3); }
   .tabla td::before { content: attr(data-etiqueta); color: var(--color-texto-secundario); font-weight: 600; }
+  /* En tarjetas, la marca de "revisar" va en el borde de la tarjeta, no en la primera celda. */
+  .tabla .fila-atencion td:first-child { box-shadow: none; }
+  .tabla tr.fila-atencion { border-left: 3px solid var(--color-alerta); padding-left: var(--esp-3); }
 }
 
 /* Ficha de datos */
@@ -377,5 +380,28 @@ textarea.input { min-height: 96px; resize: vertical; }
 }
 .desplegable[open] summary { border-bottom: 1px solid var(--color-borde); }
 .desplegable > .formulario, .desplegable > .alerta { margin: var(--esp-4); }
+
+/* Sprint 2 · Importación desde Excel */
+.pasos { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--esp-2); counter-reset: paso; }
+.pasos li {
+  counter-increment: paso; display: inline-flex; align-items: center; gap: var(--esp-2);
+  padding: var(--esp-1) var(--esp-3); border-radius: 99px; font-size: var(--texto-sm);
+  color: var(--color-texto-secundario); background: var(--color-superficie-2);
+}
+.pasos li::before { content: counter(paso) "."; font-weight: 700; }
+.pasos .paso-actual { color: var(--color-celeste-texto); background: var(--color-celeste-suave); font-weight: 600; }
+.pasos .paso-hecho { color: var(--color-exito); background: var(--color-exito-suave); }
+.conteos { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--esp-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); }
+.conteos li {
+  display: grid; gap: var(--esp-1); padding: var(--esp-3);
+  border: 1px solid var(--color-borde); border-radius: var(--radio); background: var(--color-superficie);
+}
+.conteos strong { font-size: var(--texto-xl); color: var(--color-primario-texto); }
+.conteos span { font-size: var(--texto-sm); color: var(--color-texto-secundario); }
+.conteos .conteo-peligro { border-color: var(--color-peligro); background: var(--color-peligro-suave); }
+.conteos .conteo-peligro strong { color: var(--color-peligro); }
+.acciones-izquierda { justify-content: flex-start; }
+input[type="file"].input { padding: var(--esp-2); }
 
 .pie { text-align: center; color: var(--color-texto-secundario); font-size: var(--texto-sm); padding: var(--esp-6) var(--esp-4); }
