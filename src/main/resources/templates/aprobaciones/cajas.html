@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cajas del día', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="cajas-del-dia" th:with="d=${dia}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/aprobaciones}">Aprobaciones</a></p>
+			<h1 th:text="|Cajas del ${#temporals.format(d.fecha, 'dd/MM/yyyy')}|">Cajas del 02/10/2026</h1>
+			<p class="secundario">Lo cobrado por cada cajera, su cierre a ciegas (con la diferencia) y su depósito.</p>
+		</div>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Día anterior', @{/aprobaciones/cajas(fecha=${d.anterior})}, 'secundario')}"></a>
+			<a th:if="${d.siguiente != null}" th:replace="~{fragments/componentes :: enlaceBoton('Día siguiente', @{/aprobaciones/cajas(fecha=${d.siguiente})}, 'secundario')}"></a>
+		</div>
+	</div>
+
+	<ul class="conteos conteos-montos" aria-label="Totales del día">
+		<li><strong><span th:replace="~{fragments/componentes :: monto(${d.totalEfectivo})}"></span></strong><span>Efectivo vigente</span></li>
+		<li><strong><span th:replace="~{fragments/componentes :: monto(${d.totalDigital})}"></span></strong><span>Digital vigente</span></li>
+	</ul>
+
+	<section class="tarjeta" aria-labelledby="titulo-cajas">
+		<h2 id="titulo-cajas" th:text="|${#lists.size(d.cajas)} caja(s)|">2 cajas</h2>
+		<th:block th:if="${#lists.isEmpty(d.cajas)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('No hubo cajas ese día', 'Una caja se abre con el primer cobro de cada cajera.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(d.cajas)}">
+			<thead><tr><th scope="col">Cajera</th><th scope="col">Estado</th><th scope="col" class="num">Pagos</th>
+				<th scope="col" class="num">Efectivo</th><th scope="col" class="num">Digital</th><th scope="col">Cierre</th>
+				<th scope="col">Diferencia</th><th scope="col">Depósito</th></tr></thead>
+			<tbody>
+				<tr th:each="c : ${d.cajas}" th:data-caja="${c.id}">
+					<td data-etiqueta="Cajera"><a th:href="@{/aprobaciones/cajas/{id}(id=${c.id})}" th:text="${c.cajera}">Lucía Ramos</a></td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${c.estado}, ${c.estadoVariante})}"></span></td>
+					<td data-etiqueta="Pagos" class="num" th:text="${c.pagos}">5</td>
+					<td data-etiqueta="Efectivo" class="num"><span th:replace="~{fragments/componentes :: monto(${c.efectivo})}"></span></td>
+					<td data-etiqueta="Digital" class="num"><span th:replace="~{fragments/componentes :: monto(${c.digital})}"></span></td>
+					<td data-etiqueta="Cierre"><span th:replace="~{fragments/componentes :: badge(${c.cierre}, ${c.cierreVariante})}"></span></td>
+					<td data-etiqueta="Diferencia"><span th:replace="~{fragments/componentes :: badge(${c.diferencia}, ${c.diferenciaVariante})}"></span></td>
+					<td data-etiqueta="Depósito" th:text="${c.deposito}">S/ 450.00</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

@@ -14,7 +14,10 @@ public enum TipoSolicitud {
 	ANULACION_CUOTA("Anulación de cuota"),
 	// Sprint 3, tanda 2 (caja y cobranza)
 	ANULACION_PAGO("Anulación de pago"),
-	DESCUENTO("Descuento o beca");
+	DESCUENTO("Descuento o beca"),
+	// Sprint 3, tanda 3 (caja)
+	CIERRE_CAJA("Cierre de caja"),
+	REAPERTURA_CAJA("Reapertura de caja");
 
 	private final String etiqueta;
 

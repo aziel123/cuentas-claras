@@ -136,7 +136,8 @@ class VerificadorPermisosBaseDatosTest {
 
 	/** Tablas de solo inserción: cc_app no tiene ningún UPDATE sobre ellas (1142). */
 	private static final java.util.regex.Pattern SOLO_INSERCION = java.util.regex.Pattern
-			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota) ");
+			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
+					+ "verificacion_bancaria) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -155,6 +156,21 @@ class VerificadorPermisosBaseDatosTest {
 				{ "UPDATE ajuste_cuota SET version = version WHERE 1 = 0", "ajuste_cuota" },
 				{ "UPDATE descuento SET valor = valor WHERE 1 = 0", "descuento" },
 				{ "DELETE FROM descuento WHERE 1 = 0", "descuento se podrían borrar" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+	}
+
+	/** Tanda 3: el conteo de un cierre no cambia; depósitos y verificaciones son de solo inserción. */
+	@Test
+	void fallaSiSePuedeCambiarUnConteoOEditarUnDepositoOUnaVerificacion() {
+		for (String[] caso : new String[][] { { "UPDATE cierre_caja SET contado = contado WHERE 1 = 0", "cierre_caja" },
+				{ "UPDATE deposito_caja SET version = version WHERE 1 = 0", "deposito_caja" },
+				{ "UPDATE verificacion_bancaria SET version = version WHERE 1 = 0", "verificacion_bancaria" },
+				{ "DELETE FROM cierre_caja WHERE 1 = 0", "cierre_caja se podrían borrar" } }) {
 			JdbcTemplate mysql = mysqlQueDeniega();
 			doReturn(0).when(mysql).update(caso[0]);
 
@@ -194,7 +210,9 @@ class VerificadorPermisosBaseDatosTest {
 				{ "INSERT INTO caja_diaria", "trg_caja_diaria_nace" }, { "INSERT INTO pago", "trg_pago_registro" },
 				{ "INSERT INTO aplicacion_pago", "trg_aplicacion_pago_registro" },
 				{ "INSERT INTO anulacion_pago", "trg_anulacion_pago_registro" },
-				{ "INSERT INTO descuento", "trg_descuento_nace" }, { "INSERT INTO ajuste_cuota", "trg_ajuste_cuota_registro" } }) {
+				{ "INSERT INTO descuento", "trg_descuento_nace" }, { "INSERT INTO ajuste_cuota", "trg_ajuste_cuota_registro" },
+				{ "INSERT INTO cierre_caja", "trg_cierre_caja_registro" },
+				{ "INSERT INTO verificacion_bancaria", "trg_verificacion_bancaria_registro" } }) {
 			JdbcTemplate mysql = mysqlQueDeniega();
 			doThrow(denegado(1452)).when(mysql).update(org.mockito.ArgumentMatchers.startsWith(caso[0]));
 

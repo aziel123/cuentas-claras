@@ -66,6 +66,26 @@
 	</div>
 </th:block>
 
+<!--/* Verificación bancaria: «No aparece» con nota obligatoria (qué se revisó en el banco). */-->
+<th:block th:fragment="modalNota(id, titulo, accion)">
+	<button type="button" class="btn btn-chico btn-peligro" th:popovertarget="${id}">No aparece</button>
+	<div class="modal" th:id="${id}" popover role="dialog" aria-modal="true" th:aria-labelledby="${id + '-titulo'}">
+		<form method="post" th:action="${accion}" class="modal-cuerpo">
+			<input type="hidden" name="resultado" value="NO_ENCONTRADO">
+			<h2 th:id="${id + '-titulo'}" th:text="${titulo}">¿No aparece en el banco?</h2>
+			<p>Promotoría lo verá como alerta crítica. Anota qué revisaste (fecha, cuenta, monto) para que se pueda seguir.</p>
+			<div class="campo">
+				<label th:for="${id + '-nota'}">Nota (obligatoria)</label>
+				<textarea class="input" th:id="${id + '-nota'}" name="nota" required minlength="10" maxlength="500"></textarea>
+			</div>
+			<div class="acciones">
+				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
+				<button type="submit" class="btn btn-peligro">Marcar «No aparece»</button>
+			</div>
+		</form>
+	</div>
+</th:block>
+
 <!--/* Avisos de la petición anterior (redirect) o de esta: éxito, advertencia y error. */-->
 <th:block th:fragment="avisos">
 	<th:block th:if="${exito != null}">

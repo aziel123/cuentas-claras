@@ -55,12 +55,15 @@ public class BandejaAprobaciones {
 		this.reloj = reloj;
 	}
 
-	/** Pendientes con las anulaciones de pago primero (mueven dinero ya cobrado); después, en orden de llegada. */
+	/**
+	 * Pendientes por prioridad del manejador: primero los cierres de caja con diferencia, luego las anulaciones de pago
+	 * (mueven dinero ya cobrado) y después el resto, en orden de llegada.
+	 */
 	public BandejaVista bandeja() {
 		String usuario = usuario();
 		return new BandejaVista(
 				solicitudes.findByEstadoOrderByIdAsc(EstadoSolicitud.PENDIENTE).stream()
-						.sorted(Comparator.comparing((SolicitudCambio s) -> s.getTipo() != TipoSolicitud.ANULACION_PAGO))
+						.sorted(Comparator.comparingInt((SolicitudCambio s) -> manejadorDe(s.getTipo()).prioridad(s)))
 						.map(s -> vista(s, usuario, true)).toList(),
 				solicitudes.findTop30ByEstadoNotOrderByResueltoEnDescIdDesc(EstadoSolicitud.PENDIENTE).stream()
 						.map(s -> vista(s, usuario, false)).toList(),
@@ -73,7 +76,7 @@ public class BandejaAprobaciones {
 		SolicitudCambio solicitud = pendiente(id);
 		String usuario = usuario();
 		exigirOtraPersona(solicitud, usuario, "aprobar");
-		manejadorDe(solicitud.getTipo()).aplicar(solicitud, usuario);
+		manejadorDe(solicitud.getTipo()).aplicar(solicitud, usuario, comentario);
 		solicitud.aprobar(usuario, comentario, ahora());
 		solicitudes.saveAndFlush(solicitud);
 		auditoria.registrar(AccionAuditoria.SOLICITUD_APROBADA, "solicitud_cambio", id.toString(),
@@ -138,7 +141,8 @@ public class BandejaAprobaciones {
 		return new SolicitudVista(s.getId(), s.getTipo().name(), s.getTipo().etiqueta(), s.getResumen(), s.getMotivo(),
 				s.getEstado().name(), s.getEstado().etiqueta(), s.getEstado().variante(), s.getSolicitadoPor(),
 				s.getCreadoEn(), s.getResueltoPor(), s.getResueltoEn(), s.getComentario(), puede,
-				manejador == null ? List.of() : manejador.detalle(s), manejador == null ? null : manejador.advertencia(s));
+				manejador == null ? List.of() : manejador.detalle(s), manejador == null ? null : manejador.advertencia(s),
+				manejador != null && manejador.exigeComentario(s), manejador == null ? "Rechazar" : manejador.accionRechazo());
 	}
 
 	private LocalDateTime ahora() {

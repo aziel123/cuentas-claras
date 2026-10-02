@@ -117,6 +117,25 @@ public enum AccionAuditoria {
 	DESCUENTO_APROBADO("Aprobó un descuento o beca en una cuota", true),
 	DESCUENTO_RECHAZADO("Rechazó un descuento o beca", false),
 
+	// Cierre, depósito y verificación bancaria (sprint 3, tanda 3). Se resalta todo lo que muestra una diferencia.
+	/** Se resalta: el primer conteo a ciegas no coincidió con lo registrado (no se muestran montos a la cajera). */
+	CAJA_CONTEO_NO_COINCIDE("Su primer conteo de caja no coincidió", true),
+	CAJA_CERRADA("Cerró su caja (cuadró)", false),
+	/** Se resalta: faltante o sobrante al cierre (un sobrante puede ser un cobro sin registrar). */
+	CAJA_CERRADA_CON_DIFERENCIA("Cerró su caja con diferencia", true),
+	CAJA_CIERRE_APROBADO("Aprobó un cierre de caja", false),
+	CAJA_CIERRE_OBSERVADO("Observó un cierre de caja", true),
+	CAJA_REAPERTURA_SOLICITADA("Pidió reabrir su caja", true),
+	CAJA_REABIERTA("Reabrió una caja (aprobado por otra persona)", true),
+	DEPOSITO_REGISTRADO("Registró el depósito de una caja", false),
+	/** Se resalta: depositó un monto distinto de lo contado en el cierre. */
+	DEPOSITO_DIFERENTE("Depositó un monto distinto de lo contado", true),
+	PAGO_VERIFICADO("Verificó un pago digital en el banco", false),
+	DEPOSITO_VERIFICADO("Verificó un depósito en el banco", false),
+	/** Se resalta: un Yape, Plin o transferencia registrado no aparece en el banco (¿número inventado?). */
+	PAGO_NO_ENCONTRADO_BANCO("Un pago digital no aparece en el banco", true),
+	DEPOSITO_NO_ENCONTRADO("Un depósito no aparece en el banco", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

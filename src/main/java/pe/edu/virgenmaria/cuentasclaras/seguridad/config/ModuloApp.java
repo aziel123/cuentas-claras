@@ -47,8 +47,8 @@ public enum ModuloApp {
 			true, "/caja", new String[] { "/caja", "/caja/**" }, EnumSet.of(CAJA)),
 	DESCUENTOS("Descuentos y becas", "Solicita descuentos y becas para que Dirección los apruebe.", "Sprint 3", true,
 			"/descuentos", new String[] { "/descuentos", "/descuentos/**" }, EnumSet.of(ADMINISTRACION)),
-	APROBACIONES("Aprobaciones", "Aprueba o rechaza anulaciones de pagos, descuentos y becas, retiros, cambios de "
-			+ "contacto e ingresos tardíos.",
+	APROBACIONES("Aprobaciones", "Aprueba cierres de caja, anulaciones de pagos, descuentos y becas, retiros, "
+			+ "cambios de contacto e ingresos tardíos; mira las cajas del día.",
 			"Sprint 2", true,
 			"/aprobaciones", new String[] { "/aprobaciones", "/aprobaciones/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
 
@@ -60,8 +60,8 @@ public enum ModuloApp {
 	REPORTES("Reportes", "Reportes de cobranza y exportación a Excel.", "Sprint 5", false, "/reportes",
 			new String[] { "/reportes", "/reportes/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 
-	CONCILIACION("Conciliación bancaria", "Cruza los pagos registrados con los movimientos del banco.", "Sprint 6",
-			false, "/conciliacion", new String[] { "/conciliacion", "/conciliacion/**" },
+	CONCILIACION("Conciliación bancaria", "Verifica en el banco los Yape, Plin, transferencias y depósitos de caja.",
+			"Sprint 3 (verificación)", true, "/conciliacion", new String[] { "/conciliacion", "/conciliacion/**" },
 			EnumSet.of(PROMOTOR, ADMINISTRACION)),
 
 	ACADEMICO("Académico", "Asistencia, notas por competencias y exportación al SIAGIE.", "Más adelante", false,

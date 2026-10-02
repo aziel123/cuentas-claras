@@ -17,7 +17,10 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
-		// Sprint 3 (tanda 2): descuentos y anulaciones.
+		// Sprint 3 (tanda 3): verificación bancaria, depósitos y cierres; (tanda 2): descuentos y anulaciones.
+		jdbc.update("DELETE FROM verificacion_bancaria");
+		jdbc.update("DELETE FROM deposito_caja");
+		jdbc.update("DELETE FROM cierre_caja");
 		jdbc.update("DELETE FROM ajuste_cuota");
 		jdbc.update("DELETE FROM descuento");
 		jdbc.update("DELETE FROM anulacion_pago");

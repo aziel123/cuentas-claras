@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Detalle de caja', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="detalle-caja" th:with="c=${caja}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/aprobaciones/cajas(fecha=${c.fecha})}">Cajas del día</a></p>
+			<h1 th:text="|Caja de ${c.cajera}|">Caja de Lucía Ramos</h1>
+			<p class="fila">
+				<span class="secundario" th:text="${#temporals.format(c.fecha, 'dd/MM/yyyy')}">02/10/2026</span>
+				<span th:replace="~{fragments/componentes :: badge(${c.estado}, ${c.estadoVariante})}"></span>
+			</p>
+		</div>
+	</div>
+
+	<ul class="conteos conteos-montos" aria-label="Resumen de la caja">
+		<li><strong><span th:replace="~{fragments/componentes :: monto(${c.fondo})}"></span></strong><span>Fondo fijo</span></li>
+		<li><strong><span th:replace="~{fragments/componentes :: monto(${c.efectivoVigente})}"></span></strong><span>Efectivo vigente</span></li>
+		<li><strong><span th:replace="~{fragments/componentes :: monto(${c.digitalVigente})}"></span></strong><span>Digital vigente</span></li>
+	</ul>
+
+	<section class="tarjeta" aria-labelledby="titulo-posteriores" th:unless="${#lists.isEmpty(c.posterioresAlCierre)}">
+		<h2 id="titulo-posteriores">Después del cierre</h2>
+		<ul class="lista-simple">
+			<li th:each="linea : ${c.posterioresAlCierre}" th:text="${linea}">Anulado después del cierre: −S/ 450.00</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-cierres">
+		<h2 id="titulo-cierres">Cierres</h2>
+		<th:block th:if="${#lists.isEmpty(c.cierres)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Aún sin cerrar', 'La cajera cierra su caja con un conteo a ciegas.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(c.cierres)}">
+			<thead><tr><th scope="col">N.°</th><th scope="col" class="num">Esperado</th><th scope="col" class="num">Primer conteo</th>
+				<th scope="col" class="num">Contado</th><th scope="col">Diferencia</th><th scope="col">Explicación</th>
+				<th scope="col">Revisión</th></tr></thead>
+			<tbody>
+				<tr th:each="k : ${c.cierres}">
+					<td data-etiqueta="N.°" class="num" th:text="|${k.numero} · ${#temporals.format(k.en, 'HH:mm')}|">1 · 18:10</td>
+					<td data-etiqueta="Esperado" class="num"><span th:replace="~{fragments/componentes :: monto(${k.esperado})}"></span></td>
+					<td data-etiqueta="Primer conteo" class="num"><span th:replace="~{fragments/componentes :: monto(${k.primerConteo})}"></span></td>
+					<td data-etiqueta="Contado" class="num"><span th:replace="~{fragments/componentes :: monto(${k.contado})}"></span></td>
+					<td data-etiqueta="Diferencia"><span th:replace="~{fragments/componentes :: badge(${k.diferencia}, ${k.diferenciaVariante})}"></span></td>
+					<td data-etiqueta="Explicación">
+						<span th:text="${k.explicacion} ?: '—'">—</span>
+						<small class="bloque secundario" th:if="${k.denominaciones != null}" th:text="${k.denominaciones}">B200×2</small>
+					</td>
+					<td data-etiqueta="Revisión"><span th:replace="~{fragments/componentes :: badge(${k.estado}, ${k.estadoVariante})}"></span>
+						<small class="bloque secundario" th:if="${k.revisadoPor != null}"
+							th:text="|${k.revisadoPor}${k.comentario != null ? ': ' + k.comentario : ''}|">director</small></td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-deposito">
+		<h2 id="titulo-deposito">Depósito</h2>
+		<p th:if="${c.deposito == null}" class="secundario">Aún no se registra el depósito del efectivo.</p>
+		<p th:if="${c.deposito != null}" th:text="${c.deposito}">S/ 450.00 el 02/10/2026</p>
+		<p th:if="${c.deposito != null}" class="secundario" th:text="|Verificación bancaria: ${c.depositoVerificacion}|">Sin verificar</p>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-pagos">
+		<h2 id="titulo-pagos" th:text="|Pagos (${#lists.size(c.pagos)})|">Pagos</h2>
+		<th:block th:if="${#lists.isEmpty(c.pagos)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Sin pagos', 'Esta caja no registró pagos.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(c.pagos)}">
+			<thead><tr><th scope="col">Hora</th><th scope="col">Comprobante</th><th scope="col">Familia</th><th scope="col">Medio</th>
+				<th scope="col" class="num">Monto</th><th scope="col">Estado</th><th scope="col">Banco</th></tr></thead>
+			<tbody>
+				<tr th:each="p : ${c.pagos}" th:classappend="${p.estado == 'Anulado'} ? 'fila-quitada'">
+					<td data-etiqueta="Hora" class="num" th:text="${#temporals.format(p.hora, 'HH:mm')}">09:15</td>
+					<td data-etiqueta="Comprobante" class="num" th:text="${p.comprobante}">B001-00000001</td>
+					<td data-etiqueta="Familia" th:text="${p.familia}">Familia Quispe Huamán</td>
+					<td data-etiqueta="Medio" th:text="${p.operacion != null} ? |${p.medio} ${p.operacion}| : ${p.medio}">Efectivo</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${p.total})}"></span></td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${p.estado}, ${p.estadoVariante})}"></span></td>
+					<td data-etiqueta="Banco" th:text="${p.verificacion}">Sin verificar</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

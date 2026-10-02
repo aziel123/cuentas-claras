@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.aprobaciones.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.SolicitudCambio;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.TipoSolicitud;
 
@@ -21,6 +22,29 @@ public interface ManejadorSolicitud {
 	TipoSolicitud tipo();
 
 	void aplicar(SolicitudCambio solicitud, String aprobador);
+
+	/** Igual que {@link #aplicar(SolicitudCambio, String)}, con el comentario de quien aprueba (puede ser null). */
+	default void aplicar(SolicitudCambio solicitud, String aprobador, String comentario) {
+		if (exigeComentario(solicitud) && (comentario == null || comentario.isBlank())) {
+			throw new ReglaNegocioException("Para aprobar esto escribe un comentario: qué verificaste o cómo se resolvió.");
+		}
+		aplicar(solicitud, aprobador);
+	}
+
+	/** Orden en la bandeja: 0 primero (un cierre con diferencia), 1 (anulaciones de pago), 2 el resto. */
+	default int prioridad(SolicitudCambio solicitud) {
+		return 2;
+	}
+
+	/** Si aprobarla exige un comentario (por ejemplo, un cierre con faltante: cómo se resolvió). */
+	default boolean exigeComentario(SolicitudCambio solicitud) {
+		return false;
+	}
+
+	/** El texto del botón de rechazo («Observar» en un cierre de caja). */
+	default String accionRechazo() {
+		return "Rechazar";
+	}
 
 	default void alRechazar(SolicitudCambio solicitud) {
 		// nada que deshacer

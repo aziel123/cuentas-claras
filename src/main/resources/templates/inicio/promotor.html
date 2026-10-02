@@ -14,15 +14,33 @@
 		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
 	</th:block>
 
+	<section class="tarjeta" th:each="ind, i : ${indicadores}" th:aria-labelledby="|titulo-indicadores-${i.index}|" data-indicadores>
+		<div class="fila entre">
+			<h2 th:id="|titulo-indicadores-${i.index}|" th:text="${ind.titulo()}">Hoy en caja · 02/10/2026</h2>
+			<a th:if="${ind.enlace() != null}" class="btn btn-texto btn-chico" th:href="@{${ind.enlace()}}">Ver cajas del día</a>
+		</div>
+		<ul class="indicadores">
+			<li th:each="x : ${ind.indicadores()}">
+				<span class="secundario" th:text="${x.etiqueta()}">Cobrado hoy</span>
+				<strong class="num" th:text="${x.valor()}">S/ 1,250.00</strong>
+				<small class="secundario" th:text="${x.detalle()}">5 pagos</small>
+			</li>
+		</ul>
+	</section>
+
 	<section class="tarjeta revisar" aria-labelledby="titulo-revisar">
 		<div>
 			<h2 id="titulo-revisar">Para revisar</h2>
-			<p class="secundario">Claves restablecidas, usuarios creados y cambios de roles de los últimos 7 días. Si algo no lo
-				reconoces, revísalo con quien lo hizo: así se detecta una cuenta falsa a tiempo.</p>
+			<p class="secundario">Primero lo crítico de caja (faltantes, cajas sin cerrar, pagos que no aparecen en el banco).
+				Después, claves restablecidas, usuarios creados y cambios de roles de los últimos 7 días: si algo no lo
+				reconoces, revísalo con quien lo hizo.</p>
 		</div>
 		<ul class="lista-simple alertas-revision" th:unless="${#lists.isEmpty(alertasRevision)}" data-alertas-revision>
-			<li th:each="a : ${alertasRevision}">
-				<span class="badge badge-peligro">Cobranza</span> <span th:text="${a}">3 matrículas sin cronograma</span>
+			<li th:each="a : ${alertasRevision}" th:classappend="${a.gravedad().name() == 'CRITICA'} ? 'alerta-critica'"
+				th:data-gravedad="${a.gravedad()}">
+				<span th:replace="~{fragments/componentes :: badge(|${a.modulo()} · ${a.gravedad().etiqueta()}|, ${a.gravedad().variante()})}"></span>
+				<span th:text="${a.texto()}">Faltante de S/ 50.00 en la caja de Lucía Ramos</span>
+				<a th:if="${a.enlace() != null}" class="btn btn-texto btn-chico" th:href="@{${a.enlace()}}">Revisar</a>
 			</li>
 		</ul>
 		<th:block th:if="${#lists.isEmpty(paraRevisar)}">

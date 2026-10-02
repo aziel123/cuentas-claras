@@ -212,6 +212,12 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 	}
 
 	/** Una corrección hacia OTRA familia se muestra resaltada: es la vía para mover dinero entre familias. */
+	/** Después de los cierres con diferencia y antes del resto: mueve dinero ya cobrado. */
+	@Override
+	public int prioridad(SolicitudCambio solicitud) {
+		return 1;
+	}
+
 	@Override
 	public String advertencia(SolicitudCambio solicitud) {
 		Map<String, String> datos = DatosSolicitud.leer(solicitud.getDatos());

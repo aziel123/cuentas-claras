@@ -41,10 +41,12 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `serie_comprobante` | INSERT y UPDATE **solo** de `ultimo_numero` | La serie no cambia; el número avanza de uno en uno (trigger) |
 | `comprobante` | INSERT y UPDATE **solo** del envío al OSE (`estado_envio, intentos, enviado_en, respuesta, codigo_hash, enlace_pdf`) | Serie, número, receptor y total no cambian (1143); el número es el siguiente de la serie (trigger) |
 | `comprobante_linea`, `aplicacion_pago` | INSERT | **Solo inserción**: el libro de pagos no se edita ni se borra (1142) |
-| `caja_diaria` | INSERT y UPDATE **solo** de `estado, cierres, conteos, primer_conteo` | Cajero, fecha y fondo fijo no cambian (1143). Hasta la tanda 3 (cierre) la caja no se cierra por SQL (trigger) |
+| `caja_diaria` | INSERT y UPDATE **solo** de `estado, cierres, conteos, primer_conteo` | Cajero, fecha y fondo fijo no cambian (1143). Se cierra solo con su cierre registrado, el primer conteo no se reescribe y se reabre solo con una reapertura aprobada sin depósito (trigger) |
 | `pago` | INSERT y UPDATE **solo** de `estado, operacion_vigente` | Familia, caja, medio, operación, total, vuelto y comprobante no cambian (1143); nace VIGENTE con su boleta por el mismo total (trigger) |
 | `anulacion_pago`, `ajuste_cuota` | INSERT | **Solo inserción** (tanda 2): la anulación aprobada de un pago y cada ajuste de un descuento no se editan ni se borran (1142) |
 | `descuento` | INSERT y UPDATE **solo** de `estado, resuelto_por, resuelto_en` | Alumno, tipo, valor, cuotas, total, motivo y sustento no cambian (1143); nace SOLICITADO y, resuelto, no cambia (trigger) |
+| `cierre_caja` | INSERT y UPDATE **solo** de `estado, revisado_por, revisado_en, comentario_revision` | El conteo, el esperado y la diferencia no cambian (1143); el esperado es el del libro y lo registra la cajera de una caja abierta; revisado, no cambia (trigger) |
+| `deposito_caja`, `verificacion_bancaria` | INSERT | **Solo inserción** (tanda 3): el depósito y la verificación contra el banco no se editan ni se borran (1142); verifica alguien que no cobró ni depositó (trigger) |
 
 ## Triggers (paso 3, después de los permisos)
 Los aplica `cc_migrador` (no van en Flyway: H2 no los soporta):
@@ -65,6 +67,11 @@ mysql -h <host> -u cc_migrador -p cuentasclaras < scripts/mysql/03-triggers.sql
   `anulacion_pago` registrada (y nunca vuelve a VIGENTE); una reversión solo existe con esa anulación y por el monto
   exacto de la aplicación original; la anulación corresponde al pago vigente, a su cajero y a una nota de crédito que
   anula su comprobante por el mismo total.
+- Sprint 3, tanda 3 (cierre, depósito y verificación, requiere V11): la caja se cierra solo con su `cierre_caja`
+  registrado; el primer conteo a ciegas no se reescribe ni se reinician los intentos; se reabre solo con una solicitud
+  `REAPERTURA_CAJA` que se aprueba en la misma transacción y sin depósito; el cierre lo registra la cajera de la caja
+  abierta con el esperado del libro (fondo + efectivo VIGENTE); un cierre revisado no cambia; verifica contra el banco
+  alguien que no cobró ni depositó, y solo pagos digitales o depósitos.
 - **Los triggers del sprint 3 van por tanda** (`docs/arquitectura/sprint-3-caja.md`, sección 6.3): un trigger que nombra
   una tabla que aún no existe hace fallar con 1146 todo UPDATE sobre su tabla. El script del repositorio es siempre el de
   la última migración publicada: aplícalo DESPUÉS de migrar, nunca antes.
@@ -127,6 +134,9 @@ y `UPDATE caja_diaria SET fecha = fecha` dan 1143; y `UPDATE cuota SET estado = 
 Tanda 2: `DELETE` sobre `anulacion_pago`, `descuento` y `ajuste_cuota` da 1142; `UPDATE anulacion_pago|ajuste_cuota
 SET version = version` da 1142; `UPDATE descuento SET valor = valor` (o `cuotas`, `total_estimado`) da 1143; un
 `descuento` que nace APROBADO y un `ajuste_cuota` sin descuento aprobado dan 1644.
+Tanda 3: `DELETE` sobre `cierre_caja`, `deposito_caja` y `verificacion_bancaria` da 1142; `UPDATE deposito_caja|
+verificacion_bancaria SET version = version` da 1142; `UPDATE cierre_caja SET contado = contado` da 1143; un
+`cierre_caja` de una caja inexistente y una `verificacion_bancaria` de un pago inexistente dan 1644.
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

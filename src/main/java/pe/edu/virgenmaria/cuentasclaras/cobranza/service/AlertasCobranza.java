@@ -9,6 +9,8 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.PlanPensionRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision.Gravedad;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
 
 import java.util.ArrayList;
@@ -43,8 +45,8 @@ public class AlertasCobranza implements AlertasRevision {
 	}
 
 	@Override
-	public List<String> alertas() {
-		List<String> alertas = new ArrayList<>();
+	public List<AlertaRevision> alertas() {
+		List<AlertaRevision> alertas = new ArrayList<>();
 		for (AnioEscolar anio : anios.findAllByOrderByAnioDesc()) {
 			if (anio.cerrado()) {
 				continue;
@@ -53,15 +55,16 @@ public class AlertasCobranza implements AlertasRevision {
 				var grados = ServicioPlanesPension.grados(plan.getNivel());
 				List<Matricula> sinCronograma = cuotas.matriculasSinCronograma(anio.getId(), grados);
 				if (!sinCronograma.isEmpty()) {
-					alertas.add(sinCronograma.size() + " matrícula(s) de " + plan.getNivel().etiqueta() + " " + anio.getAnio()
-							+ " sin cronograma aunque hay plan aprobado: " + nombres(sinCronograma)
-							+ ". Usa «Generar pendientes» y revisa por qué no se generó.");
+					alertas.add(new AlertaRevision(Gravedad.ATENCION, "Cobranza", sinCronograma.size() + " matrícula(s) de "
+							+ plan.getNivel().etiqueta() + " " + anio.getAnio() + " sin cronograma aunque hay plan aprobado: "
+							+ nombres(sinCronograma) + ". Usa «Generar pendientes» y revisa por qué no se generó.",
+							"/pensiones"));
 				}
 				List<Matricula> retiradas = cuotas.retiradasSinCuotas(anio.getId(), grados);
 				if (!retiradas.isEmpty()) {
-					alertas.add(retiradas.size() + " matrícula(s) de " + plan.getNivel().etiqueta() + " " + anio.getAnio()
-							+ " retirada(s) sin ninguna cuota: " + nombres(retiradas)
-							+ ". Revisa que el retiro sea real y desde cuándo.");
+					alertas.add(new AlertaRevision(Gravedad.ATENCION, "Cobranza", retiradas.size() + " matrícula(s) de "
+							+ plan.getNivel().etiqueta() + " " + anio.getAnio() + " retirada(s) sin ninguna cuota: "
+							+ nombres(retiradas) + ". Revisa que el retiro sea real y desde cuándo.", "/alumnos"));
 				}
 			}
 		}

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Verificación bancaria', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="conciliacion" th:with="v=${conciliacion}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Conciliación bancaria</p>
+			<h1>Verificación bancaria</h1>
+			<p class="secundario">Compara cada Yape, Plin, transferencia y depósito con el estado de cuenta del banco. Si algo no
+				aparece, márcalo: Promotoría lo ve como alerta. Quien cobró o depositó nunca verifica lo suyo.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<th:block th:unless="${v.puedeVerificar}">
+		<div th:replace="~{fragments/componentes :: alerta('info', 'Puedes ver lo que falta verificar; la verificación la hace Administración.')}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-pagos">
+		<h2 id="titulo-pagos" th:text="|Pagos digitales por verificar (${#lists.size(v.pagos)})|">Pagos digitales por verificar</h2>
+		<p class="secundario" th:text="|Resaltados: llevan ${v.diasLimite} día(s) o más sin verificarse.|">Resaltados</p>
+		<th:block th:if="${#lists.isEmpty(v.pagos)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todo verificado', 'No hay pagos digitales por verificar.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(v.pagos)}">
+			<thead><tr><th scope="col">Fecha</th><th scope="col">Medio</th><th scope="col">N.° de operación</th>
+				<th scope="col" class="num">Monto</th><th scope="col">Familia</th><th scope="col">Cobró</th>
+				<th scope="col" th:if="${v.puedeVerificar}">Verificar</th></tr></thead>
+			<tbody>
+				<tr th:each="p : ${v.pagos}" th:classappend="${p.atrasado} ? 'fila-atrasada'" th:data-pago="${p.id}">
+					<td data-etiqueta="Fecha" th:text="${#temporals.format(p.fecha, 'dd/MM/yyyy')}">02/10/2026</td>
+					<td data-etiqueta="Medio" th:text="${p.medio}">Yape</td>
+					<td data-etiqueta="N.° de operación" class="num" th:text="${p.operacion}">12345678</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${p.total})}"></span></td>
+					<td data-etiqueta="Familia" th:text="${p.familia}">Familia Quispe Huamán</td>
+					<td data-etiqueta="Cobró" th:text="${p.cajera}">Lucía Ramos</td>
+					<td data-etiqueta="Verificar" th:if="${v.puedeVerificar}">
+						<div class="fila">
+							<form method="post" th:action="@{/conciliacion/pagos/{id}(id=${p.id})}">
+								<input type="hidden" name="resultado" value="ENCONTRADO">
+								<button type="submit" class="btn btn-secundario btn-chico">Encontrado</button>
+							</form>
+							<th:block th:replace="~{fragments/componentes :: modalNota(|modal-pago-${p.id}|,
+								|¿${p.medio} ${p.operacion} no aparece?|, @{/conciliacion/pagos/{id}(id=${p.id})})}"></th:block>
+						</div>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-depositos">
+		<h2 id="titulo-depositos" th:text="|Depósitos por verificar (${#lists.size(v.depositos)})|">Depósitos por verificar</h2>
+		<th:block th:if="${#lists.isEmpty(v.depositos)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todo verificado', 'No hay depósitos por verificar.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(v.depositos)}">
+			<thead><tr><th scope="col">Caja</th><th scope="col">Depósito</th><th scope="col">Cuenta</th>
+				<th scope="col">N.° de operación</th><th scope="col" class="num">Monto</th><th scope="col">Cajera</th>
+				<th scope="col" th:if="${v.puedeVerificar}">Verificar</th></tr></thead>
+			<tbody>
+				<tr th:each="d : ${v.depositos}" th:classappend="${d.atrasado} ? 'fila-atrasada'" th:data-deposito="${d.id}">
+					<td data-etiqueta="Caja" th:text="${#temporals.format(d.fechaCaja, 'dd/MM/yyyy')}">01/10/2026</td>
+					<td data-etiqueta="Depósito" th:text="${#temporals.format(d.fechaDeposito, 'dd/MM/yyyy')}">02/10/2026</td>
+					<td data-etiqueta="Cuenta" th:text="${d.cuenta}">BCP Soles</td>
+					<td data-etiqueta="N.° de operación" class="num" th:text="${d.operacion}">0012345</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${d.monto})}"></span>
+						<small class="bloque" th:if="${d.distinto}">
+							<span th:replace="~{fragments/componentes :: badge('Distinto de lo contado', 'peligro')}"></span>
+							<span th:text="|Se esperaba S/ ${#numbers.formatDecimal(d.esperado, 1, 'COMMA', 2, 'POINT')}|">Se esperaba</span>
+						</small></td>
+					<td data-etiqueta="Cajera" th:text="${d.cajera}">Lucía Ramos</td>
+					<td data-etiqueta="Verificar" th:if="${v.puedeVerificar}">
+						<div class="fila">
+							<form method="post" th:action="@{/conciliacion/depositos/{id}(id=${d.id})}">
+								<input type="hidden" name="resultado" value="ENCONTRADO">
+								<button type="submit" class="btn btn-secundario btn-chico">Encontrado</button>
+							</form>
+							<th:block th:replace="~{fragments/componentes :: modalNota(|modal-deposito-${d.id}|,
+								|¿El depósito ${d.operacion} no aparece?|, @{/conciliacion/depositos/{id}(id=${d.id})})}"></th:block>
+						</div>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-recientes">
+		<h2 id="titulo-recientes">Verificados recientemente</h2>
+		<th:block th:if="${#lists.isEmpty(v.recientes)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Aún no hay verificaciones', 'Aparecerán aquí cuando Administración verifique.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(v.recientes)}">
+			<thead><tr><th scope="col">Qué</th><th scope="col">Resultado</th><th scope="col">Nota</th><th scope="col">Verificó</th></tr></thead>
+			<tbody>
+				<tr th:each="r : ${v.recientes}">
+					<td data-etiqueta="Qué" th:text="${r.que}">Yape 12345 · S/ 450.00</td>
+					<td data-etiqueta="Resultado"><span th:replace="~{fragments/componentes :: badge(${r.resultado}, ${r.variante})}"></span></td>
+					<td data-etiqueta="Nota" th:text="${r.nota} ?: '—'">—</td>
+					<td data-etiqueta="Verificó" th:text="|${r.por} · ${#temporals.format(r.en, 'dd/MM HH:mm')}|">administracion</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

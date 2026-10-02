@@ -10,6 +10,7 @@
 		</div>
 		<div class="fila">
 			<a th:replace="~{fragments/componentes :: enlaceBoton('Pagos de hoy', @{/caja/hoy}, 'secundario')}"></a>
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Cerrar caja', @{/caja/cierre}, 'secundario')}"></a>
 		</div>
 	</div>
 
@@ -17,6 +18,7 @@
 	<th:block th:if="${busqueda.cajaAnteriorAbierta != null}">
 		<div th:replace="~{fragments/componentes :: alerta('error',
 			|Primero cierra tu caja del ${#temporals.format(busqueda.cajaAnteriorAbierta, 'dd/MM')}: no puedes cobrar con una caja anterior abierta.|)}"></div>
+		<p><a th:replace="~{fragments/componentes :: enlaceBoton('Cerrar mi caja anterior', @{/caja/cierre}, 'primario')}"></a></p>
 	</th:block>
 
 	<section class="tarjeta" aria-labelledby="titulo-buscar">

@@ -637,7 +637,10 @@ class PermisosMySqlTest {
 				"anulado-" + sufijo, pago))).isEqualTo(1644);
 	}
 
-	/** Tanda 1: el cierre ciego llega con V11. Hasta entonces la caja no se cierra (ni nace cerrada) por SQL. */
+	/**
+	 * La caja no se cierra sin su cierre registrado, el conteo a ciegas no se reescribe (no se tantea el esperado) y no
+	 * se reabre sin una reapertura aprobada (trigger trg_caja_diaria_estado en su versión final).
+	 */
 	@Test
 	void cajaNoSeCierraSinCierreRegistradoFallaCon1644() {
 		FamiliasCaja familias = familiasDeCaja();
@@ -647,7 +650,8 @@ class PermisosMySqlTest {
 
 		assertThat(codigoAl(() -> jdbc.update("UPDATE caja_diaria SET estado = 'CERRADA', cierres = 1 WHERE id = ?", caja)))
 				.isEqualTo(1644);
-		assertThat(codigoAl(() -> jdbc.update("UPDATE caja_diaria SET conteos = 1, primer_conteo = 10 WHERE id = ?", caja)))
+		// Dos conteos de golpe, tampoco.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE caja_diaria SET conteos = 2, primer_conteo = 10 WHERE id = ?", caja)))
 				.isEqualTo(1644);
 		assertThat(jdbc.queryForObject("SELECT estado FROM caja_diaria WHERE id = ?", String.class, caja))
 				.isEqualTo("ABIERTA");
@@ -938,6 +942,162 @@ class PermisosMySqlTest {
 		assertThat(jdbc.queryForList("SELECT s.serie FROM serie_comprobante s WHERE s.colegio_id = 1 AND s.ultimo_numero <> "
 				+ "(SELECT COUNT(*) FROM comprobante c WHERE c.serie_id = s.id)", String.class)).isEmpty();
 		UsuariosDePrueba.iniciarSesion(guardar("verif.t2." + sufijo, Rol.PROMOTOR));
+		assertThat(verificador.verificar().integra()).isTrue();
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// Sprint 3, tanda 3: cierre ciego, depósito y verificación bancaria (V11 y el 03-triggers.sql final del sprint).
+	// Cuotas libres del escenario compartido: otroAlumno 5-8 y 10-12; hermano2 11 y 12; hermano1 12.
+	// ---------------------------------------------------------------------------------------------------------------
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioCierreCaja cierres;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioVerificacionBancaria verificacionBancaria;
+
+	private static final String EXPLICACION = "Volví a contar y faltan cincuenta soles";
+
+	private static pe.edu.virgenmaria.cuentasclaras.caja.dto.ConteoRequest conteo(String monto) {
+		return new pe.edu.virgenmaria.cuentasclaras.caja.dto.ConteoRequest(new java.math.BigDecimal(monto), null);
+	}
+
+	private static pe.edu.virgenmaria.cuentasclaras.caja.dto.ReconteoRequest reconteo(String monto) {
+		return new pe.edu.virgenmaria.cuentasclaras.caja.dto.ReconteoRequest(new java.math.BigDecimal(monto), null,
+				EXPLICACION);
+	}
+
+	@Test
+	void cierreCajaDepositoYVerificacionNoSeBorranNiCambianElConteo() {
+		for (String columna : new String[] { "contado", "primer_conteo", "esperado", "efectivo_cobrado", "diferencia",
+				"explicacion", "caja_diaria_id", "numero" }) {
+			assertThat(codigoAl(() -> jdbc.update("UPDATE cierre_caja SET " + columna + " = " + columna + " WHERE 1 = 0")))
+					.as(columna).isEqualTo(1143);
+		}
+		assertThatCode(() -> jdbc.update("UPDATE cierre_caja SET estado = estado, revisado_por = revisado_por, "
+				+ "revisado_en = revisado_en, comentario_revision = comentario_revision WHERE 1 = 0"))
+				.doesNotThrowAnyException();
+	}
+
+	@Test
+	void triggersDelCierreFallanCon1644() {
+		FamiliasCaja familias = familiasDeCaja();
+		var cajera = cajera("caja.t3");
+		UsuariosDePrueba.iniciarSesion(cajera);
+		Long pago = cobrarEfectivo(familias.otraFamilia(), java.util.List.of(cuotaDe(familias.otroAlumno(), 5)), "450.00");
+		Long caja = jdbc.queryForObject("SELECT caja_diaria_id FROM pago WHERE id = ?", Long.class, pago);
+		// Primer conteo que no coincide: queda guardado y la caja sigue abierta.
+		cierres.contar(conteo("400.00"));
+		assertThat(jdbc.queryForMap("SELECT estado, conteos, primer_conteo FROM caja_diaria WHERE id = ?", caja))
+				.containsEntry("estado", "ABIERTA").containsEntry("conteos", 1);
+
+		// No se reescribe el primer conteo ni se reinician los intentos (no se tantea el esperado).
+		assertThat(codigoAl(() -> jdbc.update("UPDATE caja_diaria SET primer_conteo = 450 WHERE id = ?", caja)))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE caja_diaria SET conteos = 0 WHERE id = ?", caja))).isEqualTo(1644);
+		// Un cierre con el esperado «acomodado» (sin el pago) o registrado por otra persona: rechazado.
+		String cierre = "INSERT INTO cierre_caja (colegio_id, caja_diaria_id, numero, fondo_fijo, efectivo_cobrado, "
+				+ "esperado, primer_conteo, contado, diferencia, explicacion, pagos_efectivo, pagos_digitales, total_digital, "
+				+ "estado, creado_en, creado_por, actualizado_en) VALUES (1, ?, 1, 0, ?, ?, 400, 400, ?, 'acomodado a mano', "
+				+ "0, 0, 0, 'POR_REVISAR', NOW(6), ?, NOW(6))";
+		assertThat(codigoAl(() -> jdbc.update(cierre, caja, 400, 400, 0, cajera.getUsername()))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(cierre, caja, 450, 450, -50, "otra.persona"))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE caja_diaria SET estado = 'CERRADA', cierres = cierres + 1 "
+				+ "WHERE id = ?", caja))).isEqualTo(1644);
+
+		// Cerrada de verdad (reconteo con explicación): no recibe efectivo ni se reabre sin una reapertura aprobada.
+		cierres.recontar(reconteo("400.00"));
+		assertThat(jdbc.queryForObject("SELECT estado FROM caja_diaria WHERE id = ?", String.class, caja))
+				.isEqualTo("CERRADA");
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, "
+				+ "comprobante_id, medio, total, recibido, vuelto, origen, clave_idempotencia, estado, creado_en, creado_por, "
+				+ "actualizado_en) SELECT colegio_id, familia_id, caja_diaria_id, cajero, fecha, comprobante_id, medio, "
+				+ "total, recibido, vuelto, origen, ?, estado, NOW(6), creado_por, NOW(6) FROM pago WHERE id = ?",
+				"cerrada-" + sufijo, pago))).isEqualTo(1644);
+		assertThatThrownBy(() -> cobrarEfectivo(familias.otraFamilia(), java.util.List.of(cuotaDe(familias.otroAlumno(),
+				6)), "450.00")).isInstanceOf(pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException.class)
+				.hasMessageContaining("ya se cerró");
+		assertThat(codigoAl(() -> jdbc.update("UPDATE caja_diaria SET estado = 'ABIERTA', conteos = 0, "
+				+ "primer_conteo = NULL WHERE id = ?", caja))).isEqualTo(1644);
+		// El cierre revisado no cambia.
+		Long cierreId = jdbc.queryForObject("SELECT id FROM cierre_caja WHERE caja_diaria_id = ?", Long.class, caja);
+		UsuariosDePrueba.iniciarSesion(EscenarioCobranza.DIRECCION);
+		bandeja.aprobar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.pendiente(jdbc, "cierre_caja",
+				cierreId), "La cajera repuso los cincuenta soles");
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cierre_caja SET estado = 'OBSERVADO', comentario_revision = "
+				+ "'cambio de opinión posterior' WHERE id = ?", cierreId))).isEqualTo(1644);
+		// Quien cobró no verifica su propio Yape (ni un pago en efectivo como si fuera digital).
+		UsuariosDePrueba.iniciarSesion(cajera);
+		Long yape = cobro.cobrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.digital(familias.otraFamilia(),
+				java.util.List.of(cuotaDe(familias.otroAlumno(), 7)), pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.YAPE,
+				"Y3" + sufijo, "450.00"));
+		String verificar = "INSERT INTO verificacion_bancaria (colegio_id, pago_id, resultado, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (1, ?, 'ENCONTRADO', NOW(6), ?, NOW(6))";
+		assertThat(codigoAl(() -> jdbc.update(verificar, yape, cajera.getUsername()))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(verificar, pago, "administracion"))).isEqualTo(1644);
+	}
+
+	/**
+	 * Tanda 3 con los permisos mínimos de cc_app y los triggers finales: cobro en efectivo y Yape, primer conteo que no
+	 * coincide, reconteo y cierre con faltante, aprobación con comentario, depósito, verificación del Yape y del depósito
+	 * por Administración; y en otra caja, cierre cuadrado, reapertura aprobada el mismo día y segundo cierre. Detecta un
+	 * saveAndFlush faltante (en H2 no hay triggers).
+	 */
+	@Test
+	void flujoCompletoDeCierreConPermisosMinimos() {
+		FamiliasCaja familias = familiasDeCaja();
+		var cajera = cajera("caja.t3f");
+		UsuariosDePrueba.iniciarSesion(cajera);
+		cobrarEfectivo(familias.otraFamilia(), java.util.List.of(cuotaDe(familias.otroAlumno(), 8)), "450.00");
+		Long yape = cobro.cobrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.digital(familias.otraFamilia(),
+				java.util.List.of(cuotaDe(familias.otroAlumno(), 10)), pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.YAPE,
+				"Y4" + sufijo, "450.00"));
+		assertThat(cierres.contar(conteo("400.00"))).isEqualTo(pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoConteo.RECONTAR);
+		cierres.recontar(reconteo("400.00"));
+		Long caja = jdbc.queryForObject("SELECT caja_diaria_id FROM pago WHERE id = ?", Long.class, yape);
+		java.util.Map<String, Object> cierre = jdbc.queryForMap("SELECT * FROM cierre_caja WHERE caja_diaria_id = ?", caja);
+		assertThat(cierre).containsEntry("estado", "POR_REVISAR").containsEntry("pagos_digitales", 1);
+		assertThat((java.math.BigDecimal) cierre.get("diferencia")).isEqualByComparingTo("-50.00");
+		assertThat((java.math.BigDecimal) cierre.get("total_digital")).isEqualByComparingTo("450.00");
+
+		UsuariosDePrueba.iniciarSesion(EscenarioCobranza.DIRECCION);
+		bandeja.aprobar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.pendiente(jdbc, "cierre_caja",
+				((Number) cierre.get("id")).longValue()), "Conversado con la cajera: repone mañana");
+		assertThat(jdbc.queryForObject("SELECT estado FROM cierre_caja WHERE caja_diaria_id = ?", String.class, caja))
+				.isEqualTo("APROBADO");
+
+		UsuariosDePrueba.iniciarSesion(cajera);
+		var estado = cierres.estado();
+		cierres.registrarDeposito(new pe.edu.virgenmaria.cuentasclaras.caja.dto.DepositoRequest(caja,
+				estado.cuentas().getFirst(), "D" + sufijo, estado.hoy(), new java.math.BigDecimal("400.00"), null));
+		Long deposito = jdbc.queryForObject("SELECT id FROM deposito_caja WHERE caja_diaria_id = ?", Long.class, caja);
+
+		UsuariosDePrueba.iniciarSesion(EscenarioCobranza.ADMINISTRACION);
+		var verificado = new pe.edu.virgenmaria.cuentasclaras.caja.dto.VerificacionRequest(
+				pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoVerificacion.ENCONTRADO, null);
+		verificacionBancaria.verificarPago(yape, verificado);
+		verificacionBancaria.verificarDeposito(deposito, verificado);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM verificacion_bancaria WHERE pago_id = ? OR deposito_id = ?",
+				Long.class, yape, deposito)).isEqualTo(2);
+
+		// Otra caja: cierra cuadrada, pide reabrir, se aprueba el mismo día y cierra de nuevo (cierre N.° 2).
+		var otra = cajera("caja.t3r");
+		UsuariosDePrueba.iniciarSesion(otra);
+		cobrarEfectivo(familias.familia(), java.util.List.of(cuotaDe(familias.hermano2(), 11)), "450.00");
+		cierres.contar(conteo("450.00"));
+		cierres.solicitarReapertura("Llegó una familia a pagar en efectivo tarde");
+		Long cajaOtra = jdbc.queryForObject("SELECT id FROM caja_diaria WHERE cajero = ?", Long.class, otra.getUsername());
+		UsuariosDePrueba.iniciarSesion(EscenarioCobranza.PROMOTORIA);
+		bandeja.aprobar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.pendiente(jdbc, "caja_diaria",
+				cajaOtra), null);
+		assertThat(jdbc.queryForMap("SELECT estado, cierres, conteos FROM caja_diaria WHERE id = ?", cajaOtra))
+				.containsEntry("estado", "ABIERTA").containsEntry("cierres", 1).containsEntry("conteos", 0);
+		UsuariosDePrueba.iniciarSesion(otra);
+		cobrarEfectivo(familias.familia(), java.util.List.of(cuotaDe(familias.hermano2(), 12)), "450.00");
+		cierres.contar(conteo("900.00"));
+		assertThat(jdbc.queryForList("SELECT CONCAT(numero, ' ', diferencia) FROM cierre_caja WHERE caja_diaria_id = ? "
+				+ "ORDER BY numero", String.class, cajaOtra)).containsExactly("1 0.00", "2 0.00");
+		UsuariosDePrueba.iniciarSesion(guardar("verif.t3." + sufijo, Rol.PROMOTOR));
 		assertThat(verificador.verificar().integra()).isTrue();
 	}
 

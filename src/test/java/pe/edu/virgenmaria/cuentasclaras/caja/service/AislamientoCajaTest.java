@@ -78,6 +78,15 @@ class AislamientoCajaTest {
 	private BandejaAprobaciones bandeja;
 
 	@Autowired
+	private ServicioCierreCaja cierres;
+
+	@Autowired
+	private ConsultaCajas consulta;
+
+	@Autowired
+	private ServicioVerificacionBancaria verificacion;
+
+	@Autowired
 	private JdbcTemplate jdbc;
 
 	private Familias a;
@@ -211,6 +220,45 @@ class AislamientoCajaTest {
 		assertThat(jdbc.queryForObject("SELECT estado FROM pago WHERE id = ?", String.class, pagoA)).isEqualTo("VIGENTE");
 		assertThat(jdbc.queryForObject("SELECT estado FROM descuento WHERE id = ?", String.class, descuentoA))
 				.isEqualTo("SOLICITADO");
+	}
+
+	/** Tanda 3: cierres, depósitos, verificaciones y cajas del día del A no existen para el B. */
+	@Test
+	void colegioBNoVeCierresDepositosNiVerificacionesDelA() {
+		como(EscenarioCaja.CAJA);
+		Long yapeA = cobro.cobrar(EscenarioCaja.digital(a.quispe(), List.of(cuota(jdbc, a.valeria(), "PEN-2027-03")),
+				pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.YAPE, "YP-A-0001", "450.00"));
+		cierres.contar(new pe.edu.virgenmaria.cuentasclaras.caja.dto.ConteoRequest(new java.math.BigDecimal("450.00"),
+				null));
+		var estadoA = cierres.estado();
+		Long cajaA = estadoA.porDepositar().getFirst().cajaId();
+		cierres.registrarDeposito(new pe.edu.virgenmaria.cuentasclaras.caja.dto.DepositoRequest(cajaA,
+				estadoA.cuentas().getFirst(), "OP-A-0001", estadoA.hoy(), new java.math.BigDecimal("450.00"), null));
+		Long depositoA = jdbc.queryForObject("SELECT id FROM deposito_caja", Long.class);
+
+		// La cajera del B (mismo nombre de usuario «caja») no ve ni toca la caja del A.
+		como(cajaB);
+		var estadoB = cierres.estado();
+		assertThat(estadoB.porDepositar()).isEmpty();
+		assertThat(estadoB.porCerrar().id()).isNotEqualTo(cajaA);
+		assertThatThrownBy(() -> cierres.registrarDeposito(new pe.edu.virgenmaria.cuentasclaras.caja.dto.DepositoRequest(
+				cajaA, estadoB.cuentas().getFirst(), "OP-B-0001", estadoB.hoy(), new java.math.BigDecimal("450.00"), null)))
+				.isInstanceOf(RecursoNoEncontradoException.class);
+		como(directorB);
+		assertThat(consulta.delDia(null).cajas()).extracting(c -> c.id()).doesNotContain(cajaA);
+		assertThatThrownBy(() -> consulta.detalle(cajaA)).isInstanceOf(RecursoNoEncontradoException.class);
+		assertThat(bandeja.bandeja().pendientes()).noneMatch(s -> s.tipo().equals("CIERRE_CAJA"));
+		como(administracionB);
+		var vistaB = verificacion.vista();
+		assertThat(vistaB.pagos()).extracting(p -> p.id()).doesNotContain(yapeA);
+		assertThat(vistaB.depositos()).isEmpty();
+		assertThatThrownBy(() -> verificacion.verificarPago(yapeA, new pe.edu.virgenmaria.cuentasclaras.caja.dto
+				.VerificacionRequest(pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoVerificacion.ENCONTRADO, null)))
+				.isInstanceOf(RecursoNoEncontradoException.class);
+		assertThatThrownBy(() -> verificacion.verificarDeposito(depositoA, new pe.edu.virgenmaria.cuentasclaras.caja.dto
+				.VerificacionRequest(pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoVerificacion.ENCONTRADO, null)))
+				.isInstanceOf(RecursoNoEncontradoException.class);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM verificacion_bancaria", Long.class)).isZero();
 	}
 
 	@Test

@@ -15,4 +15,8 @@ public interface AnulacionPagoRepository extends Repository<AnulacionPago, Long>
 	Optional<AnulacionPago> findByPagoId(Long pagoId);
 
 	List<AnulacionPago> findByPagoIdIn(Collection<Long> pagoIds);
+
+	/** Devoluciones aprobadas después del cierre de su caja: el reembolso lo hace Administración desde el banco. */
+	List<AnulacionPago> findByPosteriorAlCierreTrueAndTipoOrderByIdDesc(
+			pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAnulacion tipo);
 }

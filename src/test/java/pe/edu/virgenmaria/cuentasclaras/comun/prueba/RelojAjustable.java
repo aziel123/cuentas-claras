@@ -8,7 +8,7 @@ import java.time.ZoneId;
 /**
  * Reloj que las pruebas pueden adelantar, por ejemplo para ver que una cuenta se desbloquea sola.
  */
-public class RelojAjustable extends Clock {
+public class RelojAjustable extends Clock implements pe.edu.virgenmaria.cuentasclaras.comun.config.RelojMovible {
 
 	private final ZoneId zona;
 
@@ -21,6 +21,11 @@ public class RelojAjustable extends Clock {
 
 	public void avanzar(Duration duracion) {
 		ahora = ahora.plus(duracion);
+	}
+
+	@Override
+	public void mover(Duration desplazamiento) {
+		avanzar(desplazamiento);
 	}
 
 	public void fijar(Instant instante) {

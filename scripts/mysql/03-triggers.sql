@@ -77,10 +77,10 @@ DELIMITER ;
 
 -- ===================== Sprint 3 · Caja (tandas 1 y 2: cobro, comprobante, libro, anulaciones y descuentos) ==
 -- Todas las comparaciones usan <=> o COALESCE: en un trigger, «IF NULL THEN» NO entra (igual que un CHECK con NULL pasa).
--- Versión de la TANDA 2 (docs/arquitectura/sprint-3-caja.md, sección 6.3): un trigger NUNCA nombra una tabla que aún
--- no existe (desde ese momento todo UPDATE sobre su tabla falla con 1146). Requiere V10 (anulacion_pago, descuento y
--- ajuste_cuota). trg_caja_diaria_estado sigue en su versión reducida hasta que V11 (cierres) cree cierre_caja y
--- deposito_caja. NO apliques este script sobre una base sin V10.
+-- Versión FINAL del sprint 3 (docs/arquitectura/sprint-3-caja.md, sección 6.3): un trigger NUNCA nombra una tabla que
+-- aún no existe (desde ese momento todo UPDATE sobre su tabla falla con 1146). Requiere V10 (anulacion_pago, descuento
+-- y ajuste_cuota) y V11 (cierre_caja, deposito_caja y verificacion_bancaria). NO apliques este script sobre una base
+-- sin V11: aplícalo siempre DESPUÉS de migrar.
 
 DELIMITER $$
 
@@ -150,14 +150,29 @@ BEGIN
     END IF;
 END$$
 
--- Tanda 1 (reducido): el cierre ciego llega con V11 (cierre_caja). Hasta entonces la caja no se cierra, no se reabre y
--- no registra conteos.
+-- Cerrar exige el cierre registrado; reabrir exige una reapertura que se aprueba en esta transacción y reinicia el
+-- conteo a ciegas. El primer conteo no se reescribe (no se puede «tantear» el esperado contando una y otra vez).
 DROP TRIGGER IF EXISTS trg_caja_diaria_estado$$
 CREATE TRIGGER trg_caja_diaria_estado BEFORE UPDATE ON caja_diaria FOR EACH ROW
 BEGIN
-    IF NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.cierres <=> OLD.cierres) OR NOT (NEW.conteos <=> OLD.conteos)
-            OR NOT (NEW.primer_conteo <=> OLD.primer_conteo) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la caja solo se cierra con un cierre registrado (aún no disponible)';
+    DECLARE reabre BOOLEAN DEFAULT (OLD.estado = 'CERRADA' AND NEW.estado = 'ABIERTA');
+    IF OLD.estado = 'ABIERTA' AND NEW.estado = 'CERRADA' AND (NOT (NEW.cierres <=> OLD.cierres + 1)
+            OR NOT EXISTS (SELECT 1 FROM cierre_caja c WHERE c.caja_diaria_id = NEW.id AND c.numero = NEW.cierres)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la caja se cierra con un cierre registrado';
+    END IF;
+    IF reabre AND (NOT (NEW.cierres <=> OLD.cierres) OR NOT (NEW.conteos <=> 0)
+            OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.tipo = 'REAPERTURA_CAJA'
+                AND s.entidad = 'caja_diaria' AND s.entidad_id = NEW.id AND s.estado = 'PENDIENTE')
+            OR EXISTS (SELECT 1 FROM deposito_caja x WHERE x.caja_diaria_id = NEW.id)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la caja solo se reabre con una reapertura aprobada y sin depósito';
+    END IF;
+    IF NEW.estado = OLD.estado AND NOT (NEW.cierres <=> OLD.cierres) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los cierres solo cambian al cerrar';
+    END IF;
+    IF NOT reabre AND (NEW.conteos < OLD.conteos OR NEW.conteos > OLD.conteos + 1
+            OR (OLD.primer_conteo IS NOT NULL AND NOT (NEW.primer_conteo <=> OLD.primer_conteo))
+            OR (NEW.conteos <> OLD.conteos AND OLD.estado <> 'ABIERTA')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el conteo a ciegas no se reescribe';
     END IF;
 END$$
 
@@ -260,6 +275,48 @@ CREATE TRIGGER trg_descuento_resuelto BEFORE UPDATE ON descuento FOR EACH ROW
 BEGIN
     IF OLD.estado <> 'SOLICITADO' AND NOT (NEW.estado <=> OLD.estado) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un descuento resuelto no cambia';
+    END IF;
+END$$
+
+-- El cierre lo registra el cajero de la caja ABIERTA, con el número siguiente y con el esperado que dice el libro:
+-- fondo + pagos en efectivo VIGENTES de la caja. Nadie puede «acomodar» el esperado.
+DROP TRIGGER IF EXISTS trg_cierre_caja_registro$$
+CREATE TRIGGER trg_cierre_caja_registro BEFORE INSERT ON cierre_caja FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM caja_diaria d WHERE d.id = NEW.caja_diaria_id AND d.estado = 'ABIERTA'
+            AND d.cajero = NEW.creado_por AND d.cierres + 1 = NEW.numero AND d.fondo_fijo = NEW.fondo_fijo
+            AND d.conteos > 0 AND d.primer_conteo = NEW.primer_conteo) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cierre es del cajero de una caja abierta';
+    END IF;
+    IF NOT (NEW.efectivo_cobrado <=> (SELECT COALESCE(SUM(p.total), 0.00) FROM pago p
+            WHERE p.caja_diaria_id = NEW.caja_diaria_id AND p.medio = 'EFECTIVO' AND p.estado = 'VIGENTE')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el efectivo esperado no coincide con los pagos';
+    END IF;
+    IF NOT (NEW.estado <=> 'POR_REVISAR') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un cierre nace POR_REVISAR';
+    END IF;
+END$$
+
+DROP TRIGGER IF EXISTS trg_cierre_caja_revisado$$
+CREATE TRIGGER trg_cierre_caja_revisado BEFORE UPDATE ON cierre_caja FOR EACH ROW
+BEGIN
+    IF OLD.estado <> 'POR_REVISAR' AND NOT (NEW.estado <=> OLD.estado) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un cierre revisado no cambia';
+    END IF;
+END$$
+
+-- Verifica contra el banco alguien que no cobró ni depositó; solo pagos digitales.
+DROP TRIGGER IF EXISTS trg_verificacion_bancaria_registro$$
+CREATE TRIGGER trg_verificacion_bancaria_registro BEFORE INSERT ON verificacion_bancaria FOR EACH ROW
+BEGIN
+    IF NEW.pago_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pago p WHERE p.id = NEW.pago_id
+            AND p.medio <> 'EFECTIVO' AND p.cajero <> NEW.creado_por AND p.creado_por <> NEW.creado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: verifica un pago digital alguien que no lo cobró';
+    END IF;
+    IF NEW.deposito_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM deposito_caja x JOIN caja_diaria d
+            ON d.id = x.caja_diaria_id WHERE x.id = NEW.deposito_id AND x.creado_por <> NEW.creado_por
+            AND d.cajero <> NEW.creado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: verifica un depósito alguien que no lo hizo';
     END IF;
 END$$
 

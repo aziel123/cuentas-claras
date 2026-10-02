@@ -63,3 +63,7 @@ GRANT INSERT ON cuentasclaras.anulacion_pago TO 'cc_app'@'%';                   
 -- Descuento: lo pedido (alumno, tipo, valor, cuotas, total, motivo, sustento) no cambia; solo se resuelve.
 GRANT INSERT, UPDATE (estado, resuelto_por, resuelto_en, actualizado_en, version) ON cuentasclaras.descuento TO 'cc_app'@'%';
 GRANT INSERT ON cuentasclaras.ajuste_cuota TO 'cc_app'@'%';                       -- solo inserción
+-- Sprint 3 · tanda 3: cierre, depósito y verificación bancaria. El conteo del cierre no cambia: solo se revisa.
+GRANT INSERT, UPDATE (estado, revisado_por, revisado_en, comentario_revision, actualizado_en, version) ON cuentasclaras.cierre_caja TO 'cc_app'@'%';
+GRANT INSERT ON cuentasclaras.deposito_caja TO 'cc_app'@'%';                      -- solo inserción
+GRANT INSERT ON cuentasclaras.verificacion_bancaria TO 'cc_app'@'%';              -- solo inserción

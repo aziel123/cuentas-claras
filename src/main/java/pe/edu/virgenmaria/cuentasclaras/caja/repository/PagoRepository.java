@@ -46,4 +46,18 @@ public interface PagoRepository extends Repository<Pago, Long> {
 	Optional<Pago> findByComprobanteId(Long comprobanteId);
 
 	List<Pago> findByIdIn(java.util.Collection<Long> ids);
+
+	/** Pagos VIGENTES de una caja por medio (los digitales nunca entran al esperado del cierre). */
+	@Query("select p.medio, count(p), sum(p.total) from Pago p where p.caja.id = :caja "
+			+ "and p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE group by p.medio")
+	List<Object[]> vigentesPorMedio(@Param("caja") Long cajaId);
+
+	/** Pagos de un día de todas las cajas (resumen de Promotoría). */
+	List<Pago> findByFechaOrderByIdAsc(java.time.LocalDate fecha);
+
+	/** Pagos digitales VIGENTES que Administración aún no comparó con el banco, del más antiguo al más nuevo. */
+	@Query("select p from Pago p where p.medio <> pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.EFECTIVO "
+			+ "and p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE "
+			+ "and not exists (select v.id from VerificacionBancaria v where v.pago = p) order by p.fecha, p.id")
+	List<Pago> digitalesSinVerificar();
 }

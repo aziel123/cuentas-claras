@@ -75,7 +75,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V10): Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V11): Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Permisos por tabla de cc_app
@@ -151,6 +151,18 @@ jobs:
           comprobar 1644 "INSERT INTO anulacion_pago (colegio_id, pago_id, solicitud_id, nota_credito_id, tipo, motivo, monto, cajero_pago, solicitado_por, aprobado_por, posterior_al_cierre, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, 'DEVOLUCION', 'verificador de permisos', 1, 'a', 'b', 'c', FALSE, NOW(6), 'c', NOW(6))"
           comprobar 1644 "INSERT INTO descuento (colegio_id, alumno_id, anio_escolar_id, tipo, modalidad, valor, cuotas, total_estimado, motivo, sustento, estado, resuelto_por, resuelto_en, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'OTRO', 'MONTO', 1, ',0,', 1, 'verificador de permisos', 'x', 'APROBADO', 'b', NOW(6), NOW(6), 'a', NOW(6))"
           comprobar 1644 "INSERT INTO ajuste_cuota (colegio_id, cuota_id, descuento_id, monto, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 1, NOW(6), 'x', NOW(6))"
+          # Sprint 3, tanda 3: cierre, depósito y verificación bancaria.
+          for tabla in cierre_caja deposito_caja verificacion_bancaria; do
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          for tabla in deposito_caja verificacion_bancaria; do
+            comprobar 1142 "UPDATE $tabla SET version = version WHERE 1 = 0"
+          done
+          comprobar 1143 "UPDATE cierre_caja SET contado = contado WHERE 1 = 0"
+          comprobar 1143 "UPDATE cierre_caja SET primer_conteo = primer_conteo WHERE 1 = 0"
+          comprobar 1143 "UPDATE cierre_caja SET esperado = esperado WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO cierre_caja (colegio_id, caja_diaria_id, numero, fondo_fijo, efectivo_cobrado, esperado, primer_conteo, contado, diferencia, pagos_efectivo, pagos_digitales, total_digital, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'POR_REVISAR', NOW(6), 'x', NOW(6))"
+          comprobar 1644 "INSERT INTO verificacion_bancaria (colegio_id, pago_id, resultado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'ENCONTRADO', NOW(6), 'x', NOW(6))"
 
       - name: Arranque real en prod con cc_app (y rechazo con cc_migrador)
         env:
@@ -169,7 +181,7 @@ jobs:
           grep -q "Permisos de la bitácora verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos de las cuotas verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos por columna y triggers de planes, lotes y solicitudes verificados" prod.log || { cat prod.log; exit 1; }
-          grep -q "Permisos y triggers de caja, comprobantes, anulaciones y descuentos verificados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Permisos y triggers de caja, comprobantes, anulaciones, descuentos y cierres verificados" prod.log || { cat prod.log; exit 1; }
           kill "$PID_APP"
           if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \
                java -jar target/cuentas-claras-*.jar --server.port=18081 > prod-migrador.log 2>&1; then

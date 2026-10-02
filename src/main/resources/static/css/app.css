@@ -480,4 +480,16 @@ input[type="file"].input { padding: var(--esp-2); }
   .tabla td::before { content: none; }
 }
 
+/* Sprint 3 · tanda 3: cierre ciego, alertas de Promotoría y verificación bancaria */
+.denominaciones-detalle { margin: var(--esp-2) 0; }
+.denominaciones-detalle summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--color-primario-texto); font-weight: 600; }
+.denominaciones { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr)); gap: var(--esp-3); margin-top: var(--esp-3); }
+.alertas-revision li { padding: var(--esp-2) 0; border-bottom: 1px solid var(--color-borde); }
+.alertas-revision li:last-child { border-bottom: 0; }
+.alerta-critica { box-shadow: inset 3px 0 0 var(--color-peligro); padding-left: var(--esp-3) !important; }
+.indicadores { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--esp-3); grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr)); }
+.indicadores li { display: grid; gap: var(--esp-1); padding: var(--esp-3); border: 1px solid var(--color-borde); border-radius: var(--radio); }
+.indicadores strong { font-size: var(--texto-lg); }
+.fila-atrasada td:first-child { box-shadow: inset 3px 0 0 var(--color-alerta); }
+
 .pie { text-align: center; color: var(--color-texto-secundario); font-size: var(--texto-sm); padding: var(--esp-6) var(--esp-4); }

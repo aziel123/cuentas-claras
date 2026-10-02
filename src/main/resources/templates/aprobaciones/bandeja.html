@@ -6,9 +6,12 @@
 		<div>
 			<p class="etiqueta">Aprobaciones</p>
 			<h1>Solicitudes por aprobar</h1>
-			<p class="secundario">Cambios que una sola persona no puede hacer: anulaciones y correcciones de pagos,
-				descuentos y becas, retiros, celulares y correos de apoderados, responsables de pago, ingresos tardíos y
-				anulaciones de cuotas. Quien los pide (o cobró el pago) no los aprueba.</p>
+			<p class="secundario">Cambios que una sola persona no puede hacer: cierres y reaperturas de caja, anulaciones y
+				correcciones de pagos, descuentos y becas, retiros, celulares y correos de apoderados, responsables de pago,
+				ingresos tardíos y anulaciones de cuotas. Quien los pide (o cobró el pago, o es su caja) no los aprueba.</p>
+		</div>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Cajas del día', @{/aprobaciones/cajas}, 'secundario')}"></a>
 		</div>
 	</div>
 
@@ -35,14 +38,34 @@
 				<p class="secundario" th:text="|Motivo: ${s.motivo}|">Motivo</p>
 				<p class="secundario" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM/yyyy HH:mm')}|">Pedida por administracion</p>
 				<div class="fila" th:if="${s.puedeResolver}">
-					<form method="post" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}">
+					<form method="post" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}" th:unless="${s.pideComentario}">
 						<button th:replace="~{fragments/componentes :: boton('Aprobar', 'primario')}"></button>
 					</form>
-					<th:block th:replace="~{fragments/componentes :: modalMotivo(|modal-rechazar-${s.id}|, '¿Rechazar la solicitud?',
+					<th:block th:if="${s.pideComentario}">
+						<button type="button" class="btn btn-primario" th:popovertarget="|modal-aprobar-${s.id}|">Aprobar</button>
+						<div class="modal" th:id="|modal-aprobar-${s.id}|" popover role="dialog" aria-modal="true"
+							th:aria-labelledby="|modal-aprobar-${s.id}-titulo|">
+							<form method="post" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}" class="modal-cuerpo">
+								<h2 th:id="|modal-aprobar-${s.id}-titulo|">¿Aprobar con diferencia?</h2>
+								<p>Queda en la bitácora con tu comentario: qué verificaste con la cajera y cómo se resolvió la diferencia.</p>
+								<div class="campo">
+									<label th:for="|modal-aprobar-${s.id}-comentario|">Comentario (obligatorio)</label>
+									<textarea class="input" th:id="|modal-aprobar-${s.id}-comentario|" name="comentario" required
+										minlength="10" maxlength="500"></textarea>
+								</div>
+								<div class="acciones">
+									<button type="button" class="btn btn-secundario" th:popovertarget="|modal-aprobar-${s.id}|"
+										popovertargetaction="hide">Cancelar</button>
+									<button type="submit" class="btn btn-primario">Aprobar el cierre</button>
+								</div>
+							</form>
+						</div>
+					</th:block>
+					<th:block th:replace="~{fragments/componentes :: modalMotivo(|modal-rechazar-${s.id}|, |¿${s.accionRechazo} la solicitud?|,
 						'No se cambia nada. Quien la pidió verá tu motivo en la bitácora.',
-						@{/aprobaciones/{id}/rechazar(id=${s.id})}, 'Rechazar', 'secundario', 'Rechazar solicitud')}"></th:block>
+						@{/aprobaciones/{id}/rechazar(id=${s.id})}, ${s.accionRechazo}, 'secundario', |${s.accionRechazo} solicitud|)}"></th:block>
 				</div>
-				<p class="secundario" th:unless="${s.puedeResolver}">La pediste tú, cobraste ese pago o preparaste esa cuenta: debe resolverla otra persona.</p>
+				<p class="secundario" th:unless="${s.puedeResolver}">La pediste tú, cobraste ese pago, es tu caja o preparaste esa cuenta: debe resolverla otra persona.</p>
 			</li>
 		</ul>
 	</section>

@@ -16,6 +16,7 @@
 		<div class="fila">
 			<a th:replace="~{fragments/componentes :: enlaceBoton('Cobrar', @{/caja}, 'primario')}"></a>
 			<a th:replace="~{fragments/componentes :: enlaceBoton('Pagos de hoy', @{/caja/hoy}, 'secundario')}"></a>
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Cerrar mi caja', @{/caja/cierre}, 'secundario')}"></a>
 		</div>
 	</section>
 
@@ -34,7 +35,7 @@
 		<ul class="lista-controles">
 			<li>Cada pago emite su boleta al momento: tienes respaldo de todo lo que cobras. El aviso al apoderado por WhatsApp o correo llega en diciembre.</li>
 			<li>Si te equivocas, pides la anulación a Dirección: nadie borra pagos.</li>
-			<li>Tu cierre de caja compara lo que registraste con lo que cuentas: las diferencias se ven el mismo día.</li>
+			<li>Al cerrar cuentas a ciegas: el sistema compara tu conteo con lo registrado y las diferencias se ven el mismo día.</li>
 		</ul>
 	</section>
 

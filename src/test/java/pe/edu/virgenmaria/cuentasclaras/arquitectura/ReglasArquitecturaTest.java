@@ -40,6 +40,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EslabonCadenaRepository;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EventoAuditoriaRepository;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -257,7 +258,15 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".cobranza.service.ServicioDescuentos", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".cobranza.service.ServicioDescuentos#prepararSolicitud", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".cobranza.service.ServicioDescuentos#revisar", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioDescuentos#solicitar", SOLO_ADMINISTRACION));
+			Map.entry(BASE + ".cobranza.service.ServicioDescuentos#solicitar", SOLO_ADMINISTRACION),
+			// Sprint 3, tanda 3: la cajera cierra; Promotoría y Dirección miran las cajas; Administración verifica.
+			Map.entry(BASE + ".caja.service.ServicioCierreCaja", "hasRole('CAJA')"),
+			Map.entry(BASE + ".caja.service.ConsultaCajas", "hasAnyRole('PROMOTOR','DIRECTOR')"),
+			Map.entry(BASE + ".caja.service.AlertasCaja", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".caja.service.IndicadoresCaja", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria", "hasAnyRole('PROMOTOR','ADMINISTRACION')"),
+			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#verificarPago", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#verificarDeposito", SOLO_ADMINISTRACION));
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {
@@ -506,6 +515,30 @@ class ReglasArquitecturaTest {
 			})
 			.because("anular, revertir y reemplazar un pago solo ocurre dentro de la anulación aprobada")
 			.allowEmptyShould(true);
+
+	/** El conteo y el cierre solo los mueve el cierre ciego; la reapertura, solo la aprobada; la revisión, la bandeja. */
+	@ArchTest
+	static final ArchRule soloElCierreCiegoCuentaYCierraLaCaja = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".caja.service.ServicioCierreCaja")
+			.should().callMethod(BASE + ".caja.model.CajaDiaria", "registrarConteo", "java.math.BigDecimal",
+					"java.math.BigDecimal")
+			.orShould().callMethod(BASE + ".caja.model.CajaDiaria", "cerrar", BASE + ".caja.model.CierreCaja")
+			.because("la caja se cuenta a ciegas y se cierra solo desde ServicioCierreCaja");
+
+	@ArchTest
+	static final ArchRule soloLaReaperturaAprobadaReabreLaCaja = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".caja.service.ManejadorReaperturaCaja")
+			.should().callMethod(BASE + ".caja.model.CajaDiaria", "reabrir")
+			.because("una caja cerrada se reabre solo con una reapertura aprobada por otra persona");
+
+	@ArchTest
+	static final ArchRule soloLaBandejaRevisaUnCierre = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".caja.service.ManejadorCierreCaja")
+			.should().callMethod(BASE + ".caja.model.CierreCaja", "aprobar", "java.lang.String",
+					"java.time.LocalDateTime", "java.lang.String")
+			.orShould().callMethod(BASE + ".caja.model.CierreCaja", "observar", "java.lang.String",
+					"java.time.LocalDateTime", "java.lang.String")
+			.because("un cierre lo aprueba u observa otra persona desde la bandeja");
 
 	@ArchTest
 	static final ArchRule repositoriosDeCajaYComprobantesSinModifyingNiBorrados = noMethods()

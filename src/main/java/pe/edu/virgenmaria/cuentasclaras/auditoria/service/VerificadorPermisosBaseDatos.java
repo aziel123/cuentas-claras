@@ -121,7 +121,18 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "actualizado_en) VALUES (0, 0, 0, 'OTRO', 'MONTO', 1, ',0,', 1, 'verificador de permisos', "
 					+ "'verificador', 'APROBADO', 'b', NOW(6), NOW(6), 'a', NOW(6))", "trg_descuento_nace"),
 			trigger("INSERT INTO ajuste_cuota (colegio_id, cuota_id, descuento_id, monto, creado_en, creado_por, "
-					+ "actualizado_en) VALUES (0, 0, 0, 1, NOW(6), 'verificador', NOW(6))", "trg_ajuste_cuota_registro"));
+					+ "actualizado_en) VALUES (0, 0, 0, 1, NOW(6), 'verificador', NOW(6))", "trg_ajuste_cuota_registro"),
+			// Sprint 3, tanda 3 (cierre, depósito y verificación bancaria).
+			sinBorrado("cierre_caja"), sinBorrado("deposito_caja"), sinBorrado("verificacion_bancaria"),
+			soloInsercion("deposito_caja"), soloInsercion("verificacion_bancaria"),
+			columna("UPDATE cierre_caja SET contado = contado WHERE 1 = 0", "cierre_caja"),
+			trigger("INSERT INTO cierre_caja (colegio_id, caja_diaria_id, numero, fondo_fijo, efectivo_cobrado, esperado, "
+					+ "primer_conteo, contado, diferencia, pagos_efectivo, pagos_digitales, total_digital, estado, creado_en, "
+					+ "creado_por, actualizado_en) VALUES (0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'POR_REVISAR', NOW(6), "
+					+ "'verificador', NOW(6))", "trg_cierre_caja_registro"),
+			trigger("INSERT INTO verificacion_bancaria (colegio_id, pago_id, resultado, creado_en, creado_por, "
+					+ "actualizado_en) VALUES (0, 0, 'ENCONTRADO', NOW(6), 'verificador', NOW(6))",
+					"trg_verificacion_bancaria_registro"));
 
 	/** 1143 (columna sin GRANT) o 1142 (ningún UPDATE sobre la tabla, por ejemplo antes de aplicar el paso 2). */
 	private static SentenciaProhibida columna(String sql, String tabla) {
@@ -177,7 +188,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		LOG.info("Permisos de la bitácora verificados: la aplicación no puede editar ni borrar eventos.");
 		LOG.info("Permisos de las cuotas verificados: la aplicación no puede borrarlas ni cambiar su monto.");
 		LOG.info("Permisos por columna y triggers de planes, lotes y solicitudes verificados.");
-		LOG.info("Permisos y triggers de caja, comprobantes, anulaciones y descuentos verificados.");
+		LOG.info("Permisos y triggers de caja, comprobantes, anulaciones, descuentos y cierres verificados.");
 	}
 
 	public void verificarMigraciones() {

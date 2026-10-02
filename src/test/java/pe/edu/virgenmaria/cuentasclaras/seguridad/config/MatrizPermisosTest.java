@@ -160,6 +160,34 @@ class MatrizPermisosTest {
 		mvc.perform(get("/caja/pagos/1/correccion").with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
 	}
 
+	/** Tanda 3: solo la cajera cierra su caja; las cajas del día son de quien aprueba; verifica Administración. */
+	@ParameterizedTest
+	@EnumSource(value = Rol.class, names = { "PROMOTOR", "DIRECTOR", "ADMINISTRACION", "DOCENTE", "APODERADO" })
+	void soloCajaCierraSuCaja(Rol rol) throws Exception {
+		mvc.perform(get("/caja/cierre").with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+		for (String ruta : new String[] { "/caja/cierre/conteo", "/caja/cierre/reconteo", "/caja/cierre/deposito",
+				"/caja/cierre/reapertura" }) {
+			mvc.perform(post(ruta).with(csrf()).with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+		}
+	}
+
+	@ParameterizedTest
+	@EnumSource(value = Rol.class, names = { "CAJA", "ADMINISTRACION", "DOCENTE", "APODERADO" })
+	void cajasDelDiaSoloParaQuienAprueba(Rol rol) throws Exception {
+		mvc.perform(get("/aprobaciones/cajas").with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+		mvc.perform(get("/aprobaciones/cajas/1").with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+	}
+
+	@ParameterizedTest
+	@EnumSource(value = Rol.class, names = { "CAJA", "DIRECTOR", "DOCENTE", "APODERADO" })
+	void verificacionBancariaNoEsDeCajaNiDireccion(Rol rol) throws Exception {
+		mvc.perform(get("/conciliacion").with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+		mvc.perform(post("/conciliacion/pagos/1").with(csrf()).with(UsuariosDePrueba.como(rol))
+				.param("resultado", "ENCONTRADO")).andExpect(status().isForbidden());
+		mvc.perform(post("/conciliacion/depositos/1").with(csrf()).with(UsuariosDePrueba.como(rol))
+				.param("resultado", "ENCONTRADO")).andExpect(status().isForbidden());
+	}
+
 	/** Y al revés: Promotoría, Dirección y Administración no cobran. */
 	@ParameterizedTest
 	@EnumSource(value = Rol.class, names = { "PROMOTOR", "DIRECTOR", "ADMINISTRACION", "DOCENTE", "APODERADO" })
