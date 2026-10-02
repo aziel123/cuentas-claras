@@ -84,4 +84,10 @@ final class DescripcionAuditoria {
 		}
 		return texto.toString();
 	}
+
+	/** «WhatsApp +51 *** *** 321, correo j***@gmail.com» (enmascarado), para el resumen de una solicitud. */
+	static String contactoVisible(String telefono, String correo) {
+		return "WhatsApp " + (telefono == null ? "(ninguno)" : Enmascarar.telefono(telefono)) + ", correo "
+				+ (correo == null ? "(ninguno)" : Enmascarar.correo(correo));
+	}
 }

@@ -13,6 +13,25 @@ class LectorXlsxSeguroTest {
 
 	private final LectorXlsxSeguro lector = new LectorXlsxSeguro(PropiedadesExcel.porDefecto());
 
+	/**
+	 * Auditoría B3: un archivo de pocos KB puede declarar cientos de miles de textos vacíos que POI cargaría en memoria.
+	 * Se cuentan en streaming y se corta al pasar el máximo.
+	 */
+	@Test
+	void demasiadosTextosCompartidosSonRechazados() {
+		LectorXlsxSeguro conLimite = new LectorXlsxSeguro(new PropiedadesExcel(org.springframework.util.unit.DataSize
+				.ofMegabytes(2), 2000, org.springframework.util.unit.DataSize.ofMegabytes(20), 200, 100));
+		byte[] justo = XlsxDePrueba.crudo("<row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c></row>", false,
+				"<si><t>x</t></si>".repeat(100), null);
+		byte[] demasiados = XlsxDePrueba.crudo("<row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c></row>", false,
+				"<si><t/></si>".repeat(101), null);
+
+		assertThat(conLimite.leer(justo, "Alumnos", 10, 17).filas()).hasSize(1);
+		assertThatThrownBy(() -> conLimite.leer(demasiados, "Alumnos", 10, 17))
+				.isInstanceOf(ArchivoNoValidoException.class).hasMessageContaining("demasiados textos distintos (más de 100)");
+		assertThat(PropiedadesExcel.porDefecto().maxTextosCompartidos()).isEqualTo(20000);
+	}
+
 	@Test
 	void leeTextoCompartidoEInline() {
 		byte[] libro = XlsxDePrueba.crudo("<row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c>"

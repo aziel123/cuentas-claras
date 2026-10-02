@@ -11,19 +11,22 @@ import org.springframework.util.unit.DataSize;
  * @param maxFilas         filas de datos como máximo (sin contar los encabezados)
  * @param maxDescomprimido suma máxima de las entradas del zip ya descomprimidas (contra zip bombs)
  * @param maxEntradasZip   cantidad máxima de entradas del zip
+ * @param maxTextosCompartidos textos distintos como máximo en la tabla de textos compartidos (auditoría B3: un
+ *                         archivo pequeño puede declarar millones de textos vacíos)
  */
 @ConfigurationProperties("cuentasclaras.excel")
 public record PropiedadesExcel(@DefaultValue("2MB") DataSize maxBytes, @DefaultValue("2000") int maxFilas,
-		@DefaultValue("20MB") DataSize maxDescomprimido, @DefaultValue("200") int maxEntradasZip) {
+		@DefaultValue("20MB") DataSize maxDescomprimido, @DefaultValue("200") int maxEntradasZip,
+		@DefaultValue("20000") int maxTextosCompartidos) {
 
 	public PropiedadesExcel {
 		if (maxBytes == null || maxBytes.toBytes() <= 0 || maxFilas < 1 || maxDescomprimido == null
-				|| maxDescomprimido.toBytes() <= 0 || maxEntradasZip < 1) {
+				|| maxDescomprimido.toBytes() <= 0 || maxEntradasZip < 1 || maxTextosCompartidos < 1) {
 			throw new IllegalArgumentException("cuentasclaras.excel: los límites deben ser positivos");
 		}
 	}
 
 	public static PropiedadesExcel porDefecto() {
-		return new PropiedadesExcel(DataSize.ofMegabytes(2), 2000, DataSize.ofMegabytes(20), 200);
+		return new PropiedadesExcel(DataSize.ofMegabytes(2), 2000, DataSize.ofMegabytes(20), 200, 20000);
 	}
 }

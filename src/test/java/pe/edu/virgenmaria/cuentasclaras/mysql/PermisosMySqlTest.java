@@ -12,6 +12,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.OtraPersona;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.Actor;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.EventoAuditoria;
@@ -51,6 +53,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PermisosMySqlTest {
 
 	private final String sufijo = Long.toString(System.nanoTime(), 36);
+
+	@Autowired
+	private BandejaAprobaciones bandeja;
 
 	@Autowired
 	private MockMvc mvc;
@@ -237,6 +242,11 @@ class PermisosMySqlTest {
 				null, null), 0).getContent()).isEmpty();
 		servicioAlumnos.retirar(valeria.alumnoId(), new pe.edu.virgenmaria.cuentasclaras.alumnos.dto.RetirarAlumnoRequest(
 				java.time.LocalDate.of(anio, 12, 1), "Prueba en MySQL real"));
+		// Retiro y cambio de celular: los aprueba otra persona (INSERT y UPDATE por columna en solicitud_cambio).
+		OtraPersona.apruebaLaDe(bandeja, jdbc, "alumno", valeria.alumnoId());
+		OtraPersona.apruebaLaDe(bandeja, jdbc, "apoderado", rosa);
+		assertThat(jdbc.queryForObject("SELECT telefono_whatsapp FROM apoderado WHERE id = ?", String.class, rosa))
+				.isEqualTo("+51999888777");
 
 		// La base rechaza un responsable de pago de otra familia y una sección de otro año (FK compuestas).
 		Long otraFamilia = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
@@ -381,9 +391,7 @@ class PermisosMySqlTest {
 		Long setiembre = jdbc.queryForObject("SELECT id FROM cuota WHERE alumno_id = ? AND numero = 9", Long.class, mateo);
 		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
 		anulaciones.solicitar(setiembre, "Prueba de anulación en MySQL real");
-		new org.springframework.transaction.support.TransactionTemplate(transacciones).executeWithoutResult(estado ->
-				cuotas.findById(setiembre).orElseThrow().anular("Prueba de anulación en MySQL real", "administracion",
-						"director", LocalDateTime.of(anio, 10, 2, 9, 0)));
+		OtraPersona.apruebaLaDe(bandeja, jdbc, "cuota", setiembre);
 		assertThat(jdbc.queryForMap("SELECT estado, obligacion, monto FROM cuota WHERE id = ?", setiembre))
 				.containsEntry("estado", "ANULADA").containsEntry("obligacion", null);
 		// La base sigue rechazando la autoaprobación (CHECK) aunque cc_app pueda actualizar esas columnas.

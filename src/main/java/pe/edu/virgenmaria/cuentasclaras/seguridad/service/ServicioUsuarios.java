@@ -14,6 +14,7 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.TextoSeguro;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.PropiedadesSeguridad;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.CambiarRolesRequest;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.CrearUsuarioRequest;
@@ -35,8 +36,9 @@ import java.util.stream.Collectors;
 /**
  * Gestión de usuarios del colegio (Promotoría y Dirección).
  * <ul>
- *   <li>Jerarquía: Dirección no modifica usuarios de Promotoría ni de Dirección, ni asigna esos roles
- *       (intentarlo es una manipulación del formulario: responde 403).</li>
+ *   <li>Jerarquía: Dirección no modifica usuarios de Promotoría ni de Dirección. Tampoco crea usuarios de
+ *       Administración o Caja, ni les cambia los roles o la clave, ni asigna esos roles (auditoría A5). Intentarlo es
+ *       una manipulación del formulario: responde 403.</li>
  *   <li>Nadie se modifica a sí mismo.</li>
  *   <li>Siempre queda al menos un usuario de Promotoría activo.</li>
  *   <li>Segregación de roles ({@link pe.edu.virgenmaria.cuentasclaras.seguridad.model.ReglasSegregacion}).</li>
@@ -50,6 +52,14 @@ import java.util.stream.Collectors;
 public class ServicioUsuarios {
 
 	private static final Set<Rol> ROLES_DIRECTIVOS = EnumSet.of(Rol.PROMOTOR, Rol.DIRECTOR);
+
+	/**
+	 * Roles que solo Promotoría asigna, y cuentas que solo Promotoría crea o a las que les cambia los roles o la clave
+	 * (auditoría A5: Dirección no puede fabricarse una segunda cuenta de Administración o Caja para aprobar sus propios
+	 * cambios). Dirección sí puede desactivar, reactivar o desbloquear a Administración y Caja.
+	 */
+	private static final Set<Rol> ROLES_DE_PROMOTORIA = EnumSet.of(Rol.PROMOTOR, Rol.DIRECTOR, Rol.ADMINISTRACION,
+			Rol.CAJA);
 
 	private final UsuarioRepository usuarios;
 
@@ -101,14 +111,15 @@ public class ServicioUsuarios {
 		return new UsuarioDetalle(u.getId(), u.getNombreUsuario(), u.getNombreCompleto(), u.getCorreo(), u.getRoles(),
 				rolesTexto(u.getRoles()), estado(u, ahora), u.isActivo(), u.estaBloqueado(ahora), u.getBloqueadoHasta(),
 				u.isDebeCambiarClave(), u.getUltimoIngresoEn(), u.getCreadoEn(), u.getCreadoPor(), u.getDesactivadoEn(),
-				u.getDesactivadoPor(), esUnoMismo, !esUnoMismo && puedeTocar(actor, u.getRoles()));
+				u.getDesactivadoPor(), esUnoMismo, !esUnoMismo && puedeTocar(actor, u.getRoles()),
+				!esUnoMismo && puedeDarAcceso(actor, u.getRoles()));
 	}
 
 	/** Roles que quien está en sesión puede asignar. */
 	public Set<Rol> rolesAsignables() {
 		Set<Rol> roles = EnumSet.allOf(Rol.class);
 		if (!esPromotor(actor())) {
-			roles.removeAll(ROLES_DIRECTIVOS);
+			roles.removeAll(ROLES_DE_PROMOTORIA);
 		}
 		return roles;
 	}
@@ -174,6 +185,7 @@ public class ServicioUsuarios {
 			exigirNoEsElUltimoPromotor(usuario, "No puedes quitarle Promotoría al último usuario de Promotoría activo.");
 		}
 		exigirPuedeTocar(actor, usuario);
+		exigirPuedeAsignar(actor, usuario.getRoles());
 		exigirPuedeAsignar(actor, nuevos);
 		String motivo = motivo(solicitud.motivo());
 		String anteriores = roles(usuario.getRoles());
@@ -216,6 +228,7 @@ public class ServicioUsuarios {
 		Usuario usuario = buscar(id);
 		exigirNoEsUnoMismo(actor, usuario, "Para cambiar tu propia clave usa «Cambiar clave».");
 		exigirPuedeTocar(actor, usuario);
+		exigirPuedeAsignar(actor, usuario.getRoles());
 		String texto = motivo(motivo);
 		String claveTemporal = generador.generar();
 		LocalDateTime ahora = ahora();
@@ -263,6 +276,11 @@ public class ServicioUsuarios {
 		return esPromotor(actor) || rolesDelObjetivo.stream().noneMatch(ROLES_DIRECTIVOS::contains);
 	}
 
+	/** Crear, cambiar roles o restablecer la clave: da acceso a la cuenta (auditoría A5). */
+	private static boolean puedeDarAcceso(UsuarioAutenticado actor, Collection<Rol> roles) {
+		return esPromotor(actor) || roles.stream().noneMatch(ROLES_DE_PROMOTORIA::contains);
+	}
+
 	private static void exigirPuedeTocar(UsuarioAutenticado actor, Usuario objetivo) {
 		if (!puedeTocar(actor, objetivo.getRoles())) {
 			throw new AccessDeniedException("Dirección no puede modificar usuarios de Promotoría ni de Dirección");
@@ -270,8 +288,9 @@ public class ServicioUsuarios {
 	}
 
 	private static void exigirPuedeAsignar(UsuarioAutenticado actor, Collection<Rol> roles) {
-		if (roles != null && !puedeTocar(actor, roles)) {
-			throw new AccessDeniedException("Dirección no puede asignar los roles de Promotoría ni de Dirección");
+		if (roles != null && !puedeDarAcceso(actor, roles)) {
+			throw new AccessDeniedException("Dirección no puede asignar los roles de Promotoría, Dirección, "
+					+ "Administración ni Caja");
 		}
 	}
 
@@ -294,7 +313,7 @@ public class ServicioUsuarios {
 		if (texto.length() < 10 || texto.length() > 500) {
 			throw new ReglaNegocioException("El motivo debe tener entre 10 y 500 caracteres.");
 		}
-		return texto;
+		return TextoSeguro.exigir(texto, "el motivo");
 	}
 
 	private static String detalle(Usuario usuario, String motivo) {

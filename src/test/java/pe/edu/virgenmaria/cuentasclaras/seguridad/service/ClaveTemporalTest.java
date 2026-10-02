@@ -119,14 +119,15 @@ class ClaveTemporalTest {
 	@Test
 	void elTitularVeQuienRestablecioSuClave() throws Exception {
 		Usuario caja = guardar("lucia.caja", "Lucía Ramos", Rol.CAJA);
-		conSesion(director, () -> servicio.restablecerClave(caja.getId(), "Me dijo que la olvidó"));
+		// Auditoría A5 (sprint 2): la clave de Caja solo la restablece Promotoría.
+		conSesion(promotora, () -> servicio.restablecerClave(caja.getId(), "Me dijo que la olvidó"));
 
 		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(UsuariosDePrueba.autenticado(1L, caja.getId(),
 						"lucia.caja", "Lucía Ramos", false, EnumSet.of(Rol.CAJA)))))
-				.andExpect(content().string(containsString("Tu clave fue restablecida por Jorge Salazar el")))
+				.andExpect(content().string(containsString("Tu clave fue restablecida por María Elena Torres el")))
 				.andExpect(content().string(containsString("Si no lo pediste, avisa a Promotoría.")));
 		assertThat(jdbc.queryForObject("SELECT clave_restablecida_por FROM usuario WHERE id = ?", String.class,
-				caja.getId())).isEqualTo("director");
+				caja.getId())).isEqualTo("promotora");
 
 		reloj.avanzar(Duration.ofDays(31));
 		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(UsuariosDePrueba.autenticado(1L, caja.getId(),
@@ -137,7 +138,8 @@ class ClaveTemporalTest {
 	@Test
 	void promotoriaVeEnSuInicioLoQueHayQueRevisar() throws Exception {
 		UsuarioCreado caja = crear("pedro.caja", Rol.CAJA);
-		conSesion(director, () -> servicio.restablecerClave(caja.id(), "Pedro olvidó su clave"));
+		UsuarioCreado docente = crear("ana.docente", Rol.DOCENTE);
+		conSesion(director, () -> servicio.restablecerClave(docente.id(), "Ana olvidó su clave"));
 		conSesion(promotora, () -> {
 			servicio.cambiarRoles(caja.id(), new CambiarRolesRequest(EnumSet.of(Rol.DOCENTE), "Ahora dicta clases"));
 			return null;
@@ -158,9 +160,9 @@ class ClaveTemporalTest {
 
 	@Test
 	void laBitacoraMarcaRevisarLosRestablecimientosYLasAltasSensibles() {
-		UsuarioCreado caja = crear("pedro.caja", Rol.CAJA);
-		crear("ana.docente", Rol.DOCENTE);
-		conSesion(director, () -> servicio.restablecerClave(caja.id(), "Pedro olvidó su clave"));
+		crear("pedro.caja", Rol.CAJA);
+		UsuarioCreado docente = crear("ana.docente", Rol.DOCENTE);
+		conSesion(director, () -> servicio.restablecerClave(docente.id(), "Ana olvidó su clave"));
 		UsuariosDePrueba.iniciarSesion(promotora);
 
 		LocalDate hoy = LocalDate.now(reloj);

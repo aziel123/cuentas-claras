@@ -9,7 +9,10 @@ import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
+import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManager;
 import org.springframework.data.jpa.repository.Modifying;
@@ -23,6 +26,8 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.CuentasClarasApplication;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.EslabonCadena;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.EventoAuditoria;
@@ -241,7 +246,9 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#descartar", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#confirmar", APROBACION),
 			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#devolver", APROBACION),
-			Map.entry(BASE + ".cobranza.service.ServicioAnulacionCuotas", LECTURA_ESCOLAR));
+			Map.entry(BASE + ".cobranza.service.ServicioAnulacionCuotas", LECTURA_ESCOLAR),
+			// Correcciones del sprint 2: la bandeja de solicitudes la resuelven Promotoría o Dirección.
+			Map.entry(BASE + ".aprobaciones.service.BandejaAprobaciones", APROBACION));
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {
@@ -288,6 +295,37 @@ class ReglasArquitecturaTest {
 			.that().resideInAPackage(BASE + ".alumnos..")
 			.should().dependOnClassesThat().resideInAPackage(BASE + ".cobranza..")
 			.because("cobranza escucha MatriculaRegistrada e implementa ConsultaCuotasMatricula; alumnos no la conoce");
+
+	/** Aprobaciones es genérico: los módulos dueños del dato implementan ManejadorSolicitud, nunca al revés. */
+	@ArchTest
+	static final ArchRule aprobacionesNoDependeDeAlumnosNiCobranza = noClasses()
+			.that().resideInAPackage(BASE + ".aprobaciones..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".alumnos..", BASE + ".cobranza..")
+			.because("cada módulo aplica su cambio con un ManejadorSolicitud; aprobaciones no conoce los datos");
+
+	/** RegistroSolicitudes crea solicitudes sin exigir rol: solo lo usan servicios que ya exigieron el suyo. */
+	@ArchTest
+	static final ArchRule registroSolicitudesSoloDesdeServicios = noClasses()
+			.that().resideOutsideOfPackages(BASE + ".aprobaciones.service..", BASE + ".alumnos.service..",
+					BASE + ".cobranza.service..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".aprobaciones.service.RegistroSolicitudes")
+			.because("la solicitud la crea el servicio protegido que valida el cambio pedido");
+
+	/** Un manejador de solicitud corre dentro de la aprobación: exige una transacción abierta. */
+	@ArchTest
+	static final ArchRule manejadoresExigenTransaccionAbierta = classes()
+			.that().implement(BASE + ".aprobaciones.service.ManejadorSolicitud")
+			.should(new ArchCondition<>("estar anotada con @Transactional(propagation = MANDATORY)") {
+				@Override
+				public void check(JavaClass clase, ConditionEvents eventos) {
+					boolean ok = clase.tryGetAnnotationOfType(Transactional.class)
+							.map(t -> t.propagation() == Propagation.MANDATORY).orElse(false);
+					if (!ok) {
+						eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " no exige transacción"));
+					}
+				}
+			})
+			.because("el cambio se aplica en la misma transacción que la aprobación y su auditoría");
 
 	/** RegistroAlumnos no tiene @PreAuthorize: solo lo usan los servicios protegidos de alumnos y la demo de dev. */
 	@ArchTest

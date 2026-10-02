@@ -125,10 +125,15 @@ class InmutabilidadCuotasTest {
 				.doesNotContain("total_declarado", "fecha_corte", "documento_referencia", "anio_escolar_id");
 		assertThat(actualizables(LineaSaldoInicial.class)).isEqualTo(concedidas(script, "linea_saldo_inicial"))
 				.containsExactlyInAnyOrder("quitada", "actualizado_en", "version");
+		// Solicitudes: tipo, entidad, datos, motivo y solicitante no cambian; solo se resuelven.
+		assertThat(actualizables(pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.SolicitudCambio.class))
+				.isEqualTo(concedidas(script, "solicitud_cambio"))
+				.doesNotContain("tipo", "entidad", "entidad_id", "datos", "motivo", "solicitado_por", "resumen");
 		assertThat(script).doesNotContainPattern("(?i)GRANT[^;]*DELETE[^;]*ON cuentasclaras\\.(cuota|plan_pension|"
 				+ "lote_saldo_inicial|linea_saldo_inicial|solicitud_cambio)\\b");
 		assertThat(script).doesNotContainPattern(
-				"(?i)GRANT[^;(]*UPDATE ON cuentasclaras\\.(cuota|plan_pension|lote_saldo_inicial|linea_saldo_inicial)\\b");
+				"(?i)GRANT[^;(]*UPDATE ON cuentasclaras\\.(cuota|plan_pension|lote_saldo_inicial|linea_saldo_inicial|"
+						+ "solicitud_cambio)\\b");
 	}
 
 	static Set<String> actualizables(Class<?> entidad) {

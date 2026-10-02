@@ -149,14 +149,15 @@ class ServicioMatriculasUnitarioTest {
 		when(alumnos.findById(7L)).thenReturn(Optional.of(alumno));
 		when(secciones.findById(10L)).thenReturn(Optional.of(de2026));
 		when(secciones.findById(12L)).thenReturn(Optional.of(de2027));
-		when(registro.matricular(any(), any(), any())).thenAnswer(i -> conId(
-				Matricula.nueva(i.getArgument(0), i.getArgument(1), i.getArgument(2)), 30L));
+		when(registro.matricular(any(), any(), any())).thenAnswer(i -> conId(Matricula.nueva(i.getArgument(0),
+				i.getArgument(1), ((Seccion) i.getArgument(1)).getAnioEscolar().fechaMatriculaPorDefecto()), 30L));
 
 		servicio.matricular(7L, new MatricularRequest(10L, null));
 		servicio.matricular(7L, new MatricularRequest(12L, null));
 
-		verify(registro).matricular(alumno, de2026, LocalDate.of(2026, 3, 2));
-		verify(registro).matricular(alumno, de2027, LocalDate.of(2026, 10, 2));
+		// Sin fecha, RegistroAlumnos usa el inicio de clases de cada año (auditoría A3).
+		verify(registro).matricular(alumno, de2026, null);
+		verify(registro).matricular(alumno, de2027, null);
 	}
 
 	@Test

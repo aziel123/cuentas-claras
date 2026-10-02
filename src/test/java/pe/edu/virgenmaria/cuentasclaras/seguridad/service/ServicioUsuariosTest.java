@@ -193,7 +193,7 @@ class ServicioUsuariosTest {
 		Usuario otraPromotora = guardar("otra.promotora", Rol.PROMOTOR);
 		UsuariosDePrueba.iniciarSesion(director);
 
-		assertThat(servicio.rolesAsignables()).doesNotContain(Rol.PROMOTOR, Rol.DIRECTOR).contains(Rol.CAJA);
+		assertThat(servicio.rolesAsignables()).doesNotContain(Rol.PROMOTOR, Rol.DIRECTOR).contains(Rol.DOCENTE);
 		assertThatThrownBy(() -> servicio.crear(solicitud("nuevo.director", Rol.DIRECTOR)))
 				.isInstanceOf(AccessDeniedException.class);
 		assertThatThrownBy(() -> servicio.desactivar(otraPromotora.getId(), MOTIVO))
@@ -203,6 +203,44 @@ class ServicioUsuariosTest {
 				.isInstanceOf(AccessDeniedException.class);
 		assertThat(servicio.obtener(otraPromotora.getId()).puedeGestionar()).isFalse();
 		assertThat(servicio.obtener(caja.getId()).puedeGestionar()).isTrue();
+	}
+
+	/**
+	 * Auditoría A5 (sprint 2): Dirección se fabricaba una segunda cuenta de Administración (o le restablecía la clave
+	 * a una existente) y con ella cumplía el doble control sola. Ahora solo Promotoría da acceso a esas cuentas.
+	 */
+	@Test
+	void direccionNoCreaNiRestableceNiCambiaRolesDeAdministracionNiCaja() {
+		Usuario administracion = guardar("ana.administracion", Rol.ADMINISTRACION);
+		Usuario docente = guardar("luis.docente", Rol.DOCENTE);
+		UsuariosDePrueba.iniciarSesion(director);
+
+		assertThat(servicio.rolesAsignables()).doesNotContain(Rol.ADMINISTRACION, Rol.CAJA)
+				.contains(Rol.DOCENTE, Rol.APODERADO);
+		assertThatThrownBy(() -> servicio.crear(solicitud("segunda.cuenta", Rol.ADMINISTRACION)))
+				.isInstanceOf(AccessDeniedException.class);
+		assertThatThrownBy(() -> servicio.crear(solicitud("cajera.fantasma", Rol.CAJA)))
+				.isInstanceOf(AccessDeniedException.class);
+		assertThatThrownBy(() -> servicio.restablecerClave(administracion.getId(), MOTIVO))
+				.isInstanceOf(AccessDeniedException.class);
+		assertThatThrownBy(() -> servicio.restablecerClave(caja.getId(), MOTIVO))
+				.isInstanceOf(AccessDeniedException.class);
+		assertThatThrownBy(() -> servicio.cambiarRoles(docente.getId(),
+				new CambiarRolesRequest(EnumSet.of(Rol.ADMINISTRACION), MOTIVO))).isInstanceOf(AccessDeniedException.class);
+		assertThatThrownBy(() -> servicio.cambiarRoles(caja.getId(),
+				new CambiarRolesRequest(EnumSet.of(Rol.DOCENTE), MOTIVO))).isInstanceOf(AccessDeniedException.class);
+		assertThat(servicio.obtener(caja.getId()).puedeDarAcceso()).isFalse();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion IN ('USUARIO_CREADO', "
+				+ "'CLAVE_RESTABLECIDA', 'ROLES_CAMBIADOS')", Long.class)).isZero();
+
+		// Sí puede dar acceso a Docentes, y desactivar una cuenta de Caja (quita acceso, no lo da).
+		assertThat(servicio.restablecerClave(docente.getId(), MOTIVO).claveTemporal()).isNotBlank();
+		servicio.desactivar(caja.getId(), MOTIVO);
+
+		// Promotoría sí.
+		UsuariosDePrueba.iniciarSesion(promotora);
+		assertThat(servicio.obtener(administracion.getId()).puedeDarAcceso()).isTrue();
+		assertThat(servicio.restablecerClave(administracion.getId(), MOTIVO).claveTemporal()).isNotBlank();
 	}
 
 	@Test

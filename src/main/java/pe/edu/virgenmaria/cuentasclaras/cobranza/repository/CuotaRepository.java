@@ -36,6 +36,8 @@ public interface CuotaRepository extends Repository<Cuota, Long> {
 
 	boolean existsByMatriculaId(Long matriculaId);
 
+	List<Cuota> findByMatriculaIdAndTipoOrderByFechaVencimientoAscIdAsc(Long matriculaId, TipoCuota tipo);
+
 	long countByAnioEscolarId(Long anioId);
 
 	List<Cuota> findByLineaSaldoInicialIdIn(Collection<Long> lineas);

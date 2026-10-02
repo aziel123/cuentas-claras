@@ -9,6 +9,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.OtraPersona;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.ActualizarAlumnoRequest;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.CambiarResponsableRequest;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.FichaAlumno;
@@ -42,6 +44,9 @@ import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.ult
 @PruebaIntegracion
 @Import(ConfiguracionRelojAjustable.class)
 class ServicioAlumnosTest {
+
+	@Autowired
+	private BandejaAprobaciones bandeja;
 
 	@Autowired
 	private ServicioAlumnos alumnos;
@@ -159,6 +164,7 @@ class ServicioAlumnosTest {
 
 		alumnos.cambiarResponsablePago(mateo.alumnoId(), new CambiarResponsableRequest(null, " 41235678 ",
 				"La tutela pasó al padre por resolución judicial"));
+		OtraPersona.apruebaLoPendiente(bandeja, jdbc);
 
 		assertThat(jdbc.queryForMap("SELECT familia_id, responsable_pago_id FROM alumno WHERE id = ?", mateo.alumnoId()))
 				.containsEntry("familia_id", otro.familiaId());
@@ -182,6 +188,7 @@ class ServicioAlumnosTest {
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'RESPONSABLE_PAGO_CAMBIADO'")).isZero();
 
 		alumnos.cambiarResponsablePago(mateo.alumnoId(), new CambiarResponsableRequest(segundo, null, MOTIVO));
+		OtraPersona.apruebaLoPendiente(bandeja, jdbc);
 		assertThat(jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class,
 				mateo.alumnoId())).isEqualTo(segundo);
 		assertThat((String) ultimoEvento(jdbc, "RESPONSABLE_PAGO_CAMBIADO").get("detalle"))
@@ -201,6 +208,7 @@ class ServicioAlumnosTest {
 				.isEqualTo("ACTIVO");
 
 		alumnos.retirar(mateo.alumnoId(), new RetirarAlumnoRequest(hoy, "Se mudó a Arequipa con su familia"));
+		OtraPersona.apruebaLoPendiente(bandeja, jdbc);
 
 		assertThat(jdbc.queryForMap("SELECT * FROM alumno WHERE id = ?", mateo.alumnoId()))
 				.containsEntry("estado", "RETIRADO").containsEntry("retirado_por", "usuario.prueba")
@@ -263,6 +271,8 @@ class ServicioAlumnosTest {
 		familias.actualizarApoderado(rosa, new pe.edu.virgenmaria.cuentasclaras.alumnos.dto.ApoderadoRequest(
 				TipoDocumento.DNI, "45678912", "Huamán", "Ccori", "Rosa", Parentesco.MADRE, "999 888 777",
 				EscenarioEscolar.CORREO_ROSA, "Perdió su celular; confirmó el número nuevo en persona"));
+		// Auditoría A4: el contacto se cambia cuando otra persona aprueba la solicitud.
+		OtraPersona.apruebaLoPendiente(bandeja, jdbc);
 
 		Map<String, Object> evento = ultimoEvento(jdbc, "APODERADO_CONTACTO_CAMBIADO");
 		assertThat(evento).containsEntry("valor_anterior", "WhatsApp +51 *** *** 321")

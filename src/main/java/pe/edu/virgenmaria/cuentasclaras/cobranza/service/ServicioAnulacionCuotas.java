@@ -3,6 +3,8 @@ package pe.edu.virgenmaria.cuentasclaras.cobranza.service;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.TipoSolicitud;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.RegistroSolicitudes;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
@@ -11,10 +13,12 @@ import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 
+import java.util.Map;
+
 /**
- * Gancho de anulación de cuotas (sin pantalla en el sprint 2). Solo deja la <b>solicitud pendiente</b>: la cuota sigue
- * vigente y se sigue debiendo. La aprobación por otra persona ({@link Cuota#anular}) la conecta el módulo de
- * Aprobaciones en el sprint 3. Nada se borra.
+ * Pide anular una cuota (sin pantalla propia en el sprint 2). Solo deja la <b>solicitud pendiente</b> (marcada en la
+ * cuota y como {@code ANULACION_CUOTA} en la bandeja de Aprobaciones): la cuota sigue vigente y se sigue debiendo.
+ * La aprueba otra persona ({@link ManejadorAnulacionCuota}). Nada se borra.
  */
 @Service
 @Transactional
@@ -25,9 +29,12 @@ public class ServicioAnulacionCuotas {
 
 	private final AuditoriaService auditoria;
 
-	public ServicioAnulacionCuotas(CuotaRepository cuotas, AuditoriaService auditoria) {
+	private final RegistroSolicitudes solicitudes;
+
+	public ServicioAnulacionCuotas(CuotaRepository cuotas, AuditoriaService auditoria, RegistroSolicitudes solicitudes) {
 		this.cuotas = cuotas;
 		this.auditoria = auditoria;
+		this.solicitudes = solicitudes;
 	}
 
 	public void solicitar(Long cuotaId, String motivo) {
@@ -38,5 +45,10 @@ public class ServicioAnulacionCuotas {
 				"Alumno " + cuota.getAlumno().nombreCompleto() + ": " + cuota.getDescripcion() + " "
 						+ Dinero.formatear(cuota.getMonto()) + ", vence " + Calendario.formatear(cuota.getFechaVencimiento())
 						+ ". Motivo: " + cuota.getAnulacionMotivo());
+		solicitudes.crear(TipoSolicitud.ANULACION_CUOTA, "cuota", cuotaId,
+				"Anular " + cuota.getDescripcion() + " de " + cuota.getAlumno().nombreCompleto() + " ("
+						+ Dinero.formatear(cuota.getMonto()) + ", vence " + Calendario.formatear(cuota.getFechaVencimiento())
+						+ ")",
+				Map.of("cuotaId", cuotaId.toString()), cuota.getAnulacionMotivo());
 	}
 }

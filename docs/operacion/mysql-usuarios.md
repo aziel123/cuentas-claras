@@ -52,6 +52,9 @@ mysql -h <host> -u cc_migrador -p cuentasclaras < scripts/mysql/03-triggers.sql
 
 Si `log_bin_trust_function_creators` no puede activarse, aplica el script como administrador.
 La aplicación en `prod` **no arranca** si faltan (los comprueba con un INSERT imposible que el trigger rechaza: 1644).
+También acepta 1142 (cc_app sin INSERT en esa tabla, como en la fase 1 antes del paso 2): sin permiso de escritura no
+hay nada que el trigger deba frenar. Cualquier otro código (la FK o un CHECK, que MySQL evalúa después del trigger)
+significa que falta el trigger.
 
 ## Despliegue (cada versión)
 La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **nunca** recibe las credenciales de `cc_migrador`. Cada despliegue tiene dos pasos separados:
@@ -64,7 +67,8 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
    ```
    Si una migración crea una tabla, aplica después su GRANT (paso 3 de la instalación) y vuelve a aplicar
    `03-triggers.sql` (es idempotente).
-2. **Arrancar** la aplicación con `SPRING_PROFILES_ACTIVE=prod` y **solo** `DB_USUARIO=cc_app` / `DB_CLAVE`. Antes de aceptar peticiones comprueba que no falten migraciones, que `cc_app` no pueda editar ni borrar la bitácora ni borrar cuotas (error 1142) y que no pueda cambiar el monto de una cuota (error 1143). Si algo falla, **no arranca**.
+2. **Arrancar** la aplicación con `SPRING_PROFILES_ACTIVE=prod` y **solo** `DB_USUARIO=cc_app` / `DB_CLAVE`. Antes de aceptar peticiones comprueba que no falten migraciones, que `cc_app` no pueda editar ni borrar la bitácora ni borrar cuotas (error 1142) y que no pueda cambiar el monto de una cuota ni las columnas inmutables de planes, lotes, líneas y solicitudes (error
+1143, o 1142 si no tiene ningún UPDATE sobre la tabla), además de los triggers del paso 3. Si algo falla, **no arranca**.
 
 ## Cada migración nueva
 - Si crea una tabla, agrega su GRANT en `scripts/mysql/02-permisos-tablas.sql` y aplícalo después de migrar.

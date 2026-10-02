@@ -15,6 +15,14 @@
 
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
 
+	<section class="tarjeta" aria-labelledby="titulo-solicitudes" th:unless="${#lists.isEmpty(familia.solicitudesPendientes)}" data-solicitudes-pendientes>
+		<h2 id="titulo-solicitudes">Esperando aprobación</h2>
+		<p class="secundario">Estos cambios los aprueba otra persona de Promotoría o Dirección en Aprobaciones. Hasta entonces no se aplican.</p>
+		<ul class="lista-simple">
+			<li th:each="s : ${familia.solicitudesPendientes}" th:text="${s}">Retiro de alumno: Retirar a Mateo desde el 01/10/2026</li>
+		</ul>
+	</section>
+
 	<section class="tarjeta" aria-labelledby="titulo-alumnos">
 		<h2 id="titulo-alumnos">Alumnos</h2>
 		<p class="secundario" th:if="${#lists.isEmpty(familia.alumnos)}">Esta familia ya no tiene alumnos.</p>

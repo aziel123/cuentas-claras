@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.ApoderadoCorregido;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.ApoderadoDetalle;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.ApoderadoRequest;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.DatoInvalidoException;
@@ -99,9 +100,9 @@ public class FamiliaController {
 			return VISTA_APODERADO;
 		}
 		try {
-			Long familia = familias.actualizarApoderado(id, solicitud);
-			avisos.addFlashAttribute("exito", "Listo: se corrigieron los datos del apoderado. El cambio quedó en la bitácora.");
-			return "redirect:/alumnos/familias/" + familia;
+			ApoderadoCorregido resultado = familias.actualizarApoderado(id, solicitud);
+			avisos.addFlashAttribute("exito", resultado.aviso());
+			return "redirect:/alumnos/familias/" + resultado.familiaId();
 		}
 		catch (DatoInvalidoException e) {
 			Formularios.errorEnCampo(validacion, model, e.campo(), e.getMessage());

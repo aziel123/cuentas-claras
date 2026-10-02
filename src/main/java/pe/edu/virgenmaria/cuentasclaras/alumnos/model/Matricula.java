@@ -37,7 +37,8 @@ public class Matricula extends BaseEntity {
 	@JoinColumn(name = "seccion_id", nullable = false)
 	private Seccion seccion;
 
-	@Column(name = "fecha_matricula", nullable = false, updatable = false)
+	/** Fecha de ingreso. Solo cambia con una solicitud de ingreso tardío aprobada por otra persona. */
+	@Column(name = "fecha_matricula", nullable = false)
 	private LocalDate fechaMatricula;
 
 	@Enumerated(EnumType.STRING)
@@ -85,6 +86,14 @@ public class Matricula extends BaseEntity {
 					+ ": no se cambia a " + nueva.nivel().etiqueta() + " porque cambiaría su pensión.");
 		}
 		seccion = nueva;
+	}
+
+	/** Ingreso tardío aprobado (solicitud FECHA_MATRICULA). */
+	public void cambiarFechaIngreso(LocalDate fecha) {
+		if (estado != EstadoMatricula.ACTIVA) {
+			throw new ReglaNegocioException("La matrícula está retirada: no se cambia su fecha de ingreso.");
+		}
+		fechaMatricula = Objects.requireNonNull(fecha, "fecha");
 	}
 
 	public void retirar(LocalDate fecha) {

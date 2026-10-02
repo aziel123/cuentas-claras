@@ -18,6 +18,8 @@ import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.FamiliaRepository;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.MatriculaRepository;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.TipoSolicitud;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.RegistroSolicitudes;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Seccion;
@@ -26,7 +28,10 @@ import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -53,14 +58,17 @@ public class RegistroAlumnos {
 
 	private final AuditoriaService auditoria;
 
+	private final RegistroSolicitudes solicitudes;
+
 	private final ApplicationEventPublisher eventos;
 
 	private final Clock reloj;
 
 	public RegistroAlumnos(FamiliaRepository familias, ApoderadoRepository apoderados, AlumnoRepository alumnos,
 			MatriculaRepository matriculas, AnioEscolarRepository anios, AuditoriaService auditoria,
-			ApplicationEventPublisher eventos, Clock reloj) {
+			RegistroSolicitudes solicitudes, ApplicationEventPublisher eventos, Clock reloj) {
 		this.anios = anios;
+		this.solicitudes = solicitudes;
 		this.familias = familias;
 		this.apoderados = apoderados;
 		this.alumnos = alumnos;
@@ -97,28 +105,77 @@ public class RegistroAlumnos {
 	}
 
 	/**
-	 * Corrige los datos del apoderado. Si cambia el celular o el correo, el evento se resalta: es la vía para desviar
-	 * los avisos de pago lejos del padre real.
-	 *
-	 * @return {@code false} si no cambió nada
+	 * Corrige los datos del apoderado. Nombres, documento y parentesco se corrigen al momento; el celular y el correo
+	 * (la vía para desviar los avisos de pago lejos del padre real) quedan como solicitud que aprueba otra persona
+	 * (auditoría A4).
 	 */
-	public boolean actualizarApoderado(Apoderado apoderado, DatosApoderado datos, String motivo) {
+	public CorreccionApoderado actualizarApoderado(Apoderado apoderado, DatosApoderado datos, String motivo) {
 		exigirDocumentoLibreApoderado(datos.documento(), apoderado.getId());
+		String telefonoActual = apoderado.getTelefonoWhatsapp();
+		String correoActual = apoderado.getCorreo();
 		DatosApoderado antes = new DatosApoderado(apoderado.getDocumento(), apoderado.getApellidoPaterno(),
-				apoderado.getApellidoMaterno(), apoderado.getNombres(), apoderado.getParentesco(),
-				apoderado.getTelefonoWhatsapp(), apoderado.getCorreo());
-		List<String> campos = apoderado.actualizar(datos);
-		if (campos.isEmpty()) {
-			return false;
+				apoderado.getApellidoMaterno(), apoderado.getNombres(), apoderado.getParentesco(), telefonoActual,
+				correoActual);
+		DatosApoderado sinContacto = datos.conContacto(telefonoActual, correoActual);
+		List<String> campos = apoderado.actualizar(sinContacto);
+		if (!campos.isEmpty()) {
+			guardar(() -> apoderados.saveAndFlush(apoderado), () -> apoderadoRepetido(datos.documento()));
+			auditoria.registrar(AccionAuditoria.APODERADO_ACTUALIZADO, "apoderado", apoderado.getId().toString(),
+					DescripcionAuditoria.camposApoderado(antes, campos),
+					DescripcionAuditoria.camposApoderado(sinContacto, campos),
+					"Apoderado " + apoderado.nombreCompleto() + ". Cambió: " + String.join(", ", campos) + ". Motivo: "
+							+ motivo);
 		}
-		guardar(() -> apoderados.saveAndFlush(apoderado), () -> apoderadoRepetido(datos.documento()));
-		boolean contacto = campos.contains("celular") || campos.contains("correo");
-		auditoria.registrar(contacto ? AccionAuditoria.APODERADO_CONTACTO_CAMBIADO : AccionAuditoria.APODERADO_ACTUALIZADO,
-				"apoderado", apoderado.getId().toString(), DescripcionAuditoria.camposApoderado(antes, campos),
-				DescripcionAuditoria.camposApoderado(datos, campos),
-				"Apoderado " + apoderado.nombreCompleto() + ". Cambió: " + String.join(", ", campos) + ". Motivo: "
-						+ motivo);
-		return true;
+		boolean contacto = datos.cambiaContacto(telefonoActual, correoActual);
+		if (contacto) {
+			Map<String, String> pedido = new HashMap<>();
+			pedido.put("telefonoAnterior", vacioSiNulo(telefonoActual));
+			pedido.put("correoAnterior", vacioSiNulo(correoActual));
+			pedido.put("telefono", vacioSiNulo(datos.telefonoWhatsapp()));
+			pedido.put("correo", vacioSiNulo(datos.correo()));
+			solicitudes.crear(TipoSolicitud.CAMBIO_CONTACTO_APODERADO, "apoderado", apoderado.getId(),
+					"Contacto de " + apoderado.nombreCompleto() + " (" + apoderado.getFamilia().getNombre() + "): "
+							+ DescripcionAuditoria.contactoVisible(telefonoActual, correoActual) + " → "
+							+ DescripcionAuditoria.contactoVisible(datos.telefonoWhatsapp(), datos.correo()),
+					pedido, motivo);
+		}
+		return new CorreccionApoderado(!campos.isEmpty(), contacto);
+	}
+
+	/**
+	 * Aplica el cambio de contacto aprobado (solo lo llama el manejador de la solicitud). Si el contacto cambió desde
+	 * que se pidió, no se aplica.
+	 */
+	public void cambiarContactoAprobado(Apoderado apoderado, Map<String, String> pedido, String motivo,
+			String solicitante, String aprobador) {
+		if (!apoderado.isActivo()) {
+			throw new ReglaNegocioException(apoderado.nombreCompleto() + " está desactivado: ya no se cambia su contacto.");
+		}
+		String telefonoActual = apoderado.getTelefonoWhatsapp();
+		String correoActual = apoderado.getCorreo();
+		if (!vacioSiNulo(telefonoActual).equals(pedido.get("telefonoAnterior"))
+				|| !vacioSiNulo(correoActual).equals(pedido.get("correoAnterior"))) {
+			throw new ReglaNegocioException("El contacto de " + apoderado.nombreCompleto() + " cambió desde que se pidió: "
+					+ "rechaza esta solicitud y que se pida de nuevo.");
+		}
+		DatosApoderado actuales = new DatosApoderado(apoderado.getDocumento(), apoderado.getApellidoPaterno(),
+				apoderado.getApellidoMaterno(), apoderado.getNombres(), apoderado.getParentesco(), telefonoActual,
+				correoActual);
+		DatosApoderado nuevos = actuales.conContacto(nuloSiVacio(pedido.get("telefono")), nuloSiVacio(pedido.get("correo")));
+		List<String> campos = apoderado.actualizar(nuevos);
+		apoderados.saveAndFlush(apoderado);
+		auditoria.registrar(AccionAuditoria.APODERADO_CONTACTO_CAMBIADO, "apoderado", apoderado.getId().toString(),
+				DescripcionAuditoria.camposApoderado(actuales, campos), DescripcionAuditoria.camposApoderado(nuevos, campos),
+				"Apoderado " + apoderado.nombreCompleto() + ". Cambió: " + String.join(", ", campos) + ". Pedido por "
+						+ solicitante + ", aprobado por " + aprobador + ". Motivo: " + motivo);
+	}
+
+	private static String vacioSiNulo(String texto) {
+		return texto == null ? "" : texto;
+	}
+
+	private static String nuloSiVacio(String texto) {
+		return texto == null || texto.isEmpty() ? null : texto;
 	}
 
 	public void desactivarApoderado(Apoderado apoderado, String motivo) {
@@ -153,10 +210,30 @@ public class RegistroAlumnos {
 	}
 
 	/**
-	 * Cambia el responsable de pago. Si es de otra familia, el alumno pasa a esa familia. Queda RESALTADO en la
-	 * bitácora: decide a quién se cobra y quién recibe los avisos de pago.
+	 * Pide cambiar el responsable de pago (auditoría A4): decide a quién se cobra y quién recibe los avisos. Lo aprueba
+	 * otra persona de Promotoría o Dirección.
 	 */
-	public void cambiarResponsable(Alumno alumno, Apoderado nuevo, String motivo) {
+	public void solicitarCambioResponsable(Alumno alumno, Apoderado nuevo, String motivo) {
+		if (!alumno.activo()) {
+			throw new ReglaNegocioException(alumno.nombreCompleto() + " no está activo: no se cambia su responsable.");
+		}
+		if (nuevo.getId().equals(alumno.getResponsablePago().getId())) {
+			throw new ReglaNegocioException(nuevo.nombreCompleto() + " ya es el responsable de pago.");
+		}
+		boolean otraFamilia = !alumno.getFamilia().getId().equals(nuevo.getFamilia().getId());
+		solicitudes.crear(TipoSolicitud.CAMBIO_RESPONSABLE_PAGO, "alumno", alumno.getId(),
+				"Responsable de pago de " + alumno.nombreCompleto() + ": "
+						+ responsableTexto(alumno.getResponsablePago(), alumno.getFamilia()) + " → "
+						+ responsableTexto(nuevo, nuevo.getFamilia()) + (otraFamilia ? " (pasa a otra familia)" : ""),
+				Map.of("anteriorId", alumno.getResponsablePago().getId().toString(), "nuevoId", nuevo.getId().toString()),
+				motivo);
+	}
+
+	/**
+	 * Cambia el responsable de pago (solo lo llama el manejador de la solicitud aprobada). Si es de otra familia, el
+	 * alumno pasa a esa familia. Queda RESALTADO en la bitácora.
+	 */
+	public void cambiarResponsable(Alumno alumno, Apoderado nuevo, String motivo, String solicitante, String aprobador) {
 		Apoderado anterior = alumno.getResponsablePago();
 		Familia familiaAnterior = alumno.getFamilia();
 		alumno.cambiarResponsable(nuevo);
@@ -164,7 +241,7 @@ public class RegistroAlumnos {
 		auditoria.registrar(AccionAuditoria.RESPONSABLE_PAGO_CAMBIADO, "alumno", alumno.getId().toString(),
 				responsableTexto(anterior, familiaAnterior), responsableTexto(nuevo, nuevo.getFamilia()),
 				"Alumno " + alumno.nombreCompleto() + "." + (cambioDeFamilia ? " Pasó a otra familia." : "")
-						+ " Motivo: " + motivo);
+						+ " Pedido por " + solicitante + ", aprobado por " + aprobador + ". Motivo: " + motivo);
 	}
 
 	private static String responsableTexto(Apoderado apoderado, Familia familia) {
@@ -190,6 +267,17 @@ public class RegistroAlumnos {
 		// una aprobación simultáneas se serializan (nadie queda sin cronograma) y siempre en el mismo orden (sin
 		// bloqueo mutuo en MySQL).
 		anios.bloquear(anio.getId());
+		LocalDate pedida = fecha == null ? anio.fechaMatriculaPorDefecto() : fecha;
+		// Auditoría A3: un ingreso tardío recorta pensiones. Se matricula desde el inicio de clases (cronograma completo)
+		// y la fecha pedida queda como solicitud que aprueba otra persona.
+		boolean tardio = anio.ingresoTardio(pedida);
+		if (tardio) {
+			exigirFechaMatricula(pedida, anio);
+			fecha = anio.fechaMatriculaPorDefecto();
+		}
+		else {
+			fecha = pedida;
+		}
 		if (!alumno.activo()) {
 			throw new ReglaNegocioException(alumno.nombreCompleto() + " no está activo: no se puede matricular.");
 		}
@@ -203,17 +291,118 @@ public class RegistroAlumnos {
 		if (existente.isPresent()) {
 			throw yaMatriculado(alumno, anio, existente.get().getSeccion());
 		}
-		exigirFechaMatricula(fecha, anio);
+		if (!tardio) {
+			exigirFechaMatriculaRegular(fecha, anio);
+		}
 		Matricula matricula = Matricula.nueva(alumno, seccion, fecha);
 		guardar(() -> matriculas.saveAndFlush(matricula), () -> yaMatriculado(alumno, anio, seccion));
 		auditoria.registrar(AccionAuditoria.MATRICULA_REGISTRADA, "matricula", matricula.getId().toString(), null,
 				seccion.etiqueta() + " " + anio.getAnio() + "; desde el " + Calendario.formatear(fecha),
 				"Alumno " + alumno.nombreCompleto() + ".");
 		eventos.publishEvent(new MatriculaRegistrada(matricula.getId()));
+		if (tardio) {
+			solicitudes.crear(TipoSolicitud.FECHA_MATRICULA, "matricula", matricula.getId(),
+					"Ingreso de " + alumno.nombreCompleto() + " a " + seccion.etiqueta() + " " + anio.getAnio() + " desde el "
+							+ Calendario.formatear(pedida) + " (el inicio de clases es el "
+							+ Calendario.formatear(anio.getInicioClases()) + ")",
+					Map.of("matriculaId", matricula.getId().toString(), "fecha", pedida.toString()),
+					"Ingreso tardío pedido al matricular: hasta que se apruebe, se cobra desde el inicio de clases.");
+		}
 		return matricula;
 	}
 
-	/** No futura y entre el 01/07 del año anterior y el fin de clases. */
+	/**
+	 * Cambia la fecha de ingreso de una matrícula (solo la llama el manejador de la solicitud aprobada por otra
+	 * persona). Bloquea primero el año, luego audita.
+	 */
+	public void cambiarFechaIngreso(Matricula matricula, LocalDate fecha, String solicitante, String aprobador) {
+		anios.bloquear(matricula.getAnioEscolar().getId());
+		exigirFechaMatricula(fecha, matricula.getAnioEscolar());
+		LocalDate anterior = matricula.getFechaMatricula();
+		if (!matricula.activa()) {
+			throw new ReglaNegocioException("La matrícula ya no está activa.");
+		}
+		if (!matricula.getAnioEscolar().ingresoTardio(fecha)) {
+			throw new ReglaNegocioException("La fecha pedida no es posterior al inicio de clases.");
+		}
+		matricula.cambiarFechaIngreso(fecha);
+		matriculas.saveAndFlush(matricula);
+		auditoria.registrar(AccionAuditoria.MATRICULA_FECHA_CAMBIADA, "matricula", matricula.getId().toString(),
+				Calendario.formatear(anterior), Calendario.formatear(fecha), "Alumno "
+						+ matricula.getAlumno().nombreCompleto() + ". Pedido por " + solicitante + ", aprobado por "
+						+ aprobador + ".");
+		eventos.publishEvent(new FechaIngresoCambiada(matricula.getId(), fecha, solicitante, aprobador));
+	}
+
+	/**
+	 * Pide el retiro (auditoría A6): lo aprueba otra persona. La fecha no es futura ni anterior a la matrícula.
+	 */
+	public void solicitarRetiro(Alumno alumno, LocalDate fecha, String motivo) {
+		if (!alumno.activo()) {
+			throw new ReglaNegocioException(alumno.nombreCompleto() + " ya no está activo.");
+		}
+		exigirFechaRetiro(alumno, fecha);
+		solicitudes.crear(TipoSolicitud.RETIRO_ALUMNO, "alumno", alumno.getId(),
+				"Retirar a " + alumno.nombreCompleto() + " desde el " + Calendario.formatear(fecha),
+				Map.of("fecha", fecha.toString()), motivo);
+	}
+
+	private void exigirFechaRetiro(Alumno alumno, LocalDate fecha) {
+		if (fecha == null) {
+			throw new ReglaNegocioException("Elige la fecha de retiro.");
+		}
+		if (fecha.isAfter(LocalDate.now(reloj))) {
+			throw new ReglaNegocioException("La fecha de retiro no puede ser futura.");
+		}
+		exigirRetiroPosteriorALaMatricula(alumno, fecha, matriculas.findByAlumnoIdOrderByAnioEscolarAnioDesc(
+				alumno.getId()).stream().filter(Matricula::activa).toList());
+	}
+
+	/**
+	 * Retira al alumno y sus matrículas activas (solo lo llama el manejador de la solicitud aprobada). Queda resaltado.
+	 * La fecha no puede ser anterior a la fecha de matrícula del año.
+	 */
+	public void retirar(Alumno alumno, LocalDate fecha, String motivo, String solicitante, String aprobador) {
+		List<Matricula> activas = matriculas.findByAlumnoIdOrderByAnioEscolarAnioDesc(alumno.getId()).stream()
+				.filter(Matricula::activa).toList();
+		activas.stream().map(m -> m.getAnioEscolar().getId()).sorted().forEach(anios::bloquear);
+		if (!alumno.activo()) {
+			throw new ReglaNegocioException(alumno.nombreCompleto() + " ya no está activo.");
+		}
+		exigirFechaRetiro(alumno, fecha);
+		alumno.retirar(fecha, solicitante, motivo);
+		List<String> retiradas = new ArrayList<>();
+		for (Matricula m : activas) {
+			m.retirar(fecha);
+			retiradas.add(m.getSeccion().etiqueta() + " " + m.getAnioEscolar().getAnio());
+		}
+		auditoria.registrar(AccionAuditoria.ALUMNO_RETIRADO, "alumno", alumno.getId().toString(), "activo",
+				"retirado el " + Calendario.formatear(fecha), "Alumno " + alumno.nombreCompleto() + "."
+						+ (retiradas.isEmpty() ? "" : " Matrículas retiradas: " + String.join(", ", retiradas) + ".")
+						+ " Pedido por " + solicitante + ", aprobado por " + aprobador + ". Motivo: " + motivo);
+	}
+
+	/** Auditoría A6: la fecha de retiro no puede ser anterior a la de matrícula (evitaría todas las cuotas). */
+	public void exigirRetiroPosteriorALaMatricula(Alumno alumno, LocalDate fecha, List<Matricula> activas) {
+		for (Matricula m : activas) {
+			if (m.getAnioEscolar().getAnio() <= fecha.getYear() && fecha.isBefore(m.getFechaMatricula())) {
+				throw new ReglaNegocioException("La fecha de retiro (" + Calendario.formatear(fecha) + ") es anterior a la "
+						+ "matrícula de " + alumno.nombreCompleto() + " en " + m.getAnioEscolar().getAnio() + " ("
+						+ Calendario.formatear(m.getFechaMatricula()) + ").");
+			}
+		}
+	}
+
+	/** Ingreso regular (hasta el inicio de clases): entre el 01/07 del año anterior y el inicio; puede ser futura. */
+	private void exigirFechaMatriculaRegular(LocalDate fecha, AnioEscolar anio) {
+		if (fecha.isBefore(anio.primeraFechaDeMatricula())) {
+			throw new ReglaNegocioException("La fecha de matrícula de " + anio.getAnio() + " debe estar entre el "
+					+ Calendario.formatear(anio.primeraFechaDeMatricula()) + " y el "
+					+ Calendario.formatear(anio.getFinClases()) + ".");
+		}
+	}
+
+	/** Ingreso tardío: no futura y hasta el fin de clases. */
 	private void exigirFechaMatricula(LocalDate fecha, AnioEscolar anio) {
 		if (fecha == null) {
 			throw new ReglaNegocioException("Elige la fecha de matrícula.");

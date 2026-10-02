@@ -42,7 +42,11 @@
   `FECHA_MATRICULA`**. Opción elegida (la más segura): la matrícula se registra con el inicio de clases y **cronograma
   completo**; si se aprueba la solicitud, se cambia la fecha y se **anulan** las pensiones anteriores al ingreso (nunca
   la matrícula), con solicitante y aprobador distintos y auditado.
-- Desviación documentada: una fecha **anterior** al inicio de clases no recorta nada y se registra sin solicitud.
+- Desviación documentada: una fecha **anterior** al inicio de clases no recorta nada y se registra sin solicitud. Por
+  eso una fecha regular puede ser futura (la matrícula de un año que aún no empieza); un ingreso tardío no.
+- Aplicación: el manejador (en `alumnos`) cambia la fecha y publica `FechaIngresoCambiada`; `cobranza`
+  (`AjusteIngresoTardio`) anula en la misma transacción las pensiones que vencen antes del mes de ingreso (las mismas
+  que el cronograma no generaría). Si alguna tiene pagos, no se aprueba.
 - Reporte **«Ingresos tardíos»** en `/aprobaciones`.
 
 ### A4. Desvío de avisos
@@ -50,19 +54,24 @@
   **solicitud** que aprueba otra persona de Promotoría o Dirección. Los demás datos (nombres, parentesco) se corrigen al
   momento.
 - La importación ya **no** cambia contactos ni responsables existentes: los muestra en la revisión como «Requiere
-  solicitud» y no los aplica. Un apoderado **nuevo** sí trae su contacto.
+  solicitud» y no los aplica (una fila con solo esos cambios cuenta como «sin cambios»). Un apoderado **nuevo** sí trae
+  su contacto.
+- Al aprobar, el manejador vuelve a validar: si el contacto o el responsable cambiaron desde la solicitud, no se aplica
+  (hay que rechazarla y pedirla de nuevo).
 - **Sprint 4:** al aprobarse un cambio de contacto se avisará también al contacto anterior.
 
 ### A5. Doble control con una segunda cuenta
-- Solo **Promotoría** crea usuarios con ADMINISTRACION o CAJA (además de PROMOTOR y DIRECTOR), les asigna esos roles o les
-  restablece la clave. Dirección ya no.
+- Solo **Promotoría** crea usuarios con ADMINISTRACION o CAJA (además de PROMOTOR y DIRECTOR), les asigna esos roles,
+  les cambia los roles o les restablece la clave. Dirección ya no. Dirección sí puede desactivar, reactivar o desbloquear
+  esas cuentas (no le dan acceso a ella).
 - Es **participante** (no puede aprobar) quien **creó o restableció la clave** de la cuenta de un autor en los últimos 30
   días (`ControlParticipantes`, con `creado_por` y `clave_restablecida_por` del usuario). Se aplica a planes, lotes y
   solicitudes.
 
 ### A6. Retiro sin aprobación
 - El retiro de un alumno es una **solicitud `RETIRO_ALUMNO`** que aprueba otra persona. La fecha de retiro no puede ser
-  anterior a la fecha de matrícula del año.
+  anterior a la fecha de matrícula del año (se valida al pedir y otra vez al aprobar). `retirado_por` guarda a quien lo
+  pidió; la bitácora nombra a ambos.
 - Alerta **«Matrícula retirada sin cuotas»** en la tarjeta *Para revisar* de Promotoría (puerto `comun.alertas`).
 
 ### Módulo `aprobaciones` (genérico y pequeño)
@@ -74,6 +83,9 @@
   aplica el cambio al aprobar, en la misma transacción. `aprobaciones` no depende de `alumnos` ni de `cobranza` (ArchUnit).
 - `BandejaAprobaciones` (`/aprobaciones`, Promotoría y Dirección): aprobar o rechazar con motivo; autoaprobación auditada
   y rechazada (`noRollbackFor`). El sprint 3 agrega anulaciones de pago y cierres de caja con un manejador nuevo cada uno.
+- Los manejadores exigen una transacción abierta (`MANDATORY`, regla ArchUnit), así que la bandeja los elige dentro de
+  ella. Orden de bloqueos: la solicitud (`SELECT ... FOR UPDATE`), luego el año si el manejador lo necesita, y recién
+  después la bitácora.
 - La solicitud de anulación de cuota existente pasa a ser `ANULACION_CUOTA` en esta bandeja.
 
 ### M1. Todos los editores
@@ -98,8 +110,9 @@
 - B1. Promotoría (solo lectura) ve DNI, celular y correo **enmascarados** en la ficha y la familia.
 - B2. Textos libres (nombre de familia, descripciones, referencia del informe, motivos y comentarios) no empiezan con
   `=`, `+`, `-` ni `@` (`TextoSeguro`).
-- B3. Una sola importación en proceso por usuario, y como máximo `cuentasclaras.excel.max-textos-compartidos` (20,000)
-  textos compartidos en el archivo.
+- B3. Una sola importación en proceso (lectura o confirmación) por usuario, y como máximo
+  `cuentasclaras.excel.max-textos-compartidos` (20,000) textos compartidos en el archivo: se cuentan en streaming antes
+  de cargarlos en memoria. El límite por usuario vive en memoria: con varias instancias es por instancia.
 
 ## 2. Migración `V8__correcciones_antifraude.sql`
 - `linea_saldo_inicial.anio_deuda` (+ CHECK por concepto; se completa con el año del lote en filas existentes).

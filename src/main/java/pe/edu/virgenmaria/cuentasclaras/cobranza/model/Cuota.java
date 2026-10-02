@@ -168,14 +168,14 @@ public class Cuota extends BaseEntity {
 		return estado == EstadoCuota.ANULADA;
 	}
 
-	/** Hay una solicitud de anulación esperando aprobación (sprint 3). */
+	/** Hay una solicitud de anulación esperando aprobación (en la bandeja de Aprobaciones). */
 	public boolean anulacionPendiente() {
 		return estado != EstadoCuota.ANULADA && anulacionSolicitadaPor != null;
 	}
 
 	/**
 	 * Deja una solicitud de anulación pendiente: la cuota sigue vigente y se sigue debiendo. La aprueba otra persona
-	 * en el sprint 3 (Aprobaciones), con {@link #anular}.
+	 * en Aprobaciones, con {@link #anular}.
 	 */
 	public void solicitarAnulacion(String motivo, String solicitante) {
 		exigirAnulable();
@@ -186,8 +186,17 @@ public class Cuota extends BaseEntity {
 		anulacionSolicitadaPor = Objects.requireNonNull(solicitante, "solicitante");
 	}
 
+	/** Se rechazó la solicitud de anulación: la cuota sigue igual (el motivo queda en la solicitud y la bitácora). */
+	public void descartarSolicitudAnulacion() {
+		if (!anulacionPendiente()) {
+			throw new ReglaNegocioException("La cuota no tiene una solicitud de anulación pendiente.");
+		}
+		anulacionMotivo = null;
+		anulacionSolicitadaPor = null;
+	}
+
 	/**
-	 * Gancho para el sprint 3: anula con el motivo y la aprobación de alguien distinto de quien la solicitó (también
+	 * Anula con el motivo y la aprobación de alguien distinto de quien la solicitó (también
 	 * es CHECK en la base). Libera la obligación (podrá generarse otra cuota del mismo mes) y conserva la clave.
 	 */
 	public void anular(String motivo, String solicitante, String aprobador, LocalDateTime ahora) {

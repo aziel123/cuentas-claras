@@ -27,6 +27,14 @@
 			|Retirado el ${#temporals.format(ficha.retiradoEn, 'dd/MM/yyyy')} por ${ficha.retiradoPor}. Motivo: ${ficha.motivoRetiro}|)}"></div>
 	</th:block>
 
+	<section class="tarjeta" aria-labelledby="titulo-solicitudes" th:unless="${#lists.isEmpty(ficha.solicitudesPendientes)}" data-solicitudes-pendientes>
+		<h2 id="titulo-solicitudes">Esperando aprobación</h2>
+		<p class="secundario">Estos cambios los aprueba otra persona de Promotoría o Dirección en Aprobaciones. Hasta entonces no se aplican.</p>
+		<ul class="lista-simple">
+			<li th:each="s : ${ficha.solicitudesPendientes}" th:text="${s}">Retiro de alumno: Retirar a Mateo desde el 01/10/2026</li>
+		</ul>
+	</section>
+
 	<section class="tarjeta" aria-labelledby="titulo-datos">
 		<h2 id="titulo-datos">Datos</h2>
 		<dl class="datos">
@@ -57,7 +65,7 @@
 			<div class="modal" id="modal-responsable" popover role="dialog" aria-modal="true" aria-labelledby="modal-responsable-titulo">
 				<form method="post" th:action="@{/alumnos/{id}/responsable(id=${c.id})}" class="modal-cuerpo">
 					<h2 id="modal-responsable-titulo">Cambiar responsable de pago</h2>
-					<p>Cambia a quién se le cobra y quién recibe los avisos de pago. Quedará resaltado en la bitácora para que Promotoría lo revise.</p>
+					<p>Cambia a quién se le cobra y quién recibe los avisos de pago, así que lo aprueba otra persona de Promotoría o Dirección. Hasta entonces se cobra al responsable actual.</p>
 					<div class="campo" th:unless="${#lists.isEmpty(ficha.otrosApoderados)}">
 						<label for="apoderadoId">Otro apoderado de la familia</label>
 						<select class="input" id="apoderadoId" name="apoderadoId">
@@ -78,7 +86,7 @@
 					</div>
 					<div class="acciones">
 						<button type="button" class="btn btn-secundario" popovertarget="modal-responsable" popovertargetaction="hide">Cancelar</button>
-						<button type="submit" class="btn btn-primario">Cambiar responsable</button>
+						<button type="submit" class="btn btn-primario">Pedir el cambio</button>
 					</div>
 				</form>
 			</div>
@@ -175,14 +183,15 @@
 	<section class="tarjeta zona-sensible" th:if="${puedeEditar and c.activo()}" aria-labelledby="titulo-retiro">
 		<div>
 			<h2 id="titulo-retiro">Retiro</h2>
-			<p class="secundario">Si el alumno deja el colegio, retíralo: no se borra nada y sus matrículas quedan retiradas.</p>
+			<p class="secundario">Si el alumno deja el colegio, pide su retiro: lo aprueba otra persona de Promotoría o Dirección.
+				No se borra nada y sus matrículas quedan retiradas.</p>
 		</div>
 		<div class="fila">
-			<button type="button" class="btn btn-peligro" popovertarget="modal-retirar">Retirar alumno</button>
+			<button type="button" class="btn btn-peligro" popovertarget="modal-retirar">Pedir retiro</button>
 			<div class="modal" id="modal-retirar" popover role="dialog" aria-modal="true" aria-labelledby="modal-retirar-titulo">
 				<form method="post" th:action="@{/alumnos/{id}/retirar(id=${c.id})}" class="modal-cuerpo">
-					<h2 id="modal-retirar-titulo" th:text="|¿Retirar a ${c.nombreCompleto}?|">¿Retirar?</h2>
-					<p>Sus matrículas activas quedarán retiradas. Quedará resaltado en la bitácora.</p>
+					<h2 id="modal-retirar-titulo" th:text="|¿Pedir el retiro de ${c.nombreCompleto}?|">¿Pedir el retiro?</h2>
+					<p>Cuando otra persona lo apruebe, sus matrículas activas quedarán retiradas. La fecha no puede ser anterior a su matrícula. Quedará resaltado en la bitácora.</p>
 					<div class="campo">
 						<label for="fecha-retiro">Fecha de retiro</label>
 						<input class="input" type="date" id="fecha-retiro" name="fecha" required>
@@ -194,7 +203,7 @@
 					</div>
 					<div class="acciones">
 						<button type="button" class="btn btn-secundario" popovertarget="modal-retirar" popovertargetaction="hide">Cancelar</button>
-						<button type="submit" class="btn btn-peligro">Retirar</button>
+						<button type="submit" class="btn btn-peligro">Pedir retiro</button>
 					</div>
 				</form>
 			</div>

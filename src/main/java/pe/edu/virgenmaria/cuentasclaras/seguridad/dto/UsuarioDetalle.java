@@ -14,5 +14,6 @@ import java.util.Set;
 public record UsuarioDetalle(Long id, String nombreUsuario, String nombreCompleto, String correo, Set<Rol> roles,
 		String rolesTexto, String estado, boolean activo, boolean bloqueado, LocalDateTime bloqueadoHasta,
 		boolean debeCambiarClave, LocalDateTime ultimoIngresoEn, LocalDateTime creadoEn, String creadoPor,
-		LocalDateTime desactivadoEn, String desactivadoPor, boolean esUnoMismo, boolean puedeGestionar) {
+		LocalDateTime desactivadoEn, String desactivadoPor, boolean esUnoMismo, boolean puedeGestionar,
+		boolean puedeDarAcceso) {
 }

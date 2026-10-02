@@ -11,6 +11,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAlumnos;
 import pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest;
 import pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest;
@@ -18,6 +20,7 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.model.Colegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
+import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar;
@@ -62,6 +65,12 @@ class ServicioImportacionAlumnosTest {
 
 	@Autowired
 	private JdbcTemplate jdbc;
+
+	@Autowired
+	private AnioEscolarRepository anios;
+
+	@Autowired
+	private PlatformTransactionManager transacciones;
 
 	private Estructura escuela;
 
@@ -123,25 +132,171 @@ class ServicioImportacionAlumnosTest {
 		assertThat(contar(jdbc, "evento_auditoria")).isEqualTo(eventos);
 	}
 
+	/**
+	 * Auditoría A4: antes, reimportar el Excel con otro celular cambiaba el contacto de un apoderado ya registrado sin
+	 * que nadie más lo aprobara (y desviaba los avisos de pago). Ahora se muestra como «requiere solicitud» y no se
+	 * aplica.
+	 */
 	@Test
-	void reimportarConUnCelularCambiadoSoloActualizaEseApoderado() {
+	void reimportarConUnCelularCambiadoNoCambiaElContactoYPideSolicitud() {
 		confirmar(previa(archivo(mateo(), valeria(), sebastian())));
+		long eventos = contar(jdbc, "evento_auditoria");
 
 		VistaPreviaImportacion previa = previa(archivo(con(mateo(), 15, "999888777"), con(valeria(), 15, "999888777"),
 				sebastian()));
 
 		assertThat(previa.resumen()).extracting(ResumenImportacion::alumnosActualizados,
 				ResumenImportacion::alumnosSinCambios, ResumenImportacion::apoderadosActualizados,
-				ResumenImportacion::alumnosNuevos).containsExactly(1, 2, 1, 0);
+				ResumenImportacion::alumnosNuevos).containsExactly(0, 3, 0, 0);
+		assertThat(previa.conCambiosPorSolicitar()).isTrue();
 		assertThat(previa.conCambios()).singleElement().satisfies(p -> assertThat(p.cambios()).containsExactly(
-				new CambioFila("Celular de Rosa Huamán Ccori", "+51 *** *** 321", "+51 *** *** 777")));
-		confirmar(previa);
+				new CambioFila("Celular de Rosa Huamán Ccori", "+51 *** *** 321", "+51 *** *** 777", true)));
+		assertThatThrownBy(() -> servicio.confirmar(previa, previa.token())).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("No hay nada que importar");
 		assertThat(jdbc.queryForObject("SELECT telefono_whatsapp FROM apoderado WHERE numero_documento = '45678912'",
-				String.class)).isEqualTo("+51999888777");
-		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'APODERADO_CONTACTO_CAMBIADO'")).isEqualTo(1);
-		assertThat((String) ultimoEvento(jdbc, "APODERADO_CONTACTO_CAMBIADO").get("detalle"))
-				.contains("Importación desde Excel «alumnos.xlsx», fila 2");
-		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'ALUMNO_ACTUALIZADO'")).isZero();
+				String.class)).isEqualTo("+51987654321");
+		assertThat(contar(jdbc, "evento_auditoria")).isEqualTo(eventos);
+	}
+
+	/** Un nombre corregido sí se aplica; el celular que viene en la misma fila, no. */
+	@Test
+	void reimportarAplicaElNombreDelApoderadoPeroNoSuContacto() {
+		confirmar(previa(archivo(mateo(), valeria(), sebastian())));
+
+		VistaPreviaImportacion previa = previa(archivo(con(con(mateo(), 15, "999888777"), 13, "Rosa María"),
+				con(con(valeria(), 15, "999888777"), 13, "Rosa María"), sebastian()));
+
+		assertThat(previa.errores()).isEmpty();
+		assertThat(previa.resumen().apoderadosActualizados()).isEqualTo(1);
+		assertThat(previa.conCambios()).singleElement().satisfies(p -> assertThat(p.cambios())
+				.extracting(CambioFila::requiereSolicitud).containsExactlyInAnyOrder(false, true));
+		confirmar(previa);
+		assertThat(jdbc.queryForMap("SELECT nombres, telefono_whatsapp FROM apoderado WHERE numero_documento = "
+				+ "'45678912'")).containsEntry("nombres", "Rosa María").containsEntry("telefono_whatsapp", "+51987654321");
+		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'APODERADO_CONTACTO_CAMBIADO'")).isZero();
+		assertThat(contar(jdbc, "solicitud_cambio")).isZero();
+	}
+
+	/** Doble clic en «Confirmar e importar»: la segunda vez ve los datos cambiados y no duplica nada. */
+	@Test
+	void confirmarLaMismaRevisionDosVecesNoDuplica() {
+		VistaPreviaImportacion previa = previa(archivo(mateo(), valeria(), sebastian()));
+		confirmar(previa);
+
+		assertThatThrownBy(() -> confirmar(previa)).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("Los datos cambiaron desde la revisión");
+		assertThat(contar(jdbc, "alumno")).isEqualTo(3);
+		assertThat(contar(jdbc, "matricula")).isEqualTo(3);
+		assertThat(contar(jdbc, "importacion_alumnos")).isEqualTo(1);
+	}
+
+	@Test
+	void confirmarLaMismaRevisionDosVecesEnParaleloNoDuplica() throws Exception {
+		VistaPreviaImportacion previa = previa(archivo(mateo(), valeria(), sebastian()));
+		// Dos usuarios distintos (el límite de una importación por usuario no interviene): el año bloqueado decide.
+		var primero = UsuariosDePrueba.autenticado(1L, 1L, "usuario.prueba", "Uno", false,
+				java.util.EnumSet.of(Rol.ADMINISTRACION));
+		java.util.concurrent.ExecutorService hilos = java.util.concurrent.Executors.newFixedThreadPool(2);
+		java.util.concurrent.CountDownLatch salida = new java.util.concurrent.CountDownLatch(1);
+		try {
+			java.util.List<java.util.concurrent.Future<String>> resultados = new java.util.ArrayList<>();
+			for (int i = 0; i < 2; i++) {
+				resultados.add(hilos.submit(() -> {
+					UsuariosDePrueba.iniciarSesion(primero);
+					salida.await();
+					try {
+						servicio.confirmar(previa, previa.token());
+						return "ok";
+					}
+					catch (ReglaNegocioException e) {
+						return e.getMessage();
+					}
+					finally {
+						SecurityContextHolder.clearContext();
+					}
+				}));
+			}
+			salida.countDown();
+			java.util.List<String> mensajes = new java.util.ArrayList<>();
+			for (var r : resultados) {
+				mensajes.add(r.get(30, java.util.concurrent.TimeUnit.SECONDS));
+			}
+			assertThat(mensajes).containsOnlyOnce("ok");
+			assertThat(mensajes).filteredOn(m -> !m.equals("ok")).singleElement().asString()
+					.containsAnyOf("Los datos cambiaron", "importación en proceso");
+		}
+		finally {
+			hilos.shutdownNow();
+		}
+		assertThat(contar(jdbc, "alumno")).isEqualTo(3);
+		assertThat(contar(jdbc, "importacion_alumnos")).isEqualTo(1);
+	}
+
+	/**
+	 * Auditoría B3: un usuario no satura el servidor con varias importaciones a la vez. Determinista: otra transacción
+	 * tiene el año bloqueado, así la confirmación queda «en proceso» esperando el bloqueo.
+	 */
+	@Test
+	void unaSolaImportacionEnProcesoPorUsuario() throws Exception {
+		byte[] libro = archivo(mateo(), valeria(), sebastian());
+		VistaPreviaImportacion previa = previa(libro);
+		var usuario = UsuariosDePrueba.autenticado(Rol.ADMINISTRACION);
+		java.util.concurrent.ExecutorService hilos = java.util.concurrent.Executors.newFixedThreadPool(1);
+		java.util.concurrent.CountDownLatch bloqueado = new java.util.concurrent.CountDownLatch(1);
+		java.util.concurrent.CountDownLatch soltar = new java.util.concurrent.CountDownLatch(1);
+		try {
+			var candado = hilos.submit(() -> {
+				// Otra persona del mismo colegio (el colegio se fija al abrir la transacción).
+				UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(1L, 2L, "otra.persona", "Otra", false,
+						java.util.EnumSet.of(Rol.ADMINISTRACION)));
+				new TransactionTemplate(transacciones).executeWithoutResult(estado -> {
+					assertThat(anios.bloquear(escuela.anio2026())).isPresent();
+					bloqueado.countDown();
+					try {
+						soltar.await(20, java.util.concurrent.TimeUnit.SECONDS);
+					}
+					catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+					}
+				});
+				SecurityContextHolder.clearContext();
+			});
+			bloqueado.await(10, java.util.concurrent.TimeUnit.SECONDS);
+			java.util.concurrent.atomic.AtomicReference<Object> resultado = new java.util.concurrent.atomic.AtomicReference<>();
+			Thread confirmacion = new Thread(() -> {
+				UsuariosDePrueba.iniciarSesion(usuario);
+				try {
+					servicio.confirmar(previa, previa.token());
+					resultado.set("ok");
+				}
+				catch (RuntimeException e) {
+					resultado.set(e);
+				}
+				finally {
+					SecurityContextHolder.clearContext();
+				}
+			});
+			confirmacion.start();
+			// Espera a que la confirmación esté detenida en el bloqueo del año (ya «en proceso»).
+			for (int intento = 0; intento < 200 && confirmacion.getState() != Thread.State.TIMED_WAITING
+					&& confirmacion.getState() != Thread.State.WAITING; intento++) {
+				Thread.sleep(25);
+			}
+			assertThat(resultado.get()).as("la confirmación no debe haber terminado").isNull();
+
+			assertThatThrownBy(() -> previa(libro)).isInstanceOf(ReglaNegocioException.class)
+					.hasMessage("Ya tienes una importación en proceso. Espera a que termine y vuelve a intentarlo.");
+			soltar.countDown();
+			confirmacion.join(20_000);
+			assertThat(resultado.get()).isEqualTo("ok");
+			candado.get(20, java.util.concurrent.TimeUnit.SECONDS);
+		}
+		finally {
+			soltar.countDown();
+			hilos.shutdownNow();
+		}
+		// Terminada, se puede volver a revisar otro archivo.
+		assertThat(previa(libro).resumen().alumnosSinCambios()).isEqualTo(3);
 	}
 
 	@Test

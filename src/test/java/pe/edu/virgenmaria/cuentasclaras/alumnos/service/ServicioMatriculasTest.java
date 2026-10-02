@@ -109,18 +109,22 @@ class ServicioMatriculasTest {
 	@Test
 	void fechaDeMatriculaFuturaEsRechazada() {
 		LocalDate hoy = LocalDate.of(2026, 10, 2);
+		// Un ingreso tardío (después del inicio de clases) no puede ser futuro.
 		assertThatThrownBy(() -> matriculas.matricular(mateo,
-				new MatricularRequest(escuela.primaria6A2027(), hoy.plusDays(1))))
+				new MatricularRequest(escuela.primaria5A2026(), hoy.plusDays(1))))
+				.isInstanceOf(ReglaNegocioException.class).hasMessage("La fecha de matrícula no puede ser futura.");
+		assertThatThrownBy(() -> matriculas.matricular(mateo,
+				new MatricularRequest(escuela.primaria6A2027(), LocalDate.of(2027, 4, 1))))
 				.isInstanceOf(ReglaNegocioException.class).hasMessage("La fecha de matrícula no puede ser futura.");
 		assertThatThrownBy(() -> matriculas.matricular(mateo,
 				new MatricularRequest(escuela.primaria6A2027(), LocalDate.of(2026, 6, 30))))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("entre el 01/07/2026 y el 17/12/2027");
 		assertThat(contar(jdbc, "matricula")).isZero();
 
-		// Sin fecha: hoy para 2027 (las clases aún no empiezan) y el inicio de clases para 2026.
+		// Sin fecha: el inicio de clases de cada año (auditoría A3), aunque sea futuro (2027).
 		Long de2027 = matriculas.matricular(mateo, new MatricularRequest(escuela.primaria6A2027(), null)).matriculaId();
 		assertThat(jdbc.queryForObject("SELECT fecha_matricula FROM matricula WHERE id = ?", Date.class, de2027))
-				.isEqualTo(Date.valueOf(hoy));
+				.isEqualTo(Date.valueOf("2027-03-01"));
 		Long de2026 = matriculas.matricular(mateo, new MatricularRequest(escuela.primaria5A2026(), null)).matriculaId();
 		assertThat(jdbc.queryForObject("SELECT fecha_matricula FROM matricula WHERE id = ?", Date.class, de2026))
 				.isEqualTo(Date.valueOf("2026-03-02"));

@@ -195,14 +195,16 @@ public class AlumnoController {
 	public String cambiarResponsable(@PathVariable Long id, @Valid CambiarResponsableRequest solicitud,
 			BindingResult validacion, RedirectAttributes avisos) {
 		return ejecutar(id, validacion, avisos, () -> alumnos.cambiarResponsablePago(id, solicitud),
-				"Listo: cambió el responsable de pago. El cambio quedó resaltado en la bitácora.");
+				"Listo: se pidió el cambio de responsable de pago. Lo aprueba otra persona de Promotoría o Dirección en "
+						+ "Aprobaciones; hasta entonces se cobra al responsable actual.");
 	}
 
 	@PostMapping("/{id:\\d+}/retirar")
 	public String retirar(@PathVariable Long id, @Valid RetirarAlumnoRequest solicitud, BindingResult validacion,
 			RedirectAttributes avisos) {
 		return ejecutar(id, validacion, avisos, () -> alumnos.retirar(id, solicitud),
-				"Listo: el alumno quedó retirado. Su historia se conserva.");
+				"Listo: se pidió el retiro. Lo aprueba otra persona de Promotoría o Dirección en Aprobaciones; "
+						+ "hasta entonces el alumno sigue activo.");
 	}
 
 	private static String ejecutar(Long id, BindingResult validacion, RedirectAttributes avisos, Runnable accion,

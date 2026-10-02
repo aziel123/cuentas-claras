@@ -76,8 +76,9 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "fecha_vencimiento, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'OTRO', 'verificador', 1, "
 					+ "'2000-01-01', NOW(6), 'verificador', NOW(6))", "trg_linea_saldo_inicial_lote_abierto"));
 
+	/** 1143 (columna sin GRANT) o 1142 (ningún UPDATE sobre la tabla, por ejemplo antes de aplicar el paso 2). */
 	private static SentenciaProhibida columna(String sql, String tabla) {
-		return new SentenciaProhibida(sql, Set.of(MYSQL_COLUMNA_DENEGADA),
+		return new SentenciaProhibida(sql, Set.of(MYSQL_COLUMNA_DENEGADA, MYSQL_COMANDO_DENEGADO),
 				"las columnas inmutables de " + tabla + " se podrían cambiar por SQL (falta el GRANT por columna).");
 	}
 
@@ -86,8 +87,13 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 				"los registros de " + tabla + " se podrían borrar.");
 	}
 
+	/**
+	 * 1644 (el trigger lo rechazó) o 1142 (la aplicación no puede insertar en esa tabla, así que tampoco puede saltarse
+	 * el trigger; pasa en la fase 1 del despliegue, antes de los GRANT del paso 2). Cualquier otro código (la FK o un
+	 * CHECK, que llegan después del trigger) significa que falta el trigger.
+	 */
 	private static SentenciaProhibida trigger(String sql, String nombre) {
-		return new SentenciaProhibida(sql, Set.of(MYSQL_SIGNAL), "falta el trigger " + nombre
+		return new SentenciaProhibida(sql, Set.of(MYSQL_SIGNAL, MYSQL_COMANDO_DENEGADO), "falta el trigger " + nombre
 				+ " (aplica scripts/mysql/03-triggers.sql con cc_migrador).");
 	}
 

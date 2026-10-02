@@ -253,7 +253,7 @@ cuentasclaras:
 - **`service.ServicioCuenta.cambiarClave(...)`:** audita `CLAVE_CAMBIADA` sin ningún valor de la clave.
 - **`service.ServicioUsuarios`** (`@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")`):
   - métodos: `crear`, `cambiarRoles`, `desactivar`, `reactivar`, `restablecerClave`, `desbloquear`, `listar`, `obtener`;
-  - DIRECTOR no toca usuarios con PROMOTOR o DIRECTOR ni asigna esos roles;
+  - DIRECTOR no toca usuarios con PROMOTOR o DIRECTOR ni asigna esos roles; desde el sprint 2 (auditoría A5) tampoco crea usuarios de ADMINISTRACION o CAJA, ni les cambia los roles o la clave (sí los desactiva, reactiva o desbloquea);
   - nadie se modifica a sí mismo;
   - no se puede desactivar al último PROMOTOR activo;
   - aplica la segregación de roles;
@@ -358,7 +358,7 @@ Imports:
 | `/login`, `/error`, `/css/**`, `/actuator/health` | Público | 1 | todos | | | | | |
 | `/cuenta/cambiar-clave` | Mi contraseña | 1 | cualquier usuario autenticado | | | | | |
 | `/`, `/inicio` | Inicio por rol | 1 | X | X | X | X | X | X |
-| `/usuarios/**` | Usuarios y roles | 1 | X | X (sin tocar PROM ni DIR) | | | | |
+| `/usuarios/**` | Usuarios y roles | 1 | X | X (sin tocar PROM ni DIR; sin crear ni cambiar roles o clave de ADM y CAJA: auditoría A5 del sprint 2) | | | | |
 | `/auditoria/**` | Bitácora (verificar integridad: solo PROM) | 1 | X | X | | | | |
 | `/colegio/**` | Año, niveles, grados, secciones | 2 | X | X | X | | | |
 | `/alumnos/**` | Alumnos, apoderados, importación | 2 | X | X | X | | | |

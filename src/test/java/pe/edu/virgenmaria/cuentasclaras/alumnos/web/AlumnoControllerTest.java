@@ -16,6 +16,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.Estructura;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.LimpiezaBaseDatos;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PruebaIntegracion;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.OtraPersona;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 
@@ -157,13 +158,25 @@ class AlumnoControllerTest {
 		Long juan = jdbc.queryForObject("SELECT id FROM apoderado WHERE numero_documento = '40112233'", Long.class);
 		mvc.perform(post(ficha + "/responsable").with(admin()).with(csrf()).param("apoderadoId", juan.toString())
 						.param("motivo", "La madre viajó; paga el padre desde octubre"))
-				.andExpect(flash().attributeExists("exito"));
+				.andExpect(flash().attribute("exito", containsString("se pidió el cambio de responsable de pago")));
+		Long rosa = jdbc.queryForObject("SELECT id FROM apoderado WHERE numero_documento = ?", Long.class,
+				EscenarioEscolar.DNI_ROSA);
+		// Auditoría A4: hasta que otra persona lo apruebe, se sigue cobrando a Rosa.
+		assertThat(jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class, mateo))
+				.isEqualTo(rosa);
+		mvc.perform(get(ficha).with(admin()))
+				.andExpect(content().string(containsString("Esperando aprobación")))
+				.andExpect(content().string(containsString("Cambio de responsable de pago")));
+		aprobarComoOtraPersona();
 		assertThat(jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class, mateo))
 				.isEqualTo(juan);
 
 		mvc.perform(post(ficha + "/retirar").with(admin()).with(csrf()).param("fecha", "2026-10-01")
 						.param("motivo", "Se mudó a Arequipa con su familia"))
-				.andExpect(flash().attribute("exito", "Listo: el alumno quedó retirado. Su historia se conserva."));
+				.andExpect(flash().attribute("exito", containsString("se pidió el retiro")));
+		assertThat(jdbc.queryForObject("SELECT estado FROM alumno WHERE id = ?", String.class, mateo))
+				.isEqualTo("ACTIVO");
+		aprobarComoOtraPersona();
 		mvc.perform(get(ficha).with(admin()))
 				.andExpect(content().string(containsString("Retirado el 01/10/2026")))
 				.andExpect(content().string(not(containsString("Cambiar responsable de pago"))));
@@ -193,7 +206,11 @@ class AlumnoControllerTest {
 						.param("numeroDocumento", "45678912").param("apellidoPaterno", "Huamán")
 						.param("apellidoMaterno", "Ccori").param("nombres", "Rosa").param("parentesco", "MADRE")
 						.param("telefonoWhatsapp", "999888777").param("correo", "").param("motivo", "Cambió de número"))
-				.andExpect(status().is3xxRedirection());
+				.andExpect(status().is3xxRedirection())
+				.andExpect(flash().attribute("exito", containsString("quedó pedido")));
+		assertThat(jdbc.queryForObject("SELECT telefono_whatsapp FROM apoderado WHERE id = ?", String.class, rosa))
+				.isEqualTo("+51987654321");
+		aprobarComoOtraPersona();
 		assertThat(jdbc.queryForMap("SELECT telefono_whatsapp, correo FROM apoderado WHERE id = ?", rosa))
 				.containsEntry("telefono_whatsapp", "+51999888777").containsEntry("correo", null);
 		assertThat(jdbc.queryForObject("SELECT nombres FROM alumno", String.class)).isEqualTo("Mateo Alonso");
@@ -230,6 +247,15 @@ class AlumnoControllerTest {
 		String ruta = resultado.getResponse().getRedirectedUrl();
 		assertThat(ruta).matches("/alumnos/\\d+");
 		return ruta;
+	}
+
+	/** Otra persona aprueba en /aprobaciones todas las solicitudes pendientes. */
+	private void aprobarComoOtraPersona() throws Exception {
+		for (Long id : jdbc.queryForList("SELECT id FROM solicitud_cambio WHERE estado = 'PENDIENTE'", Long.class)) {
+			mvc.perform(post("/aprobaciones/" + id + "/aprobar").with(UsuariosDePrueba.como(OtraPersona.APROBADOR))
+							.with(csrf()))
+					.andExpect(flash().attribute("exito", "Listo: aprobaste la solicitud y el cambio se aplicó."));
+		}
 	}
 
 	private static org.springframework.test.web.servlet.request.RequestPostProcessor admin() {

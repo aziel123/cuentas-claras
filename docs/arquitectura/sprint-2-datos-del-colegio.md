@@ -847,16 +847,18 @@ cuentasclaras:
 | `GET /alumnos?q=&anio=&seccion=&estado=&pagina=` | Buscar por nombre o DNI | X | X | X |
 | `GET /alumnos/{id}`, `/alumnos/{id}/cronograma`, `/alumnos/familias/{id}` | Fichas | X | X | X |
 | `GET/POST /alumnos/nuevo`, `/alumnos/{id}/editar`, `POST /alumnos/{id}/matricula`, `/alumnos/matriculas/{id}/seccion` | Registrar, editar, matricular, cambiar sección | | X | X |
-| `POST /alumnos/{id}/responsable`, `/alumnos/{id}/retirar` | Cambiar responsable de pago o retirar (motivo, resaltado) | | X | X |
+| `POST /alumnos/{id}/responsable`, `/alumnos/{id}/retirar` | Pedir cambio de responsable de pago o retiro (solicitud; correcciones A4 y A6) | | X | X |
 | `POST /alumnos/familias/{id}/apoderados`, `/alumnos/apoderados/{id}`, `/alumnos/apoderados/{id}/desactivar` | Apoderados | | X | X |
 | `GET /alumnos/importar`, `/alumnos/importar/plantilla`, `POST /alumnos/importar`, `GET /alumnos/importar/revision`, `POST /alumnos/importar/confirmar`, `POST /alumnos/importar/cancelar`, `GET /alumnos/importaciones` | Asistente de importación | | X | X |
 | `GET /pensiones?anio=`, `/pensiones/planes/{id}` | Ver planes | X | X | X |
 | `GET/POST /pensiones/planes/nuevo`, `POST /pensiones/planes/{id}`, `/pensiones/planes/{id}/nueva-version`, `/pensiones/planes/{id}/descartar` | Proponer o editar borrador | | | X |
-| `POST /pensiones/planes/{id}/aprobar` | Aprobar (distinto de quien creó o editó) | X | X | |
+| `POST /pensiones/planes/{id}/enviar` | Enviar a aprobación (queda bloqueado; corrección A1) | | | X |
+| `POST /pensiones/planes/{id}/aprobar`, `.../{id}/devolver` | Aprobar o devolver con la versión vista (distinto de todos los editores y de quien envió) | X | X | |
 | `GET /pensiones/cronogramas?anio=`, `POST /pensiones/cronogramas/generar` | Pendientes y regeneración idempotente | X (ver) | X | X |
 | `GET /pensiones/saldo-inicial`, `/pensiones/saldo-inicial/{id}` | Ver lotes | X | X | X |
 | `POST /pensiones/saldo-inicial`, `.../{id}/lineas`, `.../{id}/lineas/{lineaId}/quitar`, `.../{id}/enviar`, `.../{id}/descartar` | Armar y enviar lote | | | X |
-| `POST /pensiones/saldo-inicial/{id}/confirmar`, `.../{id}/devolver` | Doble control | X | X | |
+| `POST /pensiones/saldo-inicial/{id}/confirmar`, `.../{id}/devolver` | Doble control (total a ciegas y versión vista) | X | X | |
+| `GET /aprobaciones`, `POST /aprobaciones/{id}/aprobar`, `/aprobaciones/{id}/rechazar` | Bandeja de solicitudes (quien pide no aprueba; correcciones del sprint 2) | X | X | |
 
 CAJA, DOCENTE y APODERADO reciben 403 en todo lo anterior (en el sprint 3, Caja verá cuotas desde `/caja`).
 
@@ -870,10 +872,10 @@ CAJA, DOCENTE y APODERADO reciben 403 en todo lo anterior (en el sprint 3, Caja 
 
 | Dato | PROM | DIR | ADM | CAJA (s3) | DOC (H4) | APOD (s4) |
 |---|---|---|---|---|---|---|
-| Ficha completa, familia y contactos | X | X | X | | | solo su familia |
+| Ficha completa, familia y contactos | enmascarados (B1) | X | X | | | solo su familia |
 | Nombre, grado y documento para buscar | X | X | X | X | sus secciones, sin documento | solo su familia |
 | Cuotas y saldos | X | X | X | X | **nunca** (INDECOPI) | solo su familia |
-| Teléfono y correo del responsable | X | X | X | enmascarado | | el suyo |
+| Teléfono y correo del responsable | enmascarado (B1) | X | X | enmascarado | | el suyo |
 
 **Otras reglas:**
 - **Bitácora:** documento, teléfono y correo enmascarados; de la fecha de nacimiento, solo el año. Los nombres completos sí van, porque se necesitan para la rendición de cuentas.

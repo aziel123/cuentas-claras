@@ -47,7 +47,8 @@ public enum ModuloApp {
 			false, "/caja", new String[] { "/caja", "/caja/**" }, EnumSet.of(CAJA)),
 	DESCUENTOS("Descuentos y becas", "Solicita descuentos y becas para que Dirección los apruebe.", "Sprint 3", false,
 			"/descuentos", new String[] { "/descuentos", "/descuentos/**" }, EnumSet.of(ADMINISTRACION)),
-	APROBACIONES("Aprobaciones", "Aprueba o rechaza anulaciones, descuentos y cierres de caja.", "Sprint 3", false,
+	APROBACIONES("Aprobaciones", "Aprueba o rechaza retiros, cambios de contacto, ingresos tardíos y anulaciones.",
+			"Sprint 2", true,
 			"/aprobaciones", new String[] { "/aprobaciones", "/aprobaciones/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
 
 	FAMILIA("Mi familia", "Revisa lo que debes, paga desde el celular y descarga tus boletas.", "Sprint 4", false,

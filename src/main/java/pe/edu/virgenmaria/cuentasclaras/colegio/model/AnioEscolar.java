@@ -89,9 +89,17 @@ public class AnioEscolar extends BaseEntity {
 		vigente = null;
 	}
 
-	/** Fecha de matrícula si no se indica otra: hoy, salvo que las clases aún no empiecen (entonces, el inicio). */
-	public LocalDate fechaMatriculaPorDefecto(LocalDate hoy) {
-		return hoy.isBefore(inicioClases) ? hoy : inicioClases;
+	/**
+	 * Fecha de matrícula si no se indica otra: el inicio de clases (cronograma completo). Una fecha posterior (ingreso
+	 * tardío) recorta pensiones y necesita la aprobación de otra persona (auditoría antifraude, A3).
+	 */
+	public LocalDate fechaMatriculaPorDefecto() {
+		return inicioClases;
+	}
+
+	/** {@code true} si la fecha es posterior al inicio de clases: un ingreso tardío. */
+	public boolean ingresoTardio(LocalDate fecha) {
+		return fecha != null && fecha.isAfter(inicioClases);
 	}
 
 	/** Rango aceptado para una fecha de matrícula: del 01/07 del año anterior al fin de clases. */

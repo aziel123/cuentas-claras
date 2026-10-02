@@ -8,6 +8,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.OtraPersona;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.AlumnoResumen;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.BusquedaAlumnos;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.RetirarAlumnoRequest;
@@ -29,6 +31,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @PruebaIntegracion
 @Import(ConfiguracionRelojAjustable.class)
 class BusquedaAlumnosTest {
+
+	@Autowired
+	private BandejaAprobaciones bandeja;
 
 	@Autowired
 	private ServicioAlumnos alumnos;
@@ -121,6 +126,7 @@ class BusquedaAlumnosTest {
 	void filtraPorAnioSeccionYEstado() {
 		Long sebastian = jdbc.queryForObject("SELECT id FROM alumno WHERE numero_documento = '75330981'", Long.class);
 		alumnos.retirar(sebastian, new RetirarAlumnoRequest(LocalDate.of(2026, 9, 30), "Cambio de colegio por mudanza"));
+		OtraPersona.apruebaLoPendiente(bandeja, jdbc);
 
 		assertThat(nombres(new BusquedaAlumnos(null, escuela.anio2026(), null, null)))
 				.containsExactly("Mateo Quispe Huamán", "Valeria Quispe Huamán");

@@ -13,15 +13,19 @@ import java.util.List;
  * @param seccionId          sección del año donde se matricula
  * @param actualizarAlumno   corrige nombres o fecha de nacimiento
  * @param actualizarApoderado corrige los datos del apoderado (solo en la primera fila de ese apoderado)
- * @param cambiarResponsable el responsable de pago pasa a ser este apoderado (de la misma familia)
  * @param matricular         se crea la matrícula del año
  */
 public record FilaPlan(FilaImportacion fila, Clasificacion clasificacion, List<CambioFila> cambios,
 		List<ErrorFila> errores, Long alumnoId, Long apoderadoId, Long seccionId, boolean actualizarAlumno,
-		boolean actualizarApoderado, boolean cambiarResponsable, boolean matricular) implements Serializable {
+		boolean actualizarApoderado, boolean matricular) implements Serializable {
 
 	@Serial
-	private static final long serialVersionUID = 1L;
+	private static final long serialVersionUID = 2L;
+
+	/** Cambios que se mostrarán pero no se aplicarán (requieren solicitud). */
+	public boolean conCambiosPorSolicitar() {
+		return cambios.stream().anyMatch(CambioFila::requiereSolicitud);
+	}
 
 	public boolean conErrores() {
 		return !errores.isEmpty();

@@ -3,6 +3,7 @@ package pe.edu.virgenmaria.cuentasclaras.alumnos.service;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.ApoderadoCorregido;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.ApoderadoDetalle;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.ApoderadoRequest;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.FichaFamilia;
@@ -56,10 +57,11 @@ public class ServicioFamilias {
 	public FichaFamilia obtener(Long id) {
 		Familia familia = buscarFamilia(id);
 		List<Alumno> deLaFamilia = alumnos.findByFamiliaIdOrderByFechaNacimientoAsc(id);
+		List<Apoderado> suyos = apoderados.findByFamiliaIdOrderByApellidoPaternoAsc(id);
 		return new FichaFamilia(familia.getId(), familia.getNombre(),
-				apoderados.findByFamiliaIdOrderByApellidoPaternoAsc(id).stream()
-						.map(a -> VistasAlumnos.apoderado(a, deLaFamilia)).toList(),
-				deLaFamilia.stream().map(vistas::hermano).toList());
+				suyos.stream().map(a -> VistasAlumnos.apoderado(a, deLaFamilia)).toList(),
+				deLaFamilia.stream().map(vistas::hermano).toList(),
+				vistas.pendientes("apoderado", suyos.stream().map(Apoderado::getId).toList()));
 	}
 
 	@PreAuthorize("hasAnyRole('DIRECTOR','ADMINISTRACION')")
@@ -79,19 +81,24 @@ public class ServicioFamilias {
 		return registro.registrarApoderado(familia, datos(solicitud)).getId();
 	}
 
-	/** @return id de la familia del apoderado */
+	/**
+	 * Corrige nombres, documento y parentesco al momento; el celular o el correo quedan como solicitud que aprueba
+	 * otra persona (auditoría A4).
+	 */
 	@PreAuthorize("hasAnyRole('DIRECTOR','ADMINISTRACION')")
 	@Transactional
-	public Long actualizarApoderado(Long apoderadoId, ApoderadoRequest solicitud) {
+	public ApoderadoCorregido actualizarApoderado(Long apoderadoId, ApoderadoRequest solicitud) {
 		Apoderado apoderado = buscarApoderado(apoderadoId);
 		String motivo = Motivo.exigir(solicitud.motivo());
 		if (!apoderado.isActivo()) {
 			throw new ReglaNegocioException(apoderado.nombreCompleto() + " está desactivado: no se corrigen sus datos.");
 		}
-		if (!registro.actualizarApoderado(apoderado, datos(solicitud), motivo)) {
+		CorreccionApoderado correccion = registro.actualizarApoderado(apoderado, datos(solicitud), motivo);
+		if (correccion.sinCambios()) {
 			throw new ReglaNegocioException("No cambiaste ningún dato.");
 		}
-		return apoderado.getFamilia().getId();
+		return new ApoderadoCorregido(apoderado.getFamilia().getId(), correccion.datosCorregidos(),
+				correccion.contactoSolicitado());
 	}
 
 	/** @return id de la familia del apoderado */

@@ -31,8 +31,15 @@ public record VistaPreviaImportacion(UUID token, Long colegioId, Long usuarioId,
 		return plan.filas().stream().flatMap(f -> f.errores().stream()).toList();
 	}
 
+	/** Filas que cambian algo ya registrado, también las que solo traen cambios que requieren solicitud. */
 	public List<FilaPlan> conCambios() {
-		return plan.filas().stream().filter(f -> f.clasificacion() == Clasificacion.ACTUALIZA).toList();
+		return plan.filas().stream().filter(f -> !f.conErrores() && f.clasificacion() != Clasificacion.NUEVO
+				&& !f.cambios().isEmpty()).toList();
+	}
+
+	/** {@code true} si hay cambios de contacto o de responsable que la importación no aplicará. */
+	public boolean conCambiosPorSolicitar() {
+		return plan.filas().stream().anyMatch(FilaPlan::conCambiosPorSolicitar);
 	}
 
 	public List<FilaPlan> nuevos() {

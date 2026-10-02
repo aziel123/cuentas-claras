@@ -8,6 +8,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.OtraPersona;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.CambiarSeccionRequest;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.MatricularRequest;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.dto.RetirarAlumnoRequest;
@@ -66,6 +68,9 @@ import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.ult
 @PruebaIntegracion
 @Import(ConfiguracionRelojAjustable.class)
 class GeneradorCronogramaTest {
+
+	@Autowired
+	private BandejaAprobaciones bandeja;
 
 	@Autowired
 	private GeneradorCronograma generador;
@@ -337,6 +342,7 @@ class GeneradorCronogramaTest {
 	void alumnoRetiradoNoRecibeCuotas() {
 		Long mateo = alumnos.registrar(EscenarioEscolar.mateoConRosa(escuela.primaria6A2027())).alumnoId();
 		alumnos.retirar(mateo, new RetirarAlumnoRequest(LocalDate.of(2026, 10, 1), MOTIVO));
+		OtraPersona.apruebaLoPendiente(bandeja, jdbc);
 
 		ResultadoGeneracion resultado = planAprobado2027(Nivel.PRIMARIA, "450");
 

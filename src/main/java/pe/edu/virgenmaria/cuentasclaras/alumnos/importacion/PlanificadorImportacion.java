@@ -93,7 +93,7 @@ public class PlanificadorImportacion {
 					? planificarFila(fila, anio, seccionesDelAnio, alumnosPorDocumento, apoderadosPorDocumento,
 							matriculaPorAlumno, apoderadosRevisados)
 					: new FilaPlan(fila, Clasificacion.ERROR, List.of(), fila.errores(), null, null, null, false, false,
-							false, false);
+							false);
 			plan.add(filaPlan);
 			if (!filaPlan.conErrores()) {
 				String claveApoderado = clave(fila.apoderado().documento());
@@ -142,14 +142,13 @@ public class PlanificadorImportacion {
 			}
 			else if (apoderadosRevisados.add(claveApoderado)) {
 				List<CambioFila> deApoderado = cambiosApoderado(apoderado, fila.apoderado());
-				actualizarApoderado = !deApoderado.isEmpty();
+				actualizarApoderado = deApoderado.stream().anyMatch(c -> !c.requiereSolicitud());
 				cambios.addAll(deApoderado);
 			}
 		}
 
 		Alumno alumno = alumnosPorDocumento.get(clave(fila.alumno().documento()));
 		boolean actualizarAlumno = false;
-		boolean cambiarResponsable = false;
 		boolean matricular = alumno == null;
 		if (alumno != null) {
 			if (!alumno.activo()) {
@@ -168,9 +167,9 @@ public class PlanificadorImportacion {
 						+ "pago, corrígelo desde su ficha."));
 			}
 			else if (!apoderado.getId().equals(alumno.getResponsablePago().getId())) {
-				cambiarResponsable = true;
+				// Auditoría A4: la importación no cambia el responsable de pago; se pide desde la ficha.
 				cambios.add(new CambioFila("Responsable de pago de " + alumno.nombreCompleto(),
-						alumno.getResponsablePago().nombreCompleto(), apoderado.nombreCompleto()));
+						alumno.getResponsablePago().nombreCompleto(), apoderado.nombreCompleto(), true));
 			}
 			List<CambioFila> deAlumno = cambiosAlumno(alumno, fila.alumno());
 			actualizarAlumno = !deAlumno.isEmpty();
@@ -189,13 +188,14 @@ public class PlanificadorImportacion {
 
 		if (!errores.isEmpty()) {
 			return new FilaPlan(fila, Clasificacion.ERROR, List.of(), List.copyOf(errores), null, null, null, false,
-					false, false, false);
+					false, false);
 		}
+		boolean aplicaAlgo = cambios.stream().anyMatch(c -> !c.requiereSolicitud());
 		Clasificacion clasificacion = alumno == null ? Clasificacion.NUEVO
-				: cambios.isEmpty() ? Clasificacion.SIN_CAMBIOS : Clasificacion.ACTUALIZA;
+				: aplicaAlgo ? Clasificacion.ACTUALIZA : Clasificacion.SIN_CAMBIOS;
 		return new FilaPlan(fila, clasificacion, List.copyOf(cambios), List.of(), alumno == null ? null : alumno.getId(),
 				apoderado == null ? null : apoderado.getId(), seccion.getId(), actualizarAlumno, actualizarApoderado,
-				cambiarResponsable, matricular);
+				matricular);
 	}
 
 	private static List<CambioFila> cambiosAlumno(Alumno alumno, DatosAlumno datos) {
@@ -225,11 +225,11 @@ public class PlanificadorImportacion {
 		}
 		if (!Objects.equals(apoderado.getTelefonoWhatsapp(), datos.telefonoWhatsapp())) {
 			cambios.add(new CambioFila("Celular de " + antes, enmascararTelefono(apoderado.getTelefonoWhatsapp()),
-					enmascararTelefono(datos.telefonoWhatsapp())));
+					enmascararTelefono(datos.telefonoWhatsapp()), true));
 		}
 		if (!Objects.equals(apoderado.getCorreo(), datos.correo())) {
 			cambios.add(new CambioFila("Correo de " + antes, enmascararCorreo(apoderado.getCorreo()),
-					enmascararCorreo(datos.correo())));
+					enmascararCorreo(datos.correo()), true));
 		}
 		return cambios;
 	}
@@ -245,8 +245,7 @@ public class PlanificadorImportacion {
 						alumno == null ? "-" : alumno.getId() + ":" + alumno.getVersion(),
 						apoderado == null ? "-" : apoderado.getId() + ":" + apoderado.getVersion(),
 						matricula == null ? "-" : matricula.getId() + ":" + matricula.getVersion(), p.seccionId(),
-						p.cambios(), p.errores(), p.actualizarAlumno(), p.actualizarApoderado(),
-						p.cambiarResponsable(), p.matricular())
+						p.cambios(), p.errores(), p.actualizarAlumno(), p.actualizarApoderado(), p.matricular())
 				.map(String::valueOf).collect(Collectors.joining("|"));
 	}
 

@@ -80,6 +80,16 @@ class VerificadorPermisosBaseDatosTest {
 				.isInstanceOf(IllegalStateException.class).hasMessageContaining("solicitud_cambio se podrían borrar");
 	}
 
+	/** Fase 1 del despliegue (antes de 02 y 03): cc_app solo tiene SELECT. No puede saltarse nada: arranca. */
+	@Test
+	void arrancaSiLaAppSoloPuedeLeer() {
+		JdbcTemplate mysql = org.mockito.Mockito.mock(JdbcTemplate.class);
+		doThrow(denegado(1142)).when(mysql).update(org.mockito.ArgumentMatchers.anyString());
+
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.doesNotThrowAnyException();
+	}
+
 	@Test
 	void arrancaSiMysqlDeniegaElMontoDeLaCuotaSinNingunUpdateCon1142() {
 		JdbcTemplate mysql = mysqlQueDeniega();

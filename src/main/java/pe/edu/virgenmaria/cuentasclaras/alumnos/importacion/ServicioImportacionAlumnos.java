@@ -35,7 +35,9 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -57,6 +59,12 @@ public class ServicioImportacionAlumnos {
 	private static final Logger LOG = LoggerFactory.getLogger(ServicioImportacionAlumnos.class);
 
 	private static final int HISTORIAL = 50;
+
+	/**
+	 * Auditoría B3: una sola importación en proceso (lectura o confirmación) por usuario, para que nadie sature el
+	 * servidor subiendo archivos en paralelo. En memoria: con varias instancias, el límite es por instancia.
+	 */
+	private final Set<Long> enProceso = ConcurrentHashMap.newKeySet();
 
 	private final ValidadorArchivoXlsx validador;
 
@@ -118,6 +126,25 @@ public class ServicioImportacionAlumnos {
 	 */
 	@Transactional(readOnly = true)
 	public VistaPreviaImportacion previsualizar(Long anioId, String nombreArchivo, byte[] contenido, long tamanoReal) {
+		Long usuario = actor().usuarioId();
+		iniciar(usuario);
+		try {
+			return leerYPlanificar(anioId, nombreArchivo, contenido, tamanoReal);
+		}
+		finally {
+			enProceso.remove(usuario);
+		}
+	}
+
+	private void iniciar(Long usuario) {
+		if (!enProceso.add(usuario)) {
+			throw new ReglaNegocioException("Ya tienes una importación en proceso. Espera a que termine y vuelve a "
+					+ "intentarlo.");
+		}
+	}
+
+	private VistaPreviaImportacion leerYPlanificar(Long anioId, String nombreArchivo, byte[] contenido,
+			long tamanoReal) {
 		if (anioId == null) {
 			throw new ReglaNegocioException("Elige el año escolar al que pertenecen los alumnos.");
 		}
@@ -152,6 +179,17 @@ public class ServicioImportacionAlumnos {
 			throw new ReglaNegocioException("No hay una revisión pendiente. Sube el archivo otra vez.");
 		}
 		PrincipalConColegio actor = actor();
+		iniciar(actor.usuarioId());
+		try {
+			return confirmarRevision(previa, token, actor);
+		}
+		finally {
+			enProceso.remove(actor.usuarioId());
+		}
+	}
+
+	private ResultadoImportacion confirmarRevision(VistaPreviaImportacion previa, UUID token,
+			PrincipalConColegio actor) {
 		if (!previa.colegioId().equals(actor.colegioId()) || !previa.usuarioId().equals(actor.usuarioId())
 				|| token == null || !token.equals(previa.token())) {
 			throw new ReglaNegocioException("Esta revisión no es válida: es de otra sesión o ya se usó. Sube el "
@@ -196,7 +234,7 @@ public class ServicioImportacionAlumnos {
 	}
 
 	private void aplicar(PlanImportacion plan, AnioEscolar anio, String archivo) {
-		LocalDate fechaMatricula = anio.fechaMatriculaPorDefecto(LocalDate.now(reloj));
+		LocalDate fechaMatricula = anio.fechaMatriculaPorDefecto();
 		Map<Long, Seccion> seccionesPorId = secciones.findByAnioEscolarIdOrderByGradoAscNombreAsc(anio.getId()).stream()
 				.collect(Collectors.toMap(Seccion::getId, Function.identity()));
 		Map<String, Apoderado> apoderadosNuevos = new HashMap<>();
@@ -214,7 +252,9 @@ public class ServicioImportacionAlumnos {
 						return registro.registrarApoderado(familia, f.apoderado());
 					});
 			if (p.actualizarApoderado()) {
-				registro.actualizarApoderado(apoderado, f.apoderado(), motivo);
+				// Auditoría A4: el contacto de un apoderado ya registrado no cambia por importación (va por solicitud).
+				registro.actualizarApoderado(apoderado,
+						f.apoderado().conContacto(apoderado.getTelefonoWhatsapp(), apoderado.getCorreo()), motivo);
 			}
 			Alumno alumno;
 			if (p.alumnoId() == null) {
@@ -224,9 +264,6 @@ public class ServicioImportacionAlumnos {
 				alumno = alumnos.findById(p.alumnoId()).orElseThrow();
 				if (p.actualizarAlumno()) {
 					registro.actualizarAlumno(alumno, f.alumno(), motivo);
-				}
-				if (p.cambiarResponsable()) {
-					registro.cambiarResponsable(alumno, apoderado, motivo);
 				}
 			}
 			if (p.matricular()) {

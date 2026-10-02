@@ -196,7 +196,7 @@ public class DatosDemoColegioDev implements ApplicationRunner {
 			Alumno alumno = registro.registrarAlumno(new DatosAlumno(new DocumentoIdentidad(TipoDocumento.DNI, al.dni()),
 					al.paterno(), al.materno(), al.nombres(), al.nacimiento()), apoderado);
 			Seccion seccion = seccionesDelAnio.get(al.grado()).get(al.seccion());
-			registro.matricular(alumno, seccion, seccion.getAnioEscolar().fechaMatriculaPorDefecto(LocalDate.now(reloj)));
+			registro.matricular(alumno, seccion, seccion.getAnioEscolar().fechaMatriculaPorDefecto());
 		}
 	}
 }

@@ -49,6 +49,7 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Enmascarar;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador;
 
@@ -150,7 +151,7 @@ public class ServicioAlumnos {
 						.filter(Matricula::activa)
 						.collect(Collectors.toMap(m -> m.getAlumno().getId(), Function.identity(), (a, b) -> a));
 		Integer anio = anioMostrado == null ? null : anioMostrado.getAnio();
-		return encontrados.map(a -> new AlumnoResumen(a.getId(), a.nombreCompleto(), a.getDocumento().texto(), anio,
+		return encontrados.map(a -> new AlumnoResumen(a.getId(), a.nombreCompleto(), VistasAlumnos.documento(a.getDocumento()), anio,
 				delAnio.containsKey(a.getId()) ? delAnio.get(a.getId()).getSeccion().etiqueta() : null, a.getEstado(),
 				a.getEstado().etiqueta()));
 	}
@@ -190,12 +191,14 @@ public class ServicioAlumnos {
 				? abiertas.stream().filter(s -> !aniosConMatricula.contains(s.anioId())).toList()
 				: List.of();
 
+		boolean enmascarar = VistasAlumnos.enmascararDatosPersonales();
 		return new FichaAlumno(cabecera(alumno), alumno.getDocumento().tipo().etiqueta(),
-				alumno.getDocumento().numero(), alumno.getApellidoPaterno(), alumno.getApellidoMaterno(),
+				enmascarar ? Enmascarar.documento(null, alumno.getDocumento().numero()) : alumno.getDocumento().numero(), alumno.getApellidoPaterno(), alumno.getApellidoMaterno(),
 				alumno.getNombres(), alumno.getFechaNacimiento(),
 				Period.between(alumno.getFechaNacimiento(), hoy).getYears(), responsable, otros, otrosHermanos,
 				matriculasVista, alumno.getRetiradoEn(), alumno.getRetiradoPor(), alumno.getMotivoRetiro(),
-				paraMatricular);
+				paraMatricular, java.util.stream.Stream.concat(vistas.pendientes("alumno", List.of(alumno.getId())).stream(),
+						vistas.pendientes("matricula", suyas.stream().map(Matricula::getId).toList()).stream()).toList());
 	}
 
 	/** Listas del formulario de alumno nuevo (solo quien puede registrar). */
@@ -262,9 +265,7 @@ public class ServicioAlumnos {
 
 		String advertencia = null;
 		if (seccion != null) {
-			LocalDate fecha = solicitud.fechaMatricula() != null ? solicitud.fechaMatricula()
-					: seccion.getAnioEscolar().fechaMatriculaPorDefecto(hoy);
-			registro.matricular(alumno, seccion, fecha);
+			registro.matricular(alumno, seccion, solicitud.fechaMatricula());
 			advertencia = ReglasDatosPersonales.advertenciaEdad(datos.fechaNacimiento(), seccion.getGrado(),
 					anioReferencia).orElse(null);
 		}
@@ -295,8 +296,8 @@ public class ServicioAlumnos {
 	}
 
 	/**
-	 * Cambia el responsable de pago por otro apoderado activo. Si es de otra familia, el alumno pasa a esa familia.
-	 * Queda RESALTADO en la bitácora: decide a quién se cobra y quién recibe los avisos de pago.
+	 * Pide cambiar el responsable de pago por otro apoderado activo (auditoría A4): lo aprueba otra persona de
+	 * Promotoría o Dirección. Si es de otra familia, al aprobarse el alumno pasa a esa familia.
 	 */
 	@PreAuthorize("hasAnyRole('DIRECTOR','ADMINISTRACION')")
 	@Transactional
@@ -309,34 +310,19 @@ public class ServicioAlumnos {
 		}
 		Apoderado nuevo = apoderadoExistente(solicitud.apoderadoId(), solicitud.documentoApoderado(),
 				"documentoApoderado");
-		registro.cambiarResponsable(alumno, nuevo, motivo);
+		registro.solicitarCambioResponsable(alumno, nuevo, motivo);
 	}
 
-	/** Retira al alumno y sus matrículas activas. Queda resaltado en la bitácora. */
+	/**
+	 * Pide el retiro del alumno (auditoría A6): lo aprueba otra persona de Promotoría o Dirección. La fecha no es
+	 * futura ni anterior a su matrícula.
+	 */
 	@PreAuthorize("hasAnyRole('DIRECTOR','ADMINISTRACION')")
 	@Transactional
 	public void retirar(Long alumnoId, RetirarAlumnoRequest solicitud) {
 		Alumno alumno = buscarAlumno(alumnoId);
 		String motivo = Motivo.exigir(solicitud.motivo());
-		LocalDate fecha = solicitud.fecha();
-		if (fecha == null) {
-			throw new ReglaNegocioException("Elige la fecha de retiro.");
-		}
-		if (fecha.isAfter(LocalDate.now(reloj))) {
-			throw new ReglaNegocioException("La fecha de retiro no puede ser futura.");
-		}
-		alumno.retirar(fecha, usuarioActual(), motivo);
-		List<String> retiradas = new java.util.ArrayList<>();
-		for (Matricula m : matriculas.findByAlumnoIdOrderByAnioEscolarAnioDesc(alumnoId)) {
-			if (m.activa()) {
-				m.retirar(fecha);
-				retiradas.add(m.getSeccion().etiqueta() + " " + m.getAnioEscolar().getAnio());
-			}
-		}
-		auditoria.registrar(AccionAuditoria.ALUMNO_RETIRADO, "alumno", alumnoId.toString(), "activo",
-				"retirado el " + Calendario.formatear(fecha), "Alumno " + alumno.nombreCompleto() + "."
-						+ (retiradas.isEmpty() ? "" : " Matrículas retiradas: " + String.join(", ", retiradas) + ".")
-						+ " Motivo: " + motivo);
+		registro.solicitarRetiro(alumno, solicitud.fecha(), motivo);
 	}
 
 	/** Datos del alumno validados. Los nombres de campo son los del formulario. */
@@ -409,7 +395,7 @@ public class ServicioAlumnos {
 	}
 
 	private CabeceraAlumno cabecera(Alumno alumno) {
-		return new CabeceraAlumno(alumno.getId(), alumno.nombreCompleto(), alumno.getDocumento().texto(),
+		return new CabeceraAlumno(alumno.getId(), alumno.nombreCompleto(), VistasAlumnos.documento(alumno.getDocumento()),
 				alumno.getEstado(), alumno.getEstado().etiqueta(), alumno.getFamilia().getId(),
 				alumno.getFamilia().getNombre(), vistas.seccionEnCurso(alumno));
 	}

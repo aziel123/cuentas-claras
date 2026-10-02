@@ -62,7 +62,7 @@ public class ServicioMatriculas {
 		this.reloj = reloj;
 	}
 
-	/** Sin fecha: hoy, o el inicio de clases si ya pasó. Devuelve un aviso si la edad no corresponde al grado. */
+	/** Sin fecha: el inicio de clases; una fecha posterior crea una solicitud de ingreso tardío. Devuelve un aviso si la edad no corresponde al grado. */
 	@Transactional
 	public MatriculaResultado matricular(Long alumnoId, MatricularRequest solicitud) {
 		Alumno alumno = alumnos.findById(alumnoId)
@@ -71,9 +71,8 @@ public class ServicioMatriculas {
 			throw new ReglaNegocioException("Elige la sección.");
 		}
 		Seccion seccion = buscarSeccion(solicitud.seccionId());
-		LocalDate fecha = solicitud.fecha() != null ? solicitud.fecha()
-				: seccion.getAnioEscolar().fechaMatriculaPorDefecto(LocalDate.now(reloj));
-		Matricula matricula = registro.matricular(alumno, seccion, fecha);
+		// Sin fecha: el inicio de clases. Una fecha posterior (ingreso tardío) queda como solicitud (auditoría A3).
+		Matricula matricula = registro.matricular(alumno, seccion, solicitud.fecha());
 		String advertencia = ReglasDatosPersonales.advertenciaEdad(alumno.getFechaNacimiento(), seccion.getGrado(),
 				seccion.getAnioEscolar().getAnio()).orElse(null);
 		return new MatriculaResultado(matricula.getId(), alumno.getId(), advertencia);

@@ -6,10 +6,12 @@ import org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException;
 import org.apache.poi.openxml4j.exceptions.OLE2NotOfficeXmlFileException;
 import org.apache.poi.openxml4j.exceptions.OpenXML4JException;
 import org.apache.poi.openxml4j.opc.OPCPackage;
+import org.apache.poi.openxml4j.opc.PackagePart;
 import org.apache.poi.openxml4j.util.ZipSecureFile;
 import org.apache.poi.util.XMLHelper;
 import org.apache.poi.xssf.eventusermodel.ReadOnlySharedStringsTable;
 import org.apache.poi.xssf.eventusermodel.XSSFReader;
+import org.apache.poi.xssf.usermodel.XSSFRelation;
 import org.springframework.stereotype.Component;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
@@ -49,7 +51,10 @@ public class LectorXlsxSeguro {
 
 	private static final int MAX_LARGO_CELDA = 1000;
 
+	private final int maxTextosCompartidos;
+
 	public LectorXlsxSeguro(PropiedadesExcel propiedades) {
+		this.maxTextosCompartidos = propiedades.maxTextosCompartidos();
 		configurarZipSeguro(propiedades);
 	}
 
@@ -70,6 +75,7 @@ public class LectorXlsxSeguro {
 		try (OPCPackage paquete = OPCPackage.open(new ByteArrayInputStream(contenido))) {
 			XSSFReader lector = new XSSFReader(paquete);
 			boolean fecha1904 = esFecha1904(lector);
+			exigirTextosCompartidos(paquete);
 			ReadOnlySharedStringsTable textos = new ReadOnlySharedStringsTable(paquete, false);
 			Iterator<InputStream> hojas = lector.getSheetsData();
 			while (hojas.hasNext()) {
@@ -89,6 +95,10 @@ public class LectorXlsxSeguro {
 		}
 		catch (ArchivoNoValidoException e) {
 			throw e;
+		}
+		catch (DemasiadosTextosException e) {
+			throw new ArchivoNoValidoException("El archivo tiene demasiados textos distintos (más de "
+					+ String.format("%,d", maxTextosCompartidos) + "). Usa la plantilla descargada y copia solo los datos.");
 		}
 		catch (DemasiadasFilasException e) {
 			throw new ArchivoNoValidoException("El archivo tiene más de " + String.format("%,d", maxFilas - 1)
@@ -130,6 +140,40 @@ public class LectorXlsxSeguro {
 	}
 
 	/** Se lanza desde el SAX para dejar de leer apenas se pasa el máximo de filas. */
+	/**
+	 * Auditoría B3: cuenta los textos compartidos ({@code <si>}) en streaming ANTES de cargarlos en memoria, y corta
+	 * al pasar el máximo.
+	 */
+	private void exigirTextosCompartidos(OPCPackage paquete) throws IOException, SAXException,
+			javax.xml.parsers.ParserConfigurationException {
+		for (PackagePart parte : paquete.getPartsByContentType(XSSFRelation.SHARED_STRINGS.getContentType())) {
+			try (InputStream datos = parte.getInputStream()) {
+				XMLReader xml = XMLHelper.newXMLReader();
+				xml.setContentHandler(new DefaultHandler() {
+
+					private int textos;
+
+					@Override
+					public void startElement(String uri, String local, String nombre, Attributes atributos)
+							throws SAXException {
+						if (("si".equals(local) || "si".equals(nombre) || nombre.endsWith(":si"))
+								&& ++textos > maxTextosCompartidos) {
+							throw new DemasiadosTextosException();
+						}
+					}
+				});
+				xml.parse(new InputSource(datos));
+			}
+		}
+	}
+
+	private static final class DemasiadosTextosException extends SAXException {
+
+		DemasiadosTextosException() {
+			super("demasiados textos compartidos");
+		}
+	}
+
 	private static final class DemasiadasFilasException extends SAXException {
 
 		DemasiadasFilasException() {

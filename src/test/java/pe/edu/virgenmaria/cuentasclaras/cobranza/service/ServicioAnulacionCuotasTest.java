@@ -38,8 +38,8 @@ import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.MOT
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.ultimoEvento;
 
 /**
- * Gancho de anulación (sprint 2): solo deja la solicitud pendiente. La cuota sigue vigente y se sigue debiendo; la
- * aprobación por otra persona la conecta Aprobaciones en el sprint 3.
+ * Anulación de cuotas: pedirla solo deja la solicitud pendiente (la cuota sigue vigente y se sigue debiendo). La
+ * aprobación por otra persona en la bandeja de Aprobaciones se prueba en {@code SolicitudesCobranzaTest}.
  */
 @PruebaIntegracion
 @Import(ConfiguracionRelojAjustable.class)
@@ -112,7 +112,7 @@ class ServicioAnulacionCuotasTest {
 	@Test
 	void elGanchoAnulaConAprobacionDeDireccion() {
 		anulaciones.solicitar(setiembre, MOTIVO);
-		// Lo que hará Aprobaciones en el sprint 3: otra persona aprueba la solicitud.
+		// Lo que hace el manejador de la bandeja: otra persona aprueba la solicitud.
 		new TransactionTemplate(transacciones).executeWithoutResult(estado -> {
 			var cuota = cuotas.findById(setiembre).orElseThrow();
 			cuota.anular(cuota.getAnulacionMotivo(), cuota.getAnulacionSolicitadaPor(), "director",

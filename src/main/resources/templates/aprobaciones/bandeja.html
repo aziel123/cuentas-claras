@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Aprobaciones', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" th:with="b=${bandeja}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Aprobaciones</p>
+			<h1>Solicitudes por aprobar</h1>
+			<p class="secundario">Cambios que una sola persona no puede hacer: retiros, celulares y correos de apoderados,
+				responsables de pago, ingresos tardíos y anulaciones. Quien los pide no los aprueba.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-pendientes">
+		<h2 id="titulo-pendientes" th:text="|Pendientes (${#lists.size(b.pendientes)})|">Pendientes</h2>
+		<th:block th:if="${#lists.isEmpty(b.pendientes)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('No hay solicitudes pendientes', 'Cuando alguien pida un cambio, aparecerá aquí.')}"></div>
+		</th:block>
+		<ul class="lista-tarjetas" th:unless="${#lists.isEmpty(b.pendientes)}">
+			<li th:each="s : ${b.pendientes}" class="persona" th:data-solicitud="${s.id}" th:data-tipo="${s.tipo}">
+				<p class="fila entre">
+					<strong th:text="${s.tipoEtiqueta}">Retiro de alumno</strong>
+					<span th:replace="~{fragments/componentes :: badge(${s.estadoEtiqueta}, ${s.estadoVariante})}"></span>
+				</p>
+				<p th:text="${s.resumen}">Retirar a Mateo Quispe Huamán desde el 01/10/2026</p>
+				<p class="secundario" th:text="|Motivo: ${s.motivo}|">Motivo</p>
+				<p class="secundario" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM/yyyy HH:mm')}|">Pedida por administracion</p>
+				<div class="fila" th:if="${s.puedeResolver}">
+					<form method="post" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}">
+						<button th:replace="~{fragments/componentes :: boton('Aprobar', 'primario')}"></button>
+					</form>
+					<th:block th:replace="~{fragments/componentes :: modalMotivo(|modal-rechazar-${s.id}|, '¿Rechazar la solicitud?',
+						'No se cambia nada. Quien la pidió verá tu motivo en la bitácora.',
+						@{/aprobaciones/{id}/rechazar(id=${s.id})}, 'Rechazar', 'secundario', 'Rechazar solicitud')}"></th:block>
+				</div>
+				<p class="secundario" th:unless="${s.puedeResolver}">La pediste tú (o preparaste esa cuenta): debe resolverla otra persona.</p>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-tardios">
+		<h2 id="titulo-tardios">Ingresos tardíos</h2>
+		<p class="secundario">Matrículas con fecha de ingreso posterior al inicio de clases: recortan pensiones. Revisa que cada
+			una tenga sustento.</p>
+		<th:block th:if="${#lists.isEmpty(b.ingresosTardios)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('No hay ingresos tardíos', 'Todas las matrículas cobran desde el inicio de clases.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(b.ingresosTardios)}">
+			<thead><tr><th scope="col">Ingreso</th><th scope="col">Pedida por</th><th scope="col">Estado</th><th scope="col">Resuelta por</th></tr></thead>
+			<tbody>
+				<tr th:each="s : ${b.ingresosTardios}">
+					<td data-etiqueta="Ingreso" th:text="${s.resumen}">Mateo desde el 15/06/2027</td>
+					<td data-etiqueta="Pedida por" th:text="${s.solicitadoPor}">administracion</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${s.estadoEtiqueta}, ${s.estadoVariante})}"></span></td>
+					<td data-etiqueta="Resuelta por" th:text="${s.resueltoPor != null} ? ${s.resueltoPor} : '—'">director</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-resueltas">
+		<h2 id="titulo-resueltas">Resueltas recientemente</h2>
+		<th:block th:if="${#lists.isEmpty(b.resueltas)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay solicitudes resueltas', 'Aquí verás las últimas 30.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(b.resueltas)}">
+			<thead><tr><th scope="col">Solicitud</th><th scope="col">Pedida por</th><th scope="col">Estado</th><th scope="col">Resuelta por</th></tr></thead>
+			<tbody>
+				<tr th:each="s : ${b.resueltas}">
+					<td data-etiqueta="Solicitud"><span th:text="|${s.tipoEtiqueta}: ${s.resumen}|">Retiro</span>
+						<small class="bloque secundario" th:if="${s.comentario != null}" th:text="${s.comentario}">Comentario</small></td>
+					<td data-etiqueta="Pedida por" th:text="${s.solicitadoPor}">administracion</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${s.estadoEtiqueta}, ${s.estadoVariante})}"></span></td>
+					<td data-etiqueta="Resuelta por" th:text="|${s.resueltoPor} · ${#temporals.format(s.resueltoEn, 'dd/MM HH:mm')}|">director</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

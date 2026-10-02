@@ -57,8 +57,12 @@
 	<section class="tarjeta" aria-labelledby="titulo-cambios" th:unless="${#lists.isEmpty(previa.conCambios())}">
 		<h2 id="titulo-cambios">Cambios sobre lo ya registrado</h2>
 		<p class="secundario">Documento, celular y correo se muestran ocultos en parte. Cada cambio quedará en la bitácora.</p>
+		<th:block th:if="${previa.conCambiosPorSolicitar()}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia',
+				'La importación no cambia el celular, el correo ni el responsable de pago de lo ya registrado. Pídelos desde la ficha: los aprueba otra persona de Promotoría o Dirección.')}"></div>
+		</th:block>
 		<table class="tabla">
-			<thead><tr><th scope="col">Fila</th><th scope="col">Qué cambia</th><th scope="col">Antes</th><th scope="col">Después</th></tr></thead>
+			<thead><tr><th scope="col">Fila</th><th scope="col">Qué cambia</th><th scope="col">Antes</th><th scope="col">Después</th><th scope="col">Se aplica</th></tr></thead>
 			<tbody>
 				<th:block th:each="p : ${previa.conCambios()}">
 					<tr th:each="c : ${p.cambios}">
@@ -66,6 +70,10 @@
 						<td data-etiqueta="Qué cambia" th:text="${c.campo}">Celular</td>
 						<td data-etiqueta="Antes" th:text="${c.antes}">+51 *** *** 321</td>
 						<td data-etiqueta="Después" th:text="${c.despues}">+51 *** *** 777</td>
+						<td data-etiqueta="Se aplica" th:data-requiere-solicitud="${c.requiereSolicitud}">
+							<th:block th:if="${c.requiereSolicitud}"><span th:replace="~{fragments/componentes :: badge('Requiere solicitud', 'alerta')}"></span></th:block>
+							<span th:unless="${c.requiereSolicitud}">Sí</span>
+						</td>
 					</tr>
 				</th:block>
 			</tbody>
