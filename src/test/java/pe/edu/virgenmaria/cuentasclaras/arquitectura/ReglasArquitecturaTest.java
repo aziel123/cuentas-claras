@@ -41,8 +41,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
  * Reglas de arquitectura que protegen las garantías del sprint 1 (multi-colegio y auditoría).
  * Analiza solo el código de producción.
  * <p>
- * TODO(sprint1-tanda2 y paso 10): completar con el resto de reglas del diseño a medida que
- * existan las clases (p. ej. retirar la excepción de {@code InicioController}).
+ * TODO(paso 10): completar con el resto de reglas del diseño a medida que existan las clases.
  */
 @AnalyzeClasses(packagesOf = CuentasClarasApplication.class, importOptions = ImportOption.DoNotIncludeTests.class)
 class ReglasArquitecturaTest {
@@ -57,9 +56,6 @@ class ReglasArquitecturaTest {
 
 	/** Única clase que puede usar JDBC directo: comprueba los permisos de MySQL (paso 9). */
 	private static final String VERIFICADOR_PERMISOS = BASE + ".auditoria.service.VerificadorPermisosBaseDatos";
-
-	/** TODO(sprint1-tanda2): el nuevo InicioController (paso 4) ya no lee repositorios; quitar esta excepción. */
-	private static final String INICIO_CONTROLLER_TEMPORAL = BASE + ".comun.web.InicioController";
 
 	/** Hibernate no filtra por colegio las consultas nativas: están prohibidas. */
 	@ArchTest
@@ -129,10 +125,9 @@ class ReglasArquitecturaTest {
 	@ArchTest
 	static final ArchRule controladoresNoDependenDeRepositorios = noClasses()
 			.that().areMetaAnnotatedWith(Controller.class)
-			.and().doNotHaveFullyQualifiedName(INICIO_CONTROLLER_TEMPORAL)
+			.or().areMetaAnnotatedWith(org.springframework.web.bind.annotation.ControllerAdvice.class)
 			.should().dependOnClassesThat().areAssignableTo(Repository.class)
-			.because("los controladores no tienen lógica: delegan en servicios")
-			.allowEmptyShould(true);
+			.because("los controladores no tienen lógica: delegan en servicios");
 
 	@ArchTest
 	static final ArchRule cobranzaNoDependeDeAcademico = noClasses()

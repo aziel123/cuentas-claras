@@ -2,11 +2,10 @@ package pe.edu.virgenmaria.cuentasclaras.comun.web;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ComoUsuario;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PruebaIntegracion;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
@@ -14,29 +13,33 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
 /**
- * Levanta la aplicación completa (Flyway + JPA + Thymeleaf + seguridad sobre H2) y verifica la
- * página de inicio.
- * <p>
- * TODO(sprint1-tanda2): con el login propio y el inicio por rol, cambiar {@code @WithMockUser}
- * por {@code @ComoUsuario} y verificar la vista {@code inicio/<rol>}.
+ * Página de inicio sobre la aplicación completa.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("test")
+@PruebaIntegracion
 class InicioControllerTest {
 
 	@Autowired
 	private MockMvc mockMvc;
 
 	@Test
-	@WithMockUser
-	void debeMostrarElNombreDelColegioCargadoPorLaMigracion() throws Exception {
-		mockMvc.perform(get("/"))
+	@ComoUsuario(roles = Rol.CAJA, nombreCompleto = "Lucía Ramos")
+	void laRaizLlevaAlInicio() throws Exception {
+		mockMvc.perform(get("/")).andExpect(redirectedUrl("/inicio"));
+	}
+
+	@Test
+	@ComoUsuario(roles = Rol.CAJA, nombreCompleto = "Lucía Ramos")
+	void elInicioMuestraElColegioYElUsuarioDesdeLaBase() throws Exception {
+		mockMvc.perform(get("/inicio"))
 				.andExpect(status().isOk())
+				.andExpect(view().name("inicio/caja"))
 				.andExpect(content().string(containsString("Colegio Virgen María")))
+				.andExpect(content().string(containsString("Hola, Lucía Ramos")))
 				.andExpect(content().string(containsString("/css/tokens.css")));
 	}
 
@@ -49,8 +52,7 @@ class InicioControllerTest {
 
 	@Test
 	void losEstilosSonPublicos() throws Exception {
-		mockMvc.perform(get("/css/tokens.css"))
-				.andExpect(status().isOk());
+		mockMvc.perform(get("/css/tokens.css")).andExpect(status().isOk());
 	}
 
 	@Test

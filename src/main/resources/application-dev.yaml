@@ -7,7 +7,17 @@ spring:
   thymeleaf:
     cache: false
 
+# En local se usa http: la cookie de sesión no puede exigir https.
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false
+
 cuentasclaras:
   auditoria:
     # Clave fija SOLO para desarrollo local. Producción usa AUDITORIA_CLAVE_HMAC.
     clave-hmac: clave-hmac-de-desarrollo-no-usar-en-produccion-01
+  demo:
+    # Clave de los usuarios de demostración (solo dev con H2 en memoria). Se puede cambiar con CC_DEMO_CLAVE.
+    clave: ${CC_DEMO_CLAVE:demo-cuentas-claras-2026}

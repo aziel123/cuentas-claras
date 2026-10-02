@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Inicio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-inicio="director">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Dirección</p>
+			<h1 th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</h1>
+			<p class="secundario">Aquí vas a aprobar anulaciones, descuentos y becas, y a revisar la bitácora de auditoría.</p>
+		</div>
+	</div>
+
+	<section class="tarjeta" aria-labelledby="titulo-modulos">
+		<h2 id="titulo-modulos">Lo que podrás hacer aquí</h2>
+		<p class="secundario">Estamos construyendo la plataforma por etapas. Cada módulo se activa cuando está listo.</p>
+		<div th:replace="~{fragments/componentes :: modulos(${menu})}"></div>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-controles">
+		<h2 id="titulo-controles">Cómo te cuida el sistema</h2>
+		<ul class="lista-controles">
+			<li>Caja no puede anular ni dar descuentos: te lo pide a ti y tú decides.</li>
+			<li>Cada aprobación o rechazo queda registrado con tu nombre y el motivo.</li>
+			<li>Puedes crear usuarios del personal, pero no cambiar a Promotoría ni a otra Dirección.</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-cuenta">
+		<h2 id="titulo-cuenta">Tu cuenta</h2>
+		<p class="secundario">Tu sesión se cierra sola tras 30 minutos sin actividad. Si ingresas desde otro equipo, se cierra la sesión anterior.</p>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Cambiar mi clave', @{/cuenta/cambiar-clave}, 'secundario')}"></a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

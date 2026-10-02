@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cambiar clave', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-clave">
+		<div>
+			<h1 id="titulo-clave">Cambia tu clave</h1>
+			<p class="secundario" th:if="${clavePendiente}">Ingresaste con una clave temporal. Para continuar, crea tu propia clave.</p>
+			<p class="secundario" th:unless="${clavePendiente}">Elige una clave que solo tú conozcas.</p>
+		</div>
+
+		<th:block th:if="${error != null}">
+			<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+		</th:block>
+
+		<form class="formulario" th:action="@{/cuenta/cambiar-clave}" th:object="${solicitud}" method="post">
+			<div th:replace="~{fragments/componentes :: campoClave('claveActual', 'Clave actual', null, 'current-password')}"></div>
+			<div th:replace="~{fragments/componentes :: campoClave('claveNueva', 'Nueva clave',
+				'Usa al menos 10 caracteres. Una frase es más segura y fácil de recordar, por ejemplo «mi gato duerme al sol».',
+				'new-password')}"></div>
+			<div th:replace="~{fragments/componentes :: campoClave('confirmacion', 'Repite la nueva clave', null, 'new-password')}"></div>
+			<button th:replace="~{fragments/componentes :: boton('Cambiar clave', 'primario')}"></button>
+		</form>
+
+		<p class="ayuda">Al cambiarla cerraremos tu sesión para que ingreses con tu nueva clave.</p>
+	</section>
+</main>
+</body>
+</html>

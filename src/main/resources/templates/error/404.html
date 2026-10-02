@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: publica('Página no encontrada', ~{::main})}">
+<body>
+<main id="contenido" class="contenido-publico">
+	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-error">
+		<h1 id="titulo-error">No encontramos esta página</h1>
+		<p class="secundario">Puede que el enlace esté incompleto o que la página ya no exista. Revisa la dirección o vuelve al inicio.</p>
+		<div class="fila">
+			<a class="btn btn-primario" th:href="@{/inicio}">Volver al inicio</a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

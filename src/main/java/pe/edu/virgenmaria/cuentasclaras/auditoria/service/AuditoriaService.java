@@ -74,6 +74,16 @@ public class AuditoriaService {
 		return guardado;
 	}
 
+	/**
+	 * Actor explícito con la IP de la petición actual (si la hay). Para eventos en los que el usuario
+	 * aún no está en el contexto de seguridad, como los intentos de ingreso o el cierre de sesión.
+	 */
+	@Transactional(propagation = Propagation.SUPPORTS)
+	public Actor actorPara(Long colegioId, Long usuarioId, String nombreUsuario, String roles) {
+		return new Actor(colegioId, usuarioId, nombreUsuario, roles == null || roles.isEmpty() ? null : roles,
+				ipActual());
+	}
+
 	/** Actor de la petición actual: usuario autenticado, {@code anonimo} o {@code sistema}. */
 	Actor actorActual() {
 		Long colegio = ContextoColegio.actual();

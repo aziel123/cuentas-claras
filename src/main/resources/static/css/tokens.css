@@ -31,6 +31,10 @@
 
   --radio: 8px;
   --sombra: 0 1px 3px rgb(15 23 42 / 0.08);
+  --sombra-alta: 0 12px 32px rgb(15 23 42 / 0.18);
+  --color-velo: rgb(15 23 42 / 0.45);   /* fondo detrás de un modal */
+  --ancho-max: 1180px;
+  --ancho-menu: 240px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -41,6 +45,7 @@
     --color-texto: #e6ecf5; --color-texto-secundario: #a9b6ca;
     --color-exito: #4ade80; --color-exito-suave: #0f2e1d; --color-alerta: #fbbf24; --color-alerta-suave: #33250a;
     --color-peligro: #f87171; --color-peligro-suave: #3a1515; --color-info: #38bdf8; --color-info-suave: #0c2a3e;
+    --sombra: 0 1px 3px rgb(0 0 0 / 0.4); --sombra-alta: 0 12px 32px rgb(0 0 0 / 0.5); --color-velo: rgb(0 0 0 / 0.6);
     color-scheme: dark;
   }
 }

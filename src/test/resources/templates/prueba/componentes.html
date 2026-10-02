@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<!--/* Plantilla solo de prueba: renderiza los componentes que aún no usa ninguna pantalla. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:replace="~{fragments/componentes :: modalConfirmacion('modal-anular', '¿Anular este pago?',
+	'El pago quedará anulado y el apoderado recibirá un aviso.', ${accion}, 'Anular pago', true)}"></div>
+<span th:replace="~{fragments/componentes :: badge('Pagado', 'exito')}"></span>
+<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay pagos hoy', 'Cuando registres un pago, aparecerá aquí.')}"></div>
+<div th:replace="~{fragments/componentes :: alerta('error', 'No se pudo guardar.')}"></div>
+<div th:replace="~{fragments/componentes :: alerta('exito', 'Listo.')}"></div>
+</body>
+</html>

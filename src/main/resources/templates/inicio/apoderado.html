@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Inicio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-inicio="apoderado">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Familia</p>
+			<h1 th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</h1>
+			<p class="secundario">Pronto vas a ver el estado de cuenta de tus hijos, pagar desde el celular y descargar tus boletas.</p>
+		</div>
+	</div>
+
+	<section class="tarjeta" aria-labelledby="titulo-modulos">
+		<h2 id="titulo-modulos">Lo que podrás hacer aquí</h2>
+		<p class="secundario">Estamos construyendo la plataforma por etapas. Cada módulo se activa cuando está listo.</p>
+		<div th:replace="~{fragments/componentes :: modulos(${menu})}"></div>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-controles">
+		<h2 id="titulo-controles">Cómo te cuida el sistema</h2>
+		<ul class="lista-controles">
+			<li>Cada pago que hagas te llega por aviso, con el monto y el número de boleta.</li>
+			<li>Si ves un cobro que no reconoces, avisa al colegio: tu estado de cuenta es la mejor forma de control.</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-cuenta">
+		<h2 id="titulo-cuenta">Tu cuenta</h2>
+		<p class="secundario">Tu sesión se cierra sola tras 30 minutos sin actividad. Si ingresas desde otro equipo, se cierra la sesión anterior.</p>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Cambiar mi clave', @{/cuenta/cambiar-clave}, 'secundario')}"></a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

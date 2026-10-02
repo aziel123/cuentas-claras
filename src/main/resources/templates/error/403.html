@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: publica('Sin permiso', ~{::main})}">
+<body>
+<main id="contenido" class="contenido-publico">
+	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-error">
+		<h1 id="titulo-error">No tienes permiso para ver esta página</h1>
+		<p class="secundario">Tu usuario no tiene acceso a esta sección. Si crees que deberías tenerlo, pide a Dirección que revise tus permisos.</p>
+		<div class="fila">
+			<a class="btn btn-primario" th:href="@{/inicio}">Volver al inicio</a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

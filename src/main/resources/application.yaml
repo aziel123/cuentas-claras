@@ -12,6 +12,11 @@ spring:
       hibernate:
         jdbc:
           time_zone: America/Lima
+        # Los LocalDateTime (hora de Lima, del reloj de la aplicación) se guardan TAL CUAL en las columnas
+        # DATETIME, sin convertir según la zona horaria de la JVM. Sin esto, con la JVM en UTC se guardaban
+        # 5 horas corridas y la cadena HMAC de auditoría dependía de la zona del servidor.
+        type:
+          java_time_use_direct_jdbc: true
         # Multi-colegio (@TenantId). Se registra por NOMBRE DE CLASE para que Hibernate lo
         # use también en @DataJpaTest; registrado como bean de Spring no se aplica ahí.
         tenant_identifier_resolver: pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ResolutorColegioActual
@@ -24,6 +29,15 @@ server:
   error:
     include-stacktrace: never
     include-message: never
+  servlet:
+    session:
+      timeout: 30m
+      tracking-modes: cookie
+      cookie:
+        name: CCSESION
+        http-only: true
+        same-site: lax
+        secure: true
 
 management:
   endpoints:
@@ -35,6 +49,10 @@ management:
       show-details: never
 
 cuentasclaras:
+  seguridad:
+    # Intentos fallidos seguidos antes de bloquear la cuenta, y cuánto dura el bloqueo.
+    intentos-maximos: 5
+    duracion-bloqueo: 15m
   auditoria:
     # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
     # aplicación no arranca. Nunca en el código: va en el gestor de secretos.

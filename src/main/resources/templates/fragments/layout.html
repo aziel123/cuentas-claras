@@ -1,6 +1,10 @@
 <!DOCTYPE html>
-<html lang="es" xmlns:th="http://www.thymeleaf.org">
-<head th:fragment="head(titulo)">
+<!--/* Estructuras de página. Sin estilos ni scripts en línea (CSP).
+     pagina(titulo, contenido): con sesión. Barra con colegio, usuario y rol; menú lateral en escritorio y
+       desplegable (<details>) en celular. Uso: <html th:replace="~{fragments/layout :: pagina('Inicio', ~{::main})}">
+     publica(titulo, contenido): login y páginas de error, sin menú. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:fragment="pagina(titulo, contenido)">
+<head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title th:text="${titulo} + ' · Cuentas Claras'">Cuentas Claras</title>
@@ -8,18 +12,82 @@
 	<link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
 <body>
-	<header class="barra" th:fragment="barra(nombreColegio)">
+	<a class="saltar" href="#contenido">Saltar al contenido</a>
+	<header class="barra">
 		<div class="barra-in">
-			<span class="monograma" aria-hidden="true">VM</span>
-			<div class="marca">
-				<strong th:text="${nombreColegio}">Colegio Virgen María</strong>
-				<small>Plataforma Cuentas Claras</small>
+			<a class="marca" th:href="@{/inicio}">
+				<span class="monograma" aria-hidden="true">VM</span>
+				<span class="marca-texto">
+					<strong th:text="${usuarioActual != null} ? ${usuarioActual.colegio} : ${nombreInstitucional}">Colegio Virgen María</strong>
+					<small>Plataforma Cuentas Claras</small>
+				</span>
+			</a>
+			<div class="sesion" th:if="${usuarioActual != null}">
+				<span class="sesion-usuario">
+					<strong th:text="${usuarioActual.nombreCompleto}">Nombre</strong>
+					<small th:text="${usuarioActual.clavePendiente} ? 'Debes cambiar tu clave' : ${usuarioActual.rol}">Rol</small>
+				</span>
+				<a class="btn btn-texto btn-chico" th:href="@{/cuenta/cambiar-clave}">Cambiar clave</a>
+				<form class="form-en-linea" th:action="@{/salir}" method="post">
+					<button type="submit" class="btn btn-secundario btn-chico">Cerrar sesión</button>
+				</form>
 			</div>
 		</div>
 	</header>
 
-	<footer class="pie" th:fragment="pie">
-		Cuentas Claras · gestión escolar transparente
-	</footer>
+	<div class="armazon" th:classappend="${#lists.isEmpty(menu)} ? 'sin-menu'">
+		<th:block th:unless="${#lists.isEmpty(menu)}">
+			<nav class="menu-lateral" aria-label="Menú principal">
+				<ul th:replace="~{fragments/layout :: menuLista}"></ul>
+			</nav>
+			<details class="menu-movil">
+				<summary>Menú</summary>
+				<nav aria-label="Menú principal">
+					<ul th:replace="~{fragments/layout :: menuLista}"></ul>
+				</nav>
+			</details>
+		</th:block>
+
+		<main id="contenido" class="contenido" th:replace="${contenido}">Contenido</main>
+	</div>
+
+	<footer class="pie">Cuentas Claras · gestión escolar transparente</footer>
 </body>
 </html>
+
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:fragment="publica(titulo, contenido)">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title th:text="${titulo} + ' · Cuentas Claras'">Cuentas Claras</title>
+	<link rel="stylesheet" th:href="@{/css/tokens.css}">
+	<link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body class="publica">
+	<header class="barra">
+		<div class="barra-in">
+			<span class="marca">
+				<span class="monograma" aria-hidden="true">VM</span>
+				<span class="marca-texto">
+					<strong th:text="${nombreInstitucional} ?: 'Cuentas Claras'">Colegio Virgen María</strong>
+					<small>Plataforma Cuentas Claras</small>
+				</span>
+			</span>
+		</div>
+	</header>
+	<main id="contenido" class="contenido-publico" th:replace="${contenido}">Contenido</main>
+	<footer class="pie">Cuentas Claras · gestión escolar transparente</footer>
+</body>
+</html>
+
+<!--/* Lista del menú: se usa en el menú lateral y en el desplegable del celular. */-->
+<ul class="menu" th:fragment="menuLista">
+	<li th:each="m : ${menu}">
+		<a th:if="${m.disponible}" class="menu-enlace" th:href="@{${m.ruta}}" th:data-modulo="${m.codigo}"
+			th:aria-current="${rutaActual == m.ruta} ? 'page'" th:text="${m.etiqueta}">Inicio</a>
+		<span th:unless="${m.disponible}" class="menu-proximo" th:data-modulo="${m.codigo}">
+			<span th:text="${m.etiqueta}">Módulo</span>
+			<span class="badge badge-neutro">Próximamente</span>
+		</span>
+	</li>
+</ul>

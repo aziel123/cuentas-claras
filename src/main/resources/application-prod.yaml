@@ -9,3 +9,11 @@ spring:
 
 server:
   forward-headers-strategy: framework
+
+# Primer PROMOTOR: se crea al arrancar SOLO si no hay ningún usuario. Debe cambiar la clave al ingresar.
+cuentasclaras:
+  inicial:
+    colegio-id: ${CC_COLEGIO_ID:1}
+    promotor-usuario: ${CC_PROMOTOR_USUARIO:}
+    promotor-nombre: ${CC_PROMOTOR_NOMBRE:}
+    promotor-clave: ${CC_PROMOTOR_CLAVE:}

@@ -186,6 +186,15 @@ class AuditoriaServiceTest {
 	}
 
 	@Test
+	void laFechaSeGuardaTalCualEnHoraDeLimaSinImportarLaZonaDeLaJvm() {
+		EventoAuditoria evento = registrarDeSistema(AccionAuditoria.USUARIO_CREADO);
+
+		LocalDateTime enBase = jdbc.queryForObject("SELECT ocurrido_en FROM evento_auditoria WHERE secuencia = 1",
+				LocalDateTime.class);
+		assertThat(enBase).isEqualTo(evento.getOcurridoEn());
+	}
+
+	@Test
 	void laConsultaPorColegioSoloDevuelveLosEventosDeEseColegio() {
 		jdbc.update("INSERT INTO colegio (nombre) VALUES ('Colegio de Prueba B')");
 		long colegioB = jdbc.queryForObject("SELECT id FROM colegio WHERE nombre = 'Colegio de Prueba B'", Long.class);

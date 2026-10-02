@@ -10,3 +10,10 @@ cuentasclaras:
   auditoria:
     # Clave SOLO para pruebas. En producción llega por la variable AUDITORIA_CLAVE_HMAC.
     clave-hmac: clave-hmac-de-pruebas-no-usar-en-produccion-0001
+
+# Las pruebas con servidor real usan http: la cookie de sesión no puede exigir https.
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false
