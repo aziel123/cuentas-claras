@@ -3,7 +3,7 @@
 -- Requisito (una vez, como administrador, porque el binlog está activo):
 --   SET PERSIST log_bin_trust_function_creators = 1;
 -- No van en Flyway: H2 (desarrollo y pruebas) no los soporta. La aplicación en prod NO ARRANCA si falta alguno:
--- VerificadorPermisosBaseDatos compara la vista cuentasclaras.trigger_instalado (02-permisos-tablas.sql) con la lista
+-- VerificadorPermisosBaseDatos compara la función cuentasclaras.triggers_instalados() (02-permisos-tablas.sql) con la lista
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.

@@ -27,8 +27,8 @@ import java.util.stream.Collectors;
  *   <li>que no puede borrar ni editar el libro de pagos, los comprobantes ni las cajas, ni cambiar sus columnas
  *       inmutables, y que están los triggers de caja (sprint 3);</li>
  *   <li>que están TODOS los triggers de {@code scripts/mysql/03-triggers.sql} (correcciones del sprint 3, M2), también
- *       los BEFORE UPDATE, que no se pueden probar con un INSERT imposible: lee la vista
- *       {@code cuentasclaras.trigger_instalado} (02-permisos-tablas.sql) y la compara con {@link #TRIGGERS_ESPERADOS};</li>
+ *       los BEFORE UPDATE, que no se pueden probar con un INSERT imposible: llama a la función
+ *       {@code cuentasclaras.triggers_instalados()} (02-permisos-tablas.sql) y la compara con {@link #TRIGGERS_ESPERADOS};</li>
  *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes).</li>
  * </ul>
  * Si algo falla, la aplicación NO arranca. No hay interruptor para saltarse esta comprobación.
@@ -156,7 +156,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_reembolso_registro", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio", "trg_apoderado_nace",
 			"trg_apoderado_facturacion");
 
-	static final String SQL_TRIGGERS_INSTALADOS = "SELECT nombre FROM trigger_instalado";
+	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
 	/** 1143 (columna sin GRANT) o 1142 (ningún UPDATE sobre la tabla, por ejemplo antes de aplicar el paso 2). */
 	private static SentenciaProhibida columna(String sql, String tabla) {
@@ -212,10 +212,11 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 	public void verificarTriggers() {
 		List<String> instalados;
 		try {
-			instalados = jdbc.queryForList(SQL_TRIGGERS_INSTALADOS, String.class);
+			String lista = jdbc.queryForObject(SQL_TRIGGERS_INSTALADOS, String.class);
+			instalados = lista == null || lista.isBlank() ? List.of() : List.of(lista.split(","));
 		}
 		catch (DataAccessException e) {
-			throw new IllegalStateException("No se pudo leer la vista cuentasclaras.trigger_instalado (código "
+			throw new IllegalStateException("No se pudo leer la función cuentasclaras.triggers_instalados() (código "
 					+ codigoMySql(e) + "): aplica scripts/mysql/02-permisos-tablas.sql como administrador. Revisa "
 					+ "docs/operacion/mysql-usuarios.md.", e);
 		}

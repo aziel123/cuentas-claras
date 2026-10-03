@@ -74,10 +74,12 @@ GRANT INSERT ON cuentasclaras.verificacion_bancaria TO 'cc_app'@'%';            
 -- Correcciones del sprint 3 (docs/arquitectura/sprint-3-correcciones.md). Reembolso de devoluciones: SOLO INSERCIÓN
 -- (lo registra Administración; trg_reembolso_registro y un CHECK impiden que sea la cajera del pago).
 GRANT INSERT ON cuentasclaras.reembolso TO 'cc_app'@'%';                          -- solo inserción
--- M2: cc_app no lee information_schema.TRIGGERS de otros (necesitaría el privilegio TRIGGER, que no debe tener). Esta
--- vista (SQL SECURITY DEFINER: corre con los permisos de quien la crea) muestra solo los nombres de los triggers del
--- esquema; al arrancar en prod, VerificadorPermisosBaseDatos la compara con la lista completa de 03-triggers.sql.
-CREATE OR REPLACE SQL SECURITY DEFINER VIEW cuentasclaras.trigger_instalado AS
-    SELECT TRIGGER_NAME AS nombre, EVENT_OBJECT_TABLE AS tabla, ACTION_TIMING AS momento, EVENT_MANIPULATION AS evento
-    FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'cuentasclaras';
-GRANT SELECT ON cuentasclaras.trigger_instalado TO 'cc_app'@'%';
+-- M2: cc_app no lee information_schema.TRIGGERS (necesitaría el privilegio TRIGGER, que no debe tener). Esta función
+-- (SQL SECURITY DEFINER: corre con los permisos de quien la crea) devuelve solo los nombres de los triggers del esquema,
+-- separados por comas; al arrancar en prod, VerificadorPermisosBaseDatos los compara con la lista de 03-triggers.sql.
+-- (Una vista DEFINER no sirve: MySQL 8 filtra information_schema con los permisos de quien consulta y cc_app vería 0.)
+DROP FUNCTION IF EXISTS cuentasclaras.triggers_instalados;
+CREATE FUNCTION cuentasclaras.triggers_instalados() RETURNS TEXT READS SQL DATA SQL SECURITY DEFINER
+    RETURN (SELECT COALESCE(GROUP_CONCAT(TRIGGER_NAME ORDER BY TRIGGER_NAME SEPARATOR ','), '')
+        FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'cuentasclaras');
+GRANT EXECUTE ON FUNCTION cuentasclaras.triggers_instalados TO 'cc_app'@'%';

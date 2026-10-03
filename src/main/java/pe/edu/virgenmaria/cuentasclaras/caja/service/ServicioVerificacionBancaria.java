@@ -209,7 +209,7 @@ public class ServicioVerificacionBancaria {
 			throw new ReglaNegocioException("El reembolso de esta devolución ya está registrado.");
 		}
 		boolean efectivo = anulacion.getPago().getMedio() == MedioPago.EFECTIVO;
-		if (!efectivo && !pedido.cuentaDeOrigen()) {
+		if (!efectivo && !pedido.aLaCuentaDeOrigen()) {
 			throw new ReglaNegocioException("Un pago digital solo se devuelve a la cuenta de origen: confírmalo.");
 		}
 		Reembolso r = reembolsos.save(Reembolso.registrar(anulacion, pedido.numeroOperacion(), pedido.recibidoPorNombre(),

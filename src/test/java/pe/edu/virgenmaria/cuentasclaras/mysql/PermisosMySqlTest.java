@@ -907,6 +907,9 @@ class PermisosMySqlTest {
 		Long yape = cobro.cobrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.digital(familias.otraFamilia(),
 				java.util.List.of(cuotaDe(familias.otroAlumno(), 4)), pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.YAPE,
 				"Y2" + sufijo, "450.00"));
+		// A1: un pago digital se anula solo si Administración ya lo encontró en el banco.
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.verificadoEnBanco(verificacionBancaria, jdbc, yape);
+		UsuariosDePrueba.iniciarSesion(cajera);
 		anulacionesPago.solicitarDevolucion(yape, MOTIVO);
 		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(EscenarioCobranza.PROMOTORIA, bandeja,
 				jdbc, "pago", yape);
@@ -1201,8 +1204,8 @@ class PermisosMySqlTest {
 		// M1: un descuento resuelto no cambia quién ni cuándo lo resolvió.
 		UsuariosDePrueba.iniciarSesion(EscenarioCobranza.ADMINISTRACION);
 		Long descuento = descuentos.solicitar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.descuento(
-				familias.hermano2(), pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoDescuento.OTRO, "10",
-				java.util.List.of(cuotaDe(familias.hermano2(), 9))));
+				familias.hermano1(), pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoDescuento.OTRO, "10",
+				java.util.List.of(cuotaDe(familias.hermano1(), 12))));
 		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(EscenarioCobranza.DIRECCION, bandeja,
 				jdbc, "descuento", descuento);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE descuento SET resuelto_por = 'otro' WHERE id = ?", descuento)))

@@ -238,4 +238,31 @@ class CierreCajaWebTest {
 				.containsEntry("conteos", 0);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cierre_caja", Long.class)).isZero();
 	}
+
+	/**
+	 * A2 por la web: la cajera pide la devolución con su causa; Dirección la aprueba solo marcando «Hablé con el
+	 * apoderado» con su celular registrado; Administración registra la entrega en efectivo (el formulario de efectivo no
+	 * envía «cuenta de origen»: antes daba un error de formato).
+	 */
+	@Test
+	void devolucionEnEfectivoPorLaWebConLlamadaYReembolso() throws Exception {
+		Long pago = jdbc.queryForObject("SELECT id FROM pago WHERE medio = 'EFECTIVO'", Long.class);
+		mvc.perform(post("/caja/pagos/{id}/devolucion", pago).with(csrf()).with(como(CAJA))
+						.param("causa", "COBRO_EQUIVOCADO").param("motivo", "Se cobró la pensión equivocada en ventanilla"))
+				.andExpect(redirectedUrl("/caja/hoy")).andExpect(flash().attributeExists("exito"));
+		Long solicitud = EscenarioAprobaciones.pendiente(jdbc, "pago", pago);
+		mvc.perform(get("/aprobaciones").with(como(DIRECCION)))
+				.andExpect(content().string(containsString("name=\"telefonos\"")))
+				.andExpect(content().string(containsString("Hablé con el apoderado")));
+		mvc.perform(post("/aprobaciones/{id}/aprobar", solicitud).with(csrf()).with(como(DIRECCION)))
+				.andExpect(flash().attribute("error", containsString("Hablé con el apoderado")));
+		mvc.perform(post("/aprobaciones/{id}/aprobar", solicitud).with(csrf()).with(como(DIRECCION))
+						.param("hablo", "true").param("telefonos", "987 654 321"))
+				.andExpect(redirectedUrl("/aprobaciones")).andExpect(flash().attributeExists("exito"));
+		Long anulacion = jdbc.queryForObject("SELECT id FROM anulacion_pago", Long.class);
+		mvc.perform(post("/conciliacion/devoluciones/{id}", anulacion).with(csrf()).with(como(ADMINISTRACION))
+						.param("recibidoPorNombre", "Rosa Huamán Ccori").param("recibidoPorDocumento", "45678912"))
+				.andExpect(redirectedUrl("/conciliacion")).andExpect(flash().attributeExists("exito"));
+		assertThat(jdbc.queryForObject("SELECT medio FROM reembolso", String.class)).isEqualTo("EFECTIVO");
+	}
 }

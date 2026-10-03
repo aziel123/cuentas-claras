@@ -48,7 +48,7 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `cierre_caja` | INSERT y UPDATE **solo** de `estado, revisado_por, revisado_en, comentario_revision` | El conteo, el esperado y la diferencia no cambian (1143); el esperado es el del libro y lo registra la cajera de una caja abierta; revisado, no cambia (trigger) |
 | `deposito_caja`, `verificacion_bancaria` | INSERT | **Solo inserción** (tanda 3): el depósito y la verificación contra el banco no se editan ni se borran (1142); verifica alguien que no cobró ni depositó, y «Encontrado» exige lo visto en el banco (operación, fecha y monto) que coincida (trigger) |
 | `reembolso` | INSERT | **Solo inserción** (correcciones del sprint 3): el reembolso de una devolución, por su monto y el medio del pago; no lo registra la cajera del pago (CHECK y trigger) |
-| `trigger_instalado` (vista) | SELECT | Nombres de los triggers del esquema (`SQL SECURITY DEFINER`): el arranque en prod comprueba que estén todos |
+| `triggers_instalados()` (función) | EXECUTE | Nombres de los triggers del esquema (`SQL SECURITY DEFINER`; una vista no sirve porque MySQL 8 filtra `information_schema` con los permisos de quien consulta): el arranque en prod comprueba que estén todos |
 | `apoderado` (RUC) | (INSERT, UPDATE de la fila) | El RUC y la razón social solo cambian con SU solicitud `DATOS_FACTURACION` aprobada (trigger) |
 
 ## Triggers (paso 3, después de los permisos)
@@ -96,9 +96,9 @@ mysql -h <host> -u cc_migrador -p cuentasclaras < scripts/mysql/03-triggers.sql
 
 Si `log_bin_trust_function_creators` no puede activarse, aplica el script como administrador.
 La aplicación en `prod` **no arranca** si falta alguno:
-- compara la vista `cuentasclaras.trigger_instalado` (la crea `02-permisos-tablas.sql`) con la lista completa de
+- compara lo que devuelve la función `cuentasclaras.triggers_instalados()` (la crea `02-permisos-tablas.sql`) con la lista completa de
   `03-triggers.sql` (`VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS`; una prueba exige que coincidan). Así detecta
-  también los BEFORE UPDATE, que un INSERT imposible no prueba. Sin la vista, tampoco arranca (salvo en la fase 1,
+  también los BEFORE UPDATE, que un INSERT imposible no prueba. Sin la función, tampoco arranca (salvo en la fase 1,
   cuando `cc_app` todavía solo puede leer: entonces no hay nada que un trigger deba frenar);
 - además prueba varios con un INSERT imposible que el trigger rechaza (1644). Acepta 1142 (cc_app sin INSERT en esa
   tabla): sin permiso de escritura no hay nada que el trigger deba frenar. Cualquier otro código (la FK o un CHECK, que

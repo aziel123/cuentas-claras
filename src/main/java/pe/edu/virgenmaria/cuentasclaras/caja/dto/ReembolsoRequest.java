@@ -8,7 +8,12 @@ import jakarta.validation.constraints.Size;
  */
 public record ReembolsoRequest(
 		@Size(max = 40, message = "El número de operación tiene hasta 30 caracteres.") String numeroOperacion,
-		boolean cuentaDeOrigen,
+		Boolean cuentaDeOrigen,
 		@Size(max = 150, message = "El nombre tiene hasta 150 caracteres.") String recibidoPorNombre,
 		@Size(max = 20, message = "El documento tiene hasta 20 caracteres.") String recibidoPorDocumento) {
+
+	/** Sin marcar (o en efectivo, donde no se envía) cuenta como «no». */
+	public boolean aLaCuentaDeOrigen() {
+		return Boolean.TRUE.equals(cuentaDeOrigen);
+	}
 }

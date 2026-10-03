@@ -168,10 +168,10 @@ jobs:
           comprobar 1142 "UPDATE reembolso SET version = version WHERE 1 = 0"
           comprobar 1644 "INSERT INTO reembolso (colegio_id, anulacion_pago_id, medio, numero_operacion, monto, fecha, cajero_pago, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'YAPE', 'X1234', 1, '2000-01-01', 'a', NOW(6), 'b', NOW(6))"
           comprobar 1644 "INSERT INTO apoderado (colegio_id, familia_id, tipo_documento, numero_documento, apellido_paterno, nombres, parentesco, nombre_busqueda, activo, ruc, razon_social, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'DNI', '00000000', 'x', 'x', 'MADRE', 'x', TRUE, '20131312955', 'x', NOW(6), 'x', NOW(6))"
-          total=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM trigger_instalado")
+          total=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT triggers_instalados()" | tr ',' '\n' | grep -c .)
           esperados=$(grep -c "^CREATE TRIGGER" scripts/mysql/03-triggers.sql)
-          [ "$total" = "$esperados" ] || { echo "ERROR: cc_app ve $total triggers en trigger_instalado y 03-triggers.sql tiene $esperados"; exit 1; }
-          echo "OK: cc_app ve los $total triggers en la vista trigger_instalado"
+          [ "$total" = "$esperados" ] || { echo "ERROR: cc_app ve $total triggers con triggers_instalados() y 03-triggers.sql tiene $esperados"; exit 1; }
+          echo "OK: cc_app ve los $total triggers con la función triggers_instalados()"
 
       - name: Arranque real en prod con cc_app (y rechazo con cc_migrador)
         env:

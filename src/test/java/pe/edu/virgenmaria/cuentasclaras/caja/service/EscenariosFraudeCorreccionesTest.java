@@ -448,6 +448,47 @@ class EscenariosFraudeCorreccionesTest {
 				&& a.texto().contains("operación 44332211 del 02/10/2026 por S/ 450.00"));
 	}
 
+	// ------------------------------------------------------------------ M1 (controles visibles para Promotoría)
+
+	/**
+	 * M1: una serie que no es de las configuradas (por ejemplo, B002 creada por SQL con cc_app), una boleta sin su pago y
+	 * una nota de crédito sin su anulación aprobada son alertas CRÍTICAS en «Para revisar». (En H2 no hay triggers: se
+	 * simula lo que cc_app podría insertar.)
+	 */
+	@Test
+	void m1SerieNoConfiguradaYComprobantesSinRespaldoSonAlertasCriticas() {
+		Long pago = cobro.cobrar(efectivo(f.quispe(), List.of(marzoMateo), "450.00", "450.00"));
+		como(PROMOTORIA);
+		assertThat(alertas.alertas()).noneMatch(a -> a.texto().contains("no es ninguna de las configuradas")
+				|| a.texto().contains("sin su pago") || a.texto().contains("sin su anulación"));
+
+		jdbc.update("INSERT INTO serie_comprobante (colegio_id, tipo, serie, proveedor, ultimo_numero, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (1, 'BOLETA', 'B002', 'SIMULADO', 0, NOW(), 'cc_app', NOW())");
+		Long comprobante = jdbc.queryForObject("SELECT comprobante_id FROM pago WHERE id = ?", Long.class, pago);
+		// Una «boleta» copiada sin pago y una nota de crédito sin anulación.
+		jdbc.update("INSERT INTO comprobante (colegio_id, serie_id, tipo, serie, numero, fecha_emision, receptor_tipo_documento, "
+				+ "receptor_numero_documento, receptor_nombre, moneda, total, afectacion_igv, proveedor, estado_envio, "
+				+ "intentos, creado_en, creado_por, actualizado_en) SELECT colegio_id, serie_id, tipo, serie, 99, fecha_emision, "
+				+ "receptor_tipo_documento, receptor_numero_documento, receptor_nombre, moneda, total, afectacion_igv, "
+				+ "proveedor, 'PENDIENTE', 0, NOW(), 'cc_app', NOW() FROM comprobante WHERE id = ?", comprobante);
+		jdbc.update("INSERT INTO serie_comprobante (colegio_id, tipo, serie, proveedor, ultimo_numero, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (1, 'NOTA_CREDITO', 'BC01', 'SIMULADO', 0, NOW(), 'cc_app', NOW())");
+		Long serieNotas = jdbc.queryForObject("SELECT id FROM serie_comprobante WHERE serie = 'BC01'", Long.class);
+		jdbc.update("INSERT INTO comprobante (colegio_id, serie_id, tipo, serie, numero, fecha_emision, receptor_tipo_documento, "
+				+ "receptor_numero_documento, receptor_nombre, moneda, total, afectacion_igv, proveedor, estado_envio, "
+				+ "intentos, modifica_id, motivo_nota, creado_en, creado_por, actualizado_en) SELECT colegio_id, " + serieNotas + ", "
+				+ "'NOTA_CREDITO', 'BC01', 98, fecha_emision, receptor_tipo_documento, receptor_numero_documento, "
+				+ "receptor_nombre, moneda, total, afectacion_igv, proveedor, 'PENDIENTE', 0, id, 'Anulación por SQL', NOW(), "
+				+ "'cc_app', NOW() FROM comprobante WHERE id = ?", comprobante);
+
+		var lista = alertas.alertas();
+		assertThat(lista).anyMatch(a -> a.gravedad() == Gravedad.CRITICA && a.texto().startsWith("Existe la serie B002"));
+		assertThat(lista).anyMatch(a -> a.gravedad() == Gravedad.CRITICA
+				&& a.texto().startsWith("1 boleta(s) o factura(s) sin su pago en el libro: B001-00000099"));
+		assertThat(lista).anyMatch(a -> a.gravedad() == Gravedad.CRITICA
+				&& a.texto().startsWith("1 nota(s) de crédito sin su anulación aprobada: BC01-00000098"));
+	}
+
 	// ------------------------------------------------------------------ B3
 
 	/** B3: un pago anulado no se verifica (se simula un dato antiguo, anulado antes de exigir la verificación). */

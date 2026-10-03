@@ -236,8 +236,8 @@ class VerificadorPermisosBaseDatosTest {
 			}
 			throw denegado(1142);
 		});
-		when(mysql.queryForList(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
-				.thenReturn(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
+				.thenReturn(String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS));
 		return mysql;
 	}
 
@@ -250,8 +250,9 @@ class VerificadorPermisosBaseDatosTest {
 		for (String borrado : List.of("trg_caja_diaria_estado", "trg_pago_anulacion", "trg_cuota_libro",
 				"trg_cierre_caja_revisado", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio")) {
 			JdbcTemplate mysql = mysqlQueDeniega();
-			when(mysql.queryForList(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class)).thenReturn(
-					VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream().filter(t -> !t.equals(borrado)).toList());
+			when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class)).thenReturn(
+					String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream().filter(t -> !t.equals(borrado))
+							.toList()));
 
 			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
 					.as(borrado).isInstanceOf(IllegalStateException.class).hasMessageContaining("Faltan triggers")
@@ -261,25 +262,25 @@ class VerificadorPermisosBaseDatosTest {
 
 	/** Fase 1 (cc_app solo lee, antes de 02 y 03): no hay vista ni triggers y no hace falta: arranca. */
 	@Test
-	void enLaFase1SinVistaNiTriggersArranca() {
+	void enLaFase1SinFuncionNiTriggersArranca() {
 		JdbcTemplate mysql = org.mockito.Mockito.mock(JdbcTemplate.class);
 		doThrow(denegado(1142)).when(mysql).update(anyString());
-		when(mysql.queryForList(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
-				.thenThrow(denegado(1146));
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
+				.thenThrow(denegado(1305));
 
 		assertThatCode(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
 				.doesNotThrowAnyException();
 	}
 
 	@Test
-	void fallaSiNoExisteLaVistaDeTriggers() {
+	void fallaSiNoExisteLaFuncionDeTriggers() {
 		JdbcTemplate mysql = mysqlQueDeniega();
-		when(mysql.queryForList(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
-				.thenThrow(denegado(1146));
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
+				.thenThrow(denegado(1305));
 
 		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
-				.isInstanceOf(IllegalStateException.class).hasMessageContaining("trigger_instalado")
-				.hasMessageContaining("1146");
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("triggers_instalados")
+				.hasMessageContaining("1305");
 	}
 
 	/** La lista del verificador es EXACTAMENTE la de scripts/mysql/03-triggers.sql (en el mismo orden). */

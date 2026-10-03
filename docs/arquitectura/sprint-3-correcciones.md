@@ -62,8 +62,8 @@ Decisiones de la ronda de correcciones del sprint 3. Cada corrección viene con 
     - para pasar a ACEPTADO exige el hash, la respuesta y la fecha de envío.
     - Con el OSE real se usará un usuario de proceso aparte, con su propio GRANT, para registrar los envíos.
 - **M2. Faltaba comprobar los triggers BEFORE UPDATE al arrancar.**
-  - `02-permisos-tablas.sql` crea la vista `cuentasclaras.trigger_instalado`, con `SQL SECURITY DEFINER` sobre `information_schema.TRIGGERS` del esquema, y da a `cc_app` SELECT solo sobre ella.
-  - Al arrancar en prod, `VerificadorPermisosBaseDatos` compara esa vista con la lista completa de triggers esperados. Una prueba asegura que la lista coincide con `03-triggers.sql`. Si falta uno, la aplicación no arranca.
+  - `02-permisos-tablas.sql` crea la función `cuentasclaras.triggers_instalados()`, con `SQL SECURITY DEFINER` sobre `information_schema.TRIGGERS` del esquema, y da a `cc_app` EXECUTE solo sobre ella. (Primero se probó una vista DEFINER: en MySQL 8 `cc_app` veía 0 triggers, porque `information_schema` se filtra con los permisos de quien consulta.)
+  - Al arrancar en prod, `VerificadorPermisosBaseDatos` compara lo que devuelve esa función con la lista completa de triggers esperados. Una prueba asegura que la lista coincide con `03-triggers.sql`. Si falta uno, la aplicación no arranca.
   - El CI borra un trigger BEFORE UPDATE, comprueba que prod no arranca y lo restaura.
 - **M3. Efectivo sin depositar (lapping).**
   - Alerta CRÍTICA cuando pasa un día hábil completo sin depositar una caja cerrada con efectivo.
