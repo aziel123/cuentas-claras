@@ -252,11 +252,11 @@ class AislamientoCajaTest {
 		var vistaB = verificacion.vista();
 		assertThat(vistaB.pagos()).extracting(p -> p.id()).doesNotContain(yapeA);
 		assertThat(vistaB.depositos()).isEmpty();
-		assertThatThrownBy(() -> verificacion.verificarPago(yapeA, new pe.edu.virgenmaria.cuentasclaras.caja.dto
-				.VerificacionRequest(pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoVerificacion.ENCONTRADO, null)))
+		assertThatThrownBy(() -> verificacion.verificarPago(yapeA, pe.edu.virgenmaria.cuentasclaras.caja.dto
+				.VerificacionRequest.noAparece("Revisé el estado de cuenta de la semana")))
 				.isInstanceOf(RecursoNoEncontradoException.class);
-		assertThatThrownBy(() -> verificacion.verificarDeposito(depositoA, new pe.edu.virgenmaria.cuentasclaras.caja.dto
-				.VerificacionRequest(pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoVerificacion.ENCONTRADO, null)))
+		assertThatThrownBy(() -> verificacion.verificarDeposito(depositoA, pe.edu.virgenmaria.cuentasclaras.caja.dto
+				.VerificacionRequest.noAparece("Revisé el estado de cuenta de la semana")))
 				.isInstanceOf(RecursoNoEncontradoException.class);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM verificacion_bancaria", Long.class)).isZero();
 	}

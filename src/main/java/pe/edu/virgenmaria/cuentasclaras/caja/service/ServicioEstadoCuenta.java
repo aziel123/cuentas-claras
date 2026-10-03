@@ -12,6 +12,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.dto.ComprobanteImprimible;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.EstadoCuentaAlumno;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.AnulacionPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.Pago;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAnulacion;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.AnulacionPagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.AplicacionPagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.PagoRepository;
@@ -145,8 +146,10 @@ public class ServicioEstadoCuenta {
 		Pago pago = pagos.findByComprobanteId(comprobanteId).orElse(null);
 		Comprobante anulado = comprobante.getModificaId() == null ? null
 				: comprobantes.findById(comprobante.getModificaId()).orElse(null);
+		boolean devolucion = anulado != null && anulaciones.existsByNotaCreditoIdAndTipo(comprobante.getId(),
+				TipoAnulacion.DEVOLUCION);
 		return ServicioCobro.imprimibleDe(comprobante, pago, colegios.nombreDe(comprobante.getColegioId()), nombres,
-				anulado);
+				anulado, devolucion);
 	}
 
 	private static boolean esAdministracion() {

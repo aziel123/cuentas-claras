@@ -72,6 +72,12 @@ class ManejadorAnulacionPagoTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private ServicioVerificacionBancaria verificacion;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioFamilias familias;
+
 	private Familias f;
 
 	private Long marzoMateo;
@@ -133,9 +139,13 @@ class ManejadorAnulacionPagoTest {
 
 	@Test
 	void notaDeCreditoUsaSerieBc01ParaBoletas() {
+		EscenarioCaja.rucRegistrado(familias, bandeja, jdbc, f.rosa(), "20131312955", "Comercial Quispe S.A.C.");
+		como(CAJA);
 		Long factura = cobro.cobrar(new CobroRequest(UUID.randomUUID(), f.quispe(), List.of(marzoValeria),
 				MedioPago.TRANSFERENCIA, "OP-123456", null, null, new BigDecimal("450.00"), TipoComprobante.FACTURA, null,
 				"20131312955", "Comercial Quispe S.A.C."));
+		EscenarioCaja.verificadoEnBanco(verificacion, jdbc, factura);
+		como(CAJA);
 		anulaciones.solicitarDevolucion(pago, MOTIVO_ANULACION);
 		anulaciones.solicitarDevolucion(factura, "La empresa pidió anular la factura emitida");
 		EscenarioAprobaciones.aprueba(DIRECCION, bandeja, jdbc, "pago", pago);
@@ -147,7 +157,7 @@ class ManejadorAnulacionPagoTest {
 		// La transferencia anulada libera su número de operación.
 		assertThat(jdbc.queryForObject("SELECT operacion_vigente FROM pago WHERE id = ?", String.class, factura)).isNull();
 		assertThat(jdbc.queryForObject("SELECT numero_operacion FROM pago WHERE id = ?", String.class, factura))
-				.isEqualTo("OP-123456");
+				.isEqualTo("OP123456");
 	}
 
 	@Test

@@ -57,6 +57,16 @@ public class Apoderado extends BaseEntity {
 	@Column(nullable = false)
 	private boolean activo = true;
 
+	/** B2: RUC para facturar (con su razón social). Solo con una solicitud DATOS_FACTURACION aprobada (su id). */
+	@Column(length = 11)
+	private String ruc;
+
+	@Column(name = "razon_social", length = 150)
+	private String razonSocial;
+
+	@Column(name = "facturacion_solicitud_id")
+	private Long facturacionSolicitudId;
+
 	protected Apoderado() {
 		// requerido por JPA
 	}
@@ -154,5 +164,30 @@ public class Apoderado extends BaseEntity {
 
 	public boolean isActivo() {
 		return activo;
+	}
+
+	/**
+	 * Registra (o quita, con {@code ruc} nulo) los datos de facturación aprobados en la solicitud {@code solicitudId}.
+	 * En MySQL, trg_apoderado_facturacion exige esa solicitud aprobada.
+	 */
+	public void registrarFacturacion(String nuevoRuc, String nuevaRazonSocial, Long solicitudId) {
+		if ((nuevoRuc == null) != (nuevaRazonSocial == null)) {
+			throw new IllegalArgumentException("RUC y razón social van juntos");
+		}
+		ruc = nuevoRuc;
+		razonSocial = nuevaRazonSocial;
+		facturacionSolicitudId = Objects.requireNonNull(solicitudId, "solicitudId");
+	}
+
+	public String getRuc() {
+		return ruc;
+	}
+
+	public String getRazonSocial() {
+		return razonSocial;
+	}
+
+	public Long getFacturacionSolicitudId() {
+		return facturacionSolicitudId;
 	}
 }

@@ -13,6 +13,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.dto.CorreccionRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CorreccionVista;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioAnulacionPagos;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioEstadoCuenta;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.CausaDevolucion;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.web.Formularios;
 
@@ -50,10 +51,11 @@ public class EstadoCuentaController {
 	}
 
 	@PostMapping("/alumnos/pagos/{id:\\d+}/devolucion")
-	public String devolucion(@PathVariable Long id, @RequestParam(required = false) String motivo,
+	public String devolucion(@PathVariable Long id, @RequestParam(required = false) CausaDevolucion causa,
+			@RequestParam(required = false) String motivo,
 			@RequestParam(name = "alumno") Long alumno, RedirectAttributes avisos) {
 		try {
-			anulaciones.solicitarDevolucion(id, motivo);
+			anulaciones.solicitarDevolucion(id, causa, motivo);
 			avisos.addFlashAttribute("exito", "Listo: pediste la anulación. Promotoría o Dirección la revisarán.");
 		}
 		catch (ReglaNegocioException e) {

@@ -113,6 +113,23 @@ public class FamiliaController {
 		return VISTA_APODERADO;
 	}
 
+	/** B2: pide registrar o cambiar el RUC del apoderado (lo aprueba otra persona en la bandeja). */
+	@PostMapping("/apoderados/{id:\\d+}/facturacion")
+	public String pedirDatosFacturacion(@PathVariable Long id, @RequestParam(required = false) String ruc,
+			@RequestParam(required = false) String razonSocial, @RequestParam(required = false) String motivo,
+			RedirectAttributes avisos) {
+		Long familia = familias.obtenerApoderado(id).familiaId();
+		try {
+			familias.solicitarDatosFacturacion(id, ruc, razonSocial, motivo);
+			avisos.addFlashAttribute("exito", "Listo: pediste registrar el RUC. Promotoría o Dirección lo aprobarán; "
+					+ "hasta entonces, en caja solo sale boleta.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/alumnos/familias/" + familia;
+	}
+
 	@PostMapping("/apoderados/{id:\\d+}/desactivar")
 	public String desactivarApoderado(@PathVariable Long id, @RequestParam Long familiaId, @Valid MotivoRequest solicitud,
 			BindingResult validacion, RedirectAttributes avisos) {

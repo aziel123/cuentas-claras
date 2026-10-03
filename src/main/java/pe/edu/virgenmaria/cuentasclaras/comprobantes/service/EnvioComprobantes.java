@@ -3,12 +3,15 @@ package pe.edu.virgenmaria.cuentasclaras.comprobantes.service;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.Comprobante;
+import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.EstadoEnvio;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.ResultadoEnvio;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.repository.ComprobanteRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
@@ -29,6 +32,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * conexión y pedir otra para una transacción nueva agotaba el pool con muchos cobros a la vez (lo detectó la prueba de
  * 20 cobros concurrentes). Así, además, la cajera no espera al OSE. Nunca deja escapar una excepción. El log no lleva
  * datos personales: solo la serie y el número.
+ * <p>
+ * Con {@code cuentasclaras.comprobantes.envio-sincrono: true} (perfil de pruebas, hallazgo 13 de QA) el envío corre en
+ * el mismo hilo, en una transacción nueva: no quedan hilos vivos que choquen con la limpieza de la prueba siguiente.
+ * Un comprobante que ya no está PENDIENTE no se vuelve a enviar (su resultado no cambia; en MySQL lo exige un trigger).
  */
 @Component
 public class EnvioComprobantes {
@@ -50,13 +57,19 @@ public class EnvioComprobantes {
 	private final ExecutorService ejecutor;
 
 	public EnvioComprobantes(ComprobanteRepository comprobantes, EmisorElectronico emisor,
-			PlatformTransactionManager transacciones, Clock reloj) {
+			PlatformTransactionManager transacciones, Clock reloj,
+			@Value("${cuentasclaras.comprobantes.envio-sincrono:false}") boolean sincrono) {
 		this.comprobantes = comprobantes;
 		this.emisor = emisor;
 		this.transaccion = new TransactionTemplate(transacciones);
+		this.transaccion.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 		this.reloj = reloj;
+		this.ejecutor = sincrono ? null : hilos();
+	}
+
+	private static ExecutorService hilos() {
 		AtomicInteger numero = new AtomicInteger();
-		this.ejecutor = Executors.newFixedThreadPool(HILOS, tarea -> {
+		return Executors.newFixedThreadPool(HILOS, tarea -> {
 			Thread hilo = new Thread(tarea, "envio-comprobantes-" + numero.incrementAndGet());
 			hilo.setDaemon(true);
 			return hilo;
@@ -65,6 +78,10 @@ public class EnvioComprobantes {
 
 	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 	public void alEmitir(ComprobanteEmitido evento) {
+		if (ejecutor == null) {
+			enviarEnSuColegio(evento);
+			return;
+		}
 		try {
 			ejecutor.execute(() -> enviarEnSuColegio(evento));
 		}
@@ -75,7 +92,14 @@ public class EnvioComprobantes {
 
 	void enviarEnSuColegio(ComprobanteEmitido evento) {
 		try {
-			ContextoColegio.en(evento.colegioId(), () -> transaccion.executeWithoutResult(estado -> enviar(evento.id())));
+			Runnable envio = () -> transaccion.executeWithoutResult(estado -> enviar(evento.id()));
+			if (ejecutor == null && evento.colegioId().equals(ContextoColegio.actual())) {
+				// Síncrono, en el mismo hilo y colegio del cobro (aún dentro de su AFTER_COMMIT): transacción nueva.
+				envio.run();
+			}
+			else {
+				ContextoColegio.en(evento.colegioId(), envio);
+			}
 		}
 		catch (RuntimeException e) {
 			LOG.error("No se pudo registrar el envío del comprobante {}: {}", evento.id(), e.getClass().getSimpleName());
@@ -86,6 +110,9 @@ public class EnvioComprobantes {
 		Comprobante comprobante = comprobantes.findById(id).orElse(null);
 		if (comprobante == null) {
 			LOG.error("El comprobante {} no existe en su colegio: no se envió.", id);
+			return;
+		}
+		if (comprobante.getEstadoEnvio() != EstadoEnvio.PENDIENTE) {
 			return;
 		}
 		LocalDateTime ahora = LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS);
@@ -104,6 +131,8 @@ public class EnvioComprobantes {
 
 	@PreDestroy
 	void detener() {
-		ejecutor.shutdown();
+		if (ejecutor != null) {
+			ejecutor.shutdown();
+		}
 	}
 }

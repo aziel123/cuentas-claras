@@ -49,6 +49,10 @@ public interface EventoAuditoriaRepository extends Repository<EventoAuditoria, L
 	List<EventoAuditoria> findByColegioIdAndAccionInAndOcurridoEnGreaterThanEqualOrderBySecuenciaDesc(Long colegioId,
 			Collection<AccionAuditoria> acciones, LocalDateTime desde, Limit limite);
 
+	/** Cuántos eventos de una acción hubo en un colegio desde un momento (alertas de Promotoría). */
+	long countByColegioIdAndAccionAndOcurridoEnGreaterThanEqual(Long colegioId, AccionAuditoria accion,
+			LocalDateTime desde);
+
 	/** Lote de la cadena en orden, para verificar la integridad. */
 	List<EventoAuditoria> findBySecuenciaGreaterThanOrderBySecuenciaAsc(long secuencia, Limit limite);
 }

@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Apoderado;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Familia;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.ApoderadoRepository;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.FamiliaRepository;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.DatosSolicitud;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.SolicitudCambio;
@@ -16,14 +17,17 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.AnulacionPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.AplicacionPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.CajaDiaria;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.CausaDevolucion;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.Pago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAnulacion;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAplicacion;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.VerificacionBancaria;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.AnulacionPagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.AplicacionPagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.CajaDiariaRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.PagoRepository;
+import pe.edu.virgenmaria.cuentasclaras.caja.repository.VerificacionBancariaRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.Comprobante;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante;
@@ -31,12 +35,14 @@ import pe.edu.virgenmaria.cuentasclaras.comprobantes.service.ServicioComprobante
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Enmascarar;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Telefono;
 
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -47,7 +53,9 @@ import java.util.TreeSet;
  * Aplica una anulación de pago aprobada en la bandeja por otra persona de Promotoría o Dirección (que no es quien la
  * pidió ni la cajera del pago: {@link #involucrados}). Nada se borra. En este orden (y orden de bloqueos):
  * <ol>
- *   <li>bloquea la caja y después el pago; valida que siga VIGENTE;</li>
+ *   <li>bloquea la caja (es su primera lectura en la transacción: así su estado es el confirmado, por ejemplo si se
+ *       cerró mientras tanto) y después el pago; valida que siga VIGENTE y, si es digital, que esté verificado en el
+ *       banco (A1);</li>
  *   <li>bloquea todas las cuotas que toca (las del pago y, si es corrección, las de destino) por id;</li>
  *   <li>emite la nota de crédito (BC01 o FC01, sin huecos) que anula el comprobante del pago;</li>
  *   <li>inserta la anulación (antes de marcar el pago: el trigger del pago la exige) y anula el pago con flush;</li>
@@ -56,6 +64,8 @@ import java.util.TreeSet;
  *       suman el pago, no se aprueba nada);</li>
  *   <li>audita y publica {@link PagoAnulado}.</li>
  * </ol>
+ * Una devolución en efectivo exige que quien aprueba llame a un apoderado de la familia, y una corrección hacia otra
+ * familia, a ambas (A2, {@link #llamadas}): la bandeja valida los números contra los celulares registrados.
  */
 @Component
 @Transactional(propagation = Propagation.MANDATORY)
@@ -73,6 +83,10 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 
 	private final FamiliaRepository familias;
 
+	private final ApoderadoRepository apoderados;
+
+	private final VerificacionBancariaRepository verificaciones;
+
 	private final ServicioComprobantes comprobantes;
 
 	private final LibroPagos libro;
@@ -87,7 +101,7 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 
 	public ManejadorAnulacionPago(PagoRepository pagos, CajaDiariaRepository cajas, AplicacionPagoRepository aplicaciones,
 			AnulacionPagoRepository anulaciones, CuotaRepository cuotas, FamiliaRepository familias,
-			ServicioComprobantes comprobantes, LibroPagos libro, NombresUsuarios nombres, AuditoriaService auditoria,
+			ApoderadoRepository apoderados, VerificacionBancariaRepository verificaciones, ServicioComprobantes comprobantes, LibroPagos libro, NombresUsuarios nombres, AuditoriaService auditoria,
 			ApplicationEventPublisher eventos, Clock reloj) {
 		this.pagos = pagos;
 		this.cajas = cajas;
@@ -95,6 +109,8 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 		this.anulaciones = anulaciones;
 		this.cuotas = cuotas;
 		this.familias = familias;
+		this.apoderados = apoderados;
+		this.verificaciones = verificaciones;
 		this.comprobantes = comprobantes;
 		this.libro = libro;
 		this.nombres = nombres;
@@ -126,6 +142,7 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 		if (!pago.vigente()) {
 			throw new ReglaNegocioException("El pago ya está anulado.");
 		}
+		ServicioAnulacionPagos.exigirVerificado(pago, verificaciones);
 		// 2. Todas las cuotas que se tocan, por id.
 		List<Long> destino = tipo == TipoAnulacion.CORRECCION ? cuotasDestino(datos) : List.of();
 		Set<Long> todas = new TreeSet<>(aplicaciones.cuotasDePago(pagoId));
@@ -152,6 +169,7 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 		if (tipo == TipoAnulacion.CORRECCION) {
 			DatosComprobante datosComprobante = original.getTipo() == TipoComprobante.FACTURA
 					&& familiaDestino.getId().equals(pago.getFamilia().getId())
+					&& libro.rucRegistrado(familiaDestino.getId(), original.getReceptor().numero()).isPresent()
 					? new DatosComprobante(TipoComprobante.FACTURA, null, original.getReceptor().numero(),
 							original.getReceptor().nombre())
 					: new DatosComprobante(TipoComprobante.BOLETA, null, null, null);
@@ -188,6 +206,13 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 				+ (pago.getNumeroOperacion() == null ? "" : " (operación " + pago.getNumeroOperacion() + ")"));
 		lineas.add("Cobrado el " + Calendario.formatear(pago.getFecha()) + " por " + nombres.de(pago.getCajero()) + " ("
 				+ pago.getCajero() + ") · " + (pago.getCaja().aceptaEfectivo() ? "Caja abierta" : "Caja ya cerrada"));
+		lineas.add(verificacionBancaria(pago));
+		String causa = datos.get(ServicioAnulacionPagos.DATO_CAUSA);
+		if (causa != null) {
+			CausaDevolucion elegida = CausaDevolucion.valueOf(causa);
+			lineas.add("Causa: " + elegida.etiqueta() + (elegida == CausaDevolucion.PAGO_DUPLICADO
+					? " (el sistema comprobó que hay otro pago vigente de esas cuotas)" : ""));
+		}
 		List<AplicacionPago> aplicadas = aplicaciones.findByPagoIdAndTipoOrderByIdAsc(pago.getId(),
 				TipoAplicacion.APLICACION);
 		lineas.add("Vuelven a deberse: " + String.join("; ", aplicadas.stream().map(a -> a.getCuota().getDescripcion()
@@ -200,24 +225,105 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 					.map(id -> cuotas.findById(id).map(c -> c.getDescripcion() + " de " + c.getAlumno().nombreCompleto())
 							.orElse("cuota " + id)).toList()));
 		}
-		// Decisión 18 (Ley 29733: finalidad de verificar con el padre): el celular completo, solo aquí, para quien aprueba.
-		Apoderado apoderado = aplicadas.isEmpty() ? null : aplicadas.getFirst().getCuota().getAlumno().getResponsablePago();
-		if (apoderado != null && apoderado.getTelefonoWhatsapp() != null) {
-			String contacto = apoderado.nombreCompleto() + ": " + Telefono.formatear(apoderado.getTelefonoWhatsapp());
-			lineas.add(tipo == TipoAnulacion.DEVOLUCION && pago.getMedio() == MedioPago.EFECTIVO
-					? "Antes de aprobar, llama al apoderado: " + contacto
-					: "Contacto del apoderado: " + contacto);
+		// Decisión 18 (Ley 29733: finalidad de verificar con el padre): los celulares completos, solo aquí, para quien
+		// aprueba. En la bitácora quedan enmascarados.
+		boolean llamar = !familiasPorLlamar(solicitud).isEmpty();
+		String contactos = contactos(pago.getFamilia().getId());
+		if (contactos != null) {
+			lineas.add((llamar ? "Antes de aprobar, llama al apoderado: " : "Contacto del apoderado: ") + contactos);
+		}
+		if (tipo == TipoAnulacion.CORRECCION) {
+			Long destinoId = Long.valueOf(datos.get(ServicioAnulacionPagos.DATO_FAMILIA));
+			String deDestino = destinoId.equals(pago.getFamilia().getId()) ? null : contactos(destinoId);
+			if (deDestino != null) {
+				lineas.add("Antes de aprobar, llama también a la otra familia: " + deDestino);
+			}
 		}
 		return lineas;
 	}
 
-	/** Una corrección hacia OTRA familia se muestra resaltada: es la vía para mover dinero entre familias. */
+	/** A1: lo que dice la conciliación del pago (un digital solo se puede anular si se encontró en el banco). */
+	private String verificacionBancaria(Pago pago) {
+		if (pago.getMedio() == MedioPago.EFECTIVO) {
+			return "Verificación bancaria: no aplica (efectivo)";
+		}
+		return verificaciones.findByPagoId(pago.getId())
+				.map(v -> "Verificación bancaria: " + v.getResultado().etiqueta() + " por " + v.getCreadoPor() + " el "
+						+ Calendario.formatear(v.getCreadoEn().toLocalDate()))
+				.orElse("Verificación bancaria: SIN VERIFICAR. No se puede aprobar hasta que Administración lo encuentre en "
+						+ "el banco.");
+	}
+
+	/** «Rosa Huamán: +51 987 654 321 · Pedro Quispe: +51 912 345 678»; {@code null} si nadie tiene celular. */
+	private String contactos(Long familiaId) {
+		List<String> lista = apoderados.findByFamiliaIdOrderByApellidoPaternoAsc(familiaId).stream()
+				.filter(a -> a.getTelefonoWhatsapp() != null)
+				.map(a -> a.nombreCompleto() + ": " + Telefono.formatear(a.getTelefonoWhatsapp())).toList();
+		return lista.isEmpty() ? null : String.join(" · ", lista);
+	}
+
+	/**
+	 * A2: una devolución en efectivo exige hablar con la familia del pago; una corrección hacia OTRA familia, con ambas
+	 * (la del pago y la de destino), en ese orden.
+	 */
+	private Map<Long, String> familiasPorLlamar(SolicitudCambio solicitud) {
+		Map<Long, String> porLlamar = new LinkedHashMap<>();
+		Pago pago = pagos.findById(solicitud.getEntidadId()).orElse(null);
+		if (pago == null) {
+			return porLlamar;
+		}
+		Map<String, String> datos = DatosSolicitud.leer(solicitud.getDatos());
+		TipoAnulacion tipo = TipoAnulacion.valueOf(datos.get(ServicioAnulacionPagos.DATO_TIPO));
+		if (tipo == TipoAnulacion.DEVOLUCION && pago.getMedio() == MedioPago.EFECTIVO) {
+			porLlamar.put(pago.getFamilia().getId(), pago.getFamilia().getNombre());
+		}
+		if (tipo == TipoAnulacion.CORRECCION) {
+			Long destino = Long.valueOf(datos.get(ServicioAnulacionPagos.DATO_FAMILIA));
+			if (!destino.equals(pago.getFamilia().getId())) {
+				porLlamar.put(pago.getFamilia().getId(), pago.getFamilia().getNombre());
+				porLlamar.put(destino, familias.findById(destino).map(Familia::getNombre).orElse("familia de destino"));
+			}
+		}
+		return porLlamar;
+	}
+
+	@Override
+	public List<String> llamadas(SolicitudCambio solicitud) {
+		return List.copyOf(familiasPorLlamar(solicitud).values());
+	}
+
+	/**
+	 * Cada número debe ser el celular registrado de un apoderado de la familia que corresponde (en el orden de
+	 * {@link #llamadas}). En la bitácora queda enmascarado, con el nombre del apoderado (decisión 18).
+	 */
+	@Override
+	public String confirmarLlamadas(SolicitudCambio solicitud, List<String> telefonos) {
+		Map<Long, String> porLlamar = familiasPorLlamar(solicitud);
+		List<String> partes = new ArrayList<>();
+		int i = 0;
+		for (Map.Entry<Long, String> familia : porLlamar.entrySet()) {
+			String numero = Telefono.normalizar(telefonos.get(i++));
+			Apoderado llamado = numero == null ? null
+					: apoderados.findByFamiliaIdOrderByApellidoPaternoAsc(familia.getKey()).stream()
+							.filter(a -> numero.equals(a.getTelefonoWhatsapp())).findFirst().orElse(null);
+			if (llamado == null) {
+				throw new ReglaNegocioException("El número que escribiste para " + familia.getValue() + " no es el celular "
+						+ "registrado de ninguno de sus apoderados. Llama a un número registrado (si cambió, primero "
+						+ "actualízalo con su aprobación).");
+			}
+			partes.add(llamado.nombreCompleto() + " (" + Enmascarar.telefono(numero) + ", " + familia.getValue() + ")");
+		}
+		return (partes.size() == 1 ? "Habló con el apoderado: " : "Habló con ambas familias: ") + String.join(" y ", partes)
+				+ ".";
+	}
+
 	/** Después de los cierres con diferencia y antes del resto: mueve dinero ya cobrado. */
 	@Override
 	public int prioridad(SolicitudCambio solicitud) {
 		return 1;
 	}
 
+	/** Una corrección hacia OTRA familia se muestra resaltada: es la vía para mover dinero entre familias. */
 	@Override
 	public String advertencia(SolicitudCambio solicitud) {
 		Map<String, String> datos = DatosSolicitud.leer(solicitud.getDatos());

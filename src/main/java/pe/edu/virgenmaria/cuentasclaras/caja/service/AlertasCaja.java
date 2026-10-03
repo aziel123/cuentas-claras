@@ -87,12 +87,20 @@ public class AlertasCaja implements AlertasRevision {
 
 	private final PropiedadesCaja propiedades;
 
+	private final pe.edu.virgenmaria.cuentasclaras.comprobantes.config.PropiedadesComprobantes seriesConfiguradas;
+
+	private final pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService auditoria;
+
 	private final Clock reloj;
 
 	public AlertasCaja(CajaDiariaRepository cajas, CierreCajaRepository cierres, DepositoCajaRepository depositos,
 			PagoRepository pagos, AnulacionPagoRepository anulaciones, VerificacionBancariaRepository verificaciones,
 			SolicitudCambioRepository solicitudes, SerieComprobanteRepository series, ComprobanteRepository comprobantes,
-			NombresUsuarios nombres, PropiedadesCaja propiedades, Clock reloj) {
+			NombresUsuarios nombres, PropiedadesCaja propiedades,
+			pe.edu.virgenmaria.cuentasclaras.comprobantes.config.PropiedadesComprobantes seriesConfiguradas,
+			pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService auditoria, Clock reloj) {
+		this.seriesConfiguradas = seriesConfiguradas;
+		this.auditoria = auditoria;
 		this.cajas = cajas;
 		this.cierres = cierres;
 		this.depositos = depositos;
@@ -117,12 +125,17 @@ public class AlertasCaja implements AlertasRevision {
 		cajasSinCerrar(alertas, hoy, ahora.toLocalTime());
 		noEncontrados(alertas, desde);
 		depositosDistintos(alertas, desde);
+		depositosTardios(alertas, desde);
 		huecosEnSeries(alertas);
-		sinVerificar(alertas, hoy);
+		consistencia(alertas);
+		devolucionesSinReembolso(alertas);
+		sinVerificar(alertas, ahora);
 		sinDepositar(alertas, hoy);
 		anulacionesPendientes(alertas);
-		devolucionesPosteriores(alertas, desde);
+		devolucionesEnEfectivoDeHoy(alertas, hoy);
+		verificacionesQueNoCoincidieron(alertas, hoy);
 		observados(alertas, desde);
+		muestraDeVerificaciones(alertas, hoy);
 		return alertas;
 	}
 
@@ -138,7 +151,14 @@ public class AlertasCaja implements AlertasRevision {
 						+ "». Por aprobar.", "/aprobaciones"));
 			}
 		}
-		long cuadrados = porRevisar.stream().filter(c -> !c.conDiferencia()).count();
+		for (CierreCaja c : porRevisar) {
+			if (c.isTrasReapertura()) {
+				alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, "Cierre tras reapertura (no es ciego: la cajera ya "
+						+ "había visto el esperado) de la caja de " + nombres.de(c.getCaja().getCajero()) + " del "
+						+ Calendario.formatear(c.getCaja().getFecha()) + ". Revísalo con comentario.", "/aprobaciones"));
+			}
+		}
+		long cuadrados = porRevisar.stream().filter(c -> !c.conDiferencia() && !c.isTrasReapertura()).count();
 		if (cuadrados > 0) {
 			alertas.add(new AlertaRevision(Gravedad.INFORMATIVA, MODULO, cuadrados + " cierre(s) de caja sin diferencia "
 					+ "esperan tu aprobación (un clic).", "/aprobaciones"));
@@ -198,7 +218,15 @@ public class AlertasCaja implements AlertasRevision {
 	}
 
 	private void huecosEnSeries(List<AlertaRevision> alertas) {
+		java.util.Set<String> configuradas = java.util.Set.of(seriesConfiguradas.serieBoleta(),
+				seriesConfiguradas.serieFactura(), seriesConfiguradas.serieNotaBoleta(), seriesConfiguradas.serieNotaFactura());
 		for (SerieComprobante serie : series.findAll()) {
+			if (!configuradas.contains(serie.getSerie())) {
+				alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Existe la serie " + serie.getSerie() + " con "
+						+ serie.getUltimoNumero() + " comprobante(s), que no es ninguna de las configuradas ("
+						+ String.join(", ", new java.util.TreeSet<>(configuradas)) + "): alguien emitió fuera del sistema. "
+						+ "Revísalo con soporte.", null));
+			}
 			long emitidos = comprobantes.countBySerie(serie.getSerie());
 			if (emitidos != serie.getUltimoNumero()) {
 				alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La serie " + serie.getSerie() + " va en el "
@@ -208,20 +236,34 @@ public class AlertasCaja implements AlertasRevision {
 		}
 	}
 
-	private void sinVerificar(List<AlertaRevision> alertas, LocalDate hoy) {
+	/**
+	 * Pagos digitales y depósitos sin verificar: ATENCIÓN cuando llevan más del límite en HORAS desde que se registraron
+	 * (un Yape de las 23:59:59 no tiene «más de un día» a las 00:00:01) y CRÍTICA cuando pasó la hora límite del día
+	 * hábil siguiente al cobro (A4).
+	 */
+	private void sinVerificar(List<AlertaRevision> alertas, LocalDateTime ahora) {
 		int dias = propiedades.diasSinVerificar();
+		List<Pago> pendientes = pagos.digitalesSinVerificar();
+		List<Pago> criticos = pendientes.stream().filter(p -> !ahora.isBefore(
+				Calendario.siguienteDiaHabil(p.getFecha()).atTime(propiedades.horaLimiteCierre()))).toList();
+		if (!criticos.isEmpty()) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, criticos.size() + " pago(s) digital(es) por "
+					+ Dinero.formatear(Dinero.sumar(criticos.stream().map(Pago::getTotal).toList())) + " siguen sin "
+					+ "verificarse en el banco pasado el día hábil siguiente al cobro (el más antiguo, del "
+					+ Calendario.formatear(criticos.getFirst().getFecha()) + ").", "/conciliacion"));
+		}
 		if (dias <= 0) {
 			return;
 		}
-		LocalDate limite = hoy.minusDays(dias);
-		List<Pago> atrasados = pagos.digitalesSinVerificar().stream().filter(p -> !p.getFecha().isAfter(limite)).toList();
+		List<Pago> atrasados = pendientes.stream().filter(p -> !criticos.contains(p)
+				&& !java.time.Duration.between(p.getCreadoEn(), ahora).minusDays(dias).isNegative()).toList();
 		if (!atrasados.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, atrasados.size() + " pago(s) digital(es) por "
 					+ Dinero.formatear(Dinero.sumar(atrasados.stream().map(Pago::getTotal).toList())) + " llevan más de "
 					+ dias + " día(s) sin verificarse en el banco.", "/conciliacion"));
 		}
 		List<DepositoCaja> depositosAtrasados = depositos.sinVerificar().stream()
-				.filter(d -> !d.getFechaDeposito().isAfter(limite)).toList();
+				.filter(d -> !java.time.Duration.between(d.getCreadoEn(), ahora).minusDays(dias).isNegative()).toList();
 		if (!depositosAtrasados.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, depositosAtrasados.size() + " depósito(s) llevan "
 					+ "más de " + dias + " día(s) sin verificarse en el banco.", "/conciliacion"));
@@ -237,9 +279,12 @@ public class AlertasCaja implements AlertasRevision {
 					.orElse(Dinero.CERO);
 			BigDecimal aDepositar = contado.subtract(caja.getFondoFijo());
 			if (aDepositar.signum() > 0) {
-				alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, "El efectivo de la caja de "
-						+ nombres.de(caja.getCajero()) + " del " + Calendario.formatear(caja.getFecha()) + " ("
-						+ Dinero.formatear(aDepositar) + ") aún no se deposita.", "/aprobaciones/cajas/" + caja.getId()));
+				// M3 (lapping): pasado un día hábil completo sin depositar, es crítico.
+				boolean critico = hoy.isAfter(Calendario.siguienteDiaHabil(caja.getFecha()));
+				alertas.add(new AlertaRevision(critico ? Gravedad.CRITICA : Gravedad.ATENCION, MODULO, "El efectivo de la "
+						+ "caja de " + nombres.de(caja.getCajero()) + " del " + Calendario.formatear(caja.getFecha()) + " ("
+						+ Dinero.formatear(aDepositar) + ") aún no se deposita" + (critico ? ", y ya pasó un día hábil." : ".")
+						, "/aprobaciones/cajas/" + caja.getId()));
 			}
 		}
 	}
@@ -254,15 +299,93 @@ public class AlertasCaja implements AlertasRevision {
 		}
 	}
 
-	private void devolucionesPosteriores(List<AlertaRevision> alertas, LocalDate desde) {
-		for (AnulacionPago a : anulaciones.findByPosteriorAlCierreTrueAndTipoOrderByIdDesc(TipoAnulacion.DEVOLUCION)) {
-			if (a.getCreadoEn().toLocalDate().isBefore(desde)) {
-				continue;
+	/** A1 y A2: una devolución aprobada sin su reembolso registrado por Administración es crítica (caja abierta o no). */
+	private void devolucionesSinReembolso(List<AlertaRevision> alertas) {
+		for (AnulacionPago a : anulaciones.devolucionesSinReembolso()) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Devolución sin reembolso registrado: "
+					+ a.getPago().getComprobante().numeroCompleto() + " (" + a.getPago().getMedio().etiqueta() + ", "
+					+ Dinero.formatear(a.getMonto()) + ", " + a.getPago().getFamilia().getNombre() + ")"
+					+ (a.isPosteriorAlCierre() ? ", anulado después del cierre de su caja" : "")
+					+ ". Administración debe registrar a quién y cómo se devolvió.", "/conciliacion"));
+		}
+	}
+
+	/** A2: todas las devoluciones en efectivo del día, para que Promotoría las revise a diario. */
+	private void devolucionesEnEfectivoDeHoy(List<AlertaRevision> alertas, LocalDate hoy) {
+		List<AnulacionPago> deHoy = anulaciones.findByCreadoEnGreaterThanEqualOrderByIdAsc(hoy.atStartOfDay()).stream()
+				.filter(a -> a.getTipo() == TipoAnulacion.DEVOLUCION
+						&& a.getPago().getMedio() == pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.EFECTIVO)
+				.toList();
+		if (!deHoy.isEmpty()) {
+			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, "Devoluciones en efectivo de hoy: " + deHoy.size()
+					+ " por " + Dinero.formatear(Dinero.sumar(deHoy.stream().map(AnulacionPago::getMonto).toList())) + " ("
+					+ deHoy.stream().map(a -> a.getPago().getComprobante().numeroCompleto() + " de "
+							+ nombres.de(a.getCajeroPago()) + ", aprobada por " + a.getAprobadoPor())
+							.collect(java.util.stream.Collectors.joining("; ")) + ").", "/conciliacion"));
+		}
+	}
+
+	/** M1: toda boleta o factura tiene su pago y toda nota de crédito su anulación aprobada. */
+	private void consistencia(List<AlertaRevision> alertas) {
+		var sinPago = pagos.comprobantesSinPago();
+		if (!sinPago.isEmpty()) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, sinPago.size() + " boleta(s) o factura(s) sin su pago "
+					+ "en el libro: " + sinPago.stream().limit(5).map(c -> c.numeroCompleto())
+							.collect(java.util.stream.Collectors.joining(", ")) + ". Revísalo con soporte.", null));
+		}
+		var notas = pagos.notasSinAnulacion();
+		if (!notas.isEmpty()) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, notas.size() + " nota(s) de crédito sin su anulación "
+					+ "aprobada: " + notas.stream().limit(5).map(c -> c.numeroCompleto())
+							.collect(java.util.stream.Collectors.joining(", ")) + ". Revísalo con soporte.", null));
+		}
+	}
+
+	/** M3: depósito que llegó al banco más de un día hábil después de la caja (fecha declarada o la del banco). */
+	private void depositosTardios(List<AlertaRevision> alertas, LocalDate desde) {
+		for (DepositoCaja d : depositos.findByFechaDepositoGreaterThanEqual(desde)) {
+			LocalDate banco = verificaciones.findByDepositoIdIn(List.of(d.getId())).stream().findFirst()
+					.map(VerificacionBancaria::getBancoFecha).orElse(null);
+			boolean tardio = ServicioVerificacionBancaria.tardio(d.getCaja().getFecha(), d.getFechaDeposito())
+					|| ServicioVerificacionBancaria.tardio(d.getCaja().getFecha(), banco);
+			if (tardio) {
+				alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Depósito tardío: el efectivo de la caja de "
+						+ nombres.de(d.getCaja().getCajero()) + " del " + Calendario.formatear(d.getCaja().getFecha())
+						+ " llegó al banco el " + Calendario.formatear(banco != null ? banco : d.getFechaDeposito())
+						+ ", más de un día hábil después (posible uso del efectivo de un día para cubrir otro).",
+						"/aprobaciones/cajas/" + d.getCaja().getId()));
 			}
-			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, "Devolución pendiente: se anuló "
-					+ a.getPago().getComprobante().numeroCompleto() + " (" + Dinero.formatear(a.getMonto())
-					+ ") después del cierre de su caja. El cierre no cambia: el reembolso lo hace Administración desde el "
-					+ "banco.", "/aprobaciones/cajas/" + a.getPago().getCaja().getId()));
+		}
+	}
+
+	/** C1: intentos de verificación de hoy en los que lo escrito del banco no coincidió con lo registrado. */
+	private void verificacionesQueNoCoincidieron(List<AlertaRevision> alertas, LocalDate hoy) {
+		long intentos = auditoria.contarDesde(pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria
+				.VERIFICACION_NO_COINCIDE, hoy.atStartOfDay());
+		if (intentos > 0) {
+			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, intentos + " verificación(es) bancaria(s) de hoy no "
+					+ "coincidieron con lo registrado (operación, fecha o monto). Revisa la bitácora.",
+					"/auditoria?soloRevisar=true"));
+		}
+	}
+
+	/**
+	 * A4: muestra al azar (estable durante el día) de 3 verificaciones «Encontrado» del día hábil anterior, con quién
+	 * verificó y qué escribió del banco, para que Promotoría las compare con el estado de cuenta.
+	 */
+	private void muestraDeVerificaciones(List<AlertaRevision> alertas, LocalDate hoy) {
+		LocalDate dia = Calendario.anteriorDiaHabil(hoy);
+		List<VerificacionBancaria> delDia = new ArrayList<>(verificaciones.findByResultadoAndCreadoEnBetweenOrderByIdAsc(
+				ResultadoVerificacion.ENCONTRADO, dia.atStartOfDay(), dia.plusDays(1).atStartOfDay()));
+		java.util.Collections.shuffle(delDia, new java.util.Random(hoy.toEpochDay()));
+		for (VerificacionBancaria v : delDia.stream().limit(3).toList()) {
+			String que = v.getPago() != null
+					? v.getPago().getMedio().etiqueta() + " de " + v.getPago().getFamilia().getNombre()
+					: "Depósito de la caja de " + nombres.de(v.getDeposito().getCaja().getCajero());
+			alertas.add(new AlertaRevision(Gravedad.INFORMATIVA, MODULO, "Revisa al azar: " + que + ", verificado por "
+					+ nombres.de(v.getCreadoPor()) + " (operación " + v.getBancoOperacion() + " del "
+					+ Calendario.formatear(v.getBancoFecha()) + " por " + Dinero.formatear(v.getBancoMonto())
+					+ "). Compáralo con el estado de cuenta.", "/conciliacion"));
 		}
 	}
 

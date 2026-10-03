@@ -12,6 +12,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 
+import java.util.List;
+
 /** Bandeja de aprobaciones. Sin lógica: delega en {@link BandejaAprobaciones} (que exige el rol). */
 @Controller
 @RequestMapping("/aprobaciones")
@@ -31,8 +33,10 @@ public class AprobacionesController {
 
 	@PostMapping("/{id:\\d+}/aprobar")
 	public String aprobar(@PathVariable Long id, @RequestParam(required = false) String comentario,
+			@RequestParam(defaultValue = "false") boolean hablo, @RequestParam(required = false) List<String> telefonos,
 			RedirectAttributes avisos) {
-		return resolver(avisos, () -> bandeja.aprobar(id, comentario), "Listo: aprobaste la solicitud y el cambio se aplicó.");
+		return resolver(avisos, () -> bandeja.aprobar(id, comentario, hablo, telefonos),
+				"Listo: aprobaste la solicitud y el cambio se aplicó.");
 	}
 
 	@PostMapping("/{id:\\d+}/rechazar")

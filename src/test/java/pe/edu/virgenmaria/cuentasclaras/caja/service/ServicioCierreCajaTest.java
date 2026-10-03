@@ -21,6 +21,7 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ContenidoVisible;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.Familias;
@@ -105,7 +106,7 @@ class ServicioCierreCajaTest {
 		assertThat(antes.porCerrar().reconteo()).isFalse();
 		// Antes de contar, ningún monto de la caja (solo el fondo fijo, que la cajera ya conoce).
 		assertThat(antes.ultimoCierre()).isNull();
-		assertThat(antes.toString()).doesNotContain("450");
+		assertThat(ContenidoVisible.muestraMonto(antes, "450.00")).isFalse();
 
 		assertThat(cierre.contar(new ConteoRequest(new BigDecimal("450.00"), null))).isEqualTo(ResultadoConteo.COINCIDE);
 
@@ -132,7 +133,8 @@ class ServicioCierreCajaTest {
 		EstadoCierreVista estado = cierre.estado();
 		assertThat(estado.porCerrar().reconteo()).isTrue();
 		assertThat(estado.ultimoCierre()).isNull();
-		assertThat(estado.toString()).doesNotContain("450").doesNotContain("400");
+		assertThat(ContenidoVisible.muestraMonto(estado, "450.00")).isFalse();
+		assertThat(ContenidoVisible.muestraMonto(estado, "400.00")).isFalse();
 		assertThat(EscenarioEscolar.ultimoEvento(jdbc, "CAJA_CONTEO_NO_COINCIDE").get("detalle")).asString()
 				.contains("S/ 400.00", "S/ 450.00");
 		// No se puede volver a «primer conteo» para tantear.

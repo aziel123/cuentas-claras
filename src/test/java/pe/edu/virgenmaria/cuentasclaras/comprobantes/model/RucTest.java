@@ -2,6 +2,7 @@ package pe.edu.virgenmaria.cuentasclaras.comprobantes.model;
 
 import org.junit.jupiter.api.Test;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Ruc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

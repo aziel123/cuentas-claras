@@ -39,37 +39,50 @@ Guía de operación del sprint 3 (tanda 3). El diseño completo está en `docs/a
   - es la caja **del mismo día**;
   - no tiene depósito registrado;
   - la aprueba otra persona.
-- Al reabrir se vuelve a contar a ciegas. **El cierre anterior queda registrado tal cual**, con su diferencia: reabrir no «arregla» un faltante. Si el cierre tenía diferencia, la tarjeta de reapertura lo advierte.
+- Al reabrir se vuelve a contar. **El cierre anterior queda registrado tal cual**, con su diferencia: reabrir no «arregla» un faltante. Si el cierre tenía diferencia, la tarjeta de reapertura lo advierte.
+- El cierre después de una reapertura **no es ciego** (la cajera ya vio el esperado del cierre anterior): queda marcado «Cierre tras reapertura», va primero en la bandeja, aprobarlo exige un comentario y Promotoría recibe una alerta.
 
-## Anulaciones después del cierre
-- Si se anula un pago en efectivo de una caja **ya cerrada**:
-  - el cierre no cambia;
-  - la anulación queda marcada «posterior al cierre»;
-  - Promotoría ve la alerta «Devolución pendiente»;
-  - el reembolso lo hace Administración desde el banco.
+## Anulaciones y devoluciones
+- Un pago **digital** solo se puede anular (devolución o corrección) si Administración ya lo encontró en el banco. Un Yape que nunca llegó no sale de la conciliación con una devolución: queda como alerta.
+- Al pedir una devolución se elige la causa. Si es «pago duplicado», el sistema exige que exista otro pago vigente de esas cuotas.
+- Para aprobar una **devolución en efectivo**, quien aprueba llama al apoderado, marca «Hablé con el apoderado» y escribe el número al que llamó: debe ser un celular registrado de la familia. En la bitácora queda enmascarado. Una **corrección hacia otra familia** exige hablar con ambas familias.
+- Toda devolución aprobada espera su **reembolso**, que registra Administración en *Conciliación* (nunca la cajera del pago):
+  - digital: a la cuenta de origen, con el número de operación de la devolución;
+  - efectivo: contra la firma de la nota de crédito impresa (trae espacio para la firma, el nombre y el DNI de quien recibe).
+  - Hasta que se registre, Promotoría tiene una alerta **crítica**.
+- Si se anula un pago en efectivo de una caja **ya cerrada**, el cierre no cambia y la anulación queda marcada «posterior al cierre».
 - Una **corrección** en una caja cerrada no cambia el efectivo de esa caja: el pago de reemplazo entra en la misma caja.
 
-## Verificación bancaria (Administración)
-- En *Conciliación bancaria* (`/conciliacion`), Administración marca cada pago digital (Yape, Plin, transferencia o tarjeta) y cada depósito como **Encontrado** o **No aparece** frente al estado de cuenta.
-  - «No aparece» exige una nota y es una alerta crítica para Promotoría. Así se detecta un Yape inventado para quedarse con el efectivo, algo que el cierre solo no ve.
-  - Nunca verifica quien cobró o depositó (trigger).
-- Lo que lleva más de `cuentasclaras.caja.dias-sin-verificar` días (1 por defecto) aparece resaltado y como alerta.
+## Verificación bancaria a ciegas (Administración)
+- En *Conciliación bancaria* (`/conciliacion`), Administración **no ve** el número de operación ni el monto registrados. Para marcar **Encontrado** escribe lo que ve en el estado de cuenta: la operación, la fecha y el monto. El sistema compara:
+  - el número se compara en su forma canónica (sin guiones, espacios ni ceros a la izquierda);
+  - un pago se acepta hasta 3 días después de cobrado; un depósito, en su fecha;
+  - si no coincide, no se guarda nada y queda en la bitácora; Promotoría ve cuántos intentos no coincidieron.
+- «No aparece» exige una nota y es una alerta crítica para Promotoría.
+- Nunca verifica quien cobró o depositó (trigger).
+- Se marcan los números **parecidos** (iguales o a un carácter de otro de los últimos 90 días) y los depósitos **tardíos** (más de un día hábil después de la caja).
+- Un mismo número de operación no se registra dos veces, ni en otro formato ni en otro medio digital; lo mismo para los vouchers de depósito.
 
 ## Alertas de Promotoría (inicio, «Para revisar»)
-Se calculan al consultar, sin tareas programadas. Las críticas aparecen primero.
+Se calculan al consultar, sin tareas programadas. Las críticas aparecen primero. Los días hábiles son de lunes a viernes (los feriados no se consideran).
 - **Críticas:**
   - faltante o sobrante en un cierre por aprobar;
   - caja de un día anterior sin cerrar;
   - pago o depósito que no aparece en el banco;
+  - pago digital sin verificar pasada la hora límite del día hábil siguiente al cobro;
+  - efectivo sin depositar cuando ya pasó un día hábil completo, y depósito tardío;
   - depósito distinto de lo contado;
-  - hueco en una serie de comprobantes.
+  - devolución aprobada sin reembolso registrado;
+  - hueco en una serie de comprobantes, o una serie que no es de las configuradas;
+  - una boleta o factura sin su pago, o una nota de crédito sin su anulación aprobada.
 - **Atención:**
-  - caja de hoy abierta pasada la hora límite (`hora-limite-cierre`, 19:00);
-  - pagos digitales o depósitos sin verificar;
-  - efectivo de días anteriores sin depositar;
+  - caja de hoy abierta pasada la hora límite (`hora-limite-cierre`, 19:00, incluida);
+  - pagos digitales o depósitos sin verificar por más de `dias-sin-verificar` días, contados en horas;
+  - efectivo del día hábil anterior sin depositar;
   - anulaciones de pago pendientes, con su monto;
-  - devoluciones posteriores al cierre;
-  - cierres observados.
-- **Para saber:** los cierres sin diferencia que esperan aprobación.
+  - todas las devoluciones en efectivo del día;
+  - verificaciones bancarias de hoy que no coincidieron;
+  - cierres tras reapertura y cierres observados.
+- **Para saber:** los cierres sin diferencia que esperan aprobación y una **muestra al azar** de 3 verificaciones del día hábil anterior, con quién verificó y qué escribió, para compararlas con el banco.
 
 Arriba de las alertas aparece **Hoy en caja**: lo cobrado hoy, cuánto fue en efectivo, cuánto digital (con su porcentaje) y cuántas cajas están abiertas o cerradas.

@@ -34,15 +34,16 @@
 					<td data-etiqueta="Alumnos" th:text="${p.alumnos}">Mateo Quispe Huamán</td>
 					<td data-etiqueta="Conceptos" th:text="${p.conceptos}">Pensión diciembre 2026</td>
 					<td data-etiqueta="Medio" th:text="${p.medio}">Efectivo</td>
-					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${p.total})}"></span></td>
+					<td data-etiqueta="Monto" class="num"><th:block th:if="${p.total != null}"><span th:replace="~{fragments/componentes :: monto(${p.total})}"></span></th:block>
+						<span class="secundario" th:if="${p.total == null}" data-monto-oculto>Se ve al cerrar</span></td>
 					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${p.estado}, ${p.estadoVariante})}"></span>
 						<small class="bloque secundario" th:if="${p.notaCredito != null}" th:text="|Nota de crédito ${p.notaCredito}|">Nota de crédito BC01-00000001</small>
 						<small class="bloque secundario" th:if="${p.reemplazaA != null}" th:text="|Reemplaza a ${p.reemplazaA}|">Reemplaza a B001-00000001</small></td>
 					<td data-etiqueta="Acciones">
 						<div class="fila" th:if="${p.puedeSolicitar}">
-							<th:block th:replace="~{fragments/componentes :: modalMotivo(|modal-anular-${p.id}|, |¿Pedir la anulación de ${p.comprobante}?|,
+							<th:block th:replace="~{fragments/componentes :: modalDevolucion(|modal-anular-${p.id}|, |¿Pedir la anulación de ${p.comprobante}?|,
 								'El pago sigue vigente hasta que Promotoría o Dirección lo aprueben. Al aprobarse se emite una nota de crédito y las cuotas vuelven a deberse.',
-								@{/caja/pagos/{id}/devolucion(id=${p.id})}, 'Solicitar anulación', 'secundario', 'Pedir anulación')}"></th:block>
+								@{/caja/pagos/{id}/devolucion(id=${p.id})})}"></th:block>
 							<a class="btn btn-texto btn-chico" th:href="@{/caja/pagos/{id}/correccion(id=${p.id})}">Corregir</a>
 						</div>
 						<span class="secundario" th:unless="${p.puedeSolicitar}">—</span>

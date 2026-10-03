@@ -11,6 +11,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PruebaJpa;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -137,7 +138,7 @@ class VerificadorPermisosBaseDatosTest {
 	/** Tablas de solo inserción: cc_app no tiene ningún UPDATE sobre ellas (1142). */
 	private static final java.util.regex.Pattern SOLO_INSERCION = java.util.regex.Pattern
 			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
-					+ "verificacion_bancaria) ");
+					+ "verificacion_bancaria|reembolso) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -212,7 +213,8 @@ class VerificadorPermisosBaseDatosTest {
 				{ "INSERT INTO anulacion_pago", "trg_anulacion_pago_registro" },
 				{ "INSERT INTO descuento", "trg_descuento_nace" }, { "INSERT INTO ajuste_cuota", "trg_ajuste_cuota_registro" },
 				{ "INSERT INTO cierre_caja", "trg_cierre_caja_registro" },
-				{ "INSERT INTO verificacion_bancaria", "trg_verificacion_bancaria_registro" } }) {
+				{ "INSERT INTO verificacion_bancaria", "trg_verificacion_bancaria_registro" },
+				{ "INSERT INTO reembolso", "trg_reembolso_registro" } }) {
 			JdbcTemplate mysql = mysqlQueDeniega();
 			doThrow(denegado(1452)).when(mysql).update(org.mockito.ArgumentMatchers.startsWith(caso[0]));
 
@@ -234,7 +236,69 @@ class VerificadorPermisosBaseDatosTest {
 			}
 			throw denegado(1142);
 		});
+		when(mysql.queryForList(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
+				.thenReturn(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
 		return mysql;
+	}
+
+	/**
+	 * M2 (correcciones del sprint 3): si alguien borra un trigger BEFORE UPDATE (que ningún INSERT imposible detecta),
+	 * la aplicación no arranca.
+	 */
+	@Test
+	void fallaSiFaltaUnTriggerBeforeUpdate() {
+		for (String borrado : List.of("trg_caja_diaria_estado", "trg_pago_anulacion", "trg_cuota_libro",
+				"trg_cierre_caja_revisado", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio")) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			when(mysql.queryForList(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class)).thenReturn(
+					VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream().filter(t -> !t.equals(borrado)).toList());
+
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
+					.as(borrado).isInstanceOf(IllegalStateException.class).hasMessageContaining("Faltan triggers")
+					.hasMessageContaining(borrado);
+		}
+	}
+
+	/** Fase 1 (cc_app solo lee, antes de 02 y 03): no hay vista ni triggers y no hace falta: arranca. */
+	@Test
+	void enLaFase1SinVistaNiTriggersArranca() {
+		JdbcTemplate mysql = org.mockito.Mockito.mock(JdbcTemplate.class);
+		doThrow(denegado(1142)).when(mysql).update(anyString());
+		when(mysql.queryForList(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
+				.thenThrow(denegado(1146));
+
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
+				.doesNotThrowAnyException();
+	}
+
+	@Test
+	void fallaSiNoExisteLaVistaDeTriggers() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		when(mysql.queryForList(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
+				.thenThrow(denegado(1146));
+
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("trigger_instalado")
+				.hasMessageContaining("1146");
+	}
+
+	/** La lista del verificador es EXACTAMENTE la de scripts/mysql/03-triggers.sql (en el mismo orden). */
+	@Test
+	void listaDeTriggersCoincideConElScript() throws java.io.IOException {
+		String script = java.nio.file.Files.readString(java.nio.file.Path.of("scripts/mysql/03-triggers.sql"));
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("CREATE TRIGGER (\\w+)").matcher(script);
+		List<String> enScript = new java.util.ArrayList<>();
+		while (m.find()) {
+			enScript.add(m.group(1));
+		}
+		org.assertj.core.api.Assertions.assertThat(enScript).isEqualTo(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
+		java.util.regex.Matcher borrados = java.util.regex.Pattern.compile("DROP TRIGGER IF EXISTS (\\w+)").matcher(script);
+		List<String> conDrop = new java.util.ArrayList<>();
+		while (borrados.find()) {
+			conDrop.add(borrados.group(1));
+		}
+		org.assertj.core.api.Assertions.assertThat(conDrop).as("cada trigger se puede volver a aplicar")
+				.isEqualTo(enScript);
 	}
 
 	private static UncategorizedSQLException denegado(int codigo) {

@@ -73,9 +73,9 @@
 							th:text="|Nota de crédito ${p.notaCredito}|">Nota de crédito BC01-00000001</a></td>
 					<td data-etiqueta="Acciones" th:if="${e.puedeSolicitar}">
 						<div class="fila" th:if="${p.puedeSolicitar}">
-							<th:block th:replace="~{fragments/componentes :: modalMotivo(|modal-anular-${p.id}|, |¿Pedir la anulación de ${p.comprobante}?|,
+							<th:block th:replace="~{fragments/componentes :: modalDevolucion(|modal-anular-${p.id}|, |¿Pedir la anulación de ${p.comprobante}?|,
 								'El pago sigue vigente hasta que Promotoría o Dirección lo aprueben. Al aprobarse se emite una nota de crédito.',
-								@{/alumnos/pagos/{id}/devolucion(id=${p.id},alumno=${e.alumnoId})}, 'Solicitar anulación', 'secundario', 'Pedir anulación')}"></th:block>
+								@{/alumnos/pagos/{id}/devolucion(id=${p.id},alumno=${e.alumnoId})})}"></th:block>
 							<a class="btn btn-texto btn-chico" th:href="@{/alumnos/pagos/{id}/correccion(id=${p.id})}">Corregir</a>
 						</div>
 					</td>

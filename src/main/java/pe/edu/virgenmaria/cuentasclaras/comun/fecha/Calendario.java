@@ -84,6 +84,29 @@ public final class Calendario {
 	}
 
 	/** 05/03/2015. */
+	/**
+	 * El día hábil siguiente (lunes a viernes). Los feriados no se consideran (riesgo anotado en
+	 * docs/arquitectura/sprint-3-correcciones.md): una alerta puede adelantarse un día en la semana de un feriado.
+	 */
+	public static LocalDate siguienteDiaHabil(LocalDate fecha) {
+		LocalDate siguiente = fecha.plusDays(1);
+		while (siguiente.getDayOfWeek() == java.time.DayOfWeek.SATURDAY
+				|| siguiente.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+			siguiente = siguiente.plusDays(1);
+		}
+		return siguiente;
+	}
+
+	/** El día hábil anterior (lunes a viernes). */
+	public static LocalDate anteriorDiaHabil(LocalDate fecha) {
+		LocalDate anterior = fecha.minusDays(1);
+		while (anterior.getDayOfWeek() == java.time.DayOfWeek.SATURDAY
+				|| anterior.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+			anterior = anterior.minusDays(1);
+		}
+		return anterior;
+	}
+
 	public static String formatear(LocalDate fecha) {
 		return fecha == null ? "" : fecha.format(FECHA_CORTA);
 	}

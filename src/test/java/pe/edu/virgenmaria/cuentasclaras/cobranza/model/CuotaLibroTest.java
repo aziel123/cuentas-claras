@@ -84,7 +84,7 @@ class CuotaLibroTest {
 	void cuotaAnuladaNoRecibePagos() {
 		Cuota cuota = CuotasDePrueba.pensionSetiembre("450.00");
 		cuota.anular("La familia se retiró antes de setiembre", "administracion", "director",
-				LocalDateTime.of(2027, 8, 2, 9, 0));
+				LocalDateTime.of(2027, 8, 2, 9, 0), 5L);
 
 		assertThat(cuota.admiteCobro()).isFalse();
 		assertThatThrownBy(() -> cuota.reflejarPagos(new BigDecimal("450.00")))

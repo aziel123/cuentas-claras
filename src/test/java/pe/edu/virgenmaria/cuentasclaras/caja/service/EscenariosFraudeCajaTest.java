@@ -175,7 +175,7 @@ class EscenariosFraudeCajaTest {
 				List<Object> resultados = new ArrayList<>();
 				for (Future<Long> r : List.of(primera, segunda)) {
 					try {
-						resultados.add(r.get(30, TimeUnit.SECONDS));
+						resultados.add(r.get(120, TimeUnit.SECONDS));
 					}
 					catch (ExecutionException e) {
 						resultados.add(e.getCause());

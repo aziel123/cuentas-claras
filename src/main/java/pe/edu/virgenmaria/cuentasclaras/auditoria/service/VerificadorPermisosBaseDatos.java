@@ -26,6 +26,9 @@ import java.util.stream.Collectors;
  *       ({@code UPDATE} de la columna {@code monto} → 1143, o 1142 si no tiene ningún UPDATE);</li>
  *   <li>que no puede borrar ni editar el libro de pagos, los comprobantes ni las cajas, ni cambiar sus columnas
  *       inmutables, y que están los triggers de caja (sprint 3);</li>
+ *   <li>que están TODOS los triggers de {@code scripts/mysql/03-triggers.sql} (correcciones del sprint 3, M2), también
+ *       los BEFORE UPDATE, que no se pueden probar con un INSERT imposible: lee la vista
+ *       {@code cuentasclaras.trigger_instalado} (02-permisos-tablas.sql) y la compara con {@link #TRIGGERS_ESPERADOS};</li>
  *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes).</li>
  * </ul>
  * Si algo falla, la aplicación NO arranca. No hay interruptor para saltarse esta comprobación.
@@ -132,7 +135,28 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "'verificador', NOW(6))", "trg_cierre_caja_registro"),
 			trigger("INSERT INTO verificacion_bancaria (colegio_id, pago_id, resultado, creado_en, creado_por, "
 					+ "actualizado_en) VALUES (0, 0, 'ENCONTRADO', NOW(6), 'verificador', NOW(6))",
-					"trg_verificacion_bancaria_registro"));
+					"trg_verificacion_bancaria_registro"),
+			// Correcciones del sprint 3: el reembolso de una devolución es de solo inserción y lo vigila su trigger.
+			sinBorrado("reembolso"), soloInsercion("reembolso"),
+			trigger("INSERT INTO reembolso (colegio_id, anulacion_pago_id, medio, numero_operacion, monto, fecha, "
+					+ "cajero_pago, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'YAPE', 'VERIFICADOR', 1, "
+					+ "'2000-01-01', 'a', NOW(6), 'b', NOW(6))", "trg_reembolso_registro"));
+
+	/**
+	 * Todos los triggers de {@code scripts/mysql/03-triggers.sql}, en su orden. {@code TriggersEsperadosTest} exige que
+	 * coincidan con el archivo: un trigger nuevo se agrega en los dos lugares.
+	 */
+	static final List<String> TRIGGERS_ESPERADOS = List.of("trg_plan_pension_nace_borrador", "trg_plan_pension_inmutable",
+			"trg_lote_saldo_inicial_nace_borrador", "trg_lote_saldo_inicial_cerrado", "trg_linea_saldo_inicial_lote_abierto",
+			"trg_linea_saldo_inicial_quitar", "trg_cuota_nace_pendiente", "trg_cuota_libro", "trg_serie_comprobante_nace",
+			"trg_serie_comprobante_correlativo", "trg_comprobante_correlativo", "trg_caja_diaria_nace",
+			"trg_caja_diaria_estado", "trg_pago_registro", "trg_pago_anulacion", "trg_aplicacion_pago_registro",
+			"trg_anulacion_pago_registro", "trg_ajuste_cuota_registro", "trg_descuento_nace", "trg_descuento_resuelto",
+			"trg_cierre_caja_registro", "trg_cierre_caja_revisado", "trg_verificacion_bancaria_registro",
+			"trg_reembolso_registro", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio", "trg_apoderado_nace",
+			"trg_apoderado_facturacion");
+
+	static final String SQL_TRIGGERS_INSTALADOS = "SELECT nombre FROM trigger_instalado";
 
 	/** 1143 (columna sin GRANT) o 1142 (ningún UPDATE sobre la tabla, por ejemplo antes de aplicar el paso 2). */
 	private static SentenciaProhibida columna(String sql, String tabla) {
@@ -175,20 +199,56 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 	@Override
 	public void afterPropertiesSet() {
 		verificarMigraciones();
-		verificarPermisos();
+		if (comprobarPermisos()) {
+			verificarTriggers();
+		}
+		else {
+			// Fase 1 del despliegue (antes de 02 y 03): cc_app solo lee, así que no hay nada que un trigger deba frenar.
+			LOG.warn("La aplicación solo puede leer (faltan los GRANT de 02-permisos-tablas.sql): no se exigen los triggers.");
+		}
+	}
+
+	/** M2: están todos los triggers de 03-triggers.sql (también los BEFORE UPDATE). Si falta uno, no arranca. */
+	public void verificarTriggers() {
+		List<String> instalados;
+		try {
+			instalados = jdbc.queryForList(SQL_TRIGGERS_INSTALADOS, String.class);
+		}
+		catch (DataAccessException e) {
+			throw new IllegalStateException("No se pudo leer la vista cuentasclaras.trigger_instalado (código "
+					+ codigoMySql(e) + "): aplica scripts/mysql/02-permisos-tablas.sql como administrador. Revisa "
+					+ "docs/operacion/mysql-usuarios.md.", e);
+		}
+		Set<String> presentes = instalados.stream().map(t -> t.toLowerCase(java.util.Locale.ROOT))
+				.collect(Collectors.toSet());
+		List<String> faltan = TRIGGERS_ESPERADOS.stream().filter(t -> !presentes.contains(t)).toList();
+		if (!faltan.isEmpty()) {
+			throw new IllegalStateException("Faltan triggers en la base: " + String.join(", ", faltan) + ". Sin ellos "
+					+ "cc_app podría saltarse las reglas por SQL. Aplica scripts/mysql/03-triggers.sql con cc_migrador. "
+					+ "Revisa docs/operacion/mysql-usuarios.md.");
+		}
+		LOG.info("Triggers verificados: están los {} de 03-triggers.sql.", TRIGGERS_ESPERADOS.size());
 	}
 
 	public void verificarPermisos() {
+		comprobarPermisos();
+	}
+
+	/** @return si la aplicación puede escribir (algún INSERT imposible llegó al trigger: 1644) */
+	private boolean comprobarPermisos() {
+		boolean escribe = false;
 		for (SentenciaProhibida sentencia : SENTENCIAS_PROHIBIDAS) {
 			String problema = comprobarDenegada(sentencia);
 			if (problema != null) {
 				throw new IllegalStateException(problema + " Revisa docs/operacion/mysql-usuarios.md.");
 			}
+			escribe |= sentencia.codigosAceptados().contains(MYSQL_SIGNAL) && llegoAlTrigger(sentencia);
 		}
 		LOG.info("Permisos de la bitácora verificados: la aplicación no puede editar ni borrar eventos.");
 		LOG.info("Permisos de las cuotas verificados: la aplicación no puede borrarlas ni cambiar su monto.");
 		LOG.info("Permisos por columna y triggers de planes, lotes y solicitudes verificados.");
 		LOG.info("Permisos y triggers de caja, comprobantes, anulaciones, descuentos y cierres verificados.");
+		return escribe;
 	}
 
 	public void verificarMigraciones() {
@@ -201,6 +261,13 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		}
 	}
 
+	/** Códigos con que la base rechazó cada sentencia en la última comprobación. */
+	private final java.util.Map<String, Integer> rechazos = new java.util.HashMap<>();
+
+	private boolean llegoAlTrigger(SentenciaProhibida sentencia) {
+		return Integer.valueOf(MYSQL_SIGNAL).equals(rechazos.get(sentencia.sql()));
+	}
+
 	/** @return {@code null} si la base la rechazó con un código aceptado; si no, la descripción del problema */
 	private String comprobarDenegada(SentenciaProhibida sentencia) {
 		try {
@@ -210,6 +277,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		catch (DataAccessException e) {
 			Integer codigo = codigoMySql(e);
 			if (codigo != null && sentencia.codigosAceptados().contains(codigo)) {
+				rechazos.put(sentencia.sql(), codigo);
 				return null;
 			}
 			return "No se pudo comprobar «" + sentencia.sql() + "» (código " + codigo + "): "

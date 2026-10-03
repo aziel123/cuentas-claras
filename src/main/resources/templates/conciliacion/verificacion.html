@@ -6,42 +6,98 @@
 		<div>
 			<p class="etiqueta">Conciliación bancaria</p>
 			<h1>Verificación bancaria</h1>
-			<p class="secundario">Compara cada Yape, Plin, transferencia y depósito con el estado de cuenta del banco. Si algo no
-				aparece, márcalo: Promotoría lo ve como alerta. Quien cobró o depositó nunca verifica lo suyo.</p>
+			<p class="secundario">Busca cada Yape, Plin, transferencia y depósito en el estado de cuenta del banco y escribe lo
+				que ves: el sistema lo compara con lo registrado. Si algo no aparece, márcalo: Promotoría lo ve como alerta.
+				Quien cobró o depositó nunca verifica lo suyo.</p>
 		</div>
 	</div>
 
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
 	<th:block th:unless="${v.puedeVerificar}">
-		<div th:replace="~{fragments/componentes :: alerta('info', 'Puedes ver lo que falta verificar; la verificación la hace Administración.')}"></div>
+		<div th:replace="~{fragments/componentes :: alerta('info', 'Puedes ver lo que falta verificar; la verificación y los reembolsos los registra Administración.')}"></div>
 	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-devoluciones" th:unless="${#lists.isEmpty(v.devoluciones)}">
+		<h2 id="titulo-devoluciones" th:text="|Devoluciones por reembolsar (${#lists.size(v.devoluciones)})|">Devoluciones por reembolsar</h2>
+		<p class="secundario">Ya aprobadas. Promotoría tiene una alerta crítica hasta que registres el reembolso: un pago digital
+			vuelve solo a la cuenta de origen; el efectivo se entrega contra la firma de la nota de crédito.</p>
+		<ul class="lista-tarjetas">
+			<li th:each="d : ${v.devoluciones}" class="persona" th:data-devolucion="${d.anulacionId}">
+				<p class="fila entre">
+					<strong th:text="|${d.medio} · ${d.familia}|">Yape · Familia Quispe</strong>
+					<span th:replace="~{fragments/componentes :: monto(${d.monto})}"></span>
+				</p>
+				<p class="secundario" th:text="|Pago ${d.comprobante} · nota de crédito ${d.notaCredito} · cobró ${d.cajera} · aprobada el ${#temporals.format(d.aprobadaEl, 'dd/MM/yyyy')}|">Pago B001-00000001</p>
+				<th:block th:if="${v.puedeVerificar}">
+					<button type="button" class="btn btn-chico btn-primario" th:popovertarget="|modal-reembolso-${d.anulacionId}|">Registrar reembolso</button>
+					<div class="modal" th:id="|modal-reembolso-${d.anulacionId}|" popover role="dialog" aria-modal="true"
+						th:aria-labelledby="|modal-reembolso-${d.anulacionId}-titulo|">
+						<form method="post" th:action="@{/conciliacion/devoluciones/{id}(id=${d.anulacionId})}" class="modal-cuerpo">
+							<h2 th:id="|modal-reembolso-${d.anulacionId}-titulo|" th:text="|Reembolso de ${d.comprobante}|">Reembolso</h2>
+							<th:block th:unless="${d.efectivo}">
+								<p>Devuélvelo por el mismo medio y a la misma cuenta desde la que pagó la familia.</p>
+								<div class="campo">
+									<label th:for="|modal-reembolso-${d.anulacionId}-op|">N.° de operación de la devolución</label>
+									<input class="input" type="text" th:id="|modal-reembolso-${d.anulacionId}-op|" name="numeroOperacion"
+										required maxlength="40" autocomplete="off">
+								</div>
+								<label class="opcion">
+									<input type="checkbox" name="cuentaDeOrigen" value="true" required>
+									<span>Lo devolví a la cuenta de origen del pago</span>
+								</label>
+							</th:block>
+							<th:block th:if="${d.efectivo}">
+								<p>Entrega el efectivo a un apoderado que firme la nota de crédito impresa con su nombre y DNI.</p>
+								<div class="campo">
+									<label th:for="|modal-reembolso-${d.anulacionId}-nombre|">Nombre de quien recibió</label>
+									<input class="input" type="text" th:id="|modal-reembolso-${d.anulacionId}-nombre|" name="recibidoPorNombre"
+										required minlength="5" maxlength="150" autocomplete="off">
+								</div>
+								<div class="campo">
+									<label th:for="|modal-reembolso-${d.anulacionId}-doc|">DNI o documento</label>
+									<input class="input" type="text" th:id="|modal-reembolso-${d.anulacionId}-doc|" name="recibidoPorDocumento"
+										required minlength="8" maxlength="20" autocomplete="off" inputmode="numeric">
+								</div>
+							</th:block>
+							<div class="acciones">
+								<button type="button" class="btn btn-secundario" th:popovertarget="|modal-reembolso-${d.anulacionId}|"
+									popovertargetaction="hide">Cancelar</button>
+								<button type="submit" class="btn btn-primario">Registrar reembolso</button>
+							</div>
+						</form>
+					</div>
+				</th:block>
+			</li>
+		</ul>
+	</section>
 
 	<section class="tarjeta" aria-labelledby="titulo-pagos">
 		<h2 id="titulo-pagos" th:text="|Pagos digitales por verificar (${#lists.size(v.pagos)})|">Pagos digitales por verificar</h2>
-		<p class="secundario" th:text="|Resaltados: llevan ${v.diasLimite} día(s) o más sin verificarse.|">Resaltados</p>
+		<p class="secundario" th:text="|Resaltados: llevan ${v.diasLimite} día(s) o más sin verificarse. «Crítico»: pasó el día hábil siguiente al cobro.|">Resaltados</p>
 		<th:block th:if="${#lists.isEmpty(v.pagos)}">
 			<div th:replace="~{fragments/componentes :: estadoVacio('Todo verificado', 'No hay pagos digitales por verificar.')}"></div>
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(v.pagos)}">
-			<thead><tr><th scope="col">Fecha</th><th scope="col">Medio</th><th scope="col">N.° de operación</th>
-				<th scope="col" class="num">Monto</th><th scope="col">Familia</th><th scope="col">Cobró</th>
+			<thead><tr><th scope="col">Fecha</th><th scope="col">Medio</th><th scope="col">Comprobante</th>
+				<th scope="col">Familia</th><th scope="col">Cobró</th>
 				<th scope="col" th:if="${v.puedeVerificar}">Verificar</th></tr></thead>
 			<tbody>
-				<tr th:each="p : ${v.pagos}" th:classappend="${p.atrasado} ? 'fila-atrasada'" th:data-pago="${p.id}">
-					<td data-etiqueta="Fecha" th:text="${#temporals.format(p.fecha, 'dd/MM/yyyy')}">02/10/2026</td>
+				<tr th:each="p : ${v.pagos}" th:classappend="${p.atrasado or p.critico} ? 'fila-atrasada'" th:data-pago="${p.id}">
+					<td data-etiqueta="Fecha"><span th:text="${#temporals.format(p.fecha, 'dd/MM/yyyy')}">02/10/2026</span>
+						<th:block th:if="${p.critico}"><span th:replace="~{fragments/componentes :: badge('Crítico', 'peligro')}"></span></th:block></td>
 					<td data-etiqueta="Medio" th:text="${p.medio}">Yape</td>
-					<td data-etiqueta="N.° de operación" class="num" th:text="${p.operacion}">12345678</td>
-					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${p.total})}"></span></td>
+					<td data-etiqueta="Comprobante"><span th:text="${p.comprobante}">B001-00000001</span>
+						<small class="bloque" th:if="${p.parecido != null}" data-parecido>
+							<span th:replace="~{fragments/componentes :: badge('Número parecido', 'alerta')}"></span>
+							<span th:text="|al del pago ${p.parecido}: revísalo con cuidado|">al del pago</span></small></td>
 					<td data-etiqueta="Familia" th:text="${p.familia}">Familia Quispe Huamán</td>
 					<td data-etiqueta="Cobró" th:text="${p.cajera}">Lucía Ramos</td>
 					<td data-etiqueta="Verificar" th:if="${v.puedeVerificar}">
 						<div class="fila">
-							<form method="post" th:action="@{/conciliacion/pagos/{id}(id=${p.id})}">
-								<input type="hidden" name="resultado" value="ENCONTRADO">
-								<button type="submit" class="btn btn-secundario btn-chico">Encontrado</button>
-							</form>
+							<th:block th:replace="~{fragments/componentes :: modalBanco(|modal-banco-pago-${p.id}|,
+								|${p.medio} del ${p.comprobante}: ¿qué ves en el banco?|, @{/conciliacion/pagos/{id}(id=${p.id})})}"></th:block>
 							<th:block th:replace="~{fragments/componentes :: modalNota(|modal-pago-${p.id}|,
-								|¿${p.medio} ${p.operacion} no aparece?|, @{/conciliacion/pagos/{id}(id=${p.id})})}"></th:block>
+								|¿El ${p.medio} del ${p.comprobante} no aparece?|, @{/conciliacion/pagos/{id}(id=${p.id})})}"></th:block>
 						</div>
 					</td>
 				</tr>
@@ -51,33 +107,30 @@
 
 	<section class="tarjeta" aria-labelledby="titulo-depositos">
 		<h2 id="titulo-depositos" th:text="|Depósitos por verificar (${#lists.size(v.depositos)})|">Depósitos por verificar</h2>
+		<p class="secundario">«Tardío»: el depósito es de más de un día hábil después de la caja.</p>
 		<th:block th:if="${#lists.isEmpty(v.depositos)}">
 			<div th:replace="~{fragments/componentes :: estadoVacio('Todo verificado', 'No hay depósitos por verificar.')}"></div>
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(v.depositos)}">
-			<thead><tr><th scope="col">Caja</th><th scope="col">Depósito</th><th scope="col">Cuenta</th>
-				<th scope="col">N.° de operación</th><th scope="col" class="num">Monto</th><th scope="col">Cajera</th>
+			<thead><tr><th scope="col">Caja</th><th scope="col">Cuenta</th><th scope="col">Cajera</th>
 				<th scope="col" th:if="${v.puedeVerificar}">Verificar</th></tr></thead>
 			<tbody>
-				<tr th:each="d : ${v.depositos}" th:classappend="${d.atrasado} ? 'fila-atrasada'" th:data-deposito="${d.id}">
-					<td data-etiqueta="Caja" th:text="${#temporals.format(d.fechaCaja, 'dd/MM/yyyy')}">01/10/2026</td>
-					<td data-etiqueta="Depósito" th:text="${#temporals.format(d.fechaDeposito, 'dd/MM/yyyy')}">02/10/2026</td>
+				<tr th:each="d : ${v.depositos}" th:classappend="${d.atrasado or d.tardio} ? 'fila-atrasada'" th:data-deposito="${d.id}">
+					<td data-etiqueta="Caja"><span th:text="${#temporals.format(d.fechaCaja, 'dd/MM/yyyy')}">01/10/2026</span>
+						<th:block th:if="${d.tardio}"><span th:replace="~{fragments/componentes :: badge('Tardío', 'peligro')}"></span></th:block>
+						<small class="bloque" th:if="${d.parecido != null}" data-parecido>
+							<span th:replace="~{fragments/componentes :: badge('Número parecido', 'alerta')}"></span>
+							<span th:text="|al de ${d.parecido}|">al de otro depósito</span></small></td>
 					<td data-etiqueta="Cuenta" th:text="${d.cuenta}">BCP Soles</td>
-					<td data-etiqueta="N.° de operación" class="num" th:text="${d.operacion}">0012345</td>
-					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${d.monto})}"></span>
-						<small class="bloque" th:if="${d.distinto}">
-							<span th:replace="~{fragments/componentes :: badge('Distinto de lo contado', 'peligro')}"></span>
-							<span th:text="|Se esperaba S/ ${#numbers.formatDecimal(d.esperado, 1, 'COMMA', 2, 'POINT')}|">Se esperaba</span>
-						</small></td>
 					<td data-etiqueta="Cajera" th:text="${d.cajera}">Lucía Ramos</td>
 					<td data-etiqueta="Verificar" th:if="${v.puedeVerificar}">
 						<div class="fila">
-							<form method="post" th:action="@{/conciliacion/depositos/{id}(id=${d.id})}">
-								<input type="hidden" name="resultado" value="ENCONTRADO">
-								<button type="submit" class="btn btn-secundario btn-chico">Encontrado</button>
-							</form>
+							<th:block th:replace="~{fragments/componentes :: modalBanco(|modal-banco-deposito-${d.id}|,
+								|Depósito de la caja del ${#temporals.format(d.fechaCaja, 'dd/MM/yyyy')}: ¿qué ves en el banco?|,
+								@{/conciliacion/depositos/{id}(id=${d.id})})}"></th:block>
 							<th:block th:replace="~{fragments/componentes :: modalNota(|modal-deposito-${d.id}|,
-								|¿El depósito ${d.operacion} no aparece?|, @{/conciliacion/depositos/{id}(id=${d.id})})}"></th:block>
+								|¿El depósito de la caja del ${#temporals.format(d.fechaCaja, 'dd/MM/yyyy')} no aparece?|,
+								@{/conciliacion/depositos/{id}(id=${d.id})})}"></th:block>
 						</div>
 					</td>
 				</tr>

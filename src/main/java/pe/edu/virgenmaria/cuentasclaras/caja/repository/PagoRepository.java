@@ -20,8 +20,16 @@ public interface PagoRepository extends Repository<Pago, Long> {
 
 	Optional<Pago> findByClaveIdempotencia(String clave);
 
-	/** Un número de operación digital vigente no se registra dos veces (también es UNIQUE en la base). */
-	boolean existsByMedioAndOperacionVigente(MedioPago medio, String operacionVigente);
+	/**
+	 * Un número de operación digital vigente (forma canónica) no se registra dos veces, en ningún medio digital (también
+	 * es UNIQUE en la base: uk_pago_operacion_canonica).
+	 */
+	boolean existsByOperacionVigente(String operacionVigente);
+
+	/** Pagos digitales desde una fecha (para marcar números de operación parecidos en la conciliación). */
+	@Query("select p from Pago p where p.medio <> pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.EFECTIVO "
+			+ "and p.fecha >= :desde")
+	List<Pago> digitalesDesde(@Param("desde") java.time.LocalDate desde);
 
 	List<Pago> findByCajaIdOrderByIdDesc(Long cajaId);
 
@@ -37,11 +45,6 @@ public interface PagoRepository extends Repository<Pago, Long> {
 	@Query("select p.caja.id from Pago p where p.id = :id")
 	Optional<Long> cajaDe(@Param("id") Long pagoId);
 
-	/** Efectivo VIGENTE de una caja (lo que la cajera debe tener, sin el fondo). {@code null} si no hay. */
-	@Query("select sum(p.total) from Pago p where p.caja.id = :caja "
-			+ "and p.medio = pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.EFECTIVO "
-			+ "and p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE")
-	java.math.BigDecimal efectivoVigente(@Param("caja") Long cajaId);
 
 	Optional<Pago> findByComprobanteId(Long comprobanteId);
 
@@ -51,6 +54,17 @@ public interface PagoRepository extends Repository<Pago, Long> {
 	@Query("select p.medio, count(p), sum(p.total) from Pago p where p.caja.id = :caja "
 			+ "and p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE group by p.medio")
 	List<Object[]> vigentesPorMedio(@Param("caja") Long cajaId);
+
+	/** Control de consistencia (M1): una boleta o factura sin su pago es un comprobante fuera del libro. */
+	@Query("select c from Comprobante c where c.tipo in (pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante"
+			+ ".BOLETA, pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante.FACTURA) and not exists "
+			+ "(select p.id from Pago p where p.comprobante = c)")
+	List<pe.edu.virgenmaria.cuentasclaras.comprobantes.model.Comprobante> comprobantesSinPago();
+
+	/** Control de consistencia (M1): una nota de crédito sin su anulación aprobada. */
+	@Query("select c from Comprobante c where c.tipo = pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante"
+			+ ".NOTA_CREDITO and not exists (select a.id from AnulacionPago a where a.notaCredito = c)")
+	List<pe.edu.virgenmaria.cuentasclaras.comprobantes.model.Comprobante> notasSinAnulacion();
 
 	/** Pagos de un día de todas las cajas (resumen de Promotoría). */
 	List<Pago> findByFechaOrderByIdAsc(java.time.LocalDate fecha);

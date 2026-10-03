@@ -15,11 +15,15 @@ import pe.edu.virgenmaria.cuentasclaras.caja.dto.CorreccionRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CorreccionVista;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.ResultadoBusqueda;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.AplicacionPago;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.CausaDevolucion;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.Pago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAnulacion;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoVerificacion;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAplicacion;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.AplicacionPagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.PagoRepository;
+import pe.edu.virgenmaria.cuentasclaras.caja.repository.VerificacionBancariaRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
@@ -49,6 +53,8 @@ import java.util.stream.Collectors;
  *   <li>Devolución: el dinero vuelve al apoderado.</li>
  *   <li>Corrección: el mismo dinero pasa a otras cuotas (incluso de otra familia, resaltado), con boleta nueva.</li>
  * </ul>
+ * Un pago digital solo se puede anular si Administración ya lo encontró en el banco (A1): si no, un Yape inventado
+ * saldría de la conciliación con una devolución. Una devolución por pago duplicado exige que el otro pago exista (A2).
  */
 @Service
 @Transactional
@@ -60,6 +66,8 @@ public class ServicioAnulacionPagos {
 	static final String DATO_FAMILIA = "familiaId";
 
 	static final String DATO_CUOTAS = "cuotas";
+
+	static final String DATO_CAUSA = "causa";
 
 	private final PagoRepository pagos;
 
@@ -73,29 +81,49 @@ public class ServicioAnulacionPagos {
 
 	private final RegistroSolicitudes solicitudes;
 
+	private final VerificacionBancariaRepository verificaciones;
+
 	private final AuditoriaService auditoria;
 
 	private final Clock reloj;
 
 	public ServicioAnulacionPagos(PagoRepository pagos, AplicacionPagoRepository aplicaciones, CuotaRepository cuotas,
 			FamiliaRepository familias, BusquedaFamilias busqueda, RegistroSolicitudes solicitudes,
-			AuditoriaService auditoria, Clock reloj) {
+			VerificacionBancariaRepository verificaciones, AuditoriaService auditoria, Clock reloj) {
 		this.pagos = pagos;
 		this.aplicaciones = aplicaciones;
 		this.cuotas = cuotas;
 		this.familias = familias;
 		this.busqueda = busqueda;
 		this.solicitudes = solicitudes;
+		this.verificaciones = verificaciones;
 		this.auditoria = auditoria;
 		this.reloj = reloj;
 	}
 
-	/** El dinero vuelve al apoderado: pide la anulación del pago (con nota de crédito al aprobarse). */
+	/** Igual que {@link #solicitarDevolucion(Long, CausaDevolucion, String)} con la causa «Otra». */
 	public void solicitarDevolucion(Long pagoId, String motivo) {
+		solicitarDevolucion(pagoId, CausaDevolucion.OTRA, motivo);
+	}
+
+	/**
+	 * El dinero vuelve al apoderado: pide la anulación del pago (con nota de crédito al aprobarse). Si la causa es
+	 * «pago duplicado» (o el motivo lo dice), otro pago vigente debe cubrir alguna de esas cuotas; si no, se rechaza.
+	 */
+	public void solicitarDevolucion(Long pagoId, CausaDevolucion causa, String motivo) {
 		Pago pago = pagoQuePuedePedir(pagoId);
 		String texto = Motivo.exigir(motivo);
-		String resumen = "Devolver " + descripcion(pago);
-		crear(pago, resumen, Map.of(DATO_TIPO, TipoAnulacion.DEVOLUCION.name()), texto);
+		CausaDevolucion elegida = causa == null ? CausaDevolucion.OTRA : causa;
+		if (elegida == CausaDevolucion.PAGO_DUPLICADO || Normalizador.paraBusqueda(texto).contains("DUPLIC")) {
+			List<Long> cuotasDelPago = aplicaciones.cuotasDePago(pago.getId());
+			if (cuotasDelPago.isEmpty() || !aplicaciones.otroPagoVigenteDe(pago.getId(), cuotasDelPago)) {
+				throw new ReglaNegocioException("No hay otro pago vigente de esas cuotas: no es un pago duplicado. "
+						+ "Revisa el estado de cuenta de la familia antes de pedir la devolución.");
+			}
+			elegida = CausaDevolucion.PAGO_DUPLICADO;
+		}
+		String resumen = "Devolver " + descripcion(pago) + " · " + elegida.etiqueta();
+		crear(pago, resumen, Map.of(DATO_TIPO, TipoAnulacion.DEVOLUCION.name(), DATO_CAUSA, elegida.name()), texto);
 	}
 
 	/**
@@ -191,7 +219,20 @@ public class ServicioAnulacionPagos {
 		if (!pago.vigente()) {
 			throw new ReglaNegocioException("El pago " + pago.getComprobante().numeroCompleto() + " ya está anulado.");
 		}
+		exigirVerificado(pago, verificaciones);
 		return pago;
+	}
+
+	/**
+	 * A1: un pago digital se anula solo si Administración lo encontró en el banco (se vuelve a validar al aprobar). Así
+	 * un Yape que nunca llegó no desaparece de la conciliación con una devolución: sigue como alerta.
+	 */
+	static void exigirVerificado(Pago pago, VerificacionBancariaRepository verificaciones) {
+		if (pago.getMedio() != MedioPago.EFECTIVO
+				&& !verificaciones.existsByPagoIdAndResultado(pago.getId(), ResultadoVerificacion.ENCONTRADO)) {
+			throw new ReglaNegocioException("Este pago con " + pago.getMedio().etiqueta() + " todavía no está verificado "
+					+ "en el banco. Administración debe encontrarlo en Conciliación antes de que se pueda anular.");
+		}
 	}
 
 	private Familia familia(Long id) {

@@ -26,6 +26,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision.Gravedad;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ContenidoVisible;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.Familias;
@@ -41,6 +42,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -67,6 +69,12 @@ import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.con
 class EscenariosFraudeCierreTest {
 
 	private static final String EXPLICACION = "Volví a contar dos veces y faltan cincuenta soles";
+
+	private static final VerificacionRequest YAPE_EN_BANCO = VerificacionRequest.delBanco("YP000002",
+			LocalDate.of(2026, 10, 2), new BigDecimal("450.00"));
+
+	private static final VerificacionRequest DEPOSITO_EN_BANCO = VerificacionRequest.delBanco("OP6666",
+			LocalDate.of(2026, 10, 2), new BigDecimal("450.00"));
 
 	@Autowired
 	private ServicioCierreCaja cierre;
@@ -197,9 +205,24 @@ class EscenariosFraudeCierreTest {
 		assertThat(EstadoCierreVista.CajaPorCerrar.class.getRecordComponents()).extracting(c -> c.getName())
 				.doesNotContain("esperado", "efectivo");
 		assertThat(estado.ultimoCierre()).isNull();
-		assertThat(estado.toString()).doesNotContain("450");
+		assertThat(ContenidoVisible.muestraMonto(estado, "450.00")).isFalse();
 		// Pagos de hoy tampoco tiene totales.
-		assertThat(cobro.pagosDelDia().toString()).doesNotContain("esperado");
+		assertThat(java.util.Arrays.stream(pe.edu.virgenmaria.cuentasclaras.caja.dto.PagosDelDia.class.getRecordComponents())
+				.map(java.lang.reflect.RecordComponent::getName)).doesNotContain("esperado", "total");
+		// B1 (correcciones): con la caja abierta, ni el monto de cada pago en efectivo (para no sumarlos a ojo).
+		var hoy = cobro.pagosDelDia();
+		assertThat(hoy.pagos()).singleElement().satisfies(p -> {
+			assertThat(p.total()).isNull();
+			assertThat(p.comprobante()).isEqualTo("B001-00000001");
+		});
+		assertThat(ContenidoVisible.muestraMonto(hoy, "450.00")).isFalse();
+		// Un Yape sí muestra su monto (se verifica contra el banco); cerrada la caja, el efectivo también.
+		cobro.cobrar(digital(f.quispe(), List.of(cuota(jdbc, f.valeria(), "PEN-2027-03")), MedioPago.YAPE, "YP000777",
+				"450.00"));
+		assertThat(cobro.pagosDelDia().pagos()).filteredOn(p -> p.total() != null).singleElement()
+				.satisfies(p -> assertThat(p.medio()).isEqualTo("Yape"));
+		cerrarCon("450.00", null);
+		assertThat(cobro.pagosDelDia().pagos()).allSatisfy(p -> assertThat(p.total()).isEqualByComparingTo("450.00"));
 	}
 
 	@Test
@@ -309,9 +332,13 @@ class EscenariosFraudeCierreTest {
 		como(PROMOTORIA);
 		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.CRITICA
 				&& a.texto().contains("depositó S/ 400.00 de S/ 450.00"));
-		// Administración lo verifica: aparece en el banco por S/ 400, pero la diferencia ya está a la vista.
+		// Administración lo verifica a ciegas: aparece en el banco por S/ 400; la diferencia ya es una alerta crítica.
 		como(ADMINISTRACION);
-		assertThat(verificacion.vista().depositos()).singleElement().satisfies(d -> assertThat(d.distinto()).isTrue());
+		Long deposito = verificacion.vista().depositos().getFirst().id();
+		verificacion.verificarDeposito(deposito, VerificacionRequest.delBanco("op 5555", estado.hoy(),
+				new BigDecimal("400.00")));
+		assertThat(jdbc.queryForObject("SELECT banco_monto FROM verificacion_bancaria", BigDecimal.class))
+				.isEqualByComparingTo("400.00");
 	}
 
 	/** «Cobré en efectivo y lo registré como Yape con un número inventado»: el cierre no lo ve; el banco sí. */
@@ -325,9 +352,9 @@ class EscenariosFraudeCierreTest {
 
 		como(ADMINISTRACION);
 		assertThat(verificacion.vista().pagos()).extracting(p -> p.id()).containsExactly(yape);
-		assertThatThrownBy(() -> verificacion.verificarPago(yape, new VerificacionRequest(ResultadoVerificacion.NO_ENCONTRADO,
-				null))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("anota qué revisaste");
-		verificacion.verificarPago(yape, new VerificacionRequest(ResultadoVerificacion.NO_ENCONTRADO,
+		assertThatThrownBy(() -> verificacion.verificarPago(yape, VerificacionRequest.noAparece(null)))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("anota qué revisaste");
+		verificacion.verificarPago(yape, VerificacionRequest.noAparece(
 				"No figura en el Yape empresarial del 02/10 ni del 03/10"));
 
 		assertThat(EscenarioEscolar.ultimoEvento(jdbc, "PAGO_NO_ENCONTRADO_BANCO")).containsEntry("nombre_usuario",
@@ -337,8 +364,9 @@ class EscenariosFraudeCierreTest {
 				&& a.texto().contains("YP000001") && a.texto().contains("NO aparece en el banco"));
 		como(ADMINISTRACION);
 		assertThat(verificacion.vista().pagos()).isEmpty();
-		assertThatThrownBy(() -> verificacion.verificarPago(yape, new VerificacionRequest(ResultadoVerificacion.ENCONTRADO,
-				null))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("ya se verificó");
+		assertThatThrownBy(() -> verificacion.verificarPago(yape, VerificacionRequest.delBanco("YP000001",
+				LocalDate.of(2026, 10, 2), new BigDecimal("450.00")))).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("ya se verificó");
 	}
 
 	/** Quien cobró o depositó no verifica: la cajera no tiene el rol y el modelo lo impide aunque lo tuviera. */
@@ -352,23 +380,22 @@ class EscenariosFraudeCierreTest {
 				estado.cuentas().getFirst(), "OP-6666", estado.hoy(), new BigDecimal("450.00"), null));
 		Long deposito = jdbc.queryForObject("SELECT id FROM deposito_caja", Long.class);
 
-		assertThatThrownBy(() -> verificacion.verificarPago(yape, new VerificacionRequest(ResultadoVerificacion.ENCONTRADO,
-				null))).isInstanceOf(AccessDeniedException.class);
-		assertThatThrownBy(() -> verificacion.verificarDeposito(deposito, new VerificacionRequest(
-				ResultadoVerificacion.ENCONTRADO, null))).isInstanceOf(AccessDeniedException.class);
+		assertThatThrownBy(() -> verificacion.verificarPago(yape, YAPE_EN_BANCO))
+				.isInstanceOf(AccessDeniedException.class);
+		assertThatThrownBy(() -> verificacion.verificarDeposito(deposito, DEPOSITO_EN_BANCO))
+				.isInstanceOf(AccessDeniedException.class);
 		// Una cuenta que fuera Caja y Administración a la vez (los roles son incompatibles) tampoco: el modelo lo rechaza.
 		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(1L, 16L, "caja", "Lucía", false,
 				java.util.EnumSet.of(Rol.ADMINISTRACION)));
-		assertThatThrownBy(() -> verificacion.verificarPago(yape, new VerificacionRequest(ResultadoVerificacion.ENCONTRADO,
-				null))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("Quien cobró");
-		assertThatThrownBy(() -> verificacion.verificarDeposito(deposito, new VerificacionRequest(
-				ResultadoVerificacion.ENCONTRADO, null))).isInstanceOf(ReglaNegocioException.class)
-				.hasMessageContaining("Quien depositó");
+		assertThatThrownBy(() -> verificacion.verificarPago(yape, YAPE_EN_BANCO))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("Quien cobró");
+		assertThatThrownBy(() -> verificacion.verificarDeposito(deposito, DEPOSITO_EN_BANCO))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("Quien depositó");
 		assertThat(contar(jdbc, "verificacion_bancaria")).isZero();
 		// Y el efectivo no se «verifica» como si fuera digital.
 		como(ADMINISTRACION);
-		assertThatThrownBy(() -> verificacion.verificarPago(pago, new VerificacionRequest(ResultadoVerificacion.ENCONTRADO,
-				null))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("pagos digitales");
+		assertThatThrownBy(() -> verificacion.verificarPago(pago, YAPE_EN_BANCO))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("pagos digitales");
 	}
 
 	/**
@@ -388,8 +415,8 @@ class EscenariosFraudeCierreTest {
 		assertThat(jdbc.queryForMap("SELECT * FROM cierre_caja")).isEqualTo(antes);
 		assertThat(jdbc.queryForObject("SELECT estado FROM caja_diaria", String.class)).isEqualTo("CERRADA");
 		como(PROMOTORIA);
-		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.ATENCION
-				&& a.texto().startsWith("Devolución pendiente") && a.texto().contains("S/ 450.00"));
+		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.CRITICA
+				&& a.texto().startsWith("Devolución sin reembolso registrado") && a.texto().contains("S/ 450.00"));
 		// El depósito esperado sigue siendo lo contado: el reembolso no sale del efectivo depositado.
 		como(CAJA);
 		assertThat(cierre.estado().porDepositar().getFirst().esperado()).isEqualByComparingTo("450.00");

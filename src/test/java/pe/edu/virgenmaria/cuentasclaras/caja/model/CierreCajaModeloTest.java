@@ -79,14 +79,14 @@ class CierreCajaModeloTest {
 		CajaDiaria caja = caja();
 		caja.registrarConteo(ESPERADO, ESPERADO);
 		caja.cerrar(CierreCaja.registrar(caja, libro(), ESPERADO, ESPERADO, null, null));
-		caja.reabrir();
+		caja.reabrir(7L);
 		assertThat(caja.getEstado()).isEqualTo(EstadoCaja.ABIERTA);
 		assertThat(caja.getConteos()).isZero();
 		assertThat(caja.getPrimerConteo()).isNull();
 		assertThat(caja.getCierres()).isEqualTo(1);
 		caja.registrarConteo(ESPERADO, ESPERADO);
 		assertThat(CierreCaja.registrar(caja, libro(), ESPERADO, ESPERADO, null, null).getNumero()).isEqualTo(2);
-		assertThatThrownBy(caja::reabrir).isInstanceOf(ReglaNegocioException.class);
+		assertThatThrownBy(() -> caja.reabrir(8L)).isInstanceOf(ReglaNegocioException.class);
 	}
 
 	@Test

@@ -3,6 +3,7 @@ package pe.edu.virgenmaria.cuentasclaras.comprobantes.model;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Enmascarar;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Ruc;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.TextoSeguro;
 
 import java.util.Locale;

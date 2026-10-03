@@ -1,12 +1,18 @@
 # Perfil de pruebas: H2 en memoria en modo MySQL, separado de la base de desarrollo.
-# LOCK_TIMEOUT amplio para las pruebas de concurrencia de la cadena de auditoría.
+# LOCK_TIMEOUT amplio para las pruebas de concurrencia (cadena de auditoría, series, cobros): en una CI lenta no deben
+# fallar por esperar un bloqueo (hallazgo 14 de QA). El pool admite los hilos de esas pruebas más el envío al OSE.
 spring:
   datasource:
-    url: jdbc:h2:mem:cuentasclaras-test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000
+    url: jdbc:h2:mem:cuentasclaras-test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=30000
     username: sa
     password: ""
+    hikari:
+      maximum-pool-size: 50
 
 cuentasclaras:
+  comprobantes:
+    # Hallazgo 13 de QA: el envío al OSE corre en el mismo hilo; no quedan hilos vivos entre una prueba y otra.
+    envio-sincrono: true
   auditoria:
     # Clave SOLO para pruebas. En producción llega por la variable AUDITORIA_CLAVE_HMAC.
     clave-hmac: clave-hmac-de-pruebas-no-usar-en-produccion-0001

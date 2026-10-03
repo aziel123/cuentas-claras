@@ -104,6 +104,12 @@ public class Cuota extends BaseEntity {
 	@Column(name = "anulada_en")
 	private LocalDateTime anuladaEn;
 
+	/**
+	 * M1: la solicitud APROBADA que la anuló (de anulación de cuota o de ingreso tardío). En MySQL la exige un trigger.
+	 */
+	@Column(name = "anulacion_solicitud_id")
+	private Long anulacionSolicitudId;
+
 	protected Cuota() {
 		// requerido por JPA
 	}
@@ -257,10 +263,10 @@ public class Cuota extends BaseEntity {
 	}
 
 	/**
-	 * Anula con el motivo y la aprobación de alguien distinto de quien la solicitó (también
-	 * es CHECK en la base). Libera la obligación (podrá generarse otra cuota del mismo mes) y conserva la clave.
+	 * Anula con el motivo y la aprobación (en la solicitud {@code solicitudId}) de alguien distinto de quien la solicitó
+	 * (también es CHECK en la base). Libera la obligación (podrá generarse otra cuota del mismo mes) y conserva la clave.
 	 */
-	public void anular(String motivo, String solicitante, String aprobador, LocalDateTime ahora) {
+	public void anular(String motivo, String solicitante, String aprobador, LocalDateTime ahora, Long solicitudId) {
 		exigirAnulable();
 		String texto = Motivo.exigir(motivo);
 		Objects.requireNonNull(solicitante, "solicitante");
@@ -273,6 +279,11 @@ public class Cuota extends BaseEntity {
 		anulacionSolicitadaPor = solicitante;
 		anulacionAprobadaPor = aprobador;
 		anuladaEn = Objects.requireNonNull(ahora, "ahora");
+		anulacionSolicitudId = Objects.requireNonNull(solicitudId, "solicitudId");
+	}
+
+	public Long getAnulacionSolicitudId() {
+		return anulacionSolicitudId;
 	}
 
 	private void exigirAnulable() {

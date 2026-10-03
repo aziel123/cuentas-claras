@@ -11,7 +11,7 @@ import java.util.Map;
 
 /** El reconteo (solo uno): con explicación obligatoria de por qué no coincidió. Siempre cierra la caja. */
 public record ReconteoRequest(
-		@Digits(integer = 7, fraction = 2, message = "Escribe el monto con hasta 2 decimales.")
+		@Digits(integer = 7, fraction = 2, message = "Escribe un monto de hasta S/ 9,999,999.99, con 2 decimales como máximo.")
 		@DecimalMin(value = "0.00", message = "El conteo no puede ser negativo.") BigDecimal contado,
 		Map<Denominacion, Integer> denominaciones,
 		@NotBlank(message = "Explica qué pasó con el primer conteo.")

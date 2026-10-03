@@ -53,7 +53,7 @@ public class ManejadorAnulacionCuota implements ManejadorSolicitud {
 		anios.bloquear(cuota.getAnioEscolar().getId());
 		String estadoAnterior = cuota.getEstado().name();
 		cuota.anular(solicitud.getMotivo(), solicitud.getSolicitadoPor(), aprobador,
-				LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS));
+				LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS), solicitud.getId());
 		cuotas.saveAndFlush(cuota);
 		auditoria.registrar(AccionAuditoria.CUOTA_ANULADA, "cuota", cuota.getId().toString(), estadoAnterior,
 				cuota.getEstado().name(), "Alumno " + cuota.getAlumno().nombreCompleto() + ": " + cuota.getDescripcion()

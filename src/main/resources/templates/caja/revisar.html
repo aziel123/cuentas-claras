@@ -79,25 +79,25 @@
 						th:checked="${datos == null or datos.comprobante == null or datos.comprobante.name() == 'BOLETA'}">
 					<span>Boleta</span>
 				</label>
-				<label class="opcion">
+				<label class="opcion" th:unless="${#lists.isEmpty(r.facturables)}">
 					<input type="radio" name="comprobante" value="FACTURA"
 						th:checked="${datos != null and datos.comprobante != null and datos.comprobante.name() == 'FACTURA'}">
 					<span>Factura (con RUC)</span>
 				</label>
 			</div>
-			<details class="desplegable" th:open="${datos != null and datos.comprobante != null and datos.comprobante.name() == 'FACTURA'}">
+			<p class="secundario" th:if="${#lists.isEmpty(r.facturables)}" data-sin-ruc>Esta familia no tiene RUC registrado:
+				solo boleta. Para factura, Administración registra el RUC del apoderado y lo aprueba otra persona.</p>
+			<details class="desplegable" th:unless="${#lists.isEmpty(r.facturables)}"
+				th:open="${datos != null and datos.comprobante != null and datos.comprobante.name() == 'FACTURA'}">
 				<summary>Datos para la factura</summary>
 				<div class="formulario">
 					<div class="campo">
-						<label for="ruc">RUC</label>
-						<input class="input num" type="text" id="ruc" name="ruc" inputmode="numeric" pattern="\d{11}" maxlength="11"
-							autocomplete="off" th:value="${datos != null} ? ${datos.ruc}" aria-describedby="ruc-ayuda">
-						<p class="ayuda" id="ruc-ayuda">11 dígitos. Se valida con SUNAT (dígito verificador).</p>
-					</div>
-					<div class="campo">
-						<label for="razonSocial">Razón social</label>
-						<input class="input" type="text" id="razonSocial" name="razonSocial" maxlength="150" autocomplete="off"
-							th:value="${datos != null} ? ${datos.razonSocial}">
+						<label for="ruc">RUC registrado de la familia</label>
+						<select class="input" id="ruc" name="ruc" aria-describedby="ruc-ayuda">
+							<option th:each="o : ${r.facturables}" th:value="${o.ruc}" th:text="|${o.ruc} · ${o.razonSocial}|"
+								th:selected="${datos != null and datos.ruc == o.ruc}">20131312955 · Comercial Quispe S.A.C.</option>
+						</select>
+						<p class="ayuda" id="ruc-ayuda">Solo los RUC aprobados de los apoderados de esta familia.</p>
 					</div>
 				</div>
 			</details>

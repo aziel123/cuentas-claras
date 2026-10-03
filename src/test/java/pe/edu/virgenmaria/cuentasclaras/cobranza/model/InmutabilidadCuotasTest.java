@@ -192,9 +192,9 @@ class InmutabilidadCuotasTest {
 	@Test
 	void anularExigeMotivoYAprobadorDistintoTambienEnLaBase() {
 		Cuota cuota = cuotas.findById(setiembre).orElseThrow();
-		assertThatThrownBy(() -> cuota.anular(MOTIVO, "administracion", "administracion", LocalDateTime.of(2026, 10, 2, 9, 0)))
+		assertThatThrownBy(() -> cuota.anular(MOTIVO, "administracion", "administracion", LocalDateTime.of(2026, 10, 2, 9, 0), 5L))
 				.isInstanceOf(AutoaprobacionException.class);
-		assertThatThrownBy(() -> cuota.anular("corto", "administracion", "director", LocalDateTime.of(2026, 10, 2, 9, 0)))
+		assertThatThrownBy(() -> cuota.anular("corto", "administracion", "director", LocalDateTime.of(2026, 10, 2, 9, 0), 5L))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("entre 10 y 500");
 
 		// En la base: el mismo solicitante y aprobador, o sin motivo, se rechaza.
@@ -220,7 +220,7 @@ class InmutabilidadCuotasTest {
 		jdbc.update("UPDATE cuota SET estado = 'PARCIAL', monto_pagado = 100.00 WHERE id = ?", setiembre);
 		Cuota cuota = cuotas.findById(setiembre).orElseThrow();
 
-		assertThatThrownBy(() -> cuota.anular(MOTIVO, "administracion", "director", LocalDateTime.of(2026, 10, 2, 9, 0)))
+		assertThatThrownBy(() -> cuota.anular(MOTIVO, "administracion", "director", LocalDateTime.of(2026, 10, 2, 9, 0), 5L))
 				.isInstanceOf(ReglaNegocioException.class).hasMessage("La cuota tiene pagos: primero se anulan los pagos.");
 		assertThatThrownBy(() -> cuota.solicitarAnulacion(MOTIVO, "administracion"))
 				.hasMessage("La cuota tiene pagos: primero se anulan los pagos.");
@@ -234,8 +234,9 @@ class InmutabilidadCuotasTest {
 	@Test
 	void anularLiberaLaObligacionYConservaLaClave() {
 		String clave = jdbc.queryForObject("SELECT clave FROM cuota WHERE id = ?", String.class, setiembre);
+		Long solicitud = solicitudDeAnulacion();
 		new TransactionTemplate(transacciones).executeWithoutResult(estado -> cuotas.findById(setiembre).orElseThrow()
-				.anular(MOTIVO, "administracion", "director", LocalDateTime.of(2026, 10, 2, 9, 0)));
+				.anular(MOTIVO, "administracion", "director", LocalDateTime.of(2026, 10, 2, 9, 0), solicitud));
 
 		Map<String, Object> fila = jdbc.queryForMap("SELECT * FROM cuota WHERE id = ?", setiembre);
 		assertThat(fila).containsEntry("estado", "ANULADA").containsEntry("clave", clave)
@@ -305,5 +306,14 @@ class InmutabilidadCuotasTest {
 		catch (ReflectiveOperationException e) {
 			throw new IllegalStateException(e);
 		}
+	}
+
+	/** Una solicitud de anulación de la cuota (la FK de anulacion_solicitud_id la exige). */
+	private Long solicitudDeAnulacion() {
+		jdbc.update("INSERT INTO solicitud_cambio (colegio_id, tipo, entidad, entidad_id, resumen, datos, motivo, estado, "
+				+ "solicitado_por, resuelto_por, resuelto_en, creado_en, creado_por, actualizado_en) VALUES (1, "
+				+ "'ANULACION_CUOTA', 'cuota', ?, 'Anular', '{}', ?, 'APROBADA', 'administracion', 'director', NOW(), NOW(), "
+				+ "'administracion', NOW())", setiembre, MOTIVO);
+		return jdbc.queryForObject("SELECT MAX(id) FROM solicitud_cambio", Long.class);
 	}
 }

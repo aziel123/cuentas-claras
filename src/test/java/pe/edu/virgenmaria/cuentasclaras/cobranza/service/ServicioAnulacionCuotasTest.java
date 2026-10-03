@@ -113,10 +113,12 @@ class ServicioAnulacionCuotasTest {
 	void elGanchoAnulaConAprobacionDeDireccion() {
 		anulaciones.solicitar(setiembre, MOTIVO);
 		// Lo que hace el manejador de la bandeja: otra persona aprueba la solicitud.
+		Long solicitud = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.pendiente(jdbc, "cuota",
+				setiembre);
 		new TransactionTemplate(transacciones).executeWithoutResult(estado -> {
 			var cuota = cuotas.findById(setiembre).orElseThrow();
 			cuota.anular(cuota.getAnulacionMotivo(), cuota.getAnulacionSolicitadaPor(), "director",
-					LocalDateTime.of(2026, 10, 2, 10, 0));
+					LocalDateTime.of(2026, 10, 2, 10, 0), solicitud);
 		});
 
 		assertThat(jdbc.queryForMap("SELECT estado, obligacion, anulacion_aprobada_por FROM cuota WHERE id = ?", setiembre))
@@ -130,7 +132,8 @@ class ServicioAnulacionCuotasTest {
 		anulaciones.solicitar(setiembre, MOTIVO);
 		var cuota = cuotas.findById(setiembre).orElseThrow();
 
-		assertThatThrownBy(() -> cuota.anular(MOTIVO, "administracion", "administracion", LocalDateTime.of(2026, 10, 2, 9, 0)))
+		assertThatThrownBy(() -> cuota.anular(MOTIVO, "administracion", "administracion", LocalDateTime.of(2026, 10, 2, 9, 0),
+				5L))
 				.isInstanceOf(AutoaprobacionException.class).hasMessage("Quien solicita la anulación no puede aprobarla.");
 	}
 

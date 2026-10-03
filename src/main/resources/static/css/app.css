@@ -468,6 +468,8 @@ input[type="file"].input { padding: var(--esp-2); }
   color: var(--color-peligro); text-align: center; font-weight: 700; letter-spacing: 0.08em;
 }
 .codigo-hash { font-size: var(--texto-xs); overflow-wrap: anywhere; }
+.firma-recepcion { display: grid; gap: var(--esp-4); padding-top: var(--esp-4); border-top: 1px solid var(--color-borde); }
+.firma-linea { margin-top: var(--esp-6); padding-top: var(--esp-1); border-top: 1px solid var(--color-texto); font-size: var(--texto-xs); color: var(--color-texto-secundario); }
 .tabla tfoot th, .tabla tfoot td { padding: var(--esp-2); }
 @media print {
   .barra, .menu-lateral, .menu-movil, .pie, .saltar, .no-imprimir { display: none !important; }

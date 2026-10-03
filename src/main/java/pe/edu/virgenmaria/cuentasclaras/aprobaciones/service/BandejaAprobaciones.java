@@ -28,7 +28,9 @@ import java.util.Set;
 /**
  * Bandeja de aprobaciones (Promotoría y Dirección): aprueba o rechaza las solicitudes. Quien la pidió (o quien creó o
  * restableció la clave de esa cuenta en los últimos 30 días) no la resuelve: el intento queda auditado. Al aprobar,
- * el manejador del tipo aplica el cambio en la misma transacción.
+ * la solicitud queda APROBADA (con flush) y después el manejador del tipo aplica el cambio en la misma transacción: si
+ * falla, nada queda aprobado (M1: los triggers de MySQL exigen la solicitud aprobada para reabrir una caja o anular una
+ * cuota). Si el manejador pide llamadas (A2), se exige «Hablé con el apoderado» y los números llamados.
  */
 @Service
 @Transactional(readOnly = true)
@@ -71,17 +73,46 @@ public class BandejaAprobaciones {
 						.map(s -> vista(s, usuario, false)).toList());
 	}
 
+	/** Aprueba una solicitud que no pide llamadas. */
 	@Transactional(noRollbackFor = AutoaprobacionSolicitudException.class)
 	public void aprobar(Long id, String comentario) {
+		aprobar(id, comentario, false, List.of());
+	}
+
+	/**
+	 * Aprueba: {@code hablo} y {@code telefonos} son la confirmación de las llamadas que pide el manejador (A2): un
+	 * número por cada familia, que debe ser un celular registrado de un apoderado de esa familia.
+	 */
+	@Transactional(noRollbackFor = AutoaprobacionSolicitudException.class)
+	public void aprobar(Long id, String comentario, boolean hablo, List<String> telefonos) {
 		SolicitudCambio solicitud = pendiente(id);
 		String usuario = usuario();
 		exigirOtraPersona(solicitud, usuario, "aprobar");
-		manejadorDe(solicitud.getTipo()).aplicar(solicitud, usuario, comentario);
+		ManejadorSolicitud manejador = manejadorDe(solicitud.getTipo());
+		String llamadas = confirmarLlamadas(manejador, solicitud, hablo, telefonos);
 		solicitud.aprobar(usuario, comentario, ahora());
 		solicitudes.saveAndFlush(solicitud);
+		manejador.aplicar(solicitud, usuario, comentario);
 		auditoria.registrar(AccionAuditoria.SOLICITUD_APROBADA, "solicitud_cambio", id.toString(),
 				EstadoSolicitud.PENDIENTE.name(), EstadoSolicitud.APROBADA.name(), solicitud.getTipo().etiqueta() + ": "
-						+ solicitud.getResumen() + ". Pedida por " + solicitud.getSolicitadoPor() + ".");
+						+ solicitud.getResumen() + ". Pedida por " + solicitud.getSolicitadoPor() + "."
+						+ (llamadas == null ? "" : " " + llamadas));
+	}
+
+	private static String confirmarLlamadas(ManejadorSolicitud manejador, SolicitudCambio solicitud, boolean hablo,
+			List<String> telefonos) {
+		List<String> llamadas = manejador.llamadas(solicitud);
+		if (llamadas.isEmpty()) {
+			return null;
+		}
+		List<String> numeros = telefonos == null ? List.of()
+				: telefonos.stream().filter(t -> t != null && !t.isBlank()).toList();
+		if (!hablo || numeros.size() != llamadas.size()) {
+			throw new ReglaNegocioException(llamadas.size() == 1
+					? "Antes de aprobar, llama al apoderado: marca «Hablé con el apoderado» y escribe el número al que llamaste."
+					: "Antes de aprobar, llama a ambas familias: marca «Hablé con ambas familias» y escribe los dos números.");
+		}
+		return manejador.confirmarLlamadas(solicitud, numeros);
 	}
 
 	@Transactional(noRollbackFor = AutoaprobacionSolicitudException.class)
@@ -142,7 +173,8 @@ public class BandejaAprobaciones {
 				s.getEstado().name(), s.getEstado().etiqueta(), s.getEstado().variante(), s.getSolicitadoPor(),
 				s.getCreadoEn(), s.getResueltoPor(), s.getResueltoEn(), s.getComentario(), puede,
 				manejador == null ? List.of() : manejador.detalle(s), manejador == null ? null : manejador.advertencia(s),
-				manejador != null && manejador.exigeComentario(s), manejador == null ? "Rechazar" : manejador.accionRechazo());
+				manejador != null && manejador.exigeComentario(s), manejador == null ? "Rechazar" : manejador.accionRechazo(),
+				manejador == null ? List.of() : manejador.llamadas(s));
 	}
 
 	private LocalDateTime ahora() {

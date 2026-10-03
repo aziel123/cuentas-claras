@@ -170,6 +170,55 @@ public class RegistroAlumnos {
 						+ solicitante + ", aprobado por " + aprobador + ". Motivo: " + motivo);
 	}
 
+	/**
+	 * B2: pide registrar o cambiar el RUC (y la razón social) de un apoderado para emitir factura. Lo aprueba otra
+	 * persona de Promotoría o Dirección; hasta entonces, en caja solo sale boleta.
+	 */
+	public void solicitarDatosFacturacion(Apoderado apoderado, String ruc, String razonSocial, String motivo) {
+		if (!apoderado.isActivo()) {
+			throw new ReglaNegocioException(apoderado.nombreCompleto() + " está desactivado: no se registra su RUC.");
+		}
+		String numero = ruc == null ? "" : ruc.replaceAll("\\s", "");
+		if (!pe.edu.virgenmaria.cuentasclaras.comun.texto.Ruc.valido(numero)) {
+			throw new ReglaNegocioException("El RUC no es válido: son 11 dígitos con el dígito verificador de SUNAT.");
+		}
+		String razon = pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador.limpiar(razonSocial);
+		if (razon == null || razon.length() < 3 || razon.length() > 150) {
+			throw new ReglaNegocioException("Escribe la razón social (de 3 a 150 caracteres), como figura en SUNAT.");
+		}
+		if (numero.equals(apoderado.getRuc()) && razon.equals(apoderado.getRazonSocial())) {
+			throw new ReglaNegocioException("Esos datos de facturación ya están registrados.");
+		}
+		Map<String, String> pedido = new HashMap<>();
+		pedido.put("ruc", numero);
+		pedido.put("razonSocial", razon);
+		pedido.put("rucAnterior", vacioSiNulo(apoderado.getRuc()));
+		solicitudes.crear(TipoSolicitud.DATOS_FACTURACION, "apoderado", apoderado.getId(), "RUC de "
+				+ apoderado.nombreCompleto() + " (" + apoderado.getFamilia().getNombre() + "): "
+				+ (apoderado.getRuc() == null ? "sin RUC" : apoderado.getRuc()) + " → " + numero + " · " + razon, pedido,
+				motivo);
+	}
+
+	/** Aplica los datos de facturación aprobados (solo lo llama su manejador). Si cambiaron desde que se pidió, no. */
+	public void aplicarDatosFacturacion(Apoderado apoderado, Map<String, String> pedido, Long solicitudId, String motivo,
+			String solicitante, String aprobador) {
+		if (!apoderado.isActivo()) {
+			throw new ReglaNegocioException(apoderado.nombreCompleto() + " está desactivado: no se registra su RUC.");
+		}
+		if (!vacioSiNulo(apoderado.getRuc()).equals(pedido.get("rucAnterior"))) {
+			throw new ReglaNegocioException("El RUC de " + apoderado.nombreCompleto() + " cambió desde que se pidió: "
+					+ "rechaza esta solicitud y que se pida de nuevo.");
+		}
+		String anterior = apoderado.getRuc() == null ? "sin RUC" : apoderado.getRuc() + " · " + apoderado.getRazonSocial();
+		apoderado.registrarFacturacion(pedido.get("ruc"), pedido.get("razonSocial"), solicitudId);
+		apoderados.saveAndFlush(apoderado);
+		auditoria.registrar(AccionAuditoria.DATOS_FACTURACION_CAMBIADOS, "apoderado", apoderado.getId().toString(),
+				anterior, apoderado.getRuc() + " · " + apoderado.getRazonSocial(), "Apoderado "
+						+ apoderado.nombreCompleto() + " (" + apoderado.getFamilia().getNombre() + "). Pedido por "
+						+ solicitante + ", aprobado por " + aprobador + ". Motivo: " + motivo
+						+ ". Desde ahora la familia puede pedir factura con este RUC.");
+	}
+
 	private static String vacioSiNulo(String texto) {
 		return texto == null ? "" : texto;
 	}
@@ -315,7 +364,8 @@ public class RegistroAlumnos {
 	 * Cambia la fecha de ingreso de una matrícula (solo la llama el manejador de la solicitud aprobada por otra
 	 * persona). Bloquea primero el año, luego audita.
 	 */
-	public void cambiarFechaIngreso(Matricula matricula, LocalDate fecha, String solicitante, String aprobador) {
+	public void cambiarFechaIngreso(Matricula matricula, LocalDate fecha, String solicitante, String aprobador,
+			Long solicitudId) {
 		anios.bloquear(matricula.getAnioEscolar().getId());
 		exigirFechaMatricula(fecha, matricula.getAnioEscolar());
 		LocalDate anterior = matricula.getFechaMatricula();
@@ -331,7 +381,7 @@ public class RegistroAlumnos {
 				Calendario.formatear(anterior), Calendario.formatear(fecha), "Alumno "
 						+ matricula.getAlumno().nombreCompleto() + ". Pedido por " + solicitante + ", aprobado por "
 						+ aprobador + ".");
-		eventos.publishEvent(new FechaIngresoCambiada(matricula.getId(), fecha, solicitante, aprobador));
+		eventos.publishEvent(new FechaIngresoCambiada(matricula.getId(), fecha, solicitante, aprobador, solicitudId));
 	}
 
 	/**

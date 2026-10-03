@@ -67,6 +67,10 @@ public class ManejadorCierreCaja implements ManejadorSolicitud {
 			throw new ReglaNegocioException("Este cierre tiene " + ServicioCierreCaja.diferenciaTexto(cierre.getDiferencia())
 					+ ": para aprobarlo escribe qué verificaste con la cajera y cómo se resolvió.");
 		}
+		if (cierre.isTrasReapertura() && (comentario == null || comentario.isBlank())) {
+			throw new ReglaNegocioException("Es un cierre tras reapertura (no fue ciego): para aprobarlo escribe qué "
+					+ "verificaste de los pagos agregados después de reabrir.");
+		}
 		cierre.aprobar(aprobador, ahora(), comentario);
 		cierres.saveAndFlush(cierre);
 		CajaDiaria caja = cierre.getCaja();
@@ -126,24 +130,30 @@ public class ManejadorCierreCaja implements ManejadorSolicitud {
 
 	@Override
 	public String advertencia(SolicitudCambio solicitud) {
-		return cierres.findById(solicitud.getEntidadId()).filter(CierreCaja::conDiferencia)
-				.map(c -> c.getDiferencia().signum() < 0
+		CierreCaja cierre = cierres.findById(solicitud.getEntidadId()).orElse(null);
+		if (cierre != null && cierre.isTrasReapertura() && !cierre.conDiferencia()) {
+			return "Cierre tras reapertura: no fue ciego (la cajera ya había visto el esperado del cierre anterior). "
+					+ "Revisa los pagos agregados después de reabrir y escribe tu comentario.";
+		}
+		return java.util.Optional.ofNullable(cierre).filter(CierreCaja::conDiferencia)
+				.map(c -> (c.isTrasReapertura() ? "Cierre tras reapertura (no fue ciego). " : "") + (c.getDiferencia().signum() < 0
 						? "Faltante de " + Dinero.formatear(c.getDiferencia().abs()) + ": habla con la cajera antes de "
 								+ "aprobar y anota cómo se resolvió."
 						: "Sobrante de " + Dinero.formatear(c.getDiferencia()) + ": puede ser un cobro sin registrar. "
-								+ "Revisa los pagos de la caja antes de aprobar.")
+								+ "Revisa los pagos de la caja antes de aprobar."))
 				.orElse(null);
 	}
 
 	/** Un cierre con diferencia va primero en la bandeja. */
 	@Override
 	public int prioridad(SolicitudCambio solicitud) {
-		return cierres.findById(solicitud.getEntidadId()).filter(CierreCaja::conDiferencia).isPresent() ? 0 : 2;
+		return exigeComentario(solicitud) ? 0 : 2;
 	}
 
 	@Override
 	public boolean exigeComentario(SolicitudCambio solicitud) {
-		return cierres.findById(solicitud.getEntidadId()).filter(CierreCaja::conDiferencia).isPresent();
+		return cierres.findById(solicitud.getEntidadId()).filter(c -> c.conDiferencia() || c.isTrasReapertura())
+				.isPresent();
 	}
 
 	@Override

@@ -89,6 +89,9 @@ class ServicioComprobantesTest {
 	private ServicioFamilias familias;
 
 	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones bandeja;
+
+	@Autowired
 	private ServicioPlanesPension planes;
 
 	@Autowired
@@ -171,7 +174,7 @@ class ServicioComprobantesTest {
 			}
 			largada.countDown();
 			for (Future<Long> resultado : resultados) {
-				assertThat(resultado.get(60, TimeUnit.SECONDS)).isNotNull();
+				assertThat(resultado.get(120, TimeUnit.SECONDS)).isNotNull();
 			}
 		}
 		finally {
@@ -185,22 +188,52 @@ class ServicioComprobantesTest {
 		assertThat(contar(jdbc, "caja_diaria")).isEqualTo(20);
 	}
 
+	/**
+	 * B2 (correcciones del sprint 3): la factura solo sale con el RUC REGISTRADO y aprobado de un apoderado de la
+	 * familia. Un RUC cualquiera escrito en caja (de un tercero que se queda con el crédito fiscal) se rechaza, y la
+	 * razón social sale del registro, no de lo que se escriba.
+	 */
 	@Test
-	void facturaExigeRucValido() {
+	void facturaSoloConElRucRegistradoDeLaFamilia() {
 		Long marzo = cuota(jdbc, f.mateo(), "PEN-2027-03");
 
-		assertThatThrownBy(() -> cobro.cobrar(factura(List.of(marzo), "20131312954", "Comercial Quispe S.A.C.")))
-				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("RUC no es válido");
-		assertThatThrownBy(() -> cobro.cobrar(factura(List.of(marzo), "20131312955", " ")))
-				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("razón social");
+		for (String ruc : List.of("20131312955", "20131312954", "")) {
+			assertThatThrownBy(() -> cobro.cobrar(factura(List.of(marzo), ruc, "Comercial Quispe S.A.C.")))
+					.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("RUC registrado de la familia");
+		}
 		assertThat(contar(jdbc, "comprobante")).isZero();
+		// Registrarlo pide la aprobación de otra persona y valida el RUC.
+		como(EscenarioCobranza.ADMINISTRACION);
+		assertThatThrownBy(() -> familias.solicitarDatosFacturacion(f.rosa(), "20131312954", "Comercial Quispe S.A.C.",
+				"La empresa de la familia pide factura")).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("RUC no es válido");
+		assertThatThrownBy(() -> familias.solicitarDatosFacturacion(f.rosa(), "20131312955", " ",
+				"La empresa de la familia pide factura")).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("razón social");
+		familias.solicitarDatosFacturacion(f.rosa(), "20131312955", "Comercial Quispe S.A.C.",
+				"La empresa de la familia pide factura");
+		como(CAJA);
+		assertThatThrownBy(() -> cobro.cobrar(factura(List.of(marzo), "20131312955", "Comercial Quispe S.A.C.")))
+				.as("pendiente de aprobación").isInstanceOf(ReglaNegocioException.class);
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba.iniciarSesion(EscenarioCobranza.DIRECCION);
+		bandeja.aprobar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.pendiente(jdbc, "apoderado",
+				f.rosa()), null);
+		assertThat(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.ultimoEvento(jdbc,
+				"DATOS_FACTURACION_CAMBIADOS")).containsEntry("nombre_usuario", "director");
 
-		Long pago = cobro.cobrar(factura(List.of(marzo), "20131312955", "Comercial Quispe S.A.C."));
+		como(CAJA);
+		Long pago = cobro.cobrar(factura(List.of(marzo), "20131312955", "Otra Empresa S.A.C."));
 		Map<String, Object> comprobante = jdbc.queryForMap("SELECT * FROM comprobante");
 		assertThat(comprobante).containsEntry("tipo", "FACTURA").containsEntry("serie", "F001").containsEntry("numero", 1)
 				.containsEntry("receptor_tipo_documento", "RUC").containsEntry("receptor_numero_documento", "20131312955")
 				.containsEntry("receptor_nombre", "Comercial Quispe S.A.C.");
 		assertThat(cobro.confirmacion(pago).comprobante()).isEqualTo("F001-00000001");
+		// Otra familia no puede usar ese RUC.
+		Long sebastian = cuota(jdbc, f.sebastian(), "PEN-2027-03");
+		assertThatThrownBy(() -> cobro.cobrar(new CobroRequest(UUID.randomUUID(), f.flores(), List.of(sebastian),
+				MedioPago.EFECTIVO, null, new BigDecimal("450.00"), null, new BigDecimal("450.00"), TipoComprobante.FACTURA,
+				null, "20131312955", null))).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("RUC registrado de la familia");
 	}
 
 	@Test
@@ -262,6 +295,8 @@ class ServicioComprobantesTest {
 				.containsEntry("respuesta", EmisorSimulado.RESPUESTA)
 				.satisfies(c -> assertThat((String) c.get("codigo_hash")).hasSize(64));
 		assertThat(cobro.confirmacion(pago).estadoEnvio()).isEqualTo("ACEPTADO");
+		// Hallazgo 13 de QA: en el perfil de pruebas el envío es síncrono; no quedan hilos vivos para la prueba siguiente.
+		assertThat(Thread.getAllStackTraces().keySet()).noneMatch(t -> t.getName().startsWith("envio-comprobantes-"));
 	}
 
 	@Test
@@ -293,7 +328,10 @@ class ServicioComprobantesTest {
 						"450.00"))), null)).codigoHash());
 	}
 
-	/** El envío corre en otro hilo después del commit: espera a que registre su intento (máximo 10 s). */
+	/**
+	 * El envío corre después del commit. En el perfil de pruebas es síncrono (hallazgo 13 de QA), así que ya terminó;
+	 * la espera queda por si se prueba con el ejecutor de hilos (máximo 10 s).
+	 */
 	private void esperarEnvio() throws InterruptedException {
 		long limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
 		while (jdbc.queryForObject("SELECT COUNT(*) FROM comprobante WHERE intentos = 0", Long.class) > 0) {

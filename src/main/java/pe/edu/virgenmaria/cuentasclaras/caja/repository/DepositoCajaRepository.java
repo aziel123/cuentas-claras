@@ -19,6 +19,11 @@ public interface DepositoCajaRepository extends Repository<DepositoCaja, Long> {
 
 	boolean existsByCajaId(Long cajaId);
 
+	/** Un número de operación de depósito (forma canónica) no se registra dos veces (UNIQUE en la base). */
+	boolean existsByNumeroOperacion(String numeroOperacion);
+
+	List<DepositoCaja> findByFechaDepositoGreaterThanEqual(java.time.LocalDate desde);
+
 	List<DepositoCaja> findByCajaIdIn(Collection<Long> cajas);
 
 	/** Depósitos que Administración aún no comparó con el banco. */

@@ -62,7 +62,7 @@ class EstadoCuotaTest {
 	@Test
 	void anuladaNoSumaAlSaldo() {
 		Cuota marzo = pensionDeMarzo();
-		marzo.anular("La familia se retiró antes de marzo", "administracion", "director", LocalDateTime.of(2027, 3, 2, 9, 0));
+		marzo.anular("La familia se retiró antes de marzo", "administracion", "director", LocalDateTime.of(2027, 3, 2, 9, 0), 5L);
 
 		assertThat(marzo.estadoAl(LocalDate.of(2027, 6, 1))).isEqualTo(EstadoVisibleCuota.ANULADA);
 		assertThat(marzo.saldo()).isEqualByComparingTo("0.00");

@@ -46,8 +46,9 @@ class ReglasEfectivoTest {
 
 	@Test
 	void numeroDeOperacionSeNormalizaEnMayusculas() {
-		assertThat(NumeroOperacion.normalizar("  ab 12-cd34 ")).isEqualTo("AB12-CD34");
-		assertThat(NumeroOperacion.normalizar("00918273")).isEqualTo("00918273");
+		// C1: forma canónica (solo letras y dígitos, en mayúsculas, sin ceros a la izquierda).
+		assertThat(NumeroOperacion.normalizar("  ab 12-cd34 ")).isEqualTo("AB12CD34");
+		assertThat(NumeroOperacion.normalizar("00918273")).isEqualTo("918273");
 		assertThatThrownBy(() -> NumeroOperacion.normalizar(" ")).isInstanceOf(ReglaNegocioException.class)
 				.hasMessageContaining("obligatorio");
 		assertThatThrownBy(() -> NumeroOperacion.normalizar("12")).isInstanceOf(ReglaNegocioException.class);

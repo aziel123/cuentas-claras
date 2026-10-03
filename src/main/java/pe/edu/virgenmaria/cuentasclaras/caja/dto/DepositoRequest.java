@@ -19,6 +19,6 @@ public record DepositoRequest(
 		@NotNull(message = "Indica la fecha del depósito.")
 		@PastOrPresent(message = "La fecha del depósito no puede ser futura.") LocalDate fecha,
 		@NotNull(message = "Escribe el monto depositado.") @Positive(message = "El monto depositado debe ser mayor que 0.")
-		@Digits(integer = 7, fraction = 2, message = "Escribe el monto con hasta 2 decimales.") BigDecimal monto,
+		@Digits(integer = 7, fraction = 2, message = "Escribe un monto de hasta S/ 9,999,999.99, con 2 decimales como máximo.") BigDecimal monto,
 		@Size(max = 500, message = "La explicación tiene hasta 500 caracteres.") String explicacion) {
 }

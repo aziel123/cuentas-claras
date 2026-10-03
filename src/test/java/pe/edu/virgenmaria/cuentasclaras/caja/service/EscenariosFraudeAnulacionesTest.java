@@ -23,6 +23,7 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ContenidoVisible;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.Familias;
@@ -99,6 +100,9 @@ class EscenariosFraudeAnulacionesTest {
 
 	@Autowired
 	private PagoRepository pagos;
+
+	@Autowired
+	private ServicioCierreCaja cierre;
 
 	@Autowired
 	private UsuarioRepository usuarios;
@@ -182,6 +186,57 @@ class EscenariosFraudeAnulacionesTest {
 		assertThat(efectivoEsperado(caja)).isEqualByComparingTo("450.00");
 		assertThat(jdbc.queryForObject("SELECT posterior_al_cierre FROM anulacion_pago WHERE pago_id = ?", Boolean.class,
 				pago)).isFalse();
+	}
+
+	/**
+	 * Hallazgo 2 de QA (M13): lo mismo con un cierre REAL. Dos cobros de S/ 450; se aprueba la devolución del primero con
+	 * la caja abierta; la cajera cuenta S/ 450 y cuadra: el esperado del cierre ya no incluye el pago anulado.
+	 */
+	@Test
+	void anularEfectivoConCajaAbiertaBajaElEsperadoDelCierreReal() {
+		como(CAJA);
+		Long pago = cobro.cobrar(efectivo(f.quispe(), List.of(marzoMateo), "450.00", "500.00"));
+		cobro.cobrar(efectivo(f.quispe(), List.of(cuota(jdbc, f.valeria(), "PEN-2027-03")), "450.00", "450.00"));
+		anulaciones.solicitarDevolucion(pago, MOTIVO_ANULACION);
+		EscenarioAprobaciones.aprueba(DIRECCION, bandeja, jdbc, "pago", pago);
+
+		como(CAJA);
+		assertThat(cierre.contar(new pe.edu.virgenmaria.cuentasclaras.caja.dto.ConteoRequest(new BigDecimal("450.00"),
+				null))).isEqualTo(pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoConteo.COINCIDE);
+		java.util.Map<String, Object> fila = jdbc.queryForMap("SELECT * FROM cierre_caja");
+		assertThat((BigDecimal) fila.get("esperado")).isEqualByComparingTo("450.00");
+		assertThat((BigDecimal) fila.get("efectivo_cobrado")).isEqualByComparingTo("450.00");
+		assertThat((BigDecimal) fila.get("diferencia")).isEqualByComparingTo("0.00");
+		assertThat(jdbc.queryForObject("SELECT posterior_al_cierre FROM anulacion_pago WHERE pago_id = ?", Boolean.class,
+				pago)).isFalse();
+	}
+
+	/**
+	 * Hallazgo 6 de QA: Promotoría le restableció la clave hace 3 días a la cuenta de caja que cobró; aunque la anulación
+	 * la pida Administración, Promotoría no la aprueba. Y la cuenta de la cajera del pago tampoco, aunque tuviera rol de
+	 * aprobador.
+	 */
+	@Test
+	void cajaDelPagoNoApruebaLaAnulacionAunqueTengaRolDeAprobador() {
+		Usuario cuenta = cajeraGuardada("caja.reset");
+		jdbc.update("UPDATE usuario SET creado_por = 'director', creado_en = ?, clave_restablecida_por = 'promotor', "
+				+ "clave_restablecida_en = ? WHERE id = ?", HACE_UN_ANIO, java.sql.Timestamp.valueOf(
+						java.time.LocalDateTime.of(2026, 9, 29, 9, 0)), cuenta.getId());
+		Long pago = cobrarComo(cuenta);
+		como(ADMINISTRACION);
+		anulaciones.solicitarDevolucion(pago, MOTIVO_ANULACION);
+		Long solicitud = EscenarioAprobaciones.pendiente(jdbc, "pago", pago);
+
+		como(PROMOTORIA);
+		assertThatThrownBy(() -> bandeja.aprobar(solicitud, null, true, List.of(EscenarioEscolar.CELULAR_ROSA)))
+				.isInstanceOf(AutoaprobacionSolicitudException.class).hasMessageContaining("restableciste la clave");
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(1L, cuenta.getId(), cuenta.getNombreUsuario(), "Cajera",
+				false, java.util.EnumSet.of(Rol.PROMOTOR)));
+		assertThatThrownBy(() -> bandeja.aprobar(solicitud, null, true, List.of(EscenarioEscolar.CELULAR_ROSA)))
+				.isInstanceOf(AutoaprobacionSolicitudException.class);
+		assertThat(jdbc.queryForObject("SELECT estado FROM pago WHERE id = ?", String.class, pago)).isEqualTo("VIGENTE");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'AUTOAPROBACION_RECHAZADA'",
+				Long.class)).isEqualTo(2);
 	}
 
 	/**
@@ -275,7 +330,7 @@ class EscenariosFraudeAnulacionesTest {
 		como(CAJA);
 		Long pago = cobro.cobrar(efectivo(f.quispe(), List.of(marzoMateo), "450.00", "500.00"));
 		anulaciones.solicitarDevolucion(pago, MOTIVO_ANULACION);
-		assertThat(cobro.pagosDelDia().toString()).doesNotContain("987");
+		assertThat(ContenidoVisible.textos(cobro.pagosDelDia())).noneMatch(t -> t.contains("987"));
 
 		como(DIRECCION);
 		List<String> detalle = bandeja.bandeja().pendientes().getFirst().detalle();
@@ -387,10 +442,13 @@ class EscenariosFraudeAnulacionesTest {
 		return jdbc.queryForObject("SELECT caja_diaria_id FROM pago WHERE id = ?", Long.class, pago);
 	}
 
-	/** Lo consulta Dirección (la cajera no ve el esperado: cierre ciego); deja la sesión en Dirección. */
+	/**
+	 * El efectivo vigente de la caja según la base (lo que el cierre tomará como esperado, sin el fondo fijo). La prueba
+	 * {@code anularEfectivoConCajaAbiertaBajaElEsperadoDelCierreReal} lo comprueba con un cierre real.
+	 */
 	private BigDecimal efectivoEsperado(Long caja) {
-		como(DIRECCION);
-		BigDecimal efectivo = new TransactionTemplate(transacciones).execute(t -> pagos.efectivoVigente(caja));
+		BigDecimal efectivo = jdbc.queryForObject("SELECT SUM(total) FROM pago WHERE caja_diaria_id = ? "
+				+ "AND medio = 'EFECTIVO' AND estado = 'VIGENTE'", BigDecimal.class, caja);
 		return efectivo == null ? BigDecimal.ZERO : efectivo;
 	}
 

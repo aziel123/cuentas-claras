@@ -30,6 +30,15 @@ public interface AplicacionPagoRepository extends Repository<AplicacionPago, Lon
 			+ "and a.tipo = pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAplicacion.APLICACION")
 	List<Long> cuotasDePago(@Param("pago") Long pagoId);
 
+	/**
+	 * Si OTRO pago vigente está aplicado a alguna de esas cuotas (A2: una devolución por «pago duplicado» exige que el
+	 * pago repetido exista).
+	 */
+	@Query("select count(a) > 0 from AplicacionPago a where a.cuota.id in :cuotas and a.pago.id <> :pago "
+			+ "and a.tipo = pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAplicacion.APLICACION "
+			+ "and a.pago.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE")
+	boolean otroPagoVigenteDe(@Param("pago") Long pagoId, @Param("cuotas") Collection<Long> cuotaIds);
+
 	/** Los pagos que tocaron cuotas de un alumno (aplicaciones y reversiones). */
 	@Query("select distinct a.pago.id from AplicacionPago a where a.cuota.alumno.id = :alumno")
 	List<Long> pagosDeAlumno(@Param("alumno") Long alumnoId);

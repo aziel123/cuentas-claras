@@ -180,4 +180,21 @@ class CajaControllerTest {
 				.andExpect(status().isOk()).andExpect(content().string(containsString("El RUC tiene 11 dígitos.")));
 		assertThat(contar(jdbc, "pago")).isZero();
 	}
+
+	/** Hallazgo 10 de QA: un monto recibido fuera de rango da el mensaje del formulario, no un error 500. */
+	@Test
+	void montosMaximosSeRechazanEnElFormulario() throws Exception {
+		mvc.perform(post("/caja/pagos").with(csrf()).with(UsuariosDePrueba.como(CAJA))
+						.param("clave", java.util.UUID.randomUUID().toString()).param("familiaId", f.quispe().toString())
+						.param("cuotaIds", marzoMateo.toString()).param("medio", "EFECTIVO").param("totalVisto", "450.00")
+						.param("recibido", "100000.00").param("comprobante", "BOLETA"))
+				.andExpect(status().isOk()).andExpect(view().name("caja/revisar"))
+				.andExpect(content().string(containsString("Lo recibido debe ser de hasta S/ 99,999.99")));
+		mvc.perform(post("/caja/pagos").with(csrf()).with(UsuariosDePrueba.como(CAJA))
+						.param("clave", java.util.UUID.randomUUID().toString()).param("familiaId", f.quispe().toString())
+						.param("cuotaIds", marzoMateo.toString()).param("medio", "EFECTIVO").param("totalVisto", "450.00")
+						.param("recibido", "1e9").param("comprobante", "BOLETA"))
+				.andExpect(status().isOk());
+		assertThat(contar(jdbc, "pago")).isZero();
+	}
 }

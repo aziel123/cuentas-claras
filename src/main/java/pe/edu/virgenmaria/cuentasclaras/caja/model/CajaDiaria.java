@@ -51,6 +51,10 @@ public class CajaDiaria extends BaseEntity {
 	@Column(name = "primer_conteo", precision = 10, scale = 2)
 	private BigDecimal primerConteo;
 
+	/** M1: la solicitud de reapertura APROBADA que reabrió la caja por última vez (en MySQL la exige un trigger). */
+	@Column(name = "reapertura_solicitud_id")
+	private Long reaperturaSolicitudId;
+
 	protected CajaDiaria() {
 		// requerido por JPA
 	}
@@ -100,11 +104,15 @@ public class CajaDiaria extends BaseEntity {
 		cierres++;
 	}
 
-	/** Reapertura aprobada: vuelve a ABIERTA y reinicia el conteo a ciegas (el cierre anterior queda como estaba). */
-	public void reabrir() {
+	/**
+	 * Reapertura aprobada con esa solicitud: vuelve a ABIERTA y reinicia el conteo (el cierre anterior queda como
+	 * estaba). El siguiente cierre ya no es ciego: queda marcado «tras reapertura».
+	 */
+	public void reabrir(Long solicitudId) {
 		if (estado != EstadoCaja.CERRADA) {
 			throw new ReglaNegocioException("La caja no está cerrada.");
 		}
+		reaperturaSolicitudId = java.util.Objects.requireNonNull(solicitudId, "solicitudId");
 		estado = EstadoCaja.ABIERTA;
 		conteos = 0;
 		primerConteo = null;
@@ -152,5 +160,9 @@ public class CajaDiaria extends BaseEntity {
 
 	public BigDecimal getPrimerConteo() {
 		return primerConteo;
+	}
+
+	public Long getReaperturaSolicitudId() {
+		return reaperturaSolicitudId;
 	}
 }

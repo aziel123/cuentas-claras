@@ -136,6 +136,13 @@ public enum AccionAuditoria {
 	PAGO_NO_ENCONTRADO_BANCO("Un pago digital no aparece en el banco", true),
 	DEPOSITO_NO_ENCONTRADO("Un depósito no aparece en el banco", true),
 
+	// Correcciones del sprint 3 (auditoría antifraude).
+	/** Se resalta: lo escrito a ciegas del banco no coincide con lo registrado (¿número o monto inventado?). */
+	VERIFICACION_NO_COINCIDE("Lo verificado en el banco no coincide", true),
+	/** Se resalta: sale dinero (devolución al apoderado). */
+	REEMBOLSO_REGISTRADO("Registró el reembolso de una devolución", true),
+	DATOS_FACTURACION_CAMBIADOS("Cambió el RUC para factura de un apoderado", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

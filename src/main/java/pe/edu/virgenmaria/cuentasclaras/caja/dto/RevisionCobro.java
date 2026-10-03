@@ -10,10 +10,15 @@ import java.util.UUID;
 /**
  * El paso de seguridad antes de cobrar: total calculado por el sistema, cómo se aplica a cada cuota y a nombre de quién
  * sale el comprobante. {@code clave} identifica este cobro: si se envía dos veces, se registra una sola vez.
+ * {@code facturables}: los RUC registrados (y aprobados) de la familia; sin ninguno, solo boleta (B2).
  */
 public record RevisionCobro(UUID clave, Long familiaId, String familia, MedioPago medio, List<Long> cuotaIds,
 		List<LineaRevision> lineas, BigDecimal total, List<OpcionReceptor> receptores, Long receptorPorDefecto,
-		List<String> avisos, boolean pagoACuentaPermitido, BigDecimal pagoACuentaMinimo) {
+		List<String> avisos, boolean pagoACuentaPermitido, BigDecimal pagoACuentaMinimo, List<OpcionFactura> facturables) {
+
+	/** Un RUC registrado de un apoderado de la familia. */
+	public record OpcionFactura(String ruc, String razonSocial) {
+	}
 
 	/** Una cuota elegida con el monto que se le aplica. */
 	public record LineaRevision(String alumno, String descripcion, LocalDate vencimiento, BigDecimal monto) {

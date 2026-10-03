@@ -23,4 +23,12 @@ public interface VerificacionBancariaRepository extends Repository<VerificacionB
 	List<VerificacionBancaria> findByResultadoOrderByIdDesc(ResultadoVerificacion resultado);
 
 	List<VerificacionBancaria> findTop30ByOrderByIdDesc();
+
+	boolean existsByPagoIdAndResultado(Long pagoId, ResultadoVerificacion resultado);
+
+	java.util.Optional<VerificacionBancaria> findByPagoId(Long pagoId);
+
+	/** Verificaciones de un rango de tiempo (muestreo de Promotoría). */
+	List<VerificacionBancaria> findByResultadoAndCreadoEnBetweenOrderByIdAsc(ResultadoVerificacion resultado,
+			java.time.LocalDateTime desde, java.time.LocalDateTime hasta);
 }

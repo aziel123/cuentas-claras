@@ -25,11 +25,28 @@ public final class EscenarioAprobaciones {
 				+ "AND entidad_id = ?", Long.class, entidad, entidadId);
 	}
 
-	/** Aprueba como esa persona la solicitud pendiente de la entidad; la sesión queda en esa persona. */
+	/**
+	 * Aprueba como esa persona la solicitud pendiente de la entidad; la sesión queda en esa persona. Si la bandeja pide
+	 * llamadas (A2), confirma «Hablé con el apoderado» con el celular registrado de cada familia.
+	 */
 	public static void aprueba(UsuarioAutenticado quien, BandejaAprobaciones bandeja, JdbcTemplate jdbc, String entidad,
 			Long entidadId) {
 		UsuariosDePrueba.iniciarSesion(quien);
-		bandeja.aprobar(pendiente(jdbc, entidad, entidadId), null);
+		Long id = pendiente(jdbc, entidad, entidadId);
+		List<String> telefonos = telefonosPorLlamar(bandeja, jdbc, id);
+		bandeja.aprobar(id, null, !telefonos.isEmpty(), telefonos);
+	}
+
+	/** El celular registrado de un apoderado de cada familia que la bandeja pide llamar (vacío si no pide). */
+	public static List<String> telefonosPorLlamar(BandejaAprobaciones bandeja, JdbcTemplate jdbc, Long solicitud) {
+		return bandeja.bandeja().pendientes().stream().filter(s -> s.id().equals(solicitud)).findFirst()
+				.map(s -> s.llamadas().stream().map(familia -> telefonoDe(jdbc, familia)).toList()).orElse(List.of());
+	}
+
+	/** El primer celular registrado de un apoderado de la familia con ese nombre. */
+	public static String telefonoDe(JdbcTemplate jdbc, String familia) {
+		return jdbc.queryForObject("SELECT a.telefono_whatsapp FROM apoderado a JOIN familia f ON f.id = a.familia_id "
+				+ "WHERE f.nombre = ? AND a.telefono_whatsapp IS NOT NULL ORDER BY a.id LIMIT 1", String.class, familia);
 	}
 
 	public static DescuentoRequest descuento(Long alumno, TipoDescuento tipo, String porcentaje, List<Long> cuotas) {

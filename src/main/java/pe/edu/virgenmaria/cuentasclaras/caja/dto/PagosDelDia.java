@@ -7,7 +7,8 @@ import java.util.List;
 
 /**
  * Pagos del día de la caja de quien la consulta. A propósito NO lleva totales: mientras la caja está abierta la cajera
- * no ve el efectivo esperado (así el cierre ciego tiene sentido).
+ * no ve el efectivo esperado (así el cierre ciego tiene sentido). Por lo mismo (B1), con la caja abierta el monto de
+ * cada pago en EFECTIVO viene {@code null}: solo se ven la cantidad de pagos y sus comprobantes.
  */
 public record PagosDelDia(LocalDate fecha, String cajera, List<PagoDelDia> pagos) {
 

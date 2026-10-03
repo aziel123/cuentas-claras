@@ -74,6 +74,16 @@ public class AuditoriaService {
 		return guardado;
 	}
 
+	/** Cuántos eventos de esa acción hubo en el colegio actual desde un momento (solo lectura; para alertas). */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public long contarDesde(AccionAuditoria accion, LocalDateTime desde) {
+		Long colegio = ContextoColegio.actual();
+		if (colegio == null || colegio <= 0) {
+			return 0;
+		}
+		return eventos.countByColegioIdAndAccionAndOcurridoEnGreaterThanEqual(colegio, accion, desde);
+	}
+
 	/**
 	 * Actor explícito con la IP de la petición actual (si la hay). Para eventos en los que el usuario
 	 * aún no está en el contexto de seguridad, como los intentos de ingreso o el cierre de sesión.

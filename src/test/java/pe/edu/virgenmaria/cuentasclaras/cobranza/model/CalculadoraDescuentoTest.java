@@ -67,4 +67,19 @@ class CalculadoraDescuentoTest {
 		assertThatThrownBy(() -> parcial.reflejarDescuentos(new BigDecimal("100.00")))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("supera");
 	}
+
+	/**
+	 * Hallazgo 10 de QA: un descuento de 99.99 % deja un saldo que se puede cobrar exacto en efectivo (múltiplo de
+	 * S/ 0.10, redondeado a favor del apoderado). En una cuota de S/ 450.00 el 0.01 % es S/ 0.045: el saldo queda en
+	 * S/ 0.00 (la cuota no se cobra, como una beca completa); en una de S/ 4,500.00, en S/ 0.40.
+	 */
+	@Test
+	void descuentoDe99_99PorCientoDejaSaldoCobrableEnEfectivo() {
+		BigDecimal ajuste = CalculadoraDescuento.ajuste(new BigDecimal("450.00"), PORCENTAJE, new BigDecimal("99.99"));
+		assertThat(new BigDecimal("450.00").subtract(ajuste)).isEqualByComparingTo("0.00");
+		BigDecimal grande = CalculadoraDescuento.ajuste(new BigDecimal("4500.00"), PORCENTAJE, new BigDecimal("99.99"));
+		BigDecimal saldo = new BigDecimal("4500.00").subtract(grande);
+		assertThat(saldo).isEqualByComparingTo("0.40");
+		assertThat(Dinero.enDecimos(saldo)).isTrue();
+	}
 }

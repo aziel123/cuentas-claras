@@ -68,6 +68,13 @@ public class CierreCaja extends BaseEntity {
 	@Column(name = "total_digital", nullable = false, updatable = false, precision = 10, scale = 2)
 	private BigDecimal totalDigital;
 
+	/**
+	 * Cierre después de una reapertura (número 2 o más): NO es ciego, porque la cajera ya vio el esperado del cierre
+	 * anterior. Su revisión exige comentario y Promotoría recibe una alerta (hallazgo 4 de QA).
+	 */
+	@Column(name = "tras_reapertura", nullable = false, updatable = false)
+	private boolean trasReapertura;
+
 	// --- Lo único que cambia: la revisión (GRANT UPDATE por columna; el trigger impide cambiarla una vez hecha) ---
 
 	@Enumerated(EnumType.STRING)
@@ -103,6 +110,7 @@ public class CierreCaja extends BaseEntity {
 		CierreCaja cierre = new CierreCaja();
 		cierre.caja = caja;
 		cierre.numero = caja.getCierres() + 1;
+		cierre.trasReapertura = cierre.numero > 1;
 		cierre.fondoFijo = caja.getFondoFijo();
 		cierre.efectivoCobrado = Dinero.normalizar(libro.efectivo());
 		cierre.esperado = cierre.fondoFijo.add(cierre.efectivoCobrado);
@@ -147,6 +155,10 @@ public class CierreCaja extends BaseEntity {
 	/** Faltante (negativo) o sobrante (positivo): ambos alertan (un sobrante puede ser un cobro sin registrar). */
 	public boolean conDiferencia() {
 		return diferencia.signum() != 0;
+	}
+
+	public boolean isTrasReapertura() {
+		return trasReapertura;
 	}
 
 	/** Contó dos veces: el primer conteo no coincidió con el esperado. */

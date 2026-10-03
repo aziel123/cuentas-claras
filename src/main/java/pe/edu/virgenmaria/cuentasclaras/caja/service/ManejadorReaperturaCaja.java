@@ -25,9 +25,11 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Reapertura de una caja aprobada por otra persona: solo la caja de HOY, cerrada y sin depósito (en MySQL el trigger
- * exige además que la solicitud siga pendiente en esta transacción). Reinicia el conteo a ciegas; el cierre anterior
- * queda registrado tal cual, con su diferencia: reabrir no «arregla» un faltante, solo permite seguir cobrando.
+ * Reapertura de una caja aprobada por otra persona: solo la caja de HOY, cerrada y sin depósito. La caja guarda el id de
+ * su solicitud (M1): en MySQL el trigger exige que esa solicitud esté APROBADA (la bandeja la aprueba antes de aplicar),
+ * sea de reapertura de ESTA caja, se haya resuelto el día de la caja por alguien que no es su cajero y no se haya usado
+ * antes. Reinicia el conteo; el cierre anterior queda registrado tal cual, con su diferencia: reabrir no «arregla» un
+ * faltante, solo permite seguir cobrando. El cierre siguiente no es ciego y queda marcado «tras reapertura».
  */
 @Component
 @Transactional(propagation = Propagation.MANDATORY)
@@ -74,7 +76,7 @@ public class ManejadorReaperturaCaja implements ManejadorSolicitud {
 		if (depositos.existsByCajaId(caja.getId())) {
 			throw new ReglaNegocioException("El efectivo de esta caja ya se depositó: no se puede reabrir.");
 		}
-		caja.reabrir();
+		caja.reabrir(solicitud.getId());
 		cajas.saveAndFlush(caja);
 		auditoria.registrar(AccionAuditoria.CAJA_REABIERTA, "caja_diaria", caja.getId().toString(),
 				EstadoCaja.CERRADA.name(), EstadoCaja.ABIERTA.name(), "Caja de " + caja.getCajero() + " del "
@@ -101,7 +103,8 @@ public class ManejadorReaperturaCaja implements ManejadorSolicitud {
 				+ c.getNumero() + ": esperado " + Dinero.formatear(c.getEsperado()) + ", contado "
 				+ Dinero.formatear(c.getContado()) + ", " + ServicioCierreCaja.diferenciaTexto(c.getDiferencia()) + " ("
 				+ c.getEstado().etiqueta().toLowerCase() + ")"));
-		lineas.add("Al reabrir vuelve a contar a ciegas; el cierre anterior no se borra ni se corrige.");
+		lineas.add("Al reabrir, el cierre anterior no se borra ni se corrige. El siguiente cierre no será ciego (la cajera ya "
+				+ "vio el esperado): quedará marcado «tras reapertura» y se revisará con comentario.");
 		return lineas;
 	}
 

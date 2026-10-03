@@ -2,8 +2,10 @@
 --   mysql -h <host> -u cc_migrador -p cuentasclaras < scripts/mysql/03-triggers.sql
 -- Requisito (una vez, como administrador, porque el binlog está activo):
 --   SET PERSIST log_bin_trust_function_creators = 1;
--- No van en Flyway: H2 (desarrollo y pruebas) no los soporta. La aplicación en prod NO ARRANCA si faltan
--- (VerificadorPermisosBaseDatos los comprueba con un INSERT imposible que el trigger rechaza con el error 1644).
+-- No van en Flyway: H2 (desarrollo y pruebas) no los soporta. La aplicación en prod NO ARRANCA si falta alguno:
+-- VerificadorPermisosBaseDatos compara la vista cuentasclaras.trigger_instalado (02-permisos-tablas.sql) con la lista
+-- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
+-- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
 
 DELIMITER $$
@@ -101,6 +103,20 @@ BEGIN
     IF OLD.estado = 'ANULADA' AND NEW.estado <> 'ANULADA' THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una cuota anulada no cambia';
     END IF;
+    -- Correcciones del sprint 3 (M1): se anula solo con SU solicitud APROBADA el mismo día, por quien figura como
+    -- aprobador: la de anulación de esta cuota o el ingreso tardío de su matrícula. El enlace no cambia después.
+    IF OLD.estado <> 'ANULADA' AND NEW.estado = 'ANULADA' AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s
+            WHERE s.id = NEW.anulacion_solicitud_id AND s.estado = 'APROBADA'
+            AND s.solicitado_por = NEW.anulacion_solicitada_por AND s.resuelto_por = NEW.anulacion_aprobada_por
+            AND DATE(s.resuelto_en) = DATE(NEW.anulada_en)
+            AND ((s.tipo = 'ANULACION_CUOTA' AND s.entidad = 'cuota' AND s.entidad_id = NEW.id)
+                OR (s.tipo = 'FECHA_MATRICULA' AND s.entidad = 'matricula' AND s.entidad_id = NEW.matricula_id))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la cuota se anula solo con su solicitud aprobada';
+    END IF;
+    IF NOT (NEW.anulacion_solicitud_id <=> OLD.anulacion_solicitud_id)
+            AND NOT (OLD.estado <> 'ANULADA' AND NEW.estado = 'ANULADA') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la solicitud de la anulación no cambia';
+    END IF;
     IF NOT (NEW.monto_pagado <=> OLD.monto_pagado) AND NOT (NEW.monto_pagado <=>
             (SELECT COALESCE(SUM(a.monto), 0.00) FROM aplicacion_pago a WHERE a.cuota_id = NEW.id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el monto pagado no coincide con el libro de pagos';
@@ -150,8 +166,9 @@ BEGIN
     END IF;
 END$$
 
--- Cerrar exige el cierre registrado; reabrir exige una reapertura que se aprueba en esta transacción y reinicia el
--- conteo a ciegas. El primer conteo no se reescribe (no se puede «tantear» el esperado contando una y otra vez).
+-- Cerrar exige el cierre registrado; reabrir exige SU solicitud de reapertura (enlazada por id, una sola vez) APROBADA
+-- el mismo día de la caja por alguien que no es su cajero, y reinicia el conteo. El primer conteo no se reescribe (no se
+-- puede «tantear» el esperado contando una y otra vez).
 DROP TRIGGER IF EXISTS trg_caja_diaria_estado$$
 CREATE TRIGGER trg_caja_diaria_estado BEFORE UPDATE ON caja_diaria FOR EACH ROW
 BEGIN
@@ -161,10 +178,15 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la caja se cierra con un cierre registrado';
     END IF;
     IF reabre AND (NOT (NEW.cierres <=> OLD.cierres) OR NOT (NEW.conteos <=> 0)
-            OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.tipo = 'REAPERTURA_CAJA'
-                AND s.entidad = 'caja_diaria' AND s.entidad_id = NEW.id AND s.estado = 'PENDIENTE')
+            OR (NEW.reapertura_solicitud_id <=> OLD.reapertura_solicitud_id)
+            OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.reapertura_solicitud_id
+                AND s.tipo = 'REAPERTURA_CAJA' AND s.entidad = 'caja_diaria' AND s.entidad_id = NEW.id
+                AND s.estado = 'APROBADA' AND DATE(s.resuelto_en) = NEW.fecha AND s.resuelto_por <> NEW.cajero)
             OR EXISTS (SELECT 1 FROM deposito_caja x WHERE x.caja_diaria_id = NEW.id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la caja solo se reabre con una reapertura aprobada y sin depósito';
+    END IF;
+    IF NOT reabre AND NOT (NEW.reapertura_solicitud_id <=> OLD.reapertura_solicitud_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la solicitud de reapertura solo cambia al reabrir';
     END IF;
     IF NEW.estado = OLD.estado AND NOT (NEW.cierres <=> OLD.cierres) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los cierres solo cambian al cerrar';
@@ -177,7 +199,8 @@ BEGIN
 END$$
 
 -- Un pago nace VIGENTE, con un comprobante (boleta o factura) del mismo total. En efectivo, solo en una caja ABIERTA;
--- la única excepción es el pago que reemplaza a otro ya anulado de la misma caja, con el mismo medio y el mismo total.
+-- la única excepción es el pago que reemplaza a otro anulado POR CORRECCIÓN de la misma caja, con el mismo medio y el
+-- mismo total.
 DROP TRIGGER IF EXISTS trg_pago_registro$$
 CREATE TRIGGER trg_pago_registro BEFORE INSERT ON pago FOR EACH ROW
 BEGIN
@@ -192,7 +215,9 @@ BEGIN
             AND NOT ((SELECT d.estado FROM caja_diaria d WHERE d.id = NEW.caja_diaria_id) <=> 'ABIERTA') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la caja está cerrada: no acepta efectivo';
     END IF;
-    IF NEW.origen = 'REEMPLAZO' AND NOT EXISTS (SELECT 1 FROM pago r WHERE r.id = NEW.reemplaza_pago_id
+    -- Correcciones del sprint 3 (A3): solo reemplaza a un pago anulado por CORRECCIÓN (nunca por devolución).
+    IF NEW.origen = 'REEMPLAZO' AND NOT EXISTS (SELECT 1 FROM pago r JOIN anulacion_pago n ON n.pago_id = r.id
+            WHERE r.id = NEW.reemplaza_pago_id AND n.tipo = 'CORRECCION'
             AND r.estado = 'ANULADO' AND r.caja_diaria_id = NEW.caja_diaria_id AND r.medio = NEW.medio
             AND r.total = NEW.total) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el reemplazo debe ser del pago anulado (misma caja, medio y total)';
@@ -261,7 +286,7 @@ BEGIN
     END IF;
 END$$
 
--- Un descuento nace SOLICITADO; resuelto no vuelve a cambiar.
+-- Un descuento nace SOLICITADO; resuelto no vuelve a cambiar (ni su estado ni quién y cuándo lo resolvió).
 DROP TRIGGER IF EXISTS trg_descuento_nace$$
 CREATE TRIGGER trg_descuento_nace BEFORE INSERT ON descuento FOR EACH ROW
 BEGIN
@@ -273,7 +298,8 @@ END$$
 DROP TRIGGER IF EXISTS trg_descuento_resuelto$$
 CREATE TRIGGER trg_descuento_resuelto BEFORE UPDATE ON descuento FOR EACH ROW
 BEGIN
-    IF OLD.estado <> 'SOLICITADO' AND NOT (NEW.estado <=> OLD.estado) THEN
+    IF OLD.estado <> 'SOLICITADO' AND (NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.resuelto_por <=> OLD.resuelto_por)
+            OR NOT (NEW.resuelto_en <=> OLD.resuelto_en)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un descuento resuelto no cambia';
     END IF;
 END$$
@@ -297,26 +323,104 @@ BEGIN
     END IF;
 END$$
 
+-- Un cierre revisado no cambia: ni su estado ni quién, cuándo y con qué comentario lo revisó (M1).
 DROP TRIGGER IF EXISTS trg_cierre_caja_revisado$$
 CREATE TRIGGER trg_cierre_caja_revisado BEFORE UPDATE ON cierre_caja FOR EACH ROW
 BEGIN
-    IF OLD.estado <> 'POR_REVISAR' AND NOT (NEW.estado <=> OLD.estado) THEN
+    IF OLD.estado <> 'POR_REVISAR' AND (NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.revisado_por <=> OLD.revisado_por)
+            OR NOT (NEW.revisado_en <=> OLD.revisado_en)
+            OR NOT (NEW.comentario_revision <=> OLD.comentario_revision)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un cierre revisado no cambia';
     END IF;
 END$$
 
--- Verifica contra el banco alguien que no cobró ni depositó; solo pagos digitales.
+-- Verifica contra el banco alguien que no cobró ni depositó; solo pagos digitales VIGENTES. «Encontrado» exige lo que
+-- se vio en el banco (correcciones del sprint 3, C1 y A4): la misma operación y el mismo monto, y una fecha posible
+-- (el pago: hasta 3 días después; el depósito: su fecha).
 DROP TRIGGER IF EXISTS trg_verificacion_bancaria_registro$$
 CREATE TRIGGER trg_verificacion_bancaria_registro BEFORE INSERT ON verificacion_bancaria FOR EACH ROW
 BEGIN
     IF NEW.pago_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pago p WHERE p.id = NEW.pago_id
-            AND p.medio <> 'EFECTIVO' AND p.cajero <> NEW.creado_por AND p.creado_por <> NEW.creado_por) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: verifica un pago digital alguien que no lo cobró';
+            AND p.medio <> 'EFECTIVO' AND p.estado = 'VIGENTE' AND p.cajero <> NEW.creado_por
+            AND p.creado_por <> NEW.creado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: verifica un pago digital vigente alguien que no lo cobró';
     END IF;
     IF NEW.deposito_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM deposito_caja x JOIN caja_diaria d
             ON d.id = x.caja_diaria_id WHERE x.id = NEW.deposito_id AND x.creado_por <> NEW.creado_por
             AND d.cajero <> NEW.creado_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: verifica un depósito alguien que no lo hizo';
+    END IF;
+    IF NEW.resultado = 'ENCONTRADO' AND NEW.pago_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pago p
+            WHERE p.id = NEW.pago_id AND p.numero_operacion = NEW.banco_operacion AND p.total = NEW.banco_monto
+            AND NEW.banco_fecha BETWEEN p.fecha AND DATE_ADD(p.fecha, INTERVAL 3 DAY)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: lo visto en el banco no coincide con el pago';
+    END IF;
+    IF NEW.resultado = 'ENCONTRADO' AND NEW.deposito_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM deposito_caja x
+            WHERE x.id = NEW.deposito_id AND x.numero_operacion = NEW.banco_operacion AND x.monto = NEW.banco_monto
+            AND x.fecha_deposito = NEW.banco_fecha) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: lo visto en el banco no coincide con el depósito';
+    END IF;
+END$$
+
+-- Correcciones del sprint 3 (A1 y A2). El reembolso es de una DEVOLUCIÓN, por su monto y por el medio del pago, y no
+-- lo registra la cajera del pago.
+DROP TRIGGER IF EXISTS trg_reembolso_registro$$
+CREATE TRIGGER trg_reembolso_registro BEFORE INSERT ON reembolso FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM anulacion_pago n JOIN pago p ON p.id = n.pago_id WHERE n.id = NEW.anulacion_pago_id
+            AND n.tipo = 'DEVOLUCION' AND n.monto = NEW.monto AND p.medio = NEW.medio AND n.cajero_pago = NEW.cajero_pago
+            AND p.cajero <> NEW.creado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el reembolso no corresponde a la devolución o lo registra la cajera';
+    END IF;
+END$$
+
+-- M1. Una solicitud resuelta no cambia: ni su estado ni quién, cuándo y con qué comentario la resolvió.
+DROP TRIGGER IF EXISTS trg_solicitud_cambio_resuelta$$
+CREATE TRIGGER trg_solicitud_cambio_resuelta BEFORE UPDATE ON solicitud_cambio FOR EACH ROW
+BEGIN
+    IF OLD.estado <> 'PENDIENTE' AND (NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.resuelto_por <=> OLD.resuelto_por)
+            OR NOT (NEW.resuelto_en <=> OLD.resuelto_en) OR NOT (NEW.comentario <=> OLD.comentario)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una solicitud resuelta no cambia';
+    END IF;
+END$$
+
+-- M1. El resultado del envío al OSE se registra una vez, desde PENDIENTE; ACEPTADO exige el hash, la respuesta y la
+-- fecha de envío. (Con el OSE real, los envíos los registrará un usuario de proceso aparte, con su propio GRANT.)
+DROP TRIGGER IF EXISTS trg_comprobante_envio$$
+CREATE TRIGGER trg_comprobante_envio BEFORE UPDATE ON comprobante FOR EACH ROW
+BEGIN
+    IF OLD.estado_envio <> 'PENDIENTE' AND (NOT (NEW.estado_envio <=> OLD.estado_envio)
+            OR NOT (NEW.codigo_hash <=> OLD.codigo_hash) OR NOT (NEW.respuesta <=> OLD.respuesta)
+            OR NOT (NEW.enviado_en <=> OLD.enviado_en) OR NOT (NEW.enlace_pdf <=> OLD.enlace_pdf)
+            OR NOT (NEW.intentos <=> OLD.intentos)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el envío ya resuelto de un comprobante no cambia';
+    END IF;
+    IF OLD.estado_envio = 'PENDIENTE' AND NEW.estado_envio = 'ACEPTADO' AND (NEW.codigo_hash IS NULL
+            OR NEW.respuesta IS NULL OR NEW.enviado_en IS NULL OR NOT (NEW.intentos <=> OLD.intentos + 1)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: ACEPTADO exige el hash, la respuesta y el envío';
+    END IF;
+END$$
+
+-- B2. Un apoderado nace sin datos de facturación; el RUC y la razón social solo cambian con SU solicitud
+-- DATOS_FACTURACION aprobada (enlazada por id, una sola vez).
+DROP TRIGGER IF EXISTS trg_apoderado_nace$$
+CREATE TRIGGER trg_apoderado_nace BEFORE INSERT ON apoderado FOR EACH ROW
+BEGIN
+    IF NEW.ruc IS NOT NULL OR NEW.razon_social IS NOT NULL OR NEW.facturacion_solicitud_id IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el RUC del apoderado se registra con una solicitud aprobada';
+    END IF;
+END$$
+
+DROP TRIGGER IF EXISTS trg_apoderado_facturacion$$
+CREATE TRIGGER trg_apoderado_facturacion BEFORE UPDATE ON apoderado FOR EACH ROW
+BEGIN
+    IF (NOT (NEW.ruc <=> OLD.ruc) OR NOT (NEW.razon_social <=> OLD.razon_social)
+            OR NOT (NEW.facturacion_solicitud_id <=> OLD.facturacion_solicitud_id))
+            AND ((NEW.facturacion_solicitud_id <=> OLD.facturacion_solicitud_id)
+                OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.facturacion_solicitud_id
+                    AND s.tipo = 'DATOS_FACTURACION' AND s.entidad = 'apoderado' AND s.entidad_id = NEW.id
+                    AND s.estado = 'APROBADA')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el RUC del apoderado solo cambia con su solicitud aprobada';
     END IF;
 END$$
 

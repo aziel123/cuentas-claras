@@ -12,7 +12,7 @@ import java.util.Map;
  * el esperado: lo calcula el sistema con el libro.
  */
 public record ConteoRequest(
-		@Digits(integer = 7, fraction = 2, message = "Escribe el monto con hasta 2 decimales.")
+		@Digits(integer = 7, fraction = 2, message = "Escribe un monto de hasta S/ 9,999,999.99, con 2 decimales como máximo.")
 		@DecimalMin(value = "0.00", message = "El conteo no puede ser negativo.") BigDecimal contado,
 		Map<Denominacion, Integer> denominaciones) {
 }

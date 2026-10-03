@@ -37,7 +37,8 @@
 				<th scope="col">Revisión</th></tr></thead>
 			<tbody>
 				<tr th:each="k : ${c.cierres}">
-					<td data-etiqueta="N.°" class="num" th:text="|${k.numero} · ${#temporals.format(k.en, 'HH:mm')}|">1 · 18:10</td>
+					<td data-etiqueta="N.°" class="num"><span th:text="|${k.numero} · ${#temporals.format(k.en, 'HH:mm')}|">1 · 18:10</span>
+						<th:block th:if="${k.trasReapertura}"><span th:replace="~{fragments/componentes :: badge('Tras reapertura: no fue ciego', 'alerta')}"></span></th:block></td>
 					<td data-etiqueta="Esperado" class="num"><span th:replace="~{fragments/componentes :: monto(${k.esperado})}"></span></td>
 					<td data-etiqueta="Primer conteo" class="num"><span th:replace="~{fragments/componentes :: monto(${k.primerConteo})}"></span></td>
 					<td data-etiqueta="Contado" class="num"><span th:replace="~{fragments/componentes :: monto(${k.contado})}"></span></td>
@@ -58,6 +59,9 @@
 		<h2 id="titulo-deposito">Depósito</h2>
 		<p th:if="${c.deposito == null}" class="secundario">Aún no se registra el depósito del efectivo.</p>
 		<p th:if="${c.deposito != null}" th:text="${c.deposito}">S/ 450.00 el 02/10/2026</p>
+		<th:block th:if="${c.depositoTardio}">
+			<div th:replace="~{fragments/componentes :: alerta('error', 'Depósito tardío: llegó al banco más de un día hábil después de la caja. Posible uso del efectivo de un día para cubrir otro.')}"></div>
+		</th:block>
 		<p th:if="${c.deposito != null}" class="secundario" th:text="|Verificación bancaria: ${c.depositoVerificacion}|">Sin verificar</p>
 	</section>
 

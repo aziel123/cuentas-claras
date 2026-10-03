@@ -59,9 +59,40 @@
 					<span th:if="${a.correo != null}" th:text="${a.correo}">rosa@gmail.com</span>
 				</p>
 				<p class="secundario" th:if="${a.esResponsable()}" th:text="|Paga por: ${#strings.listJoin(a.responsableDe, ', ')}|">Paga por: Mateo</p>
+				<p class="secundario num" th:if="${a.ruc != null}" th:text="|Factura con RUC ${a.ruc} · ${a.razonSocial}|">Factura con RUC 20131312955</p>
 				<div class="fila" th:if="${puedeEditar and a.activo}">
 					<a class="btn btn-secundario btn-chico" th:href="@{/alumnos/apoderados/{id}(id=${a.id})}"
 						th:aria-label="|Corregir datos de ${a.nombreCompleto}|">Corregir datos</a>
+					<button type="button" class="btn btn-texto btn-chico" th:popovertarget="|modal-ruc-${a.id}|"
+						th:text="${a.ruc == null} ? 'Registrar RUC' : 'Cambiar RUC'">Registrar RUC</button>
+					<div class="modal" th:id="|modal-ruc-${a.id}|" popover role="dialog" aria-modal="true"
+						th:aria-labelledby="|modal-ruc-${a.id}-titulo|">
+						<form method="post" th:action="@{/alumnos/apoderados/{id}/facturacion(id=${a.id})}" class="modal-cuerpo">
+							<h2 th:id="|modal-ruc-${a.id}-titulo|" th:text="|RUC para facturas de ${a.nombreCompleto}|">RUC</h2>
+							<p>Queda pendiente hasta que otra persona de Promotoría o Dirección lo apruebe. Solo con un RUC
+								aprobado se emite factura en caja.</p>
+							<div class="campo">
+								<label th:for="|modal-ruc-${a.id}-ruc|">RUC</label>
+								<input class="input num" type="text" th:id="|modal-ruc-${a.id}-ruc|" name="ruc" required
+									inputmode="numeric" pattern="\d{11}" maxlength="11" autocomplete="off">
+							</div>
+							<div class="campo">
+								<label th:for="|modal-ruc-${a.id}-razon|">Razón social (como figura en SUNAT)</label>
+								<input class="input" type="text" th:id="|modal-ruc-${a.id}-razon|" name="razonSocial" required
+									minlength="3" maxlength="150" autocomplete="off">
+							</div>
+							<div class="campo">
+								<label th:for="|modal-ruc-${a.id}-motivo|">Motivo (obligatorio)</label>
+								<textarea class="input" th:id="|modal-ruc-${a.id}-motivo|" name="motivo" required minlength="10"
+									maxlength="500"></textarea>
+							</div>
+							<div class="acciones">
+								<button type="button" class="btn btn-secundario" th:popovertarget="|modal-ruc-${a.id}|"
+									popovertargetaction="hide">Cancelar</button>
+								<button type="submit" class="btn btn-primario">Pedir aprobación</button>
+							</div>
+						</form>
+					</div>
 					<th:block th:unless="${a.esResponsable()}">
 						<th:block th:replace="~{fragments/componentes :: modalMotivo(${'modal-desactivar-' + a.id},
 							|¿Desactivar a ${a.nombreCompleto}?|, 'Ya no podrá ser responsable de pago. Sus datos se conservan.',

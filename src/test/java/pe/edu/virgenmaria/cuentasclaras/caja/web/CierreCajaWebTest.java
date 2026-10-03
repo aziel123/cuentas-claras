@@ -155,26 +155,45 @@ class CierreCajaWebTest {
 		assertThat(jdbc.queryForObject("SELECT estado FROM cierre_caja", String.class)).isEqualTo("APROBADO");
 	}
 
+	/**
+	 * C1: la verificación es a ciegas. Mientras está pendiente, la pantalla no muestra el número de operación registrado;
+	 * Administración escribe lo que ve en el banco. Si no coincide, no se guarda nada y queda en la bitácora.
+	 */
 	@Test
-	void verificacionBancariaPorAdministracion() throws Exception {
+	void verificacionBancariaAciegasPorAdministracion() throws Exception {
 		mvc.perform(get("/conciliacion").with(como(ADMINISTRACION)))
 				.andExpect(status().isOk()).andExpect(view().name("conciliacion/verificacion"))
-				.andExpect(content().string(containsString("YP123987")))
+				.andExpect(content().string(not(containsString("YP123987"))))
 				.andExpect(content().string(containsString("action=\"/conciliacion/pagos/" + yape + "\"")))
+				.andExpect(content().string(containsString("name=\"operacion\"")))
+				.andExpect(content().string(containsString("name=\"monto\"")))
 				.andExpect(content().string(containsString("No aparece")));
 		// Promotoría ve, pero no verifica.
 		mvc.perform(get("/conciliacion").with(como(PROMOTORIA)))
 				.andExpect(status().isOk())
-				.andExpect(content().string(containsString("YP123987")))
+				.andExpect(content().string(not(containsString("YP123987"))))
 				.andExpect(content().string(not(containsString("action=\"/conciliacion/pagos/"))));
 		mvc.perform(post("/conciliacion/pagos/{id}", yape).with(csrf()).with(como(PROMOTORIA))
 				.param("resultado", "ENCONTRADO")).andExpect(status().isForbidden());
 		mvc.perform(post("/conciliacion/pagos/{id}", yape).with(csrf()).with(como(ADMINISTRACION))
 				.param("resultado", "NO_ENCONTRADO")).andExpect(flash().attributeExists("error"));
+		// «Encontrado» sin lo que se ve en el banco, o con un monto distinto: nada se guarda.
 		mvc.perform(post("/conciliacion/pagos/{id}", yape).with(csrf()).with(como(ADMINISTRACION))
-						.param("resultado", "ENCONTRADO"))
+				.param("resultado", "ENCONTRADO")).andExpect(flash().attributeExists("error"));
+		mvc.perform(post("/conciliacion/pagos/{id}", yape).with(csrf()).with(como(ADMINISTRACION))
+						.param("resultado", "ENCONTRADO").param("operacion", "yp-123987").param("fecha", "2026-10-02")
+						.param("monto", "45.00"))
+				.andExpect(redirectedUrl("/conciliacion"))
+				.andExpect(flash().attribute("error", containsString("no coincide")));
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM verificacion_bancaria", Long.class)).isZero();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'VERIFICACION_NO_COINCIDE'",
+				Long.class)).isEqualTo(1);
+		mvc.perform(post("/conciliacion/pagos/{id}", yape).with(csrf()).with(como(ADMINISTRACION))
+						.param("resultado", "ENCONTRADO").param("operacion", "yp-123987").param("fecha", "2026-10-02")
+						.param("monto", "450"))
 				.andExpect(redirectedUrl("/conciliacion")).andExpect(flash().attributeExists("exito"));
-		assertThat(jdbc.queryForObject("SELECT resultado FROM verificacion_bancaria", String.class)).isEqualTo("ENCONTRADO");
+		assertThat(jdbc.queryForMap("SELECT resultado, banco_operacion FROM verificacion_bancaria"))
+				.containsEntry("resultado", "ENCONTRADO").containsEntry("banco_operacion", "YP123987");
 		mvc.perform(get("/conciliacion").with(como(ADMINISTRACION)))
 				.andExpect(content().string(containsString("Encontrado")))
 				.andExpect(content().string(not(containsString("action=\"/conciliacion/pagos/"))));
@@ -199,5 +218,24 @@ class CierreCajaWebTest {
 			mvc.perform(get("/aprobaciones/cajas").with(como(quien))).andExpect(status().isForbidden());
 			mvc.perform(get("/aprobaciones/cajas/{id}", caja).with(como(quien))).andExpect(status().isForbidden());
 		}
+	}
+
+	/**
+	 * Hallazgo 10 de QA: un conteo mayor que S/ 9,999,999.99, con demasiadas piezas o con un número que no cabe en un
+	 * entero da un mensaje, no un error 500; y no cierra nada.
+	 */
+	@Test
+	void montosMaximosDelConteoSeRechazanEnElFormulario() throws Exception {
+		mvc.perform(post("/caja/cierre/conteo").with(csrf()).with(como(CAJA)).param("contado", "10000000.00"))
+				.andExpect(redirectedUrl("/caja/cierre"))
+				.andExpect(flash().attribute("error", containsString("hasta S/ 9,999,999.99")));
+		mvc.perform(post("/caja/cierre/conteo").with(csrf()).with(como(CAJA)).param("denominaciones[B200]", "60000"))
+				.andExpect(redirectedUrl("/caja/cierre")).andExpect(flash().attributeExists("error"));
+		mvc.perform(post("/caja/cierre/conteo").with(csrf()).with(como(CAJA))
+						.param("denominaciones[B200]", "99999999999"))
+				.andExpect(redirectedUrl("/caja/cierre")).andExpect(flash().attributeExists("error"));
+		assertThat(jdbc.queryForMap("SELECT estado, conteos FROM caja_diaria")).containsEntry("estado", "ABIERTA")
+				.containsEntry("conteos", 0);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cierre_caja", Long.class)).isZero();
 	}
 }

@@ -14,6 +14,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.dto.CorreccionRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioAnulacionPagos;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.SeleccionCobroRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioCobro;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.CausaDevolucion;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.web.Formularios;
 
@@ -121,10 +122,11 @@ public class CajaController {
 
 	/** La cajera PIDE anular (devolver) uno de sus pagos: lo aprueba otra persona en la bandeja. */
 	@PostMapping("/caja/pagos/{id:\\d+}/devolucion")
-	public String devolucion(@PathVariable Long id, @RequestParam(required = false) String motivo,
+	public String devolucion(@PathVariable Long id, @RequestParam(required = false) CausaDevolucion causa,
+			@RequestParam(required = false) String motivo,
 			RedirectAttributes avisos) {
 		try {
-			anulaciones.solicitarDevolucion(id, motivo);
+			anulaciones.solicitarDevolucion(id, causa, motivo);
 			avisos.addFlashAttribute("exito", "Listo: pediste la anulación. Promotoría o Dirección la revisarán; "
 					+ "mientras tanto el pago sigue vigente.");
 		}

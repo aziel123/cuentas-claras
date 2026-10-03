@@ -96,7 +96,9 @@ public class ConsultaCajas {
 					cierre == null ? "alerta" : cierre.getEstado().variante(),
 					cierre == null ? "—" : ServicioCierreCaja.diferenciaTexto(cierre.getDiferencia()),
 					cierre == null || !cierre.conDiferencia() ? "exito" : "peligro",
-					deposito == null ? "—" : Dinero.formatear(deposito.getMonto()) + (deposito.distinto() ? " (distinto)" : "")));
+					deposito == null ? "—" : Dinero.formatear(deposito.getMonto()) + (deposito.distinto() ? " (distinto)" : "")
+							+ (ServicioVerificacionBancaria.tardio(caja.getFecha(), deposito.getFechaDeposito()) ? " (tardío)"
+									: "")));
 		}
 		return new CajasDelDia(dia, dia.minusDays(1), dia.isBefore(LocalDate.now(reloj)) ? dia.plusDays(1) : null,
 				Dinero.normalizar(efectivo), Dinero.normalizar(digital), filas);
@@ -122,17 +124,21 @@ public class ConsultaCajas {
 				.map(c -> new DetalleCaja.CierreDetalle(c.getNumero(), c.getCreadoEn(), c.getEsperado(), c.getPrimerConteo(),
 						c.getContado(), ServicioCierreCaja.diferenciaTexto(c.getDiferencia()),
 						c.conDiferencia() ? "peligro" : "exito", c.getExplicacion(), c.getDenominaciones(),
-						c.getEstado().etiqueta(), c.getEstado().variante(), c.getRevisadoPor(), c.getComentarioRevision()))
+						c.getEstado().etiqueta(), c.getEstado().variante(), c.getRevisadoPor(), c.getComentarioRevision(),
+						c.isTrasReapertura()))
 				.toList();
 		DepositoCaja deposito = depositos.findByCajaId(caja.getId()).orElse(null);
 		String depositoTexto = deposito == null ? null : Dinero.formatear(deposito.getMonto()) + " el "
 				+ Calendario.formatear(deposito.getFechaDeposito()) + " en " + deposito.getCuenta() + " (operación "
 				+ deposito.getNumeroOperacion() + "; se esperaba " + Dinero.formatear(deposito.getEsperado()) + ")"
 				+ (deposito.getExplicacion() == null ? "" : ". Explicación: " + deposito.getExplicacion());
+		VerificacionBancaria delDeposito = deposito == null ? null
+				: verificaciones.findByDepositoIdIn(List.of(deposito.getId())).stream().findFirst().orElse(null);
 		String depositoVerificacion = deposito == null ? null
-				: verificaciones.findByDepositoIdIn(List.of(deposito.getId())).stream().findFirst()
-						.map(v -> v.getResultado().etiqueta() + " (verificó " + v.getCreadoPor() + ")")
-						.orElse("Sin verificar");
+				: delDeposito == null ? "Sin verificar"
+						: delDeposito.getResultado().etiqueta() + " (verificó " + delDeposito.getCreadoPor() + ")";
+		boolean tardio = deposito != null && (ServicioVerificacionBancaria.tardio(caja.getFecha(), deposito.getFechaDeposito())
+				|| ServicioVerificacionBancaria.tardio(caja.getFecha(), delDeposito == null ? null : delDeposito.getBancoFecha()));
 		List<String> posteriores = suyos.isEmpty() ? List.of()
 				: anulaciones.findByPagoIdIn(suyos.stream().map(Pago::getId).toList()).stream()
 						.filter(AnulacionPago::isPosteriorAlCierre)
@@ -142,7 +148,7 @@ public class ConsultaCajas {
 						.toList();
 		return new DetalleCaja(caja.getId(), nombres.de(caja.getCajero()), caja.getFecha(), estado(caja),
 				caja.getEstado() == EstadoCaja.ABIERTA ? "info" : "neutro", caja.getFondoFijo(), resumen.efectivo(),
-				resumen.digital(), filas, susCierres, depositoTexto, depositoVerificacion, posteriores);
+				resumen.digital(), filas, susCierres, depositoTexto, depositoVerificacion, posteriores, tardio);
 	}
 
 	private static String estado(CajaDiaria caja) {

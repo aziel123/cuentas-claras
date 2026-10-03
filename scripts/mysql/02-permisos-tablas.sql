@@ -37,8 +37,9 @@ GRANT INSERT ON cuentasclaras.cuota TO 'cc_app'@'%';
 -- (MySQL responde 1143). Debe coincidir EXACTAMENTE con las columnas updatable=true de la entidad Cuota.
 -- Sprint 3: monto_descuento (libro de descuentos). monto_pagado y monto_descuento solo pueden ser la suma de su libro
 -- (aplicacion_pago y ajuste_cuota): lo exige el trigger trg_cuota_libro de 03-triggers.sql.
+-- Correcciones del sprint 3 (M1): anulacion_solicitud_id enlaza la solicitud aprobada (lo exige trg_cuota_libro).
 GRANT UPDATE (estado, monto_pagado, monto_descuento, obligacion, anulacion_motivo, anulacion_solicitada_por,
-    anulacion_aprobada_por, anulada_en, actualizado_en, version) ON cuentasclaras.cuota TO 'cc_app'@'%';
+    anulacion_aprobada_por, anulada_en, anulacion_solicitud_id, actualizado_en, version) ON cuentasclaras.cuota TO 'cc_app'@'%';
 
 -- Sprint 2 · correcciones: solicitudes de cambio que aprueba otra persona. Nunca DELETE; tipo, entidad, datos, motivo y
 -- solicitante no cambian (solo se resuelven).
@@ -53,7 +54,9 @@ GRANT INSERT, UPDATE (estado_envio, intentos, enviado_en, respuesta, codigo_hash
     ON cuentasclaras.comprobante TO 'cc_app'@'%';
 GRANT INSERT ON cuentasclaras.comprobante_linea TO 'cc_app'@'%';                  -- solo inserción
 -- Caja: cajero, fecha y fondo no cambian; solo abre/cierra y registra el conteo a ciegas (los triggers lo vigilan).
-GRANT INSERT, UPDATE (estado, cierres, conteos, primer_conteo, actualizado_en, version) ON cuentasclaras.caja_diaria TO 'cc_app'@'%';
+-- Correcciones del sprint 3 (M1): reapertura_solicitud_id enlaza la reapertura aprobada (lo exige trg_caja_diaria_estado).
+GRANT INSERT, UPDATE (estado, cierres, conteos, primer_conteo, reapertura_solicitud_id, actualizado_en, version)
+    ON cuentasclaras.caja_diaria TO 'cc_app'@'%';
 -- Pago: familia, caja, medio, operación, total, vuelto y comprobante no cambian; solo se anula.
 GRANT INSERT, UPDATE (estado, operacion_vigente, actualizado_en, version) ON cuentasclaras.pago TO 'cc_app'@'%';
 GRANT INSERT ON cuentasclaras.aplicacion_pago TO 'cc_app'@'%';                    -- solo inserción
@@ -67,3 +70,14 @@ GRANT INSERT ON cuentasclaras.ajuste_cuota TO 'cc_app'@'%';                     
 GRANT INSERT, UPDATE (estado, revisado_por, revisado_en, comentario_revision, actualizado_en, version) ON cuentasclaras.cierre_caja TO 'cc_app'@'%';
 GRANT INSERT ON cuentasclaras.deposito_caja TO 'cc_app'@'%';                      -- solo inserción
 GRANT INSERT ON cuentasclaras.verificacion_bancaria TO 'cc_app'@'%';              -- solo inserción
+
+-- Correcciones del sprint 3 (docs/arquitectura/sprint-3-correcciones.md). Reembolso de devoluciones: SOLO INSERCIÓN
+-- (lo registra Administración; trg_reembolso_registro y un CHECK impiden que sea la cajera del pago).
+GRANT INSERT ON cuentasclaras.reembolso TO 'cc_app'@'%';                          -- solo inserción
+-- M2: cc_app no lee information_schema.TRIGGERS de otros (necesitaría el privilegio TRIGGER, que no debe tener). Esta
+-- vista (SQL SECURITY DEFINER: corre con los permisos de quien la crea) muestra solo los nombres de los triggers del
+-- esquema; al arrancar en prod, VerificadorPermisosBaseDatos la compara con la lista completa de 03-triggers.sql.
+CREATE OR REPLACE SQL SECURITY DEFINER VIEW cuentasclaras.trigger_instalado AS
+    SELECT TRIGGER_NAME AS nombre, EVENT_OBJECT_TABLE AS tabla, ACTION_TIMING AS momento, EVENT_MANIPULATION AS evento
+    FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'cuentasclaras';
+GRANT SELECT ON cuentasclaras.trigger_instalado TO 'cc_app'@'%';

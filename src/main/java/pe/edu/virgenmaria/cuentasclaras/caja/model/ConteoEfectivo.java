@@ -51,8 +51,11 @@ public record ConteoEfectivo(BigDecimal total, String denominaciones) {
 	}
 
 	private static BigDecimal validar(BigDecimal contado) {
-		if (contado.signum() < 0 || contado.compareTo(Dinero.MAXIMO_TOTAL) > 0) {
+		if (contado.signum() < 0) {
 			throw new ReglaNegocioException("El conteo no puede ser negativo.");
+		}
+		if (contado.compareTo(Dinero.MAXIMO_TOTAL) > 0) {
+			throw new ReglaNegocioException("Ese conteo es demasiado grande: revísalo.");
 		}
 		return Dinero.exigirDecimos(Dinero.normalizar(contado),
 				"El conteo debe ser múltiplo de S/ 0.10 (no hay monedas de 1 ni 5 céntimos).");

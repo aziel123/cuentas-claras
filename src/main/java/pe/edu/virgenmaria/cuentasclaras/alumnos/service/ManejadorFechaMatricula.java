@@ -40,6 +40,6 @@ public class ManejadorFechaMatricula implements ManejadorSolicitud {
 		Matricula matricula = matriculas.findById(solicitud.getEntidadId())
 				.orElseThrow(() -> new ReglaNegocioException("La matrícula de la solicitud no existe."));
 		LocalDate fecha = LocalDate.parse(DatosSolicitud.leer(solicitud.getDatos()).get("fecha"));
-		registro.cambiarFechaIngreso(matricula, fecha, solicitud.getSolicitadoPor(), aprobador);
+		registro.cambiarFechaIngreso(matricula, fecha, solicitud.getSolicitadoPor(), aprobador, solicitud.getId());
 	}
 }

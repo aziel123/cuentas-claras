@@ -150,25 +150,8 @@ class ServicioCobroTest {
 		assertThat(estado(jdbc, marzoMateo)).isEqualTo("PENDIENTE");
 	}
 
-	@Test
-	void montoCambiadoDesdeLaRevisionPideRevisarDeNuevo() {
-		RevisionCobro revision = cobro.revisar(f.quispe(), new SeleccionCobroRequest(List.of(marzoMateo, marzoValeria),
-				MedioPago.EFECTIVO), null);
-		// Entre la revisión y el cobro, otra caja registró un pago a cuenta de S/ 100 sobre la cuota de Valeria.
-		jdbc.update("UPDATE cuota SET estado = 'PARCIAL', monto_pagado = 100.00 WHERE id = ?", marzoValeria);
-
-		assertThatThrownBy(() -> cobro.cobrar(new CobroRequest(revision.clave(), f.quispe(), revision.cuotaIds(),
-				MedioPago.EFECTIVO, null, new BigDecimal("1000"), null, revision.total(), TipoComprobante.BOLETA, null,
-				null, null)))
-				.isInstanceOf(MontoCambiadoException.class)
-				.hasMessage("El monto cambió desde que lo revisaste (ahora es S/ 800.00). Revisa de nuevo antes de cobrar.");
-		assertThat(contar(jdbc, "pago")).isZero();
-		// Con la revisión nueva (misma clave) sí se cobra lo que corresponde.
-		RevisionCobro nueva = cobro.revisar(f.quispe(), new SeleccionCobroRequest(revision.cuotaIds(), MedioPago.EFECTIVO),
-				revision.clave());
-		assertThat(nueva.total()).isEqualByComparingTo("800.00");
-		assertThat(nueva.clave()).isEqualTo(revision.clave());
-	}
+	// montoCambiadoDesdeLaRevisionPideRevisarDeNuevo pasó a ServicioCobroPagoACuentaTest con un pago a cuenta real
+	// (hallazgo 11 de QA: el UPDATE de monto_pagado armaba un estado imposible que el trigger de MySQL rechaza).
 
 	@Test
 	void digitalSinNumeroDeOperacionEsRechazado() {

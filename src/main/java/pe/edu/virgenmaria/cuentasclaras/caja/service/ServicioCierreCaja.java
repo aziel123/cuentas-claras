@@ -224,6 +224,11 @@ public class ServicioCierreCaja {
 		if (pedido.fecha().isBefore(caja.getFecha()) || pedido.fecha().isAfter(hoy())) {
 			throw new ReglaNegocioException("La fecha del depósito debe estar entre el día de la caja y hoy.");
 		}
+		String operacion = pe.edu.virgenmaria.cuentasclaras.caja.model.NumeroOperacion.normalizar(pedido.numeroOperacion());
+		if (depositos.existsByNumeroOperacion(operacion)) {
+			throw new ReglaNegocioException("Ese número de operación ya está registrado en otro depósito (con este u otro "
+					+ "formato). Revisa el voucher.");
+		}
 		BigDecimal esperado = aDepositar(caja);
 		DepositoCaja deposito = depositos.save(DepositoCaja.registrar(caja, cuenta, pedido.numeroOperacion(),
 				pedido.fecha(), pedido.monto(), esperado, pedido.explicacion()));

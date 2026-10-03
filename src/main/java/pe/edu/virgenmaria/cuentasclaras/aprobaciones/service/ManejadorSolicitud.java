@@ -11,7 +11,8 @@ import java.util.Set;
  * Aplica un tipo de solicitud cuando otra persona la aprueba. Lo implementa el módulo dueño del dato (alumnos,
  * cobranza; en el sprint 3, caja), así {@code aprobaciones} no depende de ellos.
  * <ul>
- *   <li>{@link #aplicar} corre en la transacción de la aprobación, después de comprobar quién aprueba. Debe volver a
+ *   <li>{@link #aplicar} corre en la transacción de la aprobación, después de comprobar quién aprueba y con la
+ *       solicitud ya APROBADA (M1: los triggers de MySQL exigen la solicitud aprobada al aplicar). Debe volver a
  *       validar (el dato pudo cambiar desde la solicitud) y lanzar {@code ReglaNegocioException} si ya no corresponde;
  *       debe auditar el cambio y, si bloquea el año escolar, hacerlo antes de auditar.</li>
  *   <li>{@link #alRechazar} deshace lo que la solicitud dejó marcado (por ejemplo, «anulación por aprobar»).</li>
@@ -61,6 +62,23 @@ public interface ManejadorSolicitud {
 	/** Lo que necesita ver quien aprueba, en líneas de texto (la tarjeta de la bandeja). */
 	default List<String> detalle(SolicitudCambio solicitud) {
 		return List.of();
+	}
+
+	/**
+	 * A2: a quién debe llamar quien aprueba antes de aprobar (una línea por familia, por ejemplo «Familia Quispe»). Si no
+	 * está vacía, la aprobación exige marcar «Hablé con el apoderado» y escribir un número por cada una.
+	 */
+	default List<String> llamadas(SolicitudCambio solicitud) {
+		return List.of();
+	}
+
+	/**
+	 * Valida los números llamados (uno por cada {@link #llamadas}, en el mismo orden) contra los celulares registrados y
+	 * devuelve el texto para la bitácora, con los números enmascarados. Lanza {@code ReglaNegocioException} si no
+	 * corresponden.
+	 */
+	default String confirmarLlamadas(SolicitudCambio solicitud, List<String> telefonos) {
+		return null;
 	}
 
 	/** Un aviso resaltado para quien aprueba (por ejemplo, «el dinero pasa a OTRA familia») o {@code null}. */

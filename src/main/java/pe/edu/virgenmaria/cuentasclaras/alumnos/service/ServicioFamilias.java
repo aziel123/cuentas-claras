@@ -101,6 +101,20 @@ public class ServicioFamilias {
 				correccion.contactoSolicitado());
 	}
 
+	/**
+	 * B2: pide registrar o cambiar el RUC y la razón social de un apoderado (para emitir factura en caja). Lo aprueba
+	 * otra persona de Promotoría o Dirección.
+	 *
+	 * @return id de la familia del apoderado
+	 */
+	@PreAuthorize("hasAnyRole('DIRECTOR','ADMINISTRACION')")
+	@Transactional
+	public Long solicitarDatosFacturacion(Long apoderadoId, String ruc, String razonSocial, String motivo) {
+		Apoderado apoderado = buscarApoderado(apoderadoId);
+		registro.solicitarDatosFacturacion(apoderado, ruc, razonSocial, Motivo.exigir(motivo));
+		return apoderado.getFamilia().getId();
+	}
+
 	/** @return id de la familia del apoderado */
 	@PreAuthorize("hasAnyRole('DIRECTOR','ADMINISTRACION')")
 	@Transactional

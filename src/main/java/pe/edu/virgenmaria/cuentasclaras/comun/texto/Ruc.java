@@ -1,4 +1,4 @@
-package pe.edu.virgenmaria.cuentasclaras.comprobantes.model;
+package pe.edu.virgenmaria.cuentasclaras.comun.texto;
 
 import java.util.Set;
 

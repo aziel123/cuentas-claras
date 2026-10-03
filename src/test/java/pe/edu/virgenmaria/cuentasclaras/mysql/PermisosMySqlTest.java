@@ -735,7 +735,8 @@ class PermisosMySqlTest {
 	@Test
 	void flujoCompletoDeCajaConPermisosMinimos() throws Exception {
 		FamiliasCaja familias = familiasDeCaja();
-		UsuariosDePrueba.iniciarSesion(cajera("caja.flujo"));
+		var cajeraFlujo = cajera("caja.flujo");
+		UsuariosDePrueba.iniciarSesion(cajeraFlujo);
 		var revision = cobro.revisar(familias.familia(), new pe.edu.virgenmaria.cuentasclaras.caja.dto.SeleccionCobroRequest(
 				java.util.List.of(cuotaDe(familias.hermano1(), 9), cuotaDe(familias.hermano2(), 9)),
 				pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.EFECTIVO), null);
@@ -756,6 +757,12 @@ class PermisosMySqlTest {
 		cobro.cobrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.digital(familias.familia(),
 				java.util.List.of(cuotaDe(familias.hermano1(), 10)), pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.YAPE,
 				"Y" + sufijo, "450.00"));
+		// B2: la factura solo con el RUC registrado de la familia (la solicitud aprobada la exige un trigger).
+		Long apoderadoOtra = jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class,
+				familias.otroAlumno());
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.rucRegistrado(servicioFamilias, bandeja, jdbc,
+				apoderadoOtra, "20131312955", "Comercial Flores S.A.C.");
+		UsuariosDePrueba.iniciarSesion(cajeraFlujo);
 		Long factura = cobro.cobrar(new pe.edu.virgenmaria.cuentasclaras.caja.dto.CobroRequest(java.util.UUID.randomUUID(),
 				familias.otraFamilia(), java.util.List.of(cuotaDe(familias.otroAlumno(), 9)),
 				pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.TRANSFERENCIA, "T" + sufijo, null, null,
@@ -1073,10 +1080,13 @@ class PermisosMySqlTest {
 		Long deposito = jdbc.queryForObject("SELECT id FROM deposito_caja WHERE caja_diaria_id = ?", Long.class, caja);
 
 		UsuariosDePrueba.iniciarSesion(EscenarioCobranza.ADMINISTRACION);
-		var verificado = new pe.edu.virgenmaria.cuentasclaras.caja.dto.VerificacionRequest(
-				pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoVerificacion.ENCONTRADO, null);
-		verificacionBancaria.verificarPago(yape, verificado);
-		verificacionBancaria.verificarDeposito(deposito, verificado);
+		// A ciegas (C1): lo que se ve en el banco; el trigger exige que coincida.
+		java.time.LocalDate fechaYape = jdbc.queryForObject("SELECT fecha FROM pago WHERE id = ?", java.time.LocalDate.class,
+				yape);
+		verificacionBancaria.verificarPago(yape, pe.edu.virgenmaria.cuentasclaras.caja.dto.VerificacionRequest.delBanco(
+				"Y4" + sufijo, fechaYape, new java.math.BigDecimal("450.00")));
+		verificacionBancaria.verificarDeposito(deposito, pe.edu.virgenmaria.cuentasclaras.caja.dto.VerificacionRequest
+				.delBanco("D" + sufijo, estado.hoy(), new java.math.BigDecimal("400.00")));
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM verificacion_bancaria WHERE pago_id = ? OR deposito_id = ?",
 				Long.class, yape, deposito)).isEqualTo(2);
 
@@ -1099,6 +1109,133 @@ class PermisosMySqlTest {
 				+ "ORDER BY numero", String.class, cajaOtra)).containsExactly("1 0.00", "2 0.00");
 		UsuariosDePrueba.iniciarSesion(guardar("verif.t3." + sufijo, Rol.PROMOTOR));
 		assertThat(verificador.verificar().integra()).isTrue();
+	}
+
+	/**
+	 * Correcciones del sprint 3: los ataques de la auditoría reproducidos COMO cc_app (con sus permisos mínimos) ahora
+	 * fallan con 1644 (los triggers de 03-triggers.sql), y los flujos legítimos siguen funcionando.
+	 * <ul>
+	 *   <li>A3: un «reemplazo» por SQL de un pago anulado por DEVOLUCIÓN;</li>
+	 *   <li>M1: reabrir una caja con una solicitud solo pendiente (o sin solicitud); anular una cuota sin solicitud
+	 *       aprobada; cambiar la resolución de una solicitud, de un cierre y de un descuento; el resultado del envío de un
+	 *       comprobante aceptado;</li>
+	 *   <li>A1/A2/C1/B2: el reembolso registrado por la cajera; una verificación «encontrada» con datos del banco que no
+	 *       coinciden; el RUC de un apoderado sin su solicitud aprobada.</li>
+	 * </ul>
+	 */
+	@Test
+	void ataquesDeLaAuditoriaComoCcAppFallanConLosTriggers() {
+		FamiliasCaja familias = familiasDeCaja();
+		var cajera = cajera("caja.m1");
+		UsuariosDePrueba.iniciarSesion(cajera);
+		Long pago = cobrarEfectivo(familias.otraFamilia(), java.util.List.of(cuotaDe(familias.otroAlumno(), 6)), "450.00");
+		anulacionesPago.solicitarDevolucion(pago, "Se cobró a la familia equivocada en ventanilla");
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(EscenarioCobranza.DIRECCION, bandeja,
+				jdbc, "pago", pago);
+		java.util.Map<String, Object> p = jdbc.queryForMap("SELECT * FROM pago WHERE id = ?", pago);
+		assertThat(p).containsEntry("estado", "ANULADO");
+
+		// A3: el reemplazo de un pago anulado por DEVOLUCIÓN (el trigger antes solo miraba caja, medio y total).
+		String reemplazo = "INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, comprobante_id, medio, "
+				+ "total, recibido, vuelto, origen, reemplaza_pago_id, clave_idempotencia, estado, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (1, ?, ?, ?, ?, ?, 'EFECTIVO', 450.00, 450.00, 0.00, 'REEMPLAZO', ?, ?, 'VIGENTE', "
+				+ "NOW(6), ?, NOW(6))";
+		assertThat(codigoAl(() -> jdbc.update(reemplazo, p.get("familia_id"), p.get("caja_diaria_id"), p.get("cajero"),
+				p.get("fecha"), p.get("comprobante_id"), pago, "a3-" + sufijo, p.get("cajero")))).isEqualTo(1644);
+
+		// A1/A2: el reembolso no lo registra la cajera del pago.
+		Long anulacion = jdbc.queryForObject("SELECT id FROM anulacion_pago WHERE pago_id = ?", Long.class, pago);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO reembolso (colegio_id, anulacion_pago_id, medio, "
+				+ "recibido_por_nombre, recibido_por_documento, monto, fecha, cajero_pago, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (1, ?, 'EFECTIVO', 'Rosa Huamán', '45678912', 450.00, CURDATE(), ?, NOW(6), ?, "
+				+ "NOW(6))", anulacion, cajera.getUsername(), cajera.getUsername()))).isEqualTo(1644);
+		UsuariosDePrueba.iniciarSesion(EscenarioCobranza.ADMINISTRACION);
+		verificacionBancaria.registrarReembolso(anulacion, new pe.edu.virgenmaria.cuentasclaras.caja.dto.ReembolsoRequest(
+				null, false, "Pedro Flores Díaz", "41234567"));
+		assertThat(jdbc.queryForObject("SELECT creado_por FROM reembolso WHERE anulacion_pago_id = ?", String.class,
+				anulacion)).isEqualTo("administracion");
+
+		// M1: cierre de esa caja (S/ 0 en efectivo tras la devolución) y su aprobación.
+		UsuariosDePrueba.iniciarSesion(cajera);
+		assertThat(cierres.contar(conteo("0.00"))).isEqualTo(pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoConteo.COINCIDE);
+		Long caja = (Long) p.get("caja_diaria_id");
+		Long cierre = jdbc.queryForObject("SELECT id FROM cierre_caja WHERE caja_diaria_id = ?", Long.class, caja);
+		UsuariosDePrueba.iniciarSesion(EscenarioCobranza.DIRECCION);
+		bandeja.aprobar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.pendiente(jdbc, "cierre_caja",
+				cierre), null);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cierre_caja SET comentario_revision = 'Cambiado por SQL' "
+				+ "WHERE id = ?", cierre))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cierre_caja SET revisado_por = 'otro' WHERE id = ?", cierre)))
+				.isEqualTo(1644);
+
+		// M1: reabrir con una solicitud solo PENDIENTE (antes bastaba) o sin solicitud.
+		UsuariosDePrueba.iniciarSesion(cajera);
+		cierres.solicitarReapertura("Llegó una familia a pagar en efectivo tarde");
+		Long reapertura = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.pendiente(jdbc, "caja_diaria",
+				caja);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE caja_diaria SET estado = 'ABIERTA', conteos = 0, primer_conteo = NULL "
+				+ "WHERE id = ?", caja))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE caja_diaria SET estado = 'ABIERTA', conteos = 0, primer_conteo = NULL, "
+				+ "reapertura_solicitud_id = ? WHERE id = ?", reapertura, caja))).isEqualTo(1644);
+		// La vía legítima: la bandeja aprueba la solicitud y después la aplica (el trigger exige que esté APROBADA).
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(EscenarioCobranza.PROMOTORIA, bandeja,
+				jdbc, "caja_diaria", caja);
+		assertThat(jdbc.queryForMap("SELECT estado, reapertura_solicitud_id FROM caja_diaria WHERE id = ?", caja))
+				.containsEntry("estado", "ABIERTA").containsEntry("reapertura_solicitud_id", reapertura);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE solicitud_cambio SET comentario = 'Cambiado por SQL' WHERE id = ?",
+				reapertura))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE solicitud_cambio SET resuelto_por = 'otro' WHERE id = ?",
+				reapertura))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE caja_diaria SET reapertura_solicitud_id = NULL WHERE id = ?",
+				caja))).isEqualTo(1644);
+
+		// M1: anular una cuota sin su solicitud aprobada.
+		Long cuota = cuotaDe(familias.otroAlumno(), 11);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cuota SET estado = 'ANULADA', obligacion = NULL, anulacion_motivo = "
+				+ "'Anulación por SQL sin aprobación', anulacion_solicitada_por = 'a', anulacion_aprobada_por = 'b', "
+				+ "anulada_en = NOW(6) WHERE id = ?", cuota))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cuota SET estado = 'ANULADA', obligacion = NULL, anulacion_motivo = "
+				+ "'Anulación por SQL sin aprobación', anulacion_solicitada_por = 'a', anulacion_aprobada_por = 'b', "
+				+ "anulada_en = NOW(6), anulacion_solicitud_id = ? WHERE id = ?", reapertura, cuota))).isEqualTo(1644);
+
+		// M1: un descuento resuelto no cambia quién ni cuándo lo resolvió.
+		UsuariosDePrueba.iniciarSesion(EscenarioCobranza.ADMINISTRACION);
+		Long descuento = descuentos.solicitar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.descuento(
+				familias.hermano2(), pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoDescuento.OTRO, "10",
+				java.util.List.of(cuotaDe(familias.hermano2(), 9))));
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(EscenarioCobranza.DIRECCION, bandeja,
+				jdbc, "descuento", descuento);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE descuento SET resuelto_por = 'otro' WHERE id = ?", descuento)))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE descuento SET resuelto_en = NOW(6) WHERE id = ?", descuento)))
+				.isEqualTo(1644);
+
+		// M1: el resultado del envío de un comprobante aceptado no cambia.
+		Long aceptado = jdbc.queryForObject("SELECT id FROM comprobante WHERE id = ?", Long.class, p.get("comprobante_id"));
+		assertThat(jdbc.queryForObject("SELECT estado_envio FROM comprobante WHERE id = ?", String.class, aceptado))
+				.isEqualTo("ACEPTADO");
+		assertThat(codigoAl(() -> jdbc.update("UPDATE comprobante SET codigo_hash = 'manipulado' WHERE id = ?", aceptado)))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE comprobante SET estado_envio = 'RECHAZADO' WHERE id = ?", aceptado)))
+				.isEqualTo(1644);
+
+		// C1: una verificación «encontrada» con un monto que no es el del pago.
+		UsuariosDePrueba.iniciarSesion(cajera);
+		Long yape = cobro.cobrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.digital(familias.otraFamilia(),
+				java.util.List.of(cuotaDe(familias.otroAlumno(), 12)), pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.YAPE,
+				"YC1" + sufijo, "450.00"));
+		java.util.Map<String, Object> y = jdbc.queryForMap("SELECT numero_operacion, fecha FROM pago WHERE id = ?", yape);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO verificacion_bancaria (colegio_id, pago_id, resultado, "
+				+ "banco_operacion, banco_fecha, banco_monto, creado_en, creado_por, actualizado_en) VALUES (1, ?, "
+				+ "'ENCONTRADO', ?, ?, 45.00, NOW(6), 'administracion', NOW(6))", yape, y.get("numero_operacion"),
+				y.get("fecha")))).isEqualTo(1644);
+
+		// B2: el RUC de un apoderado sin su solicitud aprobada.
+		Long apoderado = jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class,
+				familias.hermano1());
+		assertThat(codigoAl(() -> jdbc.update("UPDATE apoderado SET ruc = '20131312955', razon_social = 'Empresa Ajena SAC', "
+				+ "facturacion_solicitud_id = ? WHERE id = ?", reapertura, apoderado))).isEqualTo(1644);
+		SecurityContextHolder.clearContext();
 	}
 
 	private Integer codigoAl(Runnable sentencia) {

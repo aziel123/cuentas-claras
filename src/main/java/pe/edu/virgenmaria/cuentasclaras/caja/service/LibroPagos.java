@@ -118,9 +118,10 @@ public class LibroPagos {
 		String operacion = null;
 		if (orden.medio().digital()) {
 			operacion = NumeroOperacion.normalizar(orden.numeroOperacion());
-			if (pagos.existsByMedioAndOperacionVigente(orden.medio(), operacion)) {
-				throw new ReglaNegocioException("Ese número de operación de " + orden.medio().etiqueta()
-						+ " ya está registrado en otro pago. Revisa el número.");
+			// Único para todos los medios digitales juntos y en su forma canónica (C1): «012-345» es «12345».
+			if (pagos.existsByOperacionVigente(operacion)) {
+				throw new ReglaNegocioException("Ese número de operación ya está registrado en otro pago (con este u otro "
+						+ "formato, en cualquier medio digital). Revisa el número.");
 			}
 		}
 		else {
@@ -274,12 +275,27 @@ public class LibroPagos {
 		return aCuenta;
 	}
 
+	/** B2: el apoderado activo de la familia que tiene ese RUC registrado, si lo hay. */
+	java.util.Optional<Apoderado> rucRegistrado(Long familiaId, String ruc) {
+		if (ruc == null || ruc.isBlank()) {
+			return java.util.Optional.empty();
+		}
+		return apoderados.findByFamiliaIdOrderByApellidoPaternoAsc(familiaId).stream()
+				.filter(a -> a.isActivo() && ruc.equals(a.getRuc())).findFirst();
+	}
+
 	private Receptor receptor(DatosComprobante datos, Familia familia, List<Cuota> elegidas) {
 		if (datos == null || datos.tipo() == null) {
 			throw new ReglaNegocioException("Elige boleta o factura.");
 		}
 		if (datos.tipo() == TipoComprobante.FACTURA) {
-			return Receptor.de(DocumentoReceptor.RUC, datos.ruc(), datos.razonSocial());
+			// B2: solo con el RUC registrado (y aprobado) de un apoderado activo de la familia; la razón social sale de
+			// ese registro, no de lo que se escriba en caja.
+			String ruc = datos.ruc() == null ? null : datos.ruc().strip();
+			Apoderado conRuc = rucRegistrado(familia.getId(), ruc).orElseThrow(() -> new ReglaNegocioException(
+					"La factura solo se emite con un RUC registrado de la familia (lo registra Administración y lo aprueba "
+							+ "otra persona). Si no tiene, emite boleta."));
+			return Receptor.de(DocumentoReceptor.RUC, conRuc.getRuc(), conRuc.getRazonSocial());
 		}
 		if (datos.tipo() != TipoComprobante.BOLETA) {
 			throw new ReglaNegocioException("En caja se emite boleta o factura.");

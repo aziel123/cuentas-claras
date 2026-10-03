@@ -223,6 +223,7 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".alumnos.service.ServicioFamilias#actualizarApoderado", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".alumnos.service.ServicioFamilias#desactivarApoderado", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".alumnos.service.ServicioFamilias#renombrar", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".alumnos.service.ServicioFamilias#solicitarDatosFacturacion", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".alumnos.service.ServicioMatriculas", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".alumnos.importacion.ServicioImportacionAlumnos", ESCRITURA_ESCOLAR),
 			// Sprint 2, tanda 3: Administración propone y arma; Promotoría o Dirección aprueban y confirman.
@@ -266,7 +267,8 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".caja.service.IndicadoresCaja", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria", "hasAnyRole('PROMOTOR','ADMINISTRACION')"),
 			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#verificarPago", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#verificarDeposito", SOLO_ADMINISTRACION));
+			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#verificarDeposito", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#registrarReembolso", SOLO_ADMINISTRACION));
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {

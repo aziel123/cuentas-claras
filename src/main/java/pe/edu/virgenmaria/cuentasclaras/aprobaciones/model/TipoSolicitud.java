@@ -17,7 +17,9 @@ public enum TipoSolicitud {
 	DESCUENTO("Descuento o beca"),
 	// Sprint 3, tanda 3 (caja)
 	CIERRE_CAJA("Cierre de caja"),
-	REAPERTURA_CAJA("Reapertura de caja");
+	REAPERTURA_CAJA("Reapertura de caja"),
+	// Correcciones del sprint 3 (B2): RUC y razón social de un apoderado para emitir factura.
+	DATOS_FACTURACION("Datos de facturación (RUC)");
 
 	private final String etiqueta;
 

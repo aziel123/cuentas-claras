@@ -2,8 +2,12 @@ package pe.edu.virgenmaria.cuentasclaras.comun.prueba;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAlumnos;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioFamilias;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CobroRequest;
+import pe.edu.virgenmaria.cuentasclaras.caja.dto.VerificacionRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
+import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioVerificacionBancaria;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
@@ -14,6 +18,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -80,5 +85,31 @@ public final class EscenarioCaja {
 			String totalVisto) {
 		return new CobroRequest(UUID.randomUUID(), familia, cuotas, medio, operacion, null, null, new BigDecimal(totalVisto),
 				TipoComprobante.BOLETA, null, null, null);
+	}
+
+	/**
+	 * Administración encuentra el pago digital en el banco, a ciegas, con los datos registrados (A1: solo así se puede
+	 * anular). Deja la sesión en Administración.
+	 */
+	public static void verificadoEnBanco(ServicioVerificacionBancaria verificacion, JdbcTemplate jdbc, Long pago) {
+		Map<String, Object> datos = jdbc.queryForMap("SELECT numero_operacion, fecha, total FROM pago WHERE id = ?", pago);
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		verificacion.verificarPago(pago, VerificacionRequest.delBanco((String) datos.get("numero_operacion"),
+				((java.sql.Date) datos.get("fecha")).toLocalDate(), (BigDecimal) datos.get("total")));
+	}
+
+	/** RUC válido de ejemplo (dígito verificador de SUNAT). */
+	public static final String RUC_EJEMPLO = "20131312955";
+
+	/**
+	 * B2: Administración pide registrar el RUC del apoderado y Dirección lo aprueba (solo así se emite factura). Deja la
+	 * sesión en Dirección.
+	 */
+	public static void rucRegistrado(ServicioFamilias familias, BandejaAprobaciones bandeja, JdbcTemplate jdbc,
+			Long apoderadoId, String ruc, String razonSocial) {
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		familias.solicitarDatosFacturacion(apoderadoId, ruc, razonSocial, "La empresa de la familia pide factura");
+		UsuariosDePrueba.iniciarSesion(EscenarioCobranza.DIRECCION);
+		bandeja.aprobar(EscenarioAprobaciones.pendiente(jdbc, "apoderado", apoderadoId), null);
 	}
 }

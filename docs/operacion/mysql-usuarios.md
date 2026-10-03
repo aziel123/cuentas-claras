@@ -37,16 +37,19 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `lote_saldo_inicial` | INSERT y UPDATE **por columna** (estado, envío, confirmación, devolución, descarte) | Corte, referencia y total declarado inmutables |
 | `linea_saldo_inicial` | INSERT y UPDATE **solo** de `quitada` | Una deuda no se edita: se quita (y solo con el lote en preparación: trigger) |
 | `solicitud_cambio` | INSERT y UPDATE **solo** de su resolución | Tipo, datos, motivo y solicitante inmutables |
-| `cuota` | INSERT y UPDATE **solo** de `estado, monto_pagado, monto_descuento, obligacion, anulacion_*, anulada_en, actualizado_en, version` | El monto, la fecha de vencimiento, el alumno, el origen y la clave no se cambian ni por SQL (error 1143). Lo pagado y lo descontado solo pueden ser la suma de su libro (trigger) |
+| `cuota` | INSERT y UPDATE **solo** de `estado, monto_pagado, monto_descuento, obligacion, anulacion_*, anulada_en, anulacion_solicitud_id, actualizado_en, version` | El monto, la fecha de vencimiento, el alumno, el origen y la clave no se cambian ni por SQL (error 1143). Lo pagado y lo descontado solo pueden ser la suma de su libro; se anula solo con su solicitud APROBADA enlazada por id (trigger) |
 | `serie_comprobante` | INSERT y UPDATE **solo** de `ultimo_numero` | La serie no cambia; el número avanza de uno en uno (trigger) |
-| `comprobante` | INSERT y UPDATE **solo** del envío al OSE (`estado_envio, intentos, enviado_en, respuesta, codigo_hash, enlace_pdf`) | Serie, número, receptor y total no cambian (1143); el número es el siguiente de la serie (trigger) |
+| `comprobante` | INSERT y UPDATE **solo** del envío al OSE (`estado_envio, intentos, enviado_en, respuesta, codigo_hash, enlace_pdf`) | Serie, número, receptor y total no cambian (1143); el número es el siguiente de la serie; el resultado del envío se registra una vez, desde PENDIENTE, y ACEPTADO exige hash y respuesta (trigger). Con el OSE real, los envíos los registrará un usuario de proceso aparte |
 | `comprobante_linea`, `aplicacion_pago` | INSERT | **Solo inserción**: el libro de pagos no se edita ni se borra (1142) |
-| `caja_diaria` | INSERT y UPDATE **solo** de `estado, cierres, conteos, primer_conteo` | Cajero, fecha y fondo fijo no cambian (1143). Se cierra solo con su cierre registrado, el primer conteo no se reescribe y se reabre solo con una reapertura aprobada sin depósito (trigger) |
+| `caja_diaria` | INSERT y UPDATE **solo** de `estado, cierres, conteos, primer_conteo, reapertura_solicitud_id` | Cajero, fecha y fondo fijo no cambian (1143). Se cierra solo con su cierre registrado, el primer conteo no se reescribe y se reabre solo con SU solicitud de reapertura APROBADA (enlazada por id, una vez), resuelta el día de la caja por otra persona y sin depósito (trigger) |
 | `pago` | INSERT y UPDATE **solo** de `estado, operacion_vigente` | Familia, caja, medio, operación, total, vuelto y comprobante no cambian (1143); nace VIGENTE con su boleta por el mismo total (trigger) |
 | `anulacion_pago`, `ajuste_cuota` | INSERT | **Solo inserción** (tanda 2): la anulación aprobada de un pago y cada ajuste de un descuento no se editan ni se borran (1142) |
 | `descuento` | INSERT y UPDATE **solo** de `estado, resuelto_por, resuelto_en` | Alumno, tipo, valor, cuotas, total, motivo y sustento no cambian (1143); nace SOLICITADO y, resuelto, no cambia (trigger) |
 | `cierre_caja` | INSERT y UPDATE **solo** de `estado, revisado_por, revisado_en, comentario_revision` | El conteo, el esperado y la diferencia no cambian (1143); el esperado es el del libro y lo registra la cajera de una caja abierta; revisado, no cambia (trigger) |
-| `deposito_caja`, `verificacion_bancaria` | INSERT | **Solo inserción** (tanda 3): el depósito y la verificación contra el banco no se editan ni se borran (1142); verifica alguien que no cobró ni depositó (trigger) |
+| `deposito_caja`, `verificacion_bancaria` | INSERT | **Solo inserción** (tanda 3): el depósito y la verificación contra el banco no se editan ni se borran (1142); verifica alguien que no cobró ni depositó, y «Encontrado» exige lo visto en el banco (operación, fecha y monto) que coincida (trigger) |
+| `reembolso` | INSERT | **Solo inserción** (correcciones del sprint 3): el reembolso de una devolución, por su monto y el medio del pago; no lo registra la cajera del pago (CHECK y trigger) |
+| `trigger_instalado` (vista) | SELECT | Nombres de los triggers del esquema (`SQL SECURITY DEFINER`): el arranque en prod comprueba que estén todos |
+| `apoderado` (RUC) | (INSERT, UPDATE de la fila) | El RUC y la razón social solo cambian con SU solicitud `DATOS_FACTURACION` aprobada (trigger) |
 
 ## Triggers (paso 3, después de los permisos)
 Los aplica `cc_migrador` (no van en Flyway: H2 no los soporta):
@@ -68,19 +71,39 @@ mysql -h <host> -u cc_migrador -p cuentasclaras < scripts/mysql/03-triggers.sql
   exacto de la aplicación original; la anulación corresponde al pago vigente, a su cajero y a una nota de crédito que
   anula su comprobante por el mismo total.
 - Sprint 3, tanda 3 (cierre, depósito y verificación, requiere V11): la caja se cierra solo con su `cierre_caja`
-  registrado; el primer conteo a ciegas no se reescribe ni se reinician los intentos; se reabre solo con una solicitud
-  `REAPERTURA_CAJA` que se aprueba en la misma transacción y sin depósito; el cierre lo registra la cajera de la caja
-  abierta con el esperado del libro (fondo + efectivo VIGENTE); un cierre revisado no cambia; verifica contra el banco
-  alguien que no cobró ni depositó, y solo pagos digitales o depósitos.
+  registrado; el primer conteo a ciegas no se reescribe ni se reinician los intentos; el cierre lo registra la cajera de
+  la caja abierta con el esperado del libro (fondo + efectivo VIGENTE); verifica contra el banco alguien que no cobró ni
+  depositó, y solo pagos digitales o depósitos.
+- Correcciones del sprint 3 (requiere V12; `docs/arquitectura/sprint-3-correcciones.md`):
+  - **Reapertura** (corrige lo que decía antes este documento: el trigger aceptaba cualquier solicitud PENDIENTE de la
+    caja, sin probar que alguien la aprobara): la bandeja aprueba la solicitud ANTES de aplicarla y la caja guarda su
+    id en `reapertura_solicitud_id`; el trigger exige que esa solicitud sea `REAPERTURA_CAJA` de esta caja, esté
+    APROBADA, se haya resuelto el día de la caja por alguien que no es su cajero y no se haya usado antes (UNIQUE).
+  - **Anulación de cuota**: exige su solicitud APROBADA (`ANULACION_CUOTA` de la cuota o el ingreso tardío de su
+    matrícula) enlazada en `anulacion_solicitud_id`, resuelta el mismo día por quien figura como aprobador.
+  - **Resoluciones inmutables**: una solicitud, un descuento y un cierre revisado no cambian su estado ni quién, cuándo y
+    con qué comentario se resolvieron.
+  - **Reemplazo**: solo de un pago anulado por CORRECCIÓN (nunca por devolución).
+  - **Verificación bancaria**: solo pagos VIGENTES; «Encontrado» exige la operación, la fecha y el monto vistos en el
+    banco, y que coincidan.
+  - **Reembolso** y **RUC del apoderado**: ver la tabla de permisos.
+  - **Envío al OSE**: el resultado se registra una vez, desde PENDIENTE.
+  - Límite: `cc_app` escribe los nombres de usuario como texto, así que la base no puede probar QUIÉN aprobó; ese
+    riesgo lo cubren la bitácora con HMAC y el aislamiento de credenciales.
 - **Los triggers del sprint 3 van por tanda** (`docs/arquitectura/sprint-3-caja.md`, sección 6.3): un trigger que nombra
   una tabla que aún no existe hace fallar con 1146 todo UPDATE sobre su tabla. El script del repositorio es siempre el de
   la última migración publicada: aplícalo DESPUÉS de migrar, nunca antes.
 
 Si `log_bin_trust_function_creators` no puede activarse, aplica el script como administrador.
-La aplicación en `prod` **no arranca** si faltan (los comprueba con un INSERT imposible que el trigger rechaza: 1644).
-También acepta 1142 (cc_app sin INSERT en esa tabla, como en la fase 1 antes del paso 2): sin permiso de escritura no
-hay nada que el trigger deba frenar. Cualquier otro código (la FK o un CHECK, que MySQL evalúa después del trigger)
-significa que falta el trigger.
+La aplicación en `prod` **no arranca** si falta alguno:
+- compara la vista `cuentasclaras.trigger_instalado` (la crea `02-permisos-tablas.sql`) con la lista completa de
+  `03-triggers.sql` (`VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS`; una prueba exige que coincidan). Así detecta
+  también los BEFORE UPDATE, que un INSERT imposible no prueba. Sin la vista, tampoco arranca (salvo en la fase 1,
+  cuando `cc_app` todavía solo puede leer: entonces no hay nada que un trigger deba frenar);
+- además prueba varios con un INSERT imposible que el trigger rechaza (1644). Acepta 1142 (cc_app sin INSERT en esa
+  tabla): sin permiso de escritura no hay nada que el trigger deba frenar. Cualquier otro código (la FK o un CHECK, que
+  MySQL evalúa después del trigger) significa que falta el trigger.
+Un trigger nuevo se agrega en `03-triggers.sql` y en `TRIGGERS_ESPERADOS`.
 
 ## Despliegue (cada versión)
 La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **nunca** recibe las credenciales de `cc_migrador`. Cada despliegue tiene dos pasos separados:
@@ -137,6 +160,8 @@ SET version = version` da 1142; `UPDATE descuento SET valor = valor` (o `cuotas`
 Tanda 3: `DELETE` sobre `cierre_caja`, `deposito_caja` y `verificacion_bancaria` da 1142; `UPDATE deposito_caja|
 verificacion_bancaria SET version = version` da 1142; `UPDATE cierre_caja SET contado = contado` da 1143; un
 `cierre_caja` de una caja inexistente y una `verificacion_bancaria` de un pago inexistente dan 1644.
+Correcciones: `DELETE FROM reembolso` y `UPDATE reembolso SET version = version` dan 1142; un `reembolso` de una
+anulación inexistente da 1644.
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

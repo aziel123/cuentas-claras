@@ -88,10 +88,10 @@ class VistasAlumnos {
 		if (enmascararDatosPersonales()) {
 			return new ApoderadoVista(a.getId(), a.nombreCompleto(), a.getDocumento().enmascarado(), a.getParentesco(),
 					a.getParentesco().etiqueta(), Enmascarar.telefono(a.getTelefonoWhatsapp()),
-					Enmascarar.correo(a.getCorreo()), a.isActivo(), responsableDe);
+					Enmascarar.correo(a.getCorreo()), a.isActivo(), responsableDe, a.getRuc(), a.getRazonSocial());
 		}
 		return new ApoderadoVista(a.getId(), a.nombreCompleto(), a.getDocumento().texto(), a.getParentesco(),
 				a.getParentesco().etiqueta(), Telefono.formatear(a.getTelefonoWhatsapp()), a.getCorreo(), a.isActivo(),
-				responsableDe);
+				responsableDe, a.getRuc(), a.getRazonSocial());
 	}
 }

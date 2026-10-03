@@ -223,9 +223,13 @@ public class Comprobante extends BaseEntity {
 		return texto.length() <= MAX_DESCRIPCION ? texto : texto.substring(0, MAX_DESCRIPCION - 1) + "…";
 	}
 
-	/** Respuesta del OSE: el envío suma un intento y guarda su resultado. Los datos tributarios no cambian. */
+	/**
+	 * Respuesta del OSE: el envío suma un intento y guarda su resultado. Los datos tributarios no cambian. Solo desde
+	 * PENDIENTE: un resultado ya registrado no cambia (M1; en MySQL lo exige trg_comprobante_envio).
+	 */
 	public void registrarEnvio(ResultadoEnvio resultado, LocalDateTime ahora) {
 		Objects.requireNonNull(resultado, "resultado");
+		exigirPendiente();
 		intentos++;
 		estadoEnvio = resultado.estado();
 		enviadoEn = Objects.requireNonNull(ahora, "ahora");
@@ -234,13 +238,17 @@ public class Comprobante extends BaseEntity {
 		enlacePdf = corto(resultado.enlacePdf(), 300);
 	}
 
-	/** El envío falló (sin respuesta del OSE): queda PENDIENTE para reintentarlo y suma un intento. */
+	/** El envío falló (sin respuesta del OSE): sigue PENDIENTE para reintentarlo y suma un intento. */
 	public void registrarFalloEnvio(String motivo, LocalDateTime ahora) {
+		exigirPendiente();
 		intentos++;
 		enviadoEn = Objects.requireNonNull(ahora, "ahora");
 		respuesta = corto(motivo, 500);
-		if (estadoEnvio != EstadoEnvio.ACEPTADO) {
-			estadoEnvio = EstadoEnvio.PENDIENTE;
+	}
+
+	private void exigirPendiente() {
+		if (estadoEnvio != EstadoEnvio.PENDIENTE) {
+			throw new IllegalStateException("El envío del comprobante ya se resolvió (" + estadoEnvio + "): no cambia.");
 		}
 	}
 

@@ -55,7 +55,7 @@ public class AjusteIngresoTardio {
 			}
 			String estadoAnterior = cuota.getEstado().name();
 			String motivo = "Ingreso tardío aprobado: ingresó el " + Calendario.formatear(evento.fecha()) + ".";
-			cuota.anular(motivo, evento.solicitante(), evento.aprobador(), ahora);
+			cuota.anular(motivo, evento.solicitante(), evento.aprobador(), ahora, evento.solicitudId());
 			cuotas.saveAndFlush(cuota);
 			auditoria.registrar(AccionAuditoria.CUOTA_ANULADA, "cuota", cuota.getId().toString(), estadoAnterior,
 					cuota.getEstado().name(), "Alumno " + cuota.getAlumno().nombreCompleto() + ": "

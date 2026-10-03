@@ -260,14 +260,17 @@ public class ServicioCobro {
 		Apoderado porDefecto = LibroPagos.responsablePorDefecto(elegidas);
 		Set<Long> responsables = elegidas.stream().map(c -> c.getAlumno().getResponsablePago().getId())
 				.collect(Collectors.toSet());
-		List<RevisionCobro.OpcionReceptor> receptores = apoderados.findByFamiliaIdOrderByApellidoPaternoAsc(familiaId)
-				.stream().filter(Apoderado::isActivo)
+		List<Apoderado> activos = apoderados.findByFamiliaIdOrderByApellidoPaternoAsc(familiaId).stream()
+				.filter(Apoderado::isActivo).toList();
+		List<RevisionCobro.OpcionReceptor> receptores = activos.stream()
 				.map(a -> new RevisionCobro.OpcionReceptor(a.getId(), a.nombreCompleto(), a.getDocumento().enmascarado(),
 						responsables.contains(a.getId())))
 				.toList();
+		List<RevisionCobro.OpcionFactura> facturables = activos.stream().filter(a -> a.getRuc() != null)
+				.map(a -> new RevisionCobro.OpcionFactura(a.getRuc(), a.getRazonSocial())).distinct().toList();
 		return new RevisionCobro(clave == null ? UUID.randomUUID() : clave, familia.getId(), familia.getNombre(),
 				seleccion.medio(), elegidas.stream().map(Cuota::getId).toList(), lineas, total, receptores,
-				porDefecto.getId(), avisos, propiedades.permitirPagoACuenta(), propiedades.pagoACuentaMinimo());
+				porDefecto.getId(), avisos, propiedades.permitirPagoACuenta(), propiedades.pagoACuentaMinimo(), facturables);
 	}
 
 	// ------------------------------------------------------------------ cobro
@@ -292,9 +295,9 @@ public class ServicioCobro {
 		}
 		catch (DataIntegrityViolationException e) {
 			String causa = String.valueOf(e.getMostSpecificCause().getMessage()).toLowerCase(Locale.ROOT);
-			if (causa.contains("uk_pago_operacion")) {
-				throw new ReglaNegocioException("Ese número de operación de " + solicitud.medio().etiqueta()
-						+ " ya está registrado en otro pago. Revisa el número.");
+			if (causa.contains("uk_pago_operacion")) { // también uk_pago_operacion_canonica
+				throw new ReglaNegocioException("Ese número de operación ya está registrado en otro pago (con este u otro "
+						+ "formato, en cualquier medio digital). Revisa el número.");
 			}
 			if (causa.contains("uk_pago_idempotencia")) {
 				return transaccion.execute(estado -> pagos.findByClaveIdempotencia(solicitud.clave().toString())
@@ -381,12 +384,12 @@ public class ServicioCobro {
 	@Transactional(readOnly = true)
 	public ComprobanteImprimible imprimible(Long pagoId) {
 		Pago pago = pagoPropio(pagoId);
-		return imprimibleDe(pago.getComprobante(), pago, colegios.nombreDe(pago.getColegioId()), nombres, null);
+		return imprimibleDe(pago.getComprobante(), pago, colegios.nombreDe(pago.getColegioId()), nombres, null, false);
 	}
 
 	/** El impreso de un comprobante (de su pago, si tiene) o de una nota de crédito (con el comprobante que anula). */
 	static ComprobanteImprimible imprimibleDe(Comprobante c, Pago pago, String colegio, NombresUsuarios nombres,
-			Comprobante anulado) {
+			Comprobante anulado, boolean firmaRecepcion) {
 		return new ComprobanteImprimible(pago == null ? null : pago.getId(), colegio, c.getTipo().etiqueta(),
 				c.numeroCompleto(), c.getFechaEmision(), pago == null ? c.getCreadoEn() : pago.getCreadoEn(),
 				c.getReceptor().nombre(), c.getReceptor().documentoTexto(), lineas(c), c.getTotal(), c.getMoneda(),
@@ -395,7 +398,7 @@ public class ServicioCobro {
 				pago == null ? null : pago.getNumeroOperacion(),
 				nombres.de(pago == null ? c.getCreadoPor() : pago.getCajero()),
 				c.getProveedor() == ProveedorComprobantes.SIMULADO, c.getCodigoHash(),
-				anulado == null ? null : anulado.numeroCompleto(), c.getMotivoNota());
+				anulado == null ? null : anulado.numeroCompleto(), c.getMotivoNota(), firmaRecepcion);
 	}
 
 	/** Los pagos de hoy de SU caja, sin totales: la cajera no ve el efectivo esperado con la caja abierta. */
@@ -416,6 +419,8 @@ public class ServicioCobro {
 						.collect(Collectors.toMap(a -> a.getPago().getId(), a -> a.getNotaCredito().numeroCompleto()));
 		Map<Long, String> comprobantesDelDia = delDia.stream()
 				.collect(Collectors.toMap(Pago::getId, p -> p.getComprobante().numeroCompleto()));
+		// B1: con la caja abierta no se suman a ojo los montos en efectivo (el cierre es ciego).
+		boolean ocultarEfectivo = caja.aceptaEfectivo();
 		List<PagosDelDia.PagoDelDia> filas = delDia.stream().map(p -> {
 			List<AplicacionPago> suyas = porPago.getOrDefault(p.getId(), List.of());
 			String alumnosDelPago = suyas.stream().map(a -> a.getCuota().getAlumno().nombreCompleto()).distinct()
@@ -428,7 +433,8 @@ public class ServicioCobro {
 			String reemplaza = p.getReemplazaPagoId() == null ? null
 					: comprobantesDelDia.getOrDefault(p.getReemplazaPagoId(), "pago " + p.getReemplazaPagoId());
 			return new PagosDelDia.PagoDelDia(p.getId(), p.getCreadoEn().toLocalTime().withNano(0),
-					p.getComprobante().numeroCompleto(), alumnosDelPago, conceptos, p.getMedio().etiqueta(), p.getTotal(),
+					p.getComprobante().numeroCompleto(), alumnosDelPago, conceptos, p.getMedio().etiqueta(),
+					ocultarEfectivo && p.getMedio() == MedioPago.EFECTIVO ? null : p.getTotal(),
 					estado, variante, !p.vigente(), p.vigente() && !pendiente, notas.get(p.getId()), reemplaza);
 		}).toList();
 		return new PagosDelDia(hoy, cajera, filas);

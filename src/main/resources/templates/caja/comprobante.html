@@ -47,6 +47,13 @@
 		</p>
 		<p class="secundario" th:text="|Atendió: ${c.atendio} · ${#temporals.format(c.registradoEn, 'dd/MM/yyyy HH:mm')}|">Atendió: Lucía Ramos</p>
 		<p class="secundario codigo-hash" th:if="${c.codigoHash != null}" th:text="|Código: ${c.codigoHash}|">Código</p>
+		<section class="firma-recepcion" th:if="${c.firmaRecepcion}" aria-label="Recepción del dinero devuelto" data-firma>
+			<p><strong>Recibí conforme el dinero devuelto</strong></p>
+			<p class="firma-linea">Firma del apoderado</p>
+			<p class="firma-linea">Nombre completo</p>
+			<p class="firma-linea">DNI</p>
+			<p class="secundario">Si la devolución fue a la cuenta de origen (Yape, Plin, transferencia o tarjeta), Administración anota el número de operación al registrarla.</p>
+		</section>
 	</article>
 	<script src="/js/imprimir.js" th:src="@{/js/imprimir.js}" defer></script>
 </main>

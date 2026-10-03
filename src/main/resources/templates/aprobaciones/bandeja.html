@@ -38,25 +38,43 @@
 				<p class="secundario" th:text="|Motivo: ${s.motivo}|">Motivo</p>
 				<p class="secundario" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM/yyyy HH:mm')}|">Pedida por administracion</p>
 				<div class="fila" th:if="${s.puedeResolver}">
-					<form method="post" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}" th:unless="${s.pideComentario}">
+					<form method="post" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}" th:unless="${s.apruebaConVentana()}">
 						<button th:replace="~{fragments/componentes :: boton('Aprobar', 'primario')}"></button>
 					</form>
-					<th:block th:if="${s.pideComentario}">
+					<th:block th:if="${s.apruebaConVentana()}">
 						<button type="button" class="btn btn-primario" th:popovertarget="|modal-aprobar-${s.id}|">Aprobar</button>
 						<div class="modal" th:id="|modal-aprobar-${s.id}|" popover role="dialog" aria-modal="true"
 							th:aria-labelledby="|modal-aprobar-${s.id}-titulo|">
 							<form method="post" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}" class="modal-cuerpo">
-								<h2 th:id="|modal-aprobar-${s.id}-titulo|">¿Aprobar con diferencia?</h2>
-								<p>Queda en la bitácora con tu comentario: qué verificaste con la cajera y cómo se resolvió la diferencia.</p>
-								<div class="campo">
-									<label th:for="|modal-aprobar-${s.id}-comentario|">Comentario (obligatorio)</label>
-									<textarea class="input" th:id="|modal-aprobar-${s.id}-comentario|" name="comentario" required
-										minlength="10" maxlength="500"></textarea>
-								</div>
+								<th:block th:if="${s.pideComentario}">
+									<h2 th:id="|modal-aprobar-${s.id}-titulo|">¿Aprobar este cierre?</h2>
+									<p>Queda en la bitácora con tu comentario: qué verificaste con la cajera y cómo se resolvió (la
+										diferencia o los pagos agregados después de reabrir).</p>
+									<div class="campo">
+										<label th:for="|modal-aprobar-${s.id}-comentario|">Comentario (obligatorio)</label>
+										<textarea class="input" th:id="|modal-aprobar-${s.id}-comentario|" name="comentario" required
+											minlength="10" maxlength="500"></textarea>
+									</div>
+								</th:block>
+								<th:block th:unless="${#lists.isEmpty(s.llamadas)}">
+									<h2 th:id="|modal-aprobar-${s.id}-titulo|" th:unless="${s.pideComentario}"
+										th:text="${#lists.size(s.llamadas) == 1} ? 'Antes de aprobar, llama al apoderado' : 'Antes de aprobar, llama a ambas familias'">Antes de aprobar, llama al apoderado</h2>
+									<p>Sale dinero ya cobrado. Confirma por teléfono con la familia, a un celular registrado. En la bitácora
+										queda el apoderado con quien hablaste y su número enmascarado.</p>
+									<div class="campo" th:each="familia, i : ${s.llamadas}">
+										<label th:for="|modal-aprobar-${s.id}-tel-${i.index}|" th:text="|Número al que llamaste (${familia})|">Número al que llamaste</label>
+										<input class="input" type="tel" th:id="|modal-aprobar-${s.id}-tel-${i.index}|" name="telefonos" required
+											inputmode="tel" autocomplete="off" maxlength="20" placeholder="987 654 321">
+									</div>
+									<label class="opcion">
+										<input type="checkbox" name="hablo" value="true" required>
+										<span th:text="${#lists.size(s.llamadas) == 1} ? 'Hablé con el apoderado' : 'Hablé con ambas familias'">Hablé con el apoderado</span>
+									</label>
+								</th:block>
 								<div class="acciones">
 									<button type="button" class="btn btn-secundario" th:popovertarget="|modal-aprobar-${s.id}|"
 										popovertargetaction="hide">Cancelar</button>
-									<button type="submit" class="btn btn-primario">Aprobar el cierre</button>
+									<button type="submit" class="btn btn-primario" th:text="${s.pideComentario} ? 'Aprobar el cierre' : 'Aprobar'">Aprobar</button>
 								</div>
 							</form>
 						</div>

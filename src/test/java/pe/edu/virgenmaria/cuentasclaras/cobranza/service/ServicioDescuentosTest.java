@@ -163,31 +163,10 @@ class ServicioDescuentosTest {
 				.hasMessageContaining("no es de Mateo");
 		assertThat(descuentos.prepararSolicitud("78451236").cuotas()).extracting(c -> c.id()).doesNotContain(marzo)
 				.contains(abril);
-		// Una cuota parcial sí, mientras el descuento no supere lo que falta pagar.
-		jdbc.update("UPDATE cuota SET estado = 'PARCIAL', monto_pagado = 400.00 WHERE id = ?", abril);
-		assertThatThrownBy(() -> descuentos.solicitar(descuento(f.mateo(), TipoDescuento.HERMANOS, "50", List.of(abril))))
-				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("mayor que lo que falta pagar");
-		assertThat(descuentos.revisar(descuento(f.mateo(), TipoDescuento.HERMANOS, "10", List.of(abril))).total())
-				.isEqualByComparingTo("45.00");
+		// Una cuota parcial: ServicioCobroPagoACuentaTest.descuentoSobreCuotaParcialConPagoACuentaReal.
 	}
 
-	/** Si algo cambió entre el pedido y la aprobación (la cuota se pagó), no se aplica: se rechaza y se pide otro. */
-	@Test
-	void descuentoCambiadoDesdeLaSolicitudNoSeAplica() {
-		Long id = descuentos.solicitar(descuento(f.mateo(), TipoDescuento.HERMANOS, "50", List.of(marzo)));
-		// Mientras esperaba aprobación, otra caja registró un pago parcial de S/ 400.
-		jdbc.update("UPDATE cuota SET estado = 'PARCIAL', monto_pagado = 400.00 WHERE id = ?", marzo);
-
-		assertThatThrownBy(() -> EscenarioAprobaciones.aprueba(DIRECCION, bandeja, jdbc, "descuento", id))
-				.isInstanceOf(ReglaNegocioException.class).hasMessageStartingWith("El descuento cambió desde que se pidió");
-		assertThat(jdbc.queryForObject("SELECT estado FROM descuento WHERE id = ?", String.class, id))
-				.isEqualTo("SOLICITADO");
-		assertThat(contar(jdbc, "ajuste_cuota")).isZero();
-		// Se rechaza con motivo y queda RECHAZADO.
-		bandeja.rechazar(EscenarioAprobaciones.pendiente(jdbc, "descuento", id), "La cuota ya se pagó en parte");
-		assertThat(jdbc.queryForMap("SELECT estado, resuelto_por FROM descuento WHERE id = ?", id))
-				.containsEntry("estado", "RECHAZADO").containsEntry("resuelto_por", "director");
-	}
+	// descuentoCambiadoDesdeLaSolicitudNoSeAplica pasó a ServicioCobroPagoACuentaTest con un pago a cuenta real.
 
 	@Test
 	void promotorYCajaReciben403AlPedir() {

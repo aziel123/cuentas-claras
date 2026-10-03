@@ -66,6 +66,69 @@
 	</div>
 </th:block>
 
+<!--/* Pedir la devolución de un pago (A2): la causa y el motivo son obligatorios. Si la causa es «pago duplicado», el
+     sistema exige que exista otro pago vigente de esas cuotas. */-->
+<th:block th:fragment="modalDevolucion(id, titulo, consecuencia, accion)">
+	<button type="button" class="btn btn-chico btn-secundario" th:popovertarget="${id}">Solicitar anulación</button>
+	<div class="modal" th:id="${id}" popover role="dialog" aria-modal="true" th:aria-labelledby="${id + '-titulo'}">
+		<form method="post" th:action="${accion}" class="modal-cuerpo">
+			<h2 th:id="${id + '-titulo'}" th:text="${titulo}">¿Pedir la anulación?</h2>
+			<p th:text="${consecuencia}">El pago sigue vigente hasta que se apruebe.</p>
+			<div class="campo">
+				<label th:for="${id + '-causa'}">Causa (obligatoria)</label>
+				<select class="input" th:id="${id + '-causa'}" name="causa" required>
+					<option value="">Elige la causa</option>
+					<option value="PAGO_DUPLICADO">Pago duplicado (la familia pagó dos veces)</option>
+					<option value="COBRO_EQUIVOCADO">Se cobró por error</option>
+					<option value="RETIRO">Retiro del alumno</option>
+					<option value="OTRA">Otra causa</option>
+				</select>
+			</div>
+			<div class="campo">
+				<label th:for="${id + '-motivo'}">Motivo (obligatorio)</label>
+				<textarea class="input" th:id="${id + '-motivo'}" name="motivo" required minlength="10" maxlength="500"
+					th:aria-describedby="${id + '-motivo-ayuda'}"></textarea>
+				<p class="ayuda" th:id="${id + '-motivo-ayuda'}">Explica qué pasó, en al menos 10 caracteres. Quedará en la auditoría.</p>
+			</div>
+			<div class="acciones">
+				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
+				<button type="submit" class="btn btn-peligro">Pedir anulación</button>
+			</div>
+		</form>
+	</div>
+</th:block>
+
+<!--/* Verificación bancaria A CIEGAS (C1): quien verifica escribe la operación, la fecha y el monto que ve en el banco;
+     no ve lo registrado. El sistema compara y, si no coincide, no dice qué campo falló. */-->
+<th:block th:fragment="modalBanco(id, titulo, accion)">
+	<button type="button" class="btn btn-chico btn-secundario" th:popovertarget="${id}">Encontrado</button>
+	<div class="modal" th:id="${id}" popover role="dialog" aria-modal="true" th:aria-labelledby="${id + '-titulo'}">
+		<form method="post" th:action="${accion}" class="modal-cuerpo">
+			<input type="hidden" name="resultado" value="ENCONTRADO">
+			<h2 th:id="${id + '-titulo'}" th:text="${titulo}">¿Lo encontraste en el banco?</h2>
+			<p>Escribe lo que ves en el estado de cuenta del banco. El sistema lo compara con lo registrado.</p>
+			<div class="campo">
+				<label th:for="${id + '-operacion'}">N.° de operación en el banco</label>
+				<input class="input" type="text" th:id="${id + '-operacion'}" name="operacion" required maxlength="40"
+					autocomplete="off" inputmode="text">
+			</div>
+			<div class="campo">
+				<label th:for="${id + '-fecha'}">Fecha en el banco</label>
+				<input class="input" type="date" th:id="${id + '-fecha'}" name="fecha" required>
+			</div>
+			<div class="campo">
+				<label th:for="${id + '-monto'}">Monto en el banco (S/)</label>
+				<input class="input num" type="text" th:id="${id + '-monto'}" name="monto" required inputmode="decimal"
+					pattern="[0-9]{1,7}([.][0-9]{1,2})?" maxlength="10" autocomplete="off">
+			</div>
+			<div class="acciones">
+				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
+				<button type="submit" class="btn btn-primario">Comparar y verificar</button>
+			</div>
+		</form>
+	</div>
+</th:block>
+
 <!--/* Verificación bancaria: «No aparece» con nota obligatoria (qué se revisó en el banco). */-->
 <th:block th:fragment="modalNota(id, titulo, accion)">
 	<button type="button" class="btn btn-chico btn-peligro" th:popovertarget="${id}">No aparece</button>
