@@ -1,6 +1,6 @@
 # Estado del proyecto · Cuentas Claras
 
-> Última actualización: 2 de octubre de 2026.
+> Última actualización: 3 de octubre de 2026.
 > Resumen para retomar el trabajo: qué está hecho, cómo probarlo y qué hay que decidir con el colegio.
 
 ## Avance
@@ -10,9 +10,9 @@
 | 0 · Arranque | ✅ Terminado | `main` | 3 |
 | 1 · Fundaciones (seguridad, roles, auditoría) | ✅ Terminado, auditado y corregido | `claude/sprint-1-fundaciones` | 317 |
 | 2 · Datos del colegio (alumnos, Excel, pensiones, saldo inicial) | ✅ Terminado, auditado y corregido | `claude/sprint-2-datos-colegio` | 713 |
-| 3 · Caja (pagos, comprobantes, cierre de caja) | 🔄 En diseño | — | — |
+| 3 · Caja (pagos, comprobantes, anulaciones, descuentos, cierre ciego, conciliación) | ✅ Terminado, auditado y corregido | `claude/sprint-3-correcciones` | 967 |
 
-Las ramas están **apiladas**: la del sprint 2 parte de la del sprint 1 y contiene todo su trabajo. Ninguna está unida a `main` todavía. El CI de GitHub solo corre en `main` y en los PR, así que se ejecutará por primera vez cuando se abra el PR. Todas las pruebas, incluidas las de MySQL 8 real, se corrieron localmente durante el desarrollo.
+Las ramas están **apiladas**: cada una parte de la anterior y contiene todo su trabajo. La más completa es `claude/sprint-3-correcciones`. Ninguna está unida a `main` todavía. El CI de GitHub solo corre en `main` y en los PR, así que se ejecutará por primera vez cuando se abra el PR. Todas las pruebas, incluidas las de MySQL 8 real, se corrieron localmente durante el desarrollo.
 
 Cada sprint siguió el mismo flujo:
 1. `arquitecto-software` diseña.
@@ -40,12 +40,22 @@ Los diseños están en `docs/arquitectura/`.
 - Cronograma de cuotas generado por el sistema: la cajera nunca decide montos.
 - Saldo inicial con doble control. Quien confirma escribe a ciegas el total del informe del contador.
 
+### Caja (sprint 3)
+- Cobro en segundos: la cajera elige cuotas y nunca escribe montos. Boleta simulada con numeración sin huecos.
+- Libro de pagos de solo inserción. En MySQL es imposible tener una cuota pagada sin pago.
+- Anulaciones, devoluciones, correcciones, descuentos, becas y reaperturas solo con aprobación de otra persona. Las devoluciones en efectivo exigen haber hablado con el apoderado.
+- Cierre de caja a ciegas con un solo reconteo, aprobación del cierre y depósito. El faltante llega como alerta a la promotora el mismo día.
+- Conciliación a ciegas: Administración escribe el número, la fecha y el monto que ve en el banco. Un número de operación no se puede reutilizar cambiando su formato.
+- Alertas críticas por pagos digitales sin verificar, efectivo sin depositar, devoluciones pendientes y comprobantes inconsistentes.
+- 28 triggers en MySQL. Si falta alguno, la aplicación no arranca.
+- Usuarios demo adicionales: `caja2`, `caja.b`.
+
 ## Cómo probarlo en tu computadora
 Requisito: Java 21.
 ```bash
 git clone https://github.com/aziel123/cuentas-claras
 cd cuentas-claras
-git checkout claude/sprint-2-datos-colegio
+git checkout claude/sprint-3-correcciones
 ./mvnw spring-boot:run
 ```
 Abre http://localhost:8080. Usuarios de demostración, todos con la clave `demo-cuentas-claras-2026`:
@@ -79,8 +89,14 @@ Todas tienen un valor por defecto ya implementado y se pueden cambiar.
 | 13 | Promotoría en alumnos y pensiones | Solo lectura (con datos personales ocultos en parte) más aprobaciones |
 | 14 | Deudas de años anteriores a 2026 | Fuera del sistema, salvo que se pidan |
 | 15 | Vencimiento en domingo o feriado | Se mantiene, sin mora |
+| 16 | Pago parcial en caja | Desactivado en el piloto |
+| 17 | Hora límite de cierre de caja | 19:00 |
+| 18 | Quién deposita y quién verifica | Deposita la cajera al día hábil siguiente; verifica Administración |
+| 19 | Comprobante durante el piloto | Simulado (sin valor tributario); el colegio sigue con su comprobante legal hasta conectar el OSE |
+| 20 | IGV de pensiones | Inafecto. Confirmar con el contador |
+| 21 | Días hábiles | De lunes a viernes, sin feriados (por ahora) |
 
-La lista completa está en la sección 12 de `docs/arquitectura/sprint-1-fundaciones.md`, la sección 14 de `docs/arquitectura/sprint-2-datos-del-colegio.md` y en `docs/arquitectura/sprint-2-correcciones.md`.
+La lista completa está en los documentos de `docs/arquitectura/`, incluida la sección 16 de `sprint-3-caja.md`.
 
 ## Pendiente fuera del código
 - [ ] Reunión de descubrimiento con el colegio (kit en `docs/ux/`).
@@ -91,5 +107,6 @@ La lista completa está en la sección 12 de `docs/arquitectura/sprint-1-fundaci
 ## Riesgos conocidos
 - La aplicación está pensada para **una sola instancia**: las sesiones y algunos límites viven en memoria.
 - La clave temporal todavía la ve quien la genera. Se corrige en el sprint 4 con la entrega directa al titular.
+- Durante el piloto, la única constancia del padre es la boleta impresa (WhatsApp llega en el sprint 4).
 - La huella de la bitácora solo detecta un recorte si la promotora la anota. Desde el sprint 4 se le enviará a diario.
 - Los triggers de MySQL requieren `log_bin_trust_function_creators`; está documentado en `docs/operacion/mysql-usuarios.md`.
