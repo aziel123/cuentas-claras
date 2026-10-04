@@ -2,7 +2,15 @@
 
 Plataforma de gestión escolar del **Colegio Virgen María**. Empieza por la cobranza con controles antifraude: cada pago emite su comprobante, avisa a la familia, queda en una auditoría que no se puede borrar y se concilia en el cierre de caja diario.
 
-## Requisitos
+## En tu PC con MySQL (Docker)
+La forma más simple de probarla completa, con MySQL y los mismos controles que producción:
+```bash
+cp .env.ejemplo .env      # y cambia las claves
+docker compose up --build # luego abre http://localhost:8080
+```
+Guía paso a paso (Windows, Mac y Linux): `docs/operacion/instalacion-local.md`.
+
+## Requisitos (desarrollo sin Docker)
 - Java 21
 - No hace falta instalar Maven: el proyecto trae `./mvnw`.
 - Para desarrollo no hace falta base de datos: el perfil `dev` usa H2 en memoria.

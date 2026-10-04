@@ -1,0 +1,85 @@
+# Cuentas Claras en tu PC: MySQL 8 + aplicación, con los mismos controles que producción.
+# Uso:  copiar .env.ejemplo como .env, cambiar las claves y ejecutar:  docker compose up --build
+# Guía completa: docs/operacion/instalacion-local.md
+name: cuentas-claras
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Define MYSQL_ROOT_PASSWORD en .env}
+      CC_CLAVE_MIGRADOR: ${CC_CLAVE_MIGRADOR:?Define CC_CLAVE_MIGRADOR en .env}
+      CC_CLAVE_APP: ${CC_CLAVE_APP:?Define CC_CLAVE_APP en .env}
+      TZ: America/Lima
+    # cc_migrador crea triggers con el binlog activo (docs/operacion/mysql-usuarios.md).
+    command: ["--log-bin-trust-function-creators=1"]
+    volumes:
+      - datos-mysql:/var/lib/mysql
+      - ./scripts/mysql:/scripts:ro
+      - ./docker/mysql/01-crear-usuarios.sh:/docker-entrypoint-initdb.d/01-crear-usuarios.sh:ro
+    ports:
+      # Solo desde tu PC (para conectarte con MySQL Workbench o DBeaver si quieres mirar las tablas).
+      - "127.0.0.1:3307:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      # La primera vez MySQL tarda en inicializarse (puede pasar de 3 minutos en equipos lentos).
+      start_period: 120s
+
+  # Paso 1: aplica las migraciones Flyway con cc_migrador y termina.
+  migrar:
+    build: .
+    image: cuentas-claras:local
+    command: ["migrar"]
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false
+      DB_MIGRADOR_USUARIO: cc_migrador
+      DB_MIGRADOR_CLAVE: ${CC_CLAVE_MIGRADOR}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  # Paso 2: permisos por tabla de cc_app y triggers, y termina.
+  preparar-bd:
+    image: mysql:8.4
+    entrypoint: ["sh", "/preparar-bd.sh"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      CC_CLAVE_MIGRADOR: ${CC_CLAVE_MIGRADOR}
+    volumes:
+      - ./scripts/mysql:/scripts:ro
+      - ./docker/preparar-bd.sh:/preparar-bd.sh:ro
+    depends_on:
+      migrar:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # Paso 3: la aplicación (front y back) con cc_app y el perfil prod.
+  app:
+    image: cuentas-claras:local
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:mysql://mysql:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false
+      DB_USUARIO: cc_app
+      DB_CLAVE: ${CC_CLAVE_APP}
+      AUDITORIA_CLAVE_HMAC: ${AUDITORIA_CLAVE_HMAC:?Define AUDITORIA_CLAVE_HMAC en .env}
+      CC_PROMOTOR_USUARIO: ${CC_PROMOTOR_USUARIO:-}
+      CC_PROMOTOR_NOMBRE: ${CC_PROMOTOR_NOMBRE:-}
+      CC_PROMOTOR_CLAVE: ${CC_PROMOTOR_CLAVE:-}
+      # Solo para probar en tu PC por http (sin https): permite la cookie de sesión sin "Secure".
+      # En un servidor real con https, quita esta línea.
+      SERVER_SERVLET_SESSION_COOKIE_SECURE: "false"
+      TZ: America/Lima
+    ports:
+      - "${PUERTO_APP:-8080}:8080"
+    depends_on:
+      preparar-bd:
+        condition: service_completed_successfully
+
+volumes:
+  datos-mysql:
