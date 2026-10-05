@@ -81,6 +81,8 @@ Con `cc_app` puedes leer, pero no editar la bitácora ni borrar pagos: lo impide
 
 ## 9. Problemas comunes
 - **«port is already allocated»**: el puerto 8080 está ocupado. Cambia `PUERTO_APP=8081` en `.env` y entra a http://localhost:8081.
+- **«required variable … is missing a value»**: falta el archivo `.env` o no está en la carpeta de `docker-compose.yml`. Revisa con `dir .env*` (Windows) o `ls -a` (Mac/Linux).
+- **«./mvnw: not found»** al compilar: el `mvnw` quedó con saltos de línea de Windows. Actualiza el código (`git pull`): el `Dockerfile` ya lo corrige.
 - **`mysql` tarda o aparece como *unhealthy*** la primera vez: espera y vuelve a ejecutar `docker compose up -d`. La inicialización solo ocurre una vez.
 - **La aplicación no arranca y dice que faltan permisos o triggers**: revisa `docker compose logs preparar-bd`. Si cambiaste las claves después de la primera vez, ejecuta `docker compose down -v` y empieza de cero (las claves de MySQL se fijan al crear la base).
 - **No puedo iniciar sesión desde el celular por la IP de la PC**: es esperable. Esta configuración es solo para `localhost`. Para usarla en red o internet hace falta https; eso se hace al elegir el hosting (decisión D3 del plan).

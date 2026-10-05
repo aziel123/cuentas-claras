@@ -4,7 +4,8 @@ FROM eclipse-temurin:21-jdk AS compilacion
 WORKDIR /fuente
 COPY .mvn .mvn
 COPY mvnw pom.xml ./
-RUN chmod +x mvnw && ./mvnw -B -q dependency:go-offline
+# En Windows, Git puede dejar mvnw con saltos de línea CRLF y Linux no lo ejecuta ("./mvnw: not found").
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw -B -q dependency:go-offline
 COPY src src
 RUN ./mvnw -B -q -DskipTests package && cp target/cuentas-claras-*.jar /fuente/app.jar
 
