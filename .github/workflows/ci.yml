@@ -75,7 +75,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V13): Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V14): Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Permisos por tabla de cc_app
@@ -182,6 +182,16 @@ jobs:
           comprobar 1143 "UPDATE comprobante SET reemplaza_id = reemplaza_id WHERE 1 = 0"
           comprobar 1644 "INSERT INTO orden_pago (colegio_id, referencia, familia_id, apoderado_id, proveedor, monto, moneda, comprobante_tipo, clave_idempotencia, vence_en, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'x', 0, 0, 'CULQI', 1, 'PEN', 'BOLETA', 'x', NOW(6), 'PAGADA', NOW(6), 'x', NOW(6))"
           comprobar 1644 "INSERT INTO orden_pago_cuota (colegio_id, orden_pago_id, cuota_id, monto, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 1, NOW(6), 'x', NOW(6))"
+          # Sprint 4, tanda 2 (V14): recaudación bancaria. El archivo del banco es de solo inserción.
+          for tabla in archivo_cargado lote_recaudacion linea_recaudacion; do
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          comprobar 1142 "UPDATE archivo_cargado SET version = version WHERE 1 = 0"
+          comprobar 1143 "UPDATE lote_recaudacion SET total = total WHERE 1 = 0"
+          comprobar 1143 "UPDATE linea_recaudacion SET monto = monto WHERE 1 = 0"
+          comprobar 1143 "UPDATE pago SET linea_recaudacion_id = linea_recaudacion_id WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO lote_recaudacion (colegio_id, archivo_id, archivo_sha256, sha_vigente, banco, formato, fecha_proceso, desde, hasta, lineas, total, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, REPEAT('0', 64), REPEAT('0', 64), 'BCP', 'x', '2000-01-01', '2000-01-01', '2000-01-01', 1, 1, 'APLICADO', NOW(6), 'x', NOW(6))"
+          comprobar 1644 "INSERT INTO linea_recaudacion (colegio_id, lote_id, numero, fecha_pago, codigo, monto, moneda, numero_operacion, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 1, '2000-01-01', '0', 1, 'PEN', '1234', 'PENDIENTE', NOW(6), 'x', NOW(6))"
           # La base de producción no admite la pasarela simulada (sin la fila 'pasarela_simulada' del DBA).
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'pasarela_simulada'")
           [ "$filas" = "0" ] || { echo "ERROR: la base tiene la fila pasarela_simulada"; exit 1; }

@@ -18,6 +18,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.model.AnulacionPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.AplicacionPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.CajaDiaria;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.CausaDevolucion;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.Pago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAnulacion;
@@ -248,7 +249,7 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 		if (pago.getMedio() == MedioPago.EFECTIVO) {
 			return "Verificación bancaria: no aplica (efectivo)";
 		}
-		if (pago.getCaja().esDeCanal()) {
+		if (pago.getCaja().getCanal() == CanalCaja.PASARELA) {
 			return "Verificación bancaria: pago en línea confirmado por la pasarela (se verifica con su liquidación)";
 		}
 		return verificaciones.findByPagoId(pago.getId())

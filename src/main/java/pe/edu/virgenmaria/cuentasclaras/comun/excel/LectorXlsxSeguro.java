@@ -66,8 +66,13 @@ public class LectorXlsxSeguro {
 		ZipSecureFile.setMaxTextSize(5L * 1024 * 1024);
 	}
 
+	/** Lee la PRIMERA hoja del libro, sea cual sea su nombre (por ejemplo, un archivo exportado por el banco). */
+	public HojaLeida leerPrimeraHoja(byte[] contenido, int maxFilas, int maxColumnas) {
+		return leer(contenido, null, maxFilas, maxColumnas);
+	}
+
 	/**
-	 * @param hoja        nombre exacto de la hoja que se lee
+	 * @param hoja        nombre exacto de la hoja que se lee ({@code null}: la primera)
 	 * @param maxFilas    filas no vacías como máximo (incluida la de encabezados)
 	 * @param maxColumnas columnas que se leen (desde A); las demás con datos se informan en {@code columnasIgnoradas}
 	 */
@@ -80,7 +85,8 @@ public class LectorXlsxSeguro {
 			Iterator<InputStream> hojas = lector.getSheetsData();
 			while (hojas.hasNext()) {
 				try (InputStream datos = hojas.next()) {
-					if (hojas instanceof XSSFReader.SheetIterator iterador && hoja.equals(iterador.getSheetName())) {
+					if (hoja == null
+							|| hojas instanceof XSSFReader.SheetIterator iterador && hoja.equals(iterador.getSheetName())) {
 						ManejadorHoja manejador = new ManejadorHoja(textos, maxFilas, maxColumnas);
 						XMLReader xml = XMLHelper.newXMLReader();
 						xml.setContentHandler(manejador);
@@ -90,8 +96,9 @@ public class LectorXlsxSeguro {
 					}
 				}
 			}
-			throw new ArchivoNoValidoException("El archivo no tiene la hoja «" + hoja + "». Usa la plantilla descargada "
-					+ "y no le cambies el nombre a la hoja.");
+			throw new ArchivoNoValidoException(hoja == null ? "El archivo no tiene hojas con datos."
+					: "El archivo no tiene la hoja «" + hoja + "». Usa la plantilla descargada y no le cambies el nombre a "
+							+ "la hoja.");
 		}
 		catch (ArchivoNoValidoException e) {
 			throw e;

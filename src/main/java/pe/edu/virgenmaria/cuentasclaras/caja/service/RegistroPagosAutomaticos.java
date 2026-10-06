@@ -30,9 +30,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Única entrada de los canales automáticos (pagos en línea) al libro de pagos (sprint 4). La usa solo un actor de
- * sistema ({@code sistema.pasarela}), dentro de la transacción de quien llama, con este orden de bloqueos: (orden de
- * pago) → caja del canal → cuotas por id ascendente → serie → bitácora.
+ * Única entrada de los canales automáticos (pagos en línea y recaudación bancaria) al libro de pagos (sprint 4). La usa
+ * solo un actor de sistema ({@code sistema.pasarela} o {@code sistema.recaudacion}), dentro de la transacción de quien
+ * llama, con este orden de bloqueos: (orden de pago o lote) → caja del canal → cuotas por id ascendente → serie →
+ * bitácora.
  * <p>
  * {@link #evaluar} responde, SIN escribir, si el dinero se puede aplicar (cuotas cobrables de esa familia, saldo que no
  * cambió, operación no usada): así quien llama deja la orden «por revisar» en vez de romper la transacción y el dinero
@@ -55,6 +56,15 @@ public class RegistroPagosAutomaticos {
 	public record PedidoPagoEnLinea(Long familiaId, List<Long> cuotaIds, MedioPago medio, String operacion,
 			BigDecimal monto, boolean aCuenta, DatosComprobante comprobante, Long ordenPagoId, UUID clave,
 			LocalDate fechaCanal, LocalDate fechaComprobante, String detalle) {
+	}
+
+	/**
+	 * Un pago hecho en el banco con el código del alumno (una línea del archivo de recaudación ya confirmado a ciegas).
+	 * {@code fechaPago}: la del banco (la del pago y de su caja de canal); {@code fechaComprobante}: hoy (Lima).
+	 * {@code aCuenta}: el monto no cubre todas sus cuotas (pago parcial, se resalta).
+	 */
+	public record PedidoRecaudacion(Long familiaId, String operacion, BigDecimal monto, boolean aCuenta, Long lineaId,
+			UUID clave, LocalDate fechaPago, LocalDate fechaComprobante, String detalle) {
 	}
 
 	private final CajaDiariaRepository cajas;
@@ -132,7 +142,7 @@ public class RegistroPagosAutomaticos {
 			String operacion, Map<Long, BigDecimal> saldosEsperados) {
 		for (Cuota cuota : bloqueadas) {
 			if (!Objects.equals(cuota.getAlumno().getFamilia().getId(), familiaId) || !cuota.admiteCobro()
-					|| cuota.saldo().signum() <= 0) {
+					|| cuota.anulacionPendiente() || cuota.saldo().signum() <= 0) {
 				return Optional.of(MotivoNoAplicable.CUOTA_NO_COBRABLE);
 			}
 		}
@@ -171,6 +181,35 @@ public class RegistroPagosAutomaticos {
 		return libro.registrarEnCanal(canal, familia, bloqueadas, pedido.medio(), pedido.operacion(), pedido.monto(),
 				pedido.aCuenta(), pedido.comprobante(), pedido.ordenPagoId(), pedido.clave(), pedido.fechaComprobante(),
 				pedido.detalle());
+	}
+
+	/**
+	 * Registra el pago de una línea de recaudación con su boleta (a nombre del responsable de pago del alumno), sus
+	 * aplicaciones y la bitácora, en la caja RECAUDACION de la fecha de pago YA bloqueada y con las cuotas YA bloqueadas y
+	 * evaluadas (solo las que reciben dinero, de la que vence primero a la última).
+	 */
+	public Pago registrarRecaudacion(CajaDiaria canal, List<Cuota> bloqueadas, PedidoRecaudacion pedido) {
+		Objects.requireNonNull(pedido, "pedido");
+		if (canal.getCanal() != CanalCaja.RECAUDACION || !canal.getFecha().equals(pedido.fechaPago())) {
+			throw new IllegalArgumentException("El pago por banco va a la caja RECAUDACION de su fecha de pago");
+		}
+		Familia familia = familias.findById(pedido.familiaId())
+				.orElseThrow(() -> new RecursoNoEncontradoException("Familia no encontrada"));
+		return libro.registrarRecaudacion(canal, familia, bloqueadas, pedido.operacion(), pedido.monto(),
+				pedido.aCuenta(), new DatosComprobante(TipoComprobante.BOLETA, null, null, null), pedido.lineaId(),
+				pedido.clave(), pedido.fechaComprobante(), pedido.detalle());
+	}
+
+	/** El pago ya registrado de una línea de recaudación (idempotencia: la misma línea dos veces). */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public Optional<Pago> pagoDeLinea(Long lineaRecaudacionId) {
+		return pagos.findByLineaRecaudacionId(lineaRecaudacionId);
+	}
+
+	/** Si la operación canónica ya está en un pago vigente (de cualquier medio digital). */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public boolean operacionRegistrada(String operacion) {
+		return operacion != null && pagos.existsByOperacionVigente(operacion);
 	}
 
 	/** El pago ya registrado de una orden (idempotencia: el mismo aviso dos veces). */

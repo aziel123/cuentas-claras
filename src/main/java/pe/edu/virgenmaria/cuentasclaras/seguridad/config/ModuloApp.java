@@ -57,6 +57,10 @@ public enum ModuloApp {
 	PAGOS_EN_LINEA("Pagos en línea", "Pagos que entran solos por la pasarela: los que quedaron por revisar, los de hoy y "
 			+ "los vencidos.", "Sprint 4", true, "/pagos-en-linea", new String[] { "/pagos-en-linea", "/pagos-en-linea/**" },
 			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+	RECAUDACION("Recaudación bancaria", "Pagos que las familias hacen en el banco con el código del alumno: sube el archivo "
+			+ "del banco, otra persona lo confirma a ciegas y el sistema registra los pagos.", "Sprint 4", true,
+			"/recaudacion", new String[] { "/recaudacion", "/recaudacion/**" },
+			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 	COMPROBANTES("Comprobantes electrónicos", "Envíos al OSE: rechazados, por vencer el plazo legal, pendientes y aceptados.",
 			"Sprint 4", true, "/comprobantes", new String[] { "/comprobantes", "/comprobantes/**" },
 			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),

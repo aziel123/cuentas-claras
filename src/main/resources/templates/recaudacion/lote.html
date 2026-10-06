@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Archivo del banco', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="recaudacion-lote" th:with="l=${lote}" th:attr="data-estado=${l.estado}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/recaudacion}">Recaudación bancaria</a></p>
+			<h1 th:text="|Lote N.° ${l.id} · pagos del ${#temporals.format(l.desde, 'dd/MM')} al ${#temporals.format(l.hasta, 'dd/MM/yyyy')}|">Lote</h1>
+			<p class="secundario" th:text="|«${l.archivo}» · ${l.banco} · subido por ${l.cargadoPor} el ${#temporals.format(l.cargadoEn, 'dd/MM/yyyy HH:mm')}|">Archivo</p>
+		</div>
+		<span th:replace="~{fragments/componentes :: badge(${l.etiqueta}, ${l.variante})}"></span>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${l.porConfirmar()}">
+		<div th:replace="~{fragments/componentes :: alerta('info', 'Falta que otra persona de Promotoría o Dirección escriba a ciegas el total que ve en el banco. Mientras tanto no se muestran los montos ni se aplica ningún pago.')}"></div>
+	</th:block>
+	<th:block th:if="${l.motivoRechazo != null}">
+		<div th:replace="~{fragments/componentes :: alerta(${l.estado == 'RECHAZADO'} ? 'error' : 'advertencia', |${l.etiqueta} por ${l.rechazadoPor}: ${l.motivoRechazo}|)}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-resumen">
+		<h2 id="titulo-resumen">Resumen</h2>
+		<dl class="datos">
+			<dt>Pagos en el archivo</dt><dd th:text="${l.lineas}">23</dd>
+			<dt>Total</dt><dd><th:block th:if="${l.montosVisibles}"><span th:replace="~{fragments/componentes :: monto(${l.total})}"></span></th:block><span th:unless="${l.montosVisibles}">Se muestra después de la confirmación a ciegas</span></dd>
+			<dt>Confirmado por</dt><dd th:text="${l.confirmadoPor != null ? l.confirmadoPor + ' el ' + #temporals.format(l.confirmadoEn, 'dd/MM/yyyy HH:mm') : '—'}">—</dd>
+			<dt>Intentos fallidos al confirmar</dt><dd th:text="${l.intentosConfirmacion}">0</dd>
+			<dt>Aplicados por el sistema</dt><dd th:text="${l.estado == 'APLICADO' ? l.aplicadas + ' pagos · S/ ' + #numbers.formatDecimal(l.montoAplicado, 1, 'COMMA', 2, 'POINT') : '—'}">—</dd>
+			<dt>Por revisar</dt><dd th:text="${l.estado == 'APLICADO' ? l.excepciones + ' pagos · S/ ' + #numbers.formatDecimal(l.montoExcepcion, 1, 'COMMA', 2, 'POINT') : '—'}">—</dd>
+			<dt>Huella del archivo (SHA-256)</dt><dd class="num" th:text="${l.sha256}">abc</dd>
+		</dl>
+		<div class="acciones acciones-izquierda">
+			<a class="btn btn-secundario" th:if="${l.archivoDescargable}" th:href="@{/recaudacion/lotes/{id}/archivo(id=${l.id})}" download>Descargar el archivo original</a>
+			<th:block th:if="${l.porConfirmar() and puedeConfirmar}">
+				<a class="btn btn-primario" th:href="@{/recaudacion/lotes/{id}/confirmar(id=${l.id})}">Confirmar a ciegas</a>
+			</th:block>
+			<th:block th:if="${l.puedeDescartar}">
+				<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-descartar', '¿Descartar el archivo?',
+					'Queda en la lista como descartado (no se borra) y no se aplica ningún pago.',
+					@{/recaudacion/lotes/{id}/descartar(id=${l.id})}, 'Descartar', 'peligro', 'Descartar archivo')}"></th:block>
+			</th:block>
+		</div>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-lineas">
+		<h2 id="titulo-lineas">Pagos del archivo</h2>
+		<table class="tabla">
+			<thead><tr><th scope="col">N.°</th><th scope="col">Fecha</th><th scope="col">Código</th><th scope="col">Alumno</th><th scope="col" class="num">Monto</th><th scope="col">Operación</th><th scope="col">Estado</th><th scope="col">Boleta</th></tr></thead>
+			<tbody>
+				<tr th:each="x : ${l.detalle}" th:data-linea="${x.id}" th:attr="data-estado=${x.estado}" th:classappend="${x.enExcepcion()} ? 'fila-atencion'">
+					<td data-etiqueta="N.°" class="num" th:text="${x.numero}">1</td>
+					<td data-etiqueta="Fecha" th:text="${#temporals.format(x.fecha, 'dd/MM/yyyy')}">05/10/2026</td>
+					<td data-etiqueta="Código" class="num" th:text="${x.codigo}">1000 0016</td>
+					<td data-etiqueta="Alumno" th:text="${x.alumno} ?: 'Ningún alumno'">Mateo</td>
+					<td data-etiqueta="Monto" class="num" th:text="${x.monto == null} ? '—' : (${x.moneda == 'PEN'} ? ${'S/ ' + #numbers.formatDecimal(x.monto, 1, 'COMMA', 2, 'POINT')} : ${x.moneda + ' ' + x.monto})">S/ 450.00</td>
+					<td data-etiqueta="Operación" th:text="${x.operacion}">123456</td>
+					<td data-etiqueta="Estado">
+						<span th:replace="~{fragments/componentes :: badge(${x.etiqueta}, ${x.critica} ? 'peligro' : ${x.variante})}"></span>
+						<th:block th:if="${x.motivo != null}"><a th:href="@{/recaudacion/lineas/{id}(id=${x.id})}" th:text="${x.motivo}">Motivo</a></th:block>
+					</td>
+					<td data-etiqueta="Boleta" th:text="${x.comprobante} ?: '—'">B001-00000001</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

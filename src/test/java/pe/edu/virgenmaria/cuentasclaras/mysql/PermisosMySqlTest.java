@@ -1351,6 +1351,258 @@ class PermisosMySqlTest {
 				.doesNotThrowAnyException();
 	}
 
+	// Sprint 4, tanda 2: recaudación bancaria (V14). Usa la matrícula y marzo del otro alumno y marzo del segundo hermano
+	// del escenario compartido (las demás pruebas no los cobran).
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.recaudacion.service.ServicioRecaudacion recaudacion;
+
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado persona(long id, String nombre, Rol rol) {
+		return UsuariosDePrueba.autenticado(1L, id, nombre + "." + sufijo, "Persona " + nombre, false, EnumSet.of(rol));
+	}
+
+	/** Un número de operación canónico y único en esta base (que no se limpia). */
+	private String operacion(int n) {
+		return "R" + sufijo.toUpperCase(java.util.Locale.ROOT) + n;
+	}
+
+	/** Registra un archivo del banco como Administración (queda CARGADO). */
+	private Long loteCargado(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.Archivo archivo) {
+		Long lote = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.registrar(recaudacion,
+				persona(410, "adm.banco", Rol.ADMINISTRACION), "banco-" + sufijo + System.nanoTime() + ".csv",
+				archivo.csv());
+		SecurityContextHolder.clearContext();
+		return lote;
+	}
+
+	private pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.Archivo archivoDeAyer() {
+		return pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.archivo();
+	}
+
+	private String ayer() {
+		return java.time.LocalDate.now(java.time.ZoneId.of("America/Lima")).minusDays(1).toString();
+	}
+
+	@Test
+	void tablasDeRecaudacionNoSeBorranNiCambianLoPedido() {
+		for (String tabla : new String[] { "archivo_cargado", "lote_recaudacion", "linea_recaudacion" }) {
+			assertThat(codigoAl(() -> jdbc.update("DELETE FROM " + tabla + " WHERE 1 = 0"))).as(tabla).isEqualTo(1142);
+		}
+		// archivoNoSeEditaFallaCon1142: el archivo original del banco es de solo inserción.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE archivo_cargado SET version = version WHERE 1 = 0"))).isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE archivo_cargado SET contenido = contenido WHERE 1 = 0")))
+				.isEqualTo(1142);
+		for (String sentencia : new String[] { "UPDATE lote_recaudacion SET total = total WHERE 1 = 0",
+				"UPDATE lote_recaudacion SET archivo_sha256 = archivo_sha256 WHERE 1 = 0",
+				"UPDATE lote_recaudacion SET desde = desde WHERE 1 = 0",
+				"UPDATE linea_recaudacion SET monto = monto WHERE 1 = 0",
+				"UPDATE linea_recaudacion SET codigo = codigo WHERE 1 = 0",
+				"UPDATE linea_recaudacion SET numero_operacion = numero_operacion WHERE 1 = 0",
+				"UPDATE linea_recaudacion SET alumno_id = alumno_id WHERE 1 = 0",
+				"UPDATE pago SET linea_recaudacion_id = linea_recaudacion_id WHERE 1 = 0" }) {
+			assertThat(codigoAl(() -> jdbc.update(sentencia))).as(sentencia).isEqualTo(1143);
+		}
+		for (String sentencia : new String[] {
+				"INSERT INTO lote_recaudacion (colegio_id, archivo_id, archivo_sha256, sha_vigente, banco, formato, "
+						+ "fecha_proceso, desde, hasta, lineas, total, estado, creado_en, creado_por, actualizado_en) VALUES "
+						+ "(0, 0, REPEAT('0', 64), REPEAT('0', 64), 'BCP', 'verificador', '2000-01-01', '2000-01-01', "
+						+ "'2000-01-01', 1, 1, 'APLICADO', NOW(6), 'verificador', NOW(6))",
+				"INSERT INTO linea_recaudacion (colegio_id, lote_id, numero, fecha_pago, codigo, monto, moneda, "
+						+ "numero_operacion, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 1, '2000-01-01', "
+						+ "'0', 1, 'PEN', '1234', 'PENDIENTE', NOW(6), 'verificador', NOW(6))" }) {
+			assertThat(codigoAl(() -> jdbc.update(sentencia))).as(sentencia).isEqualTo(1644);
+		}
+	}
+
+	/**
+	 * Subir → registrar → confirmar a ciegas (otra persona) → el sistema aplica los pagos en la caja RECAUDACION con su
+	 * boleta, con los permisos mínimos y los triggers (H2 no los tiene: aquí se ve un saveAndFlush faltante). Después,
+	 * nada de lo resuelto se reescribe por SQL.
+	 */
+	@Test
+	void flujoRecaudacionConPermisosMinimos() {
+		FamiliasCaja familias = familiasDeCaja();
+		Long matricula = jdbc.queryForObject("SELECT id FROM cuota WHERE alumno_id = ? AND tipo = 'MATRICULA'", Long.class,
+				familias.otroAlumno());
+		Long marzo = cuotaDe(familias.hermano2(), 3);
+		var archivo = archivoDeAyer()
+				.linea(ayer(), pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago.deAlumno(familias.otroAlumno()),
+						pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago.deCuota(matricula), "350.00", "PEN",
+						operacion(1))
+				.linea(ayer(), pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago.deAlumno(familias.hermano2()),
+						pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago.deCuota(marzo), "450.00", "PEN", operacion(2))
+				.linea(ayer(), pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.codigoErrado(
+						familias.hermano1()), "", "120.00", "PEN", operacion(3));
+		Long lote = loteCargado(archivo);
+		var promotora = persona(411, "promotora.banco", Rol.PROMOTOR);
+		try {
+			// Primero un total que no coincide (suma un intento) y luego el correcto.
+			UsuariosDePrueba.iniciarSesion(promotora);
+			assertThatThrownBy(() -> recaudacion.confirmar(lote, pe.edu.virgenmaria.cuentasclaras.comun.prueba
+					.EscenarioRecaudacion.version(jdbc, lote), new java.math.BigDecimal("919.00")))
+					.isInstanceOf(pe.edu.virgenmaria.cuentasclaras.cobranza.model.TotalNoCoincideException.class);
+			recaudacion.confirmar(lote, pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.version(jdbc,
+					lote), archivo.total());
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		java.util.Map<String, Object> fila = jdbc.queryForMap("SELECT estado, intentos_confirmacion, lineas_aplicadas, "
+				+ "lineas_excepcion, confirmado_por FROM lote_recaudacion WHERE id = ?", lote);
+		assertThat(fila).containsEntry("estado", "APLICADO").containsEntry("intentos_confirmacion", 1)
+				.containsEntry("lineas_aplicadas", 2).containsEntry("lineas_excepcion", 1)
+				.containsEntry("confirmado_por", promotora.getUsername());
+		assertThat(jdbc.queryForObject("SELECT estado FROM cuota WHERE id = ?", String.class, matricula)).isEqualTo("PAGADA");
+		assertThat(jdbc.queryForObject("SELECT estado FROM cuota WHERE id = ?", String.class, marzo)).isEqualTo("PAGADA");
+		java.util.List<java.util.Map<String, Object>> pagos = jdbc.queryForList("SELECT p.origen, p.medio, p.cajero, "
+				+ "c.canal, b.estado_envio FROM pago p JOIN caja_diaria c ON c.id = p.caja_diaria_id JOIN comprobante b "
+				+ "ON b.id = p.comprobante_id JOIN linea_recaudacion l ON l.id = p.linea_recaudacion_id WHERE l.lote_id = ?",
+				lote);
+		assertThat(pagos).hasSize(2).allSatisfy(p -> assertThat(p).containsEntry("origen", "RECAUDACION")
+				.containsEntry("medio", "RECAUDACION_BANCARIA").containsEntry("cajero", "sistema.recaudacion")
+				.containsEntry("canal", "RECAUDACION").containsEntry("estado_envio", "ACEPTADO"));
+		Long excepcion = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.idLinea(jdbc, lote, 3);
+		Long aplicada = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.idLinea(jdbc, lote, 1);
+		// Nada de lo resuelto se reescribe por SQL.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE lote_recaudacion SET estado = 'CARGADO' WHERE id = ?", lote)))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE lote_recaudacion SET total_ciego = total_ciego + 1 WHERE id = ?",
+				lote))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE linea_recaudacion SET estado = 'PENDIENTE' WHERE id = ?", aplicada)))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE linea_recaudacion SET motivo_excepcion = 'EXCESO' WHERE id = ?",
+				excepcion))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE linea_recaudacion SET estado = 'APLICADA_REVISION' WHERE id = ?",
+				excepcion))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE linea_recaudacion SET estado = 'DEVUELTA', devolucion_operacion = "
+				+ "'X1', devuelto_por = 'x', devuelto_en = NOW(6) WHERE id = ?", excepcion))).isEqualTo(1644);
+		// El mismo archivo no se vuelve a cargar mientras su lote está vigente (UNIQUE sobre su SHA-256).
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO lote_recaudacion (colegio_id, archivo_id, archivo_sha256, "
+				+ "sha_vigente, banco, formato, fecha_proceso, desde, hasta, lineas, total, estado, intentos_confirmacion, "
+				+ "lineas_aplicadas, lineas_excepcion, monto_aplicado, monto_excepcion, creado_en, creado_por, "
+				+ "actualizado_en) SELECT colegio_id, archivo_id, archivo_sha256, sha_vigente, banco, formato, fecha_proceso, "
+				+ "desde, hasta, lineas, total, 'CARGADO', 0, 0, 0, 0, 0, NOW(6), 'otra', NOW(6) FROM lote_recaudacion "
+				+ "WHERE id = ?", lote))).isEqualTo(1062);
+	}
+
+	/** El pago de recaudación solo nace de un lote confirmado a ciegas: con el lote CARGADO, el trigger lo rechaza. */
+	@Test
+	void pagoDeRecaudacionConLoteSinConfirmarFallaCon1644() {
+		FamiliasCaja familias = familiasDeCaja();
+		java.util.Map<String, Object> boleta = jdbc.queryForMap("SELECT id, total FROM comprobante WHERE tipo = 'BOLETA' "
+				+ "ORDER BY id LIMIT 1");
+		String total = ((java.math.BigDecimal) boleta.get("total")).toPlainString();
+		Long lote = loteCargado(archivoDeAyer().linea(ayer(), pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago
+				.deAlumno(familias.otroAlumno()), "", total, "PEN", operacion(11)));
+		Long linea = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.idLinea(jdbc, lote, 1);
+		Long caja = cajaRecaudacionDeAyer();
+
+		Integer codigo = insertarPagoRecaudacion("RECAUDACION_BANCARIA", familias.otraFamilia(), caja, boleta.get("id"),
+				total, operacion(11), "clave-" + sufijo + "-11", linea);
+
+		assertThat(codigo).isEqualTo(1644);
+	}
+
+	/**
+	 * confirmaQuienSubioFallaCon3819 y reiniciarIntentosFallaCon1644: aunque cc_app escriba la confirmación por SQL, la
+	 * base exige otra persona y el total a ciegas igual; y los intentos fallidos no se reinician.
+	 */
+	@Test
+	void confirmaQuienSubioFallaCon3819YReiniciarIntentosFallaCon1644() {
+		FamiliasCaja familias = familiasDeCaja();
+		Long lote = loteCargado(archivoDeAyer().linea(ayer(), pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago
+				.deAlumno(familias.otroAlumno()), "", "450.00", "PEN", operacion(21)));
+
+		assertThat(codigoAl(() -> jdbc.update("UPDATE lote_recaudacion SET estado = 'CONFIRMADO', confirmado_por = "
+				+ "creado_por, confirmado_en = NOW(6), total_ciego = total WHERE id = ?", lote))).isEqualTo(3819);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE lote_recaudacion SET estado = 'CONFIRMADO', confirmado_por = "
+				+ "'otra.persona', confirmado_en = NOW(6), total_ciego = total - 1 WHERE id = ?", lote))).isEqualTo(3819);
+		UsuariosDePrueba.iniciarSesion(persona(412, "director.banco", Rol.DIRECTOR));
+		try {
+			assertThatThrownBy(() -> recaudacion.confirmar(lote, pe.edu.virgenmaria.cuentasclaras.comun.prueba
+					.EscenarioRecaudacion.version(jdbc, lote), new java.math.BigDecimal("449.00")))
+					.isInstanceOf(pe.edu.virgenmaria.cuentasclaras.cobranza.model.TotalNoCoincideException.class);
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		assertThat(codigoAl(() -> jdbc.update("UPDATE lote_recaudacion SET intentos_confirmacion = 0 WHERE id = ?", lote)))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE lote_recaudacion SET estado = 'APLICADO', aplicado_en = NOW(6) "
+				+ "WHERE id = ?", lote))).isEqualTo(1644);
+	}
+
+	/** Las líneas entran solo a un lote CARGADO y dentro de sus fechas. */
+	@Test
+	void lineaFueraDeFechasFallaCon1644() {
+		FamiliasCaja familias = familiasDeCaja();
+		Long lote = loteCargado(archivoDeAyer().linea(ayer(), pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago
+				.deAlumno(familias.otroAlumno()), "", "450.00", "PEN", operacion(31)));
+		String insertar = "INSERT INTO linea_recaudacion (colegio_id, lote_id, numero, fecha_pago, codigo, monto, moneda, "
+				+ "numero_operacion, estado, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, ?, '00000000', 450, "
+				+ "'PEN', ?, ?, NOW(6), 'x', NOW(6))";
+		String antes = java.time.LocalDate.parse(ayer()).minusDays(1).toString();
+
+		assertThat(codigoAl(() -> jdbc.update(insertar, lote, 2, antes, operacion(32), "PENDIENTE"))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(insertar, lote, 2, ayer(), operacion(33), "APLICADA"))).isEqualTo(1644);
+	}
+
+	/**
+	 * F20: un pago CAJA con medio «recaudación bancaria», y un pago de recaudación en efectivo (aunque cc_app escribiera
+	 * por SQL la confirmación del lote), los rechaza el CHECK {@code ck_pago_origen}.
+	 */
+	@Test
+	void pagoDeRecaudacionEnEfectivoFallaCon3819() {
+		FamiliasCaja familias = familiasDeCaja();
+		java.util.Map<String, Object> boleta = jdbc.queryForMap("SELECT id, total FROM comprobante WHERE tipo = 'BOLETA' "
+				+ "ORDER BY id LIMIT 1");
+		String total = ((java.math.BigDecimal) boleta.get("total")).toPlainString();
+		Long lote = loteCargado(archivoDeAyer().linea(ayer(), pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago
+				.deAlumno(familias.otroAlumno()), "", total, "PEN", operacion(41)));
+		Long linea = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.idLinea(jdbc, lote, 1);
+		Long caja = cajaRecaudacionDeAyer();
+		// Riesgo aceptado (M1): cc_app puede escribir la confirmación con otro nombre; el resto lo frena la base.
+		jdbc.update("UPDATE lote_recaudacion SET estado = 'CONFIRMADO', confirmado_por = 'otra.persona', confirmado_en = "
+				+ "NOW(6), total_ciego = total WHERE id = ?", lote);
+
+		assertThat(insertarPagoRecaudacion("EFECTIVO", familias.otraFamilia(), caja, boleta.get("id"), total,
+				operacion(41), "clave-" + sufijo + "-41", linea)).isEqualTo(3819);
+		// De otra familia que no es la del código: el trigger.
+		assertThat(insertarPagoRecaudacion("RECAUDACION_BANCARIA", familias.familia(), caja, boleta.get("id"), total,
+				operacion(41), "clave-" + sufijo + "-42", linea)).isEqualTo(1644);
+		// Un pago de caja «por banco».
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, "
+				+ "comprobante_id, medio, numero_operacion, operacion_vigente, total, a_cuenta, origen, clave_idempotencia, "
+				+ "estado, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'cajera.x', ?, ?, 'RECAUDACION_BANCARIA', "
+				+ "?, ?, ?, FALSE, 'CAJA', ?, 'VIGENTE', NOW(6), 'cajera.x', NOW(6))", familias.otraFamilia(), caja, ayer(),
+				boleta.get("id"), operacion(43), operacion(43), total, "clave-" + sufijo + "-43"))).isEqualTo(3819);
+	}
+
+	/** La caja del canal RECAUDACION de ayer (la abre el sistema; aquí, si falta, la abre una tanda real). */
+	private Long cajaRecaudacionDeAyer() {
+		java.util.List<Long> cajas = jdbc.queryForList("SELECT id FROM caja_diaria WHERE canal = 'RECAUDACION' AND fecha = ?",
+				Long.class, ayer());
+		if (!cajas.isEmpty()) {
+			return cajas.getFirst();
+		}
+		assertThat(jdbc.update("INSERT INTO caja_diaria (colegio_id, cajero, fecha, fondo_fijo, estado, cierres, conteos, "
+				+ "canal, creado_en, creado_por, actualizado_en) VALUES (1, 'sistema.recaudacion', ?, 0, 'ABIERTA', 0, 0, "
+				+ "'RECAUDACION', NOW(6), 'sistema.recaudacion', NOW(6))", ayer())).isEqualTo(1);
+		return jdbc.queryForObject("SELECT id FROM caja_diaria WHERE canal = 'RECAUDACION' AND fecha = ?", Long.class,
+				ayer());
+	}
+
+	/** INSERT directo de un pago de recaudación como cc_app (lo que haría alguien con sus credenciales). */
+	private Integer insertarPagoRecaudacion(String medio, Long familia, Long caja, Object comprobante, String total,
+			String operacion, String clave, Long linea) {
+		return codigoAl(() -> jdbc.update("INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, "
+				+ "comprobante_id, medio, total, numero_operacion, operacion_vigente, a_cuenta, origen, clave_idempotencia, "
+				+ "linea_recaudacion_id, estado, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, "
+				+ "'sistema.recaudacion', ?, ?, ?, ?, ?, ?, FALSE, 'RECAUDACION', ?, ?, 'VIGENTE', NOW(6), "
+				+ "'sistema.recaudacion', NOW(6))", familia, caja, ayer(), comprobante, medio, total, operacion, operacion,
+				clave, linea));
+	}
+
 	private String iniciarPagoEnLinea(Long cuota) {
 		var revision = pagoEnLinea.revisar(new pe.edu.virgenmaria.cuentasclaras.pasarela.dto.SeleccionPagoRequest(
 				java.util.List.of(cuota)));

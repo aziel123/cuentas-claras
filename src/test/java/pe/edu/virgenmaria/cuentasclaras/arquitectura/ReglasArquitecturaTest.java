@@ -287,7 +287,25 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".comprobantes.service.AlertasComprobantes", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".caja.service.ServicioReemision", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados", "hasAnyRole('PROMOTOR','ADMINISTRACION')"),
-			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados#cuentaDe", LECTURA_ESCOLAR));
+			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados#cuentaDe", LECTURA_ESCOLAR),
+			// Sprint 4, tanda 2: Administración sube y registra el archivo del banco; Promotoría o Dirección lo confirman a
+			// ciegas (nunca quien lo subió); el pago lo registra solo el sistema.
+			Map.entry(BASE + ".recaudacion.service.ServicioRecaudacion", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".recaudacion.service.ServicioRecaudacion#previsualizar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".recaudacion.service.ServicioRecaudacion#registrar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".recaudacion.service.ServicioRecaudacion#descartar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".recaudacion.service.ServicioRecaudacion#exportarBaseDeudas", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".recaudacion.service.ServicioRecaudacion#paraConfirmar", APROBACION),
+			Map.entry(BASE + ".recaudacion.service.ServicioRecaudacion#confirmar", APROBACION),
+			Map.entry(BASE + ".recaudacion.service.ConsultaRecaudacion", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".recaudacion.service.ServicioExcepcionesRecaudacion", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".recaudacion.service.ServicioExcepcionesRecaudacion#solicitarAplicacion",
+					SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".recaudacion.service.ServicioExcepcionesRecaudacion#solicitarDevolucion",
+					SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".recaudacion.service.ServicioExcepcionesRecaudacion#registrarDevolucion",
+					SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".recaudacion.service.AlertasRecaudacion", "hasRole('PROMOTOR')"));
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {
@@ -346,7 +364,8 @@ class ReglasArquitecturaTest {
 	@ArchTest
 	static final ArchRule registroSolicitudesSoloDesdeServicios = noClasses()
 			.that().resideOutsideOfPackages(BASE + ".aprobaciones.service..", BASE + ".alumnos.service..",
-					BASE + ".cobranza.service..", BASE + ".caja.service..", BASE + ".pasarela.service..")
+					BASE + ".cobranza.service..", BASE + ".caja.service..", BASE + ".pasarela.service..",
+					BASE + ".recaudacion.service..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".aprobaciones.service.RegistroSolicitudes")
 			.because("la solicitud la crea el servicio protegido que valida el cambio pedido");
 
@@ -591,9 +610,57 @@ class ReglasArquitecturaTest {
 	static final ArchRule cajaYCobranzaNoDependenDeLosModulosNuevos = noClasses()
 			.that().resideInAnyPackage(BASE + ".caja..", BASE + ".cobranza..", BASE + ".comprobantes..",
 					BASE + ".alumnos..", BASE + ".seguridad..", BASE + ".auditoria..", BASE + ".comun..")
-			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".pasarela..")
-			.because("pasarela usa los puertos de caja (RegistroPagosAutomaticos, PagosEnCurso) y de cobranza "
-					+ "(CuotasEnPagoEnLinea); ellos no la conocen");
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".pasarela..", BASE + ".recaudacion..")
+			.because("pasarela y recaudacion usan los puertos de caja (RegistroPagosAutomaticos, PagosEnCurso) y de "
+					+ "cobranza (CuotasEnPagoEnLinea); ellos no las conocen");
+
+	/** Sprint 4, tanda 2: pagos en línea y recaudación bancaria son canales independientes (sección 3, decisión 1). */
+	@ArchTest
+	static final ArchRule pasarelaYRecaudacionNoDependenEntreSi = noClasses()
+			.that().resideInAPackage(BASE + ".recaudacion..")
+			.should().dependOnClassesThat().resideInAPackage(BASE + ".pasarela..")
+			.orShould().dependOnClassesThat().resideInAPackage(BASE + ".conciliacion..")
+			.because("la recaudación depende de caja, cobranza, alumnos, aprobaciones, auditoria y comun");
+
+	@ArchTest
+	static final ArchRule pasarelaNoDependeDeRecaudacion = noClasses()
+			.that().resideInAPackage(BASE + ".pasarela..")
+			.should().dependOnClassesThat().resideInAPackage(BASE + ".recaudacion..")
+			.because("cada canal tiene sus propios manejadores de APLICAR_INGRESO y DEVOLVER_INGRESO (por entidad)");
+
+	/** Los lotes, sus líneas y los archivos originales del banco no se borran ni se editan por consulta. */
+	@ArchTest
+	static final ArchRule repositoriosDeRecaudacionSinModifyingNiBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".recaudacion.repository..",
+					BASE + ".comun.archivo..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("la recaudación y el archivo original del banco son evidencia: no se borran ni se editan");
+
+	@ArchTest
+	static final ArchRule repositoriosDeRecaudacionNoHeredanBorrados = classes()
+			.that().resideInAnyPackage(BASE + ".recaudacion.repository..", BASE + ".comun.archivo..")
+			.and().areInterfaces()
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("CrudRepository trae delete*: los repositorios financieros declaran solo lo que usan");
+
+	@ArchTest
+	static final ArchRule entidadesDeRecaudacionSinSettersPublicos = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".recaudacion.model..", BASE + ".comun.archivo..")
+			.and().areDeclaredInClassesThat().areAnnotatedWith(Entity.class)
+			.and().arePublic()
+			.should().haveNameMatching("set[A-Z].*")
+			.because("un lote o una línea cambian solo por sus métodos con regla");
+
+	/** El pago de recaudación solo nace de RegistroPagosAutomaticos, desde los procesos de recaudación. */
+	@ArchTest
+	static final ArchRule soloElProcesoDeRecaudacionRegistraPagosDeBanco = noClasses()
+			.that().resideInAPackage(BASE + ".recaudacion..")
+			.and().resideOutsideOfPackage(BASE + ".recaudacion.proceso..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".caja.service.RegistroPagosAutomaticos")
+			.because("los pagos por banco los registra sistema.recaudacion, nunca un servicio que llama una persona");
 
 	/** Actuar como sistema (sin persona detrás) solo desde los procesos: nunca desde un controlador ni un servicio web. */
 	@ArchTest

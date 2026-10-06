@@ -88,6 +88,16 @@ GRANT INSERT, UPDATE (estado, intentos, resultado, procesado_en, actualizado_en,
     ON cuentasclaras.evento_pasarela TO 'cc_app'@'%';
 -- pago, caja_diaria y usuario no cambian su GRANT: las columnas nuevas (pago.orden_pago_id, caja_diaria.canal) son
 -- inmutables (1143) y usuario.apoderado_id es updatable = false en la entidad (y su cambio se audita).
+-- Sprint 4 · tanda 2 (V14): recaudación bancaria. Tablas financieras: NUNCA DELETE. El archivo del banco es evidencia:
+-- SOLO INSERCIÓN. Del lote no cambian el archivo, su SHA-256, el banco, las fechas, las líneas ni el total; de la línea
+-- no cambian el monto, la fecha, el código ni la operación (trg_lote_recaudacion_estado y trg_linea_recaudacion_estado
+-- vigilan los estados). pago.linea_recaudacion_id es inmutable (1143): pago no cambia su GRANT.
+GRANT INSERT ON cuentasclaras.archivo_cargado TO 'cc_app'@'%';                    -- solo inserción
+GRANT INSERT, UPDATE (estado, sha_vigente, intentos_confirmacion, total_ciego, confirmado_por, confirmado_en, aplicado_en,
+    lineas_aplicadas, lineas_excepcion, monto_aplicado, monto_excepcion, rechazado_por, rechazado_en, motivo_rechazo,
+    actualizado_en, version) ON cuentasclaras.lote_recaudacion TO 'cc_app'@'%';
+GRANT INSERT, UPDATE (estado, motivo_excepcion, detalle, devolucion_operacion, devuelto_por, devuelto_en, actualizado_en,
+    version) ON cuentasclaras.linea_recaudacion TO 'cc_app'@'%';
 
 -- M2: cc_app no lee information_schema.TRIGGERS (necesitaría el privilegio TRIGGER, que no debe tener). Esta función
 -- (SQL SECURITY DEFINER: corre con los permisos de quien la crea) devuelve solo los nombres de los triggers del esquema,

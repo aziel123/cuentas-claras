@@ -166,6 +166,22 @@ public enum AccionAuditoria {
 	ACCESO_APODERADO_CREADO("Dio acceso en línea a un apoderado", false),
 	ACCESO_APODERADO_QUITADO("Quitó el acceso en línea de un apoderado", true),
 
+	// Sprint 4 · tanda 2: recaudación bancaria. Los pagos los registra sistema.recaudacion (PAGO_REGISTRADO de siempre).
+	RECAUDACION_CARGADA("Cargó un archivo de recaudación del banco", false),
+	/** Se resalta: quien subió el archivo lo descartó antes de que otra persona lo confirme. */
+	RECAUDACION_DESCARTADA("Descartó un archivo de recaudación", true),
+	RECAUDACION_CONFIRMADA("Confirmó a ciegas el total de una recaudación", false),
+	/** Se resalta: el total escrito a ciegas no coincide con el del archivo (¿archivo fabricado o editado?). */
+	RECAUDACION_TOTAL_NO_COINCIDE("El total a ciegas de una recaudación no coincide", true),
+	/** Se resalta: dos totales a ciegas distintos; el lote no se aplica. */
+	RECAUDACION_RECHAZADA("Se rechazó un archivo de recaudación", true),
+	RECAUDACION_APLICADA("Se aplicaron los pagos de una recaudación", false),
+	/** Se resalta: una línea del banco no se pudo aplicar sola (código errado, sin deuda, exceso...). */
+	RECAUDACION_LINEA_EXCEPCION("Una línea de recaudación quedó por revisar", true),
+	/** Se resalta: el archivo del banco lleva datos de familias (Ley 29733). */
+	ARCHIVO_BANCO_DESCARGADO("Descargó un archivo original del banco", true),
+	BASE_DEUDAS_EXPORTADA("Exportó la base de deudas para el banco", false),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

@@ -138,7 +138,7 @@ class VerificadorPermisosBaseDatosTest {
 	/** Tablas de solo inserción: cc_app no tiene ningún UPDATE sobre ellas (1142). */
 	private static final java.util.regex.Pattern SOLO_INSERCION = java.util.regex.Pattern
 			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
-					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd) ");
+					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -278,6 +278,36 @@ class VerificadorPermisosBaseDatosTest {
 		}
 	}
 
+	/** Sprint 4, tanda 2: si se puede borrar o editar algo de la recaudación bancaria, no arranca. */
+	@Test
+	void fallaSiLaRecaudacionSePuedeBorrarOEditar() {
+		for (String[] caso : new String[][] { { "DELETE FROM archivo_cargado WHERE 1 = 0", "archivo_cargado" },
+				{ "DELETE FROM lote_recaudacion WHERE 1 = 0", "lote_recaudacion" },
+				{ "DELETE FROM linea_recaudacion WHERE 1 = 0", "linea_recaudacion" },
+				{ "UPDATE archivo_cargado SET version = version WHERE 1 = 0", "solo inserción" },
+				{ "UPDATE lote_recaudacion SET total = total WHERE 1 = 0", "lote_recaudacion" },
+				{ "UPDATE linea_recaudacion SET monto = monto WHERE 1 = 0", "linea_recaudacion" },
+				{ "UPDATE pago SET linea_recaudacion_id = linea_recaudacion_id WHERE 1 = 0", "pago" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+	}
+
+	@Test
+	void fallaSiFaltanLosTriggersDeRecaudacion() {
+		for (String[] caso : new String[][] { { "INSERT INTO lote_recaudacion", "trg_lote_recaudacion_nace" },
+				{ "INSERT INTO linea_recaudacion", "trg_linea_recaudacion_registro" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doThrow(denegado(1452)).when(mysql).update(org.mockito.ArgumentMatchers.startsWith(caso[0]));
+
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+	}
+
 	/** Prod: con la fila 'pasarela_simulada' en configuracion_bd, o si la base admite una orden SIMULADA, no arranca. */
 	@Test
 	void enProduccionLaBaseNoAdmiteLaPasarelaSimulada() {
@@ -312,7 +342,8 @@ class VerificadorPermisosBaseDatosTest {
 	@Test
 	void fallaSiFaltaUnTriggerBeforeUpdate() {
 		for (String borrado : List.of("trg_caja_diaria_estado", "trg_pago_anulacion", "trg_cuota_libro",
-				"trg_cierre_caja_revisado", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio")) {
+				"trg_cierre_caja_revisado", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio",
+				"trg_lote_recaudacion_estado", "trg_linea_recaudacion_estado")) {
 			JdbcTemplate mysql = mysqlQueDeniega();
 			when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class)).thenReturn(
 					String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream().filter(t -> !t.equals(borrado))

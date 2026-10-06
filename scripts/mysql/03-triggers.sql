@@ -207,9 +207,12 @@ BEGIN
     END IF;
 END$$
 
--- (Reemplaza la versión del sprint 3.) Un pago nace VIGENTE con su comprobante del mismo total; efectivo solo en caja
--- ABIERTA; el reemplazo, de un pago anulado por CORRECCIÓN; el pago en línea, de una orden CONFIRMADA por la pasarela
--- con ese monto, operación y medio (o, si la orden quedó POR_REVISAR, con la aplicación aprobada).
+-- (Reemplaza la versión del sprint 3; versión final del sprint 4, tanda 2.) Un pago nace VIGENTE con su comprobante del
+-- mismo total; efectivo solo en caja ABIERTA; el reemplazo, de un pago anulado por CORRECCIÓN; el pago en línea, de una
+-- orden CONFIRMADA por la pasarela con ese monto, operación y medio (o, si la orden quedó POR_REVISAR, con la aplicación
+-- aprobada); el pago de recaudación, de SU línea, con el lote ya CONFIRMADO a ciegas por otra persona, por el monto, la
+-- operación y la fecha de la línea, para la familia del alumno del código (o la que aprobó otra persona si la línea
+-- quedó en excepción).
 DROP TRIGGER IF EXISTS trg_pago_registro$$
 CREATE TRIGGER trg_pago_registro BEFORE INSERT ON pago FOR EACH ROW
 BEGIN
@@ -238,6 +241,17 @@ BEGIN
                     WHERE s.tipo = 'APLICAR_INGRESO' AND s.entidad = 'orden_pago' AND s.entidad_id = o.id
                     AND s.estado = 'APROBADA')))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: pago en línea sin la confirmación de la pasarela por ese monto';
+    END IF;
+    IF NEW.origen = 'RECAUDACION' AND NOT EXISTS (SELECT 1 FROM linea_recaudacion l
+            JOIN lote_recaudacion t ON t.id = l.lote_id
+            WHERE l.id = NEW.linea_recaudacion_id AND t.estado IN ('CONFIRMADO', 'APLICADO') AND l.monto = NEW.total
+            AND l.moneda = 'PEN' AND l.numero_operacion = NEW.numero_operacion AND l.fecha_pago = NEW.fecha
+            AND ((l.estado = 'PENDIENTE' AND EXISTS (SELECT 1 FROM alumno a WHERE a.id = l.alumno_id
+                    AND a.familia_id = NEW.familia_id))
+                OR (l.estado = 'EXCEPCION' AND EXISTS (SELECT 1 FROM solicitud_cambio s
+                    WHERE s.tipo = 'APLICAR_INGRESO' AND s.entidad = 'linea_recaudacion' AND s.entidad_id = l.id
+                    AND s.estado = 'APROBADA')))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: pago de recaudación sin su línea confirmada por ese monto';
     END IF;
 END$$
 
@@ -448,8 +462,8 @@ BEGIN
 END$$
 
 -- ===================== Sprint 4 · tanda 1 (V13): pagos en línea y outbox del OSE =====================
--- Tanda 1: trg_pago_registro va en su versión REDUCIDA (sin la rama RECAUDACION: linea_recaudacion y lote_recaudacion
--- llegan con V14). Un trigger que nombra una tabla inexistente hace fallar con 1146 todo INSERT o UPDATE sobre su tabla.
+-- En la tanda 1, trg_pago_registro iba en su versión REDUCIDA (sin la rama RECAUDACION): un trigger que nombra una tabla
+-- inexistente hace fallar con 1146 todo INSERT o UPDATE sobre su tabla. Con V14 (tanda 2) pasa a su versión final.
 
 -- La orden nace CREADA, sin enlace ni confirmación. La pasarela SIMULADA solo existe en una base que el DBA habilitó
 -- (configuracion_bd, sin GRANT para cc_app): en producción esa fila no existe y la orden simulada se rechaza.
@@ -505,6 +519,80 @@ BEGIN
             WHERE s.tipo = 'DEVOLVER_INGRESO' AND s.entidad = 'orden_pago' AND s.entidad_id = NEW.id
             AND s.estado = 'APROBADA' AND s.resuelto_por <> NEW.devuelto_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la devolución necesita su aprobación';
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- ===================== Sprint 4 · tanda 2 (V14): recaudación bancaria =====================
+DELIMITER $$
+
+-- El lote nace CARGADO, sin confirmar, sin aplicar y sin intentos.
+DROP TRIGGER IF EXISTS trg_lote_recaudacion_nace$$
+CREATE TRIGGER trg_lote_recaudacion_nace BEFORE INSERT ON lote_recaudacion FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> 'CARGADO') OR NOT (NEW.intentos_confirmacion <=> 0) OR NOT (NEW.lineas_aplicadas <=> 0)
+            OR NOT (NEW.lineas_excepcion <=> 0) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un lote de recaudación nace CARGADO y sin aplicar';
+    END IF;
+END$$
+
+-- CARGADO → CONFIRMADO | RECHAZADO | DESCARTADO; CONFIRMADO → APLICADO. Los intentos de confirmación a ciegas solo
+-- suben de uno en uno mientras está CARGADO. APLICADO: las líneas suman lo declarado y ninguna quedó PENDIENTE.
+DROP TRIGGER IF EXISTS trg_lote_recaudacion_estado$$
+CREATE TRIGGER trg_lote_recaudacion_estado BEFORE UPDATE ON lote_recaudacion FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> OLD.estado) AND NOT ((OLD.estado = 'CARGADO'
+            AND NEW.estado IN ('CONFIRMADO', 'RECHAZADO', 'DESCARTADO'))
+            OR (OLD.estado = 'CONFIRMADO' AND NEW.estado = 'APLICADO')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: cambio de estado del lote no permitido';
+    END IF;
+    IF NOT (NEW.intentos_confirmacion <=> OLD.intentos_confirmacion) AND (OLD.estado <> 'CARGADO'
+            OR NOT (NEW.intentos_confirmacion <=> OLD.intentos_confirmacion + 1)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los intentos de confirmación no se reescriben';
+    END IF;
+    IF OLD.estado IN ('CONFIRMADO', 'APLICADO') AND (NOT (NEW.confirmado_por <=> OLD.confirmado_por)
+            OR NOT (NEW.confirmado_en <=> OLD.confirmado_en) OR NOT (NEW.total_ciego <=> OLD.total_ciego)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la confirmación del lote no cambia';
+    END IF;
+    IF NEW.estado = 'APLICADO' AND OLD.estado <> 'APLICADO' AND (
+            EXISTS (SELECT 1 FROM linea_recaudacion l WHERE l.lote_id = NEW.id AND l.estado = 'PENDIENTE')
+            OR NOT (NEW.lineas <=> (SELECT COUNT(*) FROM linea_recaudacion l WHERE l.lote_id = NEW.id))
+            OR NOT (NEW.total <=> (SELECT SUM(l.monto) FROM linea_recaudacion l WHERE l.lote_id = NEW.id))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el lote se aplica completo y con sus líneas';
+    END IF;
+END$$
+
+-- Las líneas entran solo con el lote CARGADO, como PENDIENTE y dentro de sus fechas.
+DROP TRIGGER IF EXISTS trg_linea_recaudacion_registro$$
+CREATE TRIGGER trg_linea_recaudacion_registro BEFORE INSERT ON linea_recaudacion FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> 'PENDIENTE') OR NOT EXISTS (SELECT 1 FROM lote_recaudacion t WHERE t.id = NEW.lote_id
+            AND t.estado = 'CARGADO' AND NEW.fecha_pago BETWEEN t.desde AND t.hasta) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la línea entra PENDIENTE a un lote CARGADO';
+    END IF;
+END$$
+
+-- PENDIENTE → APLICADA (con su pago) | EXCEPCION; EXCEPCION → APLICADA_REVISION (con su pago) | DEVUELTA (con la
+-- devolución aprobada por otra persona). Nada más cambia.
+DROP TRIGGER IF EXISTS trg_linea_recaudacion_estado$$
+CREATE TRIGGER trg_linea_recaudacion_estado BEFORE UPDATE ON linea_recaudacion FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> OLD.estado) AND NOT ((OLD.estado = 'PENDIENTE' AND NEW.estado IN ('APLICADA', 'EXCEPCION'))
+            OR (OLD.estado = 'EXCEPCION' AND NEW.estado IN ('APLICADA_REVISION', 'DEVUELTA'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: cambio de estado de la línea no permitido';
+    END IF;
+    IF NEW.estado IN ('APLICADA', 'APLICADA_REVISION') AND NOT (NEW.estado <=> OLD.estado)
+            AND NOT EXISTS (SELECT 1 FROM pago p WHERE p.linea_recaudacion_id = NEW.id AND p.estado = 'VIGENTE') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una línea aplicada necesita su pago';
+    END IF;
+    IF NEW.estado = 'DEVUELTA' AND NOT (NEW.estado <=> OLD.estado) AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s
+            WHERE s.tipo = 'DEVOLVER_INGRESO' AND s.entidad = 'linea_recaudacion' AND s.entidad_id = NEW.id
+            AND s.estado = 'APROBADA' AND s.resuelto_por <> NEW.devuelto_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la devolución necesita su aprobación';
+    END IF;
+    IF OLD.estado <> 'PENDIENTE' AND NOT (NEW.motivo_excepcion <=> OLD.motivo_excepcion) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el motivo de la excepción no cambia';
     END IF;
 END$$
 

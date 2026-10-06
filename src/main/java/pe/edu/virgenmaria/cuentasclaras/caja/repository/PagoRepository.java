@@ -53,6 +53,11 @@ public interface PagoRepository extends Repository<Pago, Long> {
 
 	List<Pago> findByOrdenPagoIdIn(java.util.Collection<Long> ordenes);
 
+	/** El pago de una línea de recaudación (como máximo uno: UNIQUE). */
+	Optional<Pago> findByLineaRecaudacionId(Long lineaRecaudacionId);
+
+	List<Pago> findByLineaRecaudacionIdIn(java.util.Collection<Long> lineas);
+
 	/** Pagos de una caja de canal en un rango de días (ingresos automáticos para Promotoría). */
 	@Query("select p from Pago p where p.caja.canal = :canal and p.fecha = :fecha order by p.id")
 	List<Pago> deCanalEnFecha(@Param("canal") pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja canal,

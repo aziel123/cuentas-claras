@@ -16,6 +16,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.dto.CorreccionVista;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.ResultadoBusqueda;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.AplicacionPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.CausaDevolucion;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.Pago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAnulacion;
@@ -133,7 +134,7 @@ public class ServicioAnulacionPagos {
 	@PreAuthorize("hasRole('SISTEMA_PASARELA')")
 	public void solicitarPorContracargo(Long pagoId, String motivo) {
 		Pago pago = pagos.findById(pagoId).orElseThrow(() -> new RecursoNoEncontradoException("Pago no encontrado"));
-		if (!pago.vigente() || !pago.getCaja().esDeCanal()) {
+		if (!pago.vigente() || pago.getCaja().getCanal() != CanalCaja.PASARELA) {
 			throw new ReglaNegocioException("Solo se pide anular un pago en línea vigente por contracargo.");
 		}
 		String resumen = "Devolver " + descripcion(pago) + " · contracargo de la pasarela";
@@ -244,8 +245,10 @@ public class ServicioAnulacionPagos {
 	 */
 	static void exigirVerificado(Pago pago, VerificacionBancariaRepository verificaciones) {
 		// Sprint 4 (decisión 29): un pago en línea lo confirmó la pasarela con su llave secreta y su reembolso solo vuelve
-		// al mismo medio de origen: se puede anular antes de su liquidación.
-		if (pago.getMedio() != MedioPago.EFECTIVO && !pago.getCaja().esDeCanal()
+		// al mismo medio de origen: se puede anular antes de su liquidación. Un pago por recaudación bancaria, en cambio,
+		// exige la verificación como cualquier digital (su archivo lo cargó una persona).
+		if (pago.getMedio() != MedioPago.EFECTIVO
+				&& pago.getCaja().getCanal() != CanalCaja.PASARELA
 				&& !verificaciones.existsByPagoIdAndResultado(pago.getId(), ResultadoVerificacion.ENCONTRADO)) {
 			throw new ReglaNegocioException("Este pago con " + pago.getMedio().etiqueta() + " todavía no está verificado "
 					+ "en el banco. Administración debe encontrarlo en Conciliación antes de que se pueda anular.");

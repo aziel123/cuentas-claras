@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Confirmar recaudación', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="recaudacion-confirmar" th:with="c=${c}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/recaudacion}">Recaudación bancaria</a></p>
+			<h1>Confirma el archivo mirando el banco</h1>
+			<p class="secundario" th:text="|Lote N.° ${c.id} · ${c.banco} · subido por ${c.subidoPor} el ${#temporals.format(c.subidoEn, 'dd/MM/yyyy HH:mm')}|">Lote</p>
+		</div>
+		<span th:replace="~{fragments/componentes :: badge(${c.estadoEtiqueta}, ${c.porConfirmar()} ? 'alerta' : 'neutro')}"></span>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:unless="${c.porConfirmar()}">
+		<div th:replace="~{fragments/componentes :: alerta('info', 'Este archivo ya no está por confirmar.')}"></div>
+		<p><a class="btn btn-secundario" th:href="@{/recaudacion/lotes/{id}(id=${c.id})}">Ver el lote</a></p>
+	</th:block>
+
+	<th:block th:if="${c.porConfirmar() and c.participaste}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', 'Tú subiste este archivo (o preparaste la cuenta de quien lo subió): debe confirmarlo otra persona de Promotoría o Dirección.')}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-banco" th:if="${c.porConfirmar() and !c.participaste}">
+		<h2 id="titulo-banco">1. Entra al portal de tu banco</h2>
+		<p th:text="|Busca la recaudación del ${#temporals.format(c.desde, 'dd/MM/yyyy')}${c.desde != c.hasta ? ' al ' + #temporals.format(c.hasta, 'dd/MM/yyyy') : ''} (${c.lineas} pagos). Comprueba que estos pagos aparezcan con el mismo código, monto y número de operación:|">Busca la recaudación</p>
+		<table class="tabla" data-seccion="muestra">
+			<caption class="solo-lectores">Pagos elegidos al azar para buscarlos en el banco</caption>
+			<thead><tr><th scope="col">Código</th><th scope="col">Fecha</th><th scope="col" class="num">Monto</th><th scope="col">Operación</th></tr></thead>
+			<tbody>
+				<tr th:each="m : ${c.muestra}">
+					<td data-etiqueta="Código" class="num" th:text="${m.codigo}">1000 0016</td>
+					<td data-etiqueta="Fecha" th:text="${#temporals.format(m.fecha, 'dd/MM/yyyy')}">05/10/2026</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${m.monto})}"></span></td>
+					<td data-etiqueta="Operación" th:text="${m.operacion}">123456</td>
+				</tr>
+			</tbody>
+		</table>
+		<p class="secundario">Si alguno no está en el banco, no confirmes: puede ser un archivo alterado. Avisa a Promotoría y a Dirección.</p>
+	</section>
+
+	<form method="post" class="formulario formulario-angosto tarjeta" th:action="@{/recaudacion/lotes/{id}/confirmar(id=${c.id})}"
+		th:if="${c.porConfirmar() and !c.participaste}" data-formulario="confirmar">
+		<h2>2. Escribe el total que ves en el banco</h2>
+		<input type="hidden" name="version" th:value="${c.version}">
+		<div class="campo">
+			<label for="totalVisto">Total recaudado según el banco (S/)</label>
+			<input type="text" inputmode="decimal" class="input num" id="totalVisto" name="totalVisto" required
+				autocomplete="off" aria-describedby="totalVisto-ayuda">
+			<p class="ayuda" id="totalVisto-ayuda" th:text="|Cópialo del portal del banco (no se muestra aquí a propósito). Con punto decimal, sin comas: 12500.00. Te ${c.intentosRestantes == 1 ? 'queda 1 intento' : 'quedan ' + c.intentosRestantes + ' intentos'}.|">Cópialo del portal del banco.</p>
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Confirmar y aplicar los pagos', 'primario')}"></button>
+	</form>
+</main>
+</body>
+</html>

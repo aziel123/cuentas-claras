@@ -50,6 +50,9 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `reembolso` | INSERT | **Solo inserción** (correcciones del sprint 3): el reembolso de una devolución, por su monto y el medio del pago; no lo registra la cajera del pago (CHECK y trigger) |
 | `triggers_instalados()` (función) | EXECUTE | Nombres de los triggers del esquema (`SQL SECURITY DEFINER`; una vista no sirve porque MySQL 8 filtra `information_schema` con los permisos de quien consulta): el arranque en prod comprueba que estén todos |
 | `apoderado` (RUC) | (INSERT, UPDATE de la fila) | El RUC y la razón social solo cambian con SU solicitud `DATOS_FACTURACION` aprobada (trigger) |
+| `archivo_cargado` | INSERT | **Solo inserción** (sprint 4, tanda 2): el archivo original del banco, con su SHA-256, es evidencia (1142) |
+| `lote_recaudacion` | INSERT y UPDATE **solo** de estado, confirmación a ciegas, intentos, aplicación y rechazo | El archivo, su SHA-256, el banco, las fechas, la cantidad de líneas y el total no cambian (1143). Lo confirma otra persona con el total a ciegas igual al del archivo (CHECK); los intentos solo suben de uno en uno y se aplica completo (trigger) |
+| `linea_recaudacion` | INSERT y UPDATE **solo** de estado, motivo de la excepción y devolución | Monto, fecha, código, alumno, cuota y operación no cambian (1143); entra PENDIENTE a un lote CARGADO y en sus fechas; APLICADA exige su pago; DEVUELTA exige la devolución aprobada por otra persona (trigger) |
 
 ## Triggers (paso 3, después de los permisos)
 Los aplica `cc_migrador` (no van en Flyway: H2 no los soporta):
@@ -184,6 +187,11 @@ inserción); `INSERT` o `UPDATE` sobre `configuracion_bd` da 1142 (la escribe so
 monto`, `UPDATE evento_pasarela SET orden_pago_id = orden_pago_id`, `UPDATE caja_diaria SET canal = canal`, `UPDATE pago
 SET orden_pago_id = orden_pago_id` y `UPDATE comprobante SET reemplaza_id = reemplaza_id` dan 1143; una orden que nace
 PAGADA, una cuota de una orden inexistente y (sin la fila del DBA) una orden de la pasarela `SIMULADA` dan 1644.
+Sprint 4, tanda 2 (V14, recaudación bancaria): `DELETE` sobre `archivo_cargado`, `lote_recaudacion` y
+`linea_recaudacion` da 1142; `UPDATE archivo_cargado SET version = version` da 1142 (solo inserción); `UPDATE
+lote_recaudacion SET total = total`, `UPDATE linea_recaudacion SET monto = monto` y `UPDATE pago SET
+linea_recaudacion_id = linea_recaudacion_id` dan 1143; un lote que nace APLICADO y una línea de un lote inexistente dan
+1644. `trg_pago_registro` pasa a su versión final (con la rama RECAUDACION): 35 triggers en total.
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

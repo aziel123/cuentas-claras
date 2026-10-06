@@ -98,6 +98,10 @@ public class LibroPagos {
 	public Pago registrar(CajaDiaria caja, Familia familia, OrdenCobro orden) {
 		Objects.requireNonNull(caja, "caja");
 		Objects.requireNonNull(familia, "familia");
+		if (orden.medio() != null && !orden.medio().enVentanilla()) {
+			throw new ReglaNegocioException("Un pago por banco con el código del alumno no se registra en caja: lo registra "
+					+ "el sistema con el archivo de recaudación del banco.");
+		}
 		List<Long> ids = orden.cuotaIds().stream().filter(Objects::nonNull).distinct().sorted().toList();
 		if (ids.isEmpty()) {
 			throw new ReglaNegocioException("Elige al menos una cuota.");
@@ -214,27 +218,53 @@ public class LibroPagos {
 	public Pago registrarEnCanal(CajaDiaria canal, Familia familia, List<Cuota> bloqueadas, MedioPago medio,
 			String operacion, BigDecimal monto, boolean aCuenta, DatosComprobante datos, Long ordenPagoId, UUID clave,
 			LocalDate fechaComprobante, String detalleExtra) {
+		return registrarEnCanal(canal, familia, bloqueadas, monto, aCuenta, datos, fechaComprobante,
+				(comprobante, importe) -> Pago.dePasarela(canal, familia, comprobante, medio, operacion, importe, aCuenta,
+						ordenPagoId, clave),
+				" Pago en línea (" + canal.getCanal().etiqueta() + ", orden " + ordenPagoId + ")."
+						+ (detalleExtra == null ? "" : " " + detalleExtra));
+	}
+
+	/**
+	 * Sprint 4, tanda 2: pago que la familia hizo en el banco con el código del alumno, en la caja del canal RECAUDACION
+	 * de la fecha de pago (ya bloqueada) y con las cuotas del alumno ya bloqueadas (por id) por quien llama. El monto y la
+	 * operación son los de SU línea del archivo; la boleta sale a nombre del responsable de pago, con la fecha de hoy.
+	 * Mismas reglas, imputación (de la cuota que vence primero a la última), comprobante y bitácora que en ventanilla.
+	 * En MySQL, trg_pago_registro exige que la línea sea de un lote ya CONFIRMADO a ciegas por otra persona.
+	 *
+	 * @param aCuenta el monto no cubre todas las cuotas (pago parcial: queda a cuenta y resaltado)
+	 */
+	public Pago registrarRecaudacion(CajaDiaria canal, Familia familia, List<Cuota> bloqueadas, String operacion,
+			BigDecimal monto, boolean aCuenta, DatosComprobante datos, Long lineaRecaudacionId, UUID clave,
+			LocalDate fechaComprobante, String detalleExtra) {
+		return registrarEnCanal(canal, familia, bloqueadas, monto, aCuenta, datos, fechaComprobante,
+				(comprobante, importe) -> Pago.deRecaudacion(canal, familia, comprobante, operacion, importe, aCuenta,
+						lineaRecaudacionId, clave),
+				" Pago en el banco con el código del alumno (" + canal.getCanal().etiqueta() + ", línea "
+						+ lineaRecaudacionId + ")." + (detalleExtra == null ? "" : " " + detalleExtra));
+	}
+
+	private Pago registrarEnCanal(CajaDiaria canal, Familia familia, List<Cuota> bloqueadas, BigDecimal monto,
+			boolean aCuenta, DatosComprobante datos, LocalDate fechaComprobante,
+			java.util.function.BiFunction<Comprobante, BigDecimal, Pago> nuevoPago, String detalle) {
 		Objects.requireNonNull(canal, "canal");
 		Objects.requireNonNull(familia, "familia");
 		if (bloqueadas == null || bloqueadas.isEmpty()) {
-			throw new IllegalArgumentException("El pago en línea necesita sus cuotas");
+			throw new IllegalArgumentException("El pago automático necesita sus cuotas");
 		}
 		bloqueadas.forEach(c -> exigirCobrable(c, familia));
 		BigDecimal debe = Dinero.sumar(bloqueadas.stream().map(Cuota::saldo).toList());
-		BigDecimal importe = Dinero.positivo(monto, "el monto del pago en línea");
+		BigDecimal importe = Dinero.positivo(monto, "el monto del pago automático");
 		if (importe.compareTo(debe) > 0 || (!aCuenta && importe.compareTo(debe) != 0)) {
-			throw new IllegalStateException("El monto del pago en línea no corresponde al saldo de sus cuotas");
+			throw new IllegalStateException("El monto del pago automático no corresponde al saldo de sus cuotas");
 		}
 		List<Imputacion> imputaciones = imputar(importe, bloqueadas);
 		Receptor receptor = receptor(datos, familia, bloqueadas);
 		Comprobante comprobante = comprobantes.emitir(datos.tipo(), receptor, fechaComprobante,
 				lineas(imputaciones, bloqueadas));
-		Pago pago = pagos.save(Pago.dePasarela(canal, familia, comprobante, medio, operacion, importe, aCuenta,
-				ordenPagoId, clave));
+		Pago pago = pagos.save(nuevoPago.apply(comprobante, importe));
 		List<String> detalleCuotas = aplicar(pago, imputaciones, bloqueadas);
-		auditar(AccionAuditoria.PAGO_REGISTRADO, pago, comprobante, receptor, detalleCuotas,
-				" Pago en línea (" + canal.getCanal().etiqueta() + ", orden " + ordenPagoId + ")."
-						+ (detalleExtra == null ? "" : " " + detalleExtra));
+		auditar(AccionAuditoria.PAGO_REGISTRADO, pago, comprobante, receptor, detalleCuotas, detalle);
 		eventos.publishEvent(new PagoRegistrado(pago.getId()));
 		return pago;
 	}

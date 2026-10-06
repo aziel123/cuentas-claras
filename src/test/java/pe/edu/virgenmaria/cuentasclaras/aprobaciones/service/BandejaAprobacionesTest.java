@@ -107,13 +107,25 @@ class BandejaAprobacionesTest {
 		LimpiezaBaseDatos.limpiar(jdbc);
 	}
 
+	/**
+	 * Cada tipo tiene un solo manejador por entidad: o uno general (sin entidad) o uno por cada entidad que lo usa (sprint
+	 * 4: APLICAR_INGRESO y DEVOLVER_INGRESO de una orden de pago en línea o de una línea de recaudación).
+	 */
 	@Test
 	void cadaTipoDeSolicitudTieneUnSoloManejador() {
-		Map<TipoSolicitud, Long> porTipo = new TransactionTemplate(transacciones).execute(estado -> manejadores.stream()
-				.collect(java.util.stream.Collectors.groupingBy(ManejadorSolicitud::tipo,
-						java.util.stream.Collectors.counting())));
-		assertThat(porTipo).hasSize(TipoSolicitud.values().length).allSatisfy((tipo, cantidad) ->
-				assertThat(cantidad).as(tipo.name()).isEqualTo(1L));
+		Map<TipoSolicitud, List<String>> porTipo = new TransactionTemplate(transacciones).execute(estado ->
+				manejadores.stream().collect(java.util.stream.Collectors.groupingBy(ManejadorSolicitud::tipo,
+						java.util.stream.Collectors.mapping(m -> String.valueOf(m.entidad()),
+								java.util.stream.Collectors.toList()))));
+		assertThat(porTipo).hasSize(TipoSolicitud.values().length).allSatisfy((tipo, entidades) -> {
+			assertThat(entidades).as(tipo.name()).doesNotHaveDuplicates();
+			if (entidades.size() > 1) {
+				assertThat(entidades).as(tipo.name()).doesNotContain("null");
+			}
+		});
+		assertThat(porTipo.get(TipoSolicitud.APLICAR_INGRESO)).containsExactlyInAnyOrder("orden_pago", "linea_recaudacion");
+		assertThat(porTipo.get(TipoSolicitud.DEVOLVER_INGRESO)).containsExactlyInAnyOrder("orden_pago",
+				"linea_recaudacion");
 	}
 
 	/** A6: antes, Administración retiraba sola al alumno (y con él, todo lo que debía de ahí en adelante). */

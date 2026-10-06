@@ -29,6 +29,8 @@ import java.util.stream.Collectors;
  *   <li>que están TODOS los triggers de {@code scripts/mysql/03-triggers.sql} (correcciones del sprint 3, M2), también
  *       los BEFORE UPDATE, que no se pueden probar con un INSERT imposible: llama a la función
  *       {@code cuentasclaras.triggers_instalados()} (02-permisos-tablas.sql) y la compara con {@link #TRIGGERS_ESPERADOS};</li>
+ *   <li>que los pagos en línea (sprint 4, tanda 1) y la recaudación bancaria (tanda 2) tienen sus GRANT por columna, sus
+ *       tablas de solo inserción y sus triggers;</li>
  *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes).</li>
  * </ul>
  * Si algo falla, la aplicación NO arranca. No hay interruptor para saltarse esta comprobación.
@@ -157,7 +159,22 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			columna("UPDATE comprobante SET reemplaza_id = reemplaza_id WHERE 1 = 0", "comprobante"),
 			trigger(ordenImposible("CULQI", "PAGADA"), "trg_orden_pago_nace"),
 			trigger("INSERT INTO orden_pago_cuota (colegio_id, orden_pago_id, cuota_id, monto, creado_en, creado_por, "
-					+ "actualizado_en) VALUES (0, 0, 0, 1, NOW(6), 'verificador', NOW(6))", "trg_orden_pago_cuota_registro"));
+					+ "actualizado_en) VALUES (0, 0, 0, 1, NOW(6), 'verificador', NOW(6))", "trg_orden_pago_cuota_registro"),
+			// Sprint 4, tanda 2 (recaudación bancaria): el archivo del banco es de solo inserción; los lotes y sus líneas no
+			// se borran; el total del lote, el monto de la línea y la línea de un pago no cambian; y cada trigger nuevo
+			// rechaza su inserción imposible (un lote que nace APLICADO y una línea de un lote que no existe).
+			sinBorrado("archivo_cargado"), sinBorrado("lote_recaudacion"), sinBorrado("linea_recaudacion"),
+			soloInsercion("archivo_cargado"),
+			columna("UPDATE lote_recaudacion SET total = total WHERE 1 = 0", "lote_recaudacion"),
+			columna("UPDATE linea_recaudacion SET monto = monto WHERE 1 = 0", "linea_recaudacion"),
+			columna("UPDATE pago SET linea_recaudacion_id = linea_recaudacion_id WHERE 1 = 0", "pago"),
+			trigger("INSERT INTO lote_recaudacion (colegio_id, archivo_id, archivo_sha256, sha_vigente, banco, formato, "
+					+ "fecha_proceso, desde, hasta, lineas, total, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, "
+					+ "REPEAT('0', 64), REPEAT('0', 64), 'BCP', 'verificador', '2000-01-01', '2000-01-01', '2000-01-01', 1, 1, "
+					+ "'APLICADO', NOW(6), 'verificador', NOW(6))", "trg_lote_recaudacion_nace"),
+			trigger("INSERT INTO linea_recaudacion (colegio_id, lote_id, numero, fecha_pago, codigo, monto, moneda, "
+					+ "numero_operacion, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 1, '2000-01-01', '0', 1, "
+					+ "'PEN', '1234', 'PENDIENTE', NOW(6), 'verificador', NOW(6))", "trg_linea_recaudacion_registro"));
 
 	/** Solo en prod: la base no admite órdenes de la pasarela simulada (sin la fila 'pasarela_simulada'). */
 	static final SentenciaProhibida ORDEN_SIMULADA = new SentenciaProhibida(ordenImposible("SIMULADA", "CREADA"),
@@ -185,7 +202,9 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_anulacion_pago_registro", "trg_ajuste_cuota_registro", "trg_descuento_nace", "trg_descuento_resuelto",
 			"trg_cierre_caja_registro", "trg_cierre_caja_revisado", "trg_verificacion_bancaria_registro",
 			"trg_reembolso_registro", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio", "trg_apoderado_nace",
-			"trg_apoderado_facturacion", "trg_orden_pago_nace", "trg_orden_pago_cuota_registro", "trg_orden_pago_estado");
+			"trg_apoderado_facturacion", "trg_orden_pago_nace", "trg_orden_pago_cuota_registro", "trg_orden_pago_estado",
+			"trg_lote_recaudacion_nace", "trg_lote_recaudacion_estado", "trg_linea_recaudacion_registro",
+			"trg_linea_recaudacion_estado");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 

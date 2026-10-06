@@ -124,6 +124,16 @@ cuentasclaras:
       webhook-clave: ${PASARELA_WEBHOOK_CLAVE:}
     simulada:
       secreto-aviso: ${PASARELA_SIMULADA_SECRETO:}
+  recaudacion:
+    # Archivo del banco con los pagos hechos con el código del alumno (sprint 4, tanda 2). GENERICO: el formato CSV o
+    # XLSX del colegio, hasta tener el adaptador del banco (se construye con un archivo de ejemplo anonimizado).
+    banco: GENERICO
+    modalidad: CON_BASE_DE_DEUDAS    # CON_BASE_DE_DEUDAS (cuota exacta) | SIN_BASE (de la cuota más antigua a la nueva)
+    intentos-confirmacion: 2         # totales a ciegas distintos antes de RECHAZAR el lote
+    aceptar-parciales: true          # el dinero ya está en el banco: se aplica a cuenta y se resalta
+    lineas-por-transaccion: 50
+    maximo-lineas: 2000
+    muestreo: 3                      # líneas al azar que quien confirma busca en el portal del banco
   auditoria:
     # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
     # aplicación no arranca. Nunca en el código: va en el gestor de secretos.

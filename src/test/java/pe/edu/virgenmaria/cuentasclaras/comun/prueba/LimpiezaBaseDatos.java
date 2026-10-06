@@ -30,6 +30,10 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM aplicacion_pago");
 		jdbc.update("DELETE FROM pago WHERE reemplaza_pago_id IS NOT NULL");
 		jdbc.update("DELETE FROM pago");
+		// Sprint 4 (tanda 2): recaudación bancaria, después del pago que enlaza su línea; el archivo, después del lote.
+		jdbc.update("DELETE FROM linea_recaudacion");
+		jdbc.update("DELETE FROM lote_recaudacion");
+		jdbc.update("DELETE FROM archivo_cargado");
 		// Sprint 4 (tanda 1): pagos en línea, después del pago que enlaza su orden.
 		jdbc.update("DELETE FROM evento_pasarela");
 		jdbc.update("DELETE FROM orden_pago_cuota");

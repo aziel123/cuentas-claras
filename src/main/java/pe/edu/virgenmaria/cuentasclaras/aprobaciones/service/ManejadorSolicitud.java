@@ -22,6 +22,15 @@ public interface ManejadorSolicitud {
 
 	TipoSolicitud tipo();
 
+	/**
+	 * La entidad que resuelve, si un mismo tipo lo resuelven varios módulos (sprint 4: {@code APLICAR_INGRESO} de una
+	 * orden de pago en línea lo resuelve {@code pasarela} y el de una línea de recaudación, {@code recaudacion}). Por
+	 * defecto {@code null}: es el único manejador de su tipo.
+	 */
+	default String entidad() {
+		return null;
+	}
+
 	void aplicar(SolicitudCambio solicitud, String aprobador);
 
 	/** Igual que {@link #aplicar(SolicitudCambio, String)}, con el comentario de quien aprueba (puede ser null). */

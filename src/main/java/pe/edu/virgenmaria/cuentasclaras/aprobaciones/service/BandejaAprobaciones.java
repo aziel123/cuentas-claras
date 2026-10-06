@@ -65,7 +65,7 @@ public class BandejaAprobaciones {
 		String usuario = usuario();
 		return new BandejaVista(
 				solicitudes.findByEstadoOrderByIdAsc(EstadoSolicitud.PENDIENTE).stream()
-						.sorted(Comparator.comparingInt((SolicitudCambio s) -> manejadorDe(s.getTipo()).prioridad(s)))
+						.sorted(Comparator.comparingInt((SolicitudCambio s) -> manejadorDe(s).prioridad(s)))
 						.map(s -> vista(s, usuario, true)).toList(),
 				solicitudes.findTop30ByEstadoNotOrderByResueltoEnDescIdDesc(EstadoSolicitud.PENDIENTE).stream()
 						.map(s -> vista(s, usuario, false)).toList(),
@@ -88,7 +88,7 @@ public class BandejaAprobaciones {
 		SolicitudCambio solicitud = pendiente(id);
 		String usuario = usuario();
 		exigirOtraPersona(solicitud, usuario, "aprobar");
-		ManejadorSolicitud manejador = manejadorDe(solicitud.getTipo());
+		ManejadorSolicitud manejador = manejadorDe(solicitud);
 		String llamadas = confirmarLlamadas(manejador, solicitud, hablo, telefonos);
 		solicitud.aprobar(usuario, comentario, ahora());
 		solicitudes.saveAndFlush(solicitud);
@@ -121,17 +121,20 @@ public class BandejaAprobaciones {
 		String usuario = usuario();
 		exigirOtraPersona(solicitud, usuario, "rechazar");
 		solicitud.rechazar(usuario, motivo, ahora());
-		manejadorDe(solicitud.getTipo()).alRechazar(solicitud);
+		manejadorDe(solicitud).alRechazar(solicitud);
 		solicitudes.saveAndFlush(solicitud);
 		auditoria.registrar(AccionAuditoria.SOLICITUD_RECHAZADA, "solicitud_cambio", id.toString(),
 				EstadoSolicitud.PENDIENTE.name(), EstadoSolicitud.RECHAZADA.name(), solicitud.getTipo().etiqueta() + ": "
 						+ solicitud.getResumen() + ". Motivo del rechazo: " + solicitud.getComentario());
 	}
 
-	private ManejadorSolicitud manejadorDe(TipoSolicitud tipo) {
-		List<ManejadorSolicitud> delTipo = manejadores.stream().filter(m -> m.tipo() == tipo).toList();
+	/** El manejador del tipo (y, si el tipo lo comparten varios módulos, el de la entidad de la solicitud). */
+	private ManejadorSolicitud manejadorDe(SolicitudCambio solicitud) {
+		List<ManejadorSolicitud> delTipo = manejadores.stream().filter(m -> m.tipo() == solicitud.getTipo())
+				.filter(m -> m.entidad() == null || m.entidad().equals(solicitud.getEntidad())).toList();
 		if (delTipo.size() != 1) {
-			throw new IllegalStateException(delTipo.size() + " manejadores para " + tipo);
+			throw new IllegalStateException(delTipo.size() + " manejadores para " + solicitud.getTipo() + " de "
+					+ solicitud.getEntidad());
 		}
 		return delTipo.getFirst();
 	}
@@ -150,7 +153,7 @@ public class BandejaAprobaciones {
 	private Set<String> participantesDe(SolicitudCambio solicitud) {
 		Set<String> autores = new LinkedHashSet<>();
 		autores.add(solicitud.getSolicitadoPor());
-		autores.addAll(manejadorDe(solicitud.getTipo()).involucrados(solicitud));
+		autores.addAll(manejadorDe(solicitud).involucrados(solicitud));
 		return participantes.ampliar(autores);
 	}
 
@@ -168,7 +171,7 @@ public class BandejaAprobaciones {
 
 	private SolicitudVista vista(SolicitudCambio s, String usuario, boolean conDetalle) {
 		boolean puede = s.estaPendiente() && !participantesDe(s).contains(usuario);
-		ManejadorSolicitud manejador = conDetalle ? manejadorDe(s.getTipo()) : null;
+		ManejadorSolicitud manejador = conDetalle ? manejadorDe(s) : null;
 		return new SolicitudVista(s.getId(), s.getTipo().name(), s.getTipo().etiqueta(), s.getResumen(), s.getMotivo(),
 				s.getEstado().name(), s.getEstado().etiqueta(), s.getEstado().variante(), s.getSolicitadoPor(),
 				s.getCreadoEn(), s.getResueltoPor(), s.getResueltoEn(), s.getComentario(), puede,

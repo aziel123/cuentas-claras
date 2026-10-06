@@ -84,6 +84,10 @@ public class Pago extends BaseEntity {
 	@Column(name = "orden_pago_id", updatable = false)
 	private Long ordenPagoId;
 
+	/** Sprint 4, tanda 2: la línea del archivo del banco de la que nace (una por línea: UNIQUE). No cambia. */
+	@Column(name = "linea_recaudacion_id", updatable = false)
+	private Long lineaRecaudacionId;
+
 	@Column(name = "clave_idempotencia", nullable = false, updatable = false, length = 36)
 	private String claveIdempotencia;
 
@@ -113,6 +117,10 @@ public class Pago extends BaseEntity {
 		Objects.requireNonNull(clave, "clave");
 		if (caja.esDeCanal()) {
 			throw new IllegalArgumentException("Una persona no cobra en la caja de un canal automático");
+		}
+		if (!medio.enVentanilla()) {
+			throw new ReglaNegocioException("Un pago por banco con el código del alumno no se registra en caja: lo registra "
+					+ "el sistema con el archivo de recaudación del banco.");
 		}
 		Pago pago = new Pago();
 		pago.familia = Objects.requireNonNull(familia, "familia");
@@ -217,6 +225,39 @@ public class Pago extends BaseEntity {
 		return pago;
 	}
 
+	/**
+	 * Pago por recaudación bancaria (sprint 4, tanda 2): lo registra {@code sistema.recaudacion} en la caja del canal
+	 * RECAUDACION de la fecha de pago en el banco, con el monto y la operación de SU línea. En MySQL, trg_pago_registro
+	 * exige que la línea sea de un lote CONFIRMADO a ciegas, por ese monto, operación y fecha, y de la familia del alumno
+	 * del código (o una aplicación aprobada si la línea quedó en excepción).
+	 */
+	public static Pago deRecaudacion(CajaDiaria canal, Familia familia, Comprobante comprobante, String operacion,
+			BigDecimal total, boolean aCuenta, Long lineaRecaudacionId, UUID clave) {
+		Objects.requireNonNull(canal, "canal");
+		if (canal.getCanal() != CanalCaja.RECAUDACION) {
+			throw new IllegalArgumentException("Un pago por banco entra a la caja del canal RECAUDACION");
+		}
+		Pago pago = new Pago();
+		pago.familia = Objects.requireNonNull(familia, "familia");
+		pago.caja = canal;
+		pago.cajero = canal.getCajero();
+		pago.fecha = canal.getFecha();
+		pago.comprobante = Objects.requireNonNull(comprobante, "comprobante");
+		pago.medio = MedioPago.RECAUDACION_BANCARIA;
+		pago.total = Dinero.positivo(total, "el total del pago");
+		if (comprobante.getTipo() == TipoComprobante.NOTA_CREDITO || !Dinero.iguales(comprobante.getTotal(), pago.total)) {
+			throw new IllegalStateException("El pago necesita su boleta o factura por el mismo total");
+		}
+		pago.numeroOperacion = Objects.requireNonNull(operacion, "operacion");
+		pago.operacionVigente = operacion;
+		pago.aCuenta = aCuenta;
+		pago.origen = OrigenPago.RECAUDACION;
+		pago.lineaRecaudacionId = Objects.requireNonNull(lineaRecaudacionId, "lineaRecaudacionId");
+		pago.claveIdempotencia = Objects.requireNonNull(clave, "clave").toString();
+		pago.estado = EstadoPago.VIGENTE;
+		return pago;
+	}
+
 	/** Solo con la anulación aprobada ya registrada (en MySQL lo exige un trigger). Libera el número de operación. */
 	public void anular() {
 		if (estado != EstadoPago.VIGENTE) {
@@ -289,6 +330,10 @@ public class Pago extends BaseEntity {
 
 	public Long getOrdenPagoId() {
 		return ordenPagoId;
+	}
+
+	public Long getLineaRecaudacionId() {
+		return lineaRecaudacionId;
 	}
 
 	public String getClaveIdempotencia() {

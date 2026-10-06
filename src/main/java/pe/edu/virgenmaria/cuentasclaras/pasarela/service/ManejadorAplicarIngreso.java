@@ -59,6 +59,11 @@ public class ManejadorAplicarIngreso implements ManejadorSolicitud {
 	}
 
 	@Override
+	public String entidad() {
+		return ServicioIngresosPorRevisar.ENTIDAD;
+	}
+
+	@Override
 	public TipoSolicitud tipo() {
 		return TipoSolicitud.APLICAR_INGRESO;
 	}

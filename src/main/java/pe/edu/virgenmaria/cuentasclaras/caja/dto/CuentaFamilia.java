@@ -34,7 +34,7 @@ public record CuentaFamilia(Long familiaId, String familia, List<AlumnoCuotas> a
 
 	/** Los medios de pago en el orden de la pantalla. */
 	public List<MedioPago> medios() {
-		return List.of(MedioPago.values());
+		return java.util.Arrays.stream(MedioPago.values()).filter(MedioPago::enVentanilla).toList();
 	}
 
 	/** Sprint 4 (decisión 7): hay un pago en línea iniciado para alguna de estas cuotas; caja lo ve pero no se bloquea. */

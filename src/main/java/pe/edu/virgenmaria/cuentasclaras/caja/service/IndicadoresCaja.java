@@ -70,8 +70,8 @@ public class IndicadoresCaja implements IndicadoresInicio {
 		List<Pago> enLinea = vigentes.stream().filter(p -> p.getCaja().esDeCanal()).toList();
 		return List.of(
 				new Indicador("Cobrado hoy", Dinero.formatear(total), vigentes.size() + " pago(s)"),
-				new Indicador("Entró solo (en línea)", Dinero.formatear(Dinero.sumar(enLinea.stream().map(Pago::getTotal)
-						.toList())), enLinea.size() + " pago(s) sin que nadie digite"),
+				new Indicador("Entró solo (en línea y por banco)", Dinero.formatear(Dinero.sumar(enLinea.stream()
+						.map(Pago::getTotal).toList())), enLinea.size() + " pago(s) sin que nadie digite"),
 				new Indicador("Efectivo", Dinero.formatear(enEfectivo), efectivo.size() + " pago(s)"),
 				new Indicador("Digital", Dinero.formatear(Dinero.normalizar(digital)), porcentaje + " % del total"),
 				new Indicador("Cajas", abiertas + " abierta(s) · " + cerradas + " cerrada(s)",

@@ -62,6 +62,22 @@ public interface CuotaRepository extends Repository<Cuota, Long> {
 			+ "pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PARCIAL)")
 	List<Cuota> porPagarDeAlumnos(@Param("alumnos") Collection<Long> alumnoIds);
 
+	/**
+	 * Ids de las cuotas por pagar (PENDIENTE o PARCIAL) de UN alumno, de la más antigua a la más nueva. Solo ids: se
+	 * cargan después con {@link #bloquear} (así la primera lectura es la bloqueada). Recaudación bancaria (sprint 4).
+	 */
+	@Query("select c.id from Cuota c where c.alumno.id = :alumno "
+			+ "and c.estado in (pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PENDIENTE, "
+			+ "pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PARCIAL) order by c.fechaVencimiento, c.id")
+	List<Long> idsPorPagarDeAlumno(@Param("alumno") Long alumnoId);
+
+	/** Todas las cuotas por pagar del colegio, por alumno y vencimiento (base de deudas para el banco, sprint 4). */
+	@Query("select c from Cuota c join fetch c.alumno a where "
+			+ "c.estado in (pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PENDIENTE, "
+			+ "pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PARCIAL) "
+			+ "order by a.apellidoPaterno, a.id, c.fechaVencimiento, c.id")
+	List<Cuota> porPagar();
+
 	List<Cuota> findByLineaSaldoInicialIdIn(Collection<Long> lineas);
 
 	/** Matrículas activas del año, de esos grados, que aún no tienen cuotas de matrícula ni de pensión. */
