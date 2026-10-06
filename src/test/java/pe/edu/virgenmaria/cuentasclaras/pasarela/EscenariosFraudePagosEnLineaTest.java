@@ -198,6 +198,7 @@ class EscenariosFraudePagosEnLineaTest {
 	void unAvisoConFirmaFalsaSeRechaza() {
 		String referencia = iniciarPago(List.of(cuota(jdbc, f.mateo(), "PEN-2027-03")));
 		byte[] cuerpo = ("evento=FALSO1&tipo=orden.pagada&referencia=" + referencia).getBytes();
+		long eventosAntes = contar(jdbc, "evento_auditoria");
 
 		assertThat(recepcion.recibir("SIMULADA", 1L, cuerpo, Map.of(PasarelaSimulada.CABECERA_FIRMA, "00ff")))
 				.isEqualTo(RecepcionAvisos.Resultado.NO_AUTENTICO);
@@ -205,6 +206,8 @@ class EscenariosFraudePagosEnLineaTest {
 		assertThat(orden(referencia)).containsEntry("estado", "CREADA");
 		assertThat(contar(jdbc, "pago")).isZero();
 		assertThat(contar(jdbc, "evento_pasarela")).isZero();
+		// F21: los avisos no auténticos no escriben en la bitácora (no se puede llenar inundando el webhook).
+		assertThat(contar(jdbc, "evento_auditoria")).isEqualTo(eventosAntes);
 	}
 
 	/** Un aviso auténtico basta para despertar al sistema, pero lo que cuenta es la CONSULTA a la pasarela. */

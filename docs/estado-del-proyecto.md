@@ -11,15 +11,16 @@
 | 1 · Fundaciones (seguridad, roles, auditoría) | ✅ Terminado, auditado y corregido | `claude/sprint-1-fundaciones` | 317 |
 | 2 · Datos del colegio (alumnos, Excel, pensiones, saldo inicial) | ✅ Terminado, auditado y corregido | `claude/sprint-2-datos-colegio` | 713 |
 | 3 · Caja (pagos, comprobantes, anulaciones, descuentos, cierre ciego, conciliación) | ✅ Terminado, auditado y corregido | `claude/sprint-3-correcciones` | 967 |
-| 4 · Cero digitación (pago en línea, comprobante automático, recaudación bancaria, conciliación automática) | Implementado en 3 tandas; falta la auditoría y sus correcciones | `claude/sprint-4-cero-digitacion` | 1175 |
+| 4 · Cero digitación (pago en línea, comprobante automático, recaudación bancaria, conciliación automática) | ✅ Terminado, auditado y corregido | `claude/sprint-4-cero-digitacion` | 1429 |
 
-El sprint 4 se implementó en 3 tandas verificadas, cada una con su migración y probada también contra MySQL 8 real:
+El sprint 4 se implementó en 3 tandas verificadas, cada una con su migración y probada también contra MySQL 8 real, y luego se corrigió todo lo que encontraron la auditoría antifraude y QA:
 
 | Tanda | Qué trae | Migración | Pruebas al cerrarla |
 |---|---|---|---|
 | 1 | Comprobante automático (envío al OSE con reintentos) y pago en línea con la pasarela simulada | V13 | 1026 |
 | 2 | Recaudación bancaria: archivo del banco confirmado a ciegas y aplicado por el sistema | V14 | 1101 |
 | 3 | Extracto bancario encadenado y conciliación automática | V15 | 1175 (44 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL`) |
+| Correcciones | Los 11 hallazgos de la auditoría y los 6 de QA (`docs/arquitectura/sprint-4-correcciones.md`) | V16 | 1429 (46 de MySQL real) |
 
 Las ramas están **apiladas**: cada una parte de la anterior y contiene todo su trabajo. La más completa es `claude/sprint-4-cero-digitacion`. Ninguna está unida a `main` todavía. El CI de GitHub solo corre en `main` y en los PR, así que se ejecutará por primera vez cuando se abra el PR. Todas las pruebas, incluidas las de MySQL 8 real, se corrieron localmente durante el desarrollo.
 
@@ -61,18 +62,20 @@ Los diseños están en `docs/arquitectura/`.
 
 ### Cero digitación (sprint 4)
 Todo lo que entra lo registra un actor de sistema (`sistema.pasarela`, `sistema.recaudacion`), nunca una persona, y el dinero solo cuenta cuando lo confirma una fuente independiente de quien lo carga.
-- **Pago en línea** de los padres (Yape, Plin o tarjeta) con la pasarela simulada: el pago se registra solo cuando la consulta a la pasarela lo confirma, con su boleta. La simulada no puede marcar pagos en producción.
+- **Pago en línea** de los padres (Yape, Plin o tarjeta) con la pasarela simulada: el pago se registra solo cuando la consulta a la pasarela lo confirma, con su boleta. La simulada no puede marcar pagos en producción, y en el piloto sus pagos quedan por revisar sin tocar las cuotas (franja «PILOTO» en todas las páginas).
+- **Cuenta en línea del apoderado:** nadie ve su clave. Quien la crea entrega un enlace de un solo uso que vence en 48 horas, con el que el apoderado elige su clave. Solo Promotoría restablece el acceso. La activación queda en la bitácora con su IP.
 - **Comprobante automático**: cola de envío al OSE (simulado por ahora) con reintentos y alerta antes del plazo legal. Un comprobante rechazado se reemite con número nuevo, sin huecos.
 - **Recaudación bancaria**: Administración sube el archivo del banco; otra persona escribe a ciegas el total que ve en el banco y recién entonces el sistema aplica los pagos. Lo que no cuadra queda por revisar y lo resuelve otra persona.
 - **Extracto y conciliación automática** (tanda 3):
   - Administración sube el extracto del banco (CSV o Excel en formato genérico; los formatos de cada banco se agregan como adaptadores). Se guarda el archivo original con su SHA-256.
   - Cada extracto **continúa al anterior**: empieza el día siguiente y con su saldo final. Un día ya cargado que vuelve distinto se rechaza y alerta a Promotoría («el banco no cambia el pasado»).
-  - Promotoría o Dirección **escribe a ciegas el saldo final** que ve en su app del banco. Quien subió el extracto no lo confirma. Dos saldos que no coinciden dejan el extracto RECHAZADO.
-  - El sistema empareja cada movimiento con los pagos digitales de caja, los depósitos, las liquidaciones de la pasarela (netas de comisión e IGV) y los abonos de la recaudación. Las parejas **exactas** (misma operación y monto) se confirman solas; las **sugeridas** las confirma alguien de Administración que no cobró, no depositó ni subió el lote.
+  - Promotoría o Dirección **escribe a ciegas el saldo final** de cada extracto que ve en su app del banco. Mientras espera, nadie ve sus montos, y la muestra que se compara es fija y sin montos. Quien subió el extracto no lo confirma. Dos saldos que no coinciden dejan el extracto RECHAZADO.
+  - El sistema empareja cada movimiento con los pagos digitales de caja, los depósitos, las liquidaciones de la pasarela (netas de comisión e IGV) y los abonos de la recaudación. Las parejas **exactas** (misma operación y monto) se confirman solas; las **sugeridas** (mismo monto) las confirma alguien de Administración que no cobró, no depositó ni subió el lote; una pareja **a mano** es del mismo monto y la aprueba otra persona en la bandeja.
   - La pantalla **muestra solo las diferencias**. Lo que debía estar en el banco y no está aparece **en rojo con quién lo registró**: un Yape inventado en caja sale en rojo para Promotoría el día hábil siguiente, en cuanto se confirma el extracto de ese día.
-  - Los movimientos ajenos a la cobranza (intereses, comisiones) se explican con categoría y nota. Todo lo resuelto a mano queda en la bitácora y en un resumen semanal para Promotoría.
+  - Los movimientos ajenos a la cobranza (intereses, comisiones) se explican con categoría y nota; un cargo no lo explica quien subió el extracto, y un cargo del mismo monto que un abono de esos días es CRÍTICO. Todo lo resuelto a mano queda en la bitácora y en un resumen semanal para Promotoría.
   - La verificación a ciegas del sprint 3 queda para las excepciones (en Conciliación › Verificación manual).
-- 40 triggers en MySQL (12 nuevos en el sprint). Si falta alguno, la aplicación no arranca.
+- **Contracargo:** se anula el pago SIN reembolso (el banco ya devolvió el dinero); la devolución de un pago en línea solo sale por la API de la pasarela.
+- 41 triggers en MySQL (13 nuevos en el sprint). Si falta alguno, la aplicación no arranca.
 
 ## Cómo probarlo en tu computadora
 Requisito: Java 21.
@@ -135,13 +138,15 @@ Todas tienen un valor por defecto ya implementado y se pueden cambiar.
 | 26 | Glosa del abono de la recaudación | Sin patrón: la pareja queda sugerida. Si el banco pone un texto fijo (por ejemplo «RECAUD»), se configura y la pareja es exacta |
 | 27 | «Un solo archivo» al día | Extracto + archivo de recaudación. Pedir al banco H2H o que la glosa traiga el código, para no subir el segundo |
 | 28 | Quién confirma la recaudación y el extracto | Promotoría o Dirección, quien tenga acceso al banco; nunca quien subió |
-| 29 | Frecuencia y hora límite del extracto | Diaria, con confirmación en cadena (el lunes sella el fin de semana); hasta las 12:00 del día hábil siguiente |
+| 29 | Frecuencia y hora límite del extracto | Diaria; cada extracto pendiente se confirma a ciegas con su propio saldo; hasta las 12:00 del día hábil siguiente |
 | 30 | Tolerancias de la conciliación | ±2 días hábiles; S/ 0.00 en montos, también en liquidaciones |
 | 31 | Muestreo diario | 3 movimientos del extracto y 3 líneas de recaudación para comparar con la app del banco |
 | 32 | Cuentas que se concilian | Una cuenta corriente en soles, donde abonan Yape empresarial, la pasarela y la recaudación |
-| 33 | Cargos del extracto | Solo se emparejan los reembolsos; los demás egresos no se revisan aquí |
+| 33 | Cargos del extracto | Se emparejan los reembolsos y las devoluciones; todo otro cargo se explica (no lo explica quien subió el extracto) y uno del mismo monto que un abono es CRÍTICO |
 | 34 | Liquidaciones de la pasarela | Se leen por su API cada día a las 06:00. Si el proveedor no tiene API, se agrega la carga por archivo cuando se conozca su formato |
 | 35 | Usuario de base de datos aparte para los procesos del sistema | No en este sprint; se evalúa en el sprint 7 |
+| 36 | Cuenta en línea del apoderado | Enlace de un solo uso (48 h) entregado en persona o por un canal del titular; desde el sprint 5, por WhatsApp o correo |
+| 37 | Contracargos | Alerta CRÍTICA y anulación de tipo CONTRACARGO, sin reembolso, que aprueba Promotoría o Dirección |
 
 La lista completa está en los documentos de `docs/arquitectura/`, incluidas la sección 16 de `sprint-3-caja.md` y la 17 de `sprint-4-cero-digitacion.md`.
 
@@ -150,16 +155,19 @@ La lista completa está en los documentos de `docs/arquitectura/`, incluidas la 
 - [ ] Trámites largos: verificación de WhatsApp Business, proveedor de comprobantes electrónicos (OSE), pasarela de pagos, Yape o Plin empresarial.
 - [ ] Elegir el hosting (decisión D3) para tener un entorno de pruebas en internet.
 - [ ] Revisar y unir las ramas a `main` mediante un PR, para que corra el CI de GitHub, incluido el job de MySQL.
-- [ ] Auditoría del sprint 4 (`auditor-seguridad-antifraude` y `qa-tester`) y sus correcciones.
+- [x] Auditoría del sprint 4 (`auditor-seguridad-antifraude` y `qa-tester`) y sus correcciones (`docs/arquitectura/sprint-4-correcciones.md`).
 - [ ] Pedir al banco un extracto y un archivo de recaudación reales (anonimizados) para construir sus adaptadores, y preguntar por H2H y por la glosa del abono de la recaudación.
 - [ ] Elegir la pasarela y confirmar si tiene API de liquidaciones.
 
 ## Riesgos conocidos
 - La aplicación está pensada para **una sola instancia**: las sesiones y algunos límites viven en memoria.
-- La clave temporal todavía la ve quien la genera. Se corrige en el sprint 4 con la entrega directa al titular.
+- La clave temporal del **personal** todavía la ve quien la genera (la del apoderado ya no: enlace de un solo uso). La entrega directa al titular llega con WhatsApp y correo en el sprint 5.
+- La alerta de «cuenta activada desde la IP de quien la creó» no detecta a quien la activa desde otra conexión; lo cubren el apoderado (no puede entrar y avisa) y el restablecimiento por Promotoría.
 - Durante el piloto, la única constancia del padre es la boleta impresa (WhatsApp llega en el sprint 4).
 - La huella de la bitácora solo detecta un recorte si la promotora la anota. Desde el sprint 4 se le enviará a diario.
 - Los triggers de MySQL requieren `log_bin_trust_function_creators`; está documentado en `docs/operacion/mysql-usuarios.md`.
+- **Extracto de varios días:** solo se confirma a ciegas el saldo de cierre; un abono y un cargo inventados que se compensan dentro del mismo extracto los detecta la alerta CRÍTICA de compensación (mismo monto) o quedan como cargos sin explicar que revisa otra persona. Conviene subir el extracto a diario.
+- El muestreo de las verificaciones de caja (sprint 3) todavía usa la fecha como semilla; el del extracto ya usa una semilla secreta.
 - **Colusión entre quien sube y quien confirma** el extracto o la recaudación: queda fuera del control. La mitigan la bitácora, el archivo original con su SHA-256 y el estado de cuenta oficial del banco. Se recomienda un cierre mensual en el que el contador compare a ciegas los abonos del mes con el estado de cuenta.
 - `cc_app` puede escribir cualquier texto en `creado_por`: con sus credenciales, alguien podría firmar como `sistema.conciliacion`. Lo frenan los triggers (una verificación automática exige una partida confirmada sobre un extracto confirmado) y la bitácora.
 - Los formatos reales de los bancos y de la pasarela no se pudieron verificar: el extracto y la recaudación usan un formato genérico hasta tener un archivo de ejemplo.

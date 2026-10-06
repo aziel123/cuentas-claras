@@ -359,6 +359,33 @@ class PagosEnLineaQaTest {
 		assertThat(contar(jdbc, "orden_pago")).isZero();
 	}
 
+	/**
+	 * Correcciones del sprint 4 (mutación O1 viva): el tope es «hasta S/ 5,000.00» INCLUSIVE. Las 11 cuotas de Mateo
+	 * (S/ 4,850.00) más la matrícula de Valeria ajustada en la base de prueba suman S/ 5,000.01 (rechazado) y luego
+	 * S/ 5,000.00 exactos (se acepta y se crea la orden).
+	 */
+	@Test
+	void debeAceptarUnTotalDeExactamenteElMaximoYRechazarUnCentimoMas() {
+		List<Long> mateo = jdbc.queryForList("SELECT id FROM cuota WHERE alumno_id = ? ORDER BY id", Long.class,
+				f.mateo());
+		Long matriculaValeria = cuota(jdbc, f.valeria(), "MAT-2027");
+		List<Long> elegidas = new java.util.ArrayList<>(mateo);
+		elegidas.add(matriculaValeria);
+
+		jdbc.update("UPDATE cuota SET monto = 150.01 WHERE id = ?", matriculaValeria);
+		assertThatThrownBy(() -> pagoEnLinea.revisar(new SeleccionPagoRequest(elegidas)))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("5,000.00");
+		assertThatThrownBy(() -> pagoEnLinea.crearOrden(new PagoEnLineaRequest(UUID.randomUUID(), elegidas,
+				new BigDecimal("5000.01"), false))).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("5,000.00");
+
+		jdbc.update("UPDATE cuota SET monto = 150.00 WHERE id = ?", matriculaValeria);
+		BigDecimal total = pagoEnLinea.revisar(new SeleccionPagoRequest(elegidas)).total();
+		assertThat(total).isEqualByComparingTo("5000.00");
+		pagoEnLinea.crearOrden(new PagoEnLineaRequest(UUID.randomUUID(), elegidas, total, false));
+		assertThat(jdbc.queryForObject("SELECT monto FROM orden_pago", BigDecimal.class)).isEqualByComparingTo("5000.00");
+	}
+
 	@Test
 	void debeRechazarUnaSeleccionQueSuperaElMaximoPorOrden() {
 		List<Long> todas = jdbc.queryForList("SELECT id FROM cuota WHERE alumno_id IN (?, ?) ORDER BY id", Long.class,

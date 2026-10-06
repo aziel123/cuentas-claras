@@ -57,6 +57,12 @@ class OutboxOseQaTest {
 	private ServicioCobro cobro;
 
 	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioAnulacionPagos anulaciones;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones bandeja;
+
+	@Autowired
 	private ServicioEstructura estructura;
 
 	@Autowired
@@ -143,5 +149,34 @@ class OutboxOseQaTest {
 		assertThat(comprobante(id).get("enviado_en")).isEqualTo(enviadoEn);
 		assertThat(envio.procesar(id)).isEqualTo(EstadoEnvio.ACEPTADO);
 		verify(emisor, times(1)).consultar(any(), anyString(), anyInt());
+	}
+
+	/**
+	 * Correcciones del sprint 4 (mutación X3 viva): la nota de crédito ESPERA a que su comprobante sea válido. Con la
+	 * boleta todavía ENVIADA (sin respuesta del OSE), la nota no se envía ni suma intentos; cuando el OSE acepta la
+	 * boleta, la nota sale en el siguiente intento.
+	 */
+	@Test
+	void debeEsperarQueSuComprobanteSeaValidoAntesDeEnviarLaNotaDeCredito() {
+		doReturn(new ResultadoEnvio(EstadoEnvio.ENVIADO, "Recibido", null, null)).when(emisor).enviar(any());
+		Long pago = cobro.cobrar(efectivo(f.quispe(), List.of(cuota(jdbc, f.mateo(), "PEN-2027-03")), "450.00", "450.00"));
+		Long boleta = jdbc.queryForObject("SELECT comprobante_id FROM pago WHERE id = ?", Long.class, pago);
+		anulaciones.solicitarDevolucion(pago, "La familia pagó dos veces la misma cuota por error");
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(
+				pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.DIRECCION, bandeja, jdbc, "pago", pago);
+		Long nota = jdbc.queryForObject("SELECT id FROM comprobante WHERE modifica_id = ?", Long.class, boleta);
+
+		reloj.avanzar(Duration.ofMinutes(5));
+		assertThat(envio.procesar(nota)).isEqualTo(EstadoEnvio.PENDIENTE);
+		assertThat(comprobante(nota)).containsEntry("estado_envio", "PENDIENTE").containsEntry("intentos", 0);
+		assertThat((String) comprobante(nota).get("ultimo_error")).contains("Espera que el OSE acepte");
+		verify(emisor, times(1)).enviar(any());
+
+		doReturn(aceptado()).when(emisor).consultar(any(), anyString(), anyInt());
+		assertThat(envio.procesar(boleta)).isEqualTo(EstadoEnvio.ACEPTADO);
+		doReturn(aceptado()).when(emisor).enviar(any());
+		reloj.avanzar(Duration.ofMinutes(5));
+		assertThat(envio.procesar(nota)).isEqualTo(EstadoEnvio.ACEPTADO);
+		verify(emisor, times(2)).enviar(any());
 	}
 }
