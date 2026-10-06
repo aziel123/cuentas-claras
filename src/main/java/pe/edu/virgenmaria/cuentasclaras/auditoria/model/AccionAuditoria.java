@@ -143,6 +143,29 @@ public enum AccionAuditoria {
 	REEMBOLSO_REGISTRADO("Registró el reembolso de una devolución", true),
 	DATOS_FACTURACION_CAMBIADOS("Cambió el RUC para factura de un apoderado", true),
 
+	// Sprint 4 · tanda 1: pagos en línea y envío de comprobantes al OSE. El actor de lo automático es sistema.*.
+	ORDEN_PAGO_CREADA("Inició un pago en línea", false),
+	ORDEN_PAGO_VENCIDA("Venció un pago en línea sin pagar", false),
+	ORDEN_PAGO_RECHAZADA("La pasarela rechazó un pago en línea", false),
+	/** Se resalta: hubo dinero pero no se pudo aplicar (cuota ya pagada, monto o moneda distintos, operación usada). */
+	ORDEN_PAGO_POR_REVISAR("Un pago en línea quedó por revisar", true),
+	/** Se resalta: un pago con la pasarela SIMULADA (no es dinero real). */
+	PASARELA_SIMULADA_USADA("Pagó con la pasarela SIMULADA (no es dinero real)", true),
+	/** Se resalta: la pasarela confirmó el pago de una orden ya vencida. */
+	PAGO_EN_LINEA_TARDIO("Se aplicó un pago en línea tardío", true),
+	INGRESO_APLICACION_SOLICITADA("Pidió aplicar un ingreso por revisar", true),
+	INGRESO_APLICADO("Aplicó un ingreso por revisar (aprobado)", true),
+	INGRESO_DEVOLUCION_SOLICITADA("Pidió devolver un ingreso por revisar", true),
+	INGRESO_DEVUELTO("Devolvió un ingreso por revisar", true),
+	CONTRACARGO_RECIBIDO("Recibió un contracargo de la pasarela", true),
+	COMPROBANTE_ACEPTADO("El OSE aceptó un comprobante", false),
+	COMPROBANTE_OBSERVADO("El OSE aceptó un comprobante con observaciones", true),
+	COMPROBANTE_RECHAZADO("El OSE rechazó un comprobante", true),
+	COMPROBANTE_REEMITIDO("Reemitió un comprobante rechazado", true),
+	COMPROBANTE_NO_COINCIDE_OSE("Un comprobante aceptado no coincide en el OSE", true),
+	ACCESO_APODERADO_CREADO("Dio acceso en línea a un apoderado", false),
+	ACCESO_APODERADO_QUITADO("Quitó el acceso en línea de un apoderado", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

@@ -204,6 +204,8 @@ class AlertasCajaTest {
 		assertThat(indicadores.indicadores()).extracting(IndicadoresInicio.Indicador::etiqueta,
 				IndicadoresInicio.Indicador::valor, IndicadoresInicio.Indicador::detalle).containsExactly(
 				org.assertj.core.groups.Tuple.tuple("Cobrado hoy", "S/ 900.00", "2 pago(s)"),
+				// Sprint 4: lo que entró por la pasarela (o la recaudación) sin que nadie lo digite.
+				org.assertj.core.groups.Tuple.tuple("Entró solo (en línea)", "S/ 0.00", "0 pago(s) sin que nadie digite"),
 				org.assertj.core.groups.Tuple.tuple("Efectivo", "S/ 450.00", "1 pago(s)"),
 				org.assertj.core.groups.Tuple.tuple("Digital", "S/ 450.00", "50 % del total"),
 				org.assertj.core.groups.Tuple.tuple("Cajas", "1 abierta(s) · 0 cerrada(s)", "Sin diferencias"));

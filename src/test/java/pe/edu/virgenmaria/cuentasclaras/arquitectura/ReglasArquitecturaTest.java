@@ -268,7 +268,26 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria", "hasAnyRole('PROMOTOR','ADMINISTRACION')"),
 			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#verificarPago", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#verificarDeposito", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#registrarReembolso", SOLO_ADMINISTRACION));
+			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#registrarReembolso", SOLO_ADMINISTRACION),
+			// Sprint 4, tanda 1: el apoderado paga lo suyo; el sistema (y solo él) registra el pago en línea;
+			// Administración pide aplicar o devolver un ingreso por revisar y reemite comprobantes rechazados.
+			Map.entry(BASE + ".pasarela.service.ServicioPagoEnLinea", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".pasarela.simulada.SimuladorPagos", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".caja.service.ComprobantesDeFamilia", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".caja.service.RegistroPagosAutomaticos", "hasAnyRole('SISTEMA_PASARELA','SISTEMA_RECAUDACION')"),
+			Map.entry(BASE + ".caja.service.ServicioAnulacionPagos#solicitarPorContracargo", "hasRole('SISTEMA_PASARELA')"),
+			Map.entry(BASE + ".pasarela.service.ConsultaPagosEnLinea", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".pasarela.service.ServicioIngresosPorRevisar", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".pasarela.service.ServicioIngresosPorRevisar#solicitarAplicacion", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".pasarela.service.ServicioIngresosPorRevisar#solicitarDevolucion", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".pasarela.service.DevolucionesPasarela", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".pasarela.service.AlertasPagosEnLinea", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".comprobantes.service.ConsultaComprobantes", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".comprobantes.service.ConsultaComprobantes#adelantarReintento", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".comprobantes.service.AlertasComprobantes", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".caja.service.ServicioReemision", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados", "hasAnyRole('PROMOTOR','ADMINISTRACION')"),
+			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados#cuentaDe", LECTURA_ESCOLAR));
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {
@@ -327,7 +346,7 @@ class ReglasArquitecturaTest {
 	@ArchTest
 	static final ArchRule registroSolicitudesSoloDesdeServicios = noClasses()
 			.that().resideOutsideOfPackages(BASE + ".aprobaciones.service..", BASE + ".alumnos.service..",
-					BASE + ".cobranza.service..", BASE + ".caja.service..")
+					BASE + ".cobranza.service..", BASE + ".caja.service..", BASE + ".pasarela.service..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".aprobaciones.service.RegistroSolicitudes")
 			.because("la solicitud la crea el servicio protegido que valida el cambio pedido");
 
@@ -565,6 +584,71 @@ class ReglasArquitecturaTest {
 			.and().arePublic()
 			.should().haveNameMatching("set[A-Z].*")
 			.because("un pago, un comprobante o una caja cambian solo por sus métodos con regla");
+
+	// Sprint 4, tanda 1: los módulos nuevos dependen de caja y cobranza (por sus puertos), nunca al revés.
+
+	@ArchTest
+	static final ArchRule cajaYCobranzaNoDependenDeLosModulosNuevos = noClasses()
+			.that().resideInAnyPackage(BASE + ".caja..", BASE + ".cobranza..", BASE + ".comprobantes..",
+					BASE + ".alumnos..", BASE + ".seguridad..", BASE + ".auditoria..", BASE + ".comun..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".pasarela..")
+			.because("pasarela usa los puertos de caja (RegistroPagosAutomaticos, PagosEnCurso) y de cobranza "
+					+ "(CuotasEnPagoEnLinea); ellos no la conocen");
+
+	/** Actuar como sistema (sin persona detrás) solo desde los procesos: nunca desde un controlador ni un servicio web. */
+	@ArchTest
+	static final ArchRule ejecucionComoSistemaSoloEnProcesos = noClasses()
+			.that().resideOutsideOfPackages(BASE + "..proceso..", BASE + ".comun.sistema..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".comun.sistema.EjecucionComoSistema")
+			.because("un actor de sistema salta los permisos de las personas: solo lo usan las tareas y los procesos");
+
+	/** La pasarela simulada solo existe en dev, test y piloto (nunca en prod). */
+	@ArchTest
+	static final ArchRule pasarelaSimuladaSoloEnDevTestPiloto = classes()
+			.that(new DescribedPredicate<JavaClass>("son beans de la pasarela simulada") {
+				@Override
+				public boolean test(JavaClass clase) {
+					return (clase.getPackageName().startsWith(BASE + ".pasarela.simulada")
+							&& clase.isMetaAnnotatedWith(org.springframework.stereotype.Component.class))
+							|| clase.getName().equals(BASE + ".pasarela.web.SimuladorPasarelaController");
+				}
+			})
+			.should(new ArchCondition<>("estar anotadas con @Profile({\"dev\", \"test\", \"piloto\"})") {
+				@Override
+				public void check(JavaClass clase, ConditionEvents eventos) {
+					boolean ok = clase.tryGetAnnotationOfType(org.springframework.context.annotation.Profile.class)
+							.map(p -> Set.of(p.value()).equals(Set.of("dev", "test", "piloto"))).orElse(false);
+					if (!ok) {
+						eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " no está limitada a dev, test y "
+								+ "piloto"));
+					}
+				}
+			})
+			.because("la pasarela simulada marca pagos sin dinero real")
+			.allowEmptyShould(true);
+
+	@ArchTest
+	static final ArchRule repositoriosDePasarelaSinModifyingNiBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".pasarela.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("las órdenes, sus cuotas y los avisos de la pasarela no se borran ni se editan por consulta");
+
+	@ArchTest
+	static final ArchRule repositoriosDePasarelaNoHeredanBorrados = classes()
+			.that().resideInAnyPackage(BASE + ".pasarela.repository..")
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("CrudRepository trae delete*: los repositorios financieros declaran solo lo que usan");
+
+	@ArchTest
+	static final ArchRule entidadesDePasarelaSinSettersPublicos = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".pasarela.model..")
+			.and().areDeclaredInClassesThat().areAnnotatedWith(Entity.class)
+			.and().arePublic()
+			.should().haveNameMatching("set[A-Z].*")
+			.because("una orden cambia solo por sus métodos con regla");
 
 	private static DescribedPredicate<JavaAnnotation<?>> consultaNativa() {
 		return new DescribedPredicate<>("@Query(nativeQuery = true)") {

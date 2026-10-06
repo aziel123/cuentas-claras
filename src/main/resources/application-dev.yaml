@@ -24,3 +24,8 @@ cuentasclaras:
     # Años 2026 y 2027, secciones y familias de ejemplo (DatosDemoColegioDev). Con false se empieza sin datos
     # del colegio, por ejemplo para probar desde cero la creación de años y el registro de alumnos.
     datos-colegio: ${CC_DEMO_DATOS_COLEGIO:true}
+  pasarela:
+    # Pago en línea SIMULADO (sin dinero real) para probar el flujo completo con el usuario «apoderado».
+    proveedor: SIMULADA
+    simulada:
+      secreto-aviso: secreto-pasarela-simulada-de-desarrollo-no-usar-en-produccion

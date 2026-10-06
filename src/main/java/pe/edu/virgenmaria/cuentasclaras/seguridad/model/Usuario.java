@@ -11,6 +11,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.model.BaseEntity;
+import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -78,6 +79,13 @@ public class Usuario extends BaseEntity {
 	@Column(name = "clave_restablecida_en")
 	private LocalDateTime claveRestablecidaEn;
 
+	/**
+	 * Sprint 4: la cuenta en línea del apoderado, enlazada a SU registro (y por él, a su familia). No cambia
+	 * ({@code updatable = false}); solo las cuentas APODERADO la tienen.
+	 */
+	@Column(name = "apoderado_id", updatable = false)
+	private Long apoderadoId;
+
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "usuario_rol", joinColumns = @JoinColumn(name = "usuario_id"))
 	@Enumerated(EnumType.STRING)
@@ -94,9 +102,30 @@ public class Usuario extends BaseEntity {
 	 */
 	public static Usuario nuevo(String nombreUsuario, String nombreCompleto, String correo, String claveHash,
 			Set<Rol> roles) {
-		ReglasSegregacion.validar(roles);
+		return crear(nombreUsuario, nombreCompleto, correo, claveHash, roles, null);
+	}
+
+	/**
+	 * Cuenta en línea de un apoderado (sprint 4): solo el rol APODERADO, enlazada a su registro. La crea Promotoría o
+	 * Administración desde su ficha.
+	 */
+	public static Usuario deApoderado(String nombreUsuario, String nombreCompleto, String correo, String claveHash,
+			Long apoderadoId) {
+		return crear(nombreUsuario, nombreCompleto, correo, claveHash, EnumSet.of(Rol.APODERADO),
+				Objects.requireNonNull(apoderadoId, "apoderadoId"));
+	}
+
+	private static Usuario crear(String nombreUsuario, String nombreCompleto, String correo, String claveHash,
+			Set<Rol> roles, Long apoderadoId) {
+		ReglasSegregacion.validarCuenta(roles, apoderadoId);
+		String normalizado = normalizarNombreUsuario(nombreUsuario);
+		if (ActorSistema.esReservado(normalizado)) {
+			throw new ReglaNegocioException("Los nombres de usuario que empiezan con «" + ActorSistema.PREFIJO_RESERVADO
+					+ "» están reservados para los procesos automáticos del sistema.");
+		}
 		Usuario usuario = new Usuario();
-		usuario.nombreUsuario = normalizarNombreUsuario(nombreUsuario);
+		usuario.apoderadoId = apoderadoId;
+		usuario.nombreUsuario = normalizado;
 		usuario.nombreCompleto = requerido(nombreCompleto, "El nombre completo es obligatorio.");
 		usuario.correo = correo == null || correo.isBlank() ? null : correo.trim();
 		usuario.claveHash = requerido(claveHash, "La clave es obligatoria.");
@@ -184,7 +213,7 @@ public class Usuario extends BaseEntity {
 	}
 
 	public void cambiarRoles(Set<Rol> nuevosRoles) {
-		ReglasSegregacion.validar(nuevosRoles);
+		ReglasSegregacion.validarCuenta(nuevosRoles, apoderadoId);
 		roles.clear();
 		roles.addAll(nuevosRoles);
 	}
@@ -272,6 +301,10 @@ public class Usuario extends BaseEntity {
 
 	public LocalDateTime getClaveRestablecidaEn() {
 		return claveRestablecidaEn;
+	}
+
+	public Long getApoderadoId() {
+		return apoderadoId;
 	}
 
 	public Set<Rol> getRoles() {

@@ -128,6 +128,14 @@ public class ServicioCobro {
 
 	private final Clock reloj;
 
+	/** Sprint 4: avisos de pagos en línea en curso (puerto que implementa el módulo de pasarela; opcional). */
+	private org.springframework.beans.factory.ObjectProvider<PagosEnCurso> pagosEnCurso;
+
+	@org.springframework.beans.factory.annotation.Autowired
+	void setPagosEnCurso(org.springframework.beans.factory.ObjectProvider<PagosEnCurso> pagosEnCurso) {
+		this.pagosEnCurso = pagosEnCurso;
+	}
+
 	public ServicioCobro(AlumnoRepository alumnos, ApoderadoRepository apoderados, FamiliaRepository familias,
 			MatriculaRepository matriculas, CuotaRepository cuotas, PagoRepository pagos,
 			AplicacionPagoRepository aplicaciones, CajaDiariaRepository cajas, AperturaCaja aperturaCaja,
@@ -190,8 +198,11 @@ public class ServicioCobro {
 						p.getMedio().etiqueta(), p.vigente() ? "Vigente" : "Anulado"))
 				.toList();
 		boolean aceptaEfectivo = cajas.findByCajeroAndFecha(cajero, hoy).map(CajaDiaria::aceptaEfectivo).orElse(true);
+		List<Long> porPagar = porAlumno.values().stream().flatMap(List::stream).map(Cuota::getId).toList();
+		PagosEnCurso puerto = pagosEnCurso == null ? null : pagosEnCurso.getIfAvailable();
+		List<String> enLinea = puerto == null || porPagar.isEmpty() ? List.of() : puerto.avisos(porPagar);
 		return new CuentaFamilia(familia.getId(), familia.getNombre(), hijos, recientes, aceptaEfectivo,
-				cajaAnteriorAbierta(cajero, hoy), hoy);
+				cajaAnteriorAbierta(cajero, hoy), hoy, enLinea);
 	}
 
 	private static CuentaFamilia.CuotaPorCobrar cuotaPorCobrar(Cuota c, LocalDate hoy) {

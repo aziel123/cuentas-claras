@@ -75,7 +75,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V12): Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V13): Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Permisos por tabla de cc_app
@@ -168,6 +168,24 @@ jobs:
           comprobar 1142 "UPDATE reembolso SET version = version WHERE 1 = 0"
           comprobar 1644 "INSERT INTO reembolso (colegio_id, anulacion_pago_id, medio, numero_operacion, monto, fecha, cajero_pago, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'YAPE', 'X1234', 1, '2000-01-01', 'a', NOW(6), 'b', NOW(6))"
           comprobar 1644 "INSERT INTO apoderado (colegio_id, familia_id, tipo_documento, numero_documento, apellido_paterno, nombres, parentesco, nombre_busqueda, activo, ruc, razon_social, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'DNI', '00000000', 'x', 'x', 'MADRE', 'x', TRUE, '20131312955', 'x', NOW(6), 'x', NOW(6))"
+          # Sprint 4, tanda 1 (V13): pagos en línea y outbox del OSE.
+          for tabla in orden_pago orden_pago_cuota evento_pasarela configuracion_bd; do
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          comprobar 1142 "UPDATE orden_pago_cuota SET version = version WHERE 1 = 0"
+          comprobar 1142 "INSERT INTO configuracion_bd VALUES ('pasarela_simulada', 'PERMITIDA', NOW(6))"
+          comprobar 1142 "UPDATE configuracion_bd SET valor = valor WHERE 1 = 0"
+          comprobar 1143 "UPDATE orden_pago SET monto = monto WHERE 1 = 0"
+          comprobar 1143 "UPDATE evento_pasarela SET orden_pago_id = orden_pago_id WHERE 1 = 0"
+          comprobar 1143 "UPDATE caja_diaria SET canal = canal WHERE 1 = 0"
+          comprobar 1143 "UPDATE pago SET orden_pago_id = orden_pago_id WHERE 1 = 0"
+          comprobar 1143 "UPDATE comprobante SET reemplaza_id = reemplaza_id WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO orden_pago (colegio_id, referencia, familia_id, apoderado_id, proveedor, monto, moneda, comprobante_tipo, clave_idempotencia, vence_en, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'x', 0, 0, 'CULQI', 1, 'PEN', 'BOLETA', 'x', NOW(6), 'PAGADA', NOW(6), 'x', NOW(6))"
+          comprobar 1644 "INSERT INTO orden_pago_cuota (colegio_id, orden_pago_id, cuota_id, monto, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 1, NOW(6), 'x', NOW(6))"
+          # La base de producción no admite la pasarela simulada (sin la fila 'pasarela_simulada' del DBA).
+          filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'pasarela_simulada'")
+          [ "$filas" = "0" ] || { echo "ERROR: la base tiene la fila pasarela_simulada"; exit 1; }
+          comprobar 1644 "INSERT INTO orden_pago (colegio_id, referencia, familia_id, apoderado_id, proveedor, monto, moneda, comprobante_tipo, clave_idempotencia, vence_en, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'x', 0, 0, 'SIMULADA', 1, 'PEN', 'BOLETA', 'x', NOW(6), 'CREADA', NOW(6), 'x', NOW(6))"
           total=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT triggers_instalados()" | tr ',' '\n' | grep -c .)
           esperados=$(grep -c "^CREATE TRIGGER" scripts/mysql/03-triggers.sql)
           [ "$total" = "$esperados" ] || { echo "ERROR: cc_app ve $total triggers con triggers_instalados() y 03-triggers.sql tiene $esperados"; exit 1; }
@@ -191,6 +209,7 @@ jobs:
           grep -q "Permisos de las cuotas verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos por columna y triggers de planes, lotes y solicitudes verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de caja, comprobantes, anulaciones, descuentos y cierres verificados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Permisos y triggers de pagos en línea, recaudación, conciliación y outbox del OSE verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Triggers verificados: están los" prod.log || { cat prod.log; exit 1; }
           kill "$PID_APP"
           if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \

@@ -19,7 +19,11 @@ public enum TipoSolicitud {
 	CIERRE_CAJA("Cierre de caja"),
 	REAPERTURA_CAJA("Reapertura de caja"),
 	// Correcciones del sprint 3 (B2): RUC y razón social de un apoderado para emitir factura.
-	DATOS_FACTURACION("Datos de facturación (RUC)");
+	DATOS_FACTURACION("Datos de facturación (RUC)"),
+	// Sprint 4 (pagos en línea): un ingreso que no se pudo aplicar solo (orden por revisar) se aplica a otras cuotas o se
+	// devuelve al mismo medio de origen. Los pide Administración y los aprueba Promotoría o Dirección.
+	APLICAR_INGRESO("Aplicar un ingreso por revisar"),
+	DEVOLVER_INGRESO("Devolver un ingreso por revisar");
 
 	private final String etiqueta;
 

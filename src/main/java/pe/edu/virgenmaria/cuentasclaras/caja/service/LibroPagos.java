@@ -15,6 +15,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.model.CajaDiaria;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.ImputacionPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.ImputacionPago.CuotaPorPagar;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.ImputacionPago.Imputacion;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.NumeroOperacion;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.Pago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.ReglasEfectivo;
@@ -199,6 +200,43 @@ public class LibroPagos {
 						+ anulado.getFamilia().getNombre() + (otraFamilia ? ": el dinero pasa a OTRA familia." : "."));
 		eventos.publishEvent(new PagoRegistrado(reemplazo.getId()));
 		return reemplazo;
+	}
+
+	/**
+	 * Sprint 4: pago que entra solo por un canal (pasarela), en la caja del canal ya bloqueada y con las cuotas ya
+	 * bloqueadas (por id) por quien llama. El monto lo confirmó la pasarela; el comprobante sale con la fecha de hoy
+	 * ({@code fechaComprobante}) y el pago con la del canal. Mismas reglas, imputación, comprobante y bitácora que en
+	 * ventanilla. En MySQL, trg_pago_registro exige además la confirmación de la orden por ese monto (debe estar ya
+	 * guardada con flush).
+	 *
+	 * @param aCuenta el monto no cubre todas las cuotas (solo al aplicar un ingreso por revisar)
+	 */
+	public Pago registrarEnCanal(CajaDiaria canal, Familia familia, List<Cuota> bloqueadas, MedioPago medio,
+			String operacion, BigDecimal monto, boolean aCuenta, DatosComprobante datos, Long ordenPagoId, UUID clave,
+			LocalDate fechaComprobante, String detalleExtra) {
+		Objects.requireNonNull(canal, "canal");
+		Objects.requireNonNull(familia, "familia");
+		if (bloqueadas == null || bloqueadas.isEmpty()) {
+			throw new IllegalArgumentException("El pago en línea necesita sus cuotas");
+		}
+		bloqueadas.forEach(c -> exigirCobrable(c, familia));
+		BigDecimal debe = Dinero.sumar(bloqueadas.stream().map(Cuota::saldo).toList());
+		BigDecimal importe = Dinero.positivo(monto, "el monto del pago en línea");
+		if (importe.compareTo(debe) > 0 || (!aCuenta && importe.compareTo(debe) != 0)) {
+			throw new IllegalStateException("El monto del pago en línea no corresponde al saldo de sus cuotas");
+		}
+		List<Imputacion> imputaciones = imputar(importe, bloqueadas);
+		Receptor receptor = receptor(datos, familia, bloqueadas);
+		Comprobante comprobante = comprobantes.emitir(datos.tipo(), receptor, fechaComprobante,
+				lineas(imputaciones, bloqueadas));
+		Pago pago = pagos.save(Pago.dePasarela(canal, familia, comprobante, medio, operacion, importe, aCuenta,
+				ordenPagoId, clave));
+		List<String> detalleCuotas = aplicar(pago, imputaciones, bloqueadas);
+		auditar(AccionAuditoria.PAGO_REGISTRADO, pago, comprobante, receptor, detalleCuotas,
+				" Pago en línea (" + canal.getCanal().etiqueta() + ", orden " + ordenPagoId + ")."
+						+ (detalleExtra == null ? "" : " " + detalleExtra));
+		eventos.publishEvent(new PagoRegistrado(pago.getId()));
+		return pago;
 	}
 
 	private static List<Imputacion> imputar(BigDecimal importe, List<Cuota> elegidas) {

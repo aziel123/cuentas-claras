@@ -50,8 +50,9 @@ GRANT INSERT, UPDATE (estado, pendiente, resuelto_por, resuelto_en, comentario, 
 -- Serie: solo avanza su último número (y el trigger exige que sea de uno en uno).
 GRANT INSERT, UPDATE (ultimo_numero, actualizado_en, version) ON cuentasclaras.serie_comprobante TO 'cc_app'@'%';
 -- Comprobante: los datos tributarios (serie, número, receptor, total) no cambian; solo su envío al OSE.
-GRANT INSERT, UPDATE (estado_envio, intentos, enviado_en, respuesta, codigo_hash, enlace_pdf, actualizado_en, version)
-    ON cuentasclaras.comprobante TO 'cc_app'@'%';
+-- Sprint 4 (tanda 1): outbox del OSE (ENVIADO, reintentos con espera creciente, aceptación). reemplaza_id no cambia.
+GRANT INSERT, UPDATE (estado_envio, intentos, enviado_en, respuesta, codigo_hash, enlace_pdf, proximo_intento_en,
+    ultimo_error, codigo_respuesta, aceptado_en, actualizado_en, version) ON cuentasclaras.comprobante TO 'cc_app'@'%';
 GRANT INSERT ON cuentasclaras.comprobante_linea TO 'cc_app'@'%';                  -- solo inserción
 -- Caja: cajero, fecha y fondo no cambian; solo abre/cierra y registra el conteo a ciegas (los triggers lo vigilan).
 -- Correcciones del sprint 3 (M1): reapertura_solicitud_id enlaza la reapertura aprobada (lo exige trg_caja_diaria_estado).
@@ -74,6 +75,20 @@ GRANT INSERT ON cuentasclaras.verificacion_bancaria TO 'cc_app'@'%';            
 -- Correcciones del sprint 3 (docs/arquitectura/sprint-3-correcciones.md). Reembolso de devoluciones: SOLO INSERCIÓN
 -- (lo registra Administración; trg_reembolso_registro y un CHECK impiden que sea la cajera del pago).
 GRANT INSERT ON cuentasclaras.reembolso TO 'cc_app'@'%';                          -- solo inserción
+-- Sprint 4 · tanda 1 (V13): pagos en línea y outbox del OSE. Tablas financieras: NUNCA DELETE.
+-- configuracion_bd: SIN GRANT a propósito (cc_app solo la lee con el SELECT general; la escribe el DBA, y en prod no
+-- existe la fila 'pasarela_simulada'). Lo comprueba VerificadorPermisosBaseDatos al arrancar (1142).
+-- Orden: monto, familia, apoderado, cuotas, referencia y vencimiento no cambian; solo el enlace (una vez), la
+-- confirmación (una vez), el estado y la resolución (trg_orden_pago_estado).
+GRANT INSERT, UPDATE (estado, proveedor_orden_id, enlace_pago, cargo_id, operacion, monto_confirmado, moneda_confirmada,
+    medio_confirmado, confirmado_en, tardia, motivo_revision, detalle_revision, devolucion_operacion, devuelto_por,
+    devuelto_en, actualizado_en, version) ON cuentasclaras.orden_pago TO 'cc_app'@'%';
+GRANT INSERT ON cuentasclaras.orden_pago_cuota TO 'cc_app'@'%';                   -- solo inserción
+GRANT INSERT, UPDATE (estado, intentos, resultado, procesado_en, actualizado_en, version)
+    ON cuentasclaras.evento_pasarela TO 'cc_app'@'%';
+-- pago, caja_diaria y usuario no cambian su GRANT: las columnas nuevas (pago.orden_pago_id, caja_diaria.canal) son
+-- inmutables (1143) y usuario.apoderado_id es updatable = false en la entidad (y su cambio se audita).
+
 -- M2: cc_app no lee information_schema.TRIGGERS (necesitaría el privilegio TRIGGER, que no debe tener). Esta función
 -- (SQL SECURITY DEFINER: corre con los permisos de quien la crea) devuelve solo los nombres de los triggers del esquema,
 -- separados por comas; al arrancar en prod, VerificadorPermisosBaseDatos los compara con la lista de 03-triggers.sql.

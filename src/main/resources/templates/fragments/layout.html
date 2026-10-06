@@ -8,6 +8,8 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title th:text="${titulo} + ' · Cuentas Claras'">Cuentas Claras</title>
+	<!--/* Sprint 4: una página que espera una confirmación se recarga sola (sin JavaScript en línea, por la CSP). */-->
+	<meta th:if="${recargarCada != null}" http-equiv="refresh" th:content="${recargarCada}">
 	<link rel="stylesheet" th:href="@{/css/tokens.css}">
 	<link rel="stylesheet" th:href="@{/css/app.css}">
 </head>

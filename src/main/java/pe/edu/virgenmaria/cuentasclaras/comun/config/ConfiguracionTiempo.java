@@ -14,7 +14,10 @@ import java.time.ZoneId;
 @Configuration(proxyBeanMethods = false)
 public class ConfiguracionTiempo {
 
-	public static final ZoneId ZONA_LIMA = ZoneId.of("America/Lima");
+	/** Nombre de la zona, para anotaciones como {@code @Scheduled(zone = ...)}. */
+	public static final String ZONA = "America/Lima";
+
+	public static final ZoneId ZONA_LIMA = ZoneId.of(ZONA);
 
 	@Bean
 	public Clock reloj() {

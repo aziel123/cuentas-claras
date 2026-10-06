@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Pago en línea', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="pago-en-linea-detalle" th:with="o=${orden}" th:attr="data-estado=${o.estado}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/pagos-en-linea}">Pagos en línea</a></p>
+			<h1 th:text="|Pago ${o.referencia}|">Pago OP-1</h1>
+			<p class="secundario" th:text="|${o.familia} · pidió ${o.apoderado}|">Familia · pidió apoderado</p>
+		</div>
+		<span th:replace="~{fragments/componentes :: badge(${o.etiqueta}, ${o.variante})}"></span>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<p class="marca-simulado" th:if="${o.simulada}">PAGO SIMULADO · NO ES DINERO REAL</p>
+
+	<section class="tarjeta" aria-labelledby="titulo-revision" th:if="${o.motivo != null}">
+		<h2 id="titulo-revision">Por qué quedó por revisar</h2>
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${o.motivo})}"></div>
+		<p class="secundario" th:if="${o.detalleRevision != null}" th:text="${o.detalleRevision}">Detalle</p>
+		<p th:if="${o.contacto != null}">Antes de decidir, llama a la familia: <strong th:text="${o.contacto}">999 999 999</strong></p>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-datos">
+		<h2 id="titulo-datos">Lo pedido y lo confirmado</h2>
+		<dl class="datos">
+			<dt>Monto pedido</dt><dd><span th:replace="~{fragments/componentes :: monto(${o.monto})}"></span></dd>
+			<dt>Monto confirmado por la pasarela</dt><dd th:text="${o.montoConfirmado == null} ? '—' : ${'S/ ' + #numbers.formatDecimal(o.montoConfirmado, 1, 'COMMA', 2, 'POINT')}">—</dd>
+			<dt>Pasarela</dt><dd th:text="${o.proveedor}">SIMULADA</dd>
+			<dt>Medio</dt><dd th:text="${o.medio != null} ? ${o.medio} : '—'">Yape</dd>
+			<dt>N.° de operación</dt><dd th:text="${o.operacion != null} ? ${o.operacion} : '—'">—</dd>
+			<dt>Cargo en la pasarela</dt><dd th:text="${o.cargo != null} ? ${o.cargo} : '—'">—</dd>
+			<dt>Creada</dt><dd th:text="${#temporals.format(o.creadaEn, 'dd/MM/yyyy HH:mm')}">06/10/2026 10:00</dd>
+			<dt>Vence</dt><dd th:text="${#temporals.format(o.venceEn, 'dd/MM/yyyy HH:mm')}">06/10/2026 10:30</dd>
+			<dt>Confirmada</dt><dd th:text="${o.confirmadoEn == null} ? '—' : ${#temporals.format(o.confirmadoEn, 'dd/MM/yyyy HH:mm')}">—</dd>
+			<dt>Llegó tarde</dt><dd th:text="${o.tardia} ? 'Sí, después del vencimiento' : 'No'">No</dd>
+			<dt>Comprobante</dt><dd th:text="${o.comprobante != null} ? ${o.comprobante} : '—'">—</dd>
+			<dt th:if="${o.devolucion != null}">Reembolso</dt><dd th:if="${o.devolucion != null}" th:text="${o.devolucion}">—</dd>
+		</dl>
+		<h3>Cuotas de la orden</h3>
+		<ul class="lista-simple">
+			<li th:each="c : ${o.cuotas}" th:text="${c}">Pensión octubre de Mateo · S/ 450.00</li>
+		</ul>
+		<th:block th:unless="${#lists.isEmpty(o.solicitudes)}">
+			<h3>Solicitudes pendientes</h3>
+			<ul class="lista-simple">
+				<li th:each="s : ${o.solicitudes}" th:text="${s}">Aplicar ingreso (pedida por admin)</li>
+			</ul>
+		</th:block>
+	</section>
+
+	<form method="post" th:action="@{/pagos-en-linea/{id}/aplicar(id=${o.id})}" class="formulario" th:if="${o.puedePedir}"
+		data-formulario="aplicar">
+		<input type="hidden" name="familiaId" th:value="${o.familiaId}">
+		<section class="tarjeta" aria-labelledby="titulo-aplicar">
+			<h2 id="titulo-aplicar">Pedir aplicar el ingreso</h2>
+			<p class="secundario">Elige las cuotas de la familia. Promotoría o Dirección lo aprueban; el pago lo registra el sistema, no tú.</p>
+			<th:block th:if="${#lists.isEmpty(o.cuotasDeLaFamilia)}">
+				<div th:replace="~{fragments/componentes :: estadoVacio('La familia no tiene cuotas por pagar', 'Si no corresponde aplicarlo, pide la devolución.')}"></div>
+			</th:block>
+			<div class="lista-cuotas">
+				<label class="cuota-opcion" th:each="q : ${o.cuotasDeLaFamilia}" th:data-cuota="${q.id}">
+					<input type="checkbox" name="cuotaIds" th:value="${q.id}">
+					<span class="cuota-datos">
+						<strong th:text="${q.descripcion}">Pensión diciembre 2026</strong>
+						<span class="secundario" th:text="${q.alumno}">Mateo</span>
+					</span>
+					<span class="cuota-saldo"><span th:replace="~{fragments/componentes :: monto(${q.saldo})}"></span></span>
+				</label>
+			</div>
+			<div class="campo">
+				<label for="motivo-aplicar">Motivo (obligatorio)</label>
+				<textarea class="input" id="motivo-aplicar" name="motivo" required minlength="10" maxlength="500" aria-describedby="motivo-aplicar-ayuda"></textarea>
+				<p class="ayuda" id="motivo-aplicar-ayuda">Por ejemplo: «Llamé a la Sra. Rosa; pagó tarde y pide aplicarlo a noviembre». Quedará en la auditoría.</p>
+			</div>
+			<div class="acciones acciones-izquierda">
+				<button th:replace="~{fragments/componentes :: boton('Pedir aplicación', 'primario')}"></button>
+				<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-devolver', '¿Pedir devolver el ingreso?',
+					'La pasarela devolverá el dinero al mismo medio de origen cuando se apruebe. Nadie entrega efectivo.',
+					@{/pagos-en-linea/{id}/devolver(id=${o.id})}, 'Pedir devolución', 'secundario', 'Pedir devolución')}"></th:block>
+			</div>
+		</section>
+	</form>
+
+	<section class="tarjeta" aria-labelledby="titulo-ejecutar" th:if="${o.devolucionPorEjecutar}">
+		<h2 id="titulo-ejecutar">Devolución aprobada</h2>
+		<p class="secundario">La ejecuta una persona de Administración distinta de quien la aprobó. El dinero vuelve al mismo medio de origen.</p>
+		<th:block th:replace="~{fragments/componentes :: modalConfirmacion('modal-ejecutar', '¿Ejecutar la devolución?',
+			'La pasarela devolverá el dinero a la familia. Queda en la auditoría.',
+			@{/pagos-en-linea/{id}/devolucion(id=${o.id})}, 'Ejecutar devolución', false)}"></th:block>
+	</section>
+</main>
+</body>
+</html>

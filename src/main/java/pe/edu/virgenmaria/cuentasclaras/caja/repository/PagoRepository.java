@@ -48,6 +48,16 @@ public interface PagoRepository extends Repository<Pago, Long> {
 
 	Optional<Pago> findByComprobanteId(Long comprobanteId);
 
+	/** El pago de una orden en línea (como máximo uno: UNIQUE). */
+	Optional<Pago> findByOrdenPagoId(Long ordenPagoId);
+
+	List<Pago> findByOrdenPagoIdIn(java.util.Collection<Long> ordenes);
+
+	/** Pagos de una caja de canal en un rango de días (ingresos automáticos para Promotoría). */
+	@Query("select p from Pago p where p.caja.canal = :canal and p.fecha = :fecha order by p.id")
+	List<Pago> deCanalEnFecha(@Param("canal") pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja canal,
+			@Param("fecha") java.time.LocalDate fecha);
+
 	List<Pago> findByIdIn(java.util.Collection<Long> ids);
 
 	/** Pagos VIGENTES de una caja por medio (los digitales nunca entran al esperado del cierre). */
@@ -69,9 +79,13 @@ public interface PagoRepository extends Repository<Pago, Long> {
 	/** Pagos de un día de todas las cajas (resumen de Promotoría). */
 	List<Pago> findByFechaOrderByIdAsc(java.time.LocalDate fecha);
 
-	/** Pagos digitales VIGENTES que Administración aún no comparó con el banco, del más antiguo al más nuevo. */
+	/**
+	 * Pagos digitales VIGENTES de ventanilla que Administración aún no comparó con el banco, del más antiguo al más nuevo.
+	 * Los pagos en línea (caja de canal) no entran: los cubre la liquidación de la pasarela (sprint 4, tanda 3).
+	 */
 	@Query("select p from Pago p where p.medio <> pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.EFECTIVO "
 			+ "and p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE "
+			+ "and p.caja.canal = pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja.VENTANILLA "
 			+ "and not exists (select v.id from VerificacionBancaria v where v.pago = p) order by p.fecha, p.id")
 	List<Pago> digitalesSinVerificar();
 }

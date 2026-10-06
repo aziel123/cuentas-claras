@@ -6,13 +6,21 @@
 		<div>
 			<p class="etiqueta">Familia</p>
 			<h1 th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</h1>
-			<p class="secundario">Pronto vas a ver el estado de cuenta de tus hijos, pagar desde el celular y descargar tus boletas.</p>
+			<p class="secundario">Mira el estado de cuenta de tus hijos, paga desde el celular con Yape o tarjeta y descarga tus boletas.</p>
 		</div>
 	</div>
 
 	<th:block th:if="${avisoClave != null}">
 		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
 	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-familia" data-cta="familia">
+		<h2 id="titulo-familia">Pagar en línea</h2>
+		<p class="secundario">Elige las cuotas, paga en la página segura de la pasarela y recibe tu boleta al instante. No tienes que ir al colegio.</p>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Ver mi estado de cuenta y pagar', @{/familia}, 'primario')}"></a>
+		</div>
+	</section>
 
 	<section class="tarjeta" aria-labelledby="titulo-modulos">
 		<h2 id="titulo-modulos">Lo que podrás hacer aquí</h2>

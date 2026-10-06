@@ -59,8 +59,9 @@ public class DatosDemoDev implements ApplicationRunner {
 			new UsuarioDemo("caja", "Lucía Ramos", Rol.CAJA),
 			// Segunda cajera (sprint 3): para demostrar que dos cajas a la vez no cobran dos veces la misma cuota.
 			new UsuarioDemo("caja2", "Pedro Huanca", Rol.CAJA),
-			new UsuarioDemo("docente", "Carlos Quispe", Rol.DOCENTE),
-			new UsuarioDemo("apoderado", "Rosa Huamán Ccori", Rol.APODERADO));
+			new UsuarioDemo("docente", "Carlos Quispe", Rol.DOCENTE));
+	// El usuario «apoderado» (sprint 4) se enlaza a un apoderado registrado: lo crea DatosDemoApoderadoDev, después
+	// de las familias de demostración.
 
 	static final UsuarioDemo PROMOTOR_COLEGIO_B = new UsuarioDemo("promotor.b", "Promotor del Colegio B", Rol.PROMOTOR);
 

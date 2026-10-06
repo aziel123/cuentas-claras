@@ -72,7 +72,9 @@ public class ConsultaCajas {
 	/** Las cajas de ese día (hoy si es {@code null}). */
 	public CajasDelDia delDia(LocalDate fecha) {
 		LocalDate dia = fecha == null ? LocalDate.now(reloj) : fecha;
-		List<CajaDiaria> delDia = cajas.findByFechaOrderByCajeroAsc(dia);
+		// Solo las cajas de las cajeras: los pagos en línea (caja de canal) se ven en Pagos en línea.
+		List<CajaDiaria> delDia = cajas.findByCanalAndFechaOrderByCajeroAsc(
+				pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja.VENTANILLA, dia);
 		List<Long> ids = delDia.stream().map(CajaDiaria::getId).toList();
 		Map<Long, CierreCaja> ultimos = ids.isEmpty() ? Map.of()
 				: cierres.findByCajaIdInOrderByNumeroAsc(ids).stream()

@@ -52,8 +52,16 @@ public final class UsuarioAutenticado implements UserDetails, CredentialsContain
 
 	private final Set<Rol> roles;
 
+	/** Sprint 4: el apoderado de la cuenta en línea (null para el personal). Su familia sale de aquí, nunca de la URL. */
+	private final Long apoderadoId;
+
 	public UsuarioAutenticado(Long id, Long colegioId, String nombreUsuario, String nombreCompleto, String claveHash,
 			boolean activo, boolean bloqueado, boolean debeCambiarClave, Set<Rol> roles) {
+		this(id, colegioId, nombreUsuario, nombreCompleto, claveHash, activo, bloqueado, debeCambiarClave, roles, null);
+	}
+
+	public UsuarioAutenticado(Long id, Long colegioId, String nombreUsuario, String nombreCompleto, String claveHash,
+			boolean activo, boolean bloqueado, boolean debeCambiarClave, Set<Rol> roles, Long apoderadoId) {
 		this.id = Objects.requireNonNull(id, "id");
 		this.colegioId = Objects.requireNonNull(colegioId, "colegioId");
 		this.nombreUsuario = nombreUsuario;
@@ -63,12 +71,18 @@ public final class UsuarioAutenticado implements UserDetails, CredentialsContain
 		this.bloqueado = bloqueado;
 		this.debeCambiarClave = debeCambiarClave;
 		this.roles = roles.isEmpty() ? EnumSet.noneOf(Rol.class) : EnumSet.copyOf(roles);
+		this.apoderadoId = apoderadoId;
 	}
 
 	public static UsuarioAutenticado de(Usuario usuario, LocalDateTime ahora) {
 		return new UsuarioAutenticado(usuario.getId(), usuario.getColegioId(), usuario.getNombreUsuario(),
 				usuario.getNombreCompleto(), usuario.getClaveHash(), usuario.isActivo(), usuario.estaBloqueado(ahora),
-				usuario.isDebeCambiarClave(), usuario.getRoles());
+				usuario.isDebeCambiarClave(), usuario.getRoles(), usuario.getApoderadoId());
+	}
+
+	/** El apoderado de la cuenta en línea; null para el personal. */
+	public Long apoderadoId() {
+		return apoderadoId;
 	}
 
 	@Override

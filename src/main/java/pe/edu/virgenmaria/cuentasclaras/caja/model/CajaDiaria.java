@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.model.BaseEntity;
+import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -35,6 +36,11 @@ public class CajaDiaria extends BaseEntity {
 
 	@Column(name = "fondo_fijo", nullable = false, updatable = false, precision = 10, scale = 2)
 	private BigDecimal fondoFijo;
+
+	/** Sprint 4: VENTANILLA (una cajera) o una caja de canal (PASARELA). No cambia (1143). */
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, updatable = false, length = 20)
+	private CanalCaja canal;
 
 	// --- Lo único que puede cambiar (GRANT UPDATE por columna en MySQL; los triggers vigilan el cierre) ---
 
@@ -64,15 +70,43 @@ public class CajaDiaria extends BaseEntity {
 		caja.cajero = Objects.requireNonNull(cajero, "cajero");
 		caja.fecha = Objects.requireNonNull(fecha, "fecha");
 		caja.fondoFijo = Dinero.normalizar(fondoFijo);
+		caja.canal = CanalCaja.VENTANILLA;
 		caja.estado = EstadoCaja.ABIERTA;
 		caja.cierres = 0;
 		caja.conteos = 0;
 		return caja;
 	}
 
-	/** Una caja cerrada no recibe efectivo (los pagos digitales sí). */
+	/**
+	 * Caja de canal del día (sprint 4): su «cajero» es el actor de sistema del canal, sin fondo fijo, siempre ABIERTA y
+	 * nunca se cuenta ni se cierra (CHECK en la base). Recibe solo pagos digitales que entran solos.
+	 */
+	public static CajaDiaria abrirCanal(CanalCaja canal, ActorSistema actor, LocalDate fecha) {
+		Objects.requireNonNull(canal, "canal");
+		Objects.requireNonNull(actor, "actor");
+		if (canal == CanalCaja.VENTANILLA || (canal == CanalCaja.PASARELA) != (actor == ActorSistema.PASARELA)
+				|| (canal == CanalCaja.RECAUDACION) != (actor == ActorSistema.RECAUDACION)) {
+			throw new IllegalArgumentException("La caja del canal " + canal + " es de su actor de sistema");
+		}
+		CajaDiaria caja = new CajaDiaria();
+		caja.cajero = actor.usuario();
+		caja.fecha = Objects.requireNonNull(fecha, "fecha");
+		caja.fondoFijo = Dinero.CERO;
+		caja.canal = canal;
+		caja.estado = EstadoCaja.ABIERTA;
+		caja.cierres = 0;
+		caja.conteos = 0;
+		return caja;
+	}
+
+	/** Una caja cerrada no recibe efectivo (los pagos digitales sí). Una caja de canal nunca lo recibe. */
 	public boolean aceptaEfectivo() {
-		return estado == EstadoCaja.ABIERTA;
+		return estado == EstadoCaja.ABIERTA && canal == CanalCaja.VENTANILLA;
+	}
+
+	/** Caja de canal (pagos que entran solos): no se cuenta ni se cierra. */
+	public boolean esDeCanal() {
+		return canal != CanalCaja.VENTANILLA;
 	}
 
 	/**
@@ -81,6 +115,7 @@ public class CajaDiaria extends BaseEntity {
 	 * @return COINCIDE (cierra), RECONTAR (vuelve a contar, sin montos) o FINAL (el reconteo: cierra)
 	 */
 	public ResultadoConteo registrarConteo(BigDecimal contado, BigDecimal esperado) {
+		exigirVentanilla();
 		exigirAbierta();
 		if (conteos == 0) {
 			primerConteo = Dinero.normalizar(contado);
@@ -96,6 +131,7 @@ public class CajaDiaria extends BaseEntity {
 
 	/** Cierra con el cierre ya registrado (número = cierres + 1). */
 	public void cerrar(CierreCaja cierre) {
+		exigirVentanilla();
 		exigirAbierta();
 		if (conteos == 0 || cierre == null || cierre.getNumero() != cierres + 1) {
 			throw new IllegalStateException("La caja se cierra con su cierre registrado");
@@ -123,6 +159,12 @@ public class CajaDiaria extends BaseEntity {
 		return estado == EstadoCaja.ABIERTA && conteos == 1;
 	}
 
+	private void exigirVentanilla() {
+		if (esDeCanal()) {
+			throw new IllegalStateException("Una caja de canal (" + canal.etiqueta() + ") no se cuenta ni se cierra");
+		}
+	}
+
 	private void exigirAbierta() {
 		if (estado != EstadoCaja.ABIERTA) {
 			throw new ReglaNegocioException("Esta caja ya está cerrada.");
@@ -144,6 +186,10 @@ public class CajaDiaria extends BaseEntity {
 
 	public BigDecimal getFondoFijo() {
 		return fondoFijo;
+	}
+
+	public CanalCaja getCanal() {
+		return canal;
 	}
 
 	public EstadoCaja getEstado() {

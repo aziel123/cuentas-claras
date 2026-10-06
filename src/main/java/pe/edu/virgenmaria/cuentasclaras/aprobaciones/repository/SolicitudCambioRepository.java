@@ -36,4 +36,8 @@ public interface SolicitudCambioRepository extends Repository<SolicitudCambio, L
 	List<SolicitudCambio> findTop30ByEstadoNotOrderByResueltoEnDescIdDesc(EstadoSolicitud estado);
 
 	List<SolicitudCambio> findByTipoOrderByIdDesc(TipoSolicitud tipo);
+
+	/** La última solicitud de ese tipo para esa entidad en ese estado (por ejemplo, la devolución APROBADA de una orden). */
+	Optional<SolicitudCambio> findFirstByTipoAndEntidadAndEntidadIdAndEstadoOrderByIdDesc(TipoSolicitud tipo, String entidad,
+			Long entidadId, EstadoSolicitud estado);
 }

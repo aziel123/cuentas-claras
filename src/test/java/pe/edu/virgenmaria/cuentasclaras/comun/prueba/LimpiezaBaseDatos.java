@@ -30,8 +30,13 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM aplicacion_pago");
 		jdbc.update("DELETE FROM pago WHERE reemplaza_pago_id IS NOT NULL");
 		jdbc.update("DELETE FROM pago");
+		// Sprint 4 (tanda 1): pagos en línea, después del pago que enlaza su orden.
+		jdbc.update("DELETE FROM evento_pasarela");
+		jdbc.update("DELETE FROM orden_pago_cuota");
+		jdbc.update("DELETE FROM orden_pago");
 		jdbc.update("DELETE FROM caja_diaria");
 		jdbc.update("DELETE FROM comprobante_linea");
+		jdbc.update("UPDATE comprobante SET reemplaza_id = NULL WHERE reemplaza_id IS NOT NULL");
 		jdbc.update("DELETE FROM comprobante WHERE modifica_id IS NOT NULL");
 		jdbc.update("DELETE FROM comprobante");
 		jdbc.update("DELETE FROM serie_comprobante");
@@ -48,6 +53,7 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM importacion_alumnos");
 		jdbc.update("DELETE FROM matricula");
 		jdbc.update("DELETE FROM alumno");
+		jdbc.update("UPDATE usuario SET apoderado_id = NULL WHERE apoderado_id IS NOT NULL");
 		jdbc.update("DELETE FROM apoderado");
 		jdbc.update("DELETE FROM familia");
 		jdbc.update("DELETE FROM seccion");
@@ -57,5 +63,6 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM usuario_rol");
 		jdbc.update("DELETE FROM usuario");
 		jdbc.update("DELETE FROM colegio WHERE id <> 1");
+		jdbc.update("DELETE FROM configuracion_bd");
 	}
 }

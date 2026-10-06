@@ -144,7 +144,8 @@ BEGIN
     END IF;
 END$$
 
--- El comprobante usa el número que la serie acaba de asignar: sin saltos ni reutilización (y UNIQUE serie+número).
+-- (Reemplaza la versión del sprint 3.) El número es el siguiente de la serie; la nota de crédito usa la letra del
+-- comprobante que anula; la reemisión solo reemplaza a un comprobante RECHAZADO del mismo tipo y total.
 DROP TRIGGER IF EXISTS trg_comprobante_correlativo$$
 CREATE TRIGGER trg_comprobante_correlativo BEFORE INSERT ON comprobante FOR EACH ROW
 BEGIN
@@ -154,6 +155,14 @@ BEGIN
     IF NEW.tipo = 'NOTA_CREDITO' AND NOT (LEFT(NEW.serie, 1) <=>
             (SELECT LEFT(m.serie, 1) FROM comprobante m WHERE m.id = NEW.modifica_id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la nota de crédito usa la letra del comprobante que anula';
+    END IF;
+    IF NEW.reemplaza_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM comprobante r WHERE r.id = NEW.reemplaza_id
+            AND r.estado_envio = 'RECHAZADO' AND r.tipo = NEW.tipo AND r.total = NEW.total
+            AND r.modifica_id <=> NEW.modifica_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo se reemite un comprobante RECHAZADO del mismo tipo y total';
+    END IF;
+    IF NOT (NEW.estado_envio <=> 'PENDIENTE') OR NOT (NEW.intentos <=> 0) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un comprobante nace PENDIENTE de envío';
     END IF;
 END$$
 
@@ -198,9 +207,9 @@ BEGIN
     END IF;
 END$$
 
--- Un pago nace VIGENTE, con un comprobante (boleta o factura) del mismo total. En efectivo, solo en una caja ABIERTA;
--- la única excepción es el pago que reemplaza a otro anulado POR CORRECCIÓN de la misma caja, con el mismo medio y el
--- mismo total.
+-- (Reemplaza la versión del sprint 3.) Un pago nace VIGENTE con su comprobante del mismo total; efectivo solo en caja
+-- ABIERTA; el reemplazo, de un pago anulado por CORRECCIÓN; el pago en línea, de una orden CONFIRMADA por la pasarela
+-- con ese monto, operación y medio (o, si la orden quedó POR_REVISAR, con la aplicación aprobada).
 DROP TRIGGER IF EXISTS trg_pago_registro$$
 CREATE TRIGGER trg_pago_registro BEFORE INSERT ON pago FOR EACH ROW
 BEGIN
@@ -215,12 +224,20 @@ BEGIN
             AND NOT ((SELECT d.estado FROM caja_diaria d WHERE d.id = NEW.caja_diaria_id) <=> 'ABIERTA') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la caja está cerrada: no acepta efectivo';
     END IF;
-    -- Correcciones del sprint 3 (A3): solo reemplaza a un pago anulado por CORRECCIÓN (nunca por devolución).
     IF NEW.origen = 'REEMPLAZO' AND NOT EXISTS (SELECT 1 FROM pago r JOIN anulacion_pago n ON n.pago_id = r.id
             WHERE r.id = NEW.reemplaza_pago_id AND n.tipo = 'CORRECCION'
             AND r.estado = 'ANULADO' AND r.caja_diaria_id = NEW.caja_diaria_id AND r.medio = NEW.medio
             AND r.total = NEW.total) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el reemplazo debe ser del pago anulado (misma caja, medio y total)';
+    END IF;
+    IF NEW.origen = 'PASARELA' AND NOT EXISTS (SELECT 1 FROM orden_pago o WHERE o.id = NEW.orden_pago_id
+            AND o.operacion = NEW.numero_operacion AND o.monto_confirmado = NEW.total AND o.moneda_confirmada = 'PEN'
+            AND o.medio_confirmado = NEW.medio
+            AND ((o.estado IN ('CREADA', 'VENCIDA') AND o.familia_id = NEW.familia_id AND o.monto = NEW.total)
+                OR (o.estado = 'POR_REVISAR' AND EXISTS (SELECT 1 FROM solicitud_cambio s
+                    WHERE s.tipo = 'APLICAR_INGRESO' AND s.entidad = 'orden_pago' AND s.entidad_id = o.id
+                    AND s.estado = 'APROBADA')))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: pago en línea sin la confirmación de la pasarela por ese monto';
     END IF;
 END$$
 
@@ -384,19 +401,25 @@ BEGIN
     END IF;
 END$$
 
--- M1. El resultado del envío al OSE se registra una vez, desde PENDIENTE; ACEPTADO exige el hash, la respuesta y la
--- fecha de envío. (Con el OSE real, los envíos los registrará un usuario de proceso aparte, con su propio GRANT.)
+-- (Reemplaza la versión de las correcciones del sprint 3.) Outbox del OSE: los intentos avanzan de uno en uno; ACEPTADO
+-- u OBSERVADO exigen hash, respuesta, envío y aceptación; un resultado definitivo (ACEPTADO, OBSERVADO, RECHAZADO) ya
+-- no cambia en nada.
 DROP TRIGGER IF EXISTS trg_comprobante_envio$$
 CREATE TRIGGER trg_comprobante_envio BEFORE UPDATE ON comprobante FOR EACH ROW
 BEGIN
-    IF OLD.estado_envio <> 'PENDIENTE' AND (NOT (NEW.estado_envio <=> OLD.estado_envio)
+    IF OLD.estado_envio IN ('ACEPTADO', 'OBSERVADO', 'RECHAZADO') AND (NOT (NEW.estado_envio <=> OLD.estado_envio)
             OR NOT (NEW.codigo_hash <=> OLD.codigo_hash) OR NOT (NEW.respuesta <=> OLD.respuesta)
             OR NOT (NEW.enviado_en <=> OLD.enviado_en) OR NOT (NEW.enlace_pdf <=> OLD.enlace_pdf)
-            OR NOT (NEW.intentos <=> OLD.intentos)) THEN
+            OR NOT (NEW.intentos <=> OLD.intentos) OR NOT (NEW.codigo_respuesta <=> OLD.codigo_respuesta)
+            OR NOT (NEW.aceptado_en <=> OLD.aceptado_en) OR NOT (NEW.proximo_intento_en <=> OLD.proximo_intento_en)
+            OR NOT (NEW.ultimo_error <=> OLD.ultimo_error)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el envío ya resuelto de un comprobante no cambia';
     END IF;
-    IF OLD.estado_envio = 'PENDIENTE' AND NEW.estado_envio = 'ACEPTADO' AND (NEW.codigo_hash IS NULL
-            OR NEW.respuesta IS NULL OR NEW.enviado_en IS NULL OR NOT (NEW.intentos <=> OLD.intentos + 1)) THEN
+    IF NOT (NEW.intentos <=> OLD.intentos) AND NOT (NEW.intentos <=> OLD.intentos + 1) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los intentos de envío avanzan de uno en uno';
+    END IF;
+    IF NEW.estado_envio IN ('ACEPTADO', 'OBSERVADO') AND NOT (NEW.estado_envio <=> OLD.estado_envio)
+            AND (NEW.codigo_hash IS NULL OR NEW.respuesta IS NULL OR NEW.enviado_en IS NULL OR NEW.aceptado_en IS NULL) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: ACEPTADO exige el hash, la respuesta y el envío';
     END IF;
 END$$
@@ -421,6 +444,67 @@ BEGIN
                     AND s.tipo = 'DATOS_FACTURACION' AND s.entidad = 'apoderado' AND s.entidad_id = NEW.id
                     AND s.estado = 'APROBADA')) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el RUC del apoderado solo cambia con su solicitud aprobada';
+    END IF;
+END$$
+
+-- ===================== Sprint 4 · tanda 1 (V13): pagos en línea y outbox del OSE =====================
+-- Tanda 1: trg_pago_registro va en su versión REDUCIDA (sin la rama RECAUDACION: linea_recaudacion y lote_recaudacion
+-- llegan con V14). Un trigger que nombra una tabla inexistente hace fallar con 1146 todo INSERT o UPDATE sobre su tabla.
+
+-- La orden nace CREADA, sin enlace ni confirmación. La pasarela SIMULADA solo existe en una base que el DBA habilitó
+-- (configuracion_bd, sin GRANT para cc_app): en producción esa fila no existe y la orden simulada se rechaza.
+DROP TRIGGER IF EXISTS trg_orden_pago_nace$$
+CREATE TRIGGER trg_orden_pago_nace BEFORE INSERT ON orden_pago FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> 'CREADA') OR NEW.proveedor_orden_id IS NOT NULL OR NEW.cargo_id IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una orden de pago nace CREADA, sin enlace ni confirmación';
+    END IF;
+    IF NEW.proveedor = 'SIMULADA' AND NOT EXISTS (SELECT 1 FROM configuracion_bd c
+            WHERE c.clave = 'pasarela_simulada' AND c.valor = 'PERMITIDA') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: esta base no admite la pasarela simulada';
+    END IF;
+END$$
+
+-- Las cuotas de la orden: de SU familia, por pagar, y solo antes de enviarla a la pasarela.
+DROP TRIGGER IF EXISTS trg_orden_pago_cuota_registro$$
+CREATE TRIGGER trg_orden_pago_cuota_registro BEFORE INSERT ON orden_pago_cuota FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM orden_pago o JOIN cuota c ON c.id = NEW.cuota_id JOIN alumno a ON a.id = c.alumno_id
+            WHERE o.id = NEW.orden_pago_id AND o.estado = 'CREADA' AND o.proveedor_orden_id IS NULL
+            AND a.familia_id = o.familia_id AND c.colegio_id = o.colegio_id AND c.estado IN ('PENDIENTE', 'PARCIAL')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la orden solo lleva cuotas por pagar de su familia';
+    END IF;
+END$$
+
+-- Enlace con la pasarela una sola vez (y con las cuotas completas); confirmación una sola vez; transiciones válidas;
+-- PAGADA/APLICADA exigen su pago vigente y DEVUELTA, la devolución aprobada.
+DROP TRIGGER IF EXISTS trg_orden_pago_estado$$
+CREATE TRIGGER trg_orden_pago_estado BEFORE UPDATE ON orden_pago FOR EACH ROW
+BEGIN
+    IF NOT (NEW.proveedor_orden_id <=> OLD.proveedor_orden_id) AND (OLD.proveedor_orden_id IS NOT NULL
+            OR NOT (NEW.estado <=> 'CREADA') OR NOT (NEW.monto <=> (SELECT COALESCE(SUM(x.monto), 0.00)
+                FROM orden_pago_cuota x WHERE x.orden_pago_id = NEW.id))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el enlace con la pasarela se registra una vez y con sus cuotas';
+    END IF;
+    IF OLD.cargo_id IS NOT NULL AND (NOT (NEW.cargo_id <=> OLD.cargo_id) OR NOT (NEW.operacion <=> OLD.operacion)
+            OR NOT (NEW.monto_confirmado <=> OLD.monto_confirmado) OR NOT (NEW.moneda_confirmada <=> OLD.moneda_confirmada)
+            OR NOT (NEW.medio_confirmado <=> OLD.medio_confirmado) OR NOT (NEW.confirmado_en <=> OLD.confirmado_en)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la confirmación de la pasarela no cambia';
+    END IF;
+    IF NOT (NEW.estado <=> OLD.estado) AND NOT (
+            (OLD.estado = 'CREADA' AND NEW.estado IN ('PAGADA', 'POR_REVISAR', 'VENCIDA', 'RECHAZADA'))
+            OR (OLD.estado = 'VENCIDA' AND NEW.estado IN ('PAGADA', 'POR_REVISAR'))
+            OR (OLD.estado = 'POR_REVISAR' AND NEW.estado IN ('APLICADA', 'DEVUELTA'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: cambio de estado de la orden no permitido';
+    END IF;
+    IF NEW.estado IN ('PAGADA', 'APLICADA') AND NOT (NEW.estado <=> OLD.estado)
+            AND NOT EXISTS (SELECT 1 FROM pago p WHERE p.orden_pago_id = NEW.id AND p.estado = 'VIGENTE') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una orden pagada necesita su pago registrado';
+    END IF;
+    IF NEW.estado = 'DEVUELTA' AND NOT (NEW.estado <=> OLD.estado) AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s
+            WHERE s.tipo = 'DEVOLVER_INGRESO' AND s.entidad = 'orden_pago' AND s.entidad_id = NEW.id
+            AND s.estado = 'APROBADA' AND s.resuelto_por <> NEW.devuelto_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la devolución necesita su aprobación';
     END IF;
 END$$
 

@@ -31,7 +31,7 @@ public class EmisorSimulado implements EmisorElectronico {
 
 	@Override
 	public ResultadoEnvio enviar(DocumentoElectronico documento) {
-		return new ResultadoEnvio(EstadoEnvio.ACEPTADO, RESPUESTA, hash(canonica(documento)), null);
+		return new ResultadoEnvio(EstadoEnvio.ACEPTADO, RESPUESTA, hash(canonica(documento)), null, "0", null);
 	}
 
 	@Override

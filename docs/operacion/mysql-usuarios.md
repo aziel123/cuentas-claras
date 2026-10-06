@@ -124,6 +124,22 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
 - **Tablas financieras** (pago, cuota, comprobante, cierre de caja): INSERT y UPDATE (para anular con estado), **nunca DELETE**.
 - El CI (job `mysql`) corre las migraciones y las pruebas con estos mismos permisos: si falta un GRANT, falla.
 
+## Pasarela simulada y perfil `piloto` (sprint 4)
+- La tabla `configuracion_bd` (V13) la escribe **solo el DBA**; `cc_app` solo la lee. En **producción no existe** la fila
+  `pasarela_simulada`: el trigger `trg_orden_pago_nace` rechaza toda orden de la pasarela simulada y la aplicación en
+  `prod` no arranca si la fila existe o si la base admite esa orden.
+- En la base del **piloto** (otra base, otro despliegue, perfil `piloto`) el DBA la registra con `cc_migrador`:
+  ```sql
+  INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('pasarela_simulada', 'PERMITIDA', NOW(6));
+  ```
+  Sin esa fila, el perfil `piloto` con la pasarela simulada no arranca. El piloto exige además
+  `PASARELA_SIMULADA_SECRETO` propio (no el de desarrollo) y nunca se combina con `prod`, `dev` ni `test`.
+- Pasarela real: `PASARELA_PROVEEDOR` (por defecto `NINGUNA`: sin pago en línea). Hoy solo se acepta `CULQI` con
+  `PASARELA_LLAVE_SECRETA` (`sk_live_` en prod, `sk_test_` fuera de prod), `PASARELA_WEBHOOK_USUARIO` y
+  `PASARELA_WEBHOOK_CLAVE`, y su adaptador todavía no está integrado: mientras tanto, déjalo en `NINGUNA`.
+- OSE real: `COMPROBANTES_PROVEEDOR=NUBEFACT` con `NUBEFACT_RUTA` (https de `api.nubefact.com`) y `NUBEFACT_TOKEN`. Fuera
+  de prod solo con `cuentasclaras.comprobantes.permitir-real-fuera-de-prod: true` (cuenta DEMO).
+
 ## Variables de entorno (perfil `prod`)
 | Variable | Contenido |
 |---|---|
@@ -162,6 +178,12 @@ verificacion_bancaria SET version = version` da 1142; `UPDATE cierre_caja SET co
 `cierre_caja` de una caja inexistente y una `verificacion_bancaria` de un pago inexistente dan 1644.
 Correcciones: `DELETE FROM reembolso` y `UPDATE reembolso SET version = version` dan 1142; un `reembolso` de una
 anulación inexistente da 1644.
+Sprint 4, tanda 1 (V13, pagos en línea y outbox del OSE): `DELETE` sobre `orden_pago`, `orden_pago_cuota`,
+`evento_pasarela` y `configuracion_bd` da 1142; `UPDATE orden_pago_cuota SET version = version` da 1142 (solo
+inserción); `INSERT` o `UPDATE` sobre `configuracion_bd` da 1142 (la escribe solo el DBA); `UPDATE orden_pago SET monto =
+monto`, `UPDATE evento_pasarela SET orden_pago_id = orden_pago_id`, `UPDATE caja_diaria SET canal = canal`, `UPDATE pago
+SET orden_pago_id = orden_pago_id` y `UPDATE comprobante SET reemplaza_id = reemplaza_id` dan 1143; una orden que nace
+PAGADA, una cuota de una orden inexistente y (sin la fila del DBA) una orden de la pasarela `SIMULADA` dan 1644.
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

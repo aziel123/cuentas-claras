@@ -102,4 +102,28 @@ class DatosDemoColegioDevTest {
 	private long contar(String desde) {
 		return jdbc.queryForObject("SELECT COUNT(*) FROM " + desde, Long.class);
 	}
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository usuarios;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.alumnos.repository.ApoderadoRepository apoderadosRepo;
+
+	@Autowired
+	private org.springframework.security.crypto.password.PasswordEncoder codificador;
+
+	/** Sprint 4: el usuario «apoderado» queda enlazado a Rosa Huamán (DNI 45678912) y entra sin clave temporal. */
+	@Test
+	void creaElUsuarioApoderadoEnlazadoARosa() {
+		DatosDemoApoderadoDev demoApoderado = new DatosDemoApoderadoDev(usuarios, apoderadosRepo, codificador, auditoria,
+				transacciones, reloj, "jdbc:h2:mem:demo", "demo-cuentas-claras-2026");
+		assertThat(demoApoderado.crearSiCorresponde()).as("sin familias no se crea").isFalse();
+		assertThat(datosDemo("jdbc:h2:mem:demo", true).crearSiCorresponde()).isTrue();
+
+		assertThat(demoApoderado.crearSiCorresponde()).isTrue();
+		assertThat(demoApoderado.crearSiCorresponde()).as("una sola vez").isFalse();
+		assertThat(jdbc.queryForObject("SELECT CONCAT(a.numero_documento, ':', u.debe_cambiar_clave) FROM usuario u "
+				+ "JOIN apoderado a ON a.id = u.apoderado_id WHERE u.nombre_usuario = 'apoderado' AND u.colegio_id = 1",
+				String.class)).isEqualTo("45678912:FALSE");
+	}
 }

@@ -5,6 +5,9 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.security.autoconfigure.web.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.authentication.CredentialsExpiredException;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -42,7 +45,33 @@ public class ConfiguracionSeguridad {
 	static final String CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
 			+ "font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 
+	/**
+	 * Sprint 4: cadena aparte para los avisos de la pasarela ({@link ModuloApp#RUTAS_WEBHOOK}). Sin sesión
+	 * ({@code STATELESS}), sin formulario de ingreso y sin CSRF SOLO aquí; solo {@code POST} a la ruta del aviso y todo lo
+	 * demás se niega. Las mismas cabeceras. La autenticación del aviso (firma) la hace la aplicación.
+	 */
 	@Bean
+	@Order(1)
+	public SecurityFilterChain cadenaDeWebhooks(HttpSecurity http) throws Exception {
+		http
+			.securityMatcher(ModuloApp.RUTAS_WEBHOOK)
+			.authorizeHttpRequests(auth -> auth
+				.requestMatchers(HttpMethod.POST, ModuloApp.RUTA_WEBHOOK_PASARELA).permitAll()
+				.anyRequest().denyAll())
+			.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+			.csrf(c -> c.disable())
+			.requestCache(c -> c.disable())
+			.securityContext(c -> c.requireExplicitSave(true))
+			.headers(h -> h
+				.contentSecurityPolicy(c -> c.policyDirectives(CSP))
+				.frameOptions(fo -> fo.deny())
+				.referrerPolicy(r -> r.policy(ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+				.permissionsPolicyHeader(p -> p.policy("camera=(), microphone=(), geolocation=(), payment=()")));
+		return http.build();
+	}
+
+	@Bean
+	@Order(2)
 	public SecurityFilterChain cadenaDeSeguridad(HttpSecurity http, ManejadorIngresoExitoso manejadorIngresoExitoso,
 			ManejadorAccesoDenegado manejadorAccesoDenegado, SessionRegistry registroSesiones) throws Exception {
 		http

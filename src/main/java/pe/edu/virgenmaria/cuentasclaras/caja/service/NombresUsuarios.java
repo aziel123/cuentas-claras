@@ -21,6 +21,17 @@ public class NombresUsuarios {
 		if (nombreUsuario == null) {
 			return null;
 		}
+		for (pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema actor
+				: pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema.values()) {
+			if (actor.usuario().equals(nombreUsuario)) {
+				return switch (actor) {
+					case PASARELA -> "Pago en línea (automático)";
+					case RECAUDACION -> "Recaudación bancaria (automático)";
+					case CONCILIACION -> "Conciliación (automático)";
+					case OSE -> "Envío al OSE (automático)";
+				};
+			}
+		}
 		return usuarios.findByNombreUsuario(nombreUsuario).map(Usuario::getNombreCompleto).orElse(nombreUsuario);
 	}
 }

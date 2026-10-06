@@ -67,6 +67,11 @@ class MatrizPermisosTest {
 					.getResponse().getStatus();
 			// Permitido: 200 si el módulo ya existe, 404 si aún no tiene controlador. Negado: 403. Nunca otro.
 			int esperado = !modulo.permite(rol) ? 403 : modulo.disponible() ? 200 : 404;
+			// Sprint 4: un usuario APODERADO de prueba sin apoderado enlazado no tiene familia que mostrar (404, sin
+			// pistas). Con su apoderado enlazado lo prueba PagoEnLineaWebTest.
+			if (rol == Rol.APODERADO && modulo == ModuloApp.FAMILIA) {
+				esperado = 404;
+			}
 			if (estado != esperado) {
 				errores.add(rol + " en " + modulo.ruta() + ": esperaba " + esperado + " y recibió " + estado);
 			}
@@ -351,6 +356,10 @@ class MatrizPermisosTest {
 			return true;
 		}
 		PathContainer camino = PathContainer.parsePath(ruta);
+		// Sprint 4: los avisos de la pasarela tienen su propia cadena (sin sesión; solo POST con firma).
+		if (PathPatternParser.defaultInstance.parse(ModuloApp.RUTA_WEBHOOK_PASARELA).matches(camino)) {
+			return true;
+		}
 		return Arrays.stream(ModuloApp.values())
 				.flatMap(m -> Arrays.stream(m.patrones()))
 				.anyMatch(patron -> PathPatternParser.defaultInstance.parse(patron).matches(camino));

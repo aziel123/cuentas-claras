@@ -127,6 +127,21 @@ public class ServicioAnulacionPagos {
 	}
 
 	/**
+	 * Sprint 4: la pasarela informó un contracargo de un pago en línea. El sistema deja PRELLENADA la solicitud de
+	 * anulación (devolución) para que Administración la revise y Promotoría o Dirección la aprueben: no se anula nada solo.
+	 */
+	@PreAuthorize("hasRole('SISTEMA_PASARELA')")
+	public void solicitarPorContracargo(Long pagoId, String motivo) {
+		Pago pago = pagos.findById(pagoId).orElseThrow(() -> new RecursoNoEncontradoException("Pago no encontrado"));
+		if (!pago.vigente() || !pago.getCaja().esDeCanal()) {
+			throw new ReglaNegocioException("Solo se pide anular un pago en línea vigente por contracargo.");
+		}
+		String resumen = "Devolver " + descripcion(pago) + " · contracargo de la pasarela";
+		crear(pago, resumen, Map.of(DATO_TIPO, TipoAnulacion.DEVOLUCION.name(), DATO_CAUSA, CausaDevolucion.OTRA.name()),
+				Motivo.exigir(motivo));
+	}
+
+	/**
 	 * La corrección: la familia destino (buscada por nombre o DNI) y sus cuotas con el saldo que tendrían si el pago se
 	 * anula. Solo lectura.
 	 */
@@ -228,7 +243,9 @@ public class ServicioAnulacionPagos {
 	 * un Yape que nunca llegó no desaparece de la conciliación con una devolución: sigue como alerta.
 	 */
 	static void exigirVerificado(Pago pago, VerificacionBancariaRepository verificaciones) {
-		if (pago.getMedio() != MedioPago.EFECTIVO
+		// Sprint 4 (decisión 29): un pago en línea lo confirmó la pasarela con su llave secreta y su reembolso solo vuelve
+		// al mismo medio de origen: se puede anular antes de su liquidación.
+		if (pago.getMedio() != MedioPago.EFECTIVO && !pago.getCaja().esDeCanal()
 				&& !verificaciones.existsByPagoIdAndResultado(pago.getId(), ResultadoVerificacion.ENCONTRADO)) {
 			throw new ReglaNegocioException("Este pago con " + pago.getMedio().etiqueta() + " todavía no está verificado "
 					+ "en el banco. Administración debe encontrarlo en Conciliación antes de que se pueda anular.");

@@ -118,6 +118,8 @@ public class ServicioUsuarios {
 	/** Roles que quien está en sesión puede asignar. */
 	public Set<Rol> rolesAsignables() {
 		Set<Rol> roles = EnumSet.allOf(Rol.class);
+		// Sprint 4: la cuenta del apoderado se crea desde su ficha (enlazada a su familia), no desde aquí.
+		roles.remove(Rol.APODERADO);
 		if (!esPromotor(actor())) {
 			roles.removeAll(ROLES_DE_PROMOTORIA);
 		}

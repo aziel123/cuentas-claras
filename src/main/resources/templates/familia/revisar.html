@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Revisa tu pago', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-revisar" th:with="r=${revision}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/familia}">Mi familia</a></p>
+			<h1>Revisa tu pago</h1>
+		</div>
+	</div>
+	<p class="marca-simulado" th:if="${r.simulada}">PAGO SIMULADO · NO ES DINERO REAL</p>
+
+	<form method="post" th:action="@{/familia/pagar}" class="formulario">
+		<input type="hidden" name="clave" th:value="${r.clave}">
+		<input type="hidden" name="totalVisto" th:value="${r.total}">
+		<input type="hidden" name="cuotaIds" th:each="id : ${r.cuotaIds}" th:value="${id}">
+
+		<section class="tarjeta total-cobro" aria-labelledby="titulo-total">
+			<h2 id="titulo-total" class="etiqueta">Total a pagar</h2>
+			<p class="total-cobro-monto" data-total th:text="|S/ ${#numbers.formatDecimal(r.total, 1, 'COMMA', 2, 'POINT')}|">S/ 900.00</p>
+			<ul class="lista-imputacion">
+				<li th:each="l : ${r.lineas}">
+					<span><strong th:text="${l.descripcion}">Pensión octubre 2026</strong>
+						<span class="secundario bloque" th:text="|${l.alumno} · vence ${#temporals.format(l.vencimiento, 'dd/MM/yyyy')}|">Mateo · vence 31/10/2026</span></span>
+					<span th:replace="~{fragments/componentes :: monto(${l.monto})}"></span>
+				</li>
+			</ul>
+			<p class="ayuda">El total lo calcula el colegio con lo que debes: no se puede cambiar. Pagas el monto exacto, sin recargo.</p>
+		</section>
+
+		<section class="tarjeta" aria-labelledby="titulo-comprobante">
+			<h2 id="titulo-comprobante">Tu comprobante</h2>
+			<p th:text="|Boleta a nombre de ${r.receptor} (${r.documentoEnmascarado})|">Boleta a nombre de Rosa Huamán Ccori</p>
+			<label class="opcion" th:if="${r.puedeFactura}">
+				<input type="checkbox" name="factura" value="true">
+				<span th:text="|Prefiero factura a nombre de ${r.razonSocial}|">Prefiero factura</span>
+			</label>
+		</section>
+
+		<div class="acciones acciones-izquierda">
+			<a class="btn btn-secundario" th:href="@{/familia}">Volver</a>
+			<button th:replace="~{fragments/componentes :: boton('Ir a pagar', 'primario')}"></button>
+		</div>
+	</form>
+</main>
+</body>
+</html>

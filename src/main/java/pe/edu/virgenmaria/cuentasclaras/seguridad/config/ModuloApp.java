@@ -52,8 +52,14 @@ public enum ModuloApp {
 			"Sprint 2", true,
 			"/aprobaciones", new String[] { "/aprobaciones", "/aprobaciones/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
 
-	FAMILIA("Mi familia", "Revisa lo que debes, paga desde el celular y descarga tus boletas.", "Sprint 4", false,
-			"/familia", new String[] { "/familia", "/familia/**" }, EnumSet.of(APODERADO)),
+	FAMILIA("Mi familia", "Revisa lo que debes, paga desde el celular y descarga tus boletas.", "Sprint 4 (pago en línea)",
+			true, "/familia", new String[] { "/familia", "/familia/**" }, EnumSet.of(APODERADO)),
+	PAGOS_EN_LINEA("Pagos en línea", "Pagos que entran solos por la pasarela: los que quedaron por revisar, los de hoy y "
+			+ "los vencidos.", "Sprint 4", true, "/pagos-en-linea", new String[] { "/pagos-en-linea", "/pagos-en-linea/**" },
+			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+	COMPROBANTES("Comprobantes electrónicos", "Envíos al OSE: rechazados, por vencer el plazo legal, pendientes y aceptados.",
+			"Sprint 4", true, "/comprobantes", new String[] { "/comprobantes", "/comprobantes/**" },
+			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 
 	PANEL("Panel del colegio", "Cuánto entró hoy, la morosidad y las alertas de caja, desde tu celular.", "Sprint 5",
 			false, "/panel", new String[] { "/panel", "/panel/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
@@ -71,6 +77,14 @@ public enum ModuloApp {
 
 	/** Rutas públicas: no exigen sesión. */
 	public static final String[] RUTAS_PUBLICAS = { "/login", "/error", "/actuator/health" };
+
+	/**
+	 * Sprint 4: avisos (webhooks) de la pasarela. Sin sesión ni CSRF, SOLO por POST y en una cadena de seguridad aparte:
+	 * cada aviso se autentica con su firma y nunca registra dinero por sí mismo (se consulta a la pasarela).
+	 */
+	public static final String RUTAS_WEBHOOK = "/webhooks/**";
+
+	public static final String RUTA_WEBHOOK_PASARELA = "/webhooks/pasarela/*/*";
 
 	/** Única ruta para quien inició sesión con una clave temporal (autoridad {@code CLAVE_PENDIENTE}). */
 	public static final String RUTA_CAMBIAR_CLAVE = "/cuenta/cambiar-clave";

@@ -29,6 +29,27 @@
 			</div>
 		</form>
 	</section>
+
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-acceso" data-acceso-en-linea>
+		<h2 id="titulo-acceso">Acceso en línea</h2>
+		<th:block th:if="${exito != null}">
+			<div th:replace="~{fragments/componentes :: alerta('exito', ${exito})}"></div>
+		</th:block>
+		<th:block th:if="${cuentaEnLinea == null}">
+			<p class="secundario">Con su cuenta en línea, el apoderado ve el estado de cuenta de sus hijos, paga con Yape, Plin o tarjeta y descarga sus boletas. Solo ve lo de su familia.</p>
+			<form th:if="${puedeDarAcceso}" method="post" th:action="@{/alumnos/apoderados/{id}/acceso(id=${apoderado.id})}">
+				<button th:replace="~{fragments/componentes :: boton('Dar acceso en línea', 'secundario')}"></button>
+			</form>
+		</th:block>
+		<th:block th:if="${cuentaEnLinea != null}">
+			<p>Usuario: <strong class="num" th:text="${cuentaEnLinea}">45678912</strong></p>
+			<th:block th:if="${puedeDarAcceso}">
+				<th:block th:replace="~{fragments/componentes :: modalMotivo('quitar-acceso', '¿Quitar el acceso en línea?',
+					'El apoderado ya no podrá ingresar ni pagar en línea. Sus sesiones abiertas se cierran al momento.',
+					@{/alumnos/apoderados/{id}/acceso/quitar(id=${apoderado.id})}, 'Quitar acceso', 'texto', 'Quitar acceso')}"></th:block>
+			</th:block>
+		</th:block>
+	</section>
 </main>
 </body>
 </html>

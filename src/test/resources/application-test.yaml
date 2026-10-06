@@ -13,6 +13,13 @@ cuentasclaras:
   comprobantes:
     # Hallazgo 13 de QA: el envío al OSE corre en el mismo hilo; no quedan hilos vivos entre una prueba y otra.
     envio-sincrono: true
+  pasarela:
+    proveedor: SIMULADA
+    simulada:
+      secreto-aviso: secreto-pasarela-simulada-de-pruebas-no-usar-en-produccion
+  tareas:
+    # Sin tareas programadas en las pruebas: cada prueba invoca el proceso que necesita (reintentos, consultas).
+    activas: false
   auditoria:
     # Clave SOLO para pruebas. En producción llega por la variable AUDITORIA_CLAVE_HMAC.
     clave-hmac: clave-hmac-de-pruebas-no-usar-en-produccion-0001

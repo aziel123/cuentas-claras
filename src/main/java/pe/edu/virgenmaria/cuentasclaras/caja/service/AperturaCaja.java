@@ -7,6 +7,8 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.caja.config.PropiedadesCaja;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.CajaDiaria;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja;
+import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.CajaDiariaRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
@@ -43,5 +45,25 @@ public class AperturaCaja {
 		auditoria.registrar(AccionAuditoria.CAJA_ABIERTA, "caja_diaria", caja.getId().toString(), null,
 				caja.getEstado().name(), "Caja de " + cajero + " del " + Calendario.formatear(fecha) + " con fondo fijo "
 						+ Dinero.formatear(caja.getFondoFijo()) + ".");
+	}
+
+	/**
+	 * Sprint 4: la caja del canal (PASARELA) del día, en su propia transacción, antes de la transacción del pago. La abre
+	 * su actor de sistema; si otra la abre a la vez, el UNIQUE (cajero, fecha) hace fallar a la segunda y se usa la otra.
+	 */
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public void asegurarCanal(CanalCaja canal, LocalDate fecha) {
+		ActorSistema actor = switch (canal) {
+			case PASARELA -> ActorSistema.PASARELA;
+			case RECAUDACION -> ActorSistema.RECAUDACION;
+			case VENTANILLA -> throw new IllegalArgumentException("La ventanilla la abre su cajera");
+		};
+		if (cajas.findByCajeroAndFecha(actor.usuario(), fecha).isPresent()) {
+			return;
+		}
+		CajaDiaria caja = cajas.save(CajaDiaria.abrirCanal(canal, actor, fecha));
+		auditoria.registrar(AccionAuditoria.CAJA_ABIERTA, "caja_diaria", caja.getId().toString(), null,
+				caja.getEstado().name(), "Caja del canal " + canal.etiqueta() + " del " + Calendario.formatear(fecha)
+						+ " (" + actor.usuario() + "): solo pagos digitales que entran solos, sin efectivo ni cierre.");
 	}
 }

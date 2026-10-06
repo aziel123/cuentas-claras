@@ -26,6 +26,22 @@ import java.time.temporal.ChronoUnit;
 @Transactional(propagation = Propagation.MANDATORY)
 public class ManejadorAnulacionCuota implements ManejadorSolicitud {
 
+	/** Sprint 4: cuotas con un pago en línea en curso (puerto opcional que implementa pasarela). */
+	private org.springframework.beans.factory.ObjectProvider<CuotasEnPagoEnLinea> pagosEnLinea;
+
+	@org.springframework.beans.factory.annotation.Autowired
+	void setPagosEnLinea(org.springframework.beans.factory.ObjectProvider<CuotasEnPagoEnLinea> pagosEnLinea) {
+		this.pagosEnLinea = pagosEnLinea;
+	}
+
+	private void exigirSinPagoEnLinea(java.util.Collection<Long> cuotaIds) {
+		CuotasEnPagoEnLinea puerto = pagosEnLinea == null ? null : pagosEnLinea.getIfAvailable();
+		if (puerto != null && puerto.algunaEnCurso(cuotaIds)) {
+			throw new pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException(CuotasEnPagoEnLinea.MENSAJE);
+		}
+	}
+
+
 	private final CuotaRepository cuotas;
 
 	private final AnioEscolarRepository anios;
@@ -50,6 +66,7 @@ public class ManejadorAnulacionCuota implements ManejadorSolicitud {
 	@Override
 	public void aplicar(SolicitudCambio solicitud, String aprobador) {
 		Cuota cuota = buscar(solicitud);
+		exigirSinPagoEnLinea(java.util.List.of(cuota.getId()));
 		anios.bloquear(cuota.getAnioEscolar().getId());
 		String estadoAnterior = cuota.getEstado().name();
 		cuota.anular(solicitud.getMotivo(), solicitud.getSolicitadoPor(), aprobador,

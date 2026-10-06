@@ -1241,6 +1241,123 @@ class PermisosMySqlTest {
 		SecurityContextHolder.clearContext();
 	}
 
+	// ---------------------------------------------------------------------------------------------------------------
+	// Sprint 4, tanda 1: pagos en línea (V13) y outbox del OSE. Usa las MATRÍCULAS del escenario compartido (las
+	// pensiones ya las usan las tandas anteriores).
+	// ---------------------------------------------------------------------------------------------------------------
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.pasarela.service.ServicioPagoEnLinea pagoEnLinea;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.pasarela.simulada.SimuladorPagos simuladorPagos;
+
+	@Test
+	void tablasDePagosEnLineaNoSeBorranNiCambianLoPedido() {
+		for (String tabla : new String[] { "orden_pago", "orden_pago_cuota", "evento_pasarela", "configuracion_bd" }) {
+			assertThat(codigoAl(() -> jdbc.update("DELETE FROM " + tabla + " WHERE 1 = 0"))).as(tabla).isEqualTo(1142);
+		}
+		assertThat(codigoAl(() -> jdbc.update("UPDATE orden_pago_cuota SET version = version WHERE 1 = 0"))).isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO configuracion_bd VALUES ('pasarela_simulada', 'PERMITIDA', "
+				+ "NOW(6))"))).isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE configuracion_bd SET valor = valor WHERE 1 = 0"))).isEqualTo(1142);
+		for (String sentencia : new String[] { "UPDATE orden_pago SET monto = monto WHERE 1 = 0",
+				"UPDATE orden_pago SET familia_id = familia_id WHERE 1 = 0",
+				"UPDATE orden_pago SET referencia = referencia WHERE 1 = 0",
+				"UPDATE evento_pasarela SET orden_pago_id = orden_pago_id WHERE 1 = 0",
+				"UPDATE caja_diaria SET canal = canal WHERE 1 = 0", "UPDATE pago SET orden_pago_id = orden_pago_id WHERE 1 = 0",
+				"UPDATE comprobante SET reemplaza_id = reemplaza_id WHERE 1 = 0" }) {
+			assertThat(codigoAl(() -> jdbc.update(sentencia))).as(sentencia).isEqualTo(1143);
+		}
+		// Triggers: una orden que nace pagada, una cuota de una orden que no existe y (sin la fila del DBA) una orden
+		// de la pasarela simulada.
+		for (String sentencia : new String[] {
+				"INSERT INTO orden_pago (colegio_id, referencia, familia_id, apoderado_id, proveedor, monto, moneda, "
+						+ "comprobante_tipo, clave_idempotencia, vence_en, estado, creado_en, creado_por, actualizado_en) VALUES "
+						+ "(0, 'verificador', 0, 0, 'CULQI', 1, 'PEN', 'BOLETA', 'verificador', NOW(6), 'PAGADA', NOW(6), "
+						+ "'verificador', NOW(6))",
+				"INSERT INTO orden_pago (colegio_id, referencia, familia_id, apoderado_id, proveedor, monto, moneda, "
+						+ "comprobante_tipo, clave_idempotencia, vence_en, estado, creado_en, creado_por, actualizado_en) VALUES "
+						+ "(0, 'verificador', 0, 0, 'SIMULADA', 1, 'PEN', 'BOLETA', 'verificador', NOW(6), 'CREADA', NOW(6), "
+						+ "'verificador', NOW(6))",
+				"INSERT INTO orden_pago_cuota (colegio_id, orden_pago_id, cuota_id, monto, creado_en, creado_por, "
+						+ "actualizado_en) VALUES (0, 0, 0, 1, NOW(6), 'verificador', NOW(6))" }) {
+			assertThat(codigoAl(() -> jdbc.update(sentencia))).as(sentencia).isEqualTo(1644);
+		}
+	}
+
+	/**
+	 * Orden → cuotas → enlace → confirmación → pago → aplicaciones → PAGADA → boleta ACEPTADA, con los permisos mínimos y
+	 * los triggers (H2 no los tiene: aquí se ve un saveAndFlush faltante). La fila 'pasarela_simulada' la pone y la quita
+	 * cc_migrador (como el DBA del piloto): en prod no existe.
+	 */
+	@Test
+	void flujoPagoEnLineaConPermisosMinimos() {
+		String claveMigrador = System.getenv("CC_MYSQL_CLAVE_MIGRADOR");
+		org.junit.jupiter.api.Assumptions.assumeTrue(claveMigrador != null && !claveMigrador.isBlank(),
+				"Falta CC_MYSQL_CLAVE_MIGRADOR");
+		JdbcTemplate migrador = new JdbcTemplate(new org.springframework.jdbc.datasource.DriverManagerDataSource(
+				System.getenv().getOrDefault("CC_MYSQL_URL",
+						"jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false"),
+				"cc_migrador", claveMigrador));
+		FamiliasCaja familias = familiasDeCaja();
+		Long rosa = jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class,
+				familias.hermano1());
+		Long matricula1 = jdbc.queryForObject("SELECT id FROM cuota WHERE alumno_id = ? AND tipo = 'MATRICULA'", Long.class,
+				familias.hermano1());
+		Long matricula2 = jdbc.queryForObject("SELECT id FROM cuota WHERE alumno_id = ? AND tipo = 'MATRICULA'", Long.class,
+				familias.hermano2());
+		migrador.update("INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('pasarela_simulada', "
+				+ "'PERMITIDA', NOW(6))");
+		try {
+			UsuariosDePrueba.iniciarSesion(new pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado(
+					400L, 1L, "rosa.linea." + sufijo, "Rosa en línea", null, true, false, false, EnumSet.of(Rol.APODERADO),
+					rosa));
+			String pagada = iniciarPagoEnLinea(matricula1);
+			assertThat(simuladorPagos.simular(pagada, pe.edu.virgenmaria.cuentasclaras.pasarela.simulada.PasarelaSimulada
+					.Accion.YAPE)).isEqualTo(pe.edu.virgenmaria.cuentasclaras.pasarela.proceso.RecepcionAvisos.Resultado.ACEPTADO);
+			java.util.Map<String, Object> orden = jdbc.queryForMap("SELECT id, estado FROM orden_pago WHERE referencia = ?",
+					pagada);
+			assertThat(orden).containsEntry("estado", "PAGADA");
+			java.util.Map<String, Object> pago = jdbc.queryForMap("SELECT p.id, p.origen, p.cajero, p.comprobante_id, c.canal "
+					+ "FROM pago p JOIN caja_diaria c ON c.id = p.caja_diaria_id WHERE p.orden_pago_id = ?", orden.get("id"));
+			assertThat(pago).containsEntry("origen", "PASARELA").containsEntry("cajero", "sistema.pasarela")
+					.containsEntry("canal", "PASARELA");
+			assertThat(jdbc.queryForObject("SELECT estado FROM cuota WHERE id = ?", String.class, matricula1))
+					.isEqualTo("PAGADA");
+			assertThat(jdbc.queryForObject("SELECT estado_envio FROM comprobante WHERE id = ?", String.class,
+					pago.get("comprobante_id"))).isEqualTo("ACEPTADO");
+			// Una orden pagada no vuelve atrás ni cambia lo confirmado por SQL.
+			assertThat(codigoAl(() -> jdbc.update("UPDATE orden_pago SET estado = 'CREADA' WHERE id = ?", orden.get("id"))))
+					.isEqualTo(1644);
+			assertThat(codigoAl(() -> jdbc.update("UPDATE orden_pago SET monto_confirmado = 1 WHERE id = ?",
+					orden.get("id")))).isEqualTo(1644);
+
+			// La pasarela confirma menos de lo pedido: queda por revisar, sin pago.
+			String porRevisar = iniciarPagoEnLinea(matricula2);
+			simuladorPagos.simular(porRevisar,
+					pe.edu.virgenmaria.cuentasclaras.pasarela.simulada.PasarelaSimulada.Accion.MONTO_MENOR);
+			assertThat(jdbc.queryForObject("SELECT estado FROM orden_pago WHERE referencia = ?", String.class, porRevisar))
+					.isEqualTo("POR_REVISAR");
+			assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM pago p JOIN orden_pago o ON o.id = p.orden_pago_id "
+					+ "WHERE o.referencia = ?", Integer.class, porRevisar)).isZero();
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+			migrador.update("DELETE FROM configuracion_bd WHERE clave = 'pasarela_simulada'");
+		}
+		// Sin la fila, como en producción, el verificador de arranque vuelve a pasar.
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(jdbc, fuenteDatos).afterPropertiesSet())
+				.doesNotThrowAnyException();
+	}
+
+	private String iniciarPagoEnLinea(Long cuota) {
+		var revision = pagoEnLinea.revisar(new pe.edu.virgenmaria.cuentasclaras.pasarela.dto.SeleccionPagoRequest(
+				java.util.List.of(cuota)));
+		return pagoEnLinea.crearOrden(new pe.edu.virgenmaria.cuentasclaras.pasarela.dto.PagoEnLineaRequest(
+				java.util.UUID.randomUUID(), java.util.List.of(cuota), revision.total(), false));
+	}
+
 	private Integer codigoAl(Runnable sentencia) {
 		try {
 			sentencia.run();

@@ -77,6 +77,37 @@ public class ServicioComprobantes {
 		return nota;
 	}
 
+	/**
+	 * Reemite un comprobante RECHAZADO por el OSE con un número NUEVO de la serie vigente de su tipo y el receptor ya
+	 * corregido. El rechazado se queda con su número: la serie sigue sin huecos.
+	 */
+	public Comprobante reemitir(Comprobante rechazado, Receptor receptor, LocalDate fecha) {
+		Objects.requireNonNull(rechazado, "rechazado");
+		if (comprobantes.existsByReemplazaId(rechazado.getId())) {
+			throw new pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException("Este comprobante ya se reemitió.");
+		}
+		SerieComprobante serie = bloquear(rechazado.getTipo());
+		int numero = serie.siguiente();
+		series.saveAndFlush(serie);
+		Comprobante nuevo = comprobantes.save(Comprobante.reemitir(serie, numero, fecha, rechazado, receptor));
+		eventos.publishEvent(new ComprobanteEmitido(nuevo.getId(), nuevo.getColegioId()));
+		return nuevo;
+	}
+
+	/** El comprobante que hoy vale por {@code original}: sigue la cadena de reemisiones (el último de ella). */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public Comprobante vigenteDe(Comprobante original) {
+		Comprobante actual = Objects.requireNonNull(original, "original");
+		for (int i = 0; i < 20; i++) {
+			java.util.Optional<Comprobante> siguiente = comprobantes.findByReemplazaId(actual.getId());
+			if (siguiente.isEmpty()) {
+				return actual;
+			}
+			actual = siguiente.get();
+		}
+		return actual;
+	}
+
 	/** BC01 para una boleta, FC01 para una factura (la letra del comprobante que se anula). */
 	public String serieNotaDe(Comprobante original) {
 		return switch (original.getTipo()) {

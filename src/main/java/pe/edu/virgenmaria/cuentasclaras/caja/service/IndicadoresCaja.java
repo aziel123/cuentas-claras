@@ -60,14 +60,18 @@ public class IndicadoresCaja implements IndicadoresInicio {
 		BigDecimal digital = total.subtract(enEfectivo);
 		long porcentaje = total.signum() == 0 ? 0
 				: digital.multiply(BigDecimal.valueOf(100)).divide(total, 0, RoundingMode.HALF_UP).longValue();
-		List<CajaDiaria> delDia = cajas.findByFechaOrderByCajeroAsc(hoy);
+		List<CajaDiaria> delDia = cajas.findByCanalAndFechaOrderByCajeroAsc(
+				pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja.VENTANILLA, hoy);
 		long abiertas = delDia.stream().filter(c -> c.getEstado() == EstadoCaja.ABIERTA).count();
 		long cerradas = delDia.size() - abiertas;
 		long conDiferencia = delDia.isEmpty() ? 0
 				: cierres.findByCajaIdInOrderByNumeroAsc(delDia.stream().map(CajaDiaria::getId).toList()).stream()
 						.filter(CierreCaja::conDiferencia).count();
+		List<Pago> enLinea = vigentes.stream().filter(p -> p.getCaja().esDeCanal()).toList();
 		return List.of(
 				new Indicador("Cobrado hoy", Dinero.formatear(total), vigentes.size() + " pago(s)"),
+				new Indicador("Entró solo (en línea)", Dinero.formatear(Dinero.sumar(enLinea.stream().map(Pago::getTotal)
+						.toList())), enLinea.size() + " pago(s) sin que nadie digite"),
 				new Indicador("Efectivo", Dinero.formatear(enEfectivo), efectivo.size() + " pago(s)"),
 				new Indicador("Digital", Dinero.formatear(Dinero.normalizar(digital)), porcentaje + " % del total"),
 				new Indicador("Cajas", abiertas + " abierta(s) · " + cerradas + " cerrada(s)",

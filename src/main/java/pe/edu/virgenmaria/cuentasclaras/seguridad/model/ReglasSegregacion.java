@@ -13,6 +13,8 @@ import java.util.Set;
  *   <li>APODERADO no se combina con ningún otro rol: un trabajador que además es padre usa dos cuentas.</li>
  *   <li>DIRECTOR no se combina con ADMINISTRACION: quien registra descuentos no los aprueba
  *       (decisión por defecto, por confirmar con el colegio; diseño, sección 12).</li>
+ *   <li>Sprint 4: la cuenta APODERADO está enlazada a SU registro de apoderado (y por él, a su familia); ninguna otra
+ *       cuenta lo está. Así el apoderado solo ve y paga lo de su familia.</li>
  * </ul>
  */
 public final class ReglasSegregacion {
@@ -37,6 +39,18 @@ public final class ReglasSegregacion {
 		if (roles.contains(Rol.APODERADO) && roles.size() > 1) {
 			throw new ReglaNegocioException(
 					"Apoderado no puede combinarse con roles del personal. Crea una cuenta aparte para cada función.");
+		}
+	}
+
+	/** Los roles y, además, el enlace con el apoderado: obligatorio para APODERADO y prohibido para el personal. */
+	public static void validarCuenta(Set<Rol> roles, Long apoderadoId) {
+		validar(roles);
+		if (roles.contains(Rol.APODERADO) && apoderadoId == null) {
+			throw new ReglaNegocioException("La cuenta de un apoderado se crea desde su ficha (Dar acceso en línea): queda "
+					+ "enlazada a su familia.");
+		}
+		if (!roles.contains(Rol.APODERADO) && apoderadoId != null) {
+			throw new ReglaNegocioException("Solo la cuenta de un apoderado se enlaza a una familia.");
 		}
 	}
 }

@@ -91,12 +91,39 @@ cuentasclaras:
     cuentas-deposito: BCP Soles 191-XXXXXXX-0-XX
     dias-sin-verificar: 1            # pagos digitales o depósitos sin verificar: alerta (tanda 3)
   comprobantes:
-    proveedor: SIMULADO              # NUBEFACT en el sprint 4 o 6 (NUBEFACT_RUTA y NUBEFACT_TOKEN por variable de entorno)
+    # SIMULADO (sin valor tributario) o NUBEFACT. Nubefact solo con su RUTA y TOKEN (variables de entorno) y, fuera de
+    # producción, con permitir-real-fuera-de-prod: true (cuenta DEMO). Sin ellos la aplicación no arranca.
+    proveedor: ${COMPROBANTES_PROVEEDOR:SIMULADO}
+    permitir-real-fuera-de-prod: false
+    nubefact:
+      ruta: ${NUBEFACT_RUTA:}
+      token: ${NUBEFACT_TOKEN:}
+      dominios-permitidos: api.nubefact.com
+    # Outbox del OSE (sprint 4): se envía tras emitir; si falla, reintenta con espera creciente.
+    plazo-envio-dias: 3              # plazo legal para que SUNAT acepte la boleta
+    alerta-horas-sin-aceptar: 4
+    reintento-inicial: 1m
+    reintento-maximo: 60m
+    consulta-cada: 5m
     afectacion-igv: INAFECTO         # TUO Ley IGV art. 2; confirmar con el contador
     serie-boleta: B001
     serie-factura: F001
     serie-nota-boleta: BC01
     serie-nota-factura: FC01
+  pasarela:
+    # NINGUNA: sin pago en línea. SIMULADA solo existe en dev, test y piloto (nunca en producción). CULQI necesita
+    # su adaptador (todavía no integrado) y sus llaves por variable de entorno.
+    proveedor: ${PASARELA_PROVEEDOR:NINGUNA}
+    minutos-vigencia-orden: 30
+    monto-maximo: 5000.00
+    medios: YAPE, PLIN, TARJETA
+    culqi:
+      llave-publica: ${PASARELA_LLAVE_PUBLICA:}
+      llave-secreta: ${PASARELA_LLAVE_SECRETA:}
+      webhook-usuario: ${PASARELA_WEBHOOK_USUARIO:}
+      webhook-clave: ${PASARELA_WEBHOOK_CLAVE:}
+    simulada:
+      secreto-aviso: ${PASARELA_SIMULADA_SECRETO:}
   auditoria:
     # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
     # aplicación no arranca. Nunca en el código: va en el gestor de secretos.

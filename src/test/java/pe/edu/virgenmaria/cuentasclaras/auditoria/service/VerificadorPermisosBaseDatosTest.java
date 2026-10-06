@@ -138,7 +138,7 @@ class VerificadorPermisosBaseDatosTest {
 	/** Tablas de solo inserción: cc_app no tiene ningún UPDATE sobre ellas (1142). */
 	private static final java.util.regex.Pattern SOLO_INSERCION = java.util.regex.Pattern
 			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
-					+ "verificacion_bancaria|reembolso) ");
+					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -228,6 +228,9 @@ class VerificadorPermisosBaseDatosTest {
 		JdbcTemplate mysql = mock(JdbcTemplate.class);
 		when(mysql.update(anyString())).thenAnswer(invocacion -> {
 			String sql = invocacion.getArgument(0);
+			if (sql.startsWith("INSERT INTO configuracion_bd")) {
+				throw denegado(1142);
+			}
 			if (sql.startsWith("INSERT")) {
 				throw denegado(1644);
 			}
@@ -238,7 +241,68 @@ class VerificadorPermisosBaseDatosTest {
 		});
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
 				.thenReturn(String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS));
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_PASARELA_SIMULADA, Integer.class)).thenReturn(0);
 		return mysql;
+	}
+
+	/** Sprint 4, tanda 1: órdenes, cuotas de orden y avisos sin borrado; columnas inmutables; configuracion_bd del DBA. */
+	@Test
+	void fallaSiSePuedeTocarLoDePagosEnLinea() {
+		for (String[] caso : new String[][] { { "DELETE FROM orden_pago WHERE 1 = 0", "orden_pago se podrían borrar" },
+				{ "DELETE FROM evento_pasarela WHERE 1 = 0", "evento_pasarela se podrían borrar" },
+				{ "UPDATE orden_pago_cuota SET version = version WHERE 1 = 0", "orden_pago_cuota se podrían editar" },
+				{ "UPDATE orden_pago SET monto = monto WHERE 1 = 0", "orden_pago" },
+				{ "UPDATE evento_pasarela SET orden_pago_id = orden_pago_id WHERE 1 = 0", "evento_pasarela" },
+				{ "UPDATE caja_diaria SET canal = canal WHERE 1 = 0", "caja_diaria" },
+				{ "UPDATE pago SET orden_pago_id = orden_pago_id WHERE 1 = 0", "pago" },
+				{ "UPDATE comprobante SET reemplaza_id = reemplaza_id WHERE 1 = 0", "comprobante" },
+				{ "INSERT INTO configuracion_bd VALUES ('verificador', 'x', NOW(6))", "pasarela simulada" },
+				{ "UPDATE configuracion_bd SET valor = valor WHERE 1 = 0", "solo escribe el DBA" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+	}
+
+	@Test
+	void fallaSiFaltanLosTriggersDePagosEnLinea() {
+		for (String[] caso : new String[][] { { "INSERT INTO orden_pago ", "trg_orden_pago_nace" },
+				{ "INSERT INTO orden_pago_cuota", "trg_orden_pago_cuota_registro" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doThrow(denegado(1452)).when(mysql).update(org.mockito.ArgumentMatchers.startsWith(caso[0]));
+
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+	}
+
+	/** Prod: con la fila 'pasarela_simulada' en configuracion_bd, o si la base admite una orden SIMULADA, no arranca. */
+	@Test
+	void enProduccionLaBaseNoAdmiteLaPasarelaSimulada() {
+		JdbcTemplate conFila = mysqlQueDeniega();
+		when(conFila.queryForObject(VerificadorPermisosBaseDatos.SQL_PASARELA_SIMULADA, Integer.class)).thenReturn(1);
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(conFila, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("PRODUCCIÓN");
+
+		JdbcTemplate admite = mysqlQueDeniega();
+		doReturn(1).when(admite).update(VerificadorPermisosBaseDatos.ORDEN_SIMULADA.sql());
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(admite, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("SIMULADA");
+	}
+
+	/** Piloto: lo contrario, la fila debe existir; con ella arranca aunque la orden SIMULADA sí se pueda crear. */
+	@Test
+	void enElPilotoLaPasarelaSimuladaDebeEstarHabilitada() {
+		JdbcTemplate sinFila = mysqlQueDeniega();
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(sinFila, fuenteDatos, false).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("piloto");
+
+		JdbcTemplate conFila = mysqlQueDeniega();
+		when(conFila.queryForObject(VerificadorPermisosBaseDatos.SQL_PASARELA_SIMULADA, Integer.class)).thenReturn(1);
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(conFila, fuenteDatos, false).verificarPermisos())
+				.doesNotThrowAnyException();
 	}
 
 	/**

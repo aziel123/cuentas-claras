@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
  * Es la ÚNICA clase autorizada a usar {@link JdbcTemplate} (regla ArchUnit).
  */
 @Component
-@Profile("prod")
+@Profile({ "prod", "piloto" })
 public class VerificadorPermisosBaseDatos implements InitializingBean {
 
 	static final int MYSQL_COMANDO_DENEGADO = 1142;
@@ -140,7 +140,38 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			sinBorrado("reembolso"), soloInsercion("reembolso"),
 			trigger("INSERT INTO reembolso (colegio_id, anulacion_pago_id, medio, numero_operacion, monto, fecha, "
 					+ "cajero_pago, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'YAPE', 'VERIFICADOR', 1, "
-					+ "'2000-01-01', 'a', NOW(6), 'b', NOW(6))", "trg_reembolso_registro"));
+					+ "'2000-01-01', 'a', NOW(6), 'b', NOW(6))", "trg_reembolso_registro"),
+			// Sprint 4, tanda 1 (pagos en línea y outbox del OSE): las órdenes, sus cuotas y los avisos no se borran; las
+			// cuotas de una orden son de solo inserción; configuracion_bd solo la escribe el DBA; las columnas inmutables
+			// no cambian; y cada trigger nuevo rechaza su inserción imposible.
+			sinBorrado("orden_pago"), sinBorrado("orden_pago_cuota"), sinBorrado("evento_pasarela"),
+			sinBorrado("configuracion_bd"), soloInsercion("orden_pago_cuota"),
+			new SentenciaProhibida("INSERT INTO configuracion_bd VALUES ('verificador', 'x', NOW(6))",
+					Set.of(MYSQL_COMANDO_DENEGADO), "la aplicación podría habilitar la pasarela simulada en la base."),
+			new SentenciaProhibida("UPDATE configuracion_bd SET valor = valor WHERE 1 = 0", Set.of(MYSQL_COMANDO_DENEGADO),
+					"la aplicación podría cambiar la configuración que solo escribe el DBA."),
+			columna("UPDATE orden_pago SET monto = monto WHERE 1 = 0", "orden_pago"),
+			columna("UPDATE evento_pasarela SET orden_pago_id = orden_pago_id WHERE 1 = 0", "evento_pasarela"),
+			columna("UPDATE caja_diaria SET canal = canal WHERE 1 = 0", "caja_diaria"),
+			columna("UPDATE pago SET orden_pago_id = orden_pago_id WHERE 1 = 0", "pago"),
+			columna("UPDATE comprobante SET reemplaza_id = reemplaza_id WHERE 1 = 0", "comprobante"),
+			trigger(ordenImposible("CULQI", "PAGADA"), "trg_orden_pago_nace"),
+			trigger("INSERT INTO orden_pago_cuota (colegio_id, orden_pago_id, cuota_id, monto, creado_en, creado_por, "
+					+ "actualizado_en) VALUES (0, 0, 0, 1, NOW(6), 'verificador', NOW(6))", "trg_orden_pago_cuota_registro"));
+
+	/** Solo en prod: la base no admite órdenes de la pasarela simulada (sin la fila 'pasarela_simulada'). */
+	static final SentenciaProhibida ORDEN_SIMULADA = new SentenciaProhibida(ordenImposible("SIMULADA", "CREADA"),
+			Set.of(MYSQL_SIGNAL, MYSQL_COMANDO_DENEGADO), "la base admite órdenes de la pasarela SIMULADA en producción "
+					+ "(revisa trg_orden_pago_nace y que configuracion_bd no tenga la fila 'pasarela_simulada').");
+
+	static final String SQL_PASARELA_SIMULADA = "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'pasarela_simulada'";
+
+	private static String ordenImposible(String proveedor, String estado) {
+		return "INSERT INTO orden_pago (colegio_id, referencia, familia_id, apoderado_id, proveedor, monto, moneda, "
+				+ "comprobante_tipo, clave_idempotencia, vence_en, estado, creado_en, creado_por, actualizado_en) VALUES (0, "
+				+ "'verificador', 0, 0, '" + proveedor + "', 1, 'PEN', 'BOLETA', 'verificador', NOW(6), '" + estado
+				+ "', NOW(6), 'verificador', NOW(6))";
+	}
 
 	/**
 	 * Todos los triggers de {@code scripts/mysql/03-triggers.sql}, en su orden. {@code TriggersEsperadosTest} exige que
@@ -154,7 +185,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_anulacion_pago_registro", "trg_ajuste_cuota_registro", "trg_descuento_nace", "trg_descuento_resuelto",
 			"trg_cierre_caja_registro", "trg_cierre_caja_revisado", "trg_verificacion_bancaria_registro",
 			"trg_reembolso_registro", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio", "trg_apoderado_nace",
-			"trg_apoderado_facturacion");
+			"trg_apoderado_facturacion", "trg_orden_pago_nace", "trg_orden_pago_cuota_registro", "trg_orden_pago_estado");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -191,9 +222,24 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 
 	private final DataSource fuenteDatos;
 
+	/** {@code true} en prod; {@code false} en piloto (allí la pasarela simulada debe estar habilitada por el DBA). */
+	private final boolean produccion;
+
+	/** Como en producción. */
 	public VerificadorPermisosBaseDatos(JdbcTemplate jdbc, DataSource fuenteDatos) {
+		this(jdbc, fuenteDatos, true);
+	}
+
+	@org.springframework.beans.factory.annotation.Autowired
+	public VerificadorPermisosBaseDatos(JdbcTemplate jdbc, DataSource fuenteDatos,
+			org.springframework.core.env.Environment entorno) {
+		this(jdbc, fuenteDatos, !Arrays.asList(entorno.getActiveProfiles()).contains("piloto"));
+	}
+
+	VerificadorPermisosBaseDatos(JdbcTemplate jdbc, DataSource fuenteDatos, boolean produccion) {
 		this.jdbc = jdbc;
 		this.fuenteDatos = fuenteDatos;
+		this.produccion = produccion;
 	}
 
 	@Override
@@ -249,7 +295,39 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		LOG.info("Permisos de las cuotas verificados: la aplicación no puede borrarlas ni cambiar su monto.");
 		LOG.info("Permisos por columna y triggers de planes, lotes y solicitudes verificados.");
 		LOG.info("Permisos y triggers de caja, comprobantes, anulaciones, descuentos y cierres verificados.");
+		verificarPasarelaSimulada(escribe);
+		LOG.info("Permisos y triggers de pagos en línea, recaudación, conciliación y outbox del OSE verificados.");
 		return escribe;
+	}
+
+	/**
+	 * Prod: la fila 'pasarela_simulada' NO existe y la base rechaza una orden SIMULADA (1644, o 1142 en la fase 1).
+	 * Piloto: la fila debe existir (si no, la pasarela simulada no funcionaría).
+	 */
+	private void verificarPasarelaSimulada(boolean escribe) {
+		Integer filas;
+		try {
+			filas = jdbc.queryForObject(SQL_PASARELA_SIMULADA, Integer.class);
+		}
+		catch (DataAccessException e) {
+			throw new IllegalStateException("No se pudo leer configuracion_bd (código " + codigoMySql(e) + "): aplica la "
+					+ "migración V13 y scripts/mysql/02-permisos-tablas.sql. Revisa docs/operacion/mysql-usuarios.md.", e);
+		}
+		boolean habilitada = filas != null && filas > 0;
+		if (produccion) {
+			if (habilitada) {
+				throw new IllegalStateException("La base de PRODUCCIÓN tiene habilitada la pasarela simulada (fila "
+						+ "'pasarela_simulada' en configuracion_bd): el DBA debe borrarla. Revisa docs/operacion/mysql-usuarios.md.");
+			}
+			String problema = comprobarDenegada(ORDEN_SIMULADA);
+			if (problema != null) {
+				throw new IllegalStateException(problema + " Revisa docs/operacion/mysql-usuarios.md.");
+			}
+		}
+		else if (!habilitada && escribe) {
+			throw new IllegalStateException("En el piloto la base no tiene habilitada la pasarela simulada (falta la fila "
+					+ "'pasarela_simulada' en configuracion_bd, la registra el DBA). Revisa docs/operacion/mysql-usuarios.md.");
+		}
 	}
 
 	public void verificarMigraciones() {

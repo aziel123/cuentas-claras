@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Acceso en línea', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="acceso-apoderado-creado">
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-creado">
+		<div>
+			<p class="etiqueta">Acceso en línea del apoderado</p>
+			<h1 id="titulo-creado">Cuenta creada</h1>
+			<p class="secundario" th:text="|${creado.nombreCompleto} · usuario ${creado.nombreUsuario}|">Rosa Huamán · usuario 45678912</p>
+		</div>
+
+		<div th:replace="~{fragments/componentes :: alerta('advertencia',
+			'Entrega esta clave temporal en persona al apoderado: no la volverás a ver. Vence en 48 horas y al ingresar tendrá que cambiarla por una propia.')}"></div>
+
+		<div class="clave-temporal">
+			<span class="etiqueta">Clave temporal</span>
+			<output class="clave-temporal-valor" th:text="${creado.claveTemporal}" aria-label="Clave temporal">abcd2345EFGH</output>
+		</div>
+
+		<div class="acciones">
+			<a class="btn btn-primario" th:href="@{/alumnos/apoderados/{id}(id=${apoderadoId})}">Listo, ya la entregué</a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

@@ -45,6 +45,22 @@ import java.util.Objects;
 @Transactional(propagation = Propagation.MANDATORY)
 public class ManejadorDescuento implements ManejadorSolicitud {
 
+	/** Sprint 4: cuotas con un pago en línea en curso (puerto opcional que implementa pasarela). */
+	private org.springframework.beans.factory.ObjectProvider<CuotasEnPagoEnLinea> pagosEnLinea;
+
+	@org.springframework.beans.factory.annotation.Autowired
+	void setPagosEnLinea(org.springframework.beans.factory.ObjectProvider<CuotasEnPagoEnLinea> pagosEnLinea) {
+		this.pagosEnLinea = pagosEnLinea;
+	}
+
+	private void exigirSinPagoEnLinea(java.util.Collection<Long> cuotaIds) {
+		CuotasEnPagoEnLinea puerto = pagosEnLinea == null ? null : pagosEnLinea.getIfAvailable();
+		if (puerto != null && puerto.algunaEnCurso(cuotaIds)) {
+			throw new pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException(CuotasEnPagoEnLinea.MENSAJE);
+		}
+	}
+
+
 	static final String CAMBIO = "El descuento cambió desde que se pidió";
 
 	private final DescuentoRepository descuentos;
@@ -85,6 +101,7 @@ public class ManejadorDescuento implements ManejadorSolicitud {
 				.orElseThrow(() -> new ReglaNegocioException("El descuento de la solicitud no existe.")).split(","))
 				.filter(s -> !s.isBlank()).map(Long::valueOf).sorted().toList();
 		List<Cuota> bloqueadas = cuotas.bloquear(ids);
+		exigirSinPagoEnLinea(ids);
 		Descuento descuento = descuentos.bloquear(id).orElseThrow();
 		if (descuento.getEstado() != EstadoDescuento.SOLICITADO) {
 			throw new ReglaNegocioException("El descuento ya fue " + descuento.getEstado().etiqueta().toLowerCase() + ".");

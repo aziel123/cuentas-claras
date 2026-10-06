@@ -42,6 +42,23 @@ class ConfiguracionYamlTest {
 		}
 	}
 
+	/** Sprint 4: sin configurar, no hay pago en línea; la simulada solo en dev y test; el piloto no migra. */
+	@Test
+	void laPasarelaSimuladaNoEstaEnLaConfiguracionComunNiEnProduccion() throws IOException {
+		assertThat(cargar("application.yaml").getProperty("cuentasclaras.pasarela.proveedor"))
+				.isEqualTo("${PASARELA_PROVEEDOR:NINGUNA}");
+		assertThat(cargar("application.yaml").getProperty("cuentasclaras.comprobantes.permitir-real-fuera-de-prod"))
+				.isEqualTo("false");
+		assertThat(cargar("application-prod.yaml").stringPropertyNames()).noneMatch(p -> p.startsWith("cuentasclaras.pasarela"));
+		assertThat(cargar("application-dev.yaml").getProperty("cuentasclaras.pasarela.proveedor")).isEqualTo("SIMULADA");
+		assertThat(cargar("application-dev.yaml").getProperty("cuentasclaras.pasarela.simulada.secreto-aviso"))
+				.contains("no-usar-en-produccion");
+		Properties piloto = cargar("application-piloto.yaml");
+		assertThat(piloto.getProperty("spring.flyway.enabled")).isEqualTo("false");
+		assertThat(new ClassPathResource("application-piloto.yaml").getContentAsString(StandardCharsets.UTF_8))
+				.doesNotContain("DB_MIGRADOR");
+	}
+
 	private static Properties cargar(String archivo) {
 		YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
 		yaml.setResources(new ClassPathResource(archivo));

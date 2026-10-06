@@ -134,6 +134,7 @@ public class AlertasCaja implements AlertasRevision {
 		anulacionesPendientes(alertas);
 		devolucionesEnEfectivoDeHoy(alertas, hoy);
 		verificacionesQueNoCoincidieron(alertas, hoy);
+		oseNoReconoce(alertas, hoy);
 		observados(alertas, desde);
 		muestraDeVerificaciones(alertas, hoy);
 		return alertas;
@@ -166,13 +167,15 @@ public class AlertasCaja implements AlertasRevision {
 	}
 
 	private void cajasSinCerrar(List<AlertaRevision> alertas, LocalDate hoy, LocalTime hora) {
-		for (CajaDiaria caja : cajas.findByEstadoAndFechaBeforeOrderByFechaAsc(EstadoCaja.ABIERTA, hoy)) {
+		for (CajaDiaria caja : cajas.findByCanalAndEstadoAndFechaBeforeOrderByFechaAsc(
+				pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja.VENTANILLA, EstadoCaja.ABIERTA, hoy)) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La caja de " + nombres.de(caja.getCajero())
 					+ " del " + Calendario.formatear(caja.getFecha()) + " sigue abierta: no hizo su cierre. Hasta que la "
 					+ "cierre con su conteo no puede cobrar.", "/aprobaciones/cajas?fecha=" + caja.getFecha()));
 		}
 		if (!hora.isBefore(propiedades.horaLimiteCierre())) {
-			for (CajaDiaria caja : cajas.findByFechaOrderByCajeroAsc(hoy)) {
+			for (CajaDiaria caja : cajas.findByCanalAndFechaOrderByCajeroAsc(
+					pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja.VENTANILLA, hoy)) {
 				if (caja.getEstado() == EstadoCaja.ABIERTA) {
 					alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, "Pasó la hora límite ("
 							+ propiedades.horaLimiteCierre() + ") y la caja de " + nombres.de(caja.getCajero())
@@ -327,7 +330,8 @@ public class AlertasCaja implements AlertasRevision {
 
 	/** M1: toda boleta o factura tiene su pago y toda nota de crédito su anulación aprobada. */
 	private void consistencia(List<AlertaRevision> alertas) {
-		var sinPago = pagos.comprobantesSinPago();
+		// Sprint 4: la reemisión de un comprobante rechazado no tiene pago propio: vale por el del rechazado.
+		var sinPago = pagos.comprobantesSinPago().stream().filter(c -> !esReemisionConPago(c)).toList();
 		if (!sinPago.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, sinPago.size() + " boleta(s) o factura(s) sin su pago "
 					+ "en el libro: " + sinPago.stream().limit(5).map(c -> c.numeroCompleto())
@@ -339,6 +343,18 @@ public class AlertasCaja implements AlertasRevision {
 					+ "aprobada: " + notas.stream().limit(5).map(c -> c.numeroCompleto())
 							.collect(java.util.stream.Collectors.joining(", ")) + ". Revísalo con soporte.", null));
 		}
+	}
+
+	private boolean esReemisionConPago(pe.edu.virgenmaria.cuentasclaras.comprobantes.model.Comprobante c) {
+		Long raiz = c.getReemplazaId();
+		for (int i = 0; raiz != null && i < 20; i++) {
+			if (pagos.findByComprobanteId(raiz).isPresent()) {
+				return true;
+			}
+			raiz = comprobantes.findById(raiz).map(pe.edu.virgenmaria.cuentasclaras.comprobantes.model.Comprobante::getReemplazaId)
+					.orElse(null);
+		}
+		return false;
 	}
 
 	/** M3: depósito que llegó al banco más de un día hábil después de la caja (fecha declarada o la del banco). */
@@ -355,6 +371,20 @@ public class AlertasCaja implements AlertasRevision {
 						+ ", más de un día hábil después (posible uso del efectivo de un día para cubrir otro).",
 						"/aprobaciones/cajas/" + d.getCaja().getId()));
 			}
+		}
+	}
+
+	/**
+	 * Sprint 4 (F6): la reconsulta nocturna encontró comprobantes que el sistema tiene como aceptados y el OSE no
+	 * reconoce (por ejemplo, el «OSE» apuntaba a un servidor propio). Se avisa durante una semana.
+	 */
+	private void oseNoReconoce(List<AlertaRevision> alertas, LocalDate hoy) {
+		long casos = auditoria.contarDesde(pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria
+				.COMPROBANTE_NO_COINCIDE_OSE, hoy.minusDays(7).atStartOfDay());
+		if (casos > 0) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, "Comprobantes", casos + " comprobante(s) que el sistema tiene "
+					+ "como aceptados no coinciden con lo que dice el OSE al volver a consultarlos. Revisa la bitácora y la "
+					+ "configuración del OSE.", "/auditoria?soloRevisar=true"));
 		}
 	}
 

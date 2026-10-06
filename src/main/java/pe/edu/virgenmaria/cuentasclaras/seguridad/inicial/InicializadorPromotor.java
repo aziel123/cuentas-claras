@@ -31,7 +31,7 @@ import java.util.Set;
  * Si no hay usuarios y faltan las variables, la aplicación no arranca (mensaje claro en el log).
  */
 @Component
-@Profile("prod")
+@Profile({ "prod", "piloto" })
 public class InicializadorPromotor implements ApplicationRunner {
 
 	private static final Logger LOG = LoggerFactory.getLogger(InicializadorPromotor.class);

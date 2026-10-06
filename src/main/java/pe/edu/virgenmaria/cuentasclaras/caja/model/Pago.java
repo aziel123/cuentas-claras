@@ -80,6 +80,10 @@ public class Pago extends BaseEntity {
 	@Column(name = "reemplaza_pago_id", updatable = false)
 	private Long reemplazaPagoId;
 
+	/** Sprint 4: la orden de pago en línea de la que nace (una por orden: UNIQUE). No cambia. */
+	@Column(name = "orden_pago_id", updatable = false)
+	private Long ordenPagoId;
+
 	@Column(name = "clave_idempotencia", nullable = false, updatable = false, length = 36)
 	private String claveIdempotencia;
 
@@ -107,6 +111,9 @@ public class Pago extends BaseEntity {
 		Objects.requireNonNull(caja, "caja");
 		Objects.requireNonNull(medio, "medio");
 		Objects.requireNonNull(clave, "clave");
+		if (caja.esDeCanal()) {
+			throw new IllegalArgumentException("Una persona no cobra en la caja de un canal automático");
+		}
 		Pago pago = new Pago();
 		pago.familia = Objects.requireNonNull(familia, "familia");
 		pago.caja = caja;
@@ -170,6 +177,41 @@ public class Pago extends BaseEntity {
 		pago.aCuenta = aCuenta;
 		pago.origen = OrigenPago.REEMPLAZO;
 		pago.reemplazaPagoId = anulado.getId();
+		pago.claveIdempotencia = Objects.requireNonNull(clave, "clave").toString();
+		pago.estado = EstadoPago.VIGENTE;
+		return pago;
+	}
+
+	/**
+	 * Pago en línea (sprint 4): lo registra {@code sistema.pasarela} en la caja del canal PASARELA del día, con la
+	 * confirmación de la pasarela de SU orden (medio, operación canónica y monto). En MySQL, trg_pago_registro exige que
+	 * la orden tenga esa confirmación por ese monto, en PEN, y que sea de esa familia (o una aplicación aprobada).
+	 */
+	public static Pago dePasarela(CajaDiaria canal, Familia familia, Comprobante comprobante, MedioPago medio,
+			String operacion, BigDecimal total, boolean aCuenta, Long ordenPagoId, UUID clave) {
+		Objects.requireNonNull(canal, "canal");
+		if (canal.getCanal() != CanalCaja.PASARELA) {
+			throw new IllegalArgumentException("Un pago en línea entra a la caja del canal PASARELA");
+		}
+		if (medio == null || !medio.enLinea()) {
+			throw new IllegalArgumentException("Medio no válido para un pago en línea: " + medio);
+		}
+		Pago pago = new Pago();
+		pago.familia = Objects.requireNonNull(familia, "familia");
+		pago.caja = canal;
+		pago.cajero = canal.getCajero();
+		pago.fecha = canal.getFecha();
+		pago.comprobante = Objects.requireNonNull(comprobante, "comprobante");
+		pago.medio = medio;
+		pago.total = Dinero.positivo(total, "el total del pago");
+		if (comprobante.getTipo() == TipoComprobante.NOTA_CREDITO || !Dinero.iguales(comprobante.getTotal(), pago.total)) {
+			throw new IllegalStateException("El pago necesita su boleta o factura por el mismo total");
+		}
+		pago.numeroOperacion = Objects.requireNonNull(operacion, "operacion");
+		pago.operacionVigente = operacion;
+		pago.aCuenta = aCuenta;
+		pago.origen = OrigenPago.PASARELA;
+		pago.ordenPagoId = Objects.requireNonNull(ordenPagoId, "ordenPagoId");
 		pago.claveIdempotencia = Objects.requireNonNull(clave, "clave").toString();
 		pago.estado = EstadoPago.VIGENTE;
 		return pago;
@@ -243,6 +285,10 @@ public class Pago extends BaseEntity {
 
 	public Long getReemplazaPagoId() {
 		return reemplazaPagoId;
+	}
+
+	public Long getOrdenPagoId() {
+		return ordenPagoId;
 	}
 
 	public String getClaveIdempotencia() {

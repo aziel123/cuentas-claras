@@ -68,11 +68,13 @@ class DatosDemoDevTest {
 		assertThat(datosDemo("jdbc:h2:mem:demo;MODE=MySQL", CLAVE_DEMO).crearSiCorresponde()).isTrue();
 
 		List<Usuario> enColegioPrincipal = ContextoColegio.en(1L, () -> usuarios.findAll());
-		// Un usuario por rol, y una segunda cajera para demostrar dos cajas a la vez (sprint 3).
-		assertThat(enColegioPrincipal).flatExtracting(Usuario::getRoles).containsOnly(Rol.values())
+		// Un usuario por rol del personal, y una segunda cajera para demostrar dos cajas a la vez (sprint 3). El
+		// «apoderado» (sprint 4) va enlazado a un apoderado registrado: lo crea DatosDemoApoderadoDev.
+		assertThat(enColegioPrincipal).flatExtracting(Usuario::getRoles).containsOnly(java.util.Arrays.stream(Rol.values())
+				.filter(r -> r != Rol.APODERADO).toArray(Rol[]::new))
 				.filteredOn(r -> r == Rol.CAJA).hasSize(2);
 		assertThat(enColegioPrincipal).extracting(Usuario::getNombreUsuario)
-				.containsExactlyInAnyOrder("promotor", "director", "administracion", "caja", "caja2", "docente", "apoderado");
+				.containsExactlyInAnyOrder("promotor", "director", "administracion", "caja", "caja2", "docente");
 		assertThat(enColegioPrincipal).allSatisfy(u -> {
 			assertThat(u.isDebeCambiarClave()).isFalse();
 			assertThat(codificador.matches(CLAVE_DEMO, u.getClaveHash())).isTrue();
@@ -82,7 +84,7 @@ class DatosDemoDevTest {
 		assertThat(ContextoColegio.en(colegioB, () -> usuarios.findAll())).extracting(Usuario::getNombreUsuario)
 				.containsExactlyInAnyOrder("promotor.b", "caja.b");
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'USUARIO_CREADO'",
-				Long.class)).isEqualTo(9);
+				Long.class)).isEqualTo(8);
 	}
 
 	@Test
@@ -100,7 +102,7 @@ class DatosDemoDevTest {
 		datosDemo("jdbc:h2:mem:demo", CLAVE_DEMO).crearSiCorresponde();
 
 		assertThat(datosDemo("jdbc:h2:mem:demo", CLAVE_DEMO).crearSiCorresponde()).isFalse();
-		assertThat(ContextoColegio.comoSistema(() -> usuarios.count())).isEqualTo(9);
+		assertThat(ContextoColegio.comoSistema(() -> usuarios.count())).isEqualTo(8);
 	}
 
 	@Test

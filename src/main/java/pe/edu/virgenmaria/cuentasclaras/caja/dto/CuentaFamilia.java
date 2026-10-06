@@ -8,7 +8,12 @@ import java.util.List;
 
 /** Lo que debe una familia (todos los hermanos) y sus pagos recientes, para elegir qué se cobra. */
 public record CuentaFamilia(Long familiaId, String familia, List<AlumnoCuotas> alumnos, List<PagoReciente> pagosRecientes,
-		boolean aceptaEfectivo, LocalDate cajaAnteriorAbierta, LocalDate hoy) {
+		boolean aceptaEfectivo, LocalDate cajaAnteriorAbierta, LocalDate hoy, List<String> pagosEnLineaEnCurso) {
+
+	public CuentaFamilia(Long familiaId, String familia, List<AlumnoCuotas> alumnos, List<PagoReciente> pagosRecientes,
+			boolean aceptaEfectivo, LocalDate cajaAnteriorAbierta, LocalDate hoy) {
+		this(familiaId, familia, alumnos, pagosRecientes, aceptaEfectivo, cajaAnteriorAbierta, hoy, List.of());
+	}
 
 	/** Las cuotas por pagar de un alumno. */
 	public record AlumnoCuotas(Long alumnoId, String nombre, String grado, List<CuotaPorCobrar> cuotas) {
@@ -30,6 +35,11 @@ public record CuentaFamilia(Long familiaId, String familia, List<AlumnoCuotas> a
 	/** Los medios de pago en el orden de la pantalla. */
 	public List<MedioPago> medios() {
 		return List.of(MedioPago.values());
+	}
+
+	/** Sprint 4 (decisión 7): hay un pago en línea iniciado para alguna de estas cuotas; caja lo ve pero no se bloquea. */
+	public boolean hayPagoEnLineaEnCurso() {
+		return pagosEnLineaEnCurso != null && !pagosEnLineaEnCurso.isEmpty();
 	}
 
 	public boolean sinDeuda() {

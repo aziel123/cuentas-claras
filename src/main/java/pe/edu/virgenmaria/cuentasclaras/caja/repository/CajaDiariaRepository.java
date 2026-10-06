@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.CajaDiaria;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoCaja;
 
 import java.time.LocalDate;
@@ -50,8 +51,17 @@ public interface CajaDiariaRepository extends Repository<CajaDiaria, Long> {
 	/** Las cajas de un día, de todos los cajeros (vista de Promotoría y Dirección). */
 	List<CajaDiaria> findByFechaOrderByCajeroAsc(LocalDate fecha);
 
+	/** Las cajas de un canal en un día (VENTANILLA: las de las cajeras; PASARELA: la de los pagos en línea). */
+	List<CajaDiaria> findByCanalAndFechaOrderByCajeroAsc(CanalCaja canal, LocalDate fecha);
+
 	/** Cajas que siguen abiertas de días anteriores (alerta crítica). */
 	List<CajaDiaria> findByEstadoAndFechaBeforeOrderByFechaAsc(EstadoCaja estado, LocalDate fecha);
+
+	/** Cajas de VENTANILLA que siguen abiertas de días anteriores (las de canal siempre están abiertas). */
+	List<CajaDiaria> findByCanalAndEstadoAndFechaBeforeOrderByFechaAsc(CanalCaja canal, EstadoCaja estado,
+			LocalDate fecha);
+
+	Optional<CajaDiaria> findByCanalAndFecha(CanalCaja canal, LocalDate fecha);
 
 	/** Cajas cerradas cuyo efectivo aún no se depositó, de un cajero o de todos. */
 	@Query("select c from CajaDiaria c where c.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoCaja.CERRADA "

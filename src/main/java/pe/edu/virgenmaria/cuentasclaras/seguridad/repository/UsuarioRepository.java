@@ -41,4 +41,7 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 	long contarActivosConRol(@Param("rol") Rol rol);
 
 	List<Usuario> findAllByOrderByNombreCompletoAsc();
+
+	/** Sprint 4: la cuenta en línea de un apoderado (como máximo una: UNIQUE). */
+	Optional<Usuario> findByApoderadoId(Long apoderadoId);
 }

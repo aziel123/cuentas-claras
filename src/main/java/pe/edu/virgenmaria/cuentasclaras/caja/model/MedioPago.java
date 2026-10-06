@@ -22,4 +22,9 @@ public enum MedioPago {
 	public boolean digital() {
 		return this != EFECTIVO;
 	}
+
+	/** Medios que confirma una pasarela de pagos en línea (sprint 4). */
+	public boolean enLinea() {
+		return this == YAPE || this == PLIN || this == TARJETA;
+	}
 }

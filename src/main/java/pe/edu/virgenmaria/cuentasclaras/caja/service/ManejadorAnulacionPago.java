@@ -205,7 +205,8 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 				+ Dinero.formatear(pago.getTotal()) + " · " + pago.getMedio().etiqueta()
 				+ (pago.getNumeroOperacion() == null ? "" : " (operación " + pago.getNumeroOperacion() + ")"));
 		lineas.add("Cobrado el " + Calendario.formatear(pago.getFecha()) + " por " + nombres.de(pago.getCajero()) + " ("
-				+ pago.getCajero() + ") · " + (pago.getCaja().aceptaEfectivo() ? "Caja abierta" : "Caja ya cerrada"));
+				+ pago.getCajero() + ") · " + (pago.getCaja().esDeCanal() ? pago.getCaja().getCanal().etiqueta()
+				: pago.getCaja().aceptaEfectivo() ? "Caja abierta" : "Caja ya cerrada"));
 		lineas.add(verificacionBancaria(pago));
 		String causa = datos.get(ServicioAnulacionPagos.DATO_CAUSA);
 		if (causa != null) {
@@ -246,6 +247,9 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 	private String verificacionBancaria(Pago pago) {
 		if (pago.getMedio() == MedioPago.EFECTIVO) {
 			return "Verificación bancaria: no aplica (efectivo)";
+		}
+		if (pago.getCaja().esDeCanal()) {
+			return "Verificación bancaria: pago en línea confirmado por la pasarela (se verifica con su liquidación)";
 		}
 		return verificaciones.findByPagoId(pago.getId())
 				.map(v -> "Verificación bancaria: " + v.getResultado().etiqueta() + " por " + v.getCreadoPor() + " el "

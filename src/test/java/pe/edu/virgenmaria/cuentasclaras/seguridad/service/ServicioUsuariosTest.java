@@ -215,8 +215,9 @@ class ServicioUsuariosTest {
 		Usuario docente = guardar("luis.docente", Rol.DOCENTE);
 		UsuariosDePrueba.iniciarSesion(director);
 
-		assertThat(servicio.rolesAsignables()).doesNotContain(Rol.ADMINISTRACION, Rol.CAJA)
-				.contains(Rol.DOCENTE, Rol.APODERADO);
+		// Sprint 4: APODERADO no se asigna desde Usuarios; su acceso se da desde la ficha del apoderado (enlazado).
+		assertThat(servicio.rolesAsignables()).doesNotContain(Rol.ADMINISTRACION, Rol.CAJA, Rol.APODERADO)
+				.contains(Rol.DOCENTE);
 		assertThatThrownBy(() -> servicio.crear(solicitud("segunda.cuenta", Rol.ADMINISTRACION)))
 				.isInstanceOf(AccessDeniedException.class);
 		assertThatThrownBy(() -> servicio.crear(solicitud("cajera.fantasma", Rol.CAJA)))

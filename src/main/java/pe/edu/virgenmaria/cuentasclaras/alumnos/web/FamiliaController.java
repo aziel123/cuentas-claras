@@ -37,8 +37,12 @@ public class FamiliaController {
 
 	private final ServicioFamilias familias;
 
-	public FamiliaController(ServicioFamilias familias) {
+	private final pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAccesoApoderados accesos;
+
+	public FamiliaController(ServicioFamilias familias,
+			pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAccesoApoderados accesos) {
 		this.familias = familias;
+		this.accesos = accesos;
 	}
 
 	@GetMapping("/familias/{id:\\d+}")
@@ -85,10 +89,15 @@ public class FamiliaController {
 	}
 
 	@GetMapping("/apoderados/{id:\\d+}")
-	public String apoderado(@PathVariable Long id, Model model) {
+	public String apoderado(@PathVariable Long id, @AuthenticationPrincipal UsuarioAutenticado sesion, Model model) {
 		ApoderadoDetalle detalle = familias.obtenerApoderado(id);
 		model.addAttribute("solicitud", detalle.datos());
 		prepararApoderado(model, detalle);
+		// Sprint 4: la cuenta en línea del apoderado (la dan Promotoría o Administración).
+		model.addAttribute("cuentaEnLinea", accesos.cuentaDe(id).orElse(null));
+		model.addAttribute("puedeDarAcceso", sesion != null && (sesion.roles().contains(
+				pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.PROMOTOR) || sesion.roles().contains(
+						pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.ADMINISTRACION)));
 		return VISTA_APODERADO;
 	}
 
