@@ -12,8 +12,8 @@
 | Hito | Fecha objetivo | Qué significa para el colegio |
 |---|---|---|
 | **H1 · Caja controlada** | 27 nov 2026 | Caja cobra en el sistema, emite comprobante y cierra caja todos los días. Funciona en paralelo al cuaderno durante 2 semanas. |
-| **H2 · Matrícula 2027** | 11 dic 2026 | La matrícula 2027 se cobra en el sistema. Las familias reciben WhatsApp y ven su estado de cuenta. Se deja el cuaderno. |
-| **H3 · Control total** | 5 feb 2027 | Pagos digitales, panel de la promotora, conciliación bancaria y auditoría de seguridad aprobada. |
+| **H2 · Cero digitación** | 11 dic 2026 | Los pagos digitales y bancarios entran solos, el banco se concilia subiendo un archivo y cada pago tiene su comprobante electrónico. |
+| **H3 · Familias y control total** | 5 feb 2027 | La matrícula 2027 se cobra en el sistema, las familias reciben WhatsApp y usan el portal, la promotora tiene su panel y la auditoría de seguridad está aprobada. Se deja el cuaderno. |
 | **H4 · Académico** | Mar–abr 2027 | Asistencia y comunicados al iniciar las clases. Notas por competencias en el primer bimestre. |
 
 ---
@@ -68,26 +68,29 @@ Cada funcionalidad sigue el flujo de agentes del proyecto:
 - **Terminado cuando:** pasan las pruebas de QA con los escenarios de fraude y el auditor confirma que caja no puede borrar, editar ni autoaprobar nada.
 - **Piloto**: 2 semanas en paralelo al cuaderno, conciliando ambos cada día.
 
-### Sprint 4 · Familias y matrícula 2027 (30 nov – 11 dic) → **H2**
-- Notificación por WhatsApp (y correo de respaldo) en cada pago, anulación y descuento.
-- **Clave temporal directo al titular** (cierra el hallazgo A2 de la auditoría del sprint 1): al crear un usuario o restablecer su clave, la clave temporal se envía por WhatsApp o correo al titular y **ya no se muestra a quien la generó**. Así Promotoría o Dirección no pueden usar la cuenta de otra persona ni crear cuentas fantasma de Caja. Mientras tanto rige la mitigación del sprint 1: la clave temporal vence a las 48 horas, el titular ve quién restableció su clave, Promotoría tiene la tarjeta «Para revisar» y la bitácora marca esos cambios para revisar.
-- **Huella diaria de la bitácora** a Promotoría por WhatsApp o correo (número de evento, fecha y código), para detectar un recorte de la bitácora sin depender de que la anote a mano.
-- Portal de familias, pensado para celular: estado de cuenta, cuotas, comprobantes descargables e historial de mensajes.
-- Proceso de **matrícula 2027**: renovación, generación del cronograma 2027 y cobro de la matrícula.
-- **Terminado cuando:** una familia real paga la matrícula 2027 y recibe su comprobante por WhatsApp. El cuaderno se archiva.
+> **Reordenamiento (6 oct 2026, decisión del colegio):** la prioridad es no sumar trabajo manual al personal. Por eso los pagos digitales y la conciliación automática pasan al sprint 4, y las familias y el panel quedan en los sprints 5 y 6. Los sprints 0 a 3 terminaron con unas 7 semanas de adelanto, así que las fechas de abajo son el límite, no la fecha real.
 
-### Sprint 5 · Panel de la promotora (14 dic – 8 ene, con feriados)
+### Sprint 4 · Cero digitación (30 nov – 11 dic) → **H2**
+- **Pagos digitales con pasarela** (Yape, Plin, tarjeta): la pasarela confirma el pago, el sistema lo registra solo, emite el comprobante y lo deja en la auditoría. Nadie lo digita.
+- **Recaudación bancaria por código de alumno**: el padre paga en el banco o en su app con el código del alumno; el archivo diario del banco se importa y los pagos se aplican solos.
+- **Conciliación automática con el extracto bancario**: Administración sube el extracto una vez al día y el sistema empareja todos los movimientos. Solo se revisan las diferencias. Reemplaza la conciliación a mano del sprint 3.
+- **Comprobante electrónico automático vía OSE**: cada pago se envía al OSE y queda su estado (aceptado, observado o rechazado). Mientras el colegio termina el trámite, funciona con un conector simulado.
+- **Terminado cuando:** un pago con Yape se refleja solo, sin que nadie lo digite, y la conciliación del día cuadra subiendo un solo archivo.
+
+### Sprint 5 · Familias y matrícula 2027 (14 dic – 8 ene, con feriados)
+- Notificación por WhatsApp (y correo de respaldo) en cada pago, anulación y descuento. **Recordatorios automáticos** antes de cada vencimiento, sin bloquear evaluaciones, según INDECOPI.
+- **Clave temporal directo al titular** (cierra el hallazgo A2 de la auditoría del sprint 1): al crear un usuario o restablecer su clave, la clave temporal se envía por WhatsApp o correo al titular y **ya no se muestra a quien la generó**. Mientras tanto rige la mitigación del sprint 1: la clave temporal vence a las 48 horas, el titular ve quién restableció su clave, Promotoría tiene la tarjeta «Para revisar» y la bitácora marca esos cambios para revisar.
+- **Huella diaria de la bitácora** a Promotoría por WhatsApp o correo (número de evento, fecha y código).
+- Portal de familias, pensado para celular: estado de cuenta, cuotas, comprobantes descargables, pago en línea e historial de mensajes.
+- Proceso de **matrícula 2027**: renovación, generación del cronograma 2027 y cobro de la matrícula.
+- **Terminado cuando:** una familia real paga la matrícula 2027 desde su celular y recibe su comprobante por WhatsApp. El cuaderno se archiva.
+
+### Sprint 6 · Panel de la promotora (11 – 22 ene)
 - Panel para celular: cobrado hoy y en el mes, deuda vencida, familias morosas y % de pagos digitales.
+- **Resumen diario** automático y **aprobaciones desde el celular**.
 - **Alertas**: caja con diferencia, anulaciones pendientes y cierre no realizado a cierta hora.
 - Reportes: morosidad por grado, ingresos por medio de pago y exportación a Excel para el contador.
-- Recordatorios automáticos de deuda. Sin bloquear evaluaciones, según INDECOPI.
 - **Terminado cuando:** la promotora usa el panel a diario sin pedir reportes a nadie.
-
-### Sprint 6 · Pagos digitales y conciliación (11 – 22 ene)
-- Integración con la pasarela (Yape, Plin, tarjeta): confirmación automática, comprobante y WhatsApp.
-- Recaudación bancaria por código de alumno: importar el archivo del banco y aplicar los pagos.
-- **Conciliación bancaria**: pagos registrados frente a movimientos del banco, con alertas de diferencias.
-- **Terminado cuando:** un pago con Yape se refleja solo, sin que nadie lo digite, y la conciliación del mes cuadra.
 
 ### Sprint 7 · Endurecimiento y entrega (25 ene – 5 feb) → **H3**
 - Auditoría de seguridad completa: OWASP, IDOR entre familias y entre colegios, y datos personales (Ley 29733).
@@ -108,8 +111,9 @@ Cada funcionalidad sigue el flujo de agentes del proyecto:
 |---|---|---|
 | Sprint 2 | Dirección y Administración | Validar los datos cargados y las pensiones. Ellos aprueban su información. |
 | Sprint 3 (piloto) | Caja | Acompañamiento presencial los primeros días. Cierre de caja juntos. |
-| Sprint 4 | Familias | Comunicado del colegio: "desde ahora recibirá su comprobante por WhatsApp". Guía de una página para pagar con Yape. |
-| Sprint 5 | Promotora | Sesión de 30 minutos con el panel en su celular. |
+| Sprint 4 | Familias y Administración | Guía de una página para pagar con Yape o en el banco con el código del alumno. Administración aprende a subir el extracto diario. |
+| Sprint 5 | Familias | Comunicado del colegio: "desde ahora recibirá su comprobante por WhatsApp". |
+| Sprint 6 | Promotora | Sesión de 30 minutos con el panel en su celular. |
 | Sprint 7 | Todo el personal | Capacitación por rol y manuales impresos. |
 | Marzo | Docentes | Asistencia y comunicados desde el celular. |
 
