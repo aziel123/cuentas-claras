@@ -1,7 +1,7 @@
 package pe.edu.virgenmaria.cuentasclaras.conciliacion.service;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.ObjetoPartida;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ReglasEmparejamiento.ObjetoAbierto;
 
@@ -22,8 +22,16 @@ class LimiteFaltantesTest {
 	private static final LocalDate LUNES_2 = LocalDate.of(2026, 11, 2);
 
 	private static ObjetoAbierto objeto(ObjetoPartida tipo, LocalDate[] ventana) {
+		return objeto(tipo, ventana, "alguien");
+	}
+
+	/**
+	 * Correcciones del sprint 4 (QA-S4-4): el Yape de caja y el pago de recaudación de un viernes tienen la MISMA ventana
+	 * (viernes a lunes); los distingue quién los registró: el pago por banco lo registra {@code sistema.recaudacion}.
+	 */
+	private static ObjetoAbierto objeto(ObjetoPartida tipo, LocalDate[] ventana, String responsable) {
 		return new ObjetoAbierto(tipo, 1L, VIERNES_30, new BigDecimal("450.00"), "OP1234", null, ventana[0], ventana[1],
-				"detalle", "alguien");
+				"detalle", responsable);
 	}
 
 	@Test
@@ -52,10 +60,8 @@ class LimiteFaltantesTest {
 	 * cajera», aunque aún está en su ventana. El lote (POR_LOTE) sí espera al día hábil siguiente.
 	 */
 	@Test
-	@Disabled("QA-S4-4: DiferenciasConciliacion.limite (línea 132) usa la fecha del objeto para todo PAGO e ignora la "
-			+ "ventana de la recaudación POR_PAGO: falsa alerta CRÍTICA de pago inventado dentro de su ventana")
 	void debeEsperarAlDiaHabilSiguienteParaUnPagoDeRecaudacionPorPago() {
 		assertThat(DiferenciasConciliacion.limite(objeto(ObjetoPartida.PAGO,
-				ReglasEmparejamiento.ventanaRecaudacion(VIERNES_30)))).isEqualTo(LUNES_2);
+				ReglasEmparejamiento.ventanaRecaudacion(VIERNES_30), ActorSistema.RECAUDACION.usuario()))).isEqualTo(LUNES_2);
 	}
 }

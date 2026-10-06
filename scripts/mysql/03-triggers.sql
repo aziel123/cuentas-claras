@@ -368,7 +368,8 @@ END$$
 -- (Reemplaza la versión de las correcciones del sprint 3.) Verifica alguien que no cobró ni depositó. MANUAL: lo
 -- escrito a ciegas coincide con el pago o el depósito. AUTOMATICA: sale de una partida CONFIRMADA sobre un extracto
 -- CONFIRMADO que cubre ese pago (directo, por su liquidación o por su lote) o ese depósito, y la inserta solo
--- sistema.conciliacion (tanda 3: más estricto que el diseño).
+-- sistema.conciliacion (tanda 3: más estricto que el diseño). Correcciones del sprint 4 (S4-C1): en un pago o depósito
+-- directo, lo «visto en el banco» es el monto del MOVIMIENTO y debe ser el del pago o depósito.
 DROP TRIGGER IF EXISTS trg_verificacion_bancaria_registro$$
 CREATE TRIGGER trg_verificacion_bancaria_registro BEFORE INSERT ON verificacion_bancaria FOR EACH ROW
 BEGIN
@@ -387,9 +388,12 @@ BEGIN
                 JOIN extracto_bancario e ON e.id = m.extracto_id
                 WHERE pc.id = NEW.partida_id AND pc.estado = 'CONFIRMADA' AND e.estado = 'CONFIRMADO'
                 AND m.fecha <=> NEW.banco_fecha
-                AND ((pc.objeto_tipo = 'PAGO' AND pc.pago_id <=> NEW.pago_id AND pc.monto_objeto <=> NEW.banco_monto)
-                    OR (pc.objeto_tipo = 'DEPOSITO' AND pc.deposito_id <=> NEW.deposito_id
-                        AND pc.monto_objeto <=> NEW.banco_monto)
+                AND ((pc.objeto_tipo = 'PAGO' AND pc.pago_id <=> NEW.pago_id AND m.monto <=> NEW.banco_monto
+                        AND pc.monto_objeto <=> m.monto AND EXISTS (SELECT 1 FROM pago p2 WHERE p2.id = NEW.pago_id
+                            AND p2.total <=> m.monto))
+                    OR (pc.objeto_tipo = 'DEPOSITO' AND pc.deposito_id <=> NEW.deposito_id AND m.monto <=> NEW.banco_monto
+                        AND pc.monto_objeto <=> m.monto AND EXISTS (SELECT 1 FROM deposito_caja x2
+                            WHERE x2.id = NEW.deposito_id AND x2.monto <=> m.monto))
                     OR (pc.objeto_tipo = 'LIQUIDACION' AND EXISTS (SELECT 1 FROM liquidacion_linea l
                         WHERE l.liquidacion_id = pc.liquidacion_id AND l.pago_id <=> NEW.pago_id AND l.tipo = 'CARGO'
                         AND l.bruto <=> NEW.banco_monto))
@@ -718,23 +722,40 @@ BEGIN
 END$$
 
 -- PROPUESTA → CONFIRMADA | DESCARTADA, una vez. Confirmar exige el extracto CONFIRMADO; si la confirma una persona
--- (SUGERIDA, MANUAL o EXPLICADA), no puede ser quien cobró, registró o depositó lo emparejado.
+-- (SUGERIDA, MANUAL o EXPLICADA), no puede ser quien cobró, registró o depositó lo emparejado, ni quien subió el lote de
+-- recaudación (también si el objeto es un pago de ese lote: S4-B2 y QA-S4-6). Correcciones del sprint 4: la MANUAL
+-- exige SU solicitud PARTIDA_MANUAL aprobada por quien confirma, que no la pidió (S4-C1); las claves vigentes solo
+-- valen la de su propio movimiento y objeto, y una partida resuelta ya no las cambia (S4-B1).
 DROP TRIGGER IF EXISTS trg_partida_conciliacion_estado$$
 CREATE TRIGGER trg_partida_conciliacion_estado BEFORE UPDATE ON partida_conciliacion FOR EACH ROW
 BEGIN
     IF OLD.estado <> 'PROPUESTA' AND (NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.resuelto_por <=> OLD.resuelto_por)
             OR NOT (NEW.resuelto_en <=> OLD.resuelto_en) OR NOT (NEW.nota <=> OLD.nota)
-            OR NOT (NEW.categoria <=> OLD.categoria)) THEN
+            OR NOT (NEW.categoria <=> OLD.categoria) OR NOT (NEW.movimiento_vigente <=> OLD.movimiento_vigente)
+            OR NOT (NEW.objeto_vigente <=> OLD.objeto_vigente)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una partida resuelta no cambia';
+    END IF;
+    IF NOT (NEW.movimiento_vigente IS NULL OR NEW.movimiento_vigente <=> NEW.movimiento_id)
+            OR NOT (NEW.objeto_vigente IS NULL OR (NEW.objeto_tipo <> 'EXPLICACION' AND NEW.objeto_vigente <=> CONCAT(
+                NEW.objeto_tipo, ':', COALESCE(NEW.pago_id, NEW.deposito_id, NEW.liquidacion_id, NEW.lote_recaudacion_id,
+                    NEW.reembolso_id)))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la clave vigente de la partida no corresponde';
     END IF;
     IF NEW.estado = 'CONFIRMADA' AND OLD.estado = 'PROPUESTA' AND (NOT EXISTS (SELECT 1 FROM movimiento_bancario m
             JOIN extracto_bancario e ON e.id = m.extracto_id WHERE m.id = NEW.movimiento_id AND e.estado = 'CONFIRMADO')
             OR (NEW.regla <> 'EXACTA' AND (
                 EXISTS (SELECT 1 FROM pago p WHERE p.id = NEW.pago_id
                     AND (p.cajero = NEW.resuelto_por OR p.creado_por = NEW.resuelto_por))
+                OR EXISTS (SELECT 1 FROM pago p JOIN linea_recaudacion l ON l.id = p.linea_recaudacion_id
+                    JOIN lote_recaudacion t ON t.id = l.lote_id WHERE p.id = NEW.pago_id AND t.creado_por = NEW.resuelto_por)
                 OR EXISTS (SELECT 1 FROM deposito_caja x JOIN caja_diaria d ON d.id = x.caja_diaria_id
                     WHERE x.id = NEW.deposito_id AND (x.creado_por = NEW.resuelto_por OR d.cajero = NEW.resuelto_por))
-                OR EXISTS (SELECT 1 FROM reembolso r WHERE r.id = NEW.reembolso_id AND r.creado_por = NEW.resuelto_por)))) THEN
+                OR EXISTS (SELECT 1 FROM reembolso r WHERE r.id = NEW.reembolso_id AND r.creado_por = NEW.resuelto_por)
+                OR EXISTS (SELECT 1 FROM lote_recaudacion t WHERE t.id = NEW.lote_recaudacion_id
+                    AND t.creado_por = NEW.resuelto_por)))
+            OR (NEW.regla = 'MANUAL' AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.tipo = 'PARTIDA_MANUAL'
+                AND s.entidad = 'partida_conciliacion' AND s.entidad_id = NEW.id AND s.estado = 'APROBADA'
+                AND s.resuelto_por = NEW.resuelto_por AND s.solicitado_por <> NEW.resuelto_por))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la partida se confirma con el extracto confirmado y por otra persona';
     END IF;
 END$$

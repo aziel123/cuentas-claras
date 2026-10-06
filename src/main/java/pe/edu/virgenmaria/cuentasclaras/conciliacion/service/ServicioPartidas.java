@@ -7,6 +7,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.TipoSolicitud;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.RegistroSolicitudes;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.NumeroOperacion;
@@ -19,6 +21,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
+import pe.edu.virgenmaria.cuentasclaras.conciliacion.config.PropiedadesConciliacion;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.CategoriaExplicacion;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoExtracto;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoPartida;
@@ -31,7 +34,6 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.MovimientoBancar
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.PartidaConciliacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ReglasEmparejamiento.ObjetoAbierto;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LoteRecaudacionRepository;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -39,9 +41,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -51,7 +53,8 @@ import java.util.Set;
  * <ul>
  *   <li>{@link #confirmarSugerida}: una pareja SUGERIDA (mismo monto, fecha cercana, candidato único) es correcta.</li>
  *   <li>{@link #descartar}: «No es»; libera el movimiento y el objeto, y ese par no se vuelve a proponer.</li>
- *   <li>{@link #emparejarManual}: una persona elige el objeto de un movimiento sin pareja, con nota.</li>
+ *   <li>{@link #emparejarManual}: una persona elige el objeto (del mismo monto) de un movimiento sin pareja, con nota, y
+ *       otra persona de Promotoría o Dirección lo aprueba en la bandeja (S4-C1).</li>
  *   <li>{@link #explicar}: un movimiento ajeno a la cobranza (intereses, transferencia propia...), con nota.</li>
  * </ul>
  * Todo queda resaltado en la bitácora y en el resumen de Promotoría.
@@ -77,7 +80,11 @@ public class ServicioPartidas {
 
 	private final LoteRecaudacionRepository lotes;
 
-	private final ControlParticipantes participantes;
+	private final ResponsablesPartida responsables;
+
+	private final RegistroSolicitudes solicitudes;
+
+	private final PropiedadesConciliacion propiedades;
 
 	private final AuditoriaService auditoria;
 
@@ -87,8 +94,9 @@ public class ServicioPartidas {
 
 	public ServicioPartidas(PartidaConciliacionRepository partidas, MovimientoBancarioRepository movimientos,
 			ObjetosConciliables objetos, PagoRepository pagos, DepositoCajaRepository depositos,
-			ReembolsoRepository reembolsos, LoteRecaudacionRepository lotes, ControlParticipantes participantes,
-			AuditoriaService auditoria, ApplicationEventPublisher eventos, Clock reloj) {
+			ReembolsoRepository reembolsos, LoteRecaudacionRepository lotes, ResponsablesPartida responsables,
+			RegistroSolicitudes solicitudes, PropiedadesConciliacion propiedades, AuditoriaService auditoria,
+			ApplicationEventPublisher eventos, Clock reloj) {
 		this.partidas = partidas;
 		this.movimientos = movimientos;
 		this.objetos = objetos;
@@ -96,7 +104,9 @@ public class ServicioPartidas {
 		this.depositos = depositos;
 		this.reembolsos = reembolsos;
 		this.lotes = lotes;
-		this.participantes = participantes;
+		this.responsables = responsables;
+		this.solicitudes = solicitudes;
+		this.propiedades = propiedades;
 		this.auditoria = auditoria;
 		this.eventos = eventos;
 		this.reloj = reloj;
@@ -158,26 +168,36 @@ public class ServicioPartidas {
 	}
 
 	/**
-	 * Empareja a mano un movimiento sin pareja con un objeto abierto (de la lista de posibles), con nota. Queda
-	 * CONFIRMADA en el acto (el extracto ya está confirmado) y resaltada para Promotoría.
+	 * Pide emparejar a mano un movimiento sin pareja con un objeto abierto del MISMO monto (de la lista de posibles), con
+	 * nota (S4-C1). Queda PROPUESTA y va a la bandeja: la confirma otra persona de Promotoría o Dirección al aprobarla
+	 * ({@link ManejadorPartidaManual}); hasta entonces no verifica nada y lo emparejado sigue en rojo. Solo una
+	 * liquidación de la pasarela admite la tolerancia configurada. No se agrupa: un movimiento, un objeto.
+	 *
+	 * @return el id de la solicitud creada en la bandeja
 	 */
 	@Transactional(noRollbackFor = AutoaprobacionException.class)
 	@PreAuthorize("hasRole('ADMINISTRACION')")
-	public void emparejarManual(Long movimientoId, ObjetoPartida tipo, Long objetoId, String nota) {
+	public Long emparejarManual(Long movimientoId, ObjetoPartida tipo, Long objetoId, String nota) {
 		MovimientoBancario movimiento = movimientoSinPareja(movimientoId);
 		if (tipo == null || objetoId == null || tipo == ObjetoPartida.EXPLICACION) {
 			throw new ReglaNegocioException("Elige con qué se empareja el movimiento.");
 		}
-		ObjetoAbierto objeto = posiblesDe(movimiento).stream().filter(o -> o.tipo() == tipo && o.id().equals(objetoId))
+		ObjetoAbierto objeto = objetos.abiertos(movimiento.getFecha().minusDays(DIAS_POSIBLES),
+				movimiento.getFecha().plusDays(DIAS_POSIBLES)).stream()
+				.filter(o -> o.tipo() == tipo && o.id().equals(objetoId) && o.tipo().movimiento() == movimiento.getTipo())
 				.findFirst().orElseThrow(() -> new ReglaNegocioException("Eso ya no se puede emparejar con este movimiento "
 						+ "(ya tiene pareja o no es del mismo tipo ni de fechas cercanas). Recarga la pantalla."));
+		if (!montoAdmitido(movimiento, objeto)) {
+			throw new ReglaNegocioException("El movimiento del banco es por " + Dinero.formatear(movimiento.getMonto())
+					+ " y lo elegido por " + Dinero.formatear(objeto.monto()) + ": a mano solo se empareja el MISMO monto. Si "
+					+ "el banco agrupó varios pagos en un abono o es otro dinero, no lo emparejes: explícalo o avisa a "
+					+ "Promotoría.");
+		}
 		String motivo = Motivo.exigir(nota);
 		String usuario = usuario();
 		exigirOtraPersona(tipo, objetoId, usuario, null);
-		PartidaConciliacion partida = partidas.save(PartidaConciliacion.proponer(movimiento, tipo, objetoId, objeto.monto(),
-				ReglaPartida.MANUAL, motivo));
-		partida.confirmar(usuario, ahora());
-		partidas.saveAndFlush(partida);
+		PartidaConciliacion partida = partidas.saveAndFlush(PartidaConciliacion.proponer(movimiento, tipo, objetoId,
+				objeto.monto(), ReglaPartida.MANUAL, motivo));
 		List<String> avisos = new ArrayList<>();
 		if (movimiento.getNumeroOperacion() != null && objeto.operacion() != null
 				&& !movimiento.getNumeroOperacion().equals(objeto.operacion())) {
@@ -187,15 +207,16 @@ public class ServicioPartidas {
 		if (partida.getDiferencia().signum() != 0) {
 			avisos.add("diferencia de " + Dinero.formatear(partida.getDiferencia()));
 		}
+		String descripcion = movimiento.getTipo().etiqueta().toLowerCase(Locale.ROOT) + " del "
+				+ Calendario.formatear(movimiento.getFecha()) + " por " + Dinero.formatear(movimiento.getMonto())
+				+ " («" + movimiento.getDescripcion() + "», operación " + texto(movimiento.getNumeroOperacion())
+				+ ") con: " + objeto.detalle() + " por " + Dinero.formatear(objeto.monto()) + " (operación "
+				+ texto(objeto.operacion()) + ")" + (avisos.isEmpty() ? "" : ". Atención: " + String.join("; ", avisos));
 		auditoria.registrar(AccionAuditoria.PARTIDA_MANUAL_REGISTRADA, "partida_conciliacion", partida.getId().toString(),
-				null, ReglaPartida.MANUAL.name() + " · " + tipo.name(), usuario + " emparejó a mano el "
-						+ movimiento.getTipo().etiqueta().toLowerCase(Locale.ROOT) + " del "
-						+ Calendario.formatear(movimiento.getFecha()) + " por " + Dinero.formatear(movimiento.getMonto())
-						+ " («" + movimiento.getDescripcion() + "», operación " + texto(movimiento.getNumeroOperacion())
-						+ ") con: " + objeto.detalle() + " por " + Dinero.formatear(objeto.monto()) + " (operación "
-						+ texto(objeto.operacion()) + ")" + (avisos.isEmpty() ? "" : ". Atención: " + String.join("; ",
-								avisos)) + ". Nota: " + motivo);
-		eventos.publishEvent(new PartidaConfirmada(partida.getColegioId(), partida.getId()));
+				null, ReglaPartida.MANUAL.name() + " · " + tipo.name() + " · por aprobar", usuario + " pidió emparejar a "
+						+ "mano el " + descripcion + ". Nota: " + motivo + ". Falta la aprobación de Promotoría o Dirección.");
+		return solicitudes.crear(TipoSolicitud.PARTIDA_MANUAL, ManejadorPartidaManual.ENTIDAD, partida.getId(),
+				"Emparejar a mano el " + descripcion, Map.of(), motivo).getId();
 	}
 
 	/** Un movimiento ajeno a la cobranza, con su categoría y una nota. Queda CONFIRMADO y resaltado para Promotoría. */
@@ -241,10 +262,14 @@ public class ServicioPartidas {
 
 	private List<ObjetoAbierto> posiblesDe(MovimientoBancario m) {
 		return objetos.abiertos(m.getFecha().minusDays(DIAS_POSIBLES), m.getFecha().plusDays(DIAS_POSIBLES)).stream()
-				.filter(o -> o.tipo().movimiento() == m.getTipo())
-				.sorted(Comparator.comparing((ObjetoAbierto o) -> o.monto().subtract(m.getMonto()).abs())
-						.thenComparing(o -> Math.abs(o.fecha().toEpochDay() - m.getFecha().toEpochDay())))
+				.filter(o -> o.tipo().movimiento() == m.getTipo() && montoAdmitido(m, o))
+				.sorted(Comparator.comparing((ObjetoAbierto o) -> Math.abs(o.fecha().toEpochDay() - m.getFecha().toEpochDay())))
 				.limit(30).toList();
+	}
+
+	/** S4-C1: a mano solo el mismo monto; la liquidación de la pasarela, con su tolerancia configurada. */
+	boolean montoAdmitido(MovimientoBancario m, ObjetoAbierto o) {
+		return ReglasEmparejamiento.montoAdmitido(m.getMonto(), o, propiedades.toleranciaMontoLiquidacion());
 	}
 
 	private MovimientoBancario movimientoSinPareja(Long movimientoId) {
@@ -269,29 +294,13 @@ public class ServicioPartidas {
 	 * por buena su pareja: el intento queda en la bitácora.
 	 */
 	private void exigirOtraPersona(ObjetoPartida tipo, Long objetoId, String usuario, Long partidaId) {
-		Set<String> responsables = new HashSet<>();
-		switch (tipo) {
-			case PAGO -> pagos.findById(objetoId).ifPresent(p -> {
-				responsables.add(p.getCajero());
-				responsables.add(p.getCreadoPor());
-			});
-			case DEPOSITO -> depositos.findById(objetoId).ifPresent(d -> {
-				responsables.add(d.getCreadoPor());
-				responsables.add(d.getCaja().getCajero());
-			});
-			case REEMBOLSO -> reembolsos.findById(objetoId).ifPresent(r -> responsables.add(r.getCreadoPor()));
-			case LOTE_RECAUDACION -> lotes.findById(objetoId).ifPresent(t -> responsables.add(t.getCreadoPor()));
-			default -> {
-				// La liquidación la registra el sistema (por la API de la pasarela).
-			}
-		}
-		if (participantes.ampliar(responsables).contains(usuario)) {
+		if (responsables.de(tipo, objetoId).contains(usuario)) {
 			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "partida_conciliacion",
 					partidaId == null ? null : partidaId.toString(), null, tipo.name() + " " + objetoId,
-					"Intentó dar por buena la pareja del extracto de algo que cobró, registró o depositó (o que hizo una "
-							+ "cuenta que preparó). Se rechazó.");
-			throw new AutoaprobacionException("No puedes confirmar la pareja de algo que tú cobraste, registraste o "
-					+ "depositaste: debe hacerlo otra persona de Administración.");
+					"Intentó dar por buena la pareja del extracto de algo que cobró, registró, depositó o subió (o que hizo "
+							+ "una cuenta que preparó). Se rechazó.");
+			throw new AutoaprobacionException("No puedes confirmar la pareja de algo que tú cobraste, registraste, "
+					+ "depositaste o subiste: debe hacerlo otra persona de Administración.");
 		}
 	}
 

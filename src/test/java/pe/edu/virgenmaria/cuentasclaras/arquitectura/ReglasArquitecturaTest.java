@@ -386,7 +386,7 @@ class ReglasArquitecturaTest {
 	static final ArchRule registroSolicitudesSoloDesdeServicios = noClasses()
 			.that().resideOutsideOfPackages(BASE + ".aprobaciones.service..", BASE + ".alumnos.service..",
 					BASE + ".cobranza.service..", BASE + ".caja.service..", BASE + ".pasarela.service..",
-					BASE + ".recaudacion.service..")
+					BASE + ".recaudacion.service..", BASE + ".conciliacion.service..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".aprobaciones.service.RegistroSolicitudes")
 			.because("la solicitud la crea el servicio protegido que valida el cambio pedido");
 

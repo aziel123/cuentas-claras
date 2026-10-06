@@ -200,9 +200,17 @@ public final class ReglasEmparejamiento {
 	}
 
 	private static boolean montoParecido(MovimientoAbierto m, ObjetoAbierto o, Parametros p) {
-		BigDecimal diferencia = m.monto().subtract(o.monto()).abs();
-		return diferencia.signum() == 0
-				|| (o.tipo() == ObjetoPartida.LIQUIDACION && diferencia.compareTo(p.toleranciaLiquidacion()) <= 0);
+		return montoAdmitido(m.monto(), o, p.toleranciaLiquidacion());
+	}
+
+	/**
+	 * S4-C1: una pareja que no es EXACTA (sugerida o elegida a mano) solo une el MISMO monto; la liquidación de la
+	 * pasarela admite su tolerancia configurada. La base lo exige con {@code ck_partida_conciliacion_monto_exacto}.
+	 */
+	public static boolean montoAdmitido(BigDecimal movimiento, ObjetoAbierto o, BigDecimal toleranciaLiquidacion) {
+		BigDecimal diferencia = movimiento.subtract(o.monto()).abs();
+		return diferencia.signum() == 0 || (o.tipo() == ObjetoPartida.LIQUIDACION
+				&& diferencia.compareTo(toleranciaLiquidacion) <= 0);
 	}
 
 	private static boolean descartado(Parametros p, MovimientoAbierto m, ObjetoAbierto o) {

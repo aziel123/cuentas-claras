@@ -1696,6 +1696,13 @@ class PermisosMySqlTest {
 		// sugeridaConfirmadaPorLaCajeraFallaCon1644: aunque cc_app lo escriba por SQL, la cajera no confirma su Yape.
 		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET estado = 'CONFIRMADA', resuelto_por = ?, "
 				+ "resuelto_en = NOW(6) WHERE id = ?", cajera.getUsername(), partidaYape))).isEqualTo(1644);
+		// S4-B2: quien subió el lote tampoco confirma su pareja, aunque lo escriba por SQL.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET estado = 'CONFIRMADA', resuelto_por = "
+				+ "(SELECT creado_por FROM lote_recaudacion WHERE id = ?), resuelto_en = NOW(6) WHERE id = ?", lote,
+				partidaLote))).isEqualTo(1644);
+		// S4-B1: la clave vigente solo puede ser la de su propio objeto.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET objeto_vigente = 'PAGO:1' WHERE id = ?",
+				partidaYape))).isEqualTo(1644);
 		// Administración (que no subió el lote ni cobró) confirma las dos; el sistema deja las verificaciones.
 		UsuariosDePrueba.iniciarSesion(administracion);
 		try {
@@ -1713,6 +1720,11 @@ class PermisosMySqlTest {
 				+ "WHERE pago_id IN (?, ?) ORDER BY pago_id", String.class, pagoBanco, yape))
 				.containsExactly("AUTOMATICA ENCONTRADO sistema.conciliacion", "AUTOMATICA ENCONTRADO sistema.conciliacion");
 
+		// S4-B1: una partida CONFIRMADA no cambia su clave vigente (antes cc_app podía liberar el objeto).
+		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET objeto_vigente = NULL WHERE id = ?",
+				partidaYape))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET movimiento_vigente = NULL WHERE id = ?",
+				partidaLote))).isEqualTo(1644);
 		// partidaConfirmadaNoSeDescartaFallaCon1644 y lo demás resuelto no se reescribe.
 		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET estado = 'DESCARTADA', movimiento_vigente = "
 				+ "NULL, objeto_vigente = NULL WHERE id = ?", partidaLote))).isEqualTo(1644);
@@ -1816,6 +1828,86 @@ class PermisosMySqlTest {
 				+ "77.70, ?, ?, 'PROPUESTA', NOW(6), 'sistema.conciliacion', NOW(6))", movimiento, movimiento,
 				otroPago.get("id"), "PAGO:" + otroPago.get("id"), otroPago.get("total"), new java.math.BigDecimal("77.70")
 						.subtract((java.math.BigDecimal) otroPago.get("total"))))).isEqualTo(1644);
+	}
+
+	/**
+	 * Ataque 6 de la auditoría del sprint 4 (S4-C1), en MySQL real: el Yape inventado de la cajera ya NO se verifica
+	 * emparejándolo a mano con un abono de otro monto. La aplicación lo rechaza y, aunque cc_app escriba la partida por
+	 * SQL, la base la rechaza (CHECK de monto exacto); una MANUAL del mismo monto no se confirma sin su aprobación en la
+	 * bandeja, y una verificación automática no guarda otro monto que el del movimiento.
+	 */
+	@Test
+	void ataque6EmparejarAManoConOtroMontoYaNoVerificaElYapeInventado() {
+		AlumnoNuevo nuevo = alumnoNuevoConCuotas();
+		var cajera = cajera("caja.aud6");
+		UsuariosDePrueba.iniciarSesion(cajera);
+		Long yape;
+		try {
+			yape = cobro.cobrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.digital(nuevo.familia(),
+					java.util.List.of(cuotaDe(nuevo.alumno(), 3)), pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.YAPE,
+					"Z9" + sufijo, "450.00"));
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		String numeroCuenta = cuentaUnica();
+		Long cuenta = registrarCuenta(numeroCuenta);
+		// Dos abonos de S/ 450 (no hay pareja sugerida única) y unos intereses de S/ 0.35.
+		var extracto = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioConciliacion.extractoDe(numeroCuenta,
+				"25000.00").abono(ayer(), "INTERESES GANADOS", "", "0.35")
+				.abono(ayer(), "TRANSFERENCIA DE TERCERO", "T1" + sufijo, "450.00")
+				.abono(ayer(), "TRANSFERENCIA DE OTRO", "T2" + sufijo, "450.00");
+		var administracion = persona(611, "adm.aud6", Rol.ADMINISTRACION);
+		Long id = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioConciliacion.registrar(servicioExtractos,
+				administracion, extracto);
+		SecurityContextHolder.clearContext();
+		UsuariosDePrueba.iniciarSesion(persona(613, "director.aud6", Rol.DIRECTOR));
+		try {
+			var vista = servicioExtractos.paraConfirmar(cuenta);
+			servicioExtractos.confirmar(cuenta, vista.ultimoId(), vista.version(), extracto.saldoFinal());
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		Long intereses = jdbc.queryForObject("SELECT id FROM movimiento_bancario WHERE extracto_id = ? AND numero = 1",
+				Long.class, id);
+		Long tercero = jdbc.queryForObject("SELECT id FROM movimiento_bancario WHERE extracto_id = ? AND numero = 2",
+				Long.class, id);
+		UsuariosDePrueba.iniciarSesion(administracion);
+		try {
+			assertThatThrownBy(() -> servicioPartidas.emparejarManual(intereses,
+					pe.edu.virgenmaria.cuentasclaras.conciliacion.model.ObjetoPartida.PAGO, yape,
+					"Yape agrupado por el banco con otros")).isInstanceOf(
+					pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException.class);
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM partida_conciliacion WHERE pago_id = ?", Integer.class, yape))
+				.isZero();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM verificacion_bancaria WHERE pago_id = ?", Integer.class, yape))
+				.isZero();
+		String insertar = "INSERT INTO partida_conciliacion (colegio_id, movimiento_id, movimiento_vigente, objeto_tipo, "
+				+ "pago_id, objeto_vigente, regla, monto_movimiento, monto_objeto, diferencia, estado, nota, creado_en, "
+				+ "creado_por, actualizado_en) VALUES (1, ?, ?, 'PAGO', ?, ?, 'MANUAL', ?, 450.00, ?, 'PROPUESTA', "
+				+ "'Yape agrupado por el banco', NOW(6), ?, NOW(6))";
+		// Por SQL, con otro monto: el CHECK de monto exacto la rechaza.
+		assertThat(codigoAl(() -> jdbc.update(insertar, intereses, intereses, yape, "PAGO:" + yape,
+				new java.math.BigDecimal("0.35"), new java.math.BigDecimal("-449.65"), administracion.getUsername())))
+				.isEqualTo(3819);
+		// Por SQL, con el mismo monto: se puede proponer, pero no confirmarla sin la aprobación de otra persona.
+		assertThat(codigoAl(() -> jdbc.update(insertar, tercero, tercero, yape, "PAGO:" + yape,
+				new java.math.BigDecimal("450.00"), java.math.BigDecimal.ZERO.setScale(2), administracion.getUsername())))
+				.isNull();
+		Long partida = jdbc.queryForObject("SELECT id FROM partida_conciliacion WHERE pago_id = ?", Long.class, yape);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET estado = 'CONFIRMADA', resuelto_por = ?, "
+				+ "resuelto_en = NOW(6) WHERE id = ?", "otra.persona." + sufijo, partida))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO verificacion_bancaria (colegio_id, pago_id, resultado, origen, "
+				+ "partida_id, banco_fecha, banco_monto, creado_en, creado_por, actualizado_en) VALUES (1, ?, 'ENCONTRADO', "
+				+ "'AUTOMATICA', ?, ?, 450.00, NOW(6), 'sistema.conciliacion', NOW(6))", yape, partida, ayer())))
+				.isEqualTo(1644);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM verificacion_bancaria WHERE pago_id = ?", Integer.class, yape))
+				.isZero();
 	}
 
 	private record AlumnoNuevo(Long familia, Long alumno) {

@@ -22,7 +22,7 @@ class MigradorBaseDatosTest {
 		MigrateResult primera = MigradorBaseDatos.migrar(url, "sa", "");
 		MigrateResult segunda = MigradorBaseDatos.migrar(url, "sa", "");
 
-		assertThat(primera.migrationsExecuted).isEqualTo(15);
+		assertThat(primera.migrationsExecuted).isEqualTo(16);
 		assertThat(segunda.migrationsExecuted).isZero();
 		try (var conexion = DriverManager.getConnection(url, "sa", "");
 				var consulta = conexion.createStatement().executeQuery("SELECT COUNT(*) FROM evento_auditoria")) {

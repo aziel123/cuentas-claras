@@ -50,10 +50,12 @@ public class VerificacionesDePartidas {
 		}
 		int nuevas = 0;
 		switch (partida.getObjetoTipo()) {
+			// S4-C1: lo que se guarda como «visto en el banco» es el monto del MOVIMIENTO (el trigger exige que sea el del
+			// movimiento y el del pago o depósito), nunca el del objeto.
 			case PAGO -> nuevas += uno(registro.verificarPago(partida.getPagoId(), partida.getId(), m.getFecha(),
-					partida.getMontoObjeto(), m.getNumeroOperacion()));
+					m.getMonto(), m.getNumeroOperacion()));
 			case DEPOSITO -> nuevas += uno(registro.verificarDeposito(partida.getDepositoId(), partida.getId(), m.getFecha(),
-					partida.getMontoObjeto(), m.getNumeroOperacion()));
+					m.getMonto(), m.getNumeroOperacion()));
 			case LIQUIDACION -> {
 				for (LiquidacionLinea l : lineasLiquidacion.findByLiquidacionIdOrderByNumeroAsc(partida.getLiquidacionId())) {
 					if (l.getTipo() == TipoLineaLiquidacion.CARGO && l.getPagoId() != null) {

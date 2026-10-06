@@ -13,8 +13,10 @@ import pe.edu.virgenmaria.cuentasclaras.caja.service.NombresUsuarios;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.config.PropiedadesConciliacion;
+import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoPartida;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.ObjetoPartida;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.PartidaConciliacion;
+import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.ReglaPartida;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.PartidaConciliacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ReglasEmparejamiento.ObjetoAbierto;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.model.LiquidacionPasarela;
@@ -130,5 +132,20 @@ public class ObjetosConciliables {
 		Set<String> tomados = partidas.findByObjetoVigenteIn(todos.stream().map(ObjetoAbierto::clave).toList()).stream()
 				.map(PartidaConciliacion::getObjetoVigente).collect(Collectors.toSet());
 		return todos.stream().filter(o -> !tomados.contains(o.clave())).toList();
+	}
+
+	/**
+	 * Lo de ese rango que no tiene una partida vigente que lo cubra: sin partida, o con una pareja MANUAL que todavía
+	 * espera la aprobación de otra persona en la bandeja (S4-C1: pedirla no borra la alerta).
+	 */
+	public List<ObjetoAbierto> sinConfirmarPorPersona(LocalDate desde, LocalDate hasta) {
+		List<ObjetoAbierto> todos = entre(desde, hasta);
+		if (todos.isEmpty()) {
+			return todos;
+		}
+		Set<String> cubiertos = partidas.findByObjetoVigenteIn(todos.stream().map(ObjetoAbierto::clave).toList()).stream()
+				.filter(p -> !(p.getRegla() == ReglaPartida.MANUAL && p.getEstado() == EstadoPartida.PROPUESTA))
+				.map(PartidaConciliacion::getObjetoVigente).collect(Collectors.toSet());
+		return todos.stream().filter(o -> !cubiertos.contains(o.clave())).toList();
 	}
 }

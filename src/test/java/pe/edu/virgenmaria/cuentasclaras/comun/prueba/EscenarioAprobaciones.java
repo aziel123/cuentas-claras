@@ -31,10 +31,16 @@ public final class EscenarioAprobaciones {
 	 */
 	public static void aprueba(UsuarioAutenticado quien, BandejaAprobaciones bandeja, JdbcTemplate jdbc, String entidad,
 			Long entidadId) {
+		aprueba(quien, bandeja, jdbc, entidad, entidadId, null);
+	}
+
+	/** Igual, con el comentario de quien aprueba (lo exigen, por ejemplo, las parejas manuales de la conciliación). */
+	public static void aprueba(UsuarioAutenticado quien, BandejaAprobaciones bandeja, JdbcTemplate jdbc, String entidad,
+			Long entidadId, String comentario) {
 		UsuariosDePrueba.iniciarSesion(quien);
 		Long id = pendiente(jdbc, entidad, entidadId);
 		List<String> telefonos = telefonosPorLlamar(bandeja, jdbc, id);
-		bandeja.aprobar(id, null, !telefonos.isEmpty(), telefonos);
+		bandeja.aprobar(id, comentario, !telefonos.isEmpty(), telefonos);
 	}
 
 	/** El celular registrado de un apoderado de cada familia que la bandeja pide llamar (vacío si no pide). */

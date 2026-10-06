@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.conciliacion;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -98,8 +97,6 @@ class SegregacionRecaudacionPorPagoQaTest {
 	}
 
 	@Test
-	@Disabled("QA-S4-6: ServicioPartidas.exigirOtraPersona (líneas 274-277) toma como responsables de un PAGO de "
-			+ "recaudación solo a sistema.recaudacion: quien subió el lote confirma la SUGERIDA de su propio pago")
 	void debeImpedirQueQuienSubioLaRecaudacionConfirmeLaParejaDeSuPago() {
 		Archivo banco = EscenarioRecaudacion.archivo().pago(f.mateo(), null, "350.00", "BCP60001");
 		Long lote = EscenarioRecaudacion.registrar(recaudacion, ADMINISTRACION, banco);

@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.NombresUsuarios;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
+import pe.edu.virgenmaria.cuentasclaras.conciliacion.config.PropiedadesConciliacion;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.dto.CuentaVista;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.dto.DetalleExtracto;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.dto.VistaDiferencias;
@@ -59,11 +60,13 @@ public class ResumenConciliacion {
 
 	private final NombresUsuarios nombres;
 
+	private final PropiedadesConciliacion propiedades;
+
 	private final Clock reloj;
 
 	public ResumenConciliacion(ExtractoBancarioRepository extractos, MovimientoBancarioRepository movimientos,
 			PartidaConciliacionRepository partidas, ObjetosConciliables objetos, DiferenciasConciliacion diferencias,
-			ServicioCuentasBancarias cuentas, NombresUsuarios nombres, Clock reloj) {
+			ServicioCuentasBancarias cuentas, NombresUsuarios nombres, PropiedadesConciliacion propiedades, Clock reloj) {
 		this.extractos = extractos;
 		this.movimientos = movimientos;
 		this.partidas = partidas;
@@ -71,6 +74,7 @@ public class ResumenConciliacion {
 		this.diferencias = diferencias;
 		this.cuentas = cuentas;
 		this.nombres = nombres;
+		this.propiedades = propiedades;
 		this.reloj = reloj;
 	}
 
@@ -117,9 +121,10 @@ public class ResumenConciliacion {
 						m.getTipo() == TipoMovimiento.ABONO, m.getMonto(), m.getDescripcion(), m.getNumeroOperacion(),
 						DiferenciasConciliacion.abonoCritico(m, hoy), m.getExtracto().getEstado() == EstadoExtracto.CONFIRMADO,
 						abiertos.stream().filter(o -> o.tipo().movimiento() == m.getTipo()
+								&& ReglasEmparejamiento.montoAdmitido(m.getMonto(), o, propiedades.toleranciaMontoLiquidacion())
 								&& Math.abs(o.fecha().toEpochDay() - m.getFecha().toEpochDay()) <= ServicioPartidas.DIAS_POSIBLES)
-								.sorted(Comparator.comparing((ObjetoAbierto o) -> o.monto().subtract(m.getMonto()).abs())
-										.thenComparing(o -> Math.abs(o.fecha().toEpochDay() - m.getFecha().toEpochDay())))
+								.sorted(Comparator.comparing((ObjetoAbierto o) -> Math.abs(o.fecha().toEpochDay()
+										- m.getFecha().toEpochDay())))
 								.limit(15)
 								.map(o -> new VistaDiferencias.Opcion(o.tipo().name() + ":" + o.id(), o.detalle() + " · S/ "
 										+ o.monto().toPlainString() + " · " + pe.edu.virgenmaria.cuentasclaras.comun.fecha

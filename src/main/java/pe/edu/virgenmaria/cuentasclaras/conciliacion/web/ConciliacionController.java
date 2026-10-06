@@ -229,7 +229,8 @@ public class ConciliacionController {
 				objetoId = Long.valueOf(objeto.substring(objeto.indexOf(':') + 1));
 			}
 			partidas.emparejarManual(id, tipo, objetoId, nota);
-			avisos.addFlashAttribute("exito", "Listo: emparejaste el movimiento. Quedó resaltado para Promotoría.");
+			avisos.addFlashAttribute("exito", "Listo: pediste emparejar el movimiento. Queda en Aprobaciones hasta que "
+					+ "Promotoría o Dirección lo apruebe; mientras tanto lo registrado sigue en rojo.");
 		}
 		catch (ReglaNegocioException | IllegalArgumentException e) {
 			avisos.addFlashAttribute("error", e instanceof ReglaNegocioException ? e.getMessage()

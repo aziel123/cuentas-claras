@@ -44,12 +44,16 @@ public class RegistroVerificacionAutomatica {
 	}
 
 	/**
-	 * @return {@code true} si la dejó; {@code false} si el pago ya estaba verificado, está anulado o no es digital
+	 * @return {@code true} si la dejó; {@code false} si el pago ya estaba verificado, está anulado, no es digital o el
+	 *         monto visto en el banco no es el suyo
 	 */
 	public boolean verificarPago(Long pagoId, Long partidaId, LocalDate fechaBanco, BigDecimal montoBanco,
 			String operacionBanco) {
 		Pago pago = pagos.findById(pagoId).orElse(null);
-		if (pago == null || !pago.vigente() || !pago.getMedio().digital() || verificaciones.existsByPagoId(pagoId)) {
+		// S4-C1: lo que se vio en el banco es por el mismo monto del pago; si no, no hay verificación (también lo exige
+		// el trigger, que compara con el movimiento del extracto).
+		if (pago == null || !pago.vigente() || !pago.getMedio().digital() || verificaciones.existsByPagoId(pagoId)
+				|| montoBanco == null || montoBanco.compareTo(pago.getTotal()) != 0) {
 			return false;
 		}
 		verificaciones.save(VerificacionBancaria.automaticaDePago(pago, partidaId, fechaBanco, montoBanco, operacionBanco,
@@ -61,7 +65,8 @@ public class RegistroVerificacionAutomatica {
 	public boolean verificarDeposito(Long depositoId, Long partidaId, LocalDate fechaBanco, BigDecimal montoBanco,
 			String operacionBanco) {
 		DepositoCaja deposito = depositos.findById(depositoId).orElse(null);
-		if (deposito == null || verificaciones.existsByDepositoId(depositoId)) {
+		if (deposito == null || verificaciones.existsByDepositoId(depositoId) || montoBanco == null
+				|| montoBanco.compareTo(deposito.getMonto()) != 0) {
 			return false;
 		}
 		verificaciones.save(VerificacionBancaria.automaticaDeDeposito(deposito, partidaId, fechaBanco, montoBanco,

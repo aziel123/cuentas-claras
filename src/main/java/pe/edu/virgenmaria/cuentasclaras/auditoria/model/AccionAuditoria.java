@@ -199,6 +199,8 @@ public enum AccionAuditoria {
 	/** Se resalta: una persona dio por buena una pareja sugerida (no tenía la misma operación). */
 	PARTIDA_SUGERIDA_CONFIRMADA("Confirmó una pareja sugerida del extracto", true),
 	PARTIDA_MANUAL_REGISTRADA("Emparejó a mano un movimiento del extracto", true),
+	/** Correcciones del sprint 4 (S4-C1): la pareja manual quedó confirmada al aprobarla otra persona en la bandeja. */
+	PARTIDA_MANUAL_APROBADA("Se aprobó una pareja manual del extracto", true),
 	PARTIDA_DESCARTADA("Descartó una pareja del extracto", true),
 	MOVIMIENTO_EXPLICADO("Explicó un movimiento del extracto", true),
 	LIQUIDACION_REGISTRADA("Registró una liquidación de la pasarela", false),

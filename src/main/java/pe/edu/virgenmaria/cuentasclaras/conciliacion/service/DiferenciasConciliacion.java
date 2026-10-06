@@ -6,6 +6,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoVerificacion;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.VerificacionBancaria;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.VerificacionBancariaRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.CuentaBancaria;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoExtracto;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoPartida;
@@ -107,7 +108,9 @@ public class DiferenciasConciliacion {
 		}
 		LocalDate desde = max(cobertura.get().desde(), hoy.minusDays(DIAS_ATRAS));
 		LocalDate cubierto = cobertura.get().hasta();
-		List<ObjetoAbierto> abiertos = objetos.abiertos(desde, cubierto);
+		// Una pareja MANUAL por aprobar no cubre nada todavía (S4-C1): lo emparejado sigue en rojo hasta que otra persona
+		// la apruebe en la bandeja.
+		List<ObjetoAbierto> abiertos = objetos.sinConfirmarPorPersona(desde, cubierto);
 		List<Long> idsPagos = ids(abiertos, ObjetoPartida.PAGO);
 		List<Long> idsDepositos = ids(abiertos, ObjetoPartida.DEPOSITO);
 		Set<Long> pagosAMano = idsPagos.isEmpty() ? Set.of()
@@ -122,13 +125,16 @@ public class DiferenciasConciliacion {
 
 	/**
 	 * Desde qué día el extracto confirmado ya debía mostrar el objeto: un pago digital de caja, un depósito o una
-	 * devolución, su mismo día; un lote de recaudación, el día hábil siguiente; una liquidación, 2 días hábiles después de
-	 * su fecha de abono.
+	 * devolución, su mismo día; un lote de recaudación, o un pago de recaudación cuando el banco abona pago por pago
+	 * (QA-S4-4: lo registra {@code sistema.recaudacion}), el día hábil siguiente; una liquidación, 2 días hábiles después
+	 * de su fecha de abono.
 	 */
 	static LocalDate limite(ObjetoAbierto o) {
 		return switch (o.tipo()) {
 			case LOTE_RECAUDACION -> Calendario.siguienteDiaHabil(o.fecha());
 			case LIQUIDACION -> Calendario.siguienteDiaHabil(Calendario.siguienteDiaHabil(o.fecha()));
+			case PAGO -> ActorSistema.RECAUDACION.usuario().equals(o.responsable()) ? Calendario.siguienteDiaHabil(o.fecha())
+					: o.fecha();
 			default -> o.fecha();
 		};
 	}
@@ -143,9 +149,10 @@ public class DiferenciasConciliacion {
 		return m.getTipo() == TipoMovimiento.ABONO && ReglasEmparejamiento.diasHabilesEntre(m.getFecha(), hoy) > 2;
 	}
 
-	/** Las parejas que espera una persona (sugeridas, sin confirmar). */
+	/** Las parejas sugeridas que espera Administración (las manuales esperan en la bandeja de aprobaciones). */
 	public List<PartidaConciliacion> sugeridas() {
-		return partidas.findByEstadoAndReglaNotOrderByIdAsc(EstadoPartida.PROPUESTA, ReglaPartida.EXACTA);
+		return partidas.findByEstadoAndReglaNotOrderByIdAsc(EstadoPartida.PROPUESTA, ReglaPartida.EXACTA).stream()
+				.filter(p -> p.getRegla() == ReglaPartida.SUGERIDA).toList();
 	}
 
 	private static List<Long> ids(Collection<ObjetoAbierto> objetos, ObjetoPartida tipo) {

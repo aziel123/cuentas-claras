@@ -23,7 +23,10 @@ public enum TipoSolicitud {
 	// Sprint 4 (pagos en línea): un ingreso que no se pudo aplicar solo (orden por revisar) se aplica a otras cuotas o se
 	// devuelve al mismo medio de origen. Los pide Administración y los aprueba Promotoría o Dirección.
 	APLICAR_INGRESO("Aplicar un ingreso por revisar"),
-	DEVOLVER_INGRESO("Devolver un ingreso por revisar");
+	DEVOLVER_INGRESO("Devolver un ingreso por revisar"),
+	// Correcciones del sprint 4 (S4-C1): una pareja del extracto elegida a mano (mismo monto) la aprueba otra persona de
+	// Promotoría o Dirección antes de que verifique nada en el banco.
+	PARTIDA_MANUAL("Pareja manual de la conciliación");
 
 	private final String etiqueta;
 

@@ -9,6 +9,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAlumnos;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioCobro;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension;
@@ -17,6 +18,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision.Gravedad;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.IndicadoresInicio;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.Familias;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioConciliacion;
@@ -64,6 +66,9 @@ class ServicioPartidasTest {
 
 	@Autowired
 	private ServicioPartidas servicio;
+
+	@Autowired
+	private BandejaAprobaciones bandeja;
 
 	@Autowired
 	private ServicioExtractos extractos;
@@ -178,7 +183,10 @@ class ServicioPartidasTest {
 				&& a.texto().startsWith("Esta semana Administración confirmó 1 pareja(s) sugerida(s)"));
 	}
 
-	/** Descartada con nota, la pareja no se vuelve a proponer; se empareja a mano (con nota) y queda resaltada. */
+	/**
+	 * Descartada con nota, la pareja no se vuelve a proponer; se pide emparejar a mano (con nota, mismo monto) y recién
+	 * verifica cuando otra persona de Promotoría la aprueba en la bandeja (S4-C1). Mientras tanto el Yape sigue en rojo.
+	 */
 	@Test
 	void descartarYEmparejarAMano() {
 		Long pago = yape("YP123456");
@@ -205,12 +213,27 @@ class ServicioPartidasTest {
 		assertThatThrownBy(() -> servicio.emparejarManual(abono, ObjetoPartida.PAGO, pago, ""))
 				.isInstanceOf(ReglaNegocioException.class);
 		servicio.emparejarManual(abono, ObjetoPartida.PAGO, pago, NOTA);
-		assertThat(partidas(jdbc)).containsExactly("MANUAL CONFIRMADA PAGO");
-		assertThat(verificacionDePago(jdbc, pago)).isEqualTo("AUTOMATICA ENCONTRADO");
+		assertThat(partidas(jdbc)).containsExactly("MANUAL PROPUESTA PAGO");
+		assertThat(verificacionDePago(jdbc, pago)).isNull();
 		assertThat(ultimoEvento(jdbc, "PARTIDA_MANUAL_REGISTRADA").get("detalle")).asString()
 				.contains("operación distinta", NOTA);
 		assertThatThrownBy(() -> servicio.emparejarManual(abono, ObjetoPartida.PAGO, pago, NOTA))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("ya tiene pareja");
+		como(PROMOTORIA);
+		assertThat(resumen.diferencias().faltantes()).singleElement()
+				.satisfies(fal -> assertThat(fal.operacion()).isEqualTo("YP123456"));
+		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.CRITICA && a.texto().contains("YP123456"));
+
+		Long partida = jdbc.queryForObject("SELECT id FROM partida_conciliacion WHERE regla = 'MANUAL'", Long.class);
+		assertThatThrownBy(() -> EscenarioAprobaciones.aprueba(PROMOTORIA, bandeja, jdbc, "partida_conciliacion", partida))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("comentario");
+		EscenarioAprobaciones.aprueba(PROMOTORIA, bandeja, jdbc, "partida_conciliacion", partida,
+				"Lo vi en la app del banco: es el Yape de la familia Quispe");
+		assertThat(partidas(jdbc)).containsExactly("MANUAL CONFIRMADA PAGO");
+		assertThat(verificacionDePago(jdbc, pago)).isEqualTo("AUTOMATICA ENCONTRADO");
+		assertThat(jdbc.queryForObject("SELECT banco_monto FROM verificacion_bancaria WHERE pago_id = ?",
+				java.math.BigDecimal.class, pago)).isEqualByComparingTo("450.00");
+		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'PARTIDA_MANUAL_APROBADA'")).isEqualTo(1);
 		como(PROMOTORIA);
 		assertThat(resumen.diferencias().sinDiferencias()).isTrue();
 	}
