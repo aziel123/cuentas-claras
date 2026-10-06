@@ -188,7 +188,7 @@ public class DatosDemoConciliacionDev implements ApplicationRunner {
 		});
 		como(director, () -> {
 			ConfirmacionExtractoVista c = extractos.paraConfirmar(cuentaId);
-			extractos.confirmar(cuentaId, c.ultimoId(), c.version(), saldoAnteayer);
+			extractos.confirmar(cuentaId, c.extractoId(), c.version(), saldoAnteayer);
 			return null;
 		});
 		// Extracto de EJEMPLO de ayer, con lo que de verdad entró al banco (sin el Yape inventado).

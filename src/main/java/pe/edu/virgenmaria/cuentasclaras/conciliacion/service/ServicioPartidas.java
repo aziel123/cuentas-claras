@@ -34,6 +34,7 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.MovimientoBancar
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.PartidaConciliacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ReglasEmparejamiento.ObjetoAbierto;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LoteRecaudacionRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -55,7 +56,8 @@ import java.util.Set;
  *   <li>{@link #descartar}: «No es»; libera el movimiento y el objeto, y ese par no se vuelve a proponer.</li>
  *   <li>{@link #emparejarManual}: una persona elige el objeto (del mismo monto) de un movimiento sin pareja, con nota, y
  *       otra persona de Promotoría o Dirección lo aprueba en la bandeja (S4-C1).</li>
- *   <li>{@link #explicar}: un movimiento ajeno a la cobranza (intereses, transferencia propia...), con nota.</li>
+ *   <li>{@link #explicar}: un movimiento ajeno a la cobranza (intereses, transferencia propia...), con nota. Un cargo
+ *       lo explica alguien que no subió el extracto, también Promotoría o Dirección (S4-A2).</li>
  * </ul>
  * Todo queda resaltado en la bitácora y en el resumen de Promotoría.
  */
@@ -82,6 +84,8 @@ public class ServicioPartidas {
 
 	private final ResponsablesPartida responsables;
 
+	private final ControlParticipantes participantes;
+
 	private final RegistroSolicitudes solicitudes;
 
 	private final PropiedadesConciliacion propiedades;
@@ -95,6 +99,7 @@ public class ServicioPartidas {
 	public ServicioPartidas(PartidaConciliacionRepository partidas, MovimientoBancarioRepository movimientos,
 			ObjetosConciliables objetos, PagoRepository pagos, DepositoCajaRepository depositos,
 			ReembolsoRepository reembolsos, LoteRecaudacionRepository lotes, ResponsablesPartida responsables,
+			ControlParticipantes participantes,
 			RegistroSolicitudes solicitudes, PropiedadesConciliacion propiedades, AuditoriaService auditoria,
 			ApplicationEventPublisher eventos, Clock reloj) {
 		this.partidas = partidas;
@@ -105,6 +110,7 @@ public class ServicioPartidas {
 		this.reembolsos = reembolsos;
 		this.lotes = lotes;
 		this.responsables = responsables;
+		this.participantes = participantes;
 		this.solicitudes = solicitudes;
 		this.propiedades = propiedades;
 		this.auditoria = auditoria;
@@ -219,11 +225,19 @@ public class ServicioPartidas {
 				"Emparejar a mano el " + descripcion, Map.of(), motivo).getId();
 	}
 
-	/** Un movimiento ajeno a la cobranza, con su categoría y una nota. Queda CONFIRMADO y resaltado para Promotoría. */
-	@Transactional
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	/**
+	 * Un movimiento ajeno a la cobranza, con su categoría y una nota. Queda CONFIRMADO y resaltado para Promotoría. Un
+	 * CARGO (dinero que sale) lo explica alguien que NO subió el extracto (S4-A2: un cargo inventado compensaba un abono
+	 * inventado): otra persona de Administración, o Promotoría o Dirección mirando su app del banco. Los abonos los
+	 * explica Administración. La base lo vuelve a exigir (trigger).
+	 */
+	@Transactional(noRollbackFor = AutoaprobacionException.class)
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR','DIRECTOR')")
 	public void explicar(Long movimientoId, CategoriaExplicacion categoria, String nota) {
 		MovimientoBancario movimiento = movimientoSinPareja(movimientoId);
+		if (movimiento.getTipo() == TipoMovimiento.ABONO && !tieneRol("ROLE_ADMINISTRACION")) {
+			throw new AccessDeniedException("Los abonos sin pareja los explica Administración.");
+		}
 		if (categoria == null) {
 			throw new ReglaNegocioException("Elige qué es el movimiento (intereses, transferencia propia...).");
 		}
@@ -233,6 +247,15 @@ public class ServicioPartidas {
 		}
 		String motivo = Motivo.exigir(nota);
 		String usuario = usuario();
+		if (movimiento.getTipo() == TipoMovimiento.CARGO
+				&& participantes.ampliar(Set.of(movimiento.getExtracto().getCreadoPor())).contains(usuario)) {
+			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "movimiento_bancario", movimientoId.toString(),
+					null, "Cargo del " + Calendario.formatear(movimiento.getFecha()) + " por "
+							+ Dinero.formatear(movimiento.getMonto()),
+					"Intentó explicar un cargo de un extracto que subió (o subió una cuenta que preparó). Se rechazó.");
+			throw new AutoaprobacionException("No puedes explicar un cargo de un extracto que tú subiste: debe explicarlo "
+					+ "otra persona (Promotoría o Dirección, mirando su app del banco).");
+		}
 		PartidaConciliacion partida = partidas.save(PartidaConciliacion.explicar(movimiento, categoria, motivo));
 		partida.confirmar(usuario, ahora());
 		partidas.saveAndFlush(partida);
@@ -241,6 +264,12 @@ public class ServicioPartidas {
 						+ movimiento.getTipo().etiqueta().toLowerCase(Locale.ROOT) + " del "
 						+ Calendario.formatear(movimiento.getFecha()) + " por " + Dinero.formatear(movimiento.getMonto())
 						+ " («" + movimiento.getDescripcion() + "») como «" + categoria.etiqueta() + "». Nota: " + motivo);
+	}
+
+	private static boolean tieneRol(String rol) {
+		Authentication autenticacion = SecurityContextHolder.getContext().getAuthentication();
+		return autenticacion != null && autenticacion.getAuthorities().stream()
+				.anyMatch(a -> rol.equals(a.getAuthority()));
 	}
 
 	/** Lo que se puede emparejar a mano con ese movimiento: abierto, del mismo tipo y de fechas cercanas. */

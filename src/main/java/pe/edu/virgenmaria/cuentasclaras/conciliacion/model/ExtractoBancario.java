@@ -10,6 +10,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PreRemove;
 import jakarta.persistence.Table;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.MuestraAlAzar;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.model.BaseEntity;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
@@ -80,6 +81,17 @@ public class ExtractoBancario extends BaseEntity {
 	@Column(nullable = false, updatable = false)
 	private int movimientos;
 
+	/**
+	 * S4-A1 (correcciones del sprint 4): los números de los movimientos que ve quien confirma, elegidos UNA vez al
+	 * registrar con un azar que quien sube no predice; nunca todos. Inmutable (sin GRANT UPDATE).
+	 */
+	@Column(updatable = false, length = 100)
+	private String muestra;
+
+	/** S4-A2: la semilla secreta del muestreo diario de este extracto (antes era la fecha, predecible). Inmutable. */
+	@Column(name = "semilla_muestreo", updatable = false)
+	private Long semillaMuestreo;
+
 	// --- Lo que puede cambiar (GRANT UPDATE por columna; trg_extracto_bancario_estado vigila la confirmación) ---
 
 	@Column(name = "secuencia_vigente")
@@ -123,7 +135,7 @@ public class ExtractoBancario extends BaseEntity {
 	 */
 	public static ExtractoBancario registrar(CuentaBancaria cuenta, ExtractoBancario anterior, Long archivoId,
 			String archivoSha256, String formato, LocalDate desde, LocalDate hasta, BigDecimal saldoInicial,
-			BigDecimal totalAbonos, BigDecimal totalCargos, int movimientos) {
+			BigDecimal totalAbonos, BigDecimal totalCargos, int movimientos, int muestreo) {
 		Objects.requireNonNull(desde, "desde");
 		Objects.requireNonNull(hasta, "hasta");
 		if (desde.isAfter(hasta) || movimientos < 0) {
@@ -156,9 +168,24 @@ public class ExtractoBancario extends BaseEntity {
 		}
 		e.saldoFinal = saldo(e.saldoInicial.add(e.totalAbonos).subtract(e.totalCargos));
 		e.movimientos = movimientos;
+		e.muestra = MuestraAlAzar.elegir(movimientos, muestreo);
+		e.semillaMuestreo = MuestraAlAzar.semilla();
 		e.estado = EstadoExtracto.CARGADO;
 		e.intentosConfirmacion = 0;
 		return e;
+	}
+
+	/** Los números de los movimientos de la muestra fija (vacía si el extracto tiene un solo movimiento). */
+	public java.util.List<Integer> numerosMuestra() {
+		return MuestraAlAzar.numeros(muestra);
+	}
+
+	public String getMuestra() {
+		return muestra;
+	}
+
+	public Long getSemillaMuestreo() {
+		return semillaMuestreo;
 	}
 
 	private static BigDecimal saldo(BigDecimal monto) {

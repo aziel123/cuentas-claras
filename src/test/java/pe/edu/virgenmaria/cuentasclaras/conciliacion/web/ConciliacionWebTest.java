@@ -207,8 +207,8 @@ class ConciliacionWebTest {
 				.andExpect(status().isForbidden());
 		mvc.perform(post("/conciliacion/partidas/1/confirmar").with(UsuariosDePrueba.como(PROMOTORIA)).with(csrf()))
 				.andExpect(status().isForbidden());
-		mvc.perform(post("/conciliacion/movimientos/1/explicar").param("categoria", "INTERESES")
-				.param("nota", "Intereses mensuales de la cuenta").with(UsuariosDePrueba.como(DIRECCION)).with(csrf()))
+		mvc.perform(post("/conciliacion/movimientos/1/emparejar").param("objeto", "PAGO:1")
+				.param("nota", "Es el Yape de la familia").with(UsuariosDePrueba.como(DIRECCION)).with(csrf()))
 				.andExpect(status().isForbidden());
 		// Un archivo que no es CSV ni XLSX no se lee.
 		mvc.perform(multipart("/conciliacion/extractos/vista-previa").file(new MockMultipartFile("archivo",

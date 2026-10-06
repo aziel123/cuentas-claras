@@ -12,6 +12,7 @@ import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAlumnos;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioCobro;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.model.AutoaprobacionException;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision.Gravedad;
@@ -256,8 +257,13 @@ class ServicioPartidasTest {
 		assertThatThrownBy(() -> servicio.explicar(intereses, CategoriaExplicacion.INTERESES, ""))
 				.isInstanceOf(ReglaNegocioException.class);
 		servicio.explicar(intereses, CategoriaExplicacion.INTERESES, "Intereses de la cuenta de ahorros del mes");
-		servicio.explicar(movimiento("COMISION MANTENIMIENTO"), CategoriaExplicacion.COMISION_BANCARIA,
-				"Comisión mensual por mantenimiento de la cuenta");
+		// S4-A2: un CARGO no lo explica quien subió el extracto; lo explica Promotoría mirando su app del banco.
+		Long comision = movimiento("COMISION MANTENIMIENTO");
+		assertThatThrownBy(() -> servicio.explicar(comision, CategoriaExplicacion.COMISION_BANCARIA,
+				"Comisión mensual por mantenimiento de la cuenta")).isInstanceOf(AutoaprobacionException.class);
+		como(PROMOTORIA);
+		servicio.explicar(comision, CategoriaExplicacion.COMISION_BANCARIA,
+				"Comisión mensual por mantenimiento de la cuenta, la vi en la app");
 		assertThat(partidas(jdbc)).containsExactly("EXPLICADA CONFIRMADA EXPLICACION",
 				"EXPLICADA CONFIRMADA EXPLICACION");
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'MOVIMIENTO_EXPLICADO'")).isEqualTo(2);

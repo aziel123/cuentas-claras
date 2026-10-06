@@ -7,3 +7,14 @@
 -- aprobada por otra persona antes de confirmarse).
 ALTER TABLE partida_conciliacion ADD CONSTRAINT ck_partida_conciliacion_monto_exacto CHECK (
     diferencia = 0 OR objeto_tipo = 'LIQUIDACION');
+
+-- S4-A1. Confirmación realmente ciega: la muestra que ve quien confirma se elige UNA vez al registrar (SecureRandom),
+-- se guarda y no cambia (sin GRANT UPDATE: 1143); nunca cubre todo el archivo y se muestra sin montos. S4-A2: la
+-- semilla del muestreo diario del extracto es secreta (antes, la fecha). Los triggers de nacimiento exigen ambas.
+ALTER TABLE extracto_bancario ADD COLUMN muestra VARCHAR(100);
+ALTER TABLE extracto_bancario ADD COLUMN semilla_muestreo BIGINT;
+ALTER TABLE extracto_bancario ADD CONSTRAINT ck_extracto_bancario_muestra CHECK (muestra IS NULL OR muestra = ''
+    OR REGEXP_LIKE(muestra, '^[1-9][0-9]*(,[1-9][0-9]*)*$'));
+ALTER TABLE lote_recaudacion ADD COLUMN muestra VARCHAR(100);
+ALTER TABLE lote_recaudacion ADD CONSTRAINT ck_lote_recaudacion_muestra CHECK (muestra IS NULL OR muestra = ''
+    OR REGEXP_LIKE(muestra, '^[1-9][0-9]*(,[1-9][0-9]*)*$'));

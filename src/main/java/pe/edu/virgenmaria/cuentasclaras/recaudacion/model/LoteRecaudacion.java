@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.PreRemove;
 import jakarta.persistence.Table;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.MuestraAlAzar;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.model.BaseEntity;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
@@ -67,6 +68,13 @@ public class LoteRecaudacion extends BaseEntity {
 	@Column(name = "total_banco", updatable = false, precision = 12, scale = 2)
 	private BigDecimal totalBanco;
 
+	/**
+	 * S4-A1 (correcciones del sprint 4): los números de las líneas que ve quien confirma, elegidos UNA vez al registrar
+	 * con un azar que quien sube no predice (recargar la pantalla no muestra otras); nunca todas. Inmutable.
+	 */
+	@Column(updatable = false, length = 100)
+	private String muestra;
+
 	// --- Lo que puede cambiar (GRANT UPDATE por columna; trg_lote_recaudacion_estado vigila las transiciones) ---
 
 	@Column(name = "sha_vigente", length = 64)
@@ -119,6 +127,13 @@ public class LoteRecaudacion extends BaseEntity {
 	/** Lote nuevo (CARGADO, sin confirmar ni aplicar). Todos los NOT NULL con DEFAULT se llenan aquí. */
 	public static LoteRecaudacion registrar(Long archivoId, String archivoSha256, BancoRecaudacion banco, String formato,
 			LocalDate fechaProceso, LocalDate desde, LocalDate hasta, int lineas, BigDecimal total, BigDecimal totalBanco) {
+		return registrar(archivoId, archivoSha256, banco, formato, fechaProceso, desde, hasta, lineas, total, totalBanco, 3);
+	}
+
+	/** Igual, con el tamaño de la muestra fija que verá quien confirma ({@code muestreo}, nunca todas las líneas). */
+	public static LoteRecaudacion registrar(Long archivoId, String archivoSha256, BancoRecaudacion banco, String formato,
+			LocalDate fechaProceso, LocalDate desde, LocalDate hasta, int lineas, BigDecimal total, BigDecimal totalBanco,
+			int muestreo) {
 		Objects.requireNonNull(desde, "desde");
 		Objects.requireNonNull(hasta, "hasta");
 		if (lineas <= 0 || desde.isAfter(hasta)) {
@@ -145,7 +160,17 @@ public class LoteRecaudacion extends BaseEntity {
 		lote.lineasExcepcion = 0;
 		lote.montoAplicado = Dinero.CERO;
 		lote.montoExcepcion = Dinero.CERO;
+		lote.muestra = MuestraAlAzar.elegir(lineas, muestreo);
 		return lote;
+	}
+
+	/** Los números de las líneas de la muestra fija (vacía si el lote tiene una sola línea). */
+	public java.util.List<Integer> numerosMuestra() {
+		return MuestraAlAzar.numeros(muestra);
+	}
+
+	public String getMuestra() {
+		return muestra;
 	}
 
 	/**

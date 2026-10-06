@@ -27,8 +27,12 @@ public interface MovimientoBancarioRepository extends Repository<MovimientoBanca
 	List<MovimientoBancario> vigentesEntre(@Param("cuenta") Long cuentaId, @Param("desde") LocalDate desde,
 			@Param("hasta") LocalDate hasta);
 
-	/** Movimientos de extractos vigentes que no tienen partida vigente (sin pareja), desde una fecha. */
-	@Query("select m from MovimientoBancario m where m.extracto.secuenciaVigente is not null and m.fecha >= :desde "
+	/**
+	 * Movimientos de extractos CONFIRMADOS que no tienen partida vigente (sin pareja), desde una fecha. Los de un extracto
+	 * por confirmar no cuentan todavía (S4-A1: sus montos no se muestran ni se suman en las alertas de quien confirma).
+	 */
+	@Query("select m from MovimientoBancario m where m.extracto.estado = "
+			+ "pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoExtracto.CONFIRMADO and m.fecha >= :desde "
 			+ "and not exists (select p.id from PartidaConciliacion p where p.movimiento = m "
 			+ "and p.movimientoVigente is not null) order by m.fecha, m.id")
 	List<MovimientoBancario> sinParejaDesde(@Param("desde") LocalDate desde);

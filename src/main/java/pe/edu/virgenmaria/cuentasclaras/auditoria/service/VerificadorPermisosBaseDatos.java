@@ -197,7 +197,12 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			trigger("INSERT INTO partida_conciliacion (colegio_id, movimiento_id, movimiento_vigente, objeto_tipo, pago_id, "
 					+ "objeto_vigente, regla, monto_movimiento, monto_objeto, diferencia, estado, creado_en, creado_por, "
 					+ "actualizado_en) VALUES (0, 0, 0, 'PAGO', 0, 'PAGO:0', 'EXACTA', 1, 1, 0, 'PROPUESTA', NOW(6), "
-					+ "'verificador', NOW(6))", "trg_partida_conciliacion_registro"));
+					+ "'verificador', NOW(6))", "trg_partida_conciliacion_registro"),
+			// Correcciones del sprint 4 (V16): la muestra fija de la confirmación a ciegas y la semilla secreta del
+			// muestreo no se reescriben (S4-A1 y S4-A2).
+			columna("UPDATE extracto_bancario SET muestra = muestra WHERE 1 = 0", "extracto_bancario"),
+			columna("UPDATE extracto_bancario SET semilla_muestreo = semilla_muestreo WHERE 1 = 0", "extracto_bancario"),
+			columna("UPDATE lote_recaudacion SET muestra = muestra WHERE 1 = 0", "lote_recaudacion"));
 
 	/** Solo en prod: la base no admite órdenes de la pasarela simulada (sin la fila 'pasarela_simulada'). */
 	static final SentenciaProhibida ORDEN_SIMULADA = new SentenciaProhibida(ordenImposible("SIMULADA", "CREADA"),

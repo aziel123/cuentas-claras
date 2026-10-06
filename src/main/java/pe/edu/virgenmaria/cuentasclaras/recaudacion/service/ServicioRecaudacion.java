@@ -201,7 +201,7 @@ public class ServicioRecaudacion {
 		ArchivoCargado archivo = archivos.guardar(TipoArchivo.RECAUDACION, previa.archivoNombre(), previa.contenido());
 		LoteRecaudacion lote = lotes.save(LoteRecaudacion.registrar(archivo.getId(), archivo.getSha256(),
 				propiedades.banco(), lectura.formato(), lectura.fechaProceso(), desde(lectura), hasta(lectura),
-				lectura.filas().size(), total, lectura.totalDeclarado()));
+				lectura.filas().size(), total, lectura.totalDeclarado(), propiedades.muestreo()));
 		for (FilaRecaudacion fila : lectura.filas()) {
 			lineas.save(LineaRecaudacion.nueva(lote, fila.numero(), fila.fechaPago(), fila.codigo(),
 					plan.alumnoDeFila().get(fila.numero()), plan.cuotaDeFila().get(fila.numero()), fila.monto(),
@@ -240,8 +240,9 @@ public class ServicioRecaudacion {
 	}
 
 	/**
-	 * Lo que ve quien confirma: banco, fechas, cuántos pagos y {@code muestreo} líneas elegidas al azar (con un azar que
-	 * quien subió el archivo no puede predecir) para buscarlas en el portal del banco. Nunca el total.
+	 * Lo que ve quien confirma: banco, fechas, cuántos pagos y la muestra FIJA de líneas elegida al registrar el archivo
+	 * (con un azar que quien lo subió no puede predecir; nunca todas), para buscarlas en el portal del banco. Nunca el
+	 * total ni el monto de ninguna línea (S4-A1: con los montos de la muestra, recargando, se reconstruía el total).
 	 */
 	@Transactional(readOnly = true)
 	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
@@ -249,12 +250,10 @@ public class ServicioRecaudacion {
 		LoteRecaudacion lote = lotes.findById(loteId)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Lote no encontrado"));
 		boolean participo = participantes.ampliar(Set.of(lote.getCreadoPor())).contains(usuario());
-		List<LineaRecaudacion> todas = new ArrayList<>(lineas.findByLoteIdOrderByNumeroAsc(loteId));
-		Collections.shuffle(todas, AZAR);
-		List<LineaMuestra> muestra = todas.stream().limit(propiedades.muestreo())
-				.sorted(Comparator.comparingInt(LineaRecaudacion::getNumero))
-				.map(l -> new LineaMuestra(CodigoPago.legible(l.getCodigo()), l.getFechaPago(), l.getMonto(),
-						l.getNumeroOperacion()))
+		Set<Integer> elegidas = Set.copyOf(lote.numerosMuestra());
+		List<LineaMuestra> muestra = lineas.findByLoteIdOrderByNumeroAsc(loteId).stream()
+				.filter(l -> elegidas.contains(l.getNumero()))
+				.map(l -> new LineaMuestra(CodigoPago.legible(l.getCodigo()), l.getFechaPago(), l.getNumeroOperacion()))
 				.toList();
 		return new ConfirmacionRecaudacionVista(lote.getId(), lote.getVersion(), lote.getBanco().etiqueta(),
 				lote.getDesde(), lote.getHasta(), lote.getLineas(), lote.getCreadoPor(), lote.getCreadoEn(),

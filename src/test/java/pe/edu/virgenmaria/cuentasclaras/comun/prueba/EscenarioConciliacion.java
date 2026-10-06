@@ -112,7 +112,7 @@ public final class EscenarioConciliacion {
 	public static void confirmar(ServicioExtractos servicio, UsuarioAutenticado quien, Long cuentaId, String saldo) {
 		UsuariosDePrueba.iniciarSesion(quien);
 		ConfirmacionExtractoVista vista = servicio.paraConfirmar(cuentaId);
-		servicio.confirmar(cuentaId, vista.ultimoId(), vista.version(), new BigDecimal(saldo));
+		servicio.confirmar(cuentaId, vista.extractoId(), vista.version(), new BigDecimal(saldo));
 	}
 
 	public static String estadoExtracto(JdbcTemplate jdbc, Long extracto) {

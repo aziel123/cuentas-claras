@@ -292,7 +292,9 @@ class ServicioRecaudacionTest {
 
 		ConfirmacionRecaudacionVista vista = servicio.paraConfirmar(lote);
 		assertThat(vista.lineas()).isEqualTo(3);
-		assertThat(vista.muestra()).hasSize(3);
+		// S4-A1: la muestra es fija (se eligió al registrar), nunca son todas las líneas y no lleva montos.
+		assertThat(vista.muestra()).hasSize(2);
+		assertThat(servicio.paraConfirmar(lote).muestra()).isEqualTo(vista.muestra());
 		assertThat(vista.intentosRestantes()).isEqualTo(2);
 		assertThat(vista.participaste()).isFalse();
 		assertThat(vista.toString()).doesNotContain("1600");

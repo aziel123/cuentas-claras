@@ -6,17 +6,18 @@ import java.util.List;
 
 /**
  * La pantalla principal de la conciliación: SOLO las diferencias. Arriba, el resumen del último extracto; luego las
- * parejas sugeridas por confirmar, los movimientos del banco sin pareja y lo que debía estar en el banco y no está (en
- * rojo, con quién lo registró).
+ * parejas sugeridas por confirmar, los abonos del banco sin pareja, los cargos sin explicar (correcciones del sprint 4,
+ * S4-A2: los explica alguien que no subió el extracto) y lo que debía estar en el banco y no está (en rojo, con quién lo
+ * registró).
  *
  * @param cubiertoHasta el último día confirmado a ciegas ({@code null} si todavía no hay ninguno)
  */
 public record VistaDiferencias(LocalDate hoy, LocalDate cubiertoHasta, Resumen resumen, List<CuentaPorConfirmar> porConfirmar,
-		List<Sugerida> sugeridas, List<SinPareja> sinPareja, List<Faltante> faltantes, boolean puedeRevisar,
-		boolean puedeConfirmar, List<Opcion> categoriasAbono, List<Opcion> categoriasCargo) {
+		List<Sugerida> sugeridas, List<SinPareja> sinPareja, List<SinPareja> cargosSinExplicar, List<Faltante> faltantes,
+		boolean puedeRevisar, boolean puedeConfirmar, List<Opcion> categoriasAbono, List<Opcion> categoriasCargo) {
 
 	public boolean sinDiferencias() {
-		return sugeridas.isEmpty() && sinPareja.isEmpty() && faltantes.isEmpty();
+		return sugeridas.isEmpty() && sinPareja.isEmpty() && cargosSinExplicar.isEmpty() && faltantes.isEmpty();
 	}
 
 	/** «Movimientos del 05/10 al 05/10: 41 · Emparejados 38 · Sugeridos 2 · Sin pareja 1». */

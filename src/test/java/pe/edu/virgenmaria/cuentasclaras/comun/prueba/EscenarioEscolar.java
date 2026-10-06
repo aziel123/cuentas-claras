@@ -95,7 +95,7 @@ public final class EscenarioEscolar {
 		return texto.toString();
 	}
 
-	public static Long ultimoId(JdbcTemplate jdbc, String tabla) {
+	public static Long extractoId(JdbcTemplate jdbc, String tabla) {
 		return jdbc.queryForObject("SELECT MAX(id) FROM " + tabla, Long.class);
 	}
 

@@ -61,4 +61,10 @@ public interface PartidaConciliacionRepository extends Repository<PartidaConcili
 	/** Las MANUALES y EXPLICADAS confirmadas recientes (resumen para Promotoría). */
 	List<PartidaConciliacion> findByEstadoAndReglaInAndResueltoEnAfterOrderByIdDesc(EstadoPartida estado,
 			Collection<ReglaPartida> reglas, LocalDateTime desde);
+
+	/** S4-C1: las partidas vigentes con diferencia de monto de movimientos desde una fecha (alerta CRÍTICA). */
+	@Query("select p from PartidaConciliacion p where p.estado <> "
+			+ "pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoPartida.DESCARTADA and p.diferencia <> 0 "
+			+ "and p.movimiento.fecha >= :desde order by p.movimiento.fecha, p.id")
+	List<PartidaConciliacion> vigentesConDiferenciaDesde(@Param("desde") java.time.LocalDate desde);
 }

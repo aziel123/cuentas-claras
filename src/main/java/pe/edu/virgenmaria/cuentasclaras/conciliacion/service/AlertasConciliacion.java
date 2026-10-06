@@ -111,7 +111,10 @@ public class AlertasConciliacion implements AlertasRevision {
 		LocalDate hoy = ahora.toLocalDate();
 		List<AlertaRevision> alertas = new ArrayList<>();
 		faltantes(alertas, hoy);
+		parejasConDiferencia(alertas, hoy);
 		abonosSinPareja(alertas, hoy);
+		cargosSinExplicar(alertas, hoy);
+		cargosQueCompensanAbonos(alertas, hoy);
 		extractosConProblemas(alertas, ahora);
 		liquidaciones(alertas, hoy);
 		sugeridasPendientes(alertas, hoy);
@@ -169,6 +172,77 @@ public class AlertasConciliacion implements AlertasRevision {
 			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, recientes.size() + " abono(s) en el banco por "
 					+ Dinero.formatear(Dinero.sumar(recientes.stream().map(MovimientoBancario::getMonto).toList()))
 					+ " sin pareja: Administración debe emparejarlos o explicarlos.", ENLACE));
+		}
+	}
+
+	/**
+	 * S4-C1: toda pareja vigente con diferencia de monto es CRÍTICA (hoy solo puede tenerla una liquidación de la
+	 * pasarela dentro de su tolerancia; la base rechaza las demás).
+	 */
+	private void parejasConDiferencia(List<AlertaRevision> alertas, LocalDate hoy) {
+		List<PartidaConciliacion> conDiferencia = partidas.vigentesConDiferenciaDesde(hoy.minusDays(
+				DiferenciasConciliacion.DIAS_ATRAS));
+		if (!conDiferencia.isEmpty()) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, conDiferencia.size() + " pareja(s) del extracto con "
+					+ "diferencia de monto por " + Dinero.formatear(Dinero.sumar(conDiferencia.stream()
+							.map(p -> p.getDiferencia().abs()).toList())) + " (la primera, del "
+					+ Calendario.formatear(conDiferencia.getFirst().getMovimiento().getFecha()) + "). Revisa la liquidación "
+					+ "con la pasarela.", ENLACE));
+		}
+	}
+
+	/**
+	 * S4-A2: un cargo del banco sin pareja (no es una devolución registrada) debe explicarlo otra persona que no subió el
+	 * extracto (Promotoría o Dirección mirando su app, o alguien de Administración): ATENCIÓN desde el día hábil
+	 * siguiente y CRÍTICA pasados 2 días hábiles. Antes no se revisaban y un cargo inventado «compensaba» un abono
+	 * inventado.
+	 */
+	private void cargosSinExplicar(List<AlertaRevision> alertas, LocalDate hoy) {
+		List<MovimientoBancario> cargos = diferencias.sinPareja(hoy).stream()
+				.filter(m -> m.getTipo() == TipoMovimiento.CARGO && !hoy.isBefore(Calendario.siguienteDiaHabil(m.getFecha())))
+				.toList();
+		List<MovimientoBancario> criticos = cargos.stream()
+				.filter(m -> ReglasEmparejamiento.diasHabilesEntre(m.getFecha(), hoy) > 2).toList();
+		if (!criticos.isEmpty()) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, criticos.size() + " cargo(s) en el banco por "
+					+ Dinero.formatear(Dinero.sumar(criticos.stream().map(MovimientoBancario::getMonto).toList()))
+					+ " llevan más de 2 días hábiles sin explicar (el más antiguo, del "
+					+ Calendario.formatear(criticos.getFirst().getFecha()) + "): es dinero que salió. Búscalos en tu app "
+					+ "del banco y explícalos; si no están, el extracto fue alterado.", ENLACE));
+		}
+		List<MovimientoBancario> recientes = cargos.stream().filter(m -> !criticos.contains(m)).toList();
+		if (!recientes.isEmpty()) {
+			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, recientes.size() + " cargo(s) en el banco por "
+					+ Dinero.formatear(Dinero.sumar(recientes.stream().map(MovimientoBancario::getMonto).toList()))
+					+ " sin explicar: los explica alguien que no subió el extracto, mirando la app del banco.", ENLACE));
+		}
+	}
+
+	/**
+	 * S4-A2 y QA-S4-5: un cargo sin explicar del MISMO monto que un abono de la misma cuenta y de fechas cercanas (2 días
+	 * hábiles) es CRÍTICO de inmediato: es el patrón de un abono inventado (para «verificar» un Yape inventado) más un
+	 * cargo que lo compensa para que el saldo final siga siendo el del banco.
+	 */
+	private void cargosQueCompensanAbonos(List<AlertaRevision> alertas, LocalDate hoy) {
+		List<String> sospechosos = new ArrayList<>();
+		for (MovimientoBancario cargo : diferencias.sinPareja(hoy)) {
+			if (cargo.getTipo() != TipoMovimiento.CARGO) {
+				continue;
+			}
+			boolean compensa = movimientos.vigentesEntre(cargo.getCuentaId(), cargo.getFecha().minusDays(4),
+					cargo.getFecha().plusDays(4)).stream()
+					.anyMatch(a -> a.getTipo() == TipoMovimiento.ABONO && a.getMonto().compareTo(cargo.getMonto()) == 0
+							&& ReglasEmparejamiento.diasHabilesEntre(a.getFecha(), cargo.getFecha()) <= 2);
+			if (compensa) {
+				sospechosos.add("«" + cargo.getDescripcion() + "» del " + Calendario.formatear(cargo.getFecha()) + " por "
+						+ Dinero.formatear(cargo.getMonto()));
+			}
+		}
+		if (!sospechosos.isEmpty()) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, sospechosos.size() + " cargo(s) del extracto del mismo "
+					+ "monto que un abono de esos días: " + String.join("; ", sospechosos.stream().limit(3).toList())
+					+ (sospechosos.size() > 3 ? " y " + (sospechosos.size() - 3) + " más" : "") + ". ¿Abono inventado y un "
+					+ "cargo para cuadrar el saldo? Busca ambos en tu app del banco hoy mismo.", ENLACE));
 		}
 	}
 
@@ -274,8 +348,9 @@ public class AlertasConciliacion implements AlertasRevision {
 	}
 
 	/**
-	 * Muestreo diario: movimientos al azar (semilla = la fecha: el mismo durante todo el día) del último extracto
-	 * confirmado, para que Promotoría los compare con su app del banco.
+	 * Muestreo diario: movimientos al azar del último extracto confirmado, para que Promotoría los compare con su app del
+	 * banco. Estable durante el día, pero con la semilla SECRETA del extracto (elegida con SecureRandom al registrarlo y
+	 * guardada): antes la semilla era la fecha y quien sube podía calcular qué movimientos saldrían (S4-A2).
 	 */
 	private void muestreo(List<AlertaRevision> alertas, LocalDate hoy) {
 		if (propiedades.muestreoDiario() <= 0) {
@@ -290,7 +365,9 @@ public class AlertasConciliacion implements AlertasRevision {
 		if (lista.isEmpty()) {
 			return;
 		}
-		java.util.Collections.shuffle(lista, new Random(hoy.toEpochDay()));
+		Long semilla = ultimo.get().getSemillaMuestreo();
+		java.util.Collections.shuffle(lista, semilla == null ? new java.security.SecureRandom()
+				: new Random(semilla ^ hoy.toEpochDay()));
 		String muestra = lista.stream().limit(propiedades.muestreoDiario())
 				.sorted(Comparator.comparing(MovimientoBancario::getNumero))
 				.map(m -> Calendario.formatear(m.getFecha()) + " " + m.getTipo().etiqueta().toLowerCase(java.util.Locale.ROOT)

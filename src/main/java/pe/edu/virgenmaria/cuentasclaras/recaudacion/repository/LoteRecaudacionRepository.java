@@ -9,6 +9,7 @@ import pe.edu.virgenmaria.cuentasclaras.recaudacion.model.EstadoLote;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.model.LoteRecaudacion;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,4 +41,11 @@ public interface LoteRecaudacionRepository extends Repository<LoteRecaudacion, L
 			java.time.LocalDate desde, java.time.LocalDate hasta);
 
 	List<LoteRecaudacion> findByIdIn(java.util.Collection<Long> ids);
+
+	/**
+	 * S4-A1: si hay un lote en ese estado cuyas fechas se superponen con {@code desde}..{@code hasta} (para no dejar
+	 * descargar el archivo de un lote descartado o rechazado mientras otro de esos días espera su confirmación a ciegas).
+	 */
+	boolean existsByEstadoAndDesdeLessThanEqualAndHastaGreaterThanEqual(EstadoLote estado, LocalDate hasta,
+			LocalDate desde);
 }

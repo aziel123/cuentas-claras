@@ -550,12 +550,13 @@ DELIMITER ;
 -- ===================== Sprint 4 · tanda 2 (V14): recaudación bancaria =====================
 DELIMITER $$
 
--- El lote nace CARGADO, sin confirmar, sin aplicar y sin intentos.
+-- El lote nace CARGADO, sin confirmar, sin aplicar y sin intentos, con su muestra fija (correcciones del sprint 4,
+-- S4-A1).
 DROP TRIGGER IF EXISTS trg_lote_recaudacion_nace$$
 CREATE TRIGGER trg_lote_recaudacion_nace BEFORE INSERT ON lote_recaudacion FOR EACH ROW
 BEGIN
     IF NOT (NEW.estado <=> 'CARGADO') OR NOT (NEW.intentos_confirmacion <=> 0) OR NOT (NEW.lineas_aplicadas <=> 0)
-            OR NOT (NEW.lineas_excepcion <=> 0) THEN
+            OR NOT (NEW.lineas_excepcion <=> 0) OR NEW.muestra IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un lote de recaudación nace CARGADO y sin aplicar';
     END IF;
 END$$
@@ -625,11 +626,13 @@ DELIMITER ;
 DELIMITER $$
 
 -- Continuidad: el extracto n+1 de una cuenta empieza el día siguiente al fin del n, con su saldo final, y el n sigue
--- vigente. Nace CARGADO, sin confirmar y sin saldo ciego.
+-- vigente. Nace CARGADO, sin confirmar y sin saldo ciego, con su muestra fija y su semilla secreta (correcciones del
+-- sprint 4, S4-A1 y S4-A2).
 DROP TRIGGER IF EXISTS trg_extracto_bancario_nace$$
 CREATE TRIGGER trg_extracto_bancario_nace BEFORE INSERT ON extracto_bancario FOR EACH ROW
 BEGIN
-    IF NOT (NEW.estado <=> 'CARGADO') OR NOT (NEW.intentos_confirmacion <=> 0) OR NEW.saldo_final_ciego IS NOT NULL THEN
+    IF NOT (NEW.estado <=> 'CARGADO') OR NOT (NEW.intentos_confirmacion <=> 0) OR NEW.saldo_final_ciego IS NOT NULL
+            OR NEW.muestra IS NULL OR NEW.semilla_muestreo IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un extracto nace CARGADO y sin confirmar';
     END IF;
     IF NEW.secuencia > 1 AND NOT EXISTS (SELECT 1 FROM extracto_bancario a WHERE a.id = NEW.anterior_id
@@ -640,8 +643,9 @@ BEGIN
 END$$
 
 -- CARGADO → CONFIRMADO | RECHAZADO | DESCARTADO. Confirmar exige el anterior ya confirmado, los movimientos completos
--- y el saldo final escrito a ciegas (en este extracto o en uno posterior de la cadena). No se descarta un extracto que
--- ya tiene uno siguiente vigente. Los intentos solo suben de uno en uno.
+-- y el saldo final de ESTE extracto escrito a ciegas (correcciones del sprint 4, S4-A2: cada extracto con su propio
+-- saldo; ya no se sella una cadena con el saldo del último). No se descarta un extracto que ya tiene uno siguiente
+-- vigente. Los intentos solo suben de uno en uno.
 DROP TRIGGER IF EXISTS trg_extracto_bancario_estado$$
 CREATE TRIGGER trg_extracto_bancario_estado BEFORE UPDATE ON extracto_bancario FOR EACH ROW
 BEGIN
@@ -665,10 +669,7 @@ BEGIN
                 WHERE m.extracto_id = NEW.id AND m.tipo = 'ABONO'))
             OR NOT (NEW.total_cargos <=> (SELECT COALESCE(SUM(m.monto), 0.00) FROM movimiento_bancario m
                 WHERE m.extracto_id = NEW.id AND m.tipo = 'CARGO'))
-            OR NOT ((NEW.confirmacion_extracto_id <=> NEW.id AND NEW.saldo_final_ciego <=> NEW.saldo_final)
-                OR EXISTS (SELECT 1 FROM extracto_bancario c WHERE c.id = NEW.confirmacion_extracto_id
-                    AND c.cuenta_id = NEW.cuenta_id AND c.secuencia > NEW.secuencia AND c.estado = 'CARGADO'
-                    AND c.saldo_final_ciego = c.saldo_final))) THEN
+            OR NOT (NEW.confirmacion_extracto_id <=> NEW.id AND NEW.saldo_final_ciego <=> NEW.saldo_final)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el extracto se confirma completo, en orden y con el saldo a ciegas';
     END IF;
     IF NEW.estado IN ('RECHAZADO', 'DESCARTADO') AND OLD.estado = 'CARGADO' AND EXISTS (SELECT 1
@@ -723,7 +724,8 @@ END$$
 
 -- PROPUESTA → CONFIRMADA | DESCARTADA, una vez. Confirmar exige el extracto CONFIRMADO; si la confirma una persona
 -- (SUGERIDA, MANUAL o EXPLICADA), no puede ser quien cobró, registró o depositó lo emparejado, ni quien subió el lote de
--- recaudación (también si el objeto es un pago de ese lote: S4-B2 y QA-S4-6). Correcciones del sprint 4: la MANUAL
+-- recaudación (también si el objeto es un pago de ese lote: S4-B2 y QA-S4-6), y un CARGO no lo explica quien subió su
+-- extracto (S4-A2). Correcciones del sprint 4: la MANUAL
 -- exige SU solicitud PARTIDA_MANUAL aprobada por quien confirma, que no la pidió (S4-C1); las claves vigentes solo
 -- valen la de su propio movimiento y objeto, y una partida resuelta ya no las cambia (S4-B1).
 DROP TRIGGER IF EXISTS trg_partida_conciliacion_estado$$
@@ -752,7 +754,10 @@ BEGIN
                     WHERE x.id = NEW.deposito_id AND (x.creado_por = NEW.resuelto_por OR d.cajero = NEW.resuelto_por))
                 OR EXISTS (SELECT 1 FROM reembolso r WHERE r.id = NEW.reembolso_id AND r.creado_por = NEW.resuelto_por)
                 OR EXISTS (SELECT 1 FROM lote_recaudacion t WHERE t.id = NEW.lote_recaudacion_id
-                    AND t.creado_por = NEW.resuelto_por)))
+                    AND t.creado_por = NEW.resuelto_por)
+                OR (NEW.regla = 'EXPLICADA' AND EXISTS (SELECT 1 FROM movimiento_bancario m JOIN extracto_bancario e
+                    ON e.id = m.extracto_id WHERE m.id = NEW.movimiento_id AND m.tipo = 'CARGO'
+                    AND e.creado_por = NEW.resuelto_por))))
             OR (NEW.regla = 'MANUAL' AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.tipo = 'PARTIDA_MANUAL'
                 AND s.entidad = 'partida_conciliacion' AND s.entidad_id = NEW.id AND s.estado = 'APROBADA'
                 AND s.resuelto_por = NEW.resuelto_por AND s.solicitado_por <> NEW.resuelto_por))) THEN

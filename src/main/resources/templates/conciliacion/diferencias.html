@@ -111,7 +111,7 @@
 					<div class="modal" th:id="|emparejar-${m.movimientoId}|" popover role="dialog" aria-modal="true" th:aria-labelledby="|emparejar-${m.movimientoId}-titulo|">
 						<form method="post" th:action="@{/conciliacion/movimientos/{id}/emparejar(id=${m.movimientoId})}" class="modal-cuerpo">
 							<h2 th:id="|emparejar-${m.movimientoId}-titulo|">Emparejar a mano</h2>
-							<p>Elige lo registrado que corresponde a este abono. Queda resaltado para Promotoría con tu nota.</p>
+							<p>Elige lo registrado que corresponde a este abono (solo aparece lo del mismo monto). Queda en Aprobaciones hasta que Promotoría o Dirección lo apruebe mirando su app del banco.</p>
 							<div class="campo">
 								<label th:for="|emparejar-${m.movimientoId}-objeto|">Lo registrado</label>
 								<select class="input" th:id="|emparejar-${m.movimientoId}-objeto|" name="objeto" required>
@@ -139,6 +139,45 @@
 								<select class="input" th:id="|explicar-${m.movimientoId}-categoria|" name="categoria" required>
 									<option value="">Elige</option>
 									<option th:each="c : ${m.abono ? d.categoriasAbono : d.categoriasCargo}" th:value="${c.valor}" th:text="${c.texto}">Intereses</option>
+								</select>
+							</div>
+							<div class="campo">
+								<label th:for="|explicar-${m.movimientoId}-nota|">Nota (obligatoria)</label>
+								<textarea class="input" th:id="|explicar-${m.movimientoId}-nota|" name="nota" required minlength="10" maxlength="500"></textarea>
+							</div>
+							<div class="acciones">
+								<button type="button" class="btn btn-secundario" th:popovertarget="|explicar-${m.movimientoId}|" popovertargetaction="hide">Cancelar</button>
+								<button type="submit" class="btn btn-primario">Explicar</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-cargos" th:unless="${#lists.isEmpty(d.cargosSinExplicar)}" data-seccion="cargos-sin-explicar">
+		<h2 id="titulo-cargos" th:text="|Cargos en el banco sin explicar (${#lists.size(d.cargosSinExplicar)})|">Cargos sin explicar</h2>
+		<p class="secundario">Dinero que salió del banco. Búscalo en tu app del banco y explica qué es. Lo explica alguien que no subió el extracto; si no está en el banco, el extracto fue alterado: avisa a Dirección.</p>
+		<ul class="lista-diferencias">
+			<li th:each="m : ${d.cargosSinExplicar}" th:classappend="${m.critico} ? 'alerta-critica'" th:data-movimiento="${m.movimientoId}">
+				<p class="fila entre">
+					<strong th:text="${m.descripcion}">COMISION</strong>
+					<span th:replace="~{fragments/componentes :: monto(${m.monto})}"></span>
+				</p>
+				<p class="secundario" th:text="|${#temporals.format(m.fecha, 'dd/MM/yyyy')} · operación ${m.operacion ?: 'sin número'}|">05/10</p>
+				<p th:if="${m.critico}"><span th:replace="~{fragments/componentes :: badge('Más de 2 días hábiles sin explicar', 'peligro')}"></span></p>
+				<div class="acciones acciones-izquierda" th:if="${d.puedeRevisar or d.puedeConfirmar}">
+					<button type="button" class="btn btn-chico btn-secundario" th:popovertarget="|explicar-${m.movimientoId}|">Explicar</button>
+					<div class="modal" th:id="|explicar-${m.movimientoId}|" popover role="dialog" aria-modal="true" th:aria-labelledby="|explicar-${m.movimientoId}-titulo|">
+						<form method="post" th:action="@{/conciliacion/movimientos/{id}/explicar(id=${m.movimientoId})}" class="modal-cuerpo">
+							<h2 th:id="|explicar-${m.movimientoId}-titulo|">¿Qué es este cargo?</h2>
+							<p>Explica qué es después de verlo en tu app del banco. Queda resaltado para Promotoría.</p>
+							<div class="campo">
+								<label th:for="|explicar-${m.movimientoId}-categoria|">Qué es</label>
+								<select class="input" th:id="|explicar-${m.movimientoId}-categoria|" name="categoria" required>
+									<option value="">Elige</option>
+									<option th:each="c : ${d.categoriasCargo}" th:value="${c.valor}" th:text="${c.texto}">Comisión</option>
 								</select>
 							</div>
 							<div class="campo">

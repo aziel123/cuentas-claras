@@ -208,6 +208,10 @@ jobs:
           comprobar 1644 "INSERT INTO movimiento_bancario (colegio_id, extracto_id, cuenta_id, numero, fecha, tipo, monto, descripcion, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 1, '2000-01-01', 'ABONO', 1, 'x', NOW(6), 'x', NOW(6))"
           comprobar 1644 "INSERT INTO partida_conciliacion (colegio_id, movimiento_id, movimiento_vigente, objeto_tipo, pago_id, objeto_vigente, regla, monto_movimiento, monto_objeto, diferencia, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'PAGO', 0, 'PAGO:0', 'EXACTA', 1, 1, 0, 'PROPUESTA', NOW(6), 'x', NOW(6))"
           comprobar 1644 "INSERT INTO verificacion_bancaria (colegio_id, pago_id, resultado, origen, partida_id, banco_fecha, banco_monto, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'ENCONTRADO', 'AUTOMATICA', 0, '2000-01-01', 1, NOW(6), 'sistema.conciliacion', NOW(6))"
+          # Correcciones del sprint 4 (V16): la muestra fija y la semilla secreta no se reescriben (S4-A1 y S4-A2).
+          comprobar 1143 "UPDATE extracto_bancario SET muestra = muestra WHERE 1 = 0"
+          comprobar 1143 "UPDATE extracto_bancario SET semilla_muestreo = semilla_muestreo WHERE 1 = 0"
+          comprobar 1143 "UPDATE lote_recaudacion SET muestra = muestra WHERE 1 = 0"
           # La base de producción no admite la pasarela simulada (sin la fila 'pasarela_simulada' del DBA).
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'pasarela_simulada'")
           [ "$filas" = "0" ] || { echo "ERROR: la base tiene la fila pasarela_simulada"; exit 1; }

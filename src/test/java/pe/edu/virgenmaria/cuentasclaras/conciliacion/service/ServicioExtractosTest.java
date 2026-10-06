@@ -221,8 +221,11 @@ class ServicioExtractosTest {
 		ConfirmacionExtractoVista vista = extractos.paraConfirmar(cuentaId);
 		assertThat(vista.participaste()).isTrue();
 		assertThat(vista.cierreDel()).isEqualTo(java.time.LocalDate.of(2026, 9, 30));
-		assertThat(vista.muestra()).hasSize(2);
-		assertThatThrownBy(() -> extractos.confirmar(cuentaId, vista.ultimoId(), vista.version(),
+		// S4-A1: la muestra fija nunca es todo el extracto (2 movimientos: se muestra 1), sin monto ni tipo.
+		assertThat(vista.muestra()).hasSize(1);
+		assertThat(jdbc.queryForObject("SELECT muestra FROM extracto_bancario WHERE id = ?", String.class, id))
+				.matches("[12]");
+		assertThatThrownBy(() -> extractos.confirmar(cuentaId, vista.extractoId(), vista.version(),
 				new BigDecimal("5349.65"))).isInstanceOf(AutoaprobacionException.class);
 		assertThat(estadoExtracto(jdbc, id)).isEqualTo("CARGADO");
 		assertThat(ultimoEvento(jdbc, "AUTOAPROBACION_RECHAZADA")).containsEntry("nombre_usuario", "promotora.adm");
@@ -234,9 +237,12 @@ class ServicioExtractosTest {
 		assertThat((BigDecimal) fila.get("saldo_final_ciego")).isEqualByComparingTo("5349.65");
 	}
 
-	/** Dos extractos pendientes se confirman juntos con el saldo del ÚLTIMO; el del primero no sirve. */
+	/**
+	 * Correcciones del sprint 4 (S4-A2): dos extractos pendientes se confirman de uno en uno, del más antiguo al más
+	 * nuevo, cada uno con SU saldo; el saldo del último ya no sella la cadena.
+	 */
 	@Test
-	void laCadenaSeConfirmaConElSaldoDelUltimoDia() {
+	void cadaExtractoPendienteSeConfirmaConSuPropioSaldo() {
 		Extracto miercoles = delMiercoles();
 		Long primero = registrar(extractos, ADMINISTRACION, miercoles);
 		Extracto jueves = delJuevesTras(miercoles);
@@ -245,23 +251,48 @@ class ServicioExtractosTest {
 		como(PROMOTORIA);
 		ConfirmacionExtractoVista vista = extractos.paraConfirmar(cuentaId);
 		assertThat(vista.pendientes()).hasSize(2);
-		assertThat(vista.ultimoId()).isEqualTo(segundo);
-		assertThat(vista.cierreDel()).isEqualTo(java.time.LocalDate.of(2026, 10, 1));
+		assertThat(vista.extractoId()).isEqualTo(primero);
+		assertThat(vista.cierreDel()).isEqualTo(java.time.LocalDate.of(2026, 9, 30));
 		assertThat(vista.intentosRestantes()).isEqualTo(2);
 
-		assertThatThrownBy(() -> confirmar(extractos, PROMOTORIA, cuentaId, miercoles.saldoFinal().toPlainString()))
+		// El saldo del jueves ya no confirma el miércoles (ni la cadena).
+		assertThatThrownBy(() -> confirmar(extractos, PROMOTORIA, cuentaId, jueves.saldoFinal().toPlainString()))
 				.isInstanceOf(SaldoNoCoincideException.class).hasMessageContaining("Te queda 1 intento");
 		assertThat(estadoExtracto(jdbc, primero)).isEqualTo("CARGADO");
-		confirmar(extractos, PROMOTORIA, cuentaId, jueves.saldoFinal().toPlainString());
+		confirmar(extractos, PROMOTORIA, cuentaId, miercoles.saldoFinal().toPlainString());
 		assertThat(estadoExtracto(jdbc, primero)).isEqualTo("CONFIRMADO");
+		assertThat(estadoExtracto(jdbc, segundo)).isEqualTo("CARGADO");
+		assertThat(ultimoEvento(jdbc, "EXTRACTO_CONFIRMADO").get("detalle")).asString()
+				.contains("Quedan 1 extracto(s) por confirmar");
+		ConfirmacionExtractoVista siguiente = extractos.paraConfirmar(cuentaId);
+		assertThat(siguiente.extractoId()).isEqualTo(segundo);
+		assertThat(siguiente.cierreDel()).isEqualTo(java.time.LocalDate.of(2026, 10, 1));
+		// Con un id viejo (el del primero) no se confirma el segundo.
+		assertThatThrownBy(() -> extractos.confirmar(cuentaId, primero, siguiente.version(), jueves.saldoFinal()))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("cambiaron");
+		confirmar(extractos, PROMOTORIA, cuentaId, jueves.saldoFinal().toPlainString());
 		assertThat(estadoExtracto(jdbc, segundo)).isEqualTo("CONFIRMADO");
 		assertThat(jdbc.queryForList("SELECT confirmacion_extracto_id FROM extracto_bancario ORDER BY id", Long.class))
-				.containsExactly(segundo, segundo);
-		assertThat(ultimoEvento(jdbc, "EXTRACTO_CONFIRMADO").get("detalle")).asString()
-				.contains("Se confirmaron 2 extracto(s) en orden");
-		// Ya no hay nada que confirmar; la cuenta tiene cubierto hasta el jueves.
+				.containsExactly(primero, segundo);
+		// El primero gastó un intento con el saldo equivocado: queda en la bitácora resaltado.
+		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'EXTRACTO_SALDO_NO_COINCIDE'")).isEqualTo(1);
+		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.CRITICA
+				&& a.texto().contains("no coincidieron"));
+	}
+
+	/** Dos saldos a ciegas distintos: el extracto queda RECHAZADO, no hay nada más que confirmar y Promotoría lo ve en rojo. */
+	@Test
+	void unExtractoRechazadoAlertaEnRojo() {
+		Extracto miercoles = delMiercoles();
+		registrar(extractos, ADMINISTRACION, miercoles);
 		como(PROMOTORIA);
+		assertThatThrownBy(() -> confirmar(extractos, PROMOTORIA, cuentaId, "1.00"))
+				.isInstanceOf(SaldoNoCoincideException.class);
+		assertThatThrownBy(() -> confirmar(extractos, PROMOTORIA, cuentaId, "2.00"))
+				.isInstanceOf(SaldoNoCoincideException.class).hasMessageContaining("RECHAZADO");
 		assertThat(extractos.paraConfirmar(cuentaId).porConfirmar()).isFalse();
+		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.CRITICA
+				&& a.texto().contains("RECHAZADO"));
 	}
 
 	/** Quien lo subió lo descarta antes de que lo confirmen; sus parejas propuestas se liberan. */

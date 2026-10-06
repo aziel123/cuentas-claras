@@ -46,7 +46,6 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ReglasEmparejamient
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
 
 import java.math.BigDecimal;
-import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -73,8 +72,9 @@ import java.util.stream.Collectors;
  *   <li>{@link #registrar} (Administración): todo o nada; el archivo original con su SHA-256, el extracto CARGADO, solo
  *       los movimientos de los días nuevos y las partidas PROPUESTA.</li>
  *   <li>{@link #confirmar} (Promotoría o Dirección, NUNCA quien subió): escribe a ciegas el saldo final que ve en su app
- *       del banco al cierre del último día pendiente; si coincide, se confirma la cadena en orden («el lunes sella el fin
- *       de semana») y el sistema concilia después del commit. Si no, suma un intento; al llegar al máximo, RECHAZADO.</li>
+ *       del banco al cierre del extracto pendiente más antiguo; si coincide, se confirma ESE extracto y el sistema
+ *       concilia después del commit (cada extracto con su propio saldo: correcciones del sprint 4, S4-A2). Si no, suma
+ *       un intento; al llegar al máximo, RECHAZADO.</li>
  * </ol>
  * Ni la revisión, ni la bitácora, ni la pantalla de confirmación muestran el saldo final mientras está por confirmar.
  */
@@ -83,8 +83,6 @@ import java.util.stream.Collectors;
 public class ServicioExtractos {
 
 	private static final Logger LOG = LoggerFactory.getLogger(ServicioExtractos.class);
-
-	private static final SecureRandom AZAR = new SecureRandom();
 
 	private final LectoresExtracto lectores;
 
@@ -203,7 +201,7 @@ public class ServicioExtractos {
 				.map(FilaExtracto::monto).toList());
 		ExtractoBancario extracto = extractos.saveAndFlush(ExtractoBancario.registrar(plan.cuenta(), plan.anterior(),
 				archivo.getId(), archivo.getSha256(), plan.lectura().formato(), plan.desde(), plan.hasta(),
-				plan.saldoInicial(), abonos, cargos, plan.nuevas().size()));
+				plan.saldoInicial(), abonos, cargos, plan.nuevas().size(), propiedades.muestreoConfirmacion()));
 		List<MovimientoBancario> guardados = new ArrayList<>();
 		int numero = 0;
 		for (FilaExtracto fila : plan.nuevas()) {
@@ -252,9 +250,10 @@ public class ServicioExtractos {
 	}
 
 	/**
-	 * Lo que ve quien confirma: los extractos pendientes de la cuenta, el día cuyo saldo debe escribir y
-	 * {@code muestreo-confirmacion} movimientos al azar (con un azar que quien subió no puede predecir) para buscarlos en
-	 * su app del banco. Nunca el saldo ni los totales.
+	 * Lo que ve quien confirma: los extractos pendientes de la cuenta, cuál toca confirmar (el MÁS ANTIGUO: cada extracto
+	 * se confirma con su propio saldo, S4-A2), el día cuyo saldo debe escribir y la muestra FIJA de sus movimientos,
+	 * elegida al registrarlo con un azar que quien subió no predice (S4-A1), con fecha, descripción y operación: sin
+	 * monto ni tipo. Nunca el saldo ni los totales.
 	 */
 	@Transactional(readOnly = true)
 	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
@@ -264,32 +263,30 @@ public class ServicioExtractos {
 		List<ExtractoBancario> pendientes = extractos.findByCuentaIdAndEstadoOrderBySecuenciaAsc(cuentaId,
 				EstadoExtracto.CARGADO);
 		if (pendientes.isEmpty()) {
-			return new ConfirmacionExtractoVista(cuentaId, cuenta.descripcion(), List.of(), null, null, null, 0, false,
-					List.of());
+			return new ConfirmacionExtractoVista(cuentaId, cuenta.descripcion(), List.of(), null, null, null, null, 0,
+					false, List.of());
 		}
-		ExtractoBancario ultimo = pendientes.getLast();
-		boolean participo = participantes.ampliar(pendientes.stream().map(ExtractoBancario::getCreadoPor)
-				.collect(Collectors.toSet())).contains(usuario());
-		List<MovimientoBancario> todos = new ArrayList<>();
-		pendientes.forEach(e -> todos.addAll(movimientos.findByExtractoIdOrderByNumeroAsc(e.getId())));
-		Collections.shuffle(todos, AZAR);
-		List<ConfirmacionExtractoVista.Muestra> muestra = todos.stream().limit(propiedades.muestreoConfirmacion())
-				.sorted(Comparator.comparing(MovimientoBancario::getFecha).thenComparing(MovimientoBancario::getId))
-				.map(m -> new ConfirmacionExtractoVista.Muestra(m.getFecha(), m.getTipo().etiqueta(), m.getMonto(),
-						m.getDescripcion(), m.getNumeroOperacion()))
+		ExtractoBancario toca = pendientes.getFirst();
+		boolean participo = participantes.ampliar(Set.of(toca.getCreadoPor())).contains(usuario());
+		Set<Integer> elegidos = Set.copyOf(toca.numerosMuestra());
+		List<ConfirmacionExtractoVista.Muestra> muestra = movimientos.findByExtractoIdOrderByNumeroAsc(toca.getId()).stream()
+				.filter(m -> elegidos.contains(m.getNumero()))
+				.map(m -> new ConfirmacionExtractoVista.Muestra(m.getFecha(), m.getDescripcion(), m.getNumeroOperacion()))
 				.toList();
 		return new ConfirmacionExtractoVista(cuentaId, cuenta.descripcion(), pendientes.stream()
 				.map(e -> new ConfirmacionExtractoVista.Pendiente(e.getId(), e.getSecuencia(), e.getDesde(), e.getHasta(),
 						e.getMovimientos(), e.getCreadoPor(), e.getCreadoEn()))
-				.toList(), ultimo.getId(), ultimo.getVersion(), ultimo.getHasta(),
-				ultimo.intentosRestantes(propiedades.intentosConfirmacion()), participo, muestra);
+				.toList(), toca.getId(), toca.getVersion(), toca.getDesde(), toca.getHasta(),
+				toca.intentosRestantes(propiedades.intentosConfirmacion()), participo, muestra);
 	}
 
 	/**
-	 * Confirma a ciegas la cadena pendiente de la cuenta: {@code saldoVisto} es el saldo que quien confirma ve en su app
-	 * del banco al cierre del último día pendiente. Quien subió alguno de los pendientes (o preparó la cuenta de quien los
-	 * subió) no confirma: el intento queda en la bitácora. Un saldo distinto se audita resaltado y suma un intento; al
-	 * llegar al máximo, el extracto queda RECHAZADO y no se concilia.
+	 * Confirma a ciegas el extracto pendiente MÁS ANTIGUO de la cuenta: {@code saldoVisto} es el saldo que quien confirma
+	 * ve en su app del banco al cierre del último día de ESE extracto. Cada extracto pendiente se confirma con su propio
+	 * saldo, en orden (S4-A2: con un solo saldo para toda la cadena, un abono inventado un día y un cargo que lo compensa
+	 * otro día no se notaban). Quien lo subió (o preparó la cuenta de quien lo subió) no confirma: el intento queda en la
+	 * bitácora. Un saldo distinto se audita resaltado y suma un intento; al llegar al máximo, el extracto queda RECHAZADO
+	 * y no se concilia.
 	 */
 	@Transactional(noRollbackFor = { AutoaprobacionException.class, SaldoNoCoincideException.class })
 	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
@@ -301,18 +298,17 @@ public class ServicioExtractos {
 		if (pendientes.isEmpty()) {
 			throw new ReglaNegocioException("No hay extractos por confirmar en esta cuenta.");
 		}
-		ExtractoBancario ultimo = pendientes.getLast();
-		if (extractoId == null || !extractoId.equals(ultimo.getId()) || version == null
-				|| !version.equals(ultimo.getVersion())) {
+		ExtractoBancario extracto = pendientes.getFirst();
+		if (extractoId == null || !extractoId.equals(extracto.getId()) || version == null
+				|| !version.equals(extracto.getVersion())) {
 			throw new ReglaNegocioException("Los extractos por confirmar cambiaron desde que abriste la pantalla (se subió "
-					+ "otro o alguien escribió un saldo). Ábrela de nuevo.");
+					+ "otro, se confirmó uno o alguien escribió un saldo). Ábrela de nuevo.");
 		}
 		String usuario = usuario();
-		Set<String> autores = pendientes.stream().map(ExtractoBancario::getCreadoPor).collect(Collectors.toSet());
-		if (participantes.ampliar(autores).contains(usuario)) {
-			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "extracto_bancario", ultimo.getId().toString(),
-					null, "Extracto del " + Calendario.formatear(ultimo.getDesde()) + " al "
-							+ Calendario.formatear(ultimo.getHasta()),
+		if (participantes.ampliar(Set.of(extracto.getCreadoPor())).contains(usuario)) {
+			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "extracto_bancario", extracto.getId().toString(),
+					null, "Extracto del " + Calendario.formatear(extracto.getDesde()) + " al "
+							+ Calendario.formatear(extracto.getHasta()),
 					"Intentó confirmar un extracto que subió (o subió una cuenta que preparó). Se rechazó.");
 			throw new AutoaprobacionException("No puedes confirmar un extracto que tú subiste: debe confirmarlo otra persona "
 					+ "de Promotoría o Dirección, mirando su app del banco.");
@@ -322,49 +318,43 @@ public class ServicioExtractos {
 		}
 		BigDecimal escrito = Dinero.normalizar(saldoVisto);
 		LocalDateTime ahora = ahora();
-		if (!Dinero.iguales(escrito, ultimo.getSaldoFinal())) {
-			boolean rechazado = ultimo.intentoFallido(propiedades.intentosConfirmacion(), usuario, ahora);
-			extractos.saveAndFlush(ultimo);
-			int quedan = ultimo.intentosRestantes(propiedades.intentosConfirmacion());
-			auditoria.registrar(AccionAuditoria.EXTRACTO_SALDO_NO_COINCIDE, "extracto_bancario", ultimo.getId().toString(),
-					null, "Saldo escrito a ciegas: " + Dinero.formatear(escrito), "El saldo que escribió " + usuario
-							+ " al cierre del " + Calendario.formatear(ultimo.getHasta()) + " no coincide con el del extracto "
-							+ "(intento " + ultimo.getIntentosConfirmacion() + " de " + propiedades.intentosConfirmacion()
-							+ "). Extracto subido por " + ultimo.getCreadoPor() + ".");
+		if (!Dinero.iguales(escrito, extracto.getSaldoFinal())) {
+			boolean rechazado = extracto.intentoFallido(propiedades.intentosConfirmacion(), usuario, ahora);
+			extractos.saveAndFlush(extracto);
+			int quedan = extracto.intentosRestantes(propiedades.intentosConfirmacion());
+			auditoria.registrar(AccionAuditoria.EXTRACTO_SALDO_NO_COINCIDE, "extracto_bancario",
+					extracto.getId().toString(), null, "Saldo escrito a ciegas: " + Dinero.formatear(escrito), "El saldo "
+							+ "que escribió " + usuario + " al cierre del " + Calendario.formatear(extracto.getHasta())
+							+ " no coincide con el del extracto (intento " + extracto.getIntentosConfirmacion() + " de "
+							+ propiedades.intentosConfirmacion() + "). Extracto subido por " + extracto.getCreadoPor() + ".");
 			if (rechazado) {
-				int liberadas = liberarPropuestas(ultimo, usuario);
-				auditoria.registrar(AccionAuditoria.EXTRACTO_RECHAZADO, "extracto_bancario", ultimo.getId().toString(),
-						EstadoExtracto.CARGADO.name(), EstadoExtracto.RECHAZADO.name(), ultimo.getMotivoRechazo()
+				int liberadas = liberarPropuestas(extracto, usuario);
+				auditoria.registrar(AccionAuditoria.EXTRACTO_RECHAZADO, "extracto_bancario", extracto.getId().toString(),
+						EstadoExtracto.CARGADO.name(), EstadoExtracto.RECHAZADO.name(), extracto.getMotivoRechazo()
 								+ " Se liberaron " + liberadas + " pareja(s) propuesta(s). Extracto subido por "
-								+ ultimo.getCreadoPor() + ": revisa con el banco y con quien lo subió.");
+								+ extracto.getCreadoPor() + ": revisa con el banco y con quien lo subió.");
 				throw new SaldoNoCoincideException("No coincide otra vez. El extracto quedó RECHAZADO y no se concilia; "
 						+ "Promotoría recibe una alerta. Revisa con el banco y con quien lo subió.");
 			}
 			throw new SaldoNoCoincideException("No coincide. Revisa el saldo en tu app del banco al cierre del "
-					+ Calendario.formatear(ultimo.getHasta()) + ". Te queda" + (quedan == 1 ? " 1 intento."
+					+ Calendario.formatear(extracto.getHasta()) + ". Te queda" + (quedan == 1 ? " 1 intento."
 							: "n " + quedan + " intentos."));
 		}
-		// El saldo a ciegas va primero (el trigger lo lee al confirmar los anteriores), luego la cadena en orden.
-		ultimo.escribirSaldoCiego(escrito);
-		extractos.saveAndFlush(ultimo);
-		for (ExtractoBancario e : pendientes) {
-			if (!e.getId().equals(ultimo.getId())) {
-				e.confirmar(usuario, ultimo.getId(), ahora);
-				extractos.saveAndFlush(e);
-			}
-		}
-		ultimo.confirmar(usuario, ultimo.getId(), ahora);
-		extractos.saveAndFlush(ultimo);
-		ExtractoBancario primero = pendientes.getFirst();
-		auditoria.registrar(AccionAuditoria.EXTRACTO_CONFIRMADO, "extracto_bancario", ultimo.getId().toString(),
-				EstadoExtracto.CARGADO.name(), EstadoExtracto.CONFIRMADO.name() + " · " + pendientes.size()
-						+ " extracto(s) del " + Calendario.formatear(primero.getDesde()) + " al "
-						+ Calendario.formatear(ultimo.getHasta()) + " · saldo " + Dinero.formatear(ultimo.getSaldoFinal()),
+		// El saldo a ciegas va primero (el trigger lo lee al confirmar).
+		extracto.escribirSaldoCiego(escrito);
+		extractos.saveAndFlush(extracto);
+		extracto.confirmar(usuario, extracto.getId(), ahora);
+		extractos.saveAndFlush(extracto);
+		int quedanPendientes = pendientes.size() - 1;
+		auditoria.registrar(AccionAuditoria.EXTRACTO_CONFIRMADO, "extracto_bancario", extracto.getId().toString(),
+				EstadoExtracto.CARGADO.name(), EstadoExtracto.CONFIRMADO.name() + " · del "
+						+ Calendario.formatear(extracto.getDesde()) + " al " + Calendario.formatear(extracto.getHasta())
+						+ " · saldo " + Dinero.formatear(extracto.getSaldoFinal()),
 				usuario + " escribió a ciegas el saldo que ve en su app del banco al cierre del "
-						+ Calendario.formatear(ultimo.getHasta()) + " y coincide con el extracto de " + cuenta.descripcion()
-						+ ". Se confirmaron " + pendientes.size() + " extracto(s) en orden. El sistema concilia.");
-		eventos.publishEvent(new ExtractosConfirmados(cuenta.getColegioId(), cuentaId,
-				pendientes.stream().map(ExtractoBancario::getId).toList()));
+						+ Calendario.formatear(extracto.getHasta()) + " y coincide con el extracto de " + cuenta.descripcion()
+						+ ". El sistema concilia." + (quedanPendientes > 0 ? " Quedan " + quedanPendientes
+								+ " extracto(s) por confirmar, cada uno con su saldo." : ""));
+		eventos.publishEvent(new ExtractosConfirmados(cuenta.getColegioId(), cuentaId, List.of(extracto.getId())));
 	}
 
 	/** Al descartar o rechazar un extracto, sus parejas propuestas se descartan y liberan sus objetos. */

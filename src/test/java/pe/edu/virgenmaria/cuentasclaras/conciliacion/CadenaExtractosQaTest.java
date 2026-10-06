@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.conciliacion;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -193,8 +192,6 @@ class CadenaExtractosQaTest {
 	 * «un cargo sin pareja no se alerta» (sección 10.4). El control del caso original queda burlado sin colusión.
 	 */
 	@Test
-	@Disabled("QA-S4-5 (diseño, sección 10.4.5 y F14): un abono y un cargo inventados del mismo monto no cambian el "
-			+ "saldo final; el Yape inventado se concilia EXACTO y el cargo sin pareja no genera ninguna alerta")
 	void debeAlertarUnAbonoYUnCargoInventadosQueSeCompensanEnElExtracto() {
 		como(CAJA);
 		cobro.cobrar(digital(f.quispe(), List.of(cuota(jdbc, f.mateo(), "PEN-2027-03")), MedioPago.YAPE, "YP999888",

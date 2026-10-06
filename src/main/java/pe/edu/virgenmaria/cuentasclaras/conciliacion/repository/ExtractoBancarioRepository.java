@@ -4,6 +4,7 @@ import org.springframework.data.repository.Repository;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoExtracto;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.ExtractoBancario;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -35,4 +36,8 @@ public interface ExtractoBancarioRepository extends Repository<ExtractoBancario,
 
 	/** Si ya tiene uno siguiente vigente (entonces no se descarta ni se rechaza). */
 	boolean existsByAnteriorIdAndSecuenciaVigenteIsNotNull(Long anteriorId);
+
+	/** S4-A1: si la cuenta tiene un extracto en ese estado cuyos días se superponen con {@code desde}..{@code hasta}. */
+	boolean existsByCuentaIdAndEstadoAndDesdeLessThanEqualAndHastaGreaterThanEqual(Long cuentaId, EstadoExtracto estado,
+			LocalDate hasta, LocalDate desde);
 }

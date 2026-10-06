@@ -121,8 +121,8 @@ public class ConsultaRecaudacion {
 		LoteRecaudacion lote = lotes.findById(loteId)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Lote no encontrado"));
 		if (!archivoDescargable(lote)) {
-			throw new ReglaNegocioException("El archivo original no se descarga mientras haya un lote suyo por confirmar: "
-					+ "quien confirma debe mirar el banco, no el archivo.");
+			throw new ReglaNegocioException("El archivo original no se descarga mientras haya un lote de esos días por "
+					+ "confirmar: quien confirma debe mirar el banco, no el archivo.");
 		}
 		ArchivoCargado archivo = archivos.findById(lote.getArchivoId()).orElseThrow();
 		auditoria.registrar(AccionAuditoria.ARCHIVO_BANCO_DESCARGADO, "archivo_cargado", archivo.getId().toString(), null,
@@ -140,10 +140,14 @@ public class ConsultaRecaudacion {
 		return lote.getEstado() == EstadoLote.CONFIRMADO || lote.getEstado() == EstadoLote.APLICADO;
 	}
 
-	/** El archivo se descarga salvo que el mismo archivo esté por confirmar (en este lote o en uno cargado de nuevo). */
+	/**
+	 * El archivo se descarga salvo que esté por confirmar, o que OTRO lote de esos mismos días esté por confirmar (S4-A1:
+	 * el archivo de un lote descartado o rechazado, con un byte distinto y otro SHA-256, traía el total del que espera la
+	 * confirmación a ciegas). Se compara por fechas, no por SHA-256.
+	 */
 	private boolean archivoDescargable(LoteRecaudacion lote) {
-		return lote.getEstado() != EstadoLote.CARGADO && lotes.findByShaVigente(lote.getArchivoSha256())
-				.map(l -> l.getEstado() != EstadoLote.CARGADO).orElse(true);
+		return lote.getEstado() != EstadoLote.CARGADO && !lotes.existsByEstadoAndDesdeLessThanEqualAndHastaGreaterThanEqual(
+				EstadoLote.CARGADO, lote.getHasta(), lote.getDesde());
 	}
 
 	private String pendiente(Long lineaId) {

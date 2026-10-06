@@ -236,8 +236,9 @@ class MatrizPermisosTest {
 				.andExpect(status().isForbidden());
 		mvc.perform(post("/conciliacion/partidas/1/confirmar").with(csrf()).with(UsuariosDePrueba.como(Rol.DIRECTOR)))
 				.andExpect(status().isForbidden());
-		mvc.perform(post("/conciliacion/movimientos/1/explicar").with(csrf()).with(UsuariosDePrueba.como(Rol.DIRECTOR))
-				.param("categoria", "INTERESES").param("nota", "Intereses del mes de la cuenta")).andExpect(status().isForbidden());
+		// Correcciones del sprint 4 (S4-A2): Dirección sí explica CARGOS (mirando su app del banco); no empareja.
+		mvc.perform(post("/conciliacion/movimientos/1/emparejar").with(csrf()).with(UsuariosDePrueba.como(Rol.DIRECTOR))
+				.param("objeto", "PAGO:1").param("nota", "Es el Yape de la familia")).andExpect(status().isForbidden());
 		mvc.perform(post("/conciliacion/cuentas").with(csrf()).with(UsuariosDePrueba.como(Rol.DIRECTOR))
 				.param("banco", "BCP").param("numero", "191-1234567-0-12").param("alias", "Otra cuenta"))
 				.andExpect(status().isForbidden());

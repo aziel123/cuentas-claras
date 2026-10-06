@@ -18,11 +18,12 @@
 	</th:block>
 
 	<th:block th:if="${c.porConfirmar() and c.participaste}">
-		<div th:replace="~{fragments/componentes :: alerta('advertencia', 'Tú subiste uno de estos extractos (o preparaste la cuenta de quien lo subió): debe confirmarlo otra persona de Promotoría o Dirección.')}"></div>
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', 'Tú subiste el extracto que toca confirmar (o preparaste la cuenta de quien lo subió): debe confirmarlo otra persona de Promotoría o Dirección.')}"></div>
 	</th:block>
 
 	<section class="tarjeta" aria-labelledby="titulo-pendientes" th:if="${c.porConfirmar()}">
 		<h2 id="titulo-pendientes">Extractos por confirmar</h2>
+		<p class="secundario">Se confirman de uno en uno, del más antiguo al más nuevo, cada uno con el saldo de su último día.</p>
 		<table class="tabla">
 			<thead><tr><th scope="col">N.°</th><th scope="col">Días</th><th scope="col">Movimientos</th><th scope="col">Subido por</th></tr></thead>
 			<tbody>
@@ -38,14 +39,12 @@
 
 	<section class="tarjeta" aria-labelledby="titulo-muestra" th:if="${c.porConfirmar() and !c.participaste and !#lists.isEmpty(c.muestra)}">
 		<h2 id="titulo-muestra">1. ¿Ves estos movimientos en tu app?</h2>
-		<p class="secundario">Elegidos al azar. Si alguno no está en tu app del banco, no confirmes: puede ser un extracto alterado. Avisa a Dirección.</p>
+		<p class="secundario">Elegidos al azar cuando se subió el extracto. El monto no se muestra a propósito: míralo en tu app. Si alguno no está en tu app del banco, no confirmes: puede ser un extracto alterado. Avisa a Dirección.</p>
 		<table class="tabla" data-seccion="muestra">
-			<thead><tr><th scope="col">Fecha</th><th scope="col">Tipo</th><th scope="col" class="num">Monto</th><th scope="col">Descripción</th><th scope="col">Operación</th></tr></thead>
+			<thead><tr><th scope="col">Fecha</th><th scope="col">Descripción</th><th scope="col">Operación</th></tr></thead>
 			<tbody>
 				<tr th:each="m : ${c.muestra}">
 					<td data-etiqueta="Fecha" th:text="${#temporals.format(m.fecha, 'dd/MM/yyyy')}">05/10/2026</td>
-					<td data-etiqueta="Tipo" th:text="${m.tipo}">Abono</td>
-					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${m.monto})}"></span></td>
 					<td data-etiqueta="Descripción" th:text="${m.descripcion}">YAPE</td>
 					<td data-etiqueta="Operación" th:text="${m.operacion} ?: '—'">123456</td>
 				</tr>
@@ -56,7 +55,8 @@
 	<form method="post" class="formulario formulario-angosto tarjeta" th:action="@{/conciliacion/cuentas/{id}/confirmar(id=${c.cuentaId})}"
 		th:if="${c.porConfirmar() and !c.participaste}" data-formulario="confirmar">
 		<h2 th:text="|2. Escribe el saldo que muestra tu app del banco al cierre del ${#temporals.format(c.cierreDel, 'dd/MM/yyyy')}|">2. Escribe el saldo</h2>
-		<input type="hidden" name="extracto" th:value="${c.ultimoId}">
+		<p class="secundario" th:text="|Extracto del ${#temporals.format(c.desdeDel, 'dd/MM/yyyy')} al ${#temporals.format(c.cierreDel, 'dd/MM/yyyy')}.|">Extracto del 05/10/2026</p>
+		<input type="hidden" name="extracto" th:value="${c.extractoId}">
 		<input type="hidden" name="version" th:value="${c.version}">
 		<div class="campo">
 			<label for="saldoVisto">Saldo al cierre según tu app (S/)</label>

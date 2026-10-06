@@ -86,8 +86,12 @@ public class ResumenConciliacion {
 				.map(c -> new VistaDiferencias.CuentaPorConfirmar(c.id(), c.banco() + " · " + c.numero() + " · " + c.alias(),
 						c.porConfirmar(), c.cargadoHasta()))
 				.toList();
+		// S4-A1: quien confirma a ciegas no ve movimientos de extractos por confirmar (ni sus montos ni sus parejas).
+		boolean confirma = puedeConfirmar();
 		// Sugeridas, con lo emparejado.
-		List<PartidaConciliacion> sugeridas = diferencias.sugeridas();
+		List<PartidaConciliacion> sugeridas = diferencias.sugeridas().stream()
+				.filter(p -> !confirma || p.getMovimiento().getExtracto().getEstado() == EstadoExtracto.CONFIRMADO)
+				.toList();
 		Map<String, ObjetoAbierto> objetosDeSugeridas = sugeridas.isEmpty() ? Map.of()
 				: objetosAlrededor(sugeridas.stream().map(p -> p.getMovimiento().getFecha()).toList());
 		List<VistaDiferencias.Sugerida> vistasSugeridas = sugeridas.stream().map(p -> {
@@ -109,17 +113,17 @@ public class ResumenConciliacion {
 					m.getExtracto().getEstado() == EstadoExtracto.CONFIRMADO);
 		}).toList();
 		// Movimientos sin pareja, con lo que se podría emparejar a mano.
-		List<MovimientoBancario> sinPareja = diferencias.sinPareja(hoy);
+		List<MovimientoBancario> sinPareja = diferencias.sinPareja(hoy).stream()
+				.filter(m -> !confirma || m.getExtracto().getEstado() == EstadoExtracto.CONFIRMADO).toList();
 		List<ObjetoAbierto> abiertos = sinPareja.isEmpty() ? List.of() : objetos.abiertos(
 				sinPareja.getFirst().getFecha().minusDays(ServicioPartidas.DIAS_POSIBLES),
 				sinPareja.stream().map(MovimientoBancario::getFecha).max(Comparator.naturalOrder()).orElseThrow()
 						.plusDays(ServicioPartidas.DIAS_POSIBLES));
 		List<VistaDiferencias.SinPareja> vistasSinPareja = sinPareja.stream()
-				// Los cargos sin pareja no son diferencias (egresos ajenos a la cobranza): se ven en el detalle del extracto.
 				.filter(m -> m.getTipo() == TipoMovimiento.ABONO)
-				.map(m -> new VistaDiferencias.SinPareja(m.getId(), m.getFecha(), m.getTipo().etiqueta(),
-						m.getTipo() == TipoMovimiento.ABONO, m.getMonto(), m.getDescripcion(), m.getNumeroOperacion(),
-						DiferenciasConciliacion.abonoCritico(m, hoy), m.getExtracto().getEstado() == EstadoExtracto.CONFIRMADO,
+				.map(m -> new VistaDiferencias.SinPareja(m.getId(), m.getFecha(), m.getTipo().etiqueta(), true, m.getMonto(),
+						m.getDescripcion(), m.getNumeroOperacion(), DiferenciasConciliacion.abonoCritico(m, hoy),
+						m.getExtracto().getEstado() == EstadoExtracto.CONFIRMADO,
 						abiertos.stream().filter(o -> o.tipo().movimiento() == m.getTipo()
 								&& ReglasEmparejamiento.montoAdmitido(m.getMonto(), o, propiedades.toleranciaMontoLiquidacion())
 								&& Math.abs(o.fecha().toEpochDay() - m.getFecha().toEpochDay()) <= ServicioPartidas.DIAS_POSIBLES)
@@ -131,12 +135,20 @@ public class ResumenConciliacion {
 												.Calendario.formatear(o.fecha())))
 								.toList()))
 				.toList();
+		// S4-A2: los cargos sin pareja ya no se ignoran: los explica alguien que no subió el extracto.
+		List<VistaDiferencias.SinPareja> cargos = sinPareja.stream()
+				.filter(m -> m.getTipo() == TipoMovimiento.CARGO)
+				.map(m -> new VistaDiferencias.SinPareja(m.getId(), m.getFecha(), m.getTipo().etiqueta(), false,
+						m.getMonto(), m.getDescripcion(), m.getNumeroOperacion(),
+						ReglasEmparejamiento.diasHabilesEntre(m.getFecha(), hoy) > 2,
+						m.getExtracto().getEstado() == EstadoExtracto.CONFIRMADO, List.of()))
+				.toList();
 		List<VistaDiferencias.Faltante> faltantes = diferencias.faltantes(hoy).stream()
 				.map(f -> new VistaDiferencias.Faltante(f.objeto().tipo().etiqueta(), f.objeto().detalle(),
 						f.objeto().fecha(), f.objeto().monto(), f.objeto().operacion()))
 				.toList();
 		return new VistaDiferencias(hoy, cobertura.map(DiferenciasConciliacion.Cobertura::hasta).orElse(null), resumen(),
-				porConfirmar, vistasSugeridas, vistasSinPareja, faltantes, tieneRol("ROLE_ADMINISTRACION"),
+				porConfirmar, vistasSugeridas, vistasSinPareja, cargos, faltantes, tieneRol("ROLE_ADMINISTRACION"),
 				tieneRol("ROLE_PROMOTOR") || tieneRol("ROLE_DIRECTOR"), opciones(TipoMovimiento.ABONO),
 				opciones(TipoMovimiento.CARGO));
 	}
@@ -158,6 +170,7 @@ public class ResumenConciliacion {
 		ExtractoBancario e = extractos.findById(id)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Extracto no encontrado"));
 		boolean confirmado = e.getEstado() == EstadoExtracto.CONFIRMADO;
+		boolean ocultos = montosOcultos(e);
 		List<MovimientoBancario> lista = movimientos.findByExtractoIdOrderByNumeroAsc(id);
 		Map<Long, PartidaConciliacion> parejas = lista.isEmpty() ? Map.of()
 				: partidas.findByMovimientoIdInOrderByIdAsc(lista.stream().map(MovimientoBancario::getId).toList()).stream()
@@ -167,7 +180,11 @@ public class ResumenConciliacion {
 			PartidaConciliacion p = parejas.get(m.getId());
 			String pareja;
 			String variante;
-			if (p == null) {
+			if (ocultos) {
+				pareja = "Se ve al confirmar";
+				variante = "neutro";
+			}
+			else if (p == null) {
 				pareja = "Sin pareja";
 				variante = m.getTipo() == TipoMovimiento.ABONO ? "peligro" : "neutro";
 			}
@@ -180,8 +197,9 @@ public class ResumenConciliacion {
 						: " · por confirmar") + " · " + p.getObjetoTipo().etiqueta();
 				variante = p.getEstado() == EstadoPartida.CONFIRMADA ? "exito" : "alerta";
 			}
-			return new DetalleExtracto.Movimiento(m.getNumero(), m.getFecha(), m.getTipo().etiqueta(), m.getMonto(),
-					confirmado ? m.getSaldo() : null, m.getDescripcion(), m.getNumeroOperacion(), pareja, variante);
+			return new DetalleExtracto.Movimiento(m.getNumero(), m.getFecha(), ocultos ? null : m.getTipo().etiqueta(),
+					ocultos ? null : m.getMonto(), confirmado ? m.getSaldo() : null, m.getDescripcion(),
+					m.getNumeroOperacion(), pareja, variante);
 		}).toList();
 		String usuario = usuarioActual();
 		return new DetalleExtracto(e.getId(), e.getCuenta().getId(), e.getCuenta().descripcion(), e.getSecuencia(),
@@ -192,7 +210,26 @@ public class ResumenConciliacion {
 				e.getConfirmadoPor() == null ? null : nombres.de(e.getConfirmadoPor()), e.getConfirmadoEn(),
 				e.getMotivoRechazo(), e.getEstado() == EstadoExtracto.CARGADO && e.getCreadoPor().equals(usuario)
 						&& !extractos.existsByAnteriorIdAndSecuenciaVigenteIsNotNull(e.getId()),
-				filas);
+				ocultos, filas);
+	}
+
+	/**
+	 * S4-A1: quien puede confirmar extractos (Promotoría o Dirección) no ve los montos ni los tipos de un extracto que no
+	 * está CONFIRMADO si él, u otro de la misma cuenta con días superpuestos (por ejemplo, uno descartado o rechazado con
+	 * los mismos días), está por confirmar.
+	 */
+	private boolean montosOcultos(ExtractoBancario e) {
+		if (e.getEstado() == EstadoExtracto.CONFIRMADO || !puedeConfirmar()) {
+			return false;
+		}
+		return e.getEstado() == EstadoExtracto.CARGADO
+				|| extractos.existsByCuentaIdAndEstadoAndDesdeLessThanEqualAndHastaGreaterThanEqual(e.getCuenta().getId(),
+						EstadoExtracto.CARGADO, e.getHasta(), e.getDesde());
+	}
+
+	/** Promotoría o Dirección: confirman extractos y recaudaciones a ciegas. */
+	private static boolean puedeConfirmar() {
+		return tieneRol("ROLE_PROMOTOR") || tieneRol("ROLE_DIRECTOR");
 	}
 
 	/** El resumen del último extracto vigente: cuántos movimientos, cuántos con pareja, sugeridos y sin pareja. */

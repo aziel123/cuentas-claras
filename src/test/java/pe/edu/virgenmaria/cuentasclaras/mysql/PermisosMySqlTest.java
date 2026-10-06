@@ -1468,6 +1468,9 @@ class PermisosMySqlTest {
 				.isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE lote_recaudacion SET total_ciego = total_ciego + 1 WHERE id = ?",
 				lote))).isEqualTo(1644);
+		// S4-A1: la muestra fija del lote no se reescribe.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE lote_recaudacion SET muestra = '1' WHERE id = ?", lote)))
+				.isEqualTo(1143);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE linea_recaudacion SET estado = 'PENDIENTE' WHERE id = ?", aplicada)))
 				.isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE linea_recaudacion SET motivo_excepcion = 'EXCESO' WHERE id = ?",
@@ -1479,9 +1482,9 @@ class PermisosMySqlTest {
 		// El mismo archivo no se vuelve a cargar mientras su lote está vigente (UNIQUE sobre su SHA-256).
 		assertThat(codigoAl(() -> jdbc.update("INSERT INTO lote_recaudacion (colegio_id, archivo_id, archivo_sha256, "
 				+ "sha_vigente, banco, formato, fecha_proceso, desde, hasta, lineas, total, estado, intentos_confirmacion, "
-				+ "lineas_aplicadas, lineas_excepcion, monto_aplicado, monto_excepcion, creado_en, creado_por, "
+				+ "lineas_aplicadas, lineas_excepcion, monto_aplicado, monto_excepcion, muestra, creado_en, creado_por, "
 				+ "actualizado_en) SELECT colegio_id, archivo_id, archivo_sha256, sha_vigente, banco, formato, fecha_proceso, "
-				+ "desde, hasta, lineas, total, 'CARGADO', 0, 0, 0, 0, 0, NOW(6), 'otra', NOW(6) FROM lote_recaudacion "
+				+ "desde, hasta, lineas, total, 'CARGADO', 0, 0, 0, 0, 0, muestra, NOW(6), 'otra', NOW(6) FROM lote_recaudacion "
 				+ "WHERE id = ?", lote))).isEqualTo(1062);
 	}
 
@@ -1676,11 +1679,11 @@ class PermisosMySqlTest {
 		UsuariosDePrueba.iniciarSesion(persona(513, "director.conc", Rol.DIRECTOR));
 		try {
 			var vista = servicioExtractos.paraConfirmar(cuenta);
-			assertThatThrownBy(() -> servicioExtractos.confirmar(cuenta, vista.ultimoId(), vista.version(),
+			assertThatThrownBy(() -> servicioExtractos.confirmar(cuenta, vista.extractoId(), vista.version(),
 					extracto.saldoFinal().add(java.math.BigDecimal.ONE)))
 					.isInstanceOf(pe.edu.virgenmaria.cuentasclaras.conciliacion.service.SaldoNoCoincideException.class);
 			var otraVez = servicioExtractos.paraConfirmar(cuenta);
-			servicioExtractos.confirmar(cuenta, otraVez.ultimoId(), otraVez.version(), extracto.saldoFinal());
+			servicioExtractos.confirmar(cuenta, otraVez.extractoId(), otraVez.version(), extracto.saldoFinal());
 		}
 		finally {
 			SecurityContextHolder.clearContext();
@@ -1716,6 +1719,31 @@ class PermisosMySqlTest {
 		finally {
 			SecurityContextHolder.clearContext();
 		}
+		// S4-A2: el cargo (ITF) no lo explica quien subió el extracto, ni por la aplicación ni por SQL.
+		Long itf = jdbc.queryForObject("SELECT id FROM movimiento_bancario WHERE extracto_id = ? AND descripcion = "
+				+ "'IMPUESTO ITF'", Long.class, id);
+		UsuariosDePrueba.iniciarSesion(administracion);
+		try {
+			assertThatThrownBy(() -> servicioPartidas.explicar(itf,
+					pe.edu.virgenmaria.cuentasclaras.conciliacion.model.CategoriaExplicacion.IMPUESTO_ITF,
+					"Impuesto a las transacciones financieras")).isInstanceOf(
+							pe.edu.virgenmaria.cuentasclaras.cobranza.model.AutoaprobacionException.class);
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO partida_conciliacion (colegio_id, movimiento_id, "
+				+ "movimiento_vigente, objeto_tipo, regla, monto_movimiento, monto_objeto, diferencia, estado, categoria, "
+				+ "nota, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'EXPLICACION', 'EXPLICADA', 0.45, 0.45, 0, "
+				+ "'PROPUESTA', 'IMPUESTO_ITF', 'Impuesto ITF del día', NOW(6), ?, NOW(6))", itf, itf,
+				administracion.getUsername()))).isNull();
+		Long explicacion = jdbc.queryForObject("SELECT id FROM partida_conciliacion WHERE movimiento_vigente = ?",
+				Long.class, itf);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET estado = 'CONFIRMADA', resuelto_por = ?, "
+				+ "resuelto_en = NOW(6) WHERE id = ?", administracion.getUsername(), explicacion))).isEqualTo(1644);
+		// Promotoría (que no lo subió) lo explica mirando su app del banco.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET estado = 'CONFIRMADA', resuelto_por = ?, "
+				+ "resuelto_en = NOW(6) WHERE id = ?", "promotora.conc." + sufijo, explicacion))).isNull();
 		assertThat(jdbc.queryForList("SELECT CONCAT(origen, ' ', resultado, ' ', creado_por) FROM verificacion_bancaria "
 				+ "WHERE pago_id IN (?, ?) ORDER BY pago_id", String.class, pagoBanco, yape))
 				.containsExactly("AUTOMATICA ENCONTRADO sistema.conciliacion", "AUTOMATICA ENCONTRADO sistema.conciliacion");
@@ -1779,9 +1807,20 @@ class PermisosMySqlTest {
 		SecurityContextHolder.clearContext();
 		String insertar = "INSERT INTO extracto_bancario (colegio_id, cuenta_id, secuencia, secuencia_vigente, anterior_id, "
 				+ "archivo_id, archivo_sha256, formato, desde, hasta, saldo_inicial, total_abonos, total_cargos, saldo_final, "
-				+ "movimientos, estado, creado_en, creado_por, actualizado_en) SELECT colegio_id, cuenta_id, 2, 2, id, "
-				+ "archivo_id, archivo_sha256, formato, ?, ?, ?, 0, 0, ?, 0, 'CARGADO', NOW(6), 'x', NOW(6) "
-				+ "FROM extracto_bancario WHERE id = ?";
+				+ "movimientos, muestra, semilla_muestreo, estado, creado_en, creado_por, actualizado_en) SELECT colegio_id, "
+				+ "cuenta_id, 2, 2, id, archivo_id, archivo_sha256, formato, ?, ?, ?, 0, 0, ?, 0, '', 7, 'CARGADO', NOW(6), "
+				+ "'x', NOW(6) FROM extracto_bancario WHERE id = ?";
+		// S4-A1 y S4-A2: sin muestra fija ni semilla secreta, un extracto no nace.
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO extracto_bancario (colegio_id, cuenta_id, secuencia, "
+				+ "secuencia_vigente, archivo_id, archivo_sha256, formato, desde, hasta, saldo_inicial, total_abonos, "
+				+ "total_cargos, saldo_final, movimientos, estado, creado_en, creado_por, actualizado_en) SELECT colegio_id, "
+				+ "cuenta_id, 9, 9, archivo_id, archivo_sha256, formato, desde, hasta, 0, 0, 0, 0, 0, 'CARGADO', NOW(6), "
+				+ "'x', NOW(6) FROM extracto_bancario WHERE id = ?", id))).isEqualTo(1644);
+		// La muestra y la semilla no se reescriben.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE extracto_bancario SET muestra = '' WHERE id = ?", id)))
+				.isEqualTo(1143);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE extracto_bancario SET semilla_muestreo = 1 WHERE id = ?", id)))
+				.isEqualTo(1143);
 		// No continúa el saldo (falta un movimiento) o se superpone con el día ya cargado.
 		assertThat(codigoAl(() -> jdbc.update(insertar, ayer(), ayer(), "999.00", "999.00", id))).isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update(insertar, anteayer, ayer(), "1000.00", "1000.00", id))).isEqualTo(1644);
@@ -1808,16 +1847,23 @@ class PermisosMySqlTest {
 				id2))).isNull();
 		assertThat(codigoAl(() -> jdbc.update("UPDATE extracto_bancario SET estado = 'CONFIRMADO', confirmado_por = 'otra', "
 				+ "confirmado_en = NOW(6), confirmacion_extracto_id = id WHERE id = ?", id2))).isEqualTo(1644);
-		// La cadena se confirma junta por la aplicación (con el saldo del último, ya escrito arriba por SQL: la vista
-		// cambió de versión, así que se vuelve a leer).
+		// S4-A2: el primero ya no se confirma con el saldo a ciegas del segundo (la «cadena» sellada por el último).
+		assertThat(codigoAl(() -> jdbc.update("UPDATE extracto_bancario SET estado = 'CONFIRMADO', confirmado_por = 'otra', "
+				+ "confirmado_en = NOW(6), confirmacion_extracto_id = ? WHERE id = ?", id2, id))).isEqualTo(1644);
+		// Por la aplicación se confirma de uno en uno: primero el más antiguo, con su propio saldo.
 		UsuariosDePrueba.iniciarSesion(persona(522, "director.cadena", Rol.DIRECTOR));
 		try {
 			var vista = servicioExtractos.paraConfirmar(cuenta);
 			assertThat(vista.pendientes()).hasSize(2);
+			assertThat(vista.extractoId()).isEqualTo(id);
+			servicioExtractos.confirmar(cuenta, vista.extractoId(), vista.version(), primero.saldoFinal());
+			assertThat(servicioExtractos.paraConfirmar(cuenta).extractoId()).isEqualTo(id2);
 		}
 		finally {
 			SecurityContextHolder.clearContext();
 		}
+		assertThat(jdbc.queryForObject("SELECT CONCAT(estado, ' ', confirmacion_extracto_id = id) FROM extracto_bancario "
+				+ "WHERE id = ?", String.class, id)).isEqualTo("CONFIRMADO 1");
 		// exactaConOtraOperacionFallaCon1644: una pareja EXACTA con un Yape de otra operación.
 		Long movimiento = jdbc.queryForObject("SELECT id FROM movimiento_bancario WHERE extracto_id = ?", Long.class, id2);
 		java.util.Map<String, Object> otroPago = jdbc.queryForMap("SELECT id, total FROM pago WHERE medio <> 'EFECTIVO' "
@@ -1864,7 +1910,7 @@ class PermisosMySqlTest {
 		UsuariosDePrueba.iniciarSesion(persona(613, "director.aud6", Rol.DIRECTOR));
 		try {
 			var vista = servicioExtractos.paraConfirmar(cuenta);
-			servicioExtractos.confirmar(cuenta, vista.ultimoId(), vista.version(), extracto.saldoFinal());
+			servicioExtractos.confirmar(cuenta, vista.extractoId(), vista.version(), extracto.saldoFinal());
 		}
 		finally {
 			SecurityContextHolder.clearContext();
