@@ -16,6 +16,11 @@ public interface IndicadoresInicio {
 	/** Enlace al detalle o {@code null}. */
 	String enlace();
 
+	/** Texto del enlace al detalle. */
+	default String textoEnlace() {
+		return "Ver detalle";
+	}
+
 	record Indicador(String etiqueta, String valor, String detalle) {
 	}
 }

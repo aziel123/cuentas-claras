@@ -70,9 +70,10 @@ public enum ModuloApp {
 	REPORTES("Reportes", "Reportes de cobranza y exportación a Excel.", "Sprint 5", false, "/reportes",
 			new String[] { "/reportes", "/reportes/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 
-	CONCILIACION("Conciliación bancaria", "Verifica en el banco los Yape, Plin, transferencias y depósitos de caja.",
-			"Sprint 3 (verificación)", true, "/conciliacion", new String[] { "/conciliacion", "/conciliacion/**" },
-			EnumSet.of(PROMOTOR, ADMINISTRACION)),
+	CONCILIACION("Conciliación bancaria", "Sube el extracto del banco cada día: el sistema empareja solo los Yape, "
+			+ "depósitos, pagos en línea y recaudación, y te muestra solo las diferencias.",
+			"Sprint 4 (automática)", true, "/conciliacion", new String[] { "/conciliacion", "/conciliacion/**" },
+			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 
 	ACADEMICO("Académico", "Asistencia, notas por competencias y exportación al SIAGIE.", "Más adelante", false,
 			"/academico", new String[] { "/academico", "/academico/**" }, EnumSet.of(DIRECTOR, DOCENTE)),

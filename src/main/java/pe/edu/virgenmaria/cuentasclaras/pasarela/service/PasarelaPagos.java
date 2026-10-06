@@ -4,6 +4,8 @@ import pe.edu.virgenmaria.cuentasclaras.pasarela.model.EstadoCobro;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.model.ProveedorPasarela;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -34,4 +36,10 @@ public interface PasarelaPagos {
 
 	/** Reembolsa el cargo (total o parcial) al mismo medio de origen. */
 	ReembolsoPasarela reembolsar(String cargoId, BigDecimal monto, String motivo);
+
+	/**
+	 * Liquidaciones (lo que la pasarela abona al banco del colegio, neto de su comisión y del IGV de la comisión) cuya
+	 * fecha de abono está entre {@code desde} y {@code hasta}, ambos incluidos (sprint 4, tanda 3).
+	 */
+	List<LiquidacionLeida> liquidaciones(LocalDate desde, LocalDate hasta);
 }

@@ -98,13 +98,32 @@ GRANT INSERT, UPDATE (estado, sha_vigente, intentos_confirmacion, total_ciego, c
     actualizado_en, version) ON cuentasclaras.lote_recaudacion TO 'cc_app'@'%';
 GRANT INSERT, UPDATE (estado, motivo_excepcion, detalle, devolucion_operacion, devuelto_por, devuelto_en, actualizado_en,
     version) ON cuentasclaras.linea_recaudacion TO 'cc_app'@'%';
+-- Sprint 4 · tanda 3 (V15): extracto, conciliación y liquidaciones de la pasarela. Tablas financieras: NUNCA DELETE.
+-- La cuenta no cambia su número (se desactiva). Del extracto no cambian la cuenta, la secuencia, el archivo, las fechas
+-- ni los saldos (trg_extracto_bancario_estado vigila la confirmación a ciegas en cadena). Los movimientos y las
+-- liquidaciones son de SOLO INSERCIÓN. De la partida no cambian el movimiento, el objeto, la regla ni los montos
+-- (trg_partida_conciliacion_estado: una partida resuelta no cambia). verificacion_bancaria no cambia su GRANT: sus
+-- columnas nuevas (origen, partida_id) son inmutables y la tabla sigue siendo de solo inserción.
+GRANT INSERT, UPDATE (activa, actualizado_en, version) ON cuentasclaras.cuenta_bancaria TO 'cc_app'@'%';
+GRANT INSERT, UPDATE (estado, secuencia_vigente, intentos_confirmacion, saldo_final_ciego, confirmacion_extracto_id,
+    confirmado_por, confirmado_en, rechazado_por, rechazado_en, motivo_rechazo, actualizado_en, version)
+    ON cuentasclaras.extracto_bancario TO 'cc_app'@'%';
+GRANT INSERT ON cuentasclaras.movimiento_bancario TO 'cc_app'@'%';                -- solo inserción
+GRANT INSERT ON cuentasclaras.liquidacion_pasarela TO 'cc_app'@'%';               -- solo inserción
+GRANT INSERT ON cuentasclaras.liquidacion_linea TO 'cc_app'@'%';                  -- solo inserción
+GRANT INSERT, UPDATE (estado, movimiento_vigente, objeto_vigente, resuelto_por, resuelto_en, actualizado_en, version)
+    ON cuentasclaras.partida_conciliacion TO 'cc_app'@'%';
 
 -- M2: cc_app no lee information_schema.TRIGGERS (necesitaría el privilegio TRIGGER, que no debe tener). Esta función
 -- (SQL SECURITY DEFINER: corre con los permisos de quien la crea) devuelve solo los nombres de los triggers del esquema,
 -- separados por comas; al arrancar en prod, VerificadorPermisosBaseDatos los compara con la lista de 03-triggers.sql.
 -- (Una vista DEFINER no sirve: MySQL 8 filtra information_schema con los permisos de quien consulta y cc_app vería 0.)
 DROP FUNCTION IF EXISTS cuentasclaras.triggers_instalados;
+-- Sprint 4, tanda 3: JSON_ARRAYAGG en lugar de GROUP_CONCAT. Con 40 triggers la lista pasa de 1024 caracteres
+-- (group_concat_max_len por defecto) y GROUP_CONCAT la cortaba: dentro de una función eso es el error 1260 y la
+-- aplicación no arrancaba. Los nombres solo tienen letras, dígitos y «_», así que quitar [ ] " y espacios es seguro.
 CREATE FUNCTION cuentasclaras.triggers_instalados() RETURNS TEXT READS SQL DATA SQL SECURITY DEFINER
-    RETURN (SELECT COALESCE(GROUP_CONCAT(TRIGGER_NAME ORDER BY TRIGGER_NAME SEPARATOR ','), '')
+    RETURN (SELECT COALESCE(REPLACE(REPLACE(REPLACE(REPLACE(JSON_ARRAYAGG(TRIGGER_NAME), '[', ''), ']', ''), '"', ''),
+        ' ', ''), '')
         FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'cuentasclaras');
 GRANT EXECUTE ON FUNCTION cuentasclaras.triggers_instalados TO 'cc_app'@'%';

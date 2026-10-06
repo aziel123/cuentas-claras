@@ -17,9 +17,25 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Sprint 4 (tanda 3): la conciliación apunta a pagos, depósitos, lotes, liquidaciones y reembolsos; el extracto se
+		// apunta a sí mismo (el anterior y el que lo confirmó): se borra del último al primero.
+		jdbc.update("DELETE FROM verificacion_bancaria");
+		jdbc.update("DELETE FROM partida_conciliacion");
+		jdbc.update("DELETE FROM movimiento_bancario");
+		// Una cadena confirmada junta se apunta en círculo (el anterior lo confirmó el siguiente): se corta apuntando cada
+		// uno a sí mismo (sigue cumpliendo los CHECK; solo en H2, en MySQL no se limpia).
+		jdbc.update("UPDATE extracto_bancario SET confirmacion_extracto_id = id WHERE confirmacion_extracto_id IS NOT NULL");
+		for (int vuelta = 0; vuelta < 1000 && jdbc.queryForObject("SELECT COUNT(*) FROM extracto_bancario", Long.class) > 0;
+				vuelta++) {
+			jdbc.update("DELETE FROM extracto_bancario e WHERE NOT EXISTS (SELECT 1 FROM extracto_bancario s "
+					+ "WHERE s.anterior_id = e.id) AND NOT EXISTS (SELECT 1 FROM extracto_bancario c "
+					+ "WHERE c.confirmacion_extracto_id = e.id AND c.id <> e.id)");
+		}
+		jdbc.update("DELETE FROM cuenta_bancaria");
+		jdbc.update("DELETE FROM liquidacion_linea");
+		jdbc.update("DELETE FROM liquidacion_pasarela");
 		// Sprint 3 (tanda 3): verificación bancaria, depósitos y cierres; (tanda 2): descuentos y anulaciones.
 		jdbc.update("DELETE FROM reembolso");
-		jdbc.update("DELETE FROM verificacion_bancaria");
 		jdbc.update("DELETE FROM deposito_caja");
 		jdbc.update("DELETE FROM cierre_caja");
 		jdbc.update("DELETE FROM ajuste_cuota");

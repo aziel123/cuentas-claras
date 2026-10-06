@@ -161,7 +161,7 @@ class CierreCajaWebTest {
 	 */
 	@Test
 	void verificacionBancariaAciegasPorAdministracion() throws Exception {
-		mvc.perform(get("/conciliacion").with(como(ADMINISTRACION)))
+		mvc.perform(get("/conciliacion/verificacion").with(como(ADMINISTRACION)))
 				.andExpect(status().isOk()).andExpect(view().name("conciliacion/verificacion"))
 				.andExpect(content().string(not(containsString("YP123987"))))
 				.andExpect(content().string(containsString("action=\"/conciliacion/pagos/" + yape + "\"")))
@@ -169,7 +169,7 @@ class CierreCajaWebTest {
 				.andExpect(content().string(containsString("name=\"monto\"")))
 				.andExpect(content().string(containsString("No aparece")));
 		// Promotoría ve, pero no verifica.
-		mvc.perform(get("/conciliacion").with(como(PROMOTORIA)))
+		mvc.perform(get("/conciliacion/verificacion").with(como(PROMOTORIA)))
 				.andExpect(status().isOk())
 				.andExpect(content().string(not(containsString("YP123987"))))
 				.andExpect(content().string(not(containsString("action=\"/conciliacion/pagos/"))));
@@ -183,7 +183,7 @@ class CierreCajaWebTest {
 		mvc.perform(post("/conciliacion/pagos/{id}", yape).with(csrf()).with(como(ADMINISTRACION))
 						.param("resultado", "ENCONTRADO").param("operacion", "yp-123987").param("fecha", "2026-10-02")
 						.param("monto", "45.00"))
-				.andExpect(redirectedUrl("/conciliacion"))
+				.andExpect(redirectedUrl("/conciliacion/verificacion"))
 				.andExpect(flash().attribute("error", containsString("no coincide")));
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM verificacion_bancaria", Long.class)).isZero();
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'VERIFICACION_NO_COINCIDE'",
@@ -191,10 +191,10 @@ class CierreCajaWebTest {
 		mvc.perform(post("/conciliacion/pagos/{id}", yape).with(csrf()).with(como(ADMINISTRACION))
 						.param("resultado", "ENCONTRADO").param("operacion", "yp-123987").param("fecha", "2026-10-02")
 						.param("monto", "450"))
-				.andExpect(redirectedUrl("/conciliacion")).andExpect(flash().attributeExists("exito"));
+				.andExpect(redirectedUrl("/conciliacion/verificacion")).andExpect(flash().attributeExists("exito"));
 		assertThat(jdbc.queryForMap("SELECT resultado, banco_operacion FROM verificacion_bancaria"))
 				.containsEntry("resultado", "ENCONTRADO").containsEntry("banco_operacion", "YP123987");
-		mvc.perform(get("/conciliacion").with(como(ADMINISTRACION)))
+		mvc.perform(get("/conciliacion/verificacion").with(como(ADMINISTRACION)))
 				.andExpect(content().string(containsString("Encontrado")))
 				.andExpect(content().string(not(containsString("action=\"/conciliacion/pagos/"))));
 	}
@@ -262,7 +262,7 @@ class CierreCajaWebTest {
 		Long anulacion = jdbc.queryForObject("SELECT id FROM anulacion_pago", Long.class);
 		mvc.perform(post("/conciliacion/devoluciones/{id}", anulacion).with(csrf()).with(como(ADMINISTRACION))
 						.param("recibidoPorNombre", "Rosa Huamán Ccori").param("recibidoPorDocumento", "45678912"))
-				.andExpect(redirectedUrl("/conciliacion")).andExpect(flash().attributeExists("exito"));
+				.andExpect(redirectedUrl("/conciliacion/verificacion")).andExpect(flash().attributeExists("exito"));
 		assertThat(jdbc.queryForObject("SELECT medio FROM reembolso", String.class)).isEqualTo("EFECTIVO");
 	}
 }

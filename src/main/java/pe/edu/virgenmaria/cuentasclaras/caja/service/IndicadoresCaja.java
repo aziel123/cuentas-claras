@@ -26,6 +26,7 @@ import java.util.List;
  * digital (el sistema empuja a lo digital) y cuántas cajas están abiertas o cerradas, y cuántas con diferencia.
  */
 @Service
+@org.springframework.core.annotation.Order(1)
 @Transactional(readOnly = true)
 @PreAuthorize("hasRole('PROMOTOR')")
 public class IndicadoresCaja implements IndicadoresInicio {
@@ -81,5 +82,10 @@ public class IndicadoresCaja implements IndicadoresInicio {
 	@Override
 	public String enlace() {
 		return "/aprobaciones/cajas";
+	}
+
+	@Override
+	public String textoEnlace() {
+		return "Ver cajas del día";
 	}
 }

@@ -184,9 +184,17 @@ class MatrizPermisosTest {
 	}
 
 	@ParameterizedTest
-	@EnumSource(value = Rol.class, names = { "CAJA", "DIRECTOR", "DOCENTE", "APODERADO" })
-	void verificacionBancariaNoEsDeCajaNiDireccion(Rol rol) throws Exception {
-		mvc.perform(get("/conciliacion").with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+	@EnumSource(value = Rol.class, names = { "CAJA", "DOCENTE", "APODERADO" })
+	void conciliacionNoEsDeCajaDocenteNiApoderado(Rol rol) throws Exception {
+		for (String ruta : new String[] { "/conciliacion", "/conciliacion/verificacion", "/conciliacion/extractos",
+				"/conciliacion/extractos/1", "/conciliacion/cuentas", "/conciliacion/cuentas/1/confirmar" }) {
+			mvc.perform(get(ruta).with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+		}
+		for (String ruta : new String[] { "/conciliacion/extractos/vista-previa", "/conciliacion/extractos",
+				"/conciliacion/cuentas/1/confirmar", "/conciliacion/partidas/1/confirmar", "/conciliacion/partidas/1/descartar",
+				"/conciliacion/movimientos/1/emparejar", "/conciliacion/movimientos/1/explicar", "/conciliacion/cuentas" }) {
+			mvc.perform(post(ruta).with(csrf()).with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+		}
 		mvc.perform(post("/conciliacion/pagos/1").with(csrf()).with(UsuariosDePrueba.como(rol))
 				.param("resultado", "ENCONTRADO")).andExpect(status().isForbidden());
 		mvc.perform(post("/conciliacion/depositos/1").with(csrf()).with(UsuariosDePrueba.como(rol))
@@ -202,6 +210,7 @@ class MatrizPermisosTest {
 	@Test
 	void promotoriaVeConciliacionPeroNoVerifica() throws Exception {
 		mvc.perform(get("/conciliacion").with(UsuariosDePrueba.como(Rol.PROMOTOR))).andExpect(status().isOk());
+		mvc.perform(get("/conciliacion/verificacion").with(UsuariosDePrueba.como(Rol.PROMOTOR))).andExpect(status().isOk());
 		mvc.perform(post("/conciliacion/pagos/1").with(csrf()).with(UsuariosDePrueba.como(Rol.PROMOTOR))
 				.param("resultado", "ENCONTRADO").param("operacion", "12345678").param("fecha", "2026-10-02")
 				.param("monto", "450.00")).andExpect(status().isForbidden());
@@ -210,6 +219,28 @@ class MatrizPermisosTest {
 				.andExpect(status().isForbidden());
 		mvc.perform(post("/conciliacion/devoluciones/1").with(csrf()).with(UsuariosDePrueba.como(Rol.PROMOTOR))
 				.param("numeroOperacion", "REM1234").param("cuentaDeOrigen", "true")).andExpect(status().isForbidden());
+	}
+
+	/**
+	 * Sprint 4, tanda 3: Dirección VE la conciliación y confirma extractos a ciegas, pero no verifica a mano, no sube
+	 * extractos, no revisa diferencias ni registra cuentas (los POST llegan al servicio, que exige el rol).
+	 */
+	@Test
+	void direccionVeLaConciliacionPeroNoLaOpera() throws Exception {
+		for (String ruta : new String[] { "/conciliacion", "/conciliacion/verificacion", "/conciliacion/extractos",
+				"/conciliacion/cuentas" }) {
+			mvc.perform(get(ruta).with(UsuariosDePrueba.como(Rol.DIRECTOR))).andExpect(status().isOk());
+		}
+		mvc.perform(post("/conciliacion/pagos/1").with(csrf()).with(UsuariosDePrueba.como(Rol.DIRECTOR))
+				.param("resultado", "NO_ENCONTRADO").param("nota", "No figura en el estado de cuenta"))
+				.andExpect(status().isForbidden());
+		mvc.perform(post("/conciliacion/partidas/1/confirmar").with(csrf()).with(UsuariosDePrueba.como(Rol.DIRECTOR)))
+				.andExpect(status().isForbidden());
+		mvc.perform(post("/conciliacion/movimientos/1/explicar").with(csrf()).with(UsuariosDePrueba.como(Rol.DIRECTOR))
+				.param("categoria", "INTERESES").param("nota", "Intereses del mes de la cuenta")).andExpect(status().isForbidden());
+		mvc.perform(post("/conciliacion/cuentas").with(csrf()).with(UsuariosDePrueba.como(Rol.DIRECTOR))
+				.param("banco", "BCP").param("numero", "191-1234567-0-12").param("alias", "Otra cuenta"))
+				.andExpect(status().isForbidden());
 	}
 
 	/** Y al revés: Promotoría, Dirección y Administración no cobran. */

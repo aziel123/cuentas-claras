@@ -365,9 +365,10 @@ BEGIN
     END IF;
 END$$
 
--- Verifica contra el banco alguien que no cobró ni depositó; solo pagos digitales VIGENTES. «Encontrado» exige lo que
--- se vio en el banco (correcciones del sprint 3, C1 y A4): la misma operación y el mismo monto, y una fecha posible
--- (el pago: hasta 3 días después; el depósito: su fecha).
+-- (Reemplaza la versión de las correcciones del sprint 3.) Verifica alguien que no cobró ni depositó. MANUAL: lo
+-- escrito a ciegas coincide con el pago o el depósito. AUTOMATICA: sale de una partida CONFIRMADA sobre un extracto
+-- CONFIRMADO que cubre ese pago (directo, por su liquidación o por su lote) o ese depósito, y la inserta solo
+-- sistema.conciliacion (tanda 3: más estricto que el diseño).
 DROP TRIGGER IF EXISTS trg_verificacion_bancaria_registro$$
 CREATE TRIGGER trg_verificacion_bancaria_registro BEFORE INSERT ON verificacion_bancaria FOR EACH ROW
 BEGIN
@@ -381,15 +382,33 @@ BEGIN
             AND d.cajero <> NEW.creado_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: verifica un depósito alguien que no lo hizo';
     END IF;
-    IF NEW.resultado = 'ENCONTRADO' AND NEW.pago_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pago p
-            WHERE p.id = NEW.pago_id AND p.numero_operacion = NEW.banco_operacion AND p.total = NEW.banco_monto
-            AND NEW.banco_fecha BETWEEN p.fecha AND DATE_ADD(p.fecha, INTERVAL 3 DAY)) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: lo visto en el banco no coincide con el pago';
-    END IF;
-    IF NEW.resultado = 'ENCONTRADO' AND NEW.deposito_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM deposito_caja x
-            WHERE x.id = NEW.deposito_id AND x.numero_operacion = NEW.banco_operacion AND x.monto = NEW.banco_monto
-            AND x.fecha_deposito = NEW.banco_fecha) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: lo visto en el banco no coincide con el depósito';
+    IF NEW.origen = 'AUTOMATICA' THEN
+        IF NOT (NEW.creado_por <=> 'sistema.conciliacion') OR NOT EXISTS (SELECT 1 FROM partida_conciliacion pc JOIN movimiento_bancario m ON m.id = pc.movimiento_id
+                JOIN extracto_bancario e ON e.id = m.extracto_id
+                WHERE pc.id = NEW.partida_id AND pc.estado = 'CONFIRMADA' AND e.estado = 'CONFIRMADO'
+                AND m.fecha <=> NEW.banco_fecha
+                AND ((pc.objeto_tipo = 'PAGO' AND pc.pago_id <=> NEW.pago_id AND pc.monto_objeto <=> NEW.banco_monto)
+                    OR (pc.objeto_tipo = 'DEPOSITO' AND pc.deposito_id <=> NEW.deposito_id
+                        AND pc.monto_objeto <=> NEW.banco_monto)
+                    OR (pc.objeto_tipo = 'LIQUIDACION' AND EXISTS (SELECT 1 FROM liquidacion_linea l
+                        WHERE l.liquidacion_id = pc.liquidacion_id AND l.pago_id <=> NEW.pago_id AND l.tipo = 'CARGO'
+                        AND l.bruto <=> NEW.banco_monto))
+                    OR (pc.objeto_tipo = 'LOTE_RECAUDACION' AND EXISTS (SELECT 1 FROM pago p
+                        JOIN linea_recaudacion l ON l.id = p.linea_recaudacion_id WHERE p.id <=> NEW.pago_id
+                        AND l.lote_id = pc.lote_recaudacion_id AND p.total <=> NEW.banco_monto)))) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: verificación automática sin partida confirmada que la cubra';
+        END IF;
+    ELSE
+        IF NEW.resultado = 'ENCONTRADO' AND NEW.pago_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pago p
+                WHERE p.id = NEW.pago_id AND p.numero_operacion = NEW.banco_operacion AND p.total = NEW.banco_monto
+                AND NEW.banco_fecha BETWEEN p.fecha AND DATE_ADD(p.fecha, INTERVAL 3 DAY)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: lo visto en el banco no coincide con el pago';
+        END IF;
+        IF NEW.resultado = 'ENCONTRADO' AND NEW.deposito_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM deposito_caja x
+                WHERE x.id = NEW.deposito_id AND x.numero_operacion = NEW.banco_operacion AND x.monto = NEW.banco_monto
+                AND x.fecha_deposito = NEW.banco_fecha) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: lo visto en el banco no coincide con el depósito';
+        END IF;
     END IF;
 END$$
 
@@ -593,6 +612,130 @@ BEGIN
     END IF;
     IF OLD.estado <> 'PENDIENTE' AND NOT (NEW.motivo_excepcion <=> OLD.motivo_excepcion) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el motivo de la excepción no cambia';
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- ===================== Sprint 4 · tanda 3 (V15): extracto y conciliación automática =====================
+DELIMITER $$
+
+-- Continuidad: el extracto n+1 de una cuenta empieza el día siguiente al fin del n, con su saldo final, y el n sigue
+-- vigente. Nace CARGADO, sin confirmar y sin saldo ciego.
+DROP TRIGGER IF EXISTS trg_extracto_bancario_nace$$
+CREATE TRIGGER trg_extracto_bancario_nace BEFORE INSERT ON extracto_bancario FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> 'CARGADO') OR NOT (NEW.intentos_confirmacion <=> 0) OR NEW.saldo_final_ciego IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un extracto nace CARGADO y sin confirmar';
+    END IF;
+    IF NEW.secuencia > 1 AND NOT EXISTS (SELECT 1 FROM extracto_bancario a WHERE a.id = NEW.anterior_id
+            AND a.cuenta_id = NEW.cuenta_id AND a.estado IN ('CARGADO', 'CONFIRMADO') AND a.secuencia = NEW.secuencia - 1
+            AND a.saldo_final = NEW.saldo_inicial AND NEW.desde = a.hasta + INTERVAL 1 DAY) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el extracto no continúa al anterior (fechas o saldo)';
+    END IF;
+END$$
+
+-- CARGADO → CONFIRMADO | RECHAZADO | DESCARTADO. Confirmar exige el anterior ya confirmado, los movimientos completos
+-- y el saldo final escrito a ciegas (en este extracto o en uno posterior de la cadena). No se descarta un extracto que
+-- ya tiene uno siguiente vigente. Los intentos solo suben de uno en uno.
+DROP TRIGGER IF EXISTS trg_extracto_bancario_estado$$
+CREATE TRIGGER trg_extracto_bancario_estado BEFORE UPDATE ON extracto_bancario FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> OLD.estado) AND NOT (OLD.estado = 'CARGADO'
+            AND NEW.estado IN ('CONFIRMADO', 'RECHAZADO', 'DESCARTADO')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: cambio de estado del extracto no permitido';
+    END IF;
+    IF NOT (NEW.intentos_confirmacion <=> OLD.intentos_confirmacion) AND (OLD.estado <> 'CARGADO'
+            OR NOT (NEW.intentos_confirmacion <=> OLD.intentos_confirmacion + 1)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los intentos de confirmación no se reescriben';
+    END IF;
+    IF NOT (NEW.saldo_final_ciego <=> OLD.saldo_final_ciego) AND (OLD.saldo_final_ciego IS NOT NULL
+            OR OLD.estado <> 'CARGADO') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el saldo escrito a ciegas no se reescribe';
+    END IF;
+    IF NEW.estado = 'CONFIRMADO' AND OLD.estado = 'CARGADO' AND (
+            (NEW.anterior_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM extracto_bancario a WHERE a.id = NEW.anterior_id
+                AND a.estado = 'CONFIRMADO'))
+            OR NOT (NEW.movimientos <=> (SELECT COUNT(*) FROM movimiento_bancario m WHERE m.extracto_id = NEW.id))
+            OR NOT (NEW.total_abonos <=> (SELECT COALESCE(SUM(m.monto), 0.00) FROM movimiento_bancario m
+                WHERE m.extracto_id = NEW.id AND m.tipo = 'ABONO'))
+            OR NOT (NEW.total_cargos <=> (SELECT COALESCE(SUM(m.monto), 0.00) FROM movimiento_bancario m
+                WHERE m.extracto_id = NEW.id AND m.tipo = 'CARGO'))
+            OR NOT ((NEW.confirmacion_extracto_id <=> NEW.id AND NEW.saldo_final_ciego <=> NEW.saldo_final)
+                OR EXISTS (SELECT 1 FROM extracto_bancario c WHERE c.id = NEW.confirmacion_extracto_id
+                    AND c.cuenta_id = NEW.cuenta_id AND c.secuencia > NEW.secuencia AND c.estado = 'CARGADO'
+                    AND c.saldo_final_ciego = c.saldo_final))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el extracto se confirma completo, en orden y con el saldo a ciegas';
+    END IF;
+    IF NEW.estado IN ('RECHAZADO', 'DESCARTADO') AND OLD.estado = 'CARGADO' AND EXISTS (SELECT 1
+            FROM extracto_bancario s WHERE s.anterior_id = NEW.id AND s.estado IN ('CARGADO', 'CONFIRMADO')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: primero se rechaza el extracto siguiente';
+    END IF;
+END$$
+
+-- Los movimientos entran con el extracto CARGADO y dentro de sus fechas.
+DROP TRIGGER IF EXISTS trg_movimiento_bancario_registro$$
+CREATE TRIGGER trg_movimiento_bancario_registro BEFORE INSERT ON movimiento_bancario FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM extracto_bancario e WHERE e.id = NEW.extracto_id AND e.estado = 'CARGADO'
+            AND NEW.fecha BETWEEN e.desde AND e.hasta) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el movimiento entra a un extracto CARGADO y en sus fechas';
+    END IF;
+END$$
+
+-- La partida nace PROPUESTA, sobre un movimiento de un extracto vigente, con los montos reales del movimiento y del
+-- objeto (abono para lo que entra; cargo para un reembolso). EXACTA exige además la misma operación canónica.
+DROP TRIGGER IF EXISTS trg_partida_conciliacion_registro$$
+CREATE TRIGGER trg_partida_conciliacion_registro BEFORE INSERT ON partida_conciliacion FOR EACH ROW
+BEGIN
+    DECLARE tipo_mov VARCHAR(10) DEFAULT (SELECT m.tipo FROM movimiento_bancario m JOIN extracto_bancario e
+        ON e.id = m.extracto_id WHERE m.id = NEW.movimiento_id AND e.estado IN ('CARGADO', 'CONFIRMADO')
+        AND m.monto = NEW.monto_movimiento);
+    IF NOT (NEW.estado <=> 'PROPUESTA') OR tipo_mov IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la partida nace PROPUESTA sobre un movimiento vigente';
+    END IF;
+    IF NEW.objeto_tipo <> 'EXPLICACION' AND NOT (NEW.objeto_vigente <=> CONCAT(NEW.objeto_tipo, ':',
+            COALESCE(NEW.pago_id, NEW.deposito_id, NEW.liquidacion_id, NEW.lote_recaudacion_id, NEW.reembolso_id))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la clave del objeto de la partida no corresponde';
+    END IF;
+    IF NOT ((NEW.objeto_tipo = 'EXPLICACION')
+            OR (NEW.objeto_tipo = 'PAGO' AND tipo_mov = 'ABONO' AND EXISTS (SELECT 1 FROM pago p WHERE p.id = NEW.pago_id
+                AND p.estado = 'VIGENTE' AND p.medio <> 'EFECTIVO' AND p.total = NEW.monto_objeto
+                AND (NEW.regla <> 'EXACTA' OR p.numero_operacion = (SELECT m.numero_operacion FROM movimiento_bancario m
+                    WHERE m.id = NEW.movimiento_id))))
+            OR (NEW.objeto_tipo = 'DEPOSITO' AND tipo_mov = 'ABONO' AND EXISTS (SELECT 1 FROM deposito_caja x
+                WHERE x.id = NEW.deposito_id AND x.monto = NEW.monto_objeto
+                AND (NEW.regla <> 'EXACTA' OR x.numero_operacion = (SELECT m.numero_operacion FROM movimiento_bancario m
+                    WHERE m.id = NEW.movimiento_id))))
+            OR (NEW.objeto_tipo = 'LIQUIDACION' AND tipo_mov = 'ABONO' AND EXISTS (SELECT 1 FROM liquidacion_pasarela l
+                WHERE l.id = NEW.liquidacion_id AND l.total_neto = NEW.monto_objeto))
+            OR (NEW.objeto_tipo = 'LOTE_RECAUDACION' AND tipo_mov = 'ABONO' AND EXISTS (SELECT 1 FROM lote_recaudacion t
+                WHERE t.id = NEW.lote_recaudacion_id AND t.estado IN ('CONFIRMADO', 'APLICADO') AND t.total = NEW.monto_objeto))
+            OR (NEW.objeto_tipo = 'REEMBOLSO' AND tipo_mov = 'CARGO' AND EXISTS (SELECT 1 FROM reembolso r
+                WHERE r.id = NEW.reembolso_id AND r.monto = NEW.monto_objeto AND r.medio <> 'EFECTIVO'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la partida no corresponde al movimiento ni a su objeto';
+    END IF;
+END$$
+
+-- PROPUESTA → CONFIRMADA | DESCARTADA, una vez. Confirmar exige el extracto CONFIRMADO; si la confirma una persona
+-- (SUGERIDA, MANUAL o EXPLICADA), no puede ser quien cobró, registró o depositó lo emparejado.
+DROP TRIGGER IF EXISTS trg_partida_conciliacion_estado$$
+CREATE TRIGGER trg_partida_conciliacion_estado BEFORE UPDATE ON partida_conciliacion FOR EACH ROW
+BEGIN
+    IF OLD.estado <> 'PROPUESTA' AND (NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.resuelto_por <=> OLD.resuelto_por)
+            OR NOT (NEW.resuelto_en <=> OLD.resuelto_en) OR NOT (NEW.nota <=> OLD.nota)
+            OR NOT (NEW.categoria <=> OLD.categoria)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una partida resuelta no cambia';
+    END IF;
+    IF NEW.estado = 'CONFIRMADA' AND OLD.estado = 'PROPUESTA' AND (NOT EXISTS (SELECT 1 FROM movimiento_bancario m
+            JOIN extracto_bancario e ON e.id = m.extracto_id WHERE m.id = NEW.movimiento_id AND e.estado = 'CONFIRMADO')
+            OR (NEW.regla <> 'EXACTA' AND (
+                EXISTS (SELECT 1 FROM pago p WHERE p.id = NEW.pago_id
+                    AND (p.cajero = NEW.resuelto_por OR p.creado_por = NEW.resuelto_por))
+                OR EXISTS (SELECT 1 FROM deposito_caja x JOIN caja_diaria d ON d.id = x.caja_diaria_id
+                    WHERE x.id = NEW.deposito_id AND (x.creado_por = NEW.resuelto_por OR d.cajero = NEW.resuelto_por))
+                OR EXISTS (SELECT 1 FROM reembolso r WHERE r.id = NEW.reembolso_id AND r.creado_por = NEW.resuelto_por)))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la partida se confirma con el extracto confirmado y por otra persona';
     END IF;
 END$$
 

@@ -17,7 +17,7 @@
 	<section class="tarjeta" th:each="ind, i : ${indicadores}" th:aria-labelledby="|titulo-indicadores-${i.index}|" data-indicadores>
 		<div class="fila entre">
 			<h2 th:id="|titulo-indicadores-${i.index}|" th:text="${ind.titulo()}">Hoy en caja · 02/10/2026</h2>
-			<a th:if="${ind.enlace() != null}" class="btn btn-texto btn-chico" th:href="@{${ind.enlace()}}">Ver cajas del día</a>
+			<a th:if="${ind.enlace() != null}" class="btn btn-texto btn-chico" th:href="@{${ind.enlace()}}" th:text="${ind.textoEnlace()}">Ver cajas del día</a>
 		</div>
 		<ul class="indicadores">
 			<li th:each="x : ${ind.indicadores()}">
@@ -31,7 +31,8 @@
 	<section class="tarjeta revisar" aria-labelledby="titulo-revisar">
 		<div>
 			<h2 id="titulo-revisar">Para revisar</h2>
-			<p class="secundario">Primero lo crítico de caja (faltantes, cajas sin cerrar, pagos que no aparecen en el banco).
+			<p class="secundario">Primero lo crítico (faltantes de caja, cajas sin cerrar, pagos que no aparecen en el banco
+				confirmado, abonos que nadie registró).
 				Después, claves restablecidas, usuarios creados y cambios de roles de los últimos 7 días: si algo no lo
 				reconoces, revísalo con quien lo hizo.</p>
 		</div>

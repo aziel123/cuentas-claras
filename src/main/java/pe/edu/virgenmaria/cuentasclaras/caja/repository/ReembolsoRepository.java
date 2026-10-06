@@ -16,4 +16,10 @@ public interface ReembolsoRepository extends Repository<Reembolso, Long> {
 	List<Reembolso> findByAnulacionIdIn(Collection<Long> anulaciones);
 
 	List<Reembolso> findTop30ByOrderByIdDesc();
+
+	/** Reembolsos digitales de un rango de fechas (salen del banco como cargo: conciliación automática). */
+	List<Reembolso> findByFechaBetweenAndMedioNotOrderByFechaAscIdAsc(java.time.LocalDate desde, java.time.LocalDate hasta,
+			pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago medio);
+
+	java.util.Optional<Reembolso> findById(Long id);
 }

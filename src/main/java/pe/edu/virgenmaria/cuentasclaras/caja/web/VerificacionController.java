@@ -16,13 +16,13 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.web.Formularios;
 
 /**
- * Verificación bancaria a ciegas de pagos digitales y depósitos, y reembolsos de devoluciones (módulo CONCILIACION).
- * Sin lógica.
+ * Verificación bancaria MANUAL a ciegas de pagos digitales y depósitos (sprint 3; desde el sprint 4, tanda 3, para las
+ * excepciones que la conciliación automática no cubre) y reembolsos de devoluciones (módulo CONCILIACION). Sin lógica.
  */
 @Controller
 public class VerificacionController {
 
-	private static final String VOLVER = "redirect:/conciliacion";
+	private static final String VOLVER = "redirect:/conciliacion/verificacion";
 
 	private final ServicioVerificacionBancaria verificacion;
 
@@ -30,7 +30,7 @@ public class VerificacionController {
 		this.verificacion = verificacion;
 	}
 
-	@GetMapping("/conciliacion")
+	@GetMapping("/conciliacion/verificacion")
 	public String vista(Model model) {
 		model.addAttribute("conciliacion", verificacion.vista());
 		return "conciliacion/verificacion";

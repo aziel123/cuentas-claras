@@ -134,6 +134,18 @@ cuentasclaras:
     lineas-por-transaccion: 50
     maximo-lineas: 2000
     muestreo: 3                      # líneas al azar que quien confirma busca en el portal del banco
+  conciliacion:
+    # Extracto bancario y conciliación automática (sprint 4, tanda 3). Las parejas exactas (misma operación y monto) se
+    # confirman solas; las sugeridas las confirma alguien que no cobró ni depositó; lo demás se alerta.
+    dias-tolerancia-fecha: 2         # días hábiles de diferencia para una pareja SUGERIDA
+    tolerancia-monto-liquidacion: 0.00
+    hora-limite-extracto: "12:00"    # del día hábil siguiente; después, «extracto no subido»
+    intentos-confirmacion: 2         # saldos a ciegas distintos antes de RECHAZAR el extracto
+    muestreo-diario: 3               # movimientos al azar (semilla = fecha) para comparar con la app del banco
+    muestreo-confirmacion: 3         # movimientos al azar que ve quien confirma
+    patron-abono-recaudacion: ""     # p. ej. "RECAUD" si el banco abona el lote con esa glosa (EXACTA por glosa)
+    abono-recaudacion: POR_LOTE      # POR_LOTE (un abono por día) | POR_PAGO (el banco abona pago por pago)
+    maximo-lineas: 3000
   auditoria:
     # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
     # aplicación no arranca. Nunca en el código: va en el gestor de secretos.

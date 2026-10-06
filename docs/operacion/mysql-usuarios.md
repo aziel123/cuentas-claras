@@ -192,6 +192,15 @@ Sprint 4, tanda 2 (V14, recaudación bancaria): `DELETE` sobre `archivo_cargado`
 lote_recaudacion SET total = total`, `UPDATE linea_recaudacion SET monto = monto` y `UPDATE pago SET
 linea_recaudacion_id = linea_recaudacion_id` dan 1143; un lote que nace APLICADO y una línea de un lote inexistente dan
 1644. `trg_pago_registro` pasa a su versión final (con la rama RECAUDACION): 35 triggers en total.
+Sprint 4, tanda 3 (V15, extracto y conciliación): `DELETE` sobre `cuenta_bancaria`, `extracto_bancario`,
+`movimiento_bancario`, `partida_conciliacion`, `liquidacion_pasarela` y `liquidacion_linea` da 1142; `UPDATE
+movimiento_bancario|liquidacion_pasarela|liquidacion_linea SET version = version` y `UPDATE verificacion_bancaria SET
+origen = origen` dan 1142 (solo inserción); `UPDATE extracto_bancario SET saldo_final = saldo_final`, `UPDATE
+partida_conciliacion SET monto_movimiento = monto_movimiento` y `UPDATE cuenta_bancaria SET numero = numero` dan 1143; un
+extracto que nace CONFIRMADO, un movimiento de un extracto inexistente, una partida sobre un movimiento inexistente y una
+verificación AUTOMATICA sin partida confirmada dan 1644. `trg_verificacion_bancaria_registro` pasa a su versión final
+(la AUTOMATICA solo la inserta `sistema.conciliacion` con una partida CONFIRMADA sobre un extracto CONFIRMADO): 40
+triggers en total.
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

@@ -497,3 +497,15 @@ input[type="file"].input { padding: var(--esp-2); }
 .fila-atrasada td:first-child { box-shadow: inset 3px 0 0 var(--color-alerta); }
 
 .pie { text-align: center; color: var(--color-texto-secundario); font-size: var(--texto-sm); padding: var(--esp-6) var(--esp-4); }
+
+/* Sprint 4 · tanda 3: conciliación automática (solo las diferencias). */
+.fila-peligro td:first-child { box-shadow: inset 3px 0 0 var(--color-peligro); }
+.texto-peligro { color: var(--color-peligro); font-weight: 600; }
+.pareja { display: grid; gap: var(--esp-2); grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.pareja > div { display: grid; gap: var(--esp-1); padding: var(--esp-3); border: 1px solid var(--color-borde);
+  border-radius: var(--radio); background: var(--color-superficie); }
+.pareja-roja { border-color: var(--color-peligro); }
+.lista-diferencias { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--esp-3); }
+.lista-diferencias > li { display: grid; gap: var(--esp-2); padding: var(--esp-3); border: 1px solid var(--color-borde);
+  border-radius: var(--radio); background: var(--color-superficie); }
+.lista-diferencias > li.alerta-critica { border-color: var(--color-peligro); background: var(--color-peligro-suave); }

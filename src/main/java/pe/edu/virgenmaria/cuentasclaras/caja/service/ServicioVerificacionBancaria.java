@@ -49,7 +49,7 @@ import java.util.List;
  */
 @Service
 @Transactional(readOnly = true)
-@PreAuthorize("hasAnyRole('PROMOTOR','ADMINISTRACION')")
+@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION')")
 public class ServicioVerificacionBancaria {
 
 	/** Un pago se busca en el banco hasta 3 días después de cobrado (un Yape del viernes puede verse el lunes). */
@@ -123,7 +123,8 @@ public class ServicioVerificacionBancaria {
 						nombres.de(a.getCajeroPago()), a.getCreadoEn().toLocalDate()))
 				.toList();
 		List<VistaConciliacion.Verificado> hechas = verificaciones.findTop30ByOrderByIdDesc().stream()
-				.map(v -> new VistaConciliacion.Verificado(que(v), v.getResultado().etiqueta(),
+				.map(v -> new VistaConciliacion.Verificado(que(v), v.getResultado().etiqueta()
+						+ (v.automatica() ? " · " + v.getOrigen().etiqueta().toLowerCase(java.util.Locale.ROOT) : ""),
 						v.getResultado().variante(), v.getNota(), v.getCreadoPor(), v.getCreadoEn()))
 				.toList();
 		return new VistaConciliacion(hoy, esAdministracion(), propiedades.diasSinVerificar(), porVerificar,

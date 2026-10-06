@@ -182,6 +182,29 @@ public enum AccionAuditoria {
 	ARCHIVO_BANCO_DESCARGADO("Descargó un archivo original del banco", true),
 	BASE_DEUDAS_EXPORTADA("Exportó la base de deudas para el banco", false),
 
+	// Sprint 4 · tanda 3: extracto bancario, conciliación automática y liquidaciones de la pasarela.
+	/** Se resalta: la cuenta cuyo extracto se concilia (una cuenta falsa escondería los abonos reales). */
+	CUENTA_BANCARIA_REGISTRADA("Registró una cuenta bancaria para conciliar", true),
+	CUENTA_BANCARIA_DESACTIVADA("Desactivó una cuenta bancaria", true),
+	EXTRACTO_CARGADO("Cargó un extracto bancario", false),
+	/** Se resalta: el saldo final escrito a ciegas no coincide con el del extracto (¿extracto editado?). */
+	EXTRACTO_SALDO_NO_COINCIDE("El saldo a ciegas de un extracto no coincide", true),
+	EXTRACTO_CONFIRMADO("Confirmó a ciegas el saldo de un extracto", false),
+	/** Se resalta: dos saldos a ciegas distintos; el extracto no se concilia. */
+	EXTRACTO_RECHAZADO("Se rechazó un extracto bancario", true),
+	/** Se resalta: el archivo trae días ya cargados con otros movimientos (el banco no cambia el pasado). */
+	EXTRACTO_DISCONTINUO("Un extracto no coincide con los días ya cargados", true),
+	EXTRACTO_DESCARTADO("Descartó un extracto bancario", true),
+	CONCILIACION_AUTOMATICA("Conciliación automática con el extracto", false),
+	/** Se resalta: una persona dio por buena una pareja sugerida (no tenía la misma operación). */
+	PARTIDA_SUGERIDA_CONFIRMADA("Confirmó una pareja sugerida del extracto", true),
+	PARTIDA_MANUAL_REGISTRADA("Emparejó a mano un movimiento del extracto", true),
+	PARTIDA_DESCARTADA("Descartó una pareja del extracto", true),
+	MOVIMIENTO_EXPLICADO("Explicó un movimiento del extracto", true),
+	LIQUIDACION_REGISTRADA("Registró una liquidación de la pasarela", false),
+	/** Se resalta: la pasarela liquidó un cargo que no corresponde a ningún pago registrado. */
+	LIQUIDACION_SIN_PAGO("Una liquidación trae un cargo sin pago registrado", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

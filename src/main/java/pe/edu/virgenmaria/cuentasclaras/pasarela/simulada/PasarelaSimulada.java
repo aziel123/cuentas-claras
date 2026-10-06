@@ -5,12 +5,16 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.config.PropiedadesPasarela;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.model.CobroConfirmado;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.model.EstadoCobro;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.model.ProveedorPasarela;
+import pe.edu.virgenmaria.cuentasclaras.pasarela.model.TipoLineaLiquidacion;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.service.AvisoNoAutenticoException;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.service.AvisoPasarela;
+import pe.edu.virgenmaria.cuentasclaras.pasarela.service.LiquidacionLeida;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.service.OrdenCreada;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.service.PasarelaPagos;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.service.ReembolsoPasarela;
@@ -26,13 +30,17 @@ import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -68,7 +76,13 @@ public class PasarelaSimulada implements PasarelaPagos {
 
 	private final Clock reloj;
 
+	private final BigDecimal comisionPorcentaje;
+
+	/** IGV de la comisión de la pasarela. */
+	private static final BigDecimal IGV = new BigDecimal("0.18");
+
 	public PasarelaSimulada(PropiedadesPasarela propiedades, Clock reloj) {
+		this.comisionPorcentaje = propiedades.simulada().comisionPorcentaje();
 		String clave = propiedades.simulada().secretoAviso();
 		if (clave == null || clave.length() < 16) {
 			throw new IllegalStateException("La pasarela simulada necesita su secreto de avisos "
@@ -144,6 +158,43 @@ public class PasarelaSimulada implements PasarelaPagos {
 			orden.reembolso = new ReembolsoPasarela("SIMREF" + aleatorio(10), cargoId, Dinero.normalizar(monto));
 			return orden.reembolso;
 		}
+	}
+
+	/**
+	 * Liquidaciones simuladas: los cargos pagados un día se liquidan juntos y se abonan al banco el día hábil siguiente,
+	 * netos de la comisión ({@code cuentasclaras.pasarela.simulada.comision-porcentaje}) y del IGV de la comisión (18 %).
+	 * Solo las del colegio actual y las ya abonadas (fecha de abono hasta hoy). La referencia es «SIMLIQ» + el día.
+	 */
+	@Override
+	public List<LiquidacionLeida> liquidaciones(LocalDate desde, LocalDate hasta) {
+		Long colegio = ContextoColegio.actual();
+		LocalDate hoy = LocalDate.now(reloj);
+		Map<LocalDate, List<CobroConfirmado>> porDia = new TreeMap<>();
+		for (OrdenSimulada orden : ordenes.values()) {
+			synchronized (orden) {
+				if (orden.cobro != null && Objects.equals(orden.colegioId, colegio)) {
+					porDia.computeIfAbsent(orden.cobro.pagadoEn().toLocalDate(), d -> new ArrayList<>()).add(orden.cobro);
+				}
+			}
+		}
+		List<LiquidacionLeida> resultado = new ArrayList<>();
+		porDia.forEach((dia, cobros) -> {
+			LocalDate abono = Calendario.siguienteDiaHabil(dia);
+			if (abono.isBefore(desde) || abono.isAfter(hasta) || abono.isAfter(hoy)) {
+				return;
+			}
+			List<LiquidacionLeida.Linea> lineas = cobros.stream()
+					.sorted(java.util.Comparator.comparing(CobroConfirmado::operacionCanonica))
+					.map(c -> {
+						BigDecimal comision = c.monto().multiply(comisionPorcentaje)
+								.divide(BigDecimal.valueOf(100), Dinero.ESCALA, Dinero.REDONDEO);
+						BigDecimal igv = comision.multiply(IGV).setScale(Dinero.ESCALA, Dinero.REDONDEO);
+						return new LiquidacionLeida.Linea(TipoLineaLiquidacion.CARGO, c.operacionCanonica(), c.monto(),
+								comision, igv);
+					}).toList();
+			resultado.add(new LiquidacionLeida("SIMLIQ" + dia.toString().replace("-", ""), dia, abono, lineas));
+		});
+		return resultado;
 	}
 
 	/**

@@ -29,3 +29,6 @@ cuentasclaras:
     proveedor: SIMULADA
     simulada:
       secreto-aviso: secreto-pasarela-simulada-de-desarrollo-no-usar-en-produccion
+  conciliacion:
+    # El extracto de ejemplo abona la recaudación con la glosa «ABONO RECAUD ...»: se empareja sola (EXACTA por glosa).
+    patron-abono-recaudacion: RECAUD

@@ -1,13 +1,14 @@
 <!DOCTYPE html>
-<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Verificación bancaria', ~{::main})}">
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Verificación manual', ~{::main})}">
 <body>
 <main id="contenido" class="contenido" data-pantalla="conciliacion" th:with="v=${conciliacion}">
 	<div class="cabecera">
 		<div>
-			<p class="etiqueta">Conciliación bancaria</p>
-			<h1>Verificación bancaria</h1>
-			<p class="secundario">Busca cada Yape, Plin, transferencia y depósito en el estado de cuenta del banco y escribe lo
-				que ves: el sistema lo compara con lo registrado. Si algo no aparece, márcalo: Promotoría lo ve como alerta.
+			<p class="etiqueta"><a th:href="@{/conciliacion}">Conciliación bancaria</a></p>
+			<h1>Verificación manual (excepciones)</h1>
+			<p class="secundario">La conciliación automática con el extracto verifica sola lo que cuadra. Aquí quedan las
+				excepciones: busca el Yape, Plin, transferencia o depósito en el banco y escribe lo que ves; el sistema lo
+				compara con lo registrado. Si algo no aparece, márcalo: Promotoría lo ve como alerta.
 				Quien cobró o depositó nunca verifica lo suyo.</p>
 		</div>
 	</div>

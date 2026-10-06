@@ -265,7 +265,7 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".caja.service.ConsultaCajas", "hasAnyRole('PROMOTOR','DIRECTOR')"),
 			Map.entry(BASE + ".caja.service.AlertasCaja", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".caja.service.IndicadoresCaja", "hasRole('PROMOTOR')"),
-			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria", "hasAnyRole('PROMOTOR','ADMINISTRACION')"),
+			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#verificarPago", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#verificarDeposito", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#registrarReembolso", SOLO_ADMINISTRACION),
@@ -305,7 +305,28 @@ class ReglasArquitecturaTest {
 					SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".recaudacion.service.ServicioExcepcionesRecaudacion#registrarDevolucion",
 					SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".recaudacion.service.AlertasRecaudacion", "hasRole('PROMOTOR')"));
+			Map.entry(BASE + ".recaudacion.service.AlertasRecaudacion", "hasRole('PROMOTOR')"),
+			// Sprint 4, tanda 3: Administración sube el extracto y revisa las diferencias; Promotoría o Dirección lo confirman
+			// a ciegas (nunca quien lo subió); solo Promotoría registra las cuentas; lo automático, solo el sistema.
+			Map.entry(BASE + ".conciliacion.service.ServicioExtractos", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".conciliacion.service.ServicioExtractos#previsualizar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".conciliacion.service.ServicioExtractos#registrar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".conciliacion.service.ServicioExtractos#descartar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".conciliacion.service.ServicioExtractos#paraConfirmar", APROBACION),
+			Map.entry(BASE + ".conciliacion.service.ServicioExtractos#confirmar", APROBACION),
+			Map.entry(BASE + ".conciliacion.service.ServicioPartidas", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".conciliacion.service.ServicioPartidas#confirmarSugerida", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".conciliacion.service.ServicioPartidas#descartar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".conciliacion.service.ServicioPartidas#emparejarManual", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".conciliacion.service.ServicioPartidas#explicar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".conciliacion.service.ServicioCuentasBancarias", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".conciliacion.service.ServicioCuentasBancarias#registrar", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".conciliacion.service.ServicioCuentasBancarias#desactivar", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".conciliacion.service.ResumenConciliacion", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".conciliacion.service.AlertasConciliacion", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".conciliacion.service.IndicadoresConciliacion", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".caja.service.RegistroVerificacionAutomatica", "hasRole('SISTEMA_CONCILIACION')"),
+			Map.entry(BASE + ".pasarela.service.RegistroLiquidaciones", "hasRole('SISTEMA_PASARELA')"));
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {
@@ -610,7 +631,8 @@ class ReglasArquitecturaTest {
 	static final ArchRule cajaYCobranzaNoDependenDeLosModulosNuevos = noClasses()
 			.that().resideInAnyPackage(BASE + ".caja..", BASE + ".cobranza..", BASE + ".comprobantes..",
 					BASE + ".alumnos..", BASE + ".seguridad..", BASE + ".auditoria..", BASE + ".comun..")
-			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".pasarela..", BASE + ".recaudacion..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".pasarela..", BASE + ".recaudacion..",
+					BASE + ".conciliacion..")
 			.because("pasarela y recaudacion usan los puertos de caja (RegistroPagosAutomaticos, PagosEnCurso) y de "
 					+ "cobranza (CuotasEnPagoEnLinea); ellos no las conocen");
 
@@ -716,6 +738,60 @@ class ReglasArquitecturaTest {
 			.and().arePublic()
 			.should().haveNameMatching("set[A-Z].*")
 			.because("una orden cambia solo por sus métodos con regla");
+
+	// Sprint 4, tanda 3: la conciliación lee caja, pasarela y recaudación; ninguno de ellos la conoce (decisión 1).
+
+	@ArchTest
+	static final ArchRule pasarelaNoDependeDeConciliacion = noClasses()
+			.that().resideInAPackage(BASE + ".pasarela..")
+			.should().dependOnClassesThat().resideInAPackage(BASE + ".conciliacion..")
+			.because("la conciliación depende de caja, pasarela, recaudacion, auditoria y comun; nunca al revés");
+
+	/** El extracto, sus movimientos y sus partidas no se borran ni se editan por consulta. */
+	@ArchTest
+	static final ArchRule repositoriosDeConciliacionSinModifyingNiBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".conciliacion.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("el extracto del banco es evidencia: no se borra ni se edita; una partida solo se confirma o descarta");
+
+	@ArchTest
+	static final ArchRule repositoriosDeConciliacionNoHeredanBorrados = classes()
+			.that().resideInAnyPackage(BASE + ".conciliacion.repository..")
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("CrudRepository trae delete*: los repositorios financieros declaran solo lo que usan");
+
+	@ArchTest
+	static final ArchRule entidadesDeConciliacionSinSettersPublicos = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".conciliacion.model..")
+			.and().areDeclaredInClassesThat().areAnnotatedWith(Entity.class)
+			.and().arePublic()
+			.should().haveNameMatching("set[A-Z].*")
+			.because("un extracto o una partida cambian solo por sus métodos con regla");
+
+	/** La verificación AUTOMÁTICA la deja solo la conciliación automática (sistema.conciliacion), desde su proceso. */
+	@ArchTest
+	static final ArchRule soloLaConciliacionVerificaAutomaticamente = noClasses()
+			.that().resideOutsideOfPackages(BASE + ".conciliacion.proceso..", BASE + ".conciliacion.service..",
+					BASE + ".caja.service..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".caja.service.RegistroVerificacionAutomatica")
+			.because("la verificación automática sale solo de una partida confirmada sobre un extracto confirmado");
+
+	/** Las partidas PROPUESTA (el emparejamiento) solo las arma la conciliación. */
+	@ArchTest
+	static final ArchRule emparejadorSoloDesdeConciliacion = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".conciliacion..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".conciliacion.service.Emparejador")
+			.because("el emparejador escribe sin @PreAuthorize: el rol lo exige quien lo llama");
+
+	/** Las liquidaciones de la pasarela solo las registra el proceso de importación (sistema.pasarela). */
+	@ArchTest
+	static final ArchRule soloElImportadorRegistraLiquidaciones = noClasses()
+			.that().resideOutsideOfPackages(BASE + ".pasarela.proceso..", BASE + ".pasarela.service..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".pasarela.service.RegistroLiquidaciones")
+			.because("una liquidación la registra sistema.pasarela con lo que respondió la API de la pasarela");
 
 	private static DescribedPredicate<JavaAnnotation<?>> consultaNativa() {
 		return new DescribedPredicate<>("@Query(nativeQuery = true)") {

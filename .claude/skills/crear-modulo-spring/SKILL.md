@@ -59,6 +59,10 @@ Las vistas van en `src/main/resources/templates/<modulo>/` y usan `fragments/lay
    - Errores de negocio: `ReglaNegocioException` (mensaje claro para el usuario). Recurso inexistente o de otro colegio: `RecursoNoEncontradoException` (404).
    - **Fechas**: siempre `LocalDateTime.now(reloj)` con el `Clock` inyectado (hora de Lima). Nunca `now()` sin reloj (regla ArchUnit). Se guardan tal cual en la base (`java_time_use_direct_jdbc`).
 6. **Procesos sin usuario** (tareas programadas, arranque, listeners de login): no hay colegio en sesión, así que el contexto queda en NINGUNO y no se ve nada. Usa `ContextoColegio.en(colegioId, () -> transaccion.execute(...))`: primero el colegio y **después** la transacción, porque cambiar de colegio con una transacción abierta lanza excepción. `ContextoColegio.comoSistema(...)` ve todos los colegios y solo lo usan las clases autorizadas en `ReglasArquitecturaTest`.
+   - **Dinero que entra sin una persona** (sprint 4): lo registra un **actor de sistema** (`ActorSistema`: `sistema.pasarela`, `sistema.recaudacion`, `sistema.conciliacion`), nunca una persona. Corre con `EjecucionComoSistema.como(actor, colegioId, ...)` desde una clase del paquete `..proceso..` (regla ArchUnit) y su servicio exige `hasRole('SISTEMA_...')` con `Propagation.MANDATORY`. Ninguna persona puede llamarse `sistema...` (CHECK y validación).
+   - **Consulta a la fuente antes de registrar dinero**: un aviso (webhook) es solo un aviso; el pago se registra cuando lo confirma la consulta a la pasarela con su llave secreta.
+   - **Confirmación a ciegas de todo archivo que mueve dinero** (recaudación, extracto): lo sube una persona y otra escribe, sin verlo en pantalla, el total o el saldo que muestra su app del banco; nunca quien lo subió (o preparó su cuenta). Los intentos fallidos se cuentan y al máximo el archivo queda RECHAZADO.
+   - **Archivo original con SHA-256** (`RegistroArchivos`, tabla `archivo_cargado`, solo inserción): la vista previa vive en la sesión de quien subió y el registro vuelve a leer el archivo y compara su huella.
 7. **Controlador**: sin lógica.
    - Valida con `@Valid`, delega al servicio y devuelve la vista. Para errores de negocio, `try/catch (ReglaNegocioException)` y mostrar el mensaje.
    - El usuario en sesión llega con `@AuthenticationPrincipal UsuarioAutenticado`.
@@ -85,5 +89,6 @@ Las vistas van en `src/main/resources/templates/<modulo>/` y usan `fragments/lay
 - [ ] Las FK a tablas de negocio son compuestas con `colegio_id`, y los CHECK sobre columnas que admiten NULL dicen `col IS NOT NULL AND ...`.
 - [ ] Los triggers nuevos van en la tanda de su migración (nunca nombran una tabla que aún no existe), comparan con `<=>` o `NOT EXISTS` y tienen su inserción imposible en el verificador de prod y en el CI.
 - [ ] Antes de cada INSERT que un trigger valida contra una fila modificada en la misma transacción hay un `saveAndFlush`, y un flujo completo en `PermisosMySqlTest` lo prueba con los permisos mínimos.
+- [ ] Lo que registra el sistema lo hace un actor de sistema desde `..proceso..`; lo que viene de un archivo del banco se confirma a ciegas por otra persona y guarda su original con SHA-256.
 - [ ] Ninguna entidad se expone en un controlador.
 - [ ] Hay pruebas de aislamiento y de auditoría, pasan, y la salida real queda reportada.

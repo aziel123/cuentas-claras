@@ -34,4 +34,10 @@ public interface DepositoCajaRepository extends Repository<DepositoCaja, Long> {
 	/** Los últimos depósitos por un monto distinto de lo contado (alerta). */
 	@Query("select d from DepositoCaja d where d.monto <> d.esperado order by d.id desc")
 	List<DepositoCaja> distintos();
+
+	/** Depósitos de un rango de fechas (los que deben verse en el extracto: conciliación automática). */
+	List<DepositoCaja> findByFechaDepositoBetweenOrderByFechaDepositoAscIdAsc(java.time.LocalDate desde,
+			java.time.LocalDate hasta);
+
+	List<DepositoCaja> findByIdIn(Collection<Long> ids);
 }

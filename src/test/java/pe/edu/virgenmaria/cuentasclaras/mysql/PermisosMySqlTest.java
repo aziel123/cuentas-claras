@@ -1578,6 +1578,287 @@ class PermisosMySqlTest {
 				boleta.get("id"), operacion(43), operacion(43), total, "clave-" + sufijo + "-43"))).isEqualTo(3819);
 	}
 
+	// --- Sprint 4, tanda 3: extracto bancario y conciliación automática ---
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ServicioCuentasBancarias cuentasBancarias;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ServicioExtractos servicioExtractos;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ServicioPartidas servicioPartidas;
+
+	@Test
+	void tablasDeConciliacionNoSeBorranNiCambianLoPedido() {
+		for (String tabla : new String[] { "cuenta_bancaria", "extracto_bancario", "movimiento_bancario",
+				"partida_conciliacion", "liquidacion_pasarela", "liquidacion_linea" }) {
+			assertThat(codigoAl(() -> jdbc.update("DELETE FROM " + tabla + " WHERE 1 = 0"))).as(tabla).isEqualTo(1142);
+		}
+		// movimientoNoSeEditaFallaCon1142: los movimientos del banco y las liquidaciones son de solo inserción.
+		for (String tabla : new String[] { "movimiento_bancario", "liquidacion_pasarela", "liquidacion_linea",
+				"verificacion_bancaria" }) {
+			assertThat(codigoAl(() -> jdbc.update("UPDATE " + tabla + " SET version = version WHERE 1 = 0"))).as(tabla)
+					.isEqualTo(1142);
+		}
+		for (String sentencia : new String[] { "UPDATE extracto_bancario SET saldo_final = saldo_final WHERE 1 = 0",
+				"UPDATE extracto_bancario SET saldo_inicial = saldo_inicial WHERE 1 = 0",
+				"UPDATE extracto_bancario SET desde = desde WHERE 1 = 0",
+				"UPDATE extracto_bancario SET cuenta_id = cuenta_id WHERE 1 = 0",
+				"UPDATE extracto_bancario SET archivo_sha256 = archivo_sha256 WHERE 1 = 0",
+				"UPDATE partida_conciliacion SET monto_movimiento = monto_movimiento WHERE 1 = 0",
+				"UPDATE partida_conciliacion SET pago_id = pago_id WHERE 1 = 0",
+				"UPDATE partida_conciliacion SET regla = regla WHERE 1 = 0",
+				"UPDATE cuenta_bancaria SET numero = numero WHERE 1 = 0" }) {
+			assertThat(codigoAl(() -> jdbc.update(sentencia))).as(sentencia).isEqualTo(1143);
+		}
+	}
+
+	/**
+	 * Promotoría registra la cuenta, Administración sube el extracto de ayer y Dirección lo confirma a ciegas; el sistema
+	 * (sistema.conciliacion, con los permisos mínimos de cc_app) propone las parejas; Administración confirma la del lote
+	 * de recaudación (no quien lo subió) y la verificación AUTOMATICA de su pago la deja el sistema; la del Yape (de hoy,
+	 * sugerida) no la confirma la cajera ni por SQL. Después, nada de lo resuelto se reescribe por SQL.
+	 */
+	@Test
+	void flujoExtractoYConciliacionConPermisosMinimos() {
+		AlumnoNuevo nuevo = alumnoNuevoConCuotas();
+		Long matricula = jdbc.queryForObject("SELECT id FROM cuota WHERE alumno_id = ? AND tipo = 'MATRICULA'", Long.class,
+				nuevo.alumno());
+		// Un lote del banco de ayer: la matrícula del alumno nuevo y una línea con el código errado (total único).
+		String centimos = String.format("%02d", Math.floorMod(System.nanoTime(), 100));
+		String errada = "1" + Math.floorMod(System.nanoTime() / 100, 90) + "." + centimos;
+		var archivo = archivoDeAyer()
+				.linea(ayer(), pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago.deAlumno(nuevo.alumno()),
+						pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago.deCuota(matricula), "350.00", "PEN",
+						operacion(51))
+				.linea(ayer(), pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.codigoErrado(
+						nuevo.alumno()), "", errada, "PEN", operacion(52));
+		Long lote = loteCargado(archivo);
+		UsuariosDePrueba.iniciarSesion(persona(511, "promotora.conc", Rol.PROMOTOR));
+		try {
+			recaudacion.confirmar(lote, pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.version(jdbc,
+					lote), archivo.total());
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		Long pagoBanco = jdbc.queryForObject("SELECT p.id FROM pago p JOIN linea_recaudacion l ON l.id = "
+				+ "p.linea_recaudacion_id WHERE l.lote_id = ?", Long.class, lote);
+		// Hoy, un Yape de tres pensiones (total único en la base).
+		var cajera = cajera("caja.t4c");
+		UsuariosDePrueba.iniciarSesion(cajera);
+		Long yape;
+		try {
+			yape = cobro.cobrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.digital(nuevo.familia(),
+					java.util.List.of(cuotaDe(nuevo.alumno(), 3), cuotaDe(nuevo.alumno(), 4), cuotaDe(nuevo.alumno(), 5)),
+					pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.YAPE, "Y5" + sufijo, "1350.00"));
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+
+		String numeroCuenta = cuentaUnica();
+		Long cuenta = registrarCuenta(numeroCuenta);
+		var extracto = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioConciliacion.extractoDe(numeroCuenta,
+				"25000.00").abono(ayer(), "ABONO RECAUDACION CODIGO ALUMNO", "", archivo.total().toPlainString())
+				.abono(ayer(), "YAPE RECIBIDO", "Y5" + sufijo + "X", "1350.00")
+				.abono(ayer(), "INTERESES GANADOS", "", "1.23").cargo(ayer(), "IMPUESTO ITF", "", "0.45");
+		var administracion = persona(512, "adm.conc", Rol.ADMINISTRACION);
+		Long id = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioConciliacion.registrar(servicioExtractos,
+				administracion, extracto);
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForList("SELECT CONCAT(p.regla, ' ', p.estado, ' ', p.objeto_tipo) FROM partida_conciliacion p "
+				+ "JOIN movimiento_bancario m ON m.id = p.movimiento_id WHERE m.extracto_id = ? ORDER BY p.id", String.class,
+				id)).containsExactly("SUGERIDA PROPUESTA LOTE_RECAUDACION", "SUGERIDA PROPUESTA PAGO");
+
+		// Quien subió no confirma; Dirección escribe a ciegas el saldo (primero uno que no coincide).
+		UsuariosDePrueba.iniciarSesion(persona(513, "director.conc", Rol.DIRECTOR));
+		try {
+			var vista = servicioExtractos.paraConfirmar(cuenta);
+			assertThatThrownBy(() -> servicioExtractos.confirmar(cuenta, vista.ultimoId(), vista.version(),
+					extracto.saldoFinal().add(java.math.BigDecimal.ONE)))
+					.isInstanceOf(pe.edu.virgenmaria.cuentasclaras.conciliacion.service.SaldoNoCoincideException.class);
+			var otraVez = servicioExtractos.paraConfirmar(cuenta);
+			servicioExtractos.confirmar(cuenta, otraVez.ultimoId(), otraVez.version(), extracto.saldoFinal());
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		java.util.Map<String, Object> fila = jdbc.queryForMap("SELECT estado, intentos_confirmacion, saldo_final_ciego, "
+				+ "confirmacion_extracto_id FROM extracto_bancario WHERE id = ?", id);
+		assertThat(fila).containsEntry("estado", "CONFIRMADO").containsEntry("intentos_confirmacion", 1);
+		assertThat(((Number) fila.get("confirmacion_extracto_id")).longValue()).isEqualTo(id);
+
+		Long partidaLote = jdbc.queryForObject("SELECT id FROM partida_conciliacion WHERE lote_recaudacion_id = ?",
+				Long.class, lote);
+		Long partidaYape = jdbc.queryForObject("SELECT id FROM partida_conciliacion WHERE pago_id = ?", Long.class, yape);
+		// sugeridaConfirmadaPorLaCajeraFallaCon1644: aunque cc_app lo escriba por SQL, la cajera no confirma su Yape.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET estado = 'CONFIRMADA', resuelto_por = ?, "
+				+ "resuelto_en = NOW(6) WHERE id = ?", cajera.getUsername(), partidaYape))).isEqualTo(1644);
+		// Administración (que no subió el lote ni cobró) confirma las dos; el sistema deja las verificaciones.
+		UsuariosDePrueba.iniciarSesion(administracion);
+		try {
+			servicioPartidas.confirmarSugerida(partidaLote);
+			servicioPartidas.confirmarSugerida(partidaYape);
+			servicioPartidas.explicar(jdbc.queryForObject("SELECT id FROM movimiento_bancario WHERE extracto_id = ? AND "
+					+ "descripcion = 'INTERESES GANADOS'", Long.class, id),
+					pe.edu.virgenmaria.cuentasclaras.conciliacion.model.CategoriaExplicacion.INTERESES,
+					"Intereses mensuales de la cuenta de cobranza");
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		assertThat(jdbc.queryForList("SELECT CONCAT(origen, ' ', resultado, ' ', creado_por) FROM verificacion_bancaria "
+				+ "WHERE pago_id IN (?, ?) ORDER BY pago_id", String.class, pagoBanco, yape))
+				.containsExactly("AUTOMATICA ENCONTRADO sistema.conciliacion", "AUTOMATICA ENCONTRADO sistema.conciliacion");
+
+		// partidaConfirmadaNoSeDescartaFallaCon1644 y lo demás resuelto no se reescribe.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET estado = 'DESCARTADA', movimiento_vigente = "
+				+ "NULL, objeto_vigente = NULL WHERE id = ?", partidaLote))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET resuelto_por = 'otra' WHERE id = ?",
+				partidaYape))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE extracto_bancario SET estado = 'CARGADO', confirmado_por = NULL, "
+				+ "confirmado_en = NULL, confirmacion_extracto_id = NULL WHERE id = ?", id))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE extracto_bancario SET intentos_confirmacion = 0 WHERE id = ?", id)))
+				.isEqualTo(1644);
+		// Un movimiento más en un extracto ya confirmado.
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO movimiento_bancario (colegio_id, extracto_id, cuenta_id, numero, "
+				+ "fecha, tipo, monto, descripcion, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 99, ?, 'ABONO', "
+				+ "1350.00, 'YAPE AGREGADO', NOW(6), 'x', NOW(6))", id, cuenta, ayer()))).isEqualTo(1644);
+		// verificacionAutomaticaSinPartidaFallaCon1644: ni sin partida, ni con otra, ni escrita por una persona.
+		Long otroYape = jdbc.queryForObject("SELECT MAX(id) FROM pago WHERE medio = 'YAPE' AND id <> ? AND estado = "
+				+ "'VIGENTE' AND id NOT IN (SELECT pago_id FROM verificacion_bancaria WHERE pago_id IS NOT NULL)", Long.class,
+				yape);
+		if (otroYape != null) {
+			assertThat(codigoAl(() -> jdbc.update("INSERT INTO verificacion_bancaria (colegio_id, pago_id, resultado, "
+					+ "origen, partida_id, banco_fecha, banco_monto, creado_en, creado_por, actualizado_en) VALUES (1, ?, "
+					+ "'ENCONTRADO', 'AUTOMATICA', ?, ?, 1350.00, NOW(6), 'sistema.conciliacion', NOW(6))", otroYape,
+					partidaYape, ayer()))).isEqualTo(1644);
+			assertThat(codigoAl(() -> jdbc.update("INSERT INTO verificacion_bancaria (colegio_id, pago_id, resultado, "
+					+ "origen, banco_fecha, banco_monto, creado_en, creado_por, actualizado_en) VALUES (1, ?, 'ENCONTRADO', "
+					+ "'AUTOMATICA', ?, 1350.00, NOW(6), 'sistema.conciliacion', NOW(6))", otroYape, ayer())))
+					.isEqualTo(1644);
+		}
+		UsuariosDePrueba.iniciarSesion(guardar("verif.t4c." + sufijo, Rol.PROMOTOR));
+		try {
+			assertThat(verificador.verificar().integra()).isTrue();
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+	}
+
+	/**
+	 * extractoQueNoContinuaFallaCon1644, extractoSuperpuestoFallaCon1644, exactaConOtraOperacionFallaCon1644 y
+	 * descartarExtractoConSiguienteFallaCon1644: aunque cc_app escriba por SQL, la cadena de saldos y las parejas exactas
+	 * las cuida la base.
+	 */
+	@Test
+	void laCadenaDeSaldosYLasParejasExactasLasCuidaLaBase() {
+		String numeroCuenta = cuentaUnica();
+		Long cuenta = registrarCuenta(numeroCuenta);
+		String anteayer = java.time.LocalDate.parse(ayer()).minusDays(1).toString();
+		var primero = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioConciliacion.extractoDe(numeroCuenta,
+				"900.00").abono(anteayer, "ABONO VARIOS", "", "100.00");
+		var administracion = persona(521, "adm.cadena", Rol.ADMINISTRACION);
+		Long id = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioConciliacion.registrar(servicioExtractos,
+				administracion, primero);
+		SecurityContextHolder.clearContext();
+		String insertar = "INSERT INTO extracto_bancario (colegio_id, cuenta_id, secuencia, secuencia_vigente, anterior_id, "
+				+ "archivo_id, archivo_sha256, formato, desde, hasta, saldo_inicial, total_abonos, total_cargos, saldo_final, "
+				+ "movimientos, estado, creado_en, creado_por, actualizado_en) SELECT colegio_id, cuenta_id, 2, 2, id, "
+				+ "archivo_id, archivo_sha256, formato, ?, ?, ?, 0, 0, ?, 0, 'CARGADO', NOW(6), 'x', NOW(6) "
+				+ "FROM extracto_bancario WHERE id = ?";
+		// No continúa el saldo (falta un movimiento) o se superpone con el día ya cargado.
+		assertThat(codigoAl(() -> jdbc.update(insertar, ayer(), ayer(), "999.00", "999.00", id))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(insertar, anteayer, ayer(), "1000.00", "1000.00", id))).isEqualTo(1644);
+		// Confirmarlo sin el saldo a ciegas, o quien lo subió.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE extracto_bancario SET estado = 'CONFIRMADO', confirmado_por = 'otra', "
+				+ "confirmado_en = NOW(6), confirmacion_extracto_id = id WHERE id = ?", id))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE extracto_bancario SET estado = 'CONFIRMADO', confirmado_por = "
+				+ "creado_por, confirmado_en = NOW(6), confirmacion_extracto_id = id, saldo_final_ciego = saldo_final "
+				+ "WHERE id = ?", id))).isIn(1644, 3819);
+
+		// El siguiente (legítimo, por la aplicación) continúa al primero; el primero ya no se descarta.
+		var segundo = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioConciliacion.extractoDe(numeroCuenta,
+				primero.saldoFinal().toPlainString()).abono(ayer(), "YAPE RECIBIDO", "Z9" + sufijo, "77.70");
+		Long id2 = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioConciliacion.registrar(servicioExtractos,
+				administracion, segundo);
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT secuencia FROM extracto_bancario WHERE id = ?", Integer.class, id2))
+				.isEqualTo(2);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE extracto_bancario SET estado = 'DESCARTADO', secuencia_vigente = NULL, "
+				+ "rechazado_por = creado_por, rechazado_en = NOW(6), motivo_rechazo = 'Descarte por SQL' WHERE id = ?",
+				id))).isEqualTo(1644);
+		// confirmarFueraDeOrdenFallaCon1644: el segundo no se confirma antes que el primero.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE extracto_bancario SET saldo_final_ciego = saldo_final WHERE id = ?",
+				id2))).isNull();
+		assertThat(codigoAl(() -> jdbc.update("UPDATE extracto_bancario SET estado = 'CONFIRMADO', confirmado_por = 'otra', "
+				+ "confirmado_en = NOW(6), confirmacion_extracto_id = id WHERE id = ?", id2))).isEqualTo(1644);
+		// La cadena se confirma junta por la aplicación (con el saldo del último, ya escrito arriba por SQL: la vista
+		// cambió de versión, así que se vuelve a leer).
+		UsuariosDePrueba.iniciarSesion(persona(522, "director.cadena", Rol.DIRECTOR));
+		try {
+			var vista = servicioExtractos.paraConfirmar(cuenta);
+			assertThat(vista.pendientes()).hasSize(2);
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		// exactaConOtraOperacionFallaCon1644: una pareja EXACTA con un Yape de otra operación.
+		Long movimiento = jdbc.queryForObject("SELECT id FROM movimiento_bancario WHERE extracto_id = ?", Long.class, id2);
+		java.util.Map<String, Object> otroPago = jdbc.queryForMap("SELECT id, total FROM pago WHERE medio <> 'EFECTIVO' "
+				+ "AND estado = 'VIGENTE' ORDER BY id LIMIT 1");
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO partida_conciliacion (colegio_id, movimiento_id, "
+				+ "movimiento_vigente, objeto_tipo, pago_id, objeto_vigente, regla, monto_movimiento, monto_objeto, "
+				+ "diferencia, estado, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'PAGO', ?, ?, 'EXACTA', "
+				+ "77.70, ?, ?, 'PROPUESTA', NOW(6), 'sistema.conciliacion', NOW(6))", movimiento, movimiento,
+				otroPago.get("id"), "PAGO:" + otroPago.get("id"), otroPago.get("total"), new java.math.BigDecimal("77.70")
+						.subtract((java.math.BigDecimal) otroPago.get("total"))))).isEqualTo(1644);
+	}
+
+	private record AlumnoNuevo(Long familia, Long alumno) {
+	}
+
+	/** Un alumno nuevo en la sección del escenario compartido: su cronograma se genera al matricularlo. */
+	private AlumnoNuevo alumnoNuevoConCuotas() {
+		FamiliasCaja familias = familiasDeCaja();
+		java.util.Map<String, Object> matricula = jdbc.queryForMap("SELECT m.seccion_id, a.anio FROM matricula m JOIN "
+				+ "anio_escolar a ON a.id = m.anio_escolar_id WHERE m.alumno_id = ?", familias.hermano1());
+		int anio = ((Number) matricula.get("anio")).intValue();
+		String base = String.format("%07d", Math.floorMod(System.nanoTime() + 59, 10_000_000L));
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		try {
+			var nuevo = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+					.conApoderadoNuevo("5" + base, "Gutiérrez", "Salas", "Ariana", java.time.LocalDate.of(anio - 10, 5, 9),
+							"2" + base, "Salas", "Paredes", "Carmen", "934567812", null,
+							((Number) matricula.get("seccion_id")).longValue()));
+			return new AlumnoNuevo(nuevo.familiaId(), nuevo.alumnoId());
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+	}
+
+	/** Un número de cuenta único en esta base (que no se limpia). */
+	private String cuentaUnica() {
+		String digitos = String.format("%09d", Math.floorMod(System.nanoTime(), 1_000_000_000L));
+		return "191-" + digitos.substring(0, 7) + "-0-" + digitos.substring(7);
+	}
+
+	/** Promotoría registra la cuenta. */
+	private Long registrarCuenta(String numero) {
+		UsuariosDePrueba.iniciarSesion(persona(520, "promotor.cuenta", Rol.PROMOTOR));
+		try {
+			return cuentasBancarias.registrar(new pe.edu.virgenmaria.cuentasclaras.conciliacion.dto.CuentaRequest(
+					pe.edu.virgenmaria.cuentasclaras.conciliacion.model.BancoCuenta.BCP, numero, "BCP " + sufijo));
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+	}
+
 	/** La caja del canal RECAUDACION de ayer (la abre el sistema; aquí, si falta, la abre una tanda real). */
 	private Long cajaRecaudacionDeAyer() {
 		java.util.List<Long> cajas = jdbc.queryForList("SELECT id FROM caja_diaria WHERE canal = 'RECAUDACION' AND fecha = ?",

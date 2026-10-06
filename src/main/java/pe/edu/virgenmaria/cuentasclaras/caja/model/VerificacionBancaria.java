@@ -54,6 +54,16 @@ public class VerificacionBancaria extends BaseEntity {
 	@Column(name = "banco_monto", updatable = false, precision = 10, scale = 2)
 	private BigDecimal bancoMonto;
 
+	// --- Sprint 4, tanda 3 (V15): la verificación AUTOMATICA sale de una partida confirmada de la conciliación ---
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, updatable = false, length = 20)
+	private OrigenVerificacion origen;
+
+	/** La partida de la conciliación que la respalda (solo AUTOMATICA; sin FK de entidad: caja no conoce conciliacion). */
+	@Column(name = "partida_id", updatable = false)
+	private Long partidaId;
+
 	protected VerificacionBancaria() {
 		// requerido por JPA
 	}
@@ -94,8 +104,52 @@ public class VerificacionBancaria extends BaseEntity {
 		return v;
 	}
 
+	/**
+	 * Verificación AUTOMATICA de un pago digital (sprint 4, tanda 3): una partida CONFIRMADA sobre un extracto
+	 * CONFIRMADO lo cubre, directo, por su liquidación o por su lote. {@code fecha} y {@code monto} son los del banco
+	 * (el movimiento o la línea de la liquidación); {@code operacion} puede faltar. La inserta {@code sistema.conciliacion}
+	 * (en MySQL, el trigger exige la partida y que no la haga quien cobró).
+	 */
+	public static VerificacionBancaria automaticaDePago(Pago pago, Long partidaId, LocalDate fecha, BigDecimal monto,
+			String operacion, String por) {
+		Objects.requireNonNull(pago, "pago");
+		if (!pago.getMedio().digital() || !pago.vigente()) {
+			throw new IllegalStateException("Solo se verifica automáticamente un pago digital vigente");
+		}
+		if (por == null || por.equals(pago.getCajero()) || por.equals(pago.getCreadoPor())) {
+			throw new IllegalStateException("Quien cobró el pago no lo verifica");
+		}
+		VerificacionBancaria v = automatica(partidaId, fecha, monto, operacion);
+		v.pago = pago;
+		return v;
+	}
+
+	/** Verificación AUTOMATICA de un depósito de caja (su partida confirmada sobre un extracto confirmado). */
+	public static VerificacionBancaria automaticaDeDeposito(DepositoCaja deposito, Long partidaId, LocalDate fecha,
+			BigDecimal monto, String operacion, String por) {
+		Objects.requireNonNull(deposito, "deposito");
+		if (por == null || por.equals(deposito.getCreadoPor()) || por.equals(deposito.getCaja().getCajero())) {
+			throw new IllegalStateException("Quien depositó no verifica su depósito");
+		}
+		VerificacionBancaria v = automatica(partidaId, fecha, monto, operacion);
+		v.deposito = deposito;
+		return v;
+	}
+
+	private static VerificacionBancaria automatica(Long partidaId, LocalDate fecha, BigDecimal monto, String operacion) {
+		VerificacionBancaria v = new VerificacionBancaria();
+		v.resultado = ResultadoVerificacion.ENCONTRADO;
+		v.origen = OrigenVerificacion.AUTOMATICA;
+		v.partidaId = Objects.requireNonNull(partidaId, "partidaId");
+		v.bancoFecha = Objects.requireNonNull(fecha, "fecha");
+		v.bancoMonto = Objects.requireNonNull(monto, "monto").setScale(2);
+		v.bancoOperacion = operacion;
+		return v;
+	}
+
 	private static VerificacionBancaria nueva(ResultadoVerificacion resultado, String nota, DatosBanco banco) {
 		VerificacionBancaria v = new VerificacionBancaria();
+		v.origen = OrigenVerificacion.MANUAL;
 		v.resultado = Objects.requireNonNull(resultado, "resultado");
 		boolean conNota = nota != null && !nota.isBlank();
 		if (resultado == ResultadoVerificacion.NO_ENCONTRADO && !conNota) {
@@ -144,5 +198,17 @@ public class VerificacionBancaria extends BaseEntity {
 
 	public BigDecimal getBancoMonto() {
 		return bancoMonto;
+	}
+
+	public OrigenVerificacion getOrigen() {
+		return origen;
+	}
+
+	public Long getPartidaId() {
+		return partidaId;
+	}
+
+	public boolean automatica() {
+		return origen == OrigenVerificacion.AUTOMATICA;
 	}
 }

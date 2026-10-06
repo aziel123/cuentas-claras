@@ -34,4 +34,10 @@ public interface LoteRecaudacionRepository extends Repository<LoteRecaudacion, L
 	List<LoteRecaudacion> findByEstadoOrderByIdAsc(EstadoLote estado);
 
 	List<LoteRecaudacion> findByEstadoAndRechazadoEnAfterOrderByIdDesc(EstadoLote estado, LocalDateTime desde);
+
+	/** Lotes ya confirmados (CONFIRMADO o APLICADO) de un rango de fechas de proceso: su abono debe verse en el extracto. */
+	List<LoteRecaudacion> findByEstadoInAndFechaProcesoBetweenOrderByIdAsc(java.util.Collection<EstadoLote> estados,
+			java.time.LocalDate desde, java.time.LocalDate hasta);
+
+	List<LoteRecaudacion> findByIdIn(java.util.Collection<Long> ids);
 }

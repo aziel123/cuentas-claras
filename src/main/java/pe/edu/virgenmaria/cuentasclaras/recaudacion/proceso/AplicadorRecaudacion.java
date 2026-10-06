@@ -121,6 +121,8 @@ public class AplicadorRecaudacion {
 		this.reloj = reloj;
 	}
 
+	/** Primero (orden 0): la conciliación, que también escucha la confirmación del lote, verifica estos pagos. */
+	@org.springframework.core.annotation.Order(0)
 	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 	public void alConfirmarse(LoteConfirmado evento) {
 		try {

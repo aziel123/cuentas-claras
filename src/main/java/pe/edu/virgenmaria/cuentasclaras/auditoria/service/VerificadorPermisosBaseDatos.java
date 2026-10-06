@@ -29,8 +29,8 @@ import java.util.stream.Collectors;
  *   <li>que están TODOS los triggers de {@code scripts/mysql/03-triggers.sql} (correcciones del sprint 3, M2), también
  *       los BEFORE UPDATE, que no se pueden probar con un INSERT imposible: llama a la función
  *       {@code cuentasclaras.triggers_instalados()} (02-permisos-tablas.sql) y la compara con {@link #TRIGGERS_ESPERADOS};</li>
- *   <li>que los pagos en línea (sprint 4, tanda 1) y la recaudación bancaria (tanda 2) tienen sus GRANT por columna, sus
- *       tablas de solo inserción y sus triggers;</li>
+ *   <li>que los pagos en línea (sprint 4, tanda 1), la recaudación bancaria (tanda 2) y el extracto con su conciliación
+ *       automática (tanda 3) tienen sus GRANT por columna, sus tablas de solo inserción y sus triggers;</li>
  *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes).</li>
  * </ul>
  * Si algo falla, la aplicación NO arranca. No hay interruptor para saltarse esta comprobación.
@@ -174,7 +174,30 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "'APLICADO', NOW(6), 'verificador', NOW(6))", "trg_lote_recaudacion_nace"),
 			trigger("INSERT INTO linea_recaudacion (colegio_id, lote_id, numero, fecha_pago, codigo, monto, moneda, "
 					+ "numero_operacion, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 1, '2000-01-01', '0', 1, "
-					+ "'PEN', '1234', 'PENDIENTE', NOW(6), 'verificador', NOW(6))", "trg_linea_recaudacion_registro"));
+					+ "'PEN', '1234', 'PENDIENTE', NOW(6), 'verificador', NOW(6))", "trg_linea_recaudacion_registro"),
+			// Sprint 4, tanda 3 (extracto y conciliación): nada se borra; los movimientos del banco y las liquidaciones de la
+			// pasarela son de solo inserción; los saldos del extracto, los montos de la partida y el número de la cuenta no
+			// cambian; y cada trigger nuevo rechaza su inserción imposible (un extracto que nace CONFIRMADO, un movimiento
+			// de un extracto que no existe y una partida de un movimiento que no existe).
+			sinBorrado("cuenta_bancaria"), sinBorrado("extracto_bancario"), sinBorrado("movimiento_bancario"),
+			sinBorrado("liquidacion_pasarela"), sinBorrado("liquidacion_linea"), sinBorrado("partida_conciliacion"),
+			soloInsercion("movimiento_bancario"), soloInsercion("liquidacion_pasarela"), soloInsercion("liquidacion_linea"),
+			columna("UPDATE extracto_bancario SET saldo_final = saldo_final WHERE 1 = 0", "extracto_bancario"),
+			columna("UPDATE partida_conciliacion SET monto_movimiento = monto_movimiento WHERE 1 = 0",
+					"partida_conciliacion"),
+			columna("UPDATE cuenta_bancaria SET numero = numero WHERE 1 = 0", "cuenta_bancaria"),
+			trigger("INSERT INTO extracto_bancario (colegio_id, cuenta_id, secuencia, secuencia_vigente, archivo_id, "
+					+ "archivo_sha256, formato, desde, hasta, saldo_inicial, total_abonos, total_cargos, saldo_final, "
+					+ "movimientos, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 1, 1, 0, REPEAT('0', 64), "
+					+ "'verificador', '2000-01-01', '2000-01-01', 0, 0, 0, 0, 0, 'CONFIRMADO', NOW(6), 'verificador', NOW(6))",
+					"trg_extracto_bancario_nace"),
+			trigger("INSERT INTO movimiento_bancario (colegio_id, extracto_id, cuenta_id, numero, fecha, tipo, monto, "
+					+ "descripcion, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 1, '2000-01-01', 'ABONO', 1, "
+					+ "'verificador', NOW(6), 'verificador', NOW(6))", "trg_movimiento_bancario_registro"),
+			trigger("INSERT INTO partida_conciliacion (colegio_id, movimiento_id, movimiento_vigente, objeto_tipo, pago_id, "
+					+ "objeto_vigente, regla, monto_movimiento, monto_objeto, diferencia, estado, creado_en, creado_por, "
+					+ "actualizado_en) VALUES (0, 0, 0, 'PAGO', 0, 'PAGO:0', 'EXACTA', 1, 1, 0, 'PROPUESTA', NOW(6), "
+					+ "'verificador', NOW(6))", "trg_partida_conciliacion_registro"));
 
 	/** Solo en prod: la base no admite órdenes de la pasarela simulada (sin la fila 'pasarela_simulada'). */
 	static final SentenciaProhibida ORDEN_SIMULADA = new SentenciaProhibida(ordenImposible("SIMULADA", "CREADA"),
@@ -204,7 +227,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_reembolso_registro", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio", "trg_apoderado_nace",
 			"trg_apoderado_facturacion", "trg_orden_pago_nace", "trg_orden_pago_cuota_registro", "trg_orden_pago_estado",
 			"trg_lote_recaudacion_nace", "trg_lote_recaudacion_estado", "trg_linea_recaudacion_registro",
-			"trg_linea_recaudacion_estado");
+			"trg_linea_recaudacion_estado", "trg_extracto_bancario_nace", "trg_extracto_bancario_estado",
+			"trg_movimiento_bancario_registro", "trg_partida_conciliacion_registro", "trg_partida_conciliacion_estado");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 

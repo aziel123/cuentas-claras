@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cuentas del colegio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="conciliacion-cuentas" th:with="x=${x}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/conciliacion}">Conciliación bancaria</a></p>
+			<h1>Cuentas del colegio</h1>
+			<p class="secundario">Las cuentas en soles cuyo extracto se concilia (donde abonan Yape empresarial, la pasarela y la recaudación). Solo Promotoría las registra o desactiva; el número no se cambia.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-lista">
+		<h2 id="titulo-lista">Cuentas</h2>
+		<th:block th:if="${#lists.isEmpty(x.cuentas)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay cuentas', 'Registra la cuenta del colegio para empezar a conciliar.')}"></div>
+		</th:block>
+		<ul class="lista-tarjetas" th:unless="${#lists.isEmpty(x.cuentas)}">
+			<li th:each="c : ${x.cuentas}" class="persona" th:classappend="${!c.activa} ? 'persona-inactiva'">
+				<strong th:text="|${c.banco} · ${c.alias}|">BCP · Soles</strong>
+				<span class="num" th:text="${c.numero}">191-2345678-0-12</span>
+				<span class="secundario" th:text="${c.activa} ? 'Activa' : 'Desactivada'">Activa</span>
+				<th:block th:if="${x.puedeRegistrarCuentas and c.activa}">
+					<th:block th:replace="~{fragments/componentes :: modalMotivo(|desactivar-${c.id}|, '¿Desactivar esta cuenta?',
+						'Ya no se suben ni se concilian sus extractos. Queda en la bitácora con tu motivo.',
+						@{/conciliacion/cuentas/{id}/desactivar(id=${c.id})}, 'Desactivar', 'texto', 'Desactivar')}"></th:block>
+				</th:block>
+			</li>
+		</ul>
+	</section>
+
+	<form method="post" class="formulario formulario-angosto tarjeta" th:action="@{/conciliacion/cuentas}" th:if="${x.puedeRegistrarCuentas}">
+		<h2>Registrar una cuenta</h2>
+		<div class="campo">
+			<label for="banco">Banco</label>
+			<select class="input" id="banco" name="banco" required>
+				<option value="">Elige</option>
+				<option th:each="b : ${bancos}" th:value="${b.name()}" th:text="${b.etiqueta()}">BCP</option>
+			</select>
+		</div>
+		<div class="campo">
+			<label for="numero">Número de cuenta</label>
+			<input class="input num" type="text" id="numero" name="numero" required maxlength="40" autocomplete="off" aria-describedby="numero-ayuda">
+			<p class="ayuda" id="numero-ayuda">Como aparece en el banco: dígitos y guiones (por ejemplo 191-2345678-0-12).</p>
+		</div>
+		<div class="campo">
+			<label for="alias">Nombre corto</label>
+			<input class="input" type="text" id="alias" name="alias" required maxlength="60" autocomplete="off">
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Registrar cuenta', 'primario')}"></button>
+	</form>
+</main>
+</body>
+</html>

@@ -35,8 +35,20 @@ public record PropiedadesPasarela(
 		}
 	}
 
-	/** Pasarela simulada: el secreto con que firma (HMAC-SHA256) sus avisos. */
-	public record Simulada(String secretoAviso) {
+	/**
+	 * Pasarela simulada: el secreto con que firma (HMAC-SHA256) sus avisos y el porcentaje de comisión de sus
+	 * liquidaciones simuladas (más el IGV de la comisión).
+	 */
+	public record Simulada(String secretoAviso, @DefaultValue("3.44") BigDecimal comisionPorcentaje) {
+
+		public Simulada {
+			if (comisionPorcentaje == null) {
+				comisionPorcentaje = new BigDecimal("3.44");
+			}
+			if (comisionPorcentaje.signum() < 0 || comisionPorcentaje.compareTo(BigDecimal.TEN) > 0) {
+				throw new IllegalArgumentException("cuentasclaras.pasarela.simulada.comision-porcentaje debe estar entre 0 y 10");
+			}
+		}
 
 		@Override
 		public String toString() {
@@ -58,7 +70,7 @@ public record PropiedadesPasarela(
 			culqi = new Culqi(null, null, null, null, "https://api.culqi.com");
 		}
 		if (simulada == null) {
-			simulada = new Simulada(null);
+			simulada = new Simulada(null, null);
 		}
 		if (consultaMinima == null || consultaMinima.isNegative()) {
 			consultaMinima = Duration.ofSeconds(10);

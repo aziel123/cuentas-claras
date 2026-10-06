@@ -138,7 +138,8 @@ class VerificadorPermisosBaseDatosTest {
 	/** Tablas de solo inserción: cc_app no tiene ningún UPDATE sobre ellas (1142). */
 	private static final java.util.regex.Pattern SOLO_INSERCION = java.util.regex.Pattern
 			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
-					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado) ");
+					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado|movimiento_bancario|"
+					+ "liquidacion_pasarela|liquidacion_linea) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -278,6 +279,60 @@ class VerificadorPermisosBaseDatosTest {
 		}
 	}
 
+	/** Sprint 4, tanda 3: si se puede borrar o editar algo del extracto o de la conciliación, no arranca. */
+	@Test
+	void fallaSiElExtractoOLaConciliacionSePuedenBorrarOEditar() {
+		for (String[] caso : new String[][] { { "DELETE FROM cuenta_bancaria WHERE 1 = 0", "cuenta_bancaria" },
+				{ "DELETE FROM extracto_bancario WHERE 1 = 0", "extracto_bancario" },
+				{ "DELETE FROM movimiento_bancario WHERE 1 = 0", "movimiento_bancario" },
+				{ "DELETE FROM partida_conciliacion WHERE 1 = 0", "partida_conciliacion" },
+				{ "DELETE FROM liquidacion_pasarela WHERE 1 = 0", "liquidacion_pasarela" },
+				{ "DELETE FROM liquidacion_linea WHERE 1 = 0", "liquidacion_linea" },
+				{ "UPDATE movimiento_bancario SET version = version WHERE 1 = 0", "solo inserción" },
+				{ "UPDATE liquidacion_pasarela SET version = version WHERE 1 = 0", "solo inserción" },
+				{ "UPDATE liquidacion_linea SET version = version WHERE 1 = 0", "solo inserción" },
+				{ "UPDATE extracto_bancario SET saldo_final = saldo_final WHERE 1 = 0", "extracto_bancario" },
+				{ "UPDATE partida_conciliacion SET monto_movimiento = monto_movimiento WHERE 1 = 0",
+						"partida_conciliacion" },
+				{ "UPDATE cuenta_bancaria SET numero = numero WHERE 1 = 0", "cuenta_bancaria" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+	}
+
+	@Test
+	void fallaSiFaltanLosTriggersDelExtractoYLaConciliacion() {
+		for (String[] caso : new String[][] { { "INSERT INTO extracto_bancario", "trg_extracto_bancario_nace" },
+				{ "INSERT INTO movimiento_bancario", "trg_movimiento_bancario_registro" },
+				{ "INSERT INTO partida_conciliacion", "trg_partida_conciliacion_registro" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doThrow(denegado(1452)).when(mysql).update(org.mockito.ArgumentMatchers.startsWith(caso[0]));
+
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(40);
+	}
+
+	/**
+	 * Hallado en MySQL 8 real (tanda 3): con 40 triggers la lista pasa de 1024 caracteres y GROUP_CONCAT (con su
+	 * group_concat_max_len por defecto) la cortaba; dentro de la función eso es el error 1260 y prod no arrancaba. La
+	 * función arma la lista con JSON_ARRAYAGG, que no tiene ese límite.
+	 */
+	@Test
+	void laListaDeTriggersNoDependeDeGroupConcat() throws java.io.IOException {
+		String script = java.nio.file.Files.readString(java.nio.file.Path.of("scripts/mysql/02-permisos-tablas.sql"));
+		String funcion = script.substring(script.indexOf("CREATE FUNCTION cuentasclaras.triggers_instalados"),
+				script.indexOf("GRANT EXECUTE ON FUNCTION cuentasclaras.triggers_instalados"));
+		org.assertj.core.api.Assertions.assertThat(funcion).contains("JSON_ARRAYAGG(TRIGGER_NAME)")
+				.doesNotContain("GROUP_CONCAT");
+		org.assertj.core.api.Assertions.assertThat(String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS))
+				.hasSizeGreaterThan(1024);
+	}
+
 	/** Sprint 4, tanda 2: si se puede borrar o editar algo de la recaudación bancaria, no arranca. */
 	@Test
 	void fallaSiLaRecaudacionSePuedeBorrarOEditar() {
@@ -343,7 +398,8 @@ class VerificadorPermisosBaseDatosTest {
 	void fallaSiFaltaUnTriggerBeforeUpdate() {
 		for (String borrado : List.of("trg_caja_diaria_estado", "trg_pago_anulacion", "trg_cuota_libro",
 				"trg_cierre_caja_revisado", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio",
-				"trg_lote_recaudacion_estado", "trg_linea_recaudacion_estado")) {
+				"trg_lote_recaudacion_estado", "trg_linea_recaudacion_estado", "trg_extracto_bancario_estado",
+				"trg_partida_conciliacion_estado")) {
 			JdbcTemplate mysql = mysqlQueDeniega();
 			when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class)).thenReturn(
 					String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream().filter(t -> !t.equals(borrado))

@@ -75,7 +75,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V14): Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V15): Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Permisos por tabla de cc_app
@@ -192,6 +192,22 @@ jobs:
           comprobar 1143 "UPDATE pago SET linea_recaudacion_id = linea_recaudacion_id WHERE 1 = 0"
           comprobar 1644 "INSERT INTO lote_recaudacion (colegio_id, archivo_id, archivo_sha256, sha_vigente, banco, formato, fecha_proceso, desde, hasta, lineas, total, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, REPEAT('0', 64), REPEAT('0', 64), 'BCP', 'x', '2000-01-01', '2000-01-01', '2000-01-01', 1, 1, 'APLICADO', NOW(6), 'x', NOW(6))"
           comprobar 1644 "INSERT INTO linea_recaudacion (colegio_id, lote_id, numero, fecha_pago, codigo, monto, moneda, numero_operacion, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 1, '2000-01-01', '0', 1, 'PEN', '1234', 'PENDIENTE', NOW(6), 'x', NOW(6))"
+          # Sprint 4, tanda 3 (V15): extracto y conciliación. Los movimientos del banco y las liquidaciones son de solo
+          # inserción; los saldos del extracto, los montos de la partida y el número de la cuenta no cambian.
+          for tabla in cuenta_bancaria extracto_bancario movimiento_bancario liquidacion_pasarela liquidacion_linea partida_conciliacion; do
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          for tabla in movimiento_bancario liquidacion_pasarela liquidacion_linea; do
+            comprobar 1142 "UPDATE $tabla SET version = version WHERE 1 = 0"
+          done
+          comprobar 1143 "UPDATE extracto_bancario SET saldo_final = saldo_final WHERE 1 = 0"
+          comprobar 1143 "UPDATE partida_conciliacion SET monto_movimiento = monto_movimiento WHERE 1 = 0"
+          comprobar 1143 "UPDATE cuenta_bancaria SET numero = numero WHERE 1 = 0"
+          comprobar 1142 "UPDATE verificacion_bancaria SET origen = origen WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO extracto_bancario (colegio_id, cuenta_id, secuencia, secuencia_vigente, archivo_id, archivo_sha256, formato, desde, hasta, saldo_inicial, total_abonos, total_cargos, saldo_final, movimientos, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 1, 1, 0, REPEAT('0', 64), 'x', '2000-01-01', '2000-01-01', 0, 0, 0, 0, 0, 'CONFIRMADO', NOW(6), 'x', NOW(6))"
+          comprobar 1644 "INSERT INTO movimiento_bancario (colegio_id, extracto_id, cuenta_id, numero, fecha, tipo, monto, descripcion, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 1, '2000-01-01', 'ABONO', 1, 'x', NOW(6), 'x', NOW(6))"
+          comprobar 1644 "INSERT INTO partida_conciliacion (colegio_id, movimiento_id, movimiento_vigente, objeto_tipo, pago_id, objeto_vigente, regla, monto_movimiento, monto_objeto, diferencia, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'PAGO', 0, 'PAGO:0', 'EXACTA', 1, 1, 0, 'PROPUESTA', NOW(6), 'x', NOW(6))"
+          comprobar 1644 "INSERT INTO verificacion_bancaria (colegio_id, pago_id, resultado, origen, partida_id, banco_fecha, banco_monto, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'ENCONTRADO', 'AUTOMATICA', 0, '2000-01-01', 1, NOW(6), 'sistema.conciliacion', NOW(6))"
           # La base de producción no admite la pasarela simulada (sin la fila 'pasarela_simulada' del DBA).
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'pasarela_simulada'")
           [ "$filas" = "0" ] || { echo "ERROR: la base tiene la fila pasarela_simulada"; exit 1; }
@@ -236,12 +252,12 @@ jobs:
           AUDITORIA_CLAVE_HMAC: "clave-hmac-del-job-de-integracion-continua-0001"
         run: |
           mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras \
-            -e "DROP TRIGGER trg_caja_diaria_estado"
+            -e "DROP TRIGGER trg_extracto_bancario_estado"
           if DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" timeout 120 \
                java -jar target/cuentas-claras-*.jar --server.port=18082 > prod-sin-trigger.log 2>&1; then
-            echo "ERROR: la aplicación arrancó sin trg_caja_diaria_estado"; exit 1
+            echo "ERROR: la aplicación arrancó sin trg_extracto_bancario_estado"; exit 1
           fi
-          grep -q "Faltan triggers en la base: trg_caja_diaria_estado" prod-sin-trigger.log || { cat prod-sin-trigger.log; exit 1; }
+          grep -q "Faltan triggers en la base: trg_extracto_bancario_estado" prod-sin-trigger.log || { cat prod-sin-trigger.log; exit 1; }
           mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras \
             < scripts/mysql/03-triggers.sql
           echo "OK: sin el trigger BEFORE UPDATE, prod no arranca; restaurado con 03-triggers.sql"

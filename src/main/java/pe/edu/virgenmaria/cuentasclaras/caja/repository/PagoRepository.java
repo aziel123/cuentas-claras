@@ -93,4 +93,30 @@ public interface PagoRepository extends Repository<Pago, Long> {
 			+ "and p.caja.canal = pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja.VENTANILLA "
 			+ "and not exists (select v.id from VerificacionBancaria v where v.pago = p) order by p.fecha, p.id")
 	List<Pago> digitalesSinVerificar();
+
+	// --- Sprint 4, tanda 3: conciliación automática con el extracto ---
+
+	/**
+	 * Pagos digitales VIGENTES de ventanilla (Yape, Plin, transferencia, tarjeta) de un rango de fechas: los que deben
+	 * verse uno por uno en el banco. Los de canal no entran: los cubren la liquidación de la pasarela y el lote de
+	 * recaudación.
+	 */
+	@Query("select p from Pago p where p.medio <> pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.EFECTIVO "
+			+ "and p.medio <> pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.RECAUDACION_BANCARIA "
+			+ "and p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE "
+			+ "and p.caja.canal = pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja.VENTANILLA "
+			+ "and p.fecha between :desde and :hasta order by p.fecha, p.id")
+	List<Pago> digitalesDeVentanillaEntre(@Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta);
+
+	/** Pagos VIGENTES de una caja de canal (pasarela o recaudación) de un rango de fechas. */
+	@Query("select p from Pago p where p.caja.canal = :canal "
+			+ "and p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE "
+			+ "and p.fecha between :desde and :hasta order by p.fecha, p.id")
+	List<Pago> deCanalEntre(@Param("canal") pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja canal,
+			@Param("desde") java.time.LocalDate desde, @Param("hasta") java.time.LocalDate hasta);
+
+	/** El pago de ese origen con esa operación (canónica), si existe (la línea de una liquidación se ata a su pago). */
+	Optional<Pago> findFirstByNumeroOperacionAndOrigenOrderByIdDesc(String numeroOperacion,
+			pe.edu.virgenmaria.cuentasclaras.caja.model.OrigenPago origen);
 }
