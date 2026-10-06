@@ -53,6 +53,8 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `archivo_cargado` | INSERT | **Solo inserción** (sprint 4, tanda 2): el archivo original del banco, con su SHA-256, es evidencia (1142) |
 | `lote_recaudacion` | INSERT y UPDATE **solo** de estado, confirmación a ciegas, intentos, aplicación y rechazo | El archivo, su SHA-256, el banco, las fechas, la cantidad de líneas y el total no cambian (1143). Lo confirma otra persona con el total a ciegas igual al del archivo (CHECK); los intentos solo suben de uno en uno y se aplica completo (trigger) |
 | `linea_recaudacion` | INSERT y UPDATE **solo** de estado, motivo de la excepción y devolución | Monto, fecha, código, alumno, cuota y operación no cambian (1143); entra PENDIENTE a un lote CARGADO y en sus fechas; APLICADA exige su pago; DEVUELTA exige la devolución aprobada por otra persona (trigger) |
+| `reembolso_pasarela` | INSERT | **Solo inserción** (correcciones del sprint 4, V16): la devolución de un pago en línea por la API de la pasarela (al mismo medio de origen), una por anulación aprobada de tipo DEVOLUCION y nunca con contracargo (trigger `trg_reembolso_pasarela_registro`). `reembolso` rechaza los pagos de la pasarela (trigger) |
+| `enlace_activacion` | INSERT y UPDATE **solo** de `usado_en, usado_ip, anulado_en, actualizado_en, version` | Enlace de un solo uso para que el apoderado elija su clave (S4-M2). El hash del token, el usuario, el vencimiento y la IP de quien lo creó no cambian (1143); no se borra (1142) |
 
 ## Triggers (paso 3, después de los permisos)
 Los aplica `cc_migrador` (no van en Flyway: H2 no los soporta):
@@ -137,6 +139,11 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
   ```
   Sin esa fila, el perfil `piloto` con la pasarela simulada no arranca. El piloto exige además
   `PASARELA_SIMULADA_SECRETO` propio (no el de desarrollo) y nunca se combina con `prod`, `dev` ni `test`.
+- Correcciones del sprint 4 (S4-M1): el piloto con la pasarela simulada exige además `cuentasclaras.entorno.nombre:
+  PILOTO` (ya viene en `application-piloto.yaml`): todas las páginas muestran la franja «PILOTO · Entorno de prueba» y un
+  pago simulado queda **por revisar** (`SIMULADA_EN_PILOTO`): no registra pago ni comprobante, no marca cuotas pagadas y
+  no se puede aplicar. Aun así, el piloto se hace con familias de prueba o con familias reales que saben que es una
+  prueba: el pago real sigue siendo en caja.
 - Pasarela real: `PASARELA_PROVEEDOR` (por defecto `NINGUNA`: sin pago en línea). Hoy solo se acepta `CULQI` con
   `PASARELA_LLAVE_SECRETA` (`sk_live_` en prod, `sk_test_` fuera de prod), `PASARELA_WEBHOOK_USUARIO` y
   `PASARELA_WEBHOOK_CLAVE`, y su adaptador todavía no está integrado: mientras tanto, déjalo en `NINGUNA`.
@@ -201,6 +208,19 @@ extracto que nace CONFIRMADO, un movimiento de un extracto inexistente, una part
 verificación AUTOMATICA sin partida confirmada dan 1644. `trg_verificacion_bancaria_registro` pasa a su versión final
 (la AUTOMATICA solo la inserta `sistema.conciliacion` con una partida CONFIRMADA sobre un extracto CONFIRMADO): 40
 triggers en total.
+Correcciones del sprint 4 (V16): `UPDATE extracto_bancario SET muestra = muestra`, `UPDATE extracto_bancario SET
+semilla_muestreo = semilla_muestreo`, `UPDATE lote_recaudacion SET muestra = muestra`, `UPDATE partida_conciliacion SET
+linea_recaudacion_id = linea_recaudacion_id` y `UPDATE enlace_activacion SET hash_token|vence_en|usuario_id = ...` dan
+1143; `DELETE` y `UPDATE ... SET version = version` sobre `reembolso_pasarela` y `DELETE` sobre `enlace_activacion` dan
+1142; un reembolso por la pasarela sin anulación aprobada da 1644. Cambian (versión final) `trg_partida_conciliacion_estado`
+(objeto vigente intocable fuera de PROPUESTA, quien subió el lote no confirma, la MANUAL exige su solicitud
+`PARTIDA_MANUAL` aprobada por quien confirma, la EXPLICADA de un cargo no la confirma quien subió el extracto),
+`trg_verificacion_bancaria_registro` (el monto del banco es el del movimiento), `trg_extracto_bancario_nace|estado`
+(muestra y semilla obligatorias; cada extracto se confirma con SU saldo), `trg_lote_recaudacion_nace` (muestra),
+`trg_partida_conciliacion_registro` (objeto LINEA_RECAUDACION), `trg_linea_recaudacion_estado` (devuelve otra persona,
+con destino), `trg_anulacion_pago_registro` (CONTRACARGO), `trg_reembolso_registro` (sin pagos de la pasarela) y
+`trg_orden_pago_estado` (contracargo una vez; con contracargo no se aplica ni se devuelve); se agrega
+`trg_reembolso_pasarela_registro`: 41 triggers en total.
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

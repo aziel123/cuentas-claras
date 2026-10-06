@@ -465,6 +465,11 @@ input[type="file"].input { padding: var(--esp-2); }
 .comprobante-numero { display: grid; gap: var(--esp-1); padding: var(--esp-3); border: 2px solid var(--color-texto); border-radius: var(--radio); text-align: center; }
 .comprobante-numero h1 { font-size: var(--texto-base); }
 .comprobante-numero strong { font-size: var(--texto-lg); }
+/* Correcciones del sprint 4 (S4-M1): franja global de un entorno de prueba (piloto). */
+.franja-entorno {
+  padding: var(--esp-2) var(--esp-4); background: var(--color-peligro); color: var(--color-superficie);
+  text-align: center; font-weight: 700; letter-spacing: 0.04em; font-size: var(--texto-sm);
+}
 .marca-simulado {
   padding: var(--esp-2); border: 2px dashed var(--color-peligro); border-radius: var(--radio);
   color: var(--color-peligro); text-align: center; font-weight: 700; letter-spacing: 0.08em;

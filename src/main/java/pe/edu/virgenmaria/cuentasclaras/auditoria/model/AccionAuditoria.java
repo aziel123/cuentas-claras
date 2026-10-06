@@ -165,6 +165,10 @@ public enum AccionAuditoria {
 	COMPROBANTE_NO_COINCIDE_OSE("Un comprobante aceptado no coincide en el OSE", true),
 	ACCESO_APODERADO_CREADO("Dio acceso en línea a un apoderado", false),
 	ACCESO_APODERADO_QUITADO("Quitó el acceso en línea de un apoderado", true),
+	/** Correcciones del sprint 4 (S4-M2): el apoderado usó su enlace y eligió su clave (con la IP de quien lo usó). */
+	ACCESO_APODERADO_ACTIVADO("El apoderado activó su cuenta en línea", true),
+	/** S4-M2: Promotoría anuló el enlace anterior y generó otro (el apoderado no pudo entrar o alguien lo usó). */
+	ACCESO_APODERADO_RESTABLECIDO("Restableció el acceso en línea de un apoderado", true),
 
 	// Sprint 4 · tanda 2: recaudación bancaria. Los pagos los registra sistema.recaudacion (PAGO_REGISTRADO de siempre).
 	RECAUDACION_CARGADA("Cargó un archivo de recaudación del banco", false),

@@ -327,7 +327,21 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".conciliacion.service.AlertasConciliacion", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".conciliacion.service.IndicadoresConciliacion", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".caja.service.RegistroVerificacionAutomatica", "hasRole('SISTEMA_CONCILIACION')"),
-			Map.entry(BASE + ".pasarela.service.RegistroLiquidaciones", "hasRole('SISTEMA_PASARELA')"));
+			Map.entry(BASE + ".pasarela.service.RegistroLiquidaciones", "hasRole('SISTEMA_PASARELA')"),
+			// Correcciones del sprint 4: el contracargo lo registra solo el sistema; la devolución en línea la pide
+			// Administración; el acceso del apoderado lo restablece solo Promotoría, que también ve sus alertas.
+			Map.entry(BASE + ".pasarela.service.ContracargosPasarela", "hasRole('SISTEMA_PASARELA')"),
+			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#reembolsarEnLinea", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados#restablecerAcceso", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados#conCuentaActiva", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".seguridad.service.AlertasActivacion", "hasRole('PROMOTOR')"));
+
+	/** S4-M2: el enlace de activación lo generan solo los servicios protegidos que dan o restablecen el acceso. */
+	@ArchTest
+	static final ArchRule enlacesActivacionSoloDesdeServiciosProtegidos = noClasses()
+			.that().resideOutsideOfPackages(BASE + ".alumnos.service..", BASE + ".seguridad.service..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".seguridad.service.EnlacesActivacion")
+			.because("EnlacesActivacion no exige rol: el permiso lo exige ServicioAccesoApoderados");
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {

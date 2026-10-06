@@ -98,6 +98,9 @@ public class FamiliaController {
 		model.addAttribute("puedeDarAcceso", sesion != null && (sesion.roles().contains(
 				pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.PROMOTOR) || sesion.roles().contains(
 						pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.ADMINISTRACION)));
+		// S4-M2: Promotoría restablece el acceso (enlace nuevo de un solo uso).
+		model.addAttribute("puedeRestablecerAcceso", sesion != null && sesion.roles().contains(
+				pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.PROMOTOR));
 		return VISTA_APODERADO;
 	}
 
@@ -158,7 +161,14 @@ public class FamiliaController {
 	}
 
 	private void prepararFamilia(Model model, Long id, UsuarioAutenticado sesion) {
-		model.addAttribute("familia", familias.obtener(id));
+		var familia = familias.obtener(id);
+		model.addAttribute("familia", familia);
+		// S4-M2: Promotoría restablece desde aquí el acceso en línea de un apoderado (enlace nuevo de un solo uso).
+		boolean restablece = sesion != null && sesion.roles().contains(
+				pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.PROMOTOR);
+		model.addAttribute("puedeRestablecerAcceso", restablece);
+		model.addAttribute("conCuentaEnLinea", restablece ? accesos.conCuentaActiva(familia.apoderados().stream()
+				.map(pe.edu.virgenmaria.cuentasclaras.alumnos.dto.ApoderadoVista::id).toList()) : java.util.Set.of());
 		model.addAttribute("puedeEditar", Formularios.puedeEditar(sesion));
 		model.addAttribute("tiposDocumento", TipoDocumento.values());
 		model.addAttribute("parentescos", Parentesco.values());

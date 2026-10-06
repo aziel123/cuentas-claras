@@ -121,6 +121,10 @@ GRANT INSERT, UPDATE (estado, movimiento_vigente, objeto_vigente, resuelto_por, 
 -- la devolución de una línea de recaudación se escribe al ejecutarla (trg_linea_recaudacion_estado). El reembolso de un
 -- pago en línea por la API de la pasarela es de SOLO INSERCIÓN (S4-A3).
 GRANT INSERT ON cuentasclaras.reembolso_pasarela TO 'cc_app'@'%';                 -- solo inserción
+-- S4-M2: el enlace de activación de la cuenta del apoderado solo cambia al usarse o anularse (nunca su hash, su
+-- usuario, su vencimiento ni quién lo creó). Sin DELETE.
+GRANT INSERT, UPDATE (usado_en, usado_ip, anulado_en, actualizado_en, version)
+    ON cuentasclaras.enlace_activacion TO 'cc_app'@'%';
 
 -- M2: cc_app no lee information_schema.TRIGGERS (necesitaría el privilegio TRIGGER, que no debe tener). Esta función
 -- (SQL SECURITY DEFINER: corre con los permisos de quien la crea) devuelve solo los nombres de los triggers del esquema,

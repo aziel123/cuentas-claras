@@ -81,17 +81,27 @@ class VerificadorConfiguracionTest {
 				config(VerificadorConfiguracion.PASARELA, "SIMULADA"))).doesNotThrowAnyException();
 	}
 
+	/** S4-M1: en el piloto, la simulada exige además la marca del entorno (franja «PILOTO» en todas las páginas). */
 	@Test
-	void enElPilotoLaSimuladaExigeUnSecretoPropio() {
+	void enElPilotoLaSimuladaExigeLaMarcaPilotoYUnSecretoPropio() {
+		String secreto = "un-secreto-propio-del-piloto-0123456789";
 		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" },
-				config(VerificadorConfiguracion.PASARELA, "SIMULADA")))
+				config(VerificadorConfiguracion.PASARELA, "SIMULADA", VerificadorConfiguracion.SECRETO_SIMULADA, secreto)))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("cuentasclaras.entorno.nombre: PILOTO");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" },
+				config(VerificadorConfiguracion.PASARELA, "SIMULADA", VerificadorConfiguracion.ENTORNO, "PRUEBAS",
+						VerificadorConfiguracion.SECRETO_SIMULADA, secreto)))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("PILOTO");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" },
+				config(VerificadorConfiguracion.PASARELA, "SIMULADA", VerificadorConfiguracion.ENTORNO, "PILOTO")))
 				.isInstanceOf(IllegalStateException.class).hasMessageContaining("PASARELA_SIMULADA_SECRETO");
 		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" },
-				config(VerificadorConfiguracion.PASARELA, "SIMULADA", VerificadorConfiguracion.SECRETO_SIMULADA,
-						"secreto-no-usar-en-produccion"))).isInstanceOf(IllegalStateException.class);
+				config(VerificadorConfiguracion.PASARELA, "SIMULADA", VerificadorConfiguracion.ENTORNO, "PILOTO",
+						VerificadorConfiguracion.SECRETO_SIMULADA, "secreto-no-usar-en-produccion")))
+				.isInstanceOf(IllegalStateException.class);
 		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" },
-				config(VerificadorConfiguracion.PASARELA, "SIMULADA", VerificadorConfiguracion.SECRETO_SIMULADA,
-						"un-secreto-propio-del-piloto-0123456789"))).doesNotThrowAnyException();
+				config(VerificadorConfiguracion.PASARELA, "SIMULADA", VerificadorConfiguracion.ENTORNO, "PILOTO",
+						VerificadorConfiguracion.SECRETO_SIMULADA, secreto))).doesNotThrowAnyException();
 	}
 
 	@Test

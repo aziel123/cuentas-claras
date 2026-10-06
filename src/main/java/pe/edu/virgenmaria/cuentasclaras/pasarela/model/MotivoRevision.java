@@ -8,7 +8,9 @@ public enum MotivoRevision {
 	MONTO_DISTINTO("La pasarela confirmó un monto distinto del de la orden", true),
 	MONEDA_DISTINTA("La pasarela confirmó otra moneda", true),
 	OPERACION_DUPLICADA("El número de operación ya está registrado en otro pago", true),
-	CONTRACARGO("El apoderado desconoció el cargo ante su banco", true);
+	CONTRACARGO("El apoderado desconoció el cargo ante su banco", true),
+	/** Correcciones del sprint 4 (S4-M1): en el piloto, un pago de la pasarela SIMULADA no es dinero real. */
+	SIMULADA_EN_PILOTO("Pago con la pasarela SIMULADA en el piloto: no es dinero real y no se aplica a cuotas", false);
 
 	private final String descripcion;
 

@@ -27,12 +27,13 @@ public class LoginController {
 			@RequestParam(required = false) String salio,
 			@RequestParam(required = false) String expirada,
 			@RequestParam(name = "clave-cambiada", required = false) String claveCambiada,
+			@RequestParam(name = "cuenta-activada", required = false) String cuentaActivada,
 			Model model) {
 		if (autenticacion != null && autenticacion.isAuthenticated()
 				&& !(autenticacion instanceof AnonymousAuthenticationToken)) {
 			return "redirect:/inicio";
 		}
-		model.addAttribute("mensaje", MensajeLogin.para(error, vencida, salio, expirada, claveCambiada,
+		model.addAttribute("mensaje", MensajeLogin.para(error, vencida, salio, expirada, claveCambiada, cuentaActivada,
 				propiedades.intentosMaximos(), propiedades.duracionBloqueo().toMinutes(),
 				propiedades.vigenciaClaveTemporal().toHours()));
 		return "seguridad/login";

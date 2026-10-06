@@ -12,12 +12,14 @@ import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.ApoderadoRepository;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.PropiedadesSeguridad;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.UsuarioCreado;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.AccesoCreado;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.EnlacesActivacion;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.GeneradorClaveTemporal;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioDetallesUsuario;
 
@@ -29,8 +31,13 @@ import java.util.Optional;
 
 /**
  * Cuenta en línea del apoderado (sprint 4, decisión 27): la crea Promotoría o Administración desde su ficha. El usuario
- * es su número de documento, queda enlazado a SU registro de apoderado (y por él, a su familia: solo ve y paga lo suyo)
- * y la clave temporal vence en 48 horas y se entrega en persona hasta el sprint 5. Quitar el acceso desactiva la cuenta.
+ * es su número de documento y queda enlazado a SU registro de apoderado (y por él, a su familia: solo ve y paga lo
+ * suyo). Quitar el acceso desactiva la cuenta.
+ * <p>
+ * Correcciones del sprint 4 (S4-M2): quien la crea ya NO ve ninguna clave. Recibe un ENLACE de un solo uso que vence en
+ * 48 horas (en la base solo queda su SHA-256) para entregarlo en persona o por un canal del titular; con él, el
+ * apoderado elige su propia clave. La activación queda auditada con su IP (y con aviso a Promotoría si es la misma IP de
+ * quien la creó). Si el enlace se perdió o lo usó otra persona, Promotoría restablece el acceso con un enlace nuevo.
  */
 @Service
 @PreAuthorize("hasAnyRole('PROMOTOR','ADMINISTRACION')")
@@ -56,11 +63,15 @@ public class ServicioAccesoApoderados {
 
 	private final pe.edu.virgenmaria.cuentasclaras.seguridad.service.SesionesUsuario sesiones;
 
+	private final EnlacesActivacion enlaces;
+
 	public ServicioAccesoApoderados(ApoderadoRepository apoderados, UsuarioRepository usuarios,
 			ServicioDetallesUsuario detalles, PasswordEncoder codificador, GeneradorClaveTemporal generador,
 			PropiedadesSeguridad propiedades, AuditoriaService auditoria, PlatformTransactionManager transacciones,
-			Clock reloj, pe.edu.virgenmaria.cuentasclaras.seguridad.service.SesionesUsuario sesiones) {
+			Clock reloj, pe.edu.virgenmaria.cuentasclaras.seguridad.service.SesionesUsuario sesiones,
+			EnlacesActivacion enlaces) {
 		this.sesiones = sesiones;
+		this.enlaces = enlaces;
 		this.apoderados = apoderados;
 		this.usuarios = usuarios;
 		this.detalles = detalles;
@@ -79,11 +90,19 @@ public class ServicioAccesoApoderados {
 				.map(u -> u.getNombreUsuario() + (u.isActivo() ? "" : " (desactivada)")).orElse(null)));
 	}
 
+	/** S4-M2: de estos apoderados, los que tienen cuenta en línea activa (para el botón «Restablecer acceso»). */
+	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION')")
+	public java.util.Set<Long> conCuentaActiva(java.util.Collection<Long> apoderadoIds) {
+		return transaccion.execute(t -> apoderadoIds.stream().filter(id -> usuarios.findByApoderadoId(id)
+				.filter(Usuario::isActivo).isPresent()).collect(java.util.stream.Collectors.toUnmodifiableSet()));
+	}
+
 	/**
-	 * Crea la cuenta (usuario = número de documento) con una clave temporal que se muestra UNA vez. No es
-	 * {@code @Transactional}: el nombre se busca antes en toda la plataforma.
+	 * Crea la cuenta (usuario = número de documento) SIN clave conocida por nadie (la temporal es al azar, nunca se
+	 * muestra y ya está vencida) y devuelve el enlace de activación de un solo uso. No es {@code @Transactional}: el
+	 * nombre se busca antes en toda la plataforma.
 	 */
-	public UsuarioCreado darAcceso(Long apoderadoId) {
+	public AccesoCreado darAcceso(Long apoderadoId) {
 		Apoderado apoderado = transaccion.execute(t -> apoderados.findById(apoderadoId).filter(Apoderado::isActivo)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Apoderado no encontrado")));
 		String nombreUsuario = apoderado.getDocumento().numero().toLowerCase(Locale.ROOT);
@@ -97,29 +116,62 @@ public class ServicioAccesoApoderados {
 			throw new ReglaNegocioException("Ya existe un usuario «" + nombreUsuario + "» en la plataforma: revisa si el "
 					+ "apoderado ya tiene cuenta o si su documento está repetido.");
 		}
-		String clave = generador.generar();
-		Usuario usuario;
 		try {
-			usuario = transaccion.execute(t -> {
+			return transaccion.execute(t -> {
 				// Releído en ESTA transacción (el de arriba ya no tiene sesión para su familia).
 				Apoderado vigente = apoderados.findById(apoderadoId).filter(Apoderado::isActivo)
 						.orElseThrow(() -> new RecursoNoEncontradoException("Apoderado no encontrado"));
 				LocalDateTime ahora = LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS);
+				// Una clave al azar que nadie conoce y que ya venció: la cuenta solo se activa con el enlace.
 				Usuario nuevo = Usuario.deApoderado(nombreUsuario, vigente.nombreCompleto(), vigente.getCorreo(),
-						codificador.encode(clave), vigente.getId());
-				nuevo.vencerClaveTemporalEn(ahora.plus(propiedades.vigenciaClaveTemporal()));
+						codificador.encode(generador.generar()), vigente.getId());
+				nuevo.vencerClaveTemporalEn(ahora);
 				usuarios.save(nuevo);
+				EnlacesActivacion.Generado enlace = enlaces.generar(nuevo.getColegioId(), nuevo.getId(),
+						propiedades.vigenciaClaveTemporal());
 				auditoria.registrar(AccionAuditoria.ACCESO_APODERADO_CREADO, "usuario", nuevo.getId().toString(), null,
-						"roles=APODERADO; activo; clave temporal", "Cuenta en línea del apoderado " + vigente.nombreCompleto()
-								+ " (" + vigente.getDocumento().enmascarado() + ") de " + vigente.getFamilia().getNombre()
-								+ ": solo ve y paga lo de su familia. La clave temporal se entrega en persona.");
-				return nuevo;
+						"roles=APODERADO; activo; enlace de un solo uso", "Cuenta en línea del apoderado "
+								+ vigente.nombreCompleto() + " (" + vigente.getDocumento().enmascarado() + ") de "
+								+ vigente.getFamilia().getNombre() + ": solo ve y paga lo de su familia. Nadie ve su clave: "
+								+ "se entrega un enlace de un solo uso que vence el " + Calendario.formatear(enlace.venceEn()
+										.toLocalDate()) + " y con el que el apoderado elige su clave.");
+				return new AccesoCreado(nuevo.getId(), nuevo.getNombreUsuario(), nuevo.getNombreCompleto(),
+						enlace.ruta(), enlace.venceEn());
 			});
 		}
 		catch (DataIntegrityViolationException e) {
 			throw new ReglaNegocioException("Este apoderado ya tiene su cuenta en línea.");
 		}
-		return new UsuarioCreado(usuario.getId(), usuario.getNombreUsuario(), usuario.getNombreCompleto(), clave);
+	}
+
+	/**
+	 * S4-M2: Promotoría restablece el acceso del apoderado (no pudo entrar, perdió el enlace o alguien más lo usó): anula
+	 * los enlaces anteriores, deja una clave al azar ya vencida (nadie la conoce), cierra sus sesiones y genera un enlace
+	 * nuevo de un solo uso.
+	 */
+	@PreAuthorize("hasRole('PROMOTOR')")
+	public AccesoCreado restablecerAcceso(Long apoderadoId) {
+		AccesoCreado creado = transaccion.execute(t -> {
+			Usuario usuario = usuarios.findByApoderadoId(apoderadoId)
+					.orElseThrow(() -> new ReglaNegocioException("Este apoderado no tiene cuenta en línea."));
+			if (!usuario.isActivo()) {
+				throw new ReglaNegocioException("La cuenta en línea del apoderado está desactivada.");
+			}
+			LocalDateTime ahora = LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS);
+			usuario.restablecerClave(codificador.encode(generador.generar()), ahora, ahora,
+					SecurityContextHolder.getContext().getAuthentication().getName());
+			usuarios.save(usuario);
+			EnlacesActivacion.Generado enlace = enlaces.generar(usuario.getColegioId(), usuario.getId(),
+					propiedades.vigenciaClaveTemporal());
+			auditoria.registrar(AccionAuditoria.ACCESO_APODERADO_RESTABLECIDO, "usuario", usuario.getId().toString(), null,
+					"enlace nuevo de un solo uso", "Se restableció el acceso en línea de " + usuario.getNombreCompleto()
+							+ ": los enlaces anteriores ya no sirven y sus sesiones se cerraron. El enlace nuevo vence el "
+							+ Calendario.formatear(enlace.venceEn().toLocalDate()) + ".");
+			return new AccesoCreado(usuario.getId(), usuario.getNombreUsuario(), usuario.getNombreCompleto(),
+					enlace.ruta(), enlace.venceEn());
+		});
+		sesiones.expirar(creado.id());
+		return creado;
 	}
 
 	/** Desactiva la cuenta en línea del apoderado (con motivo, resaltado en la bitácora). */

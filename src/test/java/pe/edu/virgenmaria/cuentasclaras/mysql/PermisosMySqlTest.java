@@ -111,6 +111,9 @@ class PermisosMySqlTest {
 	@Autowired
 	private org.springframework.transaction.PlatformTransactionManager transacciones;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAccesoApoderados accesoApoderados;
+
 	@AfterEach
 	void limpiar() {
 		SecurityContextHolder.clearContext();
@@ -2096,6 +2099,46 @@ class PermisosMySqlTest {
 		}
 		catch (DataAccessException e) {
 			return codigoMySql(e);
+		}
+	}
+
+	/**
+	 * Correcciones del sprint 4 (S4-M2): dar, restablecer y activar el acceso en línea del apoderado con los permisos
+	 * mínimos (GRANT por columna en enlace_activacion); el enlace no se borra ni cambia su hash, su usuario ni su
+	 * vencimiento (1142/1143).
+	 */
+	@Test
+	void elEnlaceDeActivacionDelApoderadoFuncionaYNoSeReescribe() throws Exception {
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.ADMINISTRACION));
+		String base = String.format("%07d", Math.floorMod(System.nanoTime(), 10_000_000L));
+		String dni = "4" + base;
+		Long familia = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoNuevo("5" + base, "Ramos", "Vega", "Lucía", java.time.LocalDate.of(2016, 4, 9), dni, "Vega",
+						"Soto", "Ana", "955444333", null, null)).familiaId();
+		Long apoderado = jdbc.queryForObject("SELECT id FROM apoderado WHERE familia_id = ?", Long.class, familia);
+		String primero = accesoApoderados.darAcceso(apoderado).enlace();
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.PROMOTOR));
+		String ruta = accesoApoderados.restablecerAcceso(apoderado).enlace();
+		SecurityContextHolder.clearContext();
+
+		mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(primero))
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+						.string(org.hamcrest.Matchers.containsString("ya no sirve")));
+		String clave = "una clave elegida en mysql " + sufijo;
+		mvc.perform(post(ruta).with(csrf()).param("documento", dni).param("clave", clave).param("confirmacion", clave))
+				.andExpect(redirectedUrl("/login?cuenta-activada"));
+		mvc.perform(post("/login").with(csrf()).param("usuario", dni).param("clave", clave))
+				.andExpect(redirectedUrl("/inicio"));
+		Long usuario = jdbc.queryForObject("SELECT id FROM usuario WHERE apoderado_id = ?", Long.class, apoderado);
+		assertThat(jdbc.queryForObject("SELECT CONCAT(COUNT(*), ' ', SUM(usado_en IS NOT NULL), ' ', "
+				+ "SUM(anulado_en IS NOT NULL)) FROM enlace_activacion WHERE usuario_id = ?", String.class, usuario))
+				.isEqualTo("2 1 1");
+		for (String[] caso : new String[][] { { "DELETE FROM enlace_activacion WHERE usuario_id = ?", "1142" },
+				{ "UPDATE enlace_activacion SET hash_token = REPEAT('0', 64) WHERE usuario_id = ?", "1143" },
+				{ "UPDATE enlace_activacion SET vence_en = NOW(6) WHERE usuario_id = ?", "1143" },
+				{ "UPDATE enlace_activacion SET usuario_id = usuario_id WHERE usuario_id = ?", "1143" } }) {
+			assertThatThrownBy(() -> jdbc.update(caso[0], usuario)).as(caso[0]).isInstanceOf(DataAccessException.class)
+					.satisfies(e -> assertThat(codigoMySql(e)).as(caso[0]).isEqualTo(Integer.parseInt(caso[1])));
 		}
 	}
 

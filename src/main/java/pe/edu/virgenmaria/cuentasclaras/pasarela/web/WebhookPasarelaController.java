@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.proceso.RecepcionAvisos;
+import pe.edu.virgenmaria.cuentasclaras.pasarela.service.LimiteAvisosPorIp;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -19,23 +20,31 @@ import java.util.Map;
 
 /**
  * Avisos (webhooks) de la pasarela: {@code POST /webhooks/pasarela/{proveedor}/{colegio}}, sin sesión ni CSRF (cadena
- * de seguridad aparte). Lee como mucho 16 KB (si no, 413) y delega en {@link RecepcionAvisos}: aviso no auténtico → 401
- * (sin escribir en la bitácora), proveedor o colegio que no existen → 404, recibido o ya recibido → 200. El aviso nunca
- * registra dinero por sí mismo: despierta la consulta a la pasarela.
+ * de seguridad aparte). Lee como mucho 16 KB (si no, 413) y delega en {@link RecepcionAvisos}: aviso no auténtico, o
+ * proveedor o colegio que no existen o no están activos → 401 (la misma respuesta: así no se enumeran colegios;
+ * correcciones del sprint 4, S4-B4), recibido o ya recibido → 200. Cada IP envía como mucho
+ * {@code avisos-por-minuto-por-ip} avisos por minuto (si no, 429). El aviso nunca registra dinero por sí mismo:
+ * despierta la consulta a la pasarela.
  */
 @Controller
 public class WebhookPasarelaController {
 
 	private final RecepcionAvisos recepcion;
 
-	public WebhookPasarelaController(RecepcionAvisos recepcion) {
+	private final LimiteAvisosPorIp limite;
+
+	public WebhookPasarelaController(RecepcionAvisos recepcion, LimiteAvisosPorIp limite) {
 		this.recepcion = recepcion;
+		this.limite = limite;
 	}
 
 	@PostMapping("/webhooks/pasarela/{proveedor:[A-Za-z]{3,20}}/{colegio:\\d{1,12}}")
 	@ResponseBody
 	public ResponseEntity<String> recibir(@PathVariable String proveedor, @PathVariable Long colegio,
 			HttpServletRequest peticion) throws IOException {
+		if (!limite.permitir(peticion.getRemoteAddr())) {
+			return respuesta(HttpStatus.TOO_MANY_REQUESTS, "demasiados avisos");
+		}
 		int maximo = recepcion.maximoBytes();
 		if (peticion.getContentLengthLong() > maximo) {
 			return respuesta(HttpStatus.CONTENT_TOO_LARGE, "aviso demasiado grande");
@@ -52,7 +61,7 @@ public class WebhookPasarelaController {
 			case ACEPTADO -> respuesta(HttpStatus.OK, "recibido");
 			case YA_RECIBIDO -> respuesta(HttpStatus.OK, "ya recibido");
 			case NO_AUTENTICO -> respuesta(HttpStatus.UNAUTHORIZED, "aviso no autentico");
-			case NO_ENCONTRADO -> respuesta(HttpStatus.NOT_FOUND, "no encontrado");
+			case NO_ENCONTRADO -> respuesta(HttpStatus.UNAUTHORIZED, "aviso no autentico");
 			case MUY_GRANDE -> respuesta(HttpStatus.CONTENT_TOO_LARGE, "aviso demasiado grande");
 		};
 	}

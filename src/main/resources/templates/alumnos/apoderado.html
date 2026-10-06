@@ -36,13 +36,17 @@
 			<div th:replace="~{fragments/componentes :: alerta('exito', ${exito})}"></div>
 		</th:block>
 		<th:block th:if="${cuentaEnLinea == null}">
-			<p class="secundario">Con su cuenta en línea, el apoderado ve el estado de cuenta de sus hijos, paga con Yape, Plin o tarjeta y descarga sus boletas. Solo ve lo de su familia.</p>
+			<p class="secundario">Con su cuenta en línea, el apoderado ve el estado de cuenta de sus hijos, paga con Yape, Plin o tarjeta y descarga sus boletas. Solo ve lo de su familia. Recibirás un enlace de un solo uso para que él elija su clave (nadie más la ve).</p>
 			<form th:if="${puedeDarAcceso}" method="post" th:action="@{/alumnos/apoderados/{id}/acceso(id=${apoderado.id})}">
 				<button th:replace="~{fragments/componentes :: boton('Dar acceso en línea', 'secundario')}"></button>
 			</form>
 		</th:block>
 		<th:block th:if="${cuentaEnLinea != null}">
 			<p>Usuario: <strong class="num" th:text="${cuentaEnLinea}">45678912</strong></p>
+			<form th:if="${puedeRestablecerAcceso}" method="post" th:action="@{/alumnos/apoderados/{id}/acceso/restablecer(id=${apoderado.id})}">
+				<p class="secundario">¿No pudo entrar, perdió el enlace o alguien más lo usó? Restablece su acceso: el enlace anterior deja de servir y se genera otro.</p>
+				<button th:replace="~{fragments/componentes :: boton('Restablecer acceso', 'secundario')}"></button>
+			</form>
 			<th:block th:if="${puedeDarAcceso}">
 				<th:block th:replace="~{fragments/componentes :: modalMotivo('quitar-acceso', '¿Quitar el acceso en línea?',
 					'El apoderado ya no podrá ingresar ni pagar en línea. Sus sesiones abiertas se cierran al momento.',

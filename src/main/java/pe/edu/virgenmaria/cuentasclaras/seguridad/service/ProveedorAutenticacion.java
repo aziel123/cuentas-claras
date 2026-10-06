@@ -143,9 +143,15 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 					"La clave temporal venció el " + usuario.getClaveTemporalHasta() + ".");
 			return new Intento(Resultado.CLAVE_TEMPORAL_VENCIDA, null);
 		}
+		// S4-M2: el PRIMER ingreso de una cuenta queda señalado en la bitácora (con la IP del evento).
+		boolean primero = usuario.getUltimoIngresoEn() == null;
 		usuario.registrarIngresoExitoso(ahora);
-		auditoria.registrar(actor, AccionAuditoria.INGRESO_EXITOSO, "usuario", id, null, null,
-				usuario.isDebeCambiarClave() ? "Ingresó con clave temporal: debe cambiarla." : null);
+		String detalle = usuario.isDebeCambiarClave() ? "Ingresó con clave temporal: debe cambiarla." : null;
+		if (primero) {
+			detalle = "PRIMER ingreso de esta cuenta" + (actor.ip() == null ? "" : ", desde la IP " + actor.ip()) + "."
+					+ (detalle == null ? "" : " " + detalle);
+		}
+		auditoria.registrar(actor, AccionAuditoria.INGRESO_EXITOSO, "usuario", id, null, null, detalle);
 		return new Intento(Resultado.CORRECTO, UsuarioAutenticado.de(usuario, ahora));
 	}
 

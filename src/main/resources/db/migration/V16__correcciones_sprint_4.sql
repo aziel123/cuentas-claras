@@ -85,3 +85,29 @@ ALTER TABLE partida_conciliacion ADD CONSTRAINT ck_partida_conciliacion_objeto C
         AND liquidacion_id IS NULL AND lote_recaudacion_id IS NULL AND reembolso_id IS NULL
         AND linea_recaudacion_id IS NULL AND categoria IS NOT NULL AND nota IS NOT NULL
         AND monto_objeto = monto_movimiento));
+
+-- S4-M2. La cuenta en línea del apoderado ya no se entrega con una clave temporal que ve quien la crea: se entrega un
+-- ENLACE de un solo uso que caduca (se guarda solo el SHA-256 del token). Al usarlo, el apoderado elige su clave; queda
+-- la IP de quien lo creó y la de quien lo usó (si coinciden, Promotoría lo ve). Promotoría puede restablecerlo (el
+-- enlace anterior queda anulado). No se borra.
+CREATE TABLE enlace_activacion (
+    id              BIGINT         NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    colegio_id      BIGINT         NOT NULL,
+    usuario_id      BIGINT         NOT NULL,
+    hash_token      VARCHAR(64)    NOT NULL,
+    vence_en        DATETIME(6)    NOT NULL,
+    creado_ip       VARCHAR(45),
+    usado_en        DATETIME(6),
+    usado_ip        VARCHAR(45),
+    anulado_en      DATETIME(6),
+    creado_en       DATETIME(6)    NOT NULL,
+    creado_por      VARCHAR(60)    NOT NULL,
+    actualizado_en  DATETIME(6)    NOT NULL,
+    version         BIGINT         NOT NULL DEFAULT 0,
+    CONSTRAINT uk_enlace_activacion_hash UNIQUE (hash_token),
+    CONSTRAINT fk_enlace_activacion_colegio FOREIGN KEY (colegio_id) REFERENCES colegio (id),
+    CONSTRAINT fk_enlace_activacion_usuario FOREIGN KEY (usuario_id) REFERENCES usuario (id),
+    CONSTRAINT ck_enlace_activacion_hash CHECK (REGEXP_LIKE(hash_token, '^[0-9a-f]{64}$', 'c')),
+    CONSTRAINT ck_enlace_activacion_uso CHECK (usado_en IS NULL OR anulado_en IS NULL)
+);
+CREATE INDEX ix_enlace_activacion_usuario ON enlace_activacion (colegio_id, usuario_id);

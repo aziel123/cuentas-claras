@@ -18,6 +18,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.service.RegistroPagosAutomaticos.Mo
 import pe.edu.virgenmaria.cuentasclaras.caja.service.RegistroPagosAutomaticos.PedidoPagoEnLinea;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante;
+import pe.edu.virgenmaria.cuentasclaras.comun.config.PropiedadesEntorno;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
@@ -87,6 +88,10 @@ public class ProcesadorPagosEnLinea {
 
 	private final ContracargosPasarela contracargos;
 
+	private final PropiedadesEntorno entorno;
+
+	private final org.springframework.core.env.Environment perfiles;
+
 	private final AuditoriaService auditoria;
 
 	private final TransactionTemplate transaccion;
@@ -98,7 +103,9 @@ public class ProcesadorPagosEnLinea {
 
 	public ProcesadorPagosEnLinea(OrdenPagoRepository ordenes, OrdenPagoCuotaRepository cuotasDeOrden,
 			EventoPasarelaRepository eventos, Pasarelas pasarelas, RegistroPagosAutomaticos registro,
-			ContracargosPasarela contracargos, AuditoriaService auditoria, PlatformTransactionManager transacciones,
+			ContracargosPasarela contracargos, PropiedadesEntorno entorno,
+			org.springframework.core.env.Environment perfiles, AuditoriaService auditoria,
+			PlatformTransactionManager transacciones,
 			Clock reloj) {
 		this.ordenes = ordenes;
 		this.cuotasDeOrden = cuotasDeOrden;
@@ -106,6 +113,8 @@ public class ProcesadorPagosEnLinea {
 		this.pasarelas = pasarelas;
 		this.registro = registro;
 		this.contracargos = contracargos;
+		this.entorno = entorno;
+		this.perfiles = perfiles;
 		this.auditoria = auditoria;
 		this.transaccion = new TransactionTemplate(transacciones);
 		this.transaccion.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -221,7 +230,12 @@ public class ProcesadorPagosEnLinea {
 			ordenes.saveAndFlush(orden);
 			Optional<MotivoRevision> motivo = Optional.empty();
 			String detalle = null;
-			if (canonico.monto().compareTo(orden.getMonto()) != 0) {
+			if (orden.getProveedor() == ProveedorPasarela.SIMULADA && enPiloto()) {
+				// S4-M1: en el piloto la pasarela simulada no marca cuotas pagadas (no es dinero real).
+				motivo = Optional.of(MotivoRevision.SIMULADA_EN_PILOTO);
+				detalle = "Entorno PILOTO: el pago simulado queda registrado para la prueba, sin tocar las cuotas.";
+			}
+			else if (canonico.monto().compareTo(orden.getMonto()) != 0) {
 				motivo = Optional.of(MotivoRevision.MONTO_DISTINTO);
 				detalle = "La pasarela confirmó " + Dinero.formatear(canonico.monto()) + " y la orden era por "
 						+ Dinero.formatear(orden.getMonto()) + ".";
@@ -335,6 +349,11 @@ public class ProcesadorPagosEnLinea {
 
 	private LocalDateTime ahora() {
 		return LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS);
+	}
+
+	/** S4-M1: el perfil piloto o la marca {@code cuentasclaras.entorno.nombre: PILOTO}. */
+	private boolean enPiloto() {
+		return entorno.piloto() || java.util.Arrays.asList(perfiles.getActiveProfiles()).contains("piloto");
 	}
 
 	/** Lo que se necesita de la orden fuera de la transacción. */

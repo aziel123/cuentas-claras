@@ -388,6 +388,11 @@ class MatrizPermisosTest {
 			return true;
 		}
 		PathContainer camino = PathContainer.parsePath(ruta);
+		// Correcciones del sprint 4 (S4-M2): las rutas públicas también son patrones (el enlace de activación).
+		if (Arrays.stream(ModuloApp.RUTAS_PUBLICAS)
+				.anyMatch(patron -> PathPatternParser.defaultInstance.parse(patron).matches(camino))) {
+			return true;
+		}
 		// Sprint 4: los avisos de la pasarela tienen su propia cadena (sin sesión; solo POST con firma).
 		if (PathPatternParser.defaultInstance.parse(ModuloApp.RUTA_WEBHOOK_PASARELA).matches(camino)) {
 			return true;

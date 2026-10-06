@@ -14,6 +14,13 @@ public record MensajeLogin(String tipo, String texto) {
 	 */
 	static MensajeLogin para(String error, String vencida, String salio, String expirada, String claveCambiada,
 			int intentosMaximos, long minutosBloqueo, long horasClaveTemporal) {
+		return para(error, vencida, salio, expirada, claveCambiada, null, intentosMaximos, minutosBloqueo,
+				horasClaveTemporal);
+	}
+
+	/** {@code cuentaActivada}: el apoderado acaba de elegir su clave con su enlace de activación (S4-M2). */
+	static MensajeLogin para(String error, String vencida, String salio, String expirada, String claveCambiada,
+			String cuentaActivada, int intentosMaximos, long minutosBloqueo, long horasClaveTemporal) {
 		if (error != null) {
 			return new MensajeLogin("error", "Usuario o clave incorrectos. Después de " + intentosMaximos
 					+ " intentos fallidos la cuenta se bloquea " + minutosBloqueo + " minutos.");
@@ -25,6 +32,10 @@ public record MensajeLogin(String tipo, String texto) {
 		if (expirada != null) {
 			return new MensajeLogin("info", "Tu sesión se cerró porque ingresaste desde otro equipo, cambiaron tus "
 					+ "permisos o pasó mucho tiempo sin actividad. Vuelve a ingresar.");
+		}
+		if (cuentaActivada != null) {
+			return new MensajeLogin("exito", "Listo, tu cuenta está activa. Ingresa con tu número de documento y la "
+					+ "clave que acabas de elegir.");
 		}
 		if (claveCambiada != null) {
 			return new MensajeLogin("exito", "Listo, tu clave se cambió. Ingresa con tu nueva clave.");

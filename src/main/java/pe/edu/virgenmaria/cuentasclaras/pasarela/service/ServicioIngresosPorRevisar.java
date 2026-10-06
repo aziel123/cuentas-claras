@@ -71,6 +71,9 @@ public class ServicioIngresosPorRevisar {
 	@PreAuthorize("hasRole('ADMINISTRACION')")
 	public void solicitarAplicacion(Long ordenId, AplicacionIngresoRequest pedido) {
 		OrdenPago orden = porRevisar(ordenId);
+		if (orden.getMotivoRevision() == pe.edu.virgenmaria.cuentasclaras.pasarela.model.MotivoRevision.SIMULADA_EN_PILOTO) {
+			throw new ReglaNegocioException("Es un pago SIMULADO del piloto: no es dinero real y no se aplica a cuotas.");
+		}
 		String motivo = Motivo.exigir(pedido.motivo());
 		if (!OrdenPago.MONEDA.equals(orden.getMonedaConfirmada())) {
 			throw new ReglaNegocioException("La pasarela cobró en otra moneda (" + orden.getMonedaConfirmada() + "): este "

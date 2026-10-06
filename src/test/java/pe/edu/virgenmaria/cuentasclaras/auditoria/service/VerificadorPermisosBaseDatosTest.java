@@ -226,8 +226,8 @@ class VerificadorPermisosBaseDatosTest {
 
 	/**
 	 * Correcciones del sprint 4 (V16): si cc_app pudiera reescribir la muestra fija de una confirmación a ciegas o la
-	 * semilla del muestreo, editar un reembolso por la pasarela o insertar uno que no corresponde (sin su trigger), la
-	 * aplicación no arranca.
+	 * semilla del muestreo, editar un reembolso por la pasarela o insertar uno que no corresponde (sin su trigger), o
+	 * borrar o reescribir un enlace de activación (S4-M2), la aplicación no arranca.
 	 */
 	@Test
 	void fallaSiSePuedenTocarLasCorreccionesDelSprint4() {
@@ -236,7 +236,11 @@ class VerificadorPermisosBaseDatosTest {
 				"UPDATE lote_recaudacion SET muestra = muestra WHERE 1 = 0",
 				"UPDATE reembolso_pasarela SET version = version WHERE 1 = 0",
 				"DELETE FROM reembolso_pasarela WHERE 1 = 0",
-				"UPDATE partida_conciliacion SET linea_recaudacion_id = linea_recaudacion_id WHERE 1 = 0" }) {
+				"UPDATE partida_conciliacion SET linea_recaudacion_id = linea_recaudacion_id WHERE 1 = 0",
+				"DELETE FROM enlace_activacion WHERE 1 = 0",
+				"UPDATE enlace_activacion SET hash_token = hash_token WHERE 1 = 0",
+				"UPDATE enlace_activacion SET vence_en = vence_en WHERE 1 = 0",
+				"UPDATE enlace_activacion SET usuario_id = usuario_id WHERE 1 = 0" }) {
 			JdbcTemplate mysql = mysqlQueDeniega();
 			doReturn(0).when(mysql).update(sql);
 			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos()).as(sql)

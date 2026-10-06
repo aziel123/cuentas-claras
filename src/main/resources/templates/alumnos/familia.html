@@ -60,6 +60,11 @@
 				</p>
 				<p class="secundario" th:if="${a.esResponsable()}" th:text="|Paga por: ${#strings.listJoin(a.responsableDe, ', ')}|">Paga por: Mateo</p>
 				<p class="secundario num" th:if="${a.ruc != null}" th:text="|Factura con RUC ${a.ruc} · ${a.razonSocial}|">Factura con RUC 20131312955</p>
+				<form class="fila" th:if="${puedeRestablecerAcceso and conCuentaEnLinea.contains(a.id)}" method="post"
+					th:action="@{/alumnos/apoderados/{id}/acceso/restablecer(id=${a.id}, familiaId=${familia.id})}">
+					<button type="submit" class="btn btn-secundario btn-chico"
+						th:aria-label="|Restablecer el acceso en línea de ${a.nombreCompleto}|">Restablecer acceso en línea</button>
+				</form>
 				<div class="fila" th:if="${puedeEditar and a.activo}">
 					<a class="btn btn-secundario btn-chico" th:href="@{/alumnos/apoderados/{id}(id=${a.id})}"
 						th:aria-label="|Corregir datos de ${a.nombreCompleto}|">Corregir datos</a>

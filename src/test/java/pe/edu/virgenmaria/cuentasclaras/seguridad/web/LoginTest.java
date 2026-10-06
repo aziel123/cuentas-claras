@@ -215,6 +215,13 @@ class LoginTest {
 		mvc.perform(get("/login").session(sesion)).andExpect(redirectedUrl("/inicio"));
 	}
 
+	/** S4-M1: sin la marca del entorno (producción) no hay franja de entorno de prueba. */
+	@Test
+	void sinMarcaDeEntornoNoHayFranja() throws Exception {
+		mvc.perform(get("/login")).andExpect(status().isOk()).andExpect(content().string(
+				org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("franja-entorno"))));
+	}
+
 	private org.springframework.test.web.servlet.ResultActions ingresar(String usuario, String clave) throws Exception {
 		return mvc.perform(post("/login").with(csrf()).param("usuario", usuario).param("clave", clave));
 	}

@@ -211,7 +211,12 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "'2000-01-01', NOW(6), 'verificador', NOW(6))", "trg_reembolso_pasarela_registro"),
 			// S4-A4: la cuenta de destino y el objeto de una partida no se reescriben.
 			columna("UPDATE partida_conciliacion SET linea_recaudacion_id = linea_recaudacion_id WHERE 1 = 0",
-					"partida_conciliacion"));
+					"partida_conciliacion"),
+			// S4-M2: el enlace de activación no se borra ni cambia su hash, su usuario ni su vencimiento.
+			sinBorrado("enlace_activacion"),
+			columna("UPDATE enlace_activacion SET hash_token = hash_token WHERE 1 = 0", "enlace_activacion"),
+			columna("UPDATE enlace_activacion SET vence_en = vence_en WHERE 1 = 0", "enlace_activacion"),
+			columna("UPDATE enlace_activacion SET usuario_id = usuario_id WHERE 1 = 0", "enlace_activacion"));
 
 	/** Solo en prod: la base no admite órdenes de la pasarela simulada (sin la fila 'pasarela_simulada'). */
 	static final SentenciaProhibida ORDEN_SIMULADA = new SentenciaProhibida(ordenImposible("SIMULADA", "CREADA"),

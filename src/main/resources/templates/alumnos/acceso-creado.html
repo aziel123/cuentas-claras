@@ -5,20 +5,22 @@
 	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-creado">
 		<div>
 			<p class="etiqueta">Acceso en línea del apoderado</p>
-			<h1 id="titulo-creado">Cuenta creada</h1>
+			<h1 id="titulo-creado" th:text="${restablecido} ? 'Acceso restablecido' : 'Cuenta creada'">Cuenta creada</h1>
 			<p class="secundario" th:text="|${creado.nombreCompleto} · usuario ${creado.nombreUsuario}|">Rosa Huamán · usuario 45678912</p>
 		</div>
 
 		<div th:replace="~{fragments/componentes :: alerta('advertencia',
-			'Entrega esta clave temporal en persona al apoderado: no la volverás a ver. Vence en 48 horas y al ingresar tendrá que cambiarla por una propia.')}"></div>
+			'Nadie ve ni recibe una clave: el apoderado elige la suya con este enlace, que sirve UNA sola vez. Entrégalo en persona (que lo abra en su celular delante de ti) o envíalo a su celular o correo registrado. No lo abras tú: si alguien más lo usa, el apoderado no podrá entrar y Promotoría verá desde dónde se activó.')}"></div>
 
 		<div class="clave-temporal">
-			<span class="etiqueta">Clave temporal</span>
-			<output class="clave-temporal-valor" th:text="${creado.claveTemporal}" aria-label="Clave temporal">abcd2345EFGH</output>
+			<span class="etiqueta">Enlace de activación (un solo uso)</span>
+			<output class="clave-temporal-valor codigo-hash" th:text="${enlace}" aria-label="Enlace de activación">https://…/activar/1/…</output>
+			<p class="ayuda" th:text="|Vence el ${#temporals.format(creado.venceEn, 'dd/MM/yyyy')} a las ${#temporals.format(creado.venceEn, 'HH:mm')}. Si vence o se pierde, Promotoría restablece el acceso con un enlace nuevo.|">Vence</p>
 		</div>
+		<p class="secundario">El envío automático por WhatsApp o correo llega en el sprint 5. Mientras tanto, el colegio entrega el enlace en persona o por un canal del titular.</p>
 
 		<div class="acciones">
-			<a class="btn btn-primario" th:href="@{/alumnos/apoderados/{id}(id=${apoderadoId})}">Listo, ya la entregué</a>
+			<a class="btn btn-primario" th:href="@{${volverA}}">Listo, ya lo entregué</a>
 		</div>
 	</section>
 </main>

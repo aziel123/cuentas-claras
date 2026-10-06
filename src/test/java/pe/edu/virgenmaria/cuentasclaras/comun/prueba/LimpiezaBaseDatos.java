@@ -81,6 +81,7 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM anio_escolar");
 		jdbc.update("DELETE FROM evento_auditoria");
 		jdbc.update("UPDATE auditoria_cadena SET ultima_secuencia = 0, ultimo_hash = ? WHERE id = 1", HASH_INICIAL);
+		jdbc.update("DELETE FROM enlace_activacion");
 		jdbc.update("DELETE FROM usuario_rol");
 		jdbc.update("DELETE FROM usuario");
 		jdbc.update("DELETE FROM colegio WHERE id <> 1");

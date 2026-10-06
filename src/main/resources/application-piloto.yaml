@@ -16,6 +16,10 @@ server:
       internal-proxies: ${CC_PROXIES_INTERNOS:10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|127\.\d+\.\d+\.\d+|0:0:0:0:0:0:0:1|::1}
 
 cuentasclaras:
+  # S4-M1: franja «PILOTO» en todas las páginas; la pasarela SIMULADA la exige. En el piloto, los pagos simulados no
+  # se aplican a cuotas (quedan por revisar como «no es dinero real»).
+  entorno:
+    nombre: PILOTO
   inicial:
     colegio-id: ${CC_COLEGIO_ID:1}
     promotor-usuario: ${CC_PROMOTOR_USUARIO:}

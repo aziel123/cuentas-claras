@@ -158,6 +158,19 @@ class PagoEnLineaWebTest {
 				.with(UsuariosDePrueba.como(pedro))).andExpect(status().isNotFound());
 	}
 
+	/** S4-B3: desde la página del simulador nadie provoca un contracargo, ni el propio apoderado (lista blanca). */
+	@Test
+	void desdeLaPaginaDelSimuladorNoSeProvocaUnContracargo() throws Exception {
+		String referencia = pagarDesdeLaWeb(cuota(jdbc, f.mateo(), "PEN-2027-03"));
+		mvc.perform(post("/familia/pasarela-simulada/" + referencia + "/YAPE").with(csrf()).with(UsuariosDePrueba.como(rosa)));
+		for (String accion : new String[] { "CONTRACARGO", "INVENTADA" }) {
+			mvc.perform(post("/familia/pasarela-simulada/" + referencia + "/" + accion).with(csrf())
+					.with(UsuariosDePrueba.como(rosa))).andExpect(status().isNotFound());
+		}
+		assertThat(contar(jdbc, "orden_pago WHERE contracargo_en IS NOT NULL")).isZero();
+		assertThat(contar(jdbc, "anulacion_pago")).isZero();
+	}
+
 	@Test
 	void sinCsrfNoSePaga() throws Exception {
 		mvc.perform(post("/familia/pagar/revisar").with(UsuariosDePrueba.como(rosa))
@@ -182,11 +195,12 @@ class PagoEnLineaWebTest {
 		mvc.perform(post("/webhooks/pasarela/simulada/1").contentType(MediaType.TEXT_PLAIN).content(aviso.cuerpo())
 				.header(PasarelaSimulada.CABECERA_FIRMA, firma))
 				.andExpect(status().isOk()).andExpect(content().string("ya recibido"));
+		// S4-B4: un colegio o un proveedor que no existen responden lo mismo que una firma inválida (no se enumeran).
 		mvc.perform(post("/webhooks/pasarela/simulada/999999").contentType(MediaType.TEXT_PLAIN).content(aviso.cuerpo())
 				.header(PasarelaSimulada.CABECERA_FIRMA, firma))
-				.andExpect(status().isNotFound());
+				.andExpect(status().isUnauthorized()).andExpect(content().string("aviso no autentico"));
 		mvc.perform(post("/webhooks/pasarela/inventada/1").contentType(MediaType.TEXT_PLAIN).content(aviso.cuerpo()))
-				.andExpect(status().isNotFound());
+				.andExpect(status().isUnauthorized()).andExpect(content().string("aviso no autentico"));
 		mvc.perform(post("/webhooks/pasarela/simulada/1").contentType(MediaType.TEXT_PLAIN)
 				.content("x".repeat(20_000).getBytes(StandardCharsets.UTF_8)))
 				.andExpect(status().isPayloadTooLarge());

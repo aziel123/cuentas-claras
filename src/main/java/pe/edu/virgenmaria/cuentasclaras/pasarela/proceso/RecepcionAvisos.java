@@ -100,6 +100,8 @@ public class RecepcionAvisos {
 		}
 		if (colegioId == null || colegioId <= 0
 				|| colegios.findById(colegioId).filter(Colegio::isActivo).isEmpty()) {
+			// S4-B4: igual que un aviso no auténtico (el controlador responde 401 en ambos casos) y cuenta para la alerta.
+			noAutenticos.registrar();
 			return Resultado.NO_ENCONTRADO;
 		}
 		AvisoPasarela aviso;

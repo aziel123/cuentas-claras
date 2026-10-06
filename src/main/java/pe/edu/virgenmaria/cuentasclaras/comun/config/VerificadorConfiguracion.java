@@ -48,6 +48,9 @@ public class VerificadorConfiguracion implements InitializingBean {
 
 	static final String PASARELA = "cuentasclaras.pasarela.proveedor";
 
+	/** S4-M1: la marca del entorno de prueba (franja global); en el piloto, la simulada la exige. */
+	static final String ENTORNO = "cuentasclaras.entorno.nombre";
+
 	static final String SECRETO_SIMULADA = "cuentasclaras.pasarela.simulada.secreto-aviso";
 
 	static final String CULQI_LLAVE_SECRETA = "cuentasclaras.pasarela.culqi.llave-secreta";
@@ -148,6 +151,12 @@ public class VerificadorConfiguracion implements InitializingBean {
 				throw new IllegalStateException("La pasarela SIMULADA marca pagos sin dinero real: solo existe en dev, test o "
 						+ "piloto, nunca en producción. Configura cuentasclaras.pasarela.proveedor con la pasarela real o "
 						+ "NINGUNA.");
+			}
+			if (activos.contains("piloto") && !PropiedadesEntorno.PILOTO.equalsIgnoreCase(
+					propiedad.apply(ENTORNO) == null ? "" : propiedad.apply(ENTORNO).strip())) {
+				throw new IllegalStateException("En el piloto, la pasarela SIMULADA exige la marca del entorno de prueba "
+						+ "(cuentasclaras.entorno.nombre: PILOTO): todas las páginas muestran que los pagos simulados no son "
+						+ "dinero real y no se aplican a cuotas.");
 			}
 			String secreto = propiedad.apply(SECRETO_SIMULADA);
 			if (activos.contains("piloto") && (vacio(secreto) || secreto.contains(MARCA_CLAVE_DE_DESARROLLO))) {
