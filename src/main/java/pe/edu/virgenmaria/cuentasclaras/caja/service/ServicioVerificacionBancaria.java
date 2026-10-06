@@ -11,6 +11,10 @@ import pe.edu.virgenmaria.cuentasclaras.caja.config.PropiedadesCaja;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.ReembolsoRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.VerificacionRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.VistaConciliacion;
+import pe.edu.virgenmaria.cuentasclaras.caja.repository.ReembolsoPasarelaRepository;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAnulacion;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.ReembolsoPasarela;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.OrigenPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.AnulacionPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.DepositoCaja;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
@@ -68,6 +72,10 @@ public class ServicioVerificacionBancaria {
 
 	private final ReembolsoRepository reembolsos;
 
+	private final ReembolsoPasarelaRepository reembolsosPasarela;
+
+	private final ReembolsosEnLinea enLinea;
+
 	private final AuditoriaService auditoria;
 
 	private final NombresUsuarios nombres;
@@ -78,13 +86,15 @@ public class ServicioVerificacionBancaria {
 
 	public ServicioVerificacionBancaria(PagoRepository pagos, DepositoCajaRepository depositos,
 			VerificacionBancariaRepository verificaciones, AnulacionPagoRepository anulaciones,
-			ReembolsoRepository reembolsos, AuditoriaService auditoria, NombresUsuarios nombres,
-			PropiedadesCaja propiedades, Clock reloj) {
+			ReembolsoRepository reembolsos, ReembolsoPasarelaRepository reembolsosPasarela, ReembolsosEnLinea enLinea,
+			AuditoriaService auditoria, NombresUsuarios nombres, PropiedadesCaja propiedades, Clock reloj) {
 		this.pagos = pagos;
 		this.depositos = depositos;
 		this.verificaciones = verificaciones;
 		this.anulaciones = anulaciones;
 		this.reembolsos = reembolsos;
+		this.reembolsosPasarela = reembolsosPasarela;
+		this.enLinea = enLinea;
 		this.auditoria = auditoria;
 		this.nombres = nombres;
 		this.propiedades = propiedades;
@@ -120,7 +130,8 @@ public class ServicioVerificacionBancaria {
 				.map(a -> new VistaConciliacion.DevolucionPorReembolsar(a.getId(), a.getPago().getComprobante().numeroCompleto(),
 						a.getNotaCredito().numeroCompleto(), a.getPago().getMedio().etiqueta(),
 						a.getPago().getMedio() == MedioPago.EFECTIVO, a.getMonto(), a.getPago().getFamilia().getNombre(),
-						nombres.de(a.getCajeroPago()), a.getCreadoEn().toLocalDate()))
+						nombres.de(a.getCajeroPago()), a.getCreadoEn().toLocalDate(),
+						a.getPago().getOrigen() == OrigenPago.PASARELA))
 				.toList();
 		List<VistaConciliacion.Verificado> hechas = verificaciones.findTop30ByOrderByIdDesc().stream()
 				.map(v -> new VistaConciliacion.Verificado(que(v), v.getResultado().etiqueta()
@@ -209,6 +220,12 @@ public class ServicioVerificacionBancaria {
 		if (reembolsos.existsByAnulacionId(anulacion.getId())) {
 			throw new ReglaNegocioException("El reembolso de esta devolución ya está registrado.");
 		}
+		if (anulacion.getPago().getOrigen() == OrigenPago.PASARELA) {
+			// S4-A3: un pago en línea solo se devuelve por la API de su pasarela (al mismo medio de origen), nunca con un
+			// número de transferencia escrito a mano (también lo rechaza trg_reembolso_registro).
+			throw new ReglaNegocioException("Un pago en línea se devuelve solo por la pasarela, al mismo medio de origen: "
+					+ "usa «Reembolsar por la pasarela».");
+		}
 		boolean efectivo = anulacion.getPago().getMedio() == MedioPago.EFECTIVO;
 		if (!efectivo && !pedido.aLaCuentaDeOrigen()) {
 			throw new ReglaNegocioException("Un pago digital solo se devuelve a la cuenta de origen: confírmalo.");
@@ -223,6 +240,47 @@ public class ServicioVerificacionBancaria {
 								+ enmascarar(r.getRecibidoPorDocumento()) + ")"
 								: "por " + r.getMedio().etiqueta() + " a la cuenta de origen, operación " + r.getNumeroOperacion())
 						+ ".");
+	}
+
+	/**
+	 * Correcciones del sprint 4 (S4-A3): la devolución aprobada de un pago EN LÍNEA se ejecuta solo con la API de su
+	 * pasarela ({@code PasarelaPagos.reembolsar}), que la devuelve al mismo cargo y medio de origen; queda el id del
+	 * reembolso. La ejecuta Administración, nunca quien pidió o aprobó la devolución (trigger). Un contracargo no se
+	 * reembolsa.
+	 */
+	@Transactional
+	@PreAuthorize("hasRole('ADMINISTRACION')")
+	public String reembolsarEnLinea(Long anulacionId) {
+		AnulacionPago anulacion = anulaciones.findById(anulacionId)
+				.orElseThrow(() -> new RecursoNoEncontradoException("Devolución no encontrada"));
+		Pago pago = anulacion.getPago();
+		if (pago.getOrigen() != OrigenPago.PASARELA || pago.getOrdenPagoId() == null) {
+			throw new ReglaNegocioException("Solo un pago en línea se reembolsa por la pasarela.");
+		}
+		if (anulacion.getTipo() != TipoAnulacion.DEVOLUCION) {
+			throw new ReglaNegocioException(anulacion.getTipo() == TipoAnulacion.CONTRACARGO
+					? "Un contracargo no se reembolsa: el banco ya le devolvió el dinero al apoderado."
+					: "Solo una devolución se reembolsa.");
+		}
+		if (reembolsosPasarela.existsByAnulacionId(anulacionId)) {
+			throw new ReglaNegocioException("El reembolso de esta devolución ya se hizo.");
+		}
+		String usuario = SesionCaja.usuario();
+		if (usuario.equals(anulacion.getAprobadoPor()) || usuario.equals(anulacion.getSolicitadoPor())) {
+			throw new ReglaNegocioException("Quien pidió o aprobó la devolución no la ejecuta: debe hacerlo otra persona de "
+					+ "Administración.");
+		}
+		ReembolsosEnLinea.Reembolsado hecho = enLinea.reembolsar(pago.getOrdenPagoId(), anulacion.getMonto(),
+				"Devolución aprobada del pago " + pago.getComprobante().numeroCompleto());
+		ReembolsoPasarela r = reembolsosPasarela.save(ReembolsoPasarela.registrar(anulacion, hecho.cargoId(),
+				hecho.reembolsoId(), hecho.monto(), LocalDate.now(reloj), usuario));
+		auditoria.registrar(AccionAuditoria.REEMBOLSO_REGISTRADO, "reembolso_pasarela", r.getId().toString(), null,
+				Dinero.formatear(r.getMonto()) + " · pasarela", "Reembolso por la pasarela de la devolución de "
+						+ pago.getComprobante().numeroCompleto() + " (nota de crédito "
+						+ anulacion.getNotaCredito().numeroCompleto() + "): " + Dinero.formatear(r.getMonto())
+						+ " al mismo medio de origen (" + pago.getMedio().etiqueta() + "), cargo " + r.getCargoId()
+						+ ", reembolso " + r.getReembolsoId() + ".");
+		return r.getReembolsoId();
 	}
 
 	/** Lo escrito por Administración, ya en forma canónica; todo es obligatorio para «Encontrado». */

@@ -139,7 +139,7 @@ class VerificadorPermisosBaseDatosTest {
 	private static final java.util.regex.Pattern SOLO_INSERCION = java.util.regex.Pattern
 			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
 					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado|movimiento_bancario|"
-					+ "liquidacion_pasarela|liquidacion_linea) ");
+					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -222,6 +222,31 @@ class VerificadorPermisosBaseDatosTest {
 			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
 					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
 		}
+	}
+
+	/**
+	 * Correcciones del sprint 4 (V16): si cc_app pudiera reescribir la muestra fija de una confirmación a ciegas o la
+	 * semilla del muestreo, editar un reembolso por la pasarela o insertar uno que no corresponde (sin su trigger), la
+	 * aplicación no arranca.
+	 */
+	@Test
+	void fallaSiSePuedenTocarLasCorreccionesDelSprint4() {
+		for (String sql : new String[] { "UPDATE extracto_bancario SET muestra = muestra WHERE 1 = 0",
+				"UPDATE extracto_bancario SET semilla_muestreo = semilla_muestreo WHERE 1 = 0",
+				"UPDATE lote_recaudacion SET muestra = muestra WHERE 1 = 0",
+				"UPDATE reembolso_pasarela SET version = version WHERE 1 = 0",
+				"DELETE FROM reembolso_pasarela WHERE 1 = 0",
+				"UPDATE partida_conciliacion SET linea_recaudacion_id = linea_recaudacion_id WHERE 1 = 0" }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(sql);
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos()).as(sql)
+					.isInstanceOf(IllegalStateException.class);
+		}
+		JdbcTemplate sinTrigger = mysqlQueDeniega();
+		doThrow(denegado(1452)).when(sinTrigger).update(org.mockito.ArgumentMatchers.startsWith(
+				"INSERT INTO reembolso_pasarela"));
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(sinTrigger, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("trg_reembolso_pasarela_registro");
 	}
 
 	/** Un MySQL bien configurado: DELETE → 1142, UPDATE de columnas inmutables → 1143, INSERT imposible → 1644. */
@@ -314,7 +339,8 @@ class VerificadorPermisosBaseDatosTest {
 			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
 					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
 		}
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(40);
+		// Correcciones del sprint 4 (V16): 41 con trg_reembolso_pasarela_registro.
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(41);
 	}
 
 	/**

@@ -1341,6 +1341,35 @@ class PermisosMySqlTest {
 					.isEqualTo("POR_REVISAR");
 			assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM pago p JOIN orden_pago o ON o.id = p.orden_pago_id "
 					+ "WHERE o.referencia = ?", Integer.class, porRevisar)).isZero();
+			// QA-S4-2: con contracargo, el ingreso por revisar ya no se aplica ni se devuelve (ni por SQL).
+			simuladorPagos.simular(porRevisar, pe.edu.virgenmaria.cuentasclaras.pasarela.simulada.PasarelaSimulada.Accion
+					.CONTRACARGO);
+			assertThat(jdbc.queryForObject("SELECT contracargo_origen FROM orden_pago WHERE referencia = ?", String.class,
+					porRevisar)).isEqualTo("AVISO");
+			assertThat(codigoAl(() -> jdbc.update("UPDATE orden_pago SET estado = 'DEVUELTA', devolucion_operacion = 'X1', "
+					+ "devuelto_por = 'adm.cc', devuelto_en = NOW(6) WHERE referencia = ?", porRevisar))).isEqualTo(1644);
+			// S4-A3: el contracargo se registra una vez, pide una anulación SIN reembolso y nadie reembolsa otra vez.
+			simuladorPagos.simular(pagada, pe.edu.virgenmaria.cuentasclaras.pasarela.simulada.PasarelaSimulada.Accion
+					.CONTRACARGO);
+			assertThat(jdbc.queryForObject("SELECT contracargo_origen FROM orden_pago WHERE id = ?", String.class,
+					orden.get("id"))).isEqualTo("AVISO");
+			assertThat(codigoAl(() -> jdbc.update("UPDATE orden_pago SET contracargo_en = NULL, contracargo_origen = NULL "
+					+ "WHERE id = ?", orden.get("id")))).isIn(1644, 3819);
+			Long pagoId = ((Number) pago.get("id")).longValue();
+			pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(persona(415, "promotora.cc",
+					Rol.PROMOTOR), bandeja, jdbc, "pago", pagoId);
+			java.util.Map<String, Object> anulacion = jdbc.queryForMap("SELECT id, tipo, monto, cajero_pago, solicitado_por, "
+					+ "aprobado_por FROM anulacion_pago WHERE pago_id = ?", pagoId);
+			assertThat(anulacion).containsEntry("tipo", "CONTRACARGO");
+			assertThat(codigoAl(() -> jdbc.update("INSERT INTO reembolso (colegio_id, anulacion_pago_id, medio, "
+					+ "numero_operacion, monto, fecha, cajero_pago, creado_en, creado_por, actualizado_en) VALUES (1, ?, "
+					+ "'YAPE', 'TRFMIA0002', ?, CURDATE(), ?, NOW(6), 'adm.cc', NOW(6))", anulacion.get("id"),
+					anulacion.get("monto"), anulacion.get("cajero_pago")))).isEqualTo(1644);
+			assertThat(codigoAl(() -> jdbc.update("INSERT INTO reembolso_pasarela (colegio_id, anulacion_pago_id, pago_id, "
+					+ "cargo_id, reembolso_id, monto, fecha, creado_en, creado_por, actualizado_en) SELECT 1, ?, ?, cargo_id, "
+					+ "'SIMREF1', ?, CURDATE(), NOW(6), 'adm.cc', NOW(6) FROM orden_pago WHERE id = ?", anulacion.get("id"),
+					pagoId, anulacion.get("monto"), orden.get("id")))).isEqualTo(1644);
+
 		}
 		finally {
 			SecurityContextHolder.clearContext();
@@ -1356,6 +1385,9 @@ class PermisosMySqlTest {
 
 	@Autowired
 	private pe.edu.virgenmaria.cuentasclaras.recaudacion.service.ServicioRecaudacion recaudacion;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.recaudacion.service.ServicioExcepcionesRecaudacion excepciones;
 
 	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado persona(long id, String nombre, Rol rol) {
 		return UsuariosDePrueba.autenticado(1L, id, nombre + "." + sufijo, "Persona " + nombre, false, EnumSet.of(rol));
@@ -1479,6 +1511,34 @@ class PermisosMySqlTest {
 				excepcion))).isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE linea_recaudacion SET estado = 'DEVUELTA', devolucion_operacion = "
 				+ "'X1', devuelto_por = 'x', devuelto_en = NOW(6) WHERE id = ?", excepcion))).isEqualTo(1644);
+		// S4-A4: la devolución lleva su cuenta de destino y no la ejecuta quien la pidió (ni por SQL).
+		var pide = persona(416, "adm.pide", Rol.ADMINISTRACION);
+		UsuariosDePrueba.iniciarSesion(pide);
+		try {
+			excepciones.solicitarDevolucion(excepcion, new pe.edu.virgenmaria.cuentasclaras.recaudacion.dto
+					.DevolucionLineaRequest("BCP", "191-7654321-0-55", "Rosa Quispe Huamán", "Código errado: se devuelve "
+							+ "a quien pagó"));
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(promotora, bandeja, jdbc,
+				"linea_recaudacion", excepcion);
+		SecurityContextHolder.clearContext();
+		assertThat(codigoAl(() -> jdbc.update("UPDATE linea_recaudacion SET estado = 'DEVUELTA', devolucion_operacion = "
+				+ "'X1', devuelto_por = ?, devuelto_en = NOW(6), devolucion_banco = 'BCP', devolucion_cuenta = '1', "
+				+ "devolucion_titular = 'x' WHERE id = ?", pide.getUsername(), excepcion))).isEqualTo(1644);
+		UsuariosDePrueba.iniciarSesion(persona(417, "adm.ejecuta", Rol.ADMINISTRACION));
+		try {
+			excepciones.registrarDevolucion(excepcion, operacion(9));
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		assertThat(jdbc.queryForObject("SELECT CONCAT(estado, ' ', devolucion_cuenta) FROM linea_recaudacion WHERE id = ?",
+				String.class, excepcion)).isEqualTo("DEVUELTA 191-7654321-0-55");
+		assertThat(codigoAl(() -> jdbc.update("UPDATE linea_recaudacion SET devolucion_cuenta = '999' WHERE id = ?",
+				excepcion))).isEqualTo(1644);
 		// El mismo archivo no se vuelve a cargar mientras su lote está vigente (UNIQUE sobre su SHA-256).
 		assertThat(codigoAl(() -> jdbc.update("INSERT INTO lote_recaudacion (colegio_id, archivo_id, archivo_sha256, "
 				+ "sha_vigente, banco, formato, fecha_proceso, desde, hasta, lineas, total, estado, intentos_confirmacion, "

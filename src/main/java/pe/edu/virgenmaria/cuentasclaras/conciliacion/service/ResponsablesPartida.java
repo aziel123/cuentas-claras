@@ -61,6 +61,10 @@ public class ResponsablesPartida {
 			});
 			case REEMBOLSO -> reembolsos.findById(objetoId).ifPresent(r -> responsables.add(r.getCreadoPor()));
 			case LOTE_RECAUDACION -> lotes.findById(objetoId).ifPresent(t -> responsables.add(t.getCreadoPor()));
+			case LINEA_RECAUDACION -> lineas.findById(objetoId).ifPresent(l -> {
+				responsables.add(l.getLote().getCreadoPor());
+				responsables.add(l.getDevueltoPor());
+			});
 			default -> {
 				// La liquidación la registra el sistema (por la API de la pasarela).
 			}

@@ -4,6 +4,10 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.TextoSeguro;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.DatosSolicitud;
+import pe.edu.virgenmaria.cuentasclaras.recaudacion.dto.DevolucionLineaRequest;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Alumno;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Familia;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.AlumnoRepository;
@@ -60,6 +64,12 @@ public class ServicioExcepcionesRecaudacion {
 	static final String ENTIDAD = "linea_recaudacion";
 
 	static final String DATO_FAMILIA = "familiaId";
+
+	static final String DATO_BANCO = "banco";
+
+	static final String DATO_CUENTA = "cuenta";
+
+	static final String DATO_TITULAR = "titular";
 
 	static final String DATO_CUOTAS = "cuotas";
 
@@ -120,8 +130,14 @@ public class ServicioExcepcionesRecaudacion {
 		boolean enExcepcion = linea.getEstado() == EstadoLinea.EXCEPCION;
 		boolean sinPendiente = pendientes.findByEntidadAndEntidadIdAndEstadoOrderByIdAsc(ENTIDAD, lineaId,
 				EstadoSolicitud.PENDIENTE).isEmpty();
-		boolean devolucionAprobada = enExcepcion && pendientes.findFirstByTipoAndEntidadAndEntidadIdAndEstadoOrderByIdDesc(
-				TipoSolicitud.DEVOLVER_INGRESO, ENTIDAD, lineaId, EstadoSolicitud.APROBADA).isPresent();
+		java.util.Optional<SolicitudCambio> aprobada = enExcepcion
+				? pendientes.findFirstByTipoAndEntidadAndEntidadIdAndEstadoOrderByIdDesc(TipoSolicitud.DEVOLVER_INGRESO,
+						ENTIDAD, lineaId, EstadoSolicitud.APROBADA)
+				: java.util.Optional.empty();
+		boolean devolucionAprobada = aprobada.isPresent();
+		String destinoDevolucion = aprobada.map(s -> DatosSolicitud.leer(s.getDatos()))
+				.filter(d -> d.get(DATO_CUENTA) != null)
+				.map(d -> d.get(DATO_BANCO) + " " + d.get(DATO_CUENTA) + " de " + d.get(DATO_TITULAR)).orElse(null);
 		String comprobante = pagos.findByLineaRecaudacionId(lineaId).map(p -> p.getComprobante().numeroCompleto())
 				.orElse(null);
 		MotivoExcepcion motivo = linea.getMotivoExcepcion();
@@ -137,9 +153,10 @@ public class ServicioExcepcionesRecaudacion {
 				solicitudes.pendientesDe(ENTIDAD, lineaId), enExcepcion && sinPendiente && !devolucionAprobada,
 				enExcepcion && linea.enPesos() && !pagos.existsByOperacionVigente(linea.getNumeroOperacion()),
 				devolucionAprobada,
-				linea.getDevolucionOperacion() == null ? null : "Transferencia " + linea.getDevolucionOperacion() + " por "
-						+ linea.getDevueltoPor(),
-				comprobante);
+				linea.getDevolucionOperacion() == null ? null : "Transferencia " + linea.getDevolucionOperacion() + " a "
+						+ linea.getDevolucionBanco() + " " + linea.getDevolucionCuenta() + " de " + linea.getDevolucionTitular()
+						+ " por " + linea.getDevueltoPor(),
+				comprobante, destinoDevolucion);
 	}
 
 	/** Pide aplicar la línea a esas cuotas (deben sumar al menos el pago; si suman más, queda a cuenta). */
@@ -179,23 +196,41 @@ public class ServicioExcepcionesRecaudacion {
 				EstadoLinea.EXCEPCION.name(), "Aplicación pendiente de aprobación", resumen + ". Motivo: " + motivo);
 	}
 
-	/** Pide devolver el pago por transferencia a quien lo hizo (lo aprueba otra persona; lo ejecuta Administración). */
+	/**
+	 * Pide devolver el pago por transferencia a quien lo hizo, A UNA CUENTA DE DESTINO que queda en la solicitud (banco,
+	 * número y titular: S4-A4) y que ve quien aprueba. La aprueba otra persona y la ejecuta Administración, nunca quien la
+	 * pidió ni quien la aprobó.
+	 */
 	@PreAuthorize("hasRole('ADMINISTRACION')")
-	public void solicitarDevolucion(Long lineaId, String motivo) {
+	public void solicitarDevolucion(Long lineaId, DevolucionLineaRequest pedido) {
 		LineaRecaudacion linea = enExcepcion(lineaId);
-		String texto = Motivo.exigir(motivo);
+		String texto = Motivo.exigir(pedido == null ? null : pedido.motivo());
+		String banco = TextoSeguro.exigir(Normalizador.limpiar(pedido.banco()), "el banco de destino");
+		String cuenta = Normalizador.sinEspacios(pedido.cuenta());
+		if (cuenta == null || !cuenta.matches("[0-9-]{6,30}")) {
+			throw new ReglaNegocioException("Escribe la cuenta de destino (o el CCI) con dígitos y guiones.");
+		}
+		String titular = TextoSeguro.exigir(Normalizador.limpiar(pedido.titular()), "el titular de la cuenta de destino");
+		if (banco.length() > 20 || titular.length() < 5 || titular.length() > 120) {
+			throw new ReglaNegocioException("Revisa el banco (hasta 20 caracteres) y el titular (de 5 a 120).");
+		}
 		exigirSinOtraPendiente(lineaId);
 		String resumen = "Devolver el pago por banco del " + linea.getFechaPago() + " por " + linea.getMoneda() + " "
 				+ linea.getMonto().toPlainString() + " (código " + CodigoPago.legible(linea.getCodigo()) + ", operación "
-				+ linea.getNumeroOperacion() + ")";
-		solicitudes.crear(TipoSolicitud.DEVOLVER_INGRESO, ENTIDAD, lineaId, resumen, Map.of(), texto);
+				+ linea.getNumeroOperacion() + ") a la cuenta " + banco + " " + cuenta + " de " + titular;
+		Map<String, String> datos = new LinkedHashMap<>();
+		datos.put(DATO_BANCO, banco);
+		datos.put(DATO_CUENTA, cuenta);
+		datos.put(DATO_TITULAR, titular);
+		solicitudes.crear(TipoSolicitud.DEVOLVER_INGRESO, ENTIDAD, lineaId, recortar(resumen), datos, texto);
 		auditoria.registrar(AccionAuditoria.INGRESO_DEVOLUCION_SOLICITADA, ENTIDAD, lineaId.toString(),
 				EstadoLinea.EXCEPCION.name(), "Devolución pendiente de aprobación", resumen + ". Motivo: " + texto);
 	}
 
 	/**
-	 * Registra la devolución YA aprobada: el número de la transferencia con que se devolvió. La registra Administración y
-	 * nunca quien la aprobó.
+	 * Registra la devolución YA aprobada: el número de la transferencia con que se devolvió a la cuenta aprobada. La
+	 * registra Administración y nunca quien la pidió ni quien la aprobó (S4-A4; también lo exige el trigger). Queda como
+	 * un cargo que la conciliación espera ver en el extracto.
 	 */
 	@PreAuthorize("hasRole('ADMINISTRACION')")
 	public void registrarDevolucion(Long lineaId, String numeroOperacion) {
@@ -208,12 +243,25 @@ public class ServicioExcepcionesRecaudacion {
 		if (usuario.equals(aprobada.getResueltoPor())) {
 			throw new ReglaNegocioException("Aprobaste esta devolución: la registra otra persona de Administración.");
 		}
+		if (usuario.equals(aprobada.getSolicitadoPor())) {
+			throw new ReglaNegocioException("Pediste esta devolución: la ejecuta otra persona de Administración.");
+		}
+		Map<String, String> datos = DatosSolicitud.leer(aprobada.getDatos());
+		String banco = datos.get(DATO_BANCO);
+		String cuenta = datos.get(DATO_CUENTA);
+		String titular = datos.get(DATO_TITULAR);
+		if (banco == null || cuenta == null || titular == null) {
+			throw new ReglaNegocioException("La solicitud aprobada no tiene la cuenta de destino: pide la devolución otra vez.");
+		}
 		String operacion = NumeroOperacion.normalizar(numeroOperacion);
-		linea.marcarDevuelta(operacion, usuario, LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS));
+		linea.marcarDevuelta(operacion, banco, cuenta, titular, usuario,
+				LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS));
 		auditoria.registrar(AccionAuditoria.INGRESO_DEVUELTO, ENTIDAD, lineaId.toString(), EstadoLinea.EXCEPCION.name(),
 				EstadoLinea.DEVUELTA.name(), "Se devolvió el pago por banco de la línea " + linea.getNumero() + " del lote "
 						+ linea.getLote().getId() + " por " + linea.getMoneda() + " " + linea.getMonto().toPlainString()
-						+ " con la transferencia " + operacion + ". Aprobado por " + aprobada.getResueltoPor() + ".");
+						+ " con la transferencia " + operacion + " a la cuenta " + banco + " " + cuenta + " de " + titular
+						+ ". Pedido por " + aprobada.getSolicitadoPor() + ", aprobado por " + aprobada.getResueltoPor()
+						+ ". La conciliación espera ver ese cargo en el extracto.");
 	}
 
 	private LineaRecaudacion enExcepcion(Long lineaId) {

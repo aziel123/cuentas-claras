@@ -47,6 +47,7 @@ public class ManejadorDevolverIngreso implements ManejadorSolicitud {
 		if (orden.getEstado() != EstadoOrden.POR_REVISAR) {
 			throw new ReglaNegocioException("El pago en línea ya no está por revisar: recházala.");
 		}
+		orden.exigirSinContracargo();
 	}
 
 	@Override

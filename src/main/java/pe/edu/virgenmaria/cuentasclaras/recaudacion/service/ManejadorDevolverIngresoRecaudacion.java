@@ -3,6 +3,7 @@ package pe.edu.virgenmaria.cuentasclaras.recaudacion.service;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.DatosSolicitud;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.SolicitudCambio;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.TipoSolicitud;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.ManejadorSolicitud;
@@ -47,6 +48,9 @@ public class ManejadorDevolverIngresoRecaudacion implements ManejadorSolicitud {
 		if (linea.getEstado() != EstadoLinea.EXCEPCION) {
 			throw new ReglaNegocioException("El pago por banco ya no está por revisar: recházala.");
 		}
+		if (DatosSolicitud.leer(solicitud.getDatos()).get(ServicioExcepcionesRecaudacion.DATO_CUENTA) == null) {
+			throw new ReglaNegocioException("La solicitud no tiene la cuenta de destino: recházala y pídela otra vez.");
+		}
 	}
 
 	@Override
@@ -61,14 +65,20 @@ public class ManejadorDevolverIngresoRecaudacion implements ManejadorSolicitud {
 			return List.of();
 		}
 		List<String> texto = new ArrayList<>();
+		java.util.Map<String, String> datos = pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.DatosSolicitud.leer(
+				solicitud.getDatos());
 		texto.add("Devolver " + linea.getMoneda() + " " + linea.getMonto().toPlainString() + " pagados en el banco el "
 				+ linea.getFechaPago() + " con el código " + CodigoPago.legible(linea.getCodigo()) + " (operación "
-				+ linea.getNumeroOperacion() + ") a la cuenta de quien pagó, por transferencia.");
+				+ linea.getNumeroOperacion() + "), por transferencia.");
+		texto.add("Cuenta de destino: " + datos.getOrDefault(ServicioExcepcionesRecaudacion.DATO_BANCO, "—") + " "
+				+ datos.getOrDefault(ServicioExcepcionesRecaudacion.DATO_CUENTA, "—") + " · titular "
+				+ datos.getOrDefault(ServicioExcepcionesRecaudacion.DATO_TITULAR, "—")
+				+ ". Confírmala con la familia antes de aprobar.");
 		if (linea.getMotivoExcepcion() != null) {
 			texto.add("Por qué quedó por revisar: " + linea.getMotivoExcepcion().descripcion());
 		}
-		texto.add("Después de aprobarla, la registra Administración (otra persona que no seas tú) con el número de la "
-				+ "transferencia.");
+		texto.add("Después de aprobarla, la ejecuta otra persona de Administración (ni tú ni quien la pidió) con el número "
+				+ "de la transferencia; la conciliación espera ver ese cargo en el banco.");
 		return texto;
 	}
 }

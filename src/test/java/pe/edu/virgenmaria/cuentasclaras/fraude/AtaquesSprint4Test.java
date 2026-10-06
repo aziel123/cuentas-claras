@@ -10,6 +10,20 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAlumnos;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
+import pe.edu.virgenmaria.cuentasclaras.caja.dto.ReembolsoRequest;
+import pe.edu.virgenmaria.cuentasclaras.caja.service.AlertasCaja;
+import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioAnulacionPagos;
+import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioVerificacionBancaria;
+import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ObjetosConciliables;
+import pe.edu.virgenmaria.cuentasclaras.pasarela.dto.PagoEnLineaRequest;
+import pe.edu.virgenmaria.cuentasclaras.pasarela.dto.SeleccionPagoRequest;
+import pe.edu.virgenmaria.cuentasclaras.pasarela.service.ServicioPagoEnLinea;
+import pe.edu.virgenmaria.cuentasclaras.pasarela.simulada.PasarelaSimulada;
+import pe.edu.virgenmaria.cuentasclaras.pasarela.simulada.SimuladorPagos;
+import pe.edu.virgenmaria.cuentasclaras.recaudacion.dto.DevolucionLineaRequest;
+import pe.edu.virgenmaria.cuentasclaras.recaudacion.service.ServicioExcepcionesRecaudacion;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioCobro;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
@@ -46,6 +60,9 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ServicioPartidas;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.EnumSet;
+import java.util.UUID;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -56,6 +73,7 @@ import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.CAJA;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.cuota;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.digital;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.ADMINISTRACION;
+import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.ADMINISTRACION_2;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.PROMOTORIA;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.como;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioConciliacion.estadoExtracto;
@@ -110,6 +128,27 @@ class AtaquesSprint4Test {
 
 	@Autowired
 	private ConsultaRecaudacion consultaRecaudacion;
+
+	@Autowired
+	private ServicioExcepcionesRecaudacion excepciones;
+
+	@Autowired
+	private ObjetosConciliables objetos;
+
+	@Autowired
+	private ServicioPagoEnLinea pagoEnLinea;
+
+	@Autowired
+	private SimuladorPagos simulador;
+
+	@Autowired
+	private ServicioVerificacionBancaria verificacion;
+
+	@Autowired
+	private ServicioAnulacionPagos anulaciones;
+
+	@Autowired
+	private AlertasCaja cajaAlertas;
 
 	@Autowired
 	private RelojAjustable reloj;
@@ -348,5 +387,121 @@ class AtaquesSprint4Test {
 		UsuariosDePrueba.iniciarSesion(PROMOTORIA);
 		assertThat(new String(consultaRecaudacion.archivo(primero).contenido(), StandardCharsets.UTF_8))
 				.contains("TOTAL;1019.00");
+	}
+
+	/**
+	 * ATAQUE 4 (S4-A4): la devolución de una línea de recaudación ya no se pide sin cuenta de destino, quien la pidió no
+	 * la ejecuta y queda como un cargo que la conciliación espera ver en el banco: si no aparece, alerta CRÍTICA.
+	 */
+	@Test
+	void ataque4LaDevolucionDeRecaudacionTieneDestinoOtraPersonaLaEjecutaYSeConcilia() {
+		EscenarioRecaudacion.Archivo archivo = EscenarioRecaudacion.archivo()
+				.linea(EscenarioRecaudacion.FECHA, EscenarioRecaudacion.codigoErrado(f.mateo()), "", "450.00", "PEN",
+						"BCP80001");
+		Long lote = EscenarioRecaudacion.registrar(recaudacion, ADMINISTRACION, archivo);
+		EscenarioRecaudacion.confirmar(recaudacion, jdbc, PROMOTORIA, lote, "450.00");
+		Long linea = EscenarioRecaudacion.idLinea(jdbc, lote, 1);
+
+		como(ADMINISTRACION);
+		excepciones.solicitarDevolucion(linea, new DevolucionLineaRequest("BCP", "191-7654321-0-55",
+				"Rosa Quispe Huamán", "Código errado: se devuelve a la cuenta de quien pagó"));
+		assertThat(jdbc.queryForObject("SELECT resumen FROM solicitud_cambio WHERE entidad = 'linea_recaudacion'",
+				String.class)).contains("191-7654321-0-55", "Rosa Quispe Huamán");
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(PROMOTORIA, bandeja, jdbc,
+				"linea_recaudacion", linea);
+		como(ADMINISTRACION); // la MISMA persona que la pidió
+		assertThatThrownBy(() -> excepciones.registrarDevolucion(linea, "TRF-MIA-0001"))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("Pediste");
+		como(ADMINISTRACION_2);
+		excepciones.registrarDevolucion(linea, "TRF-0001");
+		assertThat(jdbc.queryForObject("SELECT CONCAT(estado, ' ', devuelto_por, ' ', devolucion_cuenta) FROM "
+				+ "linea_recaudacion WHERE id = ?", String.class, linea))
+				.isEqualTo("DEVUELTA administracion2 191-7654321-0-55");
+		UsuariosDePrueba.iniciarSesion(PROMOTORIA);
+		assertThat(objetos.entre(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 10, 31)))
+				.anyMatch(o -> o.tipo() == ObjetoPartida.LINEA_RECAUDACION && "TRF0001".equals(o.operacion()));
+		// El extracto trae el abono del lote pero NO el cargo de la devolución: alerta CRÍTICA.
+		reloj.fijar(LUNES);
+		Extracto banco = extracto("10000.00").abonoConReferencia("2026-10-01", "ABONO RECAUD", "LOTE", "450.00")
+				.abono("2026-10-02", "INTERESES", "", "0.10");
+		Long id = registrar(extractos, ADMINISTRACION, banco);
+		EscenarioConciliacion.confirmar(extractos, PROMOTORIA, cuentaId, banco.saldoFinal().toPlainString());
+		assertThat(estadoExtracto(jdbc, id)).isEqualTo("CONFIRMADO");
+		assertThat(alertasPromotoria()).anyMatch(a -> a.gravedad() == Gravedad.CRITICA && a.texto().contains("TRF0001")
+				&& a.texto().contains("NO sale del banco"));
+	}
+
+	/**
+	 * ATAQUE 5 (S4-A3): contracargo de un pago en línea. Ya no se prellena una DEVOLUCIÓN: la anulación es de tipo
+	 * CONTRACARGO, sin reembolso; Administración no puede «reembolsar» a mano (ni por la pasarela) y no hay alerta de
+	 * reembolso pendiente que la empuje a hacerlo.
+	 */
+	@Test
+	void ataque5ElContracargoAnulaSinReembolsoYNoSeDevuelveDosVeces() {
+		UsuarioAutenticado rosa = new UsuarioAutenticado(40L, 1L, "rosa.familia", "Rosa", null, true, false, false,
+				EnumSet.of(Rol.APODERADO), f.rosa());
+		UsuariosDePrueba.iniciarSesion(rosa);
+		List<Long> cuotas = List.of(cuota(jdbc, f.mateo(), "PEN-2027-03"));
+		BigDecimal total = pagoEnLinea.revisar(new SeleccionPagoRequest(cuotas)).total();
+		String referencia = pagoEnLinea.crearOrden(new PagoEnLineaRequest(UUID.randomUUID(), cuotas, total, false));
+		simulador.simular(referencia, PasarelaSimulada.Accion.YAPE);
+		simulador.simular(referencia, PasarelaSimulada.Accion.CONTRACARGO);
+		Long pago = jdbc.queryForObject("SELECT id FROM pago WHERE origen = 'PASARELA'", Long.class);
+		assertThat(jdbc.queryForObject("SELECT datos FROM solicitud_cambio WHERE tipo = 'ANULACION_PAGO'", String.class))
+				.contains("CONTRACARGO");
+
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(PROMOTORIA, bandeja, jdbc, "pago",
+				pago);
+		Long anulacion = jdbc.queryForObject("SELECT id FROM anulacion_pago WHERE pago_id = ?", Long.class, pago);
+		assertThat(jdbc.queryForObject("SELECT tipo FROM anulacion_pago WHERE id = ?", String.class, anulacion))
+				.isEqualTo("CONTRACARGO");
+		assertThat(jdbc.queryForObject("SELECT estado FROM pago WHERE id = ?", String.class, pago)).isEqualTo("ANULADO");
+		como(PROMOTORIA);
+		assertThat(cajaAlertas.alertas()).noneMatch(a -> a.texto().contains("Devolución sin reembolso"));
+
+		como(ADMINISTRACION);
+		assertThatThrownBy(() -> verificacion.registrarReembolso(anulacion, new ReembolsoRequest("TRF-MIA-0002", true,
+				null, null))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("pasarela");
+		assertThatThrownBy(() -> verificacion.reembolsarEnLinea(anulacion)).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("contracargo");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM reembolso", Integer.class)).isZero();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM reembolso_pasarela", Integer.class)).isZero();
+	}
+
+	/**
+	 * S4-A3, la devolución normal de un pago en línea: no se registra a mano con un número de transferencia; sale solo
+	 * por la API de la pasarela, al mismo cargo, y no la ejecuta quien la pidió ni quien la aprobó.
+	 */
+	@Test
+	void laDevolucionDeUnPagoEnLineaSoloSalePorLaPasarela() {
+		UsuarioAutenticado rosa = new UsuarioAutenticado(40L, 1L, "rosa.familia", "Rosa", null, true, false, false,
+				EnumSet.of(Rol.APODERADO), f.rosa());
+		UsuariosDePrueba.iniciarSesion(rosa);
+		List<Long> cuotas = List.of(cuota(jdbc, f.mateo(), "PEN-2027-03"));
+		BigDecimal total = pagoEnLinea.revisar(new SeleccionPagoRequest(cuotas)).total();
+		String referencia = pagoEnLinea.crearOrden(new PagoEnLineaRequest(UUID.randomUUID(), cuotas, total, false));
+		simulador.simular(referencia, PasarelaSimulada.Accion.YAPE);
+		Long pago = jdbc.queryForObject("SELECT id FROM pago WHERE origen = 'PASARELA'", Long.class);
+		como(ADMINISTRACION);
+		anulaciones.solicitarDevolucion(pago, "La familia pagó dos veces la misma pensión por error");
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones.aprueba(PROMOTORIA, bandeja, jdbc, "pago",
+				pago);
+		Long anulacion = jdbc.queryForObject("SELECT id FROM anulacion_pago WHERE pago_id = ?", Long.class, pago);
+
+		como(ADMINISTRACION_2);
+		assertThatThrownBy(() -> verificacion.registrarReembolso(anulacion, new ReembolsoRequest("TRF-MIA-0003", true,
+				null, null))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("pasarela");
+		como(ADMINISTRACION);
+		assertThatThrownBy(() -> verificacion.reembolsarEnLinea(anulacion)).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("pidió o aprobó");
+		como(ADMINISTRACION_2);
+		String reembolso = verificacion.reembolsarEnLinea(anulacion);
+		assertThat(reembolso).startsWith("SIMREF");
+		assertThat(jdbc.queryForObject("SELECT CONCAT(cargo_id, ' ', monto, ' ', creado_por) FROM reembolso_pasarela",
+				String.class)).isEqualTo(jdbc.queryForObject("SELECT cargo_id FROM orden_pago WHERE referencia = ?",
+						String.class, referencia) + " 450.00 administracion2");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM reembolso", Integer.class)).isZero();
+		como(PROMOTORIA);
+		assertThat(cajaAlertas.alertas()).noneMatch(a -> a.texto().contains("Devolución sin reembolso"));
 	}
 }

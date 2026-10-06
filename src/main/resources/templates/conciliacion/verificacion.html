@@ -29,7 +29,11 @@
 					<span th:replace="~{fragments/componentes :: monto(${d.monto})}"></span>
 				</p>
 				<p class="secundario" th:text="|Pago ${d.comprobante} · nota de crédito ${d.notaCredito} · cobró ${d.cajera} · aprobada el ${#temporals.format(d.aprobadaEl, 'dd/MM/yyyy')}|">Pago B001-00000001</p>
-				<th:block th:if="${v.puedeVerificar}">
+				<form method="post" th:if="${v.puedeVerificar and d.enLinea}" th:action="@{/conciliacion/devoluciones/{id}/pasarela(id=${d.anulacionId})}">
+					<p class="secundario">Pago en línea: se devuelve solo por la pasarela, al mismo medio de origen (no se escribe ningún número). No lo hace quien pidió ni quien aprobó la devolución.</p>
+					<button type="submit" class="btn btn-chico btn-primario">Reembolsar por la pasarela</button>
+				</form>
+				<th:block th:if="${v.puedeVerificar and !d.enLinea}">
 					<button type="button" class="btn btn-chico btn-primario" th:popovertarget="|modal-reembolso-${d.anulacionId}|">Registrar reembolso</button>
 					<div class="modal" th:id="|modal-reembolso-${d.anulacionId}|" popover role="dialog" aria-modal="true"
 						th:aria-labelledby="|modal-reembolso-${d.anulacionId}-titulo|">

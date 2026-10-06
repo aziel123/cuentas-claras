@@ -19,6 +19,7 @@ import pe.edu.virgenmaria.cuentasclaras.pasarela.model.ProveedorPasarela;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.model.TipoLineaLiquidacion;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.repository.LiquidacionLineaRepository;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.repository.LiquidacionPasarelaRepository;
+import pe.edu.virgenmaria.cuentasclaras.pasarela.repository.OrdenPagoRepository;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -48,12 +49,19 @@ public class RegistroLiquidaciones {
 
 	private final AuditoriaService auditoria;
 
+	private final OrdenPagoRepository ordenes;
+
+	private final ContracargosPasarela contracargosPasarela;
+
 	public RegistroLiquidaciones(LiquidacionPasarelaRepository liquidaciones, LiquidacionLineaRepository lineas,
-			PagoRepository pagos, AuditoriaService auditoria) {
+			PagoRepository pagos, AuditoriaService auditoria, OrdenPagoRepository ordenes,
+			ContracargosPasarela contracargosPasarela) {
 		this.liquidaciones = liquidaciones;
 		this.lineas = lineas;
 		this.pagos = pagos;
 		this.auditoria = auditoria;
+		this.ordenes = ordenes;
+		this.contracargosPasarela = contracargosPasarela;
 	}
 
 	/** @return el id de la liquidación nueva, o vacío si ya estaba registrada (o no trae líneas) */
@@ -68,6 +76,7 @@ public class RegistroLiquidaciones {
 				leida.fechaLiquidacion(), leida.fechaAbono(), bruto, comision, igv, leida.lineas().size(),
 				OrigenLiquidacion.API, null));
 		List<String> sinPago = new ArrayList<>();
+		List<String> contracargos = new ArrayList<>();
 		int numero = 0;
 		for (LiquidacionLeida.Linea linea : leida.lineas()) {
 			String operacion = NumeroOperacion.normalizar(linea.operacion());
@@ -77,6 +86,9 @@ public class RegistroLiquidaciones {
 					linea.comision(), linea.igv()));
 			if (pagoId == null && linea.tipo() == TipoLineaLiquidacion.CARGO) {
 				sinPago.add(operacion + " por " + Dinero.formatear(linea.bruto()));
+			}
+			if (linea.tipo() == TipoLineaLiquidacion.CONTRACARGO) {
+				contracargos.add(operacion);
 			}
 		}
 		auditoria.registrar(AccionAuditoria.LIQUIDACION_REGISTRADA, "liquidacion_pasarela", liquidacion.getId().toString(),
@@ -91,6 +103,11 @@ public class RegistroLiquidaciones {
 					liquidacion.getId().toString(), null, sinPago.size() + " cargo(s) sin pago",
 					"La liquidación " + liquidacion.getReferencia() + " trae cargos que no corresponden a ningún pago en "
 							+ "línea registrado: " + String.join("; ", sinPago) + ". Revisa con la pasarela.");
+		}
+		// QA-S4-3: el contracargo también llega como línea de la liquidación: alerta y anulación igual que por el aviso.
+		for (String operacion : contracargos) {
+			ordenes.findFirstByOperacionOrderByIdDesc(operacion).ifPresent(o -> contracargosPasarela.registrar(o.getId(),
+					ContracargosPasarela.POR_LIQUIDACION, "Llegó en la liquidación " + liquidacion.getReferencia() + "."));
 		}
 		return Optional.of(liquidacion.getId());
 	}

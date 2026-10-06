@@ -55,6 +55,7 @@ public class DevolucionesPasarela {
 		if (orden.getEstado() != EstadoOrden.POR_REVISAR) {
 			throw new ReglaNegocioException("Este pago en línea no está por revisar.");
 		}
+		orden.exigirSinContracargo();
 		SolicitudCambio aprobada = solicitudes.findFirstByTipoAndEntidadAndEntidadIdAndEstadoOrderByIdDesc(
 				TipoSolicitud.DEVOLVER_INGRESO, ServicioIngresosPorRevisar.ENTIDAD, ordenId, EstadoSolicitud.APROBADA)
 				.orElseThrow(() -> new ReglaNegocioException("La devolución todavía no está aprobada por Promotoría o "

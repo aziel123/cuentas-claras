@@ -295,7 +295,9 @@ BEGIN
     END IF;
 END$$
 
--- La anulación corresponde al pago vigente, a su cajero y a una nota de crédito que anula SU comprobante.
+-- La anulación corresponde al pago vigente, a su cajero y a una nota de crédito que anula SU comprobante. Correcciones
+-- del sprint 4 (S4-A3): una anulación por CONTRACARGO (sin reembolso) solo es de un pago en línea cuya orden registró
+-- el contracargo de la pasarela.
 DROP TRIGGER IF EXISTS trg_anulacion_pago_registro$$
 CREATE TRIGGER trg_anulacion_pago_registro BEFORE INSERT ON anulacion_pago FOR EACH ROW
 BEGIN
@@ -303,6 +305,10 @@ BEGIN
             WHERE p.id = NEW.pago_id AND p.estado = 'VIGENTE' AND p.cajero = NEW.cajero_pago AND p.total = NEW.monto
             AND n.tipo = 'NOTA_CREDITO' AND n.modifica_id = p.comprobante_id AND n.total = p.total) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: anulación que no corresponde al pago o a su nota de crédito';
+    END IF;
+    IF NEW.tipo = 'CONTRACARGO' AND NOT EXISTS (SELECT 1 FROM pago p JOIN orden_pago o ON o.id = p.orden_pago_id
+            WHERE p.id = NEW.pago_id AND p.origen = 'PASARELA' AND o.contracargo_en IS NOT NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo un pago en línea con contracargo se anula por contracargo';
     END IF;
 END$$
 
@@ -417,13 +423,14 @@ BEGIN
 END$$
 
 -- Correcciones del sprint 3 (A1 y A2). El reembolso es de una DEVOLUCIÓN, por su monto y por el medio del pago, y no
--- lo registra la cajera del pago.
+-- lo registra la cajera del pago. Correcciones del sprint 4 (S4-A3): nunca de un pago de la pasarela (ese solo se
+-- devuelve por su API: reembolso_pasarela); un contracargo no es una devolución.
 DROP TRIGGER IF EXISTS trg_reembolso_registro$$
 CREATE TRIGGER trg_reembolso_registro BEFORE INSERT ON reembolso FOR EACH ROW
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM anulacion_pago n JOIN pago p ON p.id = n.pago_id WHERE n.id = NEW.anulacion_pago_id
             AND n.tipo = 'DEVOLUCION' AND n.monto = NEW.monto AND p.medio = NEW.medio AND n.cajero_pago = NEW.cajero_pago
-            AND p.cajero <> NEW.creado_por) THEN
+            AND p.cajero <> NEW.creado_por AND p.origen <> 'PASARELA') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el reembolso no corresponde a la devolución o lo registra la cajera';
     END IF;
 END$$
@@ -543,6 +550,15 @@ BEGIN
             AND s.estado = 'APROBADA' AND s.resuelto_por <> NEW.devuelto_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la devolución necesita su aprobación';
     END IF;
+    -- Correcciones del sprint 4 (S4-A3): el contracargo se registra una vez y no cambia; con contracargo, un ingreso por
+    -- revisar ya no se aplica ni se devuelve (el banco ya devolvió el dinero al apoderado).
+    IF OLD.contracargo_en IS NOT NULL AND (NOT (NEW.contracargo_en <=> OLD.contracargo_en)
+            OR NOT (NEW.contracargo_origen <=> OLD.contracargo_origen)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el contracargo de la orden no cambia';
+    END IF;
+    IF NEW.contracargo_en IS NOT NULL AND OLD.estado = 'POR_REVISAR' AND NEW.estado IN ('APLICADA', 'DEVUELTA') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un ingreso con contracargo no se aplica ni se devuelve';
+    END IF;
 END$$
 
 DELIMITER ;
@@ -598,7 +614,8 @@ BEGIN
 END$$
 
 -- PENDIENTE → APLICADA (con su pago) | EXCEPCION; EXCEPCION → APLICADA_REVISION (con su pago) | DEVUELTA (con la
--- devolución aprobada por otra persona). Nada más cambia.
+-- devolución aprobada por otra persona y ejecutada por alguien que no la pidió ni la aprobó: correcciones del sprint 4,
+-- S4-A4). Nada más cambia; la cuenta de destino se escribe al devolverla y ya no cambia.
 DROP TRIGGER IF EXISTS trg_linea_recaudacion_estado$$
 CREATE TRIGGER trg_linea_recaudacion_estado BEFORE UPDATE ON linea_recaudacion FOR EACH ROW
 BEGIN
@@ -612,11 +629,16 @@ BEGIN
     END IF;
     IF NEW.estado = 'DEVUELTA' AND NOT (NEW.estado <=> OLD.estado) AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s
             WHERE s.tipo = 'DEVOLVER_INGRESO' AND s.entidad = 'linea_recaudacion' AND s.entidad_id = NEW.id
-            AND s.estado = 'APROBADA' AND s.resuelto_por <> NEW.devuelto_por) THEN
+            AND s.estado = 'APROBADA' AND s.resuelto_por <> NEW.devuelto_por AND s.solicitado_por <> NEW.devuelto_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la devolución necesita su aprobación';
     END IF;
     IF OLD.estado <> 'PENDIENTE' AND NOT (NEW.motivo_excepcion <=> OLD.motivo_excepcion) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el motivo de la excepción no cambia';
+    END IF;
+    IF OLD.estado = 'DEVUELTA' AND (NOT (NEW.devolucion_banco <=> OLD.devolucion_banco)
+            OR NOT (NEW.devolucion_cuenta <=> OLD.devolucion_cuenta) OR NOT (NEW.devolucion_titular <=> OLD.devolucion_titular)
+            OR NOT (NEW.devolucion_operacion <=> OLD.devolucion_operacion)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la devolución de la línea no cambia';
     END IF;
 END$$
 
@@ -689,7 +711,8 @@ BEGIN
 END$$
 
 -- La partida nace PROPUESTA, sobre un movimiento de un extracto vigente, con los montos reales del movimiento y del
--- objeto (abono para lo que entra; cargo para un reembolso). EXACTA exige además la misma operación canónica.
+-- objeto (abono para lo que entra; cargo para un reembolso o, desde las correcciones del sprint 4 (S4-A4), para la
+-- devolución de una línea de recaudación). EXACTA exige además la misma operación canónica.
 DROP TRIGGER IF EXISTS trg_partida_conciliacion_registro$$
 CREATE TRIGGER trg_partida_conciliacion_registro BEFORE INSERT ON partida_conciliacion FOR EACH ROW
 BEGIN
@@ -700,7 +723,8 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la partida nace PROPUESTA sobre un movimiento vigente';
     END IF;
     IF NEW.objeto_tipo <> 'EXPLICACION' AND NOT (NEW.objeto_vigente <=> CONCAT(NEW.objeto_tipo, ':',
-            COALESCE(NEW.pago_id, NEW.deposito_id, NEW.liquidacion_id, NEW.lote_recaudacion_id, NEW.reembolso_id))) THEN
+            COALESCE(NEW.pago_id, NEW.deposito_id, NEW.liquidacion_id, NEW.lote_recaudacion_id, NEW.reembolso_id,
+            NEW.linea_recaudacion_id))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la clave del objeto de la partida no corresponde';
     END IF;
     IF NOT ((NEW.objeto_tipo = 'EXPLICACION')
@@ -717,7 +741,11 @@ BEGIN
             OR (NEW.objeto_tipo = 'LOTE_RECAUDACION' AND tipo_mov = 'ABONO' AND EXISTS (SELECT 1 FROM lote_recaudacion t
                 WHERE t.id = NEW.lote_recaudacion_id AND t.estado IN ('CONFIRMADO', 'APLICADO') AND t.total = NEW.monto_objeto))
             OR (NEW.objeto_tipo = 'REEMBOLSO' AND tipo_mov = 'CARGO' AND EXISTS (SELECT 1 FROM reembolso r
-                WHERE r.id = NEW.reembolso_id AND r.monto = NEW.monto_objeto AND r.medio <> 'EFECTIVO'))) THEN
+                WHERE r.id = NEW.reembolso_id AND r.monto = NEW.monto_objeto AND r.medio <> 'EFECTIVO'))
+            OR (NEW.objeto_tipo = 'LINEA_RECAUDACION' AND tipo_mov = 'CARGO' AND EXISTS (SELECT 1 FROM linea_recaudacion l
+                WHERE l.id = NEW.linea_recaudacion_id AND l.estado = 'DEVUELTA' AND l.monto = NEW.monto_objeto
+                AND (NEW.regla <> 'EXACTA' OR l.devolucion_operacion = (SELECT m.numero_operacion
+                    FROM movimiento_bancario m WHERE m.id = NEW.movimiento_id))))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la partida no corresponde al movimiento ni a su objeto';
     END IF;
 END$$
@@ -740,7 +768,7 @@ BEGIN
     IF NOT (NEW.movimiento_vigente IS NULL OR NEW.movimiento_vigente <=> NEW.movimiento_id)
             OR NOT (NEW.objeto_vigente IS NULL OR (NEW.objeto_tipo <> 'EXPLICACION' AND NEW.objeto_vigente <=> CONCAT(
                 NEW.objeto_tipo, ':', COALESCE(NEW.pago_id, NEW.deposito_id, NEW.liquidacion_id, NEW.lote_recaudacion_id,
-                    NEW.reembolso_id)))) THEN
+                    NEW.reembolso_id, NEW.linea_recaudacion_id)))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la clave vigente de la partida no corresponde';
     END IF;
     IF NEW.estado = 'CONFIRMADA' AND OLD.estado = 'PROPUESTA' AND (NOT EXISTS (SELECT 1 FROM movimiento_bancario m
@@ -755,6 +783,9 @@ BEGIN
                 OR EXISTS (SELECT 1 FROM reembolso r WHERE r.id = NEW.reembolso_id AND r.creado_por = NEW.resuelto_por)
                 OR EXISTS (SELECT 1 FROM lote_recaudacion t WHERE t.id = NEW.lote_recaudacion_id
                     AND t.creado_por = NEW.resuelto_por)
+                OR EXISTS (SELECT 1 FROM linea_recaudacion l JOIN lote_recaudacion t ON t.id = l.lote_id
+                    WHERE l.id = NEW.linea_recaudacion_id AND (l.devuelto_por = NEW.resuelto_por
+                        OR t.creado_por = NEW.resuelto_por))
                 OR (NEW.regla = 'EXPLICADA' AND EXISTS (SELECT 1 FROM movimiento_bancario m JOIN extracto_bancario e
                     ON e.id = m.extracto_id WHERE m.id = NEW.movimiento_id AND m.tipo = 'CARGO'
                     AND e.creado_por = NEW.resuelto_por))))
@@ -762,6 +793,21 @@ BEGIN
                 AND s.entidad = 'partida_conciliacion' AND s.entidad_id = NEW.id AND s.estado = 'APROBADA'
                 AND s.resuelto_por = NEW.resuelto_por AND s.solicitado_por <> NEW.resuelto_por))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la partida se confirma con el extracto confirmado y por otra persona';
+    END IF;
+END$$
+
+-- ===================== Correcciones del sprint 4 (V16) =====================
+-- S4-A3. El reembolso de un pago en línea sale solo por la API de la pasarela: de una DEVOLUCIÓN (nunca de un
+-- contracargo) de un pago de la pasarela, por su monto y su mismo cargo, si la orden no tuvo contracargo; no lo ejecuta
+-- quien pidió ni quien aprobó la devolución.
+DROP TRIGGER IF EXISTS trg_reembolso_pasarela_registro$$
+CREATE TRIGGER trg_reembolso_pasarela_registro BEFORE INSERT ON reembolso_pasarela FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM anulacion_pago n JOIN pago p ON p.id = n.pago_id JOIN orden_pago o
+            ON o.id = p.orden_pago_id WHERE n.id = NEW.anulacion_pago_id AND n.tipo = 'DEVOLUCION' AND p.id = NEW.pago_id
+            AND p.origen = 'PASARELA' AND n.monto = NEW.monto AND o.cargo_id = NEW.cargo_id AND o.contracargo_en IS NULL
+            AND NEW.creado_por <> n.aprobado_por AND NEW.creado_por <> n.solicitado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el reembolso por la pasarela no corresponde a la devolución';
     END IF;
 END$$
 

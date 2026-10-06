@@ -212,6 +212,12 @@ jobs:
           comprobar 1143 "UPDATE extracto_bancario SET muestra = muestra WHERE 1 = 0"
           comprobar 1143 "UPDATE extracto_bancario SET semilla_muestreo = semilla_muestreo WHERE 1 = 0"
           comprobar 1143 "UPDATE lote_recaudacion SET muestra = muestra WHERE 1 = 0"
+          # S4-A3: el reembolso de un pago en línea (por la API de la pasarela) es de solo inserción; S4-A4: el objeto de
+          # la partida no cambia.
+          comprobar 1142 "DELETE FROM reembolso_pasarela WHERE 1 = 0"
+          comprobar 1142 "UPDATE reembolso_pasarela SET version = version WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO reembolso_pasarela (colegio_id, anulacion_pago_id, pago_id, cargo_id, reembolso_id, monto, fecha, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'x', 'x', 1, '2000-01-01', NOW(6), 'x', NOW(6))"
+          comprobar 1143 "UPDATE partida_conciliacion SET linea_recaudacion_id = linea_recaudacion_id WHERE 1 = 0"
           # La base de producción no admite la pasarela simulada (sin la fila 'pasarela_simulada' del DBA).
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'pasarela_simulada'")
           [ "$filas" = "0" ] || { echo "ERROR: la base tiene la fila pasarela_simulada"; exit 1; }

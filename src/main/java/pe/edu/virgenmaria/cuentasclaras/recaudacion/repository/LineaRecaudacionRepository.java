@@ -48,4 +48,8 @@ public interface LineaRecaudacionRepository extends Repository<LineaRecaudacion,
 			+ "pe.edu.virgenmaria.cuentasclaras.recaudacion.model.EstadoLote.CONFIRMADO)"
 			+ " and l.estado = pe.edu.virgenmaria.cuentasclaras.recaudacion.model.EstadoLinea.PENDIENTE")
 	long pendientesConOperacion(@Param("operacion") String operacion);
+
+	/** S4-A4: las líneas devueltas en un rango (salen del banco como cargo: la conciliación espera verlas). */
+	List<LineaRecaudacion> findByEstadoAndDevueltoEnBetweenOrderByIdAsc(EstadoLinea estado, java.time.LocalDateTime desde,
+			java.time.LocalDateTime hasta);
 }

@@ -148,6 +148,9 @@ public class AlertasConciliacion implements AlertasRevision {
 				case REEMBOLSO -> o.detalle() + " por " + Dinero.formatear(o.monto()) + " del "
 						+ Calendario.formatear(o.fecha()) + " NO sale del banco (operación " + o.operacion() + "): la "
 						+ "devolución registrada no se hizo desde la cuenta del colegio.";
+				case LINEA_RECAUDACION -> o.detalle() + " por " + Dinero.formatear(o.monto()) + " del "
+						+ Calendario.formatear(o.fecha()) + " NO sale del banco (operación " + o.operacion() + "): la "
+						+ "devolución de recaudación registrada no se hizo desde la cuenta del colegio.";
 				default -> o.detalle();
 			};
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, texto, ENLACE));

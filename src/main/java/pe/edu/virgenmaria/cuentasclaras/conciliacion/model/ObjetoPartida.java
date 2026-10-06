@@ -2,7 +2,8 @@ package pe.edu.virgenmaria.cuentasclaras.conciliacion.model;
 
 /**
  * Qué debía verse en el banco: un pago digital, un depósito de caja, una liquidación de la pasarela (neta), un lote de
- * recaudación, un reembolso digital (como cargo) o una explicación (abono o cargo ajeno a la cobranza).
+ * recaudación, un reembolso digital o la devolución de una línea de recaudación (como cargo) o una explicación (abono o
+ * cargo ajeno a la cobranza).
  */
 public enum ObjetoPartida {
 
@@ -11,6 +12,8 @@ public enum ObjetoPartida {
 	LIQUIDACION("Liquidación de la pasarela", true),
 	LOTE_RECAUDACION("Recaudación del banco", true),
 	REEMBOLSO("Devolución (reembolso)", false),
+	/** Correcciones del sprint 4 (S4-A4): la devolución de una línea de recaudación sale del banco como cargo. */
+	LINEA_RECAUDACION("Devolución de recaudación", false),
 	EXPLICACION("Explicación", true);
 
 	private final String etiqueta;

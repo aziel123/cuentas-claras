@@ -36,6 +36,7 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM liquidacion_pasarela");
 		// Sprint 3 (tanda 3): verificación bancaria, depósitos y cierres; (tanda 2): descuentos y anulaciones.
 		jdbc.update("DELETE FROM reembolso");
+		jdbc.update("DELETE FROM reembolso_pasarela");
 		jdbc.update("DELETE FROM deposito_caja");
 		jdbc.update("DELETE FROM cierre_caja");
 		jdbc.update("DELETE FROM ajuste_cuota");

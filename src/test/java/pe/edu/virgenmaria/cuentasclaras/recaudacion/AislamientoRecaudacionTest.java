@@ -125,7 +125,9 @@ class AislamientoRecaudacionTest {
 		UsuariosDePrueba.iniciarSesion(administracionB);
 		assertThatThrownBy(() -> servicio.descartar(lote, "Intento desde otro colegio con motivo"))
 				.isInstanceOf(RecursoNoEncontradoException.class);
-		assertThatThrownBy(() -> excepciones.solicitarDevolucion(linea, "Intento desde otro colegio con motivo"))
+		assertThatThrownBy(() -> excepciones.solicitarDevolucion(linea,
+				new pe.edu.virgenmaria.cuentasclaras.recaudacion.dto.DevolucionLineaRequest("BCP", "191-7654321-0-55",
+						"Titular de prueba", "Intento desde otro colegio con motivo")))
 				.isInstanceOf(RecursoNoEncontradoException.class);
 		assertThatThrownBy(() -> excepciones.solicitarAplicacion(linea, new AplicacionLineaRequest(f.quispe(),
 				List.of(1L), "Intento desde otro colegio con motivo"))).isInstanceOf(RecursoNoEncontradoException.class);

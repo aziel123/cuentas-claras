@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.pasarela;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -192,8 +191,6 @@ class PagosEnLineaQaTest {
 	 * boleta, igual que una PAGADA: si el apoderado desconoce el cargo, el dinero sale y nadie se entera.
 	 */
 	@Test
-	@Disabled("QA-S4-1: ProcesadorPagosEnLinea.procesarEnContexto (líneas 162-163 y 188) ignora el CONTRACARGO de una "
-			+ "orden APLICADA: no audita CONTRACARGO_RECIBIDO ni pide la anulación del pago vigente")
 	void debeAlertarElContracargoDeUnaOrdenAplicadaTrasRevision() {
 		Long marzo = cuota(jdbc, f.mateo(), "PEN-2027-03");
 		Long abril = cuota(jdbc, f.mateo(), "PEN-2027-04");
@@ -216,8 +213,6 @@ class PagosEnLineaQaTest {
 	 * puede pedir aplicarlo a otra cuota (el sistema emitiría una boleta por dinero que el banco devolvió).
 	 */
 	@Test
-	@Disabled("QA-S4-2: ProcesadorPagosEnLinea.procesarEnContexto (líneas 165-166) descarta el CONTRACARGO de una orden "
-			+ "POR_REVISAR: no queda alerta y el ingreso se puede seguir aplicando")
 	void debeAlertarElContracargoDeUnIngresoPorRevisar() {
 		String referencia = ordenPorRevisar(cuota(jdbc, f.mateo(), "PEN-2027-03"));
 
@@ -232,8 +227,6 @@ class PagosEnLineaQaTest {
 
 	/** Sección 10.1, punto 8: el contracargo «llega como aviso O como línea CONTRACARGO de la liquidación». */
 	@Test
-	@Disabled("QA-S4-3: RegistroLiquidaciones.registrar (líneas 72-81) guarda la línea CONTRACARGO sin alerta "
-			+ "CONTRACARGO_RECIBIDO ni solicitud de anulación; solo el aviso los genera")
 	void debeAlertarElContracargoQueLlegaEnLaLiquidacion() {
 		String referencia = iniciarPago(List.of(cuota(jdbc, f.mateo(), "PEN-2027-03")));
 		simulador.simular(referencia, Accion.YAPE);

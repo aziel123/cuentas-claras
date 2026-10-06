@@ -120,6 +120,17 @@ public class OrdenPago extends BaseEntity {
 	@Column(name = "devuelto_en")
 	private LocalDateTime devueltoEn;
 
+	/**
+	 * Correcciones del sprint 4 (S4-A3): cuándo llegó el contracargo (el apoderado desconoció el cargo y su banco le
+	 * devolvió el dinero) y por dónde (aviso o liquidación). Se registra una vez; desde entonces el ingreso no se aplica ni
+	 * se devuelve, y el pago (si lo hay) se anula sin reembolso.
+	 */
+	@Column(name = "contracargo_en")
+	private LocalDateTime contracargoEn;
+
+	@Column(name = "contracargo_origen", length = 20)
+	private String contracargoOrigen;
+
 	protected OrdenPago() {
 		// requerido por JPA
 	}
@@ -224,6 +235,7 @@ public class OrdenPago extends BaseEntity {
 		if (estado != EstadoOrden.POR_REVISAR) {
 			throw new IllegalStateException("Solo se aplica una orden por revisar");
 		}
+		exigirSinContracargo();
 		estado = EstadoOrden.APLICADA;
 	}
 
@@ -232,14 +244,55 @@ public class OrdenPago extends BaseEntity {
 		if (estado != EstadoOrden.POR_REVISAR) {
 			throw new IllegalStateException("Solo se devuelve una orden por revisar");
 		}
+		exigirSinContracargo();
 		devolucionOperacion = texto(operacionReembolso, 80, "la operación del reembolso");
 		devueltoPor = Objects.requireNonNull(por, "por");
 		devueltoEn = Objects.requireNonNull(en, "en");
 		estado = EstadoOrden.DEVUELTA;
 	}
 
+	/**
+	 * Registra el contracargo una sola vez (por el aviso de la pasarela o por la línea de su liquidación).
+	 *
+	 * @return {@code false} si ya estaba registrado
+	 */
+	public boolean registrarContracargo(String origen, LocalDateTime en) {
+		if (contracargoEn != null) {
+			return false;
+		}
+		if (cargoId == null) {
+			throw new IllegalStateException("Solo una orden cobrada por la pasarela recibe un contracargo");
+		}
+		if (!"AVISO".equals(origen) && !"LIQUIDACION".equals(origen)) {
+			throw new IllegalArgumentException("Origen del contracargo no válido: " + origen);
+		}
+		contracargoOrigen = origen;
+		contracargoEn = Objects.requireNonNull(en, "en");
+		return true;
+	}
+
+	public boolean tieneContracargo() {
+		return contracargoEn != null;
+	}
+
+	public LocalDateTime getContracargoEn() {
+		return contracargoEn;
+	}
+
+	public String getContracargoOrigen() {
+		return contracargoOrigen;
+	}
+
 	public boolean vencidaAl(LocalDateTime ahora) {
 		return !ahora.isBefore(venceEn);
+	}
+
+	/** S4-A3: con contracargo, el dinero ya volvió al apoderado por su banco: no se aplica ni se devuelve otra vez. */
+	public void exigirSinContracargo() {
+		if (contracargoEn != null) {
+			throw new ReglaNegocioException("Este pago en línea tuvo un contracargo: el apoderado ya recuperó su dinero por "
+					+ "su banco. No se aplica a cuotas ni se devuelve otra vez.");
+		}
 	}
 
 	private void exigirConfirmada() {

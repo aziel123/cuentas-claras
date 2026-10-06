@@ -152,6 +152,10 @@ public class PasarelaSimulada implements PasarelaPagos {
 			if (orden.reembolso != null) {
 				return orden.reembolso;
 			}
+			if (orden.contracargo) {
+				// Como una pasarela real: un cargo con contracargo ya volvió al tarjetahabiente; no se reembolsa otra vez.
+				throw new IllegalStateException("El cargo tuvo un contracargo: no se reembolsa");
+			}
 			if (Dinero.normalizar(monto).compareTo(orden.cobro.monto()) > 0) {
 				throw new IllegalStateException("No se reembolsa más de lo cobrado");
 			}

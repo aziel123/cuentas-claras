@@ -14,5 +14,6 @@ public record LineaExcepcionVista(Long id, Long loteId, String loteEstado, int n
 		String alumno, String familia, BigDecimal monto, String moneda, String operacion, String estado, String etiqueta,
 		String variante, String motivo, String detalle, boolean critica, String contacto, Long familiaDestinoId,
 		String familiaDestino, String codigoDestino, List<CuotaDestino> cuotasDestino, List<String> solicitudes,
-		boolean puedePedir, boolean puedeAplicar, boolean devolucionPorEjecutar, String devolucion, String comprobante) {
+		boolean puedePedir, boolean puedeAplicar, boolean devolucionPorEjecutar, String devolucion, String comprobante,
+		String devolucionDestino) {
 }

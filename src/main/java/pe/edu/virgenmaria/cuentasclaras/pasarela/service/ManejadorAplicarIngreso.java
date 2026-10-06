@@ -75,6 +75,7 @@ public class ManejadorAplicarIngreso implements ManejadorSolicitud {
 		if (orden.getEstado() != EstadoOrden.POR_REVISAR) {
 			throw new ReglaNegocioException("El pago en línea ya no está por revisar: recházala.");
 		}
+		orden.exigirSinContracargo();
 		Map<String, String> datos = DatosSolicitud.leer(solicitud.getDatos());
 		Long destino = Long.valueOf(datos.get(ServicioIngresosPorRevisar.DATO_FAMILIA));
 		List<Cuota> elegidas = cuotas.bloquear(ServicioIngresosPorRevisar.cuotasDe(datos));

@@ -202,7 +202,16 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			// muestreo no se reescriben (S4-A1 y S4-A2).
 			columna("UPDATE extracto_bancario SET muestra = muestra WHERE 1 = 0", "extracto_bancario"),
 			columna("UPDATE extracto_bancario SET semilla_muestreo = semilla_muestreo WHERE 1 = 0", "extracto_bancario"),
-			columna("UPDATE lote_recaudacion SET muestra = muestra WHERE 1 = 0", "lote_recaudacion"));
+			columna("UPDATE lote_recaudacion SET muestra = muestra WHERE 1 = 0", "lote_recaudacion"),
+			// S4-A3: el reembolso de un pago en línea (por la API de la pasarela) es de solo inserción y su trigger rechaza
+			// uno que no corresponde a una devolución aprobada.
+			sinBorrado("reembolso_pasarela"), soloInsercion("reembolso_pasarela"),
+			trigger("INSERT INTO reembolso_pasarela (colegio_id, anulacion_pago_id, pago_id, cargo_id, reembolso_id, monto, "
+					+ "fecha, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'verificador', 'verificador', 1, "
+					+ "'2000-01-01', NOW(6), 'verificador', NOW(6))", "trg_reembolso_pasarela_registro"),
+			// S4-A4: la cuenta de destino y el objeto de una partida no se reescriben.
+			columna("UPDATE partida_conciliacion SET linea_recaudacion_id = linea_recaudacion_id WHERE 1 = 0",
+					"partida_conciliacion"));
 
 	/** Solo en prod: la base no admite órdenes de la pasarela simulada (sin la fila 'pasarela_simulada'). */
 	static final SentenciaProhibida ORDEN_SIMULADA = new SentenciaProhibida(ordenImposible("SIMULADA", "CREADA"),
@@ -233,7 +242,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_apoderado_facturacion", "trg_orden_pago_nace", "trg_orden_pago_cuota_registro", "trg_orden_pago_estado",
 			"trg_lote_recaudacion_nace", "trg_lote_recaudacion_estado", "trg_linea_recaudacion_registro",
 			"trg_linea_recaudacion_estado", "trg_extracto_bancario_nace", "trg_extracto_bancario_estado",
-			"trg_movimiento_bancario_registro", "trg_partida_conciliacion_registro", "trg_partida_conciliacion_estado");
+			"trg_movimiento_bancario_registro", "trg_partida_conciliacion_registro", "trg_partida_conciliacion_estado",
+			"trg_reembolso_pasarela_registro");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 

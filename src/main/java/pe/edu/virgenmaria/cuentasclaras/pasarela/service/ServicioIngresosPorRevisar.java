@@ -119,6 +119,7 @@ public class ServicioIngresosPorRevisar {
 			throw new ReglaNegocioException("Este pago en línea no está por revisar (está "
 					+ orden.getEstado().etiqueta().toLowerCase(java.util.Locale.ROOT) + ").");
 		}
+		orden.exigirSinContracargo();
 		return orden;
 	}
 

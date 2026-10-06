@@ -36,7 +36,10 @@ class InmutabilidadRecaudacionTest {
 		assertThat(ColumnasActualizables.de(LineaRecaudacion.class))
 				.isEqualTo(ColumnasActualizables.concedidas(script, "linea_recaudacion"))
 				.containsExactlyInAnyOrder("estado", "motivo_excepcion", "detalle", "devolucion_operacion", "devuelto_por",
-						"devuelto_en", "actualizado_en", "version");
+						"devuelto_en", "devolucion_banco", "devolucion_cuenta", "devolucion_titular", "actualizado_en",
+						"version");
+		// Correcciones del sprint 4 (S4-A1): la muestra fija del lote no se reescribe.
+		assertThat(ColumnasActualizables.de(LoteRecaudacion.class)).doesNotContain("muestra");
 		// El archivo original: solo inserción y @Immutable.
 		assertThat(script).containsPattern("GRANT INSERT ON cuentasclaras\\.archivo_cargado ")
 				.doesNotContainPattern("(?i)GRANT[^;]*UPDATE[^;]*ON cuentasclaras\\.archivo_cargado\\b");

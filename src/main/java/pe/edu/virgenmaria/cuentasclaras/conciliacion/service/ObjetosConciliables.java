@@ -21,8 +21,11 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.PartidaConciliac
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ReglasEmparejamiento.ObjetoAbierto;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.model.LiquidacionPasarela;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.repository.LiquidacionPasarelaRepository;
+import pe.edu.virgenmaria.cuentasclaras.recaudacion.model.EstadoLinea;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.model.EstadoLote;
+import pe.edu.virgenmaria.cuentasclaras.recaudacion.model.LineaRecaudacion;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.model.LoteRecaudacion;
+import pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LineaRecaudacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LoteRecaudacionRepository;
 
 import java.time.LocalDate;
@@ -35,8 +38,8 @@ import java.util.stream.Collectors;
 /**
  * Lo que debía verse en el banco en un rango de fechas (sección 10.4 del diseño del sprint 4), cada cosa con su ventana:
  * los pagos digitales VIGENTES de ventanilla, los depósitos de caja, las liquidaciones de la pasarela (netas), los lotes
- * de recaudación ya confirmados (o sus pagos uno por uno, según cómo abone el banco) y los reembolsos digitales (como
- * cargo). Los pagos en línea no entran: los cubre su liquidación. Solo lectura, en la transacción de quien llama.
+ * de recaudación ya confirmados (o sus pagos uno por uno, según cómo abone el banco) y los reembolsos digitales y las
+ * devoluciones de líneas de recaudación (como cargo; correcciones del sprint 4, S4-A4). Los pagos en línea no entran: los cubre su liquidación. Solo lectura, en la transacción de quien llama.
  */
 @Component
 public class ObjetosConciliables {
@@ -53,19 +56,23 @@ public class ObjetosConciliables {
 
 	private final PartidaConciliacionRepository partidas;
 
+	private final LineaRecaudacionRepository lineasRecaudacion;
+
 	private final NombresUsuarios nombres;
 
 	private final PropiedadesConciliacion propiedades;
 
 	public ObjetosConciliables(PagoRepository pagos, DepositoCajaRepository depositos, ReembolsoRepository reembolsos,
 			LiquidacionPasarelaRepository liquidaciones, LoteRecaudacionRepository lotes,
-			PartidaConciliacionRepository partidas, NombresUsuarios nombres, PropiedadesConciliacion propiedades) {
+			PartidaConciliacionRepository partidas, LineaRecaudacionRepository lineasRecaudacion, NombresUsuarios nombres,
+			PropiedadesConciliacion propiedades) {
 		this.pagos = pagos;
 		this.depositos = depositos;
 		this.reembolsos = reembolsos;
 		this.liquidaciones = liquidaciones;
 		this.lotes = lotes;
 		this.partidas = partidas;
+		this.lineasRecaudacion = lineasRecaudacion;
 		this.nombres = nombres;
 		this.propiedades = propiedades;
 	}
@@ -119,6 +126,16 @@ public class ObjetosConciliables {
 					r.getNumeroOperacion(), null, v[0], v[1], "Devolución de " + r.getAnulacion().getPago().getComprobante()
 							.numeroCompleto() + " por " + r.getMedio().etiqueta() + " · registró " + nombres.de(
 									r.getCreadoPor()), r.getCreadoPor()));
+		}
+		// S4-A4: la devolución de una línea de recaudación sale del banco como cargo, a la cuenta aprobada.
+		for (LineaRecaudacion l : lineasRecaudacion.findByEstadoAndDevueltoEnBetweenOrderByIdAsc(EstadoLinea.DEVUELTA,
+				desde.atStartOfDay(), hasta.plusDays(1).atStartOfDay())) {
+			LocalDate fecha = l.getDevueltoEn().toLocalDate();
+			LocalDate[] v = ReglasEmparejamiento.ventanaReembolso(fecha);
+			objetos.add(new ObjetoAbierto(ObjetoPartida.LINEA_RECAUDACION, l.getId(), fecha, l.getMonto(),
+					l.getDevolucionOperacion(), null, v[0], v[1], "Devolución de la línea " + l.getNumero() + " del lote "
+							+ l.getLote().getId() + " a " + l.getDevolucionBanco() + " " + l.getDevolucionCuenta()
+							+ " · registró " + nombres.de(l.getDevueltoPor()), l.getDevueltoPor()));
 		}
 		return objetos;
 	}

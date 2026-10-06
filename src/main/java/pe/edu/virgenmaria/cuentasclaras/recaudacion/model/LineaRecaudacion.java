@@ -83,6 +83,16 @@ public class LineaRecaudacion extends BaseEntity {
 	@Column(name = "devuelto_en")
 	private LocalDateTime devueltoEn;
 
+	/** S4-A4 (correcciones del sprint 4): la cuenta a la que se devolvió (la aprobada en la solicitud). */
+	@Column(name = "devolucion_banco", length = 20)
+	private String devolucionBanco;
+
+	@Column(name = "devolucion_cuenta", length = 30)
+	private String devolucionCuenta;
+
+	@Column(name = "devolucion_titular", length = 120)
+	private String devolucionTitular;
+
 	protected LineaRecaudacion() {
 		// requerido por JPA
 	}
@@ -130,12 +140,28 @@ public class LineaRecaudacion extends BaseEntity {
 	}
 
 	/** Se devolvió con la transferencia {@code operacion}, aprobada por otra persona que no es {@code por}. */
-	public void marcarDevuelta(String operacion, String por, LocalDateTime ahora) {
+	public void marcarDevuelta(String operacion, String banco, String cuenta, String titular, String por,
+			LocalDateTime ahora) {
 		exigir(EstadoLinea.EXCEPCION);
 		estado = EstadoLinea.DEVUELTA;
 		devolucionOperacion = Objects.requireNonNull(operacion, "operacion");
+		devolucionBanco = Objects.requireNonNull(banco, "banco");
+		devolucionCuenta = Objects.requireNonNull(cuenta, "cuenta");
+		devolucionTitular = Objects.requireNonNull(titular, "titular");
 		devueltoPor = Objects.requireNonNull(por, "por");
 		devueltoEn = Objects.requireNonNull(ahora, "ahora");
+	}
+
+	public String getDevolucionBanco() {
+		return devolucionBanco;
+	}
+
+	public String getDevolucionCuenta() {
+		return devolucionCuenta;
+	}
+
+	public String getDevolucionTitular() {
+		return devolucionTitular;
 	}
 
 	private void exigir(EstadoLinea esperado) {

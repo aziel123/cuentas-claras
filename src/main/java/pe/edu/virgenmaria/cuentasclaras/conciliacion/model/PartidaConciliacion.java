@@ -58,6 +58,9 @@ public class PartidaConciliacion extends BaseEntity {
 	@Column(name = "reembolso_id", updatable = false)
 	private Long reembolsoId;
 
+	@Column(name = "linea_recaudacion_id", updatable = false)
+	private Long lineaRecaudacionId;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, updatable = false, length = 20)
 	private ReglaPartida regla;
@@ -123,6 +126,7 @@ public class PartidaConciliacion extends BaseEntity {
 			case LIQUIDACION -> p.liquidacionId = Objects.requireNonNull(objetoId, "objetoId");
 			case LOTE_RECAUDACION -> p.loteRecaudacionId = Objects.requireNonNull(objetoId, "objetoId");
 			case REEMBOLSO -> p.reembolsoId = Objects.requireNonNull(objetoId, "objetoId");
+			case LINEA_RECAUDACION -> p.lineaRecaudacionId = Objects.requireNonNull(objetoId, "objetoId");
 			default -> throw new IllegalArgumentException(tipo.name());
 		}
 		p.objetoVigente = tipo.clave(objetoId);
@@ -204,6 +208,7 @@ public class PartidaConciliacion extends BaseEntity {
 			case LIQUIDACION -> liquidacionId;
 			case LOTE_RECAUDACION -> loteRecaudacionId;
 			case REEMBOLSO -> reembolsoId;
+			case LINEA_RECAUDACION -> lineaRecaudacionId;
 			case EXPLICACION -> null;
 		};
 	}
@@ -243,6 +248,10 @@ public class PartidaConciliacion extends BaseEntity {
 
 	public Long getReembolsoId() {
 		return reembolsoId;
+	}
+
+	public Long getLineaRecaudacionId() {
+		return lineaRecaudacionId;
 	}
 
 	public ReglaPartida getRegla() {

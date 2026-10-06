@@ -144,6 +144,9 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 			throw new ReglaNegocioException("El pago ya está anulado.");
 		}
 		ServicioAnulacionPagos.exigirVerificado(pago, verificaciones);
+		if (tipo == TipoAnulacion.CONTRACARGO && pago.getCaja().getCanal() != CanalCaja.PASARELA) {
+			throw new ReglaNegocioException("Solo un pago en línea se anula por contracargo.");
+		}
 		// 2. Todas las cuotas que se tocan, por id.
 		List<Long> destino = tipo == TipoAnulacion.CORRECCION ? cuotasDestino(datos) : List.of();
 		Set<Long> todas = new TreeSet<>(aplicaciones.cuotasDePago(pagoId));
@@ -209,6 +212,10 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 				+ pago.getCajero() + ") · " + (pago.getCaja().esDeCanal() ? pago.getCaja().getCanal().etiqueta()
 				: pago.getCaja().aceptaEfectivo() ? "Caja abierta" : "Caja ya cerrada"));
 		lineas.add(verificacionBancaria(pago));
+		if (tipo == TipoAnulacion.CONTRACARGO) {
+			lineas.add("Contracargo: el apoderado desconoció el pago ante su banco y ya recuperó su dinero. Se anula SIN "
+					+ "reembolso: nadie debe devolver nada otra vez.");
+		}
 		String causa = datos.get(ServicioAnulacionPagos.DATO_CAUSA);
 		if (causa != null) {
 			CausaDevolucion elegida = CausaDevolucion.valueOf(causa);

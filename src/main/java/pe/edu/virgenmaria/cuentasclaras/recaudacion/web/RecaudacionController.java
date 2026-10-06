@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.recaudacion.web;
 
+import pe.edu.virgenmaria.cuentasclaras.recaudacion.dto.DevolucionLineaRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import org.springframework.http.ContentDisposition;
@@ -229,12 +230,16 @@ public class RecaudacionController {
 	}
 
 	@PostMapping("/lineas/{id:\\d+}/devolver")
-	public String devolver(@PathVariable Long id, @RequestParam(required = false) String motivo,
+	public String devolver(@PathVariable Long id, @Valid DevolucionLineaRequest pedido, BindingResult validacion,
 			RedirectAttributes avisos) {
+		if (validacion.hasErrors()) {
+			avisos.addFlashAttribute("error", Formularios.primerError(validacion));
+			return "redirect:" + RUTA + "/lineas/" + id;
+		}
 		try {
-			excepciones.solicitarDevolucion(id, motivo);
+			excepciones.solicitarDevolucion(id, pedido);
 			avisos.addFlashAttribute("exito", "Listo: pediste devolver el pago. Cuando Promotoría o Dirección lo aprueben, "
-					+ "otra persona de Administración registra la transferencia.");
+					+ "otra persona de Administración (no tú) hace la transferencia a esa cuenta y registra su número.");
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());

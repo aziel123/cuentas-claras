@@ -16,7 +16,6 @@ import pe.edu.virgenmaria.cuentasclaras.caja.service.DatosComprobante;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.RegistroPagosAutomaticos;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.RegistroPagosAutomaticos.MotivoNoAplicable;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.RegistroPagosAutomaticos.PedidoPagoEnLinea;
-import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioAnulacionPagos;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
@@ -35,6 +34,7 @@ import pe.edu.virgenmaria.cuentasclaras.pasarela.model.ProveedorPasarela;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.repository.EventoPasarelaRepository;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.repository.OrdenPagoCuotaRepository;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.repository.OrdenPagoRepository;
+import pe.edu.virgenmaria.cuentasclaras.pasarela.service.ContracargosPasarela;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.service.Pasarelas;
 
 import java.math.BigDecimal;
@@ -85,7 +85,7 @@ public class ProcesadorPagosEnLinea {
 
 	private final RegistroPagosAutomaticos registro;
 
-	private final ServicioAnulacionPagos anulaciones;
+	private final ContracargosPasarela contracargos;
 
 	private final AuditoriaService auditoria;
 
@@ -98,14 +98,14 @@ public class ProcesadorPagosEnLinea {
 
 	public ProcesadorPagosEnLinea(OrdenPagoRepository ordenes, OrdenPagoCuotaRepository cuotasDeOrden,
 			EventoPasarelaRepository eventos, Pasarelas pasarelas, RegistroPagosAutomaticos registro,
-			ServicioAnulacionPagos anulaciones, AuditoriaService auditoria, PlatformTransactionManager transacciones,
+			ContracargosPasarela contracargos, AuditoriaService auditoria, PlatformTransactionManager transacciones,
 			Clock reloj) {
 		this.ordenes = ordenes;
 		this.cuotasDeOrden = cuotasDeOrden;
 		this.eventos = eventos;
 		this.pasarelas = pasarelas;
 		this.registro = registro;
-		this.anulaciones = anulaciones;
+		this.contracargos = contracargos;
 		this.auditoria = auditoria;
 		this.transaccion = new TransactionTemplate(transacciones);
 		this.transaccion.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -159,10 +159,14 @@ public class ProcesadorPagosEnLinea {
 		if (orden == null) {
 			return Resultado.IGNORADA;
 		}
-		if (orden.estado() != EstadoOrden.PAGADA && orden.estado().finalizada()) {
+		// Correcciones del sprint 4 (QA-S4-1/2): una orden cobrada que ya se resolvió (APLICADA tras revisión, POR_REVISAR o
+		// DEVUELTA) se sigue consultando, pero solo para registrar un contracargo; nunca se vuelve a aplicar.
+		boolean soloContracargo = orden.estado() == EstadoOrden.POR_REVISAR || orden.estado() == EstadoOrden.APLICADA
+				|| orden.estado() == EstadoOrden.DEVUELTA;
+		if (soloContracargo && (orden.contracargo() || orden.proveedorOrdenId() == null)) {
 			return Resultado.IGNORADA;
 		}
-		if (orden.estado() == EstadoOrden.POR_REVISAR) {
+		if (orden.estado() != EstadoOrden.PAGADA && orden.estado().finalizada() && !soloContracargo) {
 			return Resultado.IGNORADA;
 		}
 		if (orden.proveedorOrdenId() == null) {
@@ -179,6 +183,9 @@ public class ProcesadorPagosEnLinea {
 			return Resultado.ERROR;
 		}
 		try {
+			if (soloContracargo) {
+				return estado.estado() == EstadoCobro.Estado.CONTRACARGO ? contracargo(ordenId) : Resultado.IGNORADA;
+			}
 			return switch (estado.estado()) {
 				case PAGADO -> orden.estado() == EstadoOrden.PAGADA ? Resultado.IGNORADA : aplicar(ordenId, estado.cobro());
 				case RECHAZADO -> orden.estado() == EstadoOrden.CREADA ? rechazar(ordenId) : Resultado.SIN_CAMBIOS;
@@ -297,29 +304,13 @@ public class ProcesadorPagosEnLinea {
 	}
 
 	/**
-	 * El apoderado desconoció el cargo ante su banco: alerta CRÍTICA y una solicitud de anulación (devolución)
-	 * prellenada para que Administración la revise. No se anula nada solo.
+	 * El apoderado desconoció el cargo ante su banco: alerta CRÍTICA y, si hay un pago vigente, una solicitud de anulación
+	 * por CONTRACARGO (sin reembolso) para que la apruebe otra persona; un ingreso por revisar ya no se aplica. No se
+	 * anula nada solo ({@link ContracargosPasarela}).
 	 */
 	private Resultado contracargo(Long ordenId) {
-		return transaccion.execute(e -> {
-			OrdenPago orden = ordenes.findById(ordenId).orElseThrow();
-			Pago pago = registro.pagoDeOrden(ordenId).orElse(null);
-			if (pago == null || !pago.vigente()) {
-				return Resultado.SIN_CAMBIOS;
-			}
-			auditoria.registrar(AccionAuditoria.CONTRACARGO_RECIBIDO, "orden_pago", ordenId.toString(), "PAGADA",
-					"CONTRACARGO", "La pasarela informa un contracargo del pago en línea " + pago.getComprobante()
-							.numeroCompleto() + " de " + orden.getFamilia().getNombre() + " por "
-							+ Dinero.formatear(pago.getTotal()) + ". Se pidió su anulación (devolución) para revisión.");
-			try {
-				anulaciones.solicitarPorContracargo(pago.getId(), "Contracargo de la pasarela " + orden.getProveedor().name()
-						+ " del cargo " + orden.getCargoId() + ": el apoderado desconoció el pago ante su banco.");
-			}
-			catch (ReglaNegocioException yaPedida) {
-				// Ya hay una solicitud pendiente para este pago: la alerta queda en la bitácora.
-			}
-			return Resultado.CONTRACARGO;
-		});
+		return transaccion.execute(e -> contracargos.registrar(ordenId, ContracargosPasarela.POR_AVISO, null)
+				? Resultado.CONTRACARGO : Resultado.SIN_CAMBIOS);
 	}
 
 	private static String detalleNoAplicable(MotivoNoAplicable motivo, List<Cuota> cuotas, String operacion) {
@@ -348,10 +339,11 @@ public class ProcesadorPagosEnLinea {
 
 	/** Lo que se necesita de la orden fuera de la transacción. */
 	private record Instantanea(EstadoOrden estado, ProveedorPasarela proveedor, String proveedorOrdenId,
-			LocalDateTime venceEn) {
+			LocalDateTime venceEn, boolean contracargo) {
 
 		static Instantanea de(OrdenPago o) {
-			return new Instantanea(o.getEstado(), o.getProveedor(), o.getProveedorOrdenId(), o.getVenceEn());
+			return new Instantanea(o.getEstado(), o.getProveedor(), o.getProveedorOrdenId(), o.getVenceEn(),
+					o.tieneContracargo());
 		}
 	}
 }

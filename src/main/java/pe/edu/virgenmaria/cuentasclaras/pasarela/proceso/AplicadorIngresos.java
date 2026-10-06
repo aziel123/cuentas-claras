@@ -104,7 +104,7 @@ public class AplicadorIngresos {
 		registro.prepararCanal(CanalCaja.PASARELA, hoy);
 		return transaccion.execute(e -> {
 			OrdenPago orden = ordenes.bloquear(ordenId).orElseThrow();
-			if (orden.getEstado() != EstadoOrden.POR_REVISAR) {
+			if (orden.getEstado() != EstadoOrden.POR_REVISAR || orden.tieneContracargo()) {
 				return Optional.<Long>empty();
 			}
 			SolicitudCambio solicitud = solicitudes.findById(solicitudId)

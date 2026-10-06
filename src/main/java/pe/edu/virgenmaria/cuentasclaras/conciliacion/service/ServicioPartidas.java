@@ -82,6 +82,8 @@ public class ServicioPartidas {
 
 	private final LoteRecaudacionRepository lotes;
 
+	private final pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LineaRecaudacionRepository lineasRecaudacion;
+
 	private final ResponsablesPartida responsables;
 
 	private final ControlParticipantes participantes;
@@ -98,7 +100,9 @@ public class ServicioPartidas {
 
 	public ServicioPartidas(PartidaConciliacionRepository partidas, MovimientoBancarioRepository movimientos,
 			ObjetosConciliables objetos, PagoRepository pagos, DepositoCajaRepository depositos,
-			ReembolsoRepository reembolsos, LoteRecaudacionRepository lotes, ResponsablesPartida responsables,
+			ReembolsoRepository reembolsos, LoteRecaudacionRepository lotes,
+			pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LineaRecaudacionRepository lineasRecaudacion,
+			ResponsablesPartida responsables,
 			ControlParticipantes participantes,
 			RegistroSolicitudes solicitudes, PropiedadesConciliacion propiedades, AuditoriaService auditoria,
 			ApplicationEventPublisher eventos, Clock reloj) {
@@ -109,6 +113,7 @@ public class ServicioPartidas {
 		this.depositos = depositos;
 		this.reembolsos = reembolsos;
 		this.lotes = lotes;
+		this.lineasRecaudacion = lineasRecaudacion;
 		this.responsables = responsables;
 		this.participantes = participantes;
 		this.solicitudes = solicitudes;
@@ -355,6 +360,8 @@ public class ServicioPartidas {
 					::getNumeroOperacion).orElse(null);
 			case REEMBOLSO -> reembolsos.findById(id).map(pe.edu.virgenmaria.cuentasclaras.caja.model.Reembolso
 					::getNumeroOperacion).orElse(null);
+			case LINEA_RECAUDACION -> lineasRecaudacion.findById(id).map(pe.edu.virgenmaria.cuentasclaras.recaudacion.model
+					.LineaRecaudacion::getDevolucionOperacion).orElse(null);
 			default -> null;
 		};
 	}

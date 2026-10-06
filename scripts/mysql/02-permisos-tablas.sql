@@ -82,7 +82,7 @@ GRANT INSERT ON cuentasclaras.reembolso TO 'cc_app'@'%';                        
 -- confirmación (una vez), el estado y la resolución (trg_orden_pago_estado).
 GRANT INSERT, UPDATE (estado, proveedor_orden_id, enlace_pago, cargo_id, operacion, monto_confirmado, moneda_confirmada,
     medio_confirmado, confirmado_en, tardia, motivo_revision, detalle_revision, devolucion_operacion, devuelto_por,
-    devuelto_en, actualizado_en, version) ON cuentasclaras.orden_pago TO 'cc_app'@'%';
+    devuelto_en, contracargo_en, contracargo_origen, actualizado_en, version) ON cuentasclaras.orden_pago TO 'cc_app'@'%';
 GRANT INSERT ON cuentasclaras.orden_pago_cuota TO 'cc_app'@'%';                   -- solo inserción
 GRANT INSERT, UPDATE (estado, intentos, resultado, procesado_en, actualizado_en, version)
     ON cuentasclaras.evento_pasarela TO 'cc_app'@'%';
@@ -96,8 +96,9 @@ GRANT INSERT ON cuentasclaras.archivo_cargado TO 'cc_app'@'%';                  
 GRANT INSERT, UPDATE (estado, sha_vigente, intentos_confirmacion, total_ciego, confirmado_por, confirmado_en, aplicado_en,
     lineas_aplicadas, lineas_excepcion, monto_aplicado, monto_excepcion, rechazado_por, rechazado_en, motivo_rechazo,
     actualizado_en, version) ON cuentasclaras.lote_recaudacion TO 'cc_app'@'%';
-GRANT INSERT, UPDATE (estado, motivo_excepcion, detalle, devolucion_operacion, devuelto_por, devuelto_en, actualizado_en,
-    version) ON cuentasclaras.linea_recaudacion TO 'cc_app'@'%';
+GRANT INSERT, UPDATE (estado, motivo_excepcion, detalle, devolucion_operacion, devuelto_por, devuelto_en,
+    devolucion_banco, devolucion_cuenta, devolucion_titular, actualizado_en, version)
+    ON cuentasclaras.linea_recaudacion TO 'cc_app'@'%';
 -- Sprint 4 · tanda 3 (V15): extracto, conciliación y liquidaciones de la pasarela. Tablas financieras: NUNCA DELETE.
 -- La cuenta no cambia su número (se desactiva). Del extracto no cambian la cuenta, la secuencia, el archivo, las fechas
 -- ni los saldos (trg_extracto_bancario_estado vigila la confirmación a ciegas en cadena). Los movimientos y las
@@ -113,6 +114,13 @@ GRANT INSERT ON cuentasclaras.liquidacion_pasarela TO 'cc_app'@'%';             
 GRANT INSERT ON cuentasclaras.liquidacion_linea TO 'cc_app'@'%';                  -- solo inserción
 GRANT INSERT, UPDATE (estado, movimiento_vigente, objeto_vigente, resuelto_por, resuelto_en, actualizado_en, version)
     ON cuentasclaras.partida_conciliacion TO 'cc_app'@'%';
+
+-- Correcciones del sprint 4 (V16). Columnas nuevas inmutables (sin UPDATE: 1143): extracto_bancario.muestra y
+-- semilla_muestreo, lote_recaudacion.muestra y partida_conciliacion.linea_recaudacion_id (S4-A1, S4-A2 y S4-A4).
+-- orden_pago.contracargo_en y contracargo_origen se escriben una vez (trg_orden_pago_estado); la cuenta de destino de
+-- la devolución de una línea de recaudación se escribe al ejecutarla (trg_linea_recaudacion_estado). El reembolso de un
+-- pago en línea por la API de la pasarela es de SOLO INSERCIÓN (S4-A3).
+GRANT INSERT ON cuentasclaras.reembolso_pasarela TO 'cc_app'@'%';                 -- solo inserción
 
 -- M2: cc_app no lee information_schema.TRIGGERS (necesitaría el privilegio TRIGGER, que no debe tener). Esta función
 -- (SQL SECURITY DEFINER: corre con los permisos de quien la crea) devuelve solo los nombres de los triggers del esquema,

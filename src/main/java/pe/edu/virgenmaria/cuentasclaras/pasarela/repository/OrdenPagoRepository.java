@@ -28,6 +28,9 @@ public interface OrdenPagoRepository extends Repository<OrdenPago, Long> {
 
 	Optional<OrdenPago> findByProveedorOrdenId(String proveedorOrdenId);
 
+	/** La orden cobrada con esa operación canónica (para la línea CONTRACARGO de una liquidación). */
+	Optional<OrdenPago> findFirstByOperacionOrderByIdDesc(String operacion);
+
 	/** La orden bloqueada (primer bloqueo del procesamiento de un pago en línea). */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select o from OrdenPago o where o.id = :id")

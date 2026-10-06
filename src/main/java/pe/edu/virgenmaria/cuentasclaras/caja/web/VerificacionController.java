@@ -72,7 +72,21 @@ public class VerificacionController {
 		return VOLVER;
 	}
 
-	@PostMapping("/conciliacion/devoluciones/{id:\\d+}")
+		/** S4-A3: la devolución de un pago en línea solo sale por la API de la pasarela, al mismo medio de origen. */
+	@PostMapping("/conciliacion/devoluciones/{id:\\d+}/pasarela")
+	public String reembolsarEnLinea(@PathVariable Long id, RedirectAttributes avisos) {
+		try {
+			String reembolso = verificacion.reembolsarEnLinea(id);
+			avisos.addFlashAttribute("exito", "Listo: la pasarela devolvió el pago al mismo medio de origen (reembolso "
+					+ reembolso + ").");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return VOLVER;
+	}
+
+@PostMapping("/conciliacion/devoluciones/{id:\\d+}")
 	public String registrarReembolso(@PathVariable Long id, @Valid ReembolsoRequest pedido, BindingResult validacion,
 			RedirectAttributes avisos) {
 		if (validacion.hasErrors()) {

@@ -30,6 +30,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.dto.AplicacionLineaRequest;
+import pe.edu.virgenmaria.cuentasclaras.recaudacion.dto.DevolucionLineaRequest;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.dto.LineaExcepcionVista;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.formato.FilaRecaudacion;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.formato.FormatoGenericoCsv;
@@ -53,6 +54,7 @@ import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.cuota;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.digital;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.estado;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.ADMINISTRACION;
+import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.ADMINISTRACION_2;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.DIRECCION;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.DIRECCION_Y_ADMINISTRACION;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.PROMOTORIA;
@@ -227,27 +229,39 @@ class EscenariosFraudeRecaudacionTest {
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'INGRESO_APLICADO'")).isEqualTo(1);
 	}
 
-	/** Un pago en dólares no se aplica a cuotas en soles: se devuelve, y lo registra alguien que no lo aprobó. */
+	/**
+	 * Un pago en dólares no se aplica a cuotas en soles: se devuelve a la cuenta de destino que se pidió, y lo registra
+	 * alguien que no lo pidió ni lo aprobó (correcciones del sprint 4, S4-A4).
+	 */
 	@Test
-	void devolucionLaRegistraQuienNoLaAprobo() {
+	void devolucionLaRegistraQuienNoLaPidioNiLaAprobo() {
 		Long lote = aplicado(archivo().linea(FECHA, CodigoPago.deAlumno(f.mateo()), "", "120.00", "USD", "BCP60031"));
 		Long linea = idLinea(jdbc, lote, 1);
 		como(ADMINISTRACION);
 		assertThatThrownBy(() -> excepciones.solicitarAplicacion(linea, new AplicacionLineaRequest(f.quispe(),
 				List.of(cuota(jdbc, f.mateo(), "MAT-2027")), "Aplicar el pago en dólares a la matrícula")))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("solo se devuelve");
-		excepciones.solicitarDevolucion(linea, "Pagó en dólares: se le devuelve por transferencia");
+		assertThatThrownBy(() -> excepciones.solicitarDevolucion(linea, new DevolucionLineaRequest("BCP", "abc", "Rosa "
+				+ "Quispe Huamán", "Pagó en dólares: se le devuelve por transferencia")))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("cuenta de destino");
+		excepciones.solicitarDevolucion(linea, new DevolucionLineaRequest("BCP", "191-7654321-0-55", "Rosa Quispe Huamán",
+				"Pagó en dólares: se le devuelve por transferencia"));
 		EscenarioAprobaciones.aprueba(DIRECCION_Y_ADMINISTRACION, bandeja, jdbc, "linea_recaudacion", linea);
 		assertThatThrownBy(() -> excepciones.registrarDevolucion(linea, "TRF-0099"))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("Aprobaste");
-
 		como(ADMINISTRACION);
+		assertThatThrownBy(() -> excepciones.registrarDevolucion(linea, "TRF-0099"))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("Pediste");
+
+		como(ADMINISTRACION_2);
 		excepciones.registrarDevolucion(linea, "TRF-0099");
 
-		Map<String, Object> fila = jdbc.queryForMap("SELECT estado, devolucion_operacion, devuelto_por FROM "
-				+ "linea_recaudacion WHERE id = ?", linea);
+		Map<String, Object> fila = jdbc.queryForMap("SELECT estado, devolucion_operacion, devuelto_por, devolucion_banco, "
+				+ "devolucion_cuenta, devolucion_titular FROM linea_recaudacion WHERE id = ?", linea);
 		assertThat(fila).containsEntry("estado", "DEVUELTA").containsEntry("devolucion_operacion", "TRF0099")
-				.containsEntry("devuelto_por", "administracion");
+				.containsEntry("devuelto_por", "administracion2").containsEntry("devolucion_banco", "BCP")
+				.containsEntry("devolucion_cuenta", "191-7654321-0-55").containsEntry("devolucion_titular",
+						"Rosa Quispe Huamán");
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'INGRESO_DEVUELTO'")).isEqualTo(1);
 	}
 

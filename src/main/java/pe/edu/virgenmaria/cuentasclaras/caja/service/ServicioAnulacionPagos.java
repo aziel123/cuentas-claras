@@ -128,8 +128,10 @@ public class ServicioAnulacionPagos {
 	}
 
 	/**
-	 * Sprint 4: la pasarela informó un contracargo de un pago en línea. El sistema deja PRELLENADA la solicitud de
-	 * anulación (devolución) para que Administración la revise y Promotoría o Dirección la aprueben: no se anula nada solo.
+	 * Sprint 4: la pasarela informó un contracargo de un pago en línea. El sistema deja la solicitud de anulación para
+	 * que Promotoría o Dirección la aprueben: no se anula nada solo. Correcciones del sprint 4 (S4-A3): es de tipo
+	 * CONTRACARGO, SIN reembolso (el banco ya le devolvió el dinero al apoderado; antes se prellenaba una devolución y
+	 * Administración podía «reembolsar» otra vez a una cuenta propia).
 	 */
 	@PreAuthorize("hasRole('SISTEMA_PASARELA')")
 	public void solicitarPorContracargo(Long pagoId, String motivo) {
@@ -137,9 +139,8 @@ public class ServicioAnulacionPagos {
 		if (!pago.vigente() || pago.getCaja().getCanal() != CanalCaja.PASARELA) {
 			throw new ReglaNegocioException("Solo se pide anular un pago en línea vigente por contracargo.");
 		}
-		String resumen = "Devolver " + descripcion(pago) + " · contracargo de la pasarela";
-		crear(pago, resumen, Map.of(DATO_TIPO, TipoAnulacion.DEVOLUCION.name(), DATO_CAUSA, CausaDevolucion.OTRA.name()),
-				Motivo.exigir(motivo));
+		String resumen = "Anular " + descripcion(pago) + " · contracargo: SIN reembolso (el banco ya devolvió el dinero)";
+		crear(pago, resumen, Map.of(DATO_TIPO, TipoAnulacion.CONTRACARGO.name()), Motivo.exigir(motivo));
 	}
 
 	/**

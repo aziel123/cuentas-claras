@@ -24,8 +24,9 @@ public record VistaConciliacion(LocalDate hoy, boolean puedeVerificar, int diasL
 	}
 
 	/** Devolución aprobada que espera su reembolso (por el mismo medio del pago). */
+	/** {@code enLinea}: un pago de la pasarela; se reembolsa solo por su API (S4-A3), sin escribir números. */
 	public record DevolucionPorReembolsar(Long anulacionId, String comprobante, String notaCredito, String medio,
-			boolean efectivo, BigDecimal monto, String familia, String cajera, LocalDate aprobadaEl) {
+			boolean efectivo, BigDecimal monto, String familia, String cajera, LocalDate aprobadaEl, boolean enLinea) {
 	}
 
 	public record Verificado(String que, String resultado, String variante, String nota, String por,

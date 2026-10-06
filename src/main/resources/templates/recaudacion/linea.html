@@ -82,16 +82,32 @@
 
 	<section class="tarjeta" aria-labelledby="titulo-devolver" th:if="${l.puedePedir}">
 		<h2 id="titulo-devolver">Pedir la devolución</h2>
-		<p class="secundario">Si el pago no corresponde a ninguna deuda, se devuelve por transferencia a quien lo hizo. Lo aprueba otra persona y lo registra Administración con el número de la transferencia.</p>
-		<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-devolver', '¿Pedir devolver el pago?',
-			'Cuando se apruebe, otra persona de Administración hará la transferencia y registrará su número.',
-			@{/recaudacion/lineas/{id}/devolver(id=${l.id})}, 'Pedir devolución', 'secundario', 'Pedir devolución')}"></th:block>
+		<p class="secundario">Si el pago no corresponde a ninguna deuda, se devuelve por transferencia a quien lo hizo. Escribe la cuenta de quien pagó (la confirma la familia): quien aprueba la ve, y la transferencia la hace otra persona de Administración (no tú), que registra su número. La conciliación espera ver ese cargo en el banco.</p>
+		<form method="post" th:action="@{/recaudacion/lineas/{id}/devolver(id=${l.id})}" class="formulario" data-formulario="pedir-devolucion">
+			<div class="campo">
+				<label for="devolver-banco">Banco de destino</label>
+				<input class="input" type="text" id="devolver-banco" name="banco" required maxlength="20" autocomplete="off">
+			</div>
+			<div class="campo">
+				<label for="devolver-cuenta">Cuenta o CCI de destino</label>
+				<input class="input" type="text" id="devolver-cuenta" name="cuenta" required maxlength="30" inputmode="numeric" autocomplete="off">
+			</div>
+			<div class="campo">
+				<label for="devolver-titular">Titular de la cuenta (quien pagó)</label>
+				<input class="input" type="text" id="devolver-titular" name="titular" required minlength="5" maxlength="120" autocomplete="off">
+			</div>
+			<div class="campo">
+				<label for="devolver-motivo">Motivo (obligatorio)</label>
+				<textarea class="input" id="devolver-motivo" name="motivo" required minlength="10" maxlength="500"></textarea>
+			</div>
+			<button th:replace="~{fragments/componentes :: boton('Pedir devolución', 'secundario')}"></button>
+		</form>
 	</section>
 
 	<form method="post" th:action="@{/recaudacion/lineas/{id}/devolucion(id=${l.id})}" class="formulario formulario-angosto tarjeta"
 		th:if="${l.devolucionPorEjecutar}" data-formulario="devolucion">
 		<h2>Registrar la devolución aprobada</h2>
-		<p class="secundario">La registra una persona de Administración distinta de quien la aprobó.</p>
+		<p class="secundario" th:text="${l.devolucionDestino != null} ? |Transfiere a ${l.devolucionDestino}. La registra una persona de Administración distinta de quien la pidió y de quien la aprobó.| : 'La registra una persona de Administración distinta de quien la pidió y de quien la aprobó.'">La registra otra persona.</p>
 		<div class="campo">
 			<label for="numeroOperacion">N.° de operación de la transferencia</label>
 			<input class="input" type="text" id="numeroOperacion" name="numeroOperacion" required maxlength="40" autocomplete="off">
