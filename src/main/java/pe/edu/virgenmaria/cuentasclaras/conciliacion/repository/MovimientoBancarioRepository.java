@@ -47,4 +47,22 @@ public interface MovimientoBancarioRepository extends Repository<MovimientoBanca
 			+ "and exists (select p.id from PartidaConciliacion p where p.movimiento = m and p.estado = "
 			+ "pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoPartida.CONFIRMADA)")
 	long conciliadosDesde(@Param("desde") LocalDate desde);
+
+	/**
+	 * Sprint 5, tanda 3 (cierre mensual): la suma de los movimientos de un tipo, entre dos fechas, de los extractos
+	 * CONFIRMADOS de la cuenta (la misma cuenta que hace trg_cierre_mensual_banco_nace).
+	 */
+	@Query("select coalesce(sum(m.monto), 0) from MovimientoBancario m where m.cuentaId = :cuenta and m.tipo = :tipo "
+			+ "and m.extracto.estado = pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoExtracto.CONFIRMADO "
+			+ "and m.fecha between :desde and :hasta")
+	java.math.BigDecimal sumaConfirmada(@Param("cuenta") Long cuentaId,
+			@Param("tipo") pe.edu.virgenmaria.cuentasclaras.conciliacion.model.TipoMovimiento tipo,
+			@Param("desde") LocalDate desde, @Param("hasta") LocalDate hasta);
+
+	/** La suma de los movimientos de un tipo de un extracto hasta una fecha (saldo al cierre de un día). */
+	@Query("select coalesce(sum(m.monto), 0) from MovimientoBancario m where m.extracto.id = :extracto "
+			+ "and m.tipo = :tipo and m.fecha <= :hasta")
+	java.math.BigDecimal sumaDelExtractoHasta(@Param("extracto") Long extractoId,
+			@Param("tipo") pe.edu.virgenmaria.cuentasclaras.conciliacion.model.TipoMovimiento tipo,
+			@Param("hasta") LocalDate hasta);
 }

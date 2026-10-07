@@ -11,6 +11,8 @@ import pe.edu.virgenmaria.cuentasclaras.matricula.model.EstadoRenovacion;
 import pe.edu.virgenmaria.cuentasclaras.matricula.repository.MatriculasReservadasRepository;
 import pe.edu.virgenmaria.cuentasclaras.matricula.repository.RenovacionMatriculaRepository;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -21,6 +23,8 @@ import java.util.stream.Collectors;
  *   <li>ATENCIÓN: matrícula ACTIVA cuya cuota de matrícula volvió a estar por pagar (se anuló el pago). No se desactiva
  *       sola (decisión 57): se resuelve con las aprobaciones existentes.</li>
  *   <li>ATENCIÓN: renovaciones confirmadas que el sistema aún no pudo reservar.</li>
+ *   <li>ATENCIÓN (tanda 3): renovaciones confirmadas sin pagar a {@value #DIAS_AVISO} días del vencimiento de la
+ *       matrícula (o ya vencida): la familia confirmó, pero sin pagar no hay matrícula activa ni pensiones.</li>
  * </ul>
  */
 @Service
@@ -30,13 +34,19 @@ public class AlertasMatricula implements AlertasRevision {
 
 	static final String MODULO = "Matrícula";
 
+	static final int DIAS_AVISO = 7;
+
 	private final MatriculasReservadasRepository reservadas;
 
 	private final RenovacionMatriculaRepository renovaciones;
 
-	public AlertasMatricula(MatriculasReservadasRepository reservadas, RenovacionMatriculaRepository renovaciones) {
+	private final Clock reloj;
+
+	public AlertasMatricula(MatriculasReservadasRepository reservadas, RenovacionMatriculaRepository renovaciones,
+			Clock reloj) {
 		this.reservadas = reservadas;
 		this.renovaciones = renovaciones;
+		this.reloj = reloj;
 	}
 
 	@Override
@@ -53,6 +63,13 @@ public class AlertasMatricula implements AlertasRevision {
 		if (sinReservar > 0) {
 			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, sinReservar + " renovación(es) confirmada(s) sin "
 					+ "matrícula reservada todavía.", "/matricula-2027"));
+		}
+		List<Matricula> sinPagar = reservadas.reservadasSinPagarQueVencenHasta(LocalDate.now(reloj).plusDays(DIAS_AVISO));
+		if (!sinPagar.isEmpty()) {
+			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, sinPagar.size() + " renovación(es) confirmada(s) sin "
+					+ "pagar la matrícula a " + DIAS_AVISO + " días o menos de su vencimiento: "
+					+ sinPagar.stream().limit(3).map(m -> m.getAlumno().nombreCompleto()).collect(Collectors.joining(", "))
+					+ ". Sin el pago no se activa la matrícula ni se generan las pensiones.", "/matricula-2027"));
 		}
 		return alertas;
 	}

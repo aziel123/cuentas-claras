@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Feriados', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="feriados">
+	<div class="cabecera">
+		<div>
+			<h1 th:text="|Feriados ${vista.anio}|">Feriados 2027</h1>
+			<p class="secundario">Los días que no cuentan como hábiles en las alertas de depósito, de abono y de verificación, y en los que no salen recordatorios.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta">
+		<h2>Días no laborables del colegio</h2>
+		<p class="secundario">Solo Promotoría o Dirección los registran, desde mañana en adelante. Quedan resaltados en la bitácora.</p>
+		<th:block th:if="${#lists.isEmpty(vista.extras)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Sin días extra', 'Este año el colegio no registró días no laborables.')}"></div>
+		</th:block>
+		<ul class="cuotas-familia" th:unless="${#lists.isEmpty(vista.extras)}">
+			<li th:each="f : ${vista.extras}" th:data-feriado="${f.id}">
+				<div class="cuota-cabecera">
+					<strong th:text="|${#temporals.format(f.fecha, 'dd/MM/yyyy')} · ${f.descripcion}|">15/03/2027 · Aniversario</strong>
+					<span th:replace="~{fragments/componentes :: badge(${f.vigente} ? 'Vigente' : 'Anulado', ${f.vigente} ? 'info' : 'peligro')}"></span>
+				</div>
+				<span class="secundario" th:text="|Registró ${f.registradoPor}|">Registró promotor</span>
+				<span class="secundario" th:if="${f.anulacion != null}" th:text="${f.anulacion}">Anulado</span>
+				<form th:if="${vista.puedeEditar and f.anulable}" method="post" class="formulario"
+					th:action="@{/feriados/{id}/anular(id=${f.id})}">
+					<div class="campo">
+						<label th:for="|motivo-${f.id}|">Motivo para anularlo</label>
+						<textarea class="input" th:id="|motivo-${f.id}|" name="motivo" rows="2" minlength="10" maxlength="500" required></textarea>
+					</div>
+					<div class="acciones acciones-izquierda">
+						<button type="submit" class="btn btn-peligro">Anular este día</button>
+					</div>
+				</form>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" th:if="${vista.puedeEditar}">
+		<h2>Registrar un día no laborable</h2>
+		<form method="post" class="formulario" th:action="@{/feriados}">
+			<div class="campo">
+				<label for="fecha">Fecha</label>
+				<input class="input" id="fecha" name="fecha" type="date" required>
+			</div>
+			<div class="campo">
+				<label for="descripcion">Motivo</label>
+				<input class="input" id="descripcion" name="descripcion" type="text" minlength="5" maxlength="80" required>
+				<small class="ayuda">Por ejemplo: «Día no laborable decretado por el Gobierno».</small>
+			</div>
+			<div class="acciones acciones-izquierda">
+				<button type="submit" class="btn btn-primario">Registrar día no laborable</button>
+			</div>
+		</form>
+	</section>
+
+	<section class="tarjeta">
+		<h2>Feriados nacionales</h2>
+		<p class="secundario">Están en el sistema por ley y nadie los cambia.</p>
+		<ul class="cuotas-familia">
+			<li th:each="n : ${vista.nacionales}">
+				<span th:text="|${#temporals.format(n.fecha, 'dd/MM/yyyy')} · ${n.nombre}|">01/01/2027 · Año Nuevo</span>
+			</li>
+		</ul>
+	</section>
+</main>
+</body>
+</html>

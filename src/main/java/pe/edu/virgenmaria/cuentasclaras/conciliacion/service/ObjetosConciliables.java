@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.conciliacion.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
 import org.springframework.stereotype.Component;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.DepositoCaja;
@@ -62,10 +63,13 @@ public class ObjetosConciliables {
 
 	private final PropiedadesConciliacion propiedades;
 
+	private final CalendarioHabil calendario;
+
 	public ObjetosConciliables(PagoRepository pagos, DepositoCajaRepository depositos, ReembolsoRepository reembolsos,
 			LiquidacionPasarelaRepository liquidaciones, LoteRecaudacionRepository lotes,
 			PartidaConciliacionRepository partidas, LineaRecaudacionRepository lineasRecaudacion, NombresUsuarios nombres,
-			PropiedadesConciliacion propiedades) {
+			PropiedadesConciliacion propiedades, CalendarioHabil calendario) {
+		this.calendario = calendario;
 		this.pagos = pagos;
 		this.depositos = depositos;
 		this.reembolsos = reembolsos;
@@ -87,7 +91,7 @@ public class ObjetosConciliables {
 							+ p.getFamilia().getNombre() + " · cobró " + nombres.de(p.getCajero()), p.getCajero()));
 		}
 		for (DepositoCaja d : depositos.findByFechaDepositoBetweenOrderByFechaDepositoAscIdAsc(desde, hasta)) {
-			LocalDate[] v = ReglasEmparejamiento.ventanaDeposito(d.getFechaDeposito());
+			LocalDate[] v = ReglasEmparejamiento.ventanaDeposito(calendario, d.getFechaDeposito());
 			objetos.add(new ObjetoAbierto(ObjetoPartida.DEPOSITO, d.getId(), d.getFechaDeposito(), d.getMonto(),
 					d.getNumeroOperacion(), null, v[0], v[1], "Depósito de la caja de " + nombres.de(d.getCaja().getCajero())
 							+ " del " + Calendario.formatear(d.getCaja().getFecha()), d.getCaja().getCajero()));
@@ -96,7 +100,7 @@ public class ObjetosConciliables {
 			if (l.getTotalNeto().signum() <= 0) {
 				continue;
 			}
-			LocalDate[] v = ReglasEmparejamiento.ventanaLiquidacion(l.getFechaAbono());
+			LocalDate[] v = ReglasEmparejamiento.ventanaLiquidacion(calendario, l.getFechaAbono());
 			objetos.add(new ObjetoAbierto(ObjetoPartida.LIQUIDACION, l.getId(), l.getFechaAbono(), l.getTotalNeto(), null,
 					l.getReferencia(), v[0], v[1], "Liquidación " + l.getReferencia() + " de la pasarela · " + l.getLineas()
 							+ " cargo(s) · bruto " + Dinero.formatear(l.getTotalBruto()) + " menos comisión e IGV "
@@ -105,7 +109,7 @@ public class ObjetosConciliables {
 		if (propiedades.abonoRecaudacion() == PropiedadesConciliacion.AbonoRecaudacion.POR_LOTE) {
 			for (LoteRecaudacion t : lotes.findByEstadoInAndFechaProcesoBetweenOrderByIdAsc(
 					EnumSet.of(EstadoLote.CONFIRMADO, EstadoLote.APLICADO), desde, hasta)) {
-				LocalDate[] v = ReglasEmparejamiento.ventanaRecaudacion(t.getFechaProceso());
+				LocalDate[] v = ReglasEmparejamiento.ventanaRecaudacion(calendario, t.getFechaProceso());
 				objetos.add(new ObjetoAbierto(ObjetoPartida.LOTE_RECAUDACION, t.getId(), t.getFechaProceso(), t.getTotal(),
 						null, null, v[0], v[1], "Recaudación del banco (lote N.° " + t.getId() + ") · " + t.getLineas()
 								+ " pago(s) del " + Calendario.formatear(t.getDesde()) + " · subió " + nombres.de(
@@ -114,7 +118,7 @@ public class ObjetosConciliables {
 		}
 		else {
 			for (Pago p : pagos.deCanalEntre(CanalCaja.RECAUDACION, desde, hasta)) {
-				LocalDate[] v = ReglasEmparejamiento.ventanaRecaudacion(p.getFecha());
+				LocalDate[] v = ReglasEmparejamiento.ventanaRecaudacion(calendario, p.getFecha());
 				objetos.add(new ObjetoAbierto(ObjetoPartida.PAGO, p.getId(), p.getFecha(), p.getTotal(),
 						p.getNumeroOperacion(), null, v[0], v[1], "Pago por banco " + p.getComprobante().numeroCompleto()
 								+ " · " + p.getFamilia().getNombre(), p.getCajero()));

@@ -191,6 +191,17 @@ public class Mensaje extends BaseEntity {
 	}
 
 	/** Administración adelanta el siguiente intento de un PENDIENTE (nunca edita el destino ni el texto). */
+	/**
+	 * Tanda 3: un recordatorio fuera de su ventana (lunes a sábado de 08:00 a 20:00, nunca en feriado) espera a la
+	 * siguiente. No cuenta como intento ni cambia nada más.
+	 */
+	public void posponerHasta(LocalDateTime cuando) {
+		if (estado != EstadoMensaje.PENDIENTE) {
+			throw new IllegalStateException("Solo se pospone un mensaje PENDIENTE");
+		}
+		proximoIntentoEn = cuando;
+	}
+
 	public void adelantar(LocalDateTime ahora) {
 		exigir(EstadoMensaje.PENDIENTE);
 		proximoIntentoEn = ahora;

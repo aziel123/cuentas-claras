@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.conciliacion.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -64,9 +65,12 @@ public class ResumenConciliacion {
 
 	private final Clock reloj;
 
+	private final CalendarioHabil calendario;
+
 	public ResumenConciliacion(ExtractoBancarioRepository extractos, MovimientoBancarioRepository movimientos,
 			PartidaConciliacionRepository partidas, ObjetosConciliables objetos, DiferenciasConciliacion diferencias,
-			ServicioCuentasBancarias cuentas, NombresUsuarios nombres, PropiedadesConciliacion propiedades, Clock reloj) {
+			ServicioCuentasBancarias cuentas, NombresUsuarios nombres, PropiedadesConciliacion propiedades, Clock reloj, CalendarioHabil calendario) {
+		this.calendario = calendario;
 		this.extractos = extractos;
 		this.movimientos = movimientos;
 		this.partidas = partidas;
@@ -122,7 +126,7 @@ public class ResumenConciliacion {
 		List<VistaDiferencias.SinPareja> vistasSinPareja = sinPareja.stream()
 				.filter(m -> m.getTipo() == TipoMovimiento.ABONO)
 				.map(m -> new VistaDiferencias.SinPareja(m.getId(), m.getFecha(), m.getTipo().etiqueta(), true, m.getMonto(),
-						m.getDescripcion(), m.getNumeroOperacion(), DiferenciasConciliacion.abonoCritico(m, hoy),
+						m.getDescripcion(), m.getNumeroOperacion(), diferencias.abonoCritico(m, hoy),
 						m.getExtracto().getEstado() == EstadoExtracto.CONFIRMADO,
 						abiertos.stream().filter(o -> o.tipo().movimiento() == m.getTipo()
 								&& ReglasEmparejamiento.montoAdmitido(m.getMonto(), o, propiedades.toleranciaMontoLiquidacion())
@@ -140,7 +144,7 @@ public class ResumenConciliacion {
 				.filter(m -> m.getTipo() == TipoMovimiento.CARGO)
 				.map(m -> new VistaDiferencias.SinPareja(m.getId(), m.getFecha(), m.getTipo().etiqueta(), false,
 						m.getMonto(), m.getDescripcion(), m.getNumeroOperacion(),
-						ReglasEmparejamiento.diasHabilesEntre(m.getFecha(), hoy) > 2,
+						ReglasEmparejamiento.diasHabilesEntre(calendario, m.getFecha(), hoy) > 2,
 						m.getExtracto().getEstado() == EstadoExtracto.CONFIRMADO, List.of()))
 				.toList();
 		List<VistaDiferencias.Faltante> faltantes = diferencias.faltantes(hoy).stream()

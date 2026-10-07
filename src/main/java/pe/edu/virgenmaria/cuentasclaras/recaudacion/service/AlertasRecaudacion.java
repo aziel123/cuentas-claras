@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.recaudacion.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,7 +47,10 @@ public class AlertasRecaudacion implements AlertasRevision {
 
 	private final Clock reloj;
 
-	public AlertasRecaudacion(LoteRecaudacionRepository lotes, LineaRecaudacionRepository lineas, Clock reloj) {
+	private final CalendarioHabil calendario;
+
+	public AlertasRecaudacion(LoteRecaudacionRepository lotes, LineaRecaudacionRepository lineas, Clock reloj, CalendarioHabil calendario) {
+		this.calendario = calendario;
 		this.lotes = lotes;
 		this.lineas = lineas;
 		this.reloj = reloj;
@@ -78,7 +82,7 @@ public class AlertasRecaudacion implements AlertasRevision {
 					+ "devolverlos.", ENLACE));
 		}
 		for (LoteRecaudacion lote : lotes.findByEstadoOrderByIdAsc(EstadoLote.CARGADO)) {
-			LocalDateTime limite = Calendario.siguienteDiaHabil(lote.getCreadoEn().toLocalDate()).atTime(HORA_LIMITE);
+			LocalDateTime limite = calendario.siguienteDiaHabil(lote.getCreadoEn().toLocalDate()).atTime(HORA_LIMITE);
 			if (ahora.isAfter(limite)) {
 				alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, "El archivo de recaudación del "
 						+ Calendario.formatear(lote.getDesde()) + " al " + Calendario.formatear(lote.getHasta()) + " ("

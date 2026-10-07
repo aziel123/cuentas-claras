@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.comunicacion.proceso;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -89,11 +90,14 @@ public class DespachoMensajes {
 
 	private final Clock reloj;
 
+	private final CalendarioHabil calendario;
+
 	public DespachoMensajes(MensajeRepository mensajes, ObjectProvider<ProveedorWhatsApp> whatsapp,
 			ObjectProvider<ProveedorCorreo> correo, EnlacesActivacion enlaces, UsuarioRepository usuarios,
 			ApoderadoRepository apoderados, CreadorMensajes creador, AuditoriaService auditoria,
 			PropiedadesMensajeria propiedades, RecorridoColegios colegios, PlatformTransactionManager transacciones,
-			Clock reloj) {
+			Clock reloj, CalendarioHabil calendario) {
+		this.calendario = calendario;
 		this.mensajes = mensajes;
 		this.whatsapp = whatsapp;
 		this.correo = correo;
@@ -170,6 +174,12 @@ public class DespachoMensajes {
 						: correo.getIfAvailable() != null;
 				if (!conProveedor) {
 					return null; // conector apagado: queda PENDIENTE (alerta «pendientes»)
+				}
+				if (esRecordatorio(mensaje.getTipo()) && !enVentana(ahora())) {
+					// Tanda 3 (INDECOPI): los recordatorios salen de lunes a sábado de 08:00 a 20:00, nunca en feriado.
+					mensaje.posponerHasta(siguienteVentana(ahora()));
+					mensajes.saveAndFlush(mensaje);
+					return null;
 				}
 				Envio envio = preparar(mensaje);
 				ResultadoEnvio resultado = enviar(mensaje, envio);
@@ -274,6 +284,28 @@ public class DespachoMensajes {
 				: apoderados.findById(mensaje.getApoderadoId()).orElse(null);
 		Usuario usuario = mensaje.getUsuarioId() == null ? null : usuarios.findById(mensaje.getUsuarioId()).orElse(null);
 		creador.respaldo(mensaje, apoderado, usuario);
+	}
+
+	static final java.time.LocalTime VENTANA_DESDE = java.time.LocalTime.of(8, 0);
+
+	static final java.time.LocalTime VENTANA_HASTA = java.time.LocalTime.of(20, 0);
+
+	static boolean esRecordatorio(TipoMensaje tipo) {
+		return tipo == TipoMensaje.RECORDATORIO_VENCIMIENTO || tipo == TipoMensaje.CUOTA_VENCIDA;
+	}
+
+	/** Lunes a sábado (sin feriados nacionales ni del colegio), de 08:00 a 20:00. */
+	boolean enVentana(LocalDateTime momento) {
+		java.time.LocalTime hora = momento.toLocalTime();
+		return calendario.admiteMensajes(momento.toLocalDate()) && !hora.isBefore(VENTANA_DESDE)
+				&& hora.isBefore(VENTANA_HASTA);
+	}
+
+	/** El inicio de la próxima ventana de recordatorios. */
+	LocalDateTime siguienteVentana(LocalDateTime momento) {
+		java.time.LocalDate dia = momento.toLocalTime().isBefore(VENTANA_DESDE) ? momento.toLocalDate()
+				: momento.toLocalDate().plusDays(1);
+		return calendario.diaDeMensajesEnODespues(dia).atTime(VENTANA_DESDE);
 	}
 
 	private LocalDateTime ahora() {

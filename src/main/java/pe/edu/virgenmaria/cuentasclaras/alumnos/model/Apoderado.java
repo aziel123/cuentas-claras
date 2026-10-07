@@ -75,6 +75,13 @@ public class Apoderado extends BaseEntity {
 	@Column(name = "contacto_solicitud_id")
 	private Long contactoSolicitudId;
 
+	/**
+	 * Sprint 5, tanda 3 (decisión 45): el apoderado puede apagar los RECORDATORIOS de vencimiento desde el portal. Los avisos
+	 * de pago, anulación y descuento no dependen de esto: son el control antifraude y nunca se apagan.
+	 */
+	@Column(name = "recordatorios_activos", nullable = false)
+	private boolean recordatoriosActivos = true;
+
 	protected Apoderado() {
 		// requerido por JPA
 	}
@@ -172,6 +179,15 @@ public class Apoderado extends BaseEntity {
 
 	public boolean isActivo() {
 		return activo;
+	}
+
+	public boolean isRecordatoriosActivos() {
+		return recordatoriosActivos;
+	}
+
+	/** Solo el propio apoderado, desde el portal (ServicioPreferencias). */
+	public void cambiarRecordatorios(boolean activos) {
+		this.recordatoriosActivos = activos;
 	}
 
 	/**

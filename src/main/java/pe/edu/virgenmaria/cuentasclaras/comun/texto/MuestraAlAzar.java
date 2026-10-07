@@ -47,6 +47,16 @@ public final class MuestraAlAzar {
 		return AZAR.nextLong();
 	}
 
+	/**
+	 * Hasta {@code cuantos} elementos de la lista, elegidos con la semilla SECRETA del día (sprint 5, tanda 3; G21): la
+	 * misma semilla da la misma muestra (estable durante el día) y nadie la deduce de la fecha. No cambia la lista.
+	 */
+	public static <T> List<T> delDia(long semilla, List<T> elementos, int cuantos) {
+		List<T> copia = new ArrayList<>(elementos);
+		Collections.shuffle(copia, new java.util.Random(semilla));
+		return List.copyOf(copia.subList(0, Math.min(Math.max(cuantos, 0), copia.size())));
+	}
+
 	/** Los números de una muestra guardada. */
 	public static List<Integer> numeros(String muestra) {
 		if (muestra == null || muestra.isBlank()) {

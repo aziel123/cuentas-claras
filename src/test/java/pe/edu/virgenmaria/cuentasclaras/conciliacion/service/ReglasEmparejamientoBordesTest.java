@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.conciliacion.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.DiasHabiles;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -42,19 +43,19 @@ class ReglasEmparejamientoBordesTest {
 	}
 
 	private static ObjetoAbierto deposito(long id, LocalDate fecha, String monto, String operacion) {
-		LocalDate[] v = ReglasEmparejamiento.ventanaDeposito(fecha);
+		LocalDate[] v = ReglasEmparejamiento.ventanaDeposito(DiasHabiles.LUNES_A_VIERNES, fecha);
 		return new ObjetoAbierto(ObjetoPartida.DEPOSITO, id, fecha, new BigDecimal(monto), operacion, null, v[0], v[1],
 				"Depósito " + id, "caja");
 	}
 
 	private static ObjetoAbierto liquidacion(long id, LocalDate abono, String neto, String referencia) {
-		LocalDate[] v = ReglasEmparejamiento.ventanaLiquidacion(abono);
+		LocalDate[] v = ReglasEmparejamiento.ventanaLiquidacion(DiasHabiles.LUNES_A_VIERNES, abono);
 		return new ObjetoAbierto(ObjetoPartida.LIQUIDACION, id, abono, new BigDecimal(neto), null, referencia, v[0], v[1],
 				"Liquidación " + referencia, null);
 	}
 
 	private static ObjetoAbierto lote(long id, LocalDate proceso, String total) {
-		LocalDate[] v = ReglasEmparejamiento.ventanaRecaudacion(proceso);
+		LocalDate[] v = ReglasEmparejamiento.ventanaRecaudacion(DiasHabiles.LUNES_A_VIERNES, proceso);
 		return new ObjetoAbierto(ObjetoPartida.LOTE_RECAUDACION, id, proceso, new BigDecimal(total), null, null, v[0], v[1],
 				"Lote " + id, "administracion");
 	}
@@ -161,19 +162,19 @@ class ReglasEmparejamientoBordesTest {
 	@CsvSource({ "2026-10-30, 2026-11-02, 1", "2026-12-31, 2027-01-04, 2", "2026-02-27, 2026-03-02, 1",
 			"2026-10-31, 2026-11-01, 0", "2026-10-05, 2026-10-09, 4", "2026-10-09, 2026-10-05, 4" })
 	void debeContarDiasHabilesAlCruzarFinDeMesYDeAnio(LocalDate a, LocalDate b, int dias) {
-		assertThat(ReglasEmparejamiento.diasHabilesEntre(a, b)).isEqualTo(dias);
+		assertThat(ReglasEmparejamiento.diasHabilesEntre(DiasHabiles.LUNES_A_VIERNES, a, b)).isEqualTo(dias);
 	}
 
 	@Test
 	void debeAbrirLaVentanaDelDepositoDelViernesHastaElLunes() {
-		assertThat(ReglasEmparejamiento.ventanaDeposito(VIERNES)).containsExactly(VIERNES, VIERNES.plusDays(3));
+		assertThat(ReglasEmparejamiento.ventanaDeposito(DiasHabiles.LUNES_A_VIERNES, VIERNES)).containsExactly(VIERNES, VIERNES.plusDays(3));
 	}
 
 	@Test
 	void debeAbrirLaVentanaDeLaRecaudacionDelUltimoDiaDelMesHastaElDiaHabilSiguiente() {
 		LocalDate viernes30 = LocalDate.of(2026, 10, 30);
 
-		assertThat(ReglasEmparejamiento.ventanaRecaudacion(viernes30)).containsExactly(viernes30,
+		assertThat(ReglasEmparejamiento.ventanaRecaudacion(DiasHabiles.LUNES_A_VIERNES, viernes30)).containsExactly(viernes30,
 				LocalDate.of(2026, 11, 2));
 	}
 
@@ -181,7 +182,7 @@ class ReglasEmparejamientoBordesTest {
 	void debeAbrirLaVentanaDeLaLiquidacionDeUnDiaHabilAntesATresDespues() {
 		LocalDate lunes = LocalDate.of(2026, 10, 5);
 
-		assertThat(ReglasEmparejamiento.ventanaLiquidacion(lunes)).containsExactly(VIERNES, LocalDate.of(2026, 10, 8));
+		assertThat(ReglasEmparejamiento.ventanaLiquidacion(DiasHabiles.LUNES_A_VIERNES, lunes)).containsExactly(VIERNES, LocalDate.of(2026, 10, 8));
 	}
 
 	@Test

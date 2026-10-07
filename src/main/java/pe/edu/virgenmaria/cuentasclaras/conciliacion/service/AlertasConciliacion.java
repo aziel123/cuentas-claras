@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.conciliacion.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -89,10 +90,13 @@ public class AlertasConciliacion implements AlertasRevision {
 
 	private final Clock reloj;
 
+	private final CalendarioHabil calendario;
+
 	public AlertasConciliacion(DiferenciasConciliacion diferencias, CuentaBancariaRepository cuentas,
 			ExtractoBancarioRepository extractos, MovimientoBancarioRepository movimientos,
 			PartidaConciliacionRepository partidas, LiquidacionLineaRepository lineasLiquidacion, PagoRepository pagos,
-			AuditoriaService auditoria, PropiedadesConciliacion propiedades, Clock reloj) {
+			AuditoriaService auditoria, PropiedadesConciliacion propiedades, Clock reloj, CalendarioHabil calendario) {
+		this.calendario = calendario;
 		this.diferencias = diferencias;
 		this.cuentas = cuentas;
 		this.extractos = extractos;
@@ -159,9 +163,9 @@ public class AlertasConciliacion implements AlertasRevision {
 
 	private void abonosSinPareja(List<AlertaRevision> alertas, LocalDate hoy) {
 		List<MovimientoBancario> abonos = diferencias.sinPareja(hoy).stream()
-				.filter(m -> m.getTipo() == TipoMovimiento.ABONO && !hoy.isBefore(Calendario.siguienteDiaHabil(m.getFecha())))
+				.filter(m -> m.getTipo() == TipoMovimiento.ABONO && !hoy.isBefore(calendario.siguienteDiaHabil(m.getFecha())))
 				.toList();
-		List<MovimientoBancario> criticos = abonos.stream().filter(m -> DiferenciasConciliacion.abonoCritico(m, hoy))
+		List<MovimientoBancario> criticos = abonos.stream().filter(m -> diferencias.abonoCritico(m, hoy))
 				.toList();
 		if (!criticos.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, criticos.size() + " abono(s) en el banco por "
@@ -202,10 +206,10 @@ public class AlertasConciliacion implements AlertasRevision {
 	 */
 	private void cargosSinExplicar(List<AlertaRevision> alertas, LocalDate hoy) {
 		List<MovimientoBancario> cargos = diferencias.sinPareja(hoy).stream()
-				.filter(m -> m.getTipo() == TipoMovimiento.CARGO && !hoy.isBefore(Calendario.siguienteDiaHabil(m.getFecha())))
+				.filter(m -> m.getTipo() == TipoMovimiento.CARGO && !hoy.isBefore(calendario.siguienteDiaHabil(m.getFecha())))
 				.toList();
 		List<MovimientoBancario> criticos = cargos.stream()
-				.filter(m -> ReglasEmparejamiento.diasHabilesEntre(m.getFecha(), hoy) > 2).toList();
+				.filter(m -> ReglasEmparejamiento.diasHabilesEntre(calendario, m.getFecha(), hoy) > 2).toList();
 		if (!criticos.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, criticos.size() + " cargo(s) en el banco por "
 					+ Dinero.formatear(Dinero.sumar(criticos.stream().map(MovimientoBancario::getMonto).toList()))
@@ -235,7 +239,7 @@ public class AlertasConciliacion implements AlertasRevision {
 			boolean compensa = movimientos.vigentesEntre(cargo.getCuentaId(), cargo.getFecha().minusDays(4),
 					cargo.getFecha().plusDays(4)).stream()
 					.anyMatch(a -> a.getTipo() == TipoMovimiento.ABONO && a.getMonto().compareTo(cargo.getMonto()) == 0
-							&& ReglasEmparejamiento.diasHabilesEntre(a.getFecha(), cargo.getFecha()) <= 2);
+							&& ReglasEmparejamiento.diasHabilesEntre(calendario, a.getFecha(), cargo.getFecha()) <= 2);
 			if (compensa) {
 				sospechosos.add("«" + cargo.getDescripcion() + "» del " + Calendario.formatear(cargo.getFecha()) + " por "
 						+ Dinero.formatear(cargo.getMonto()));
@@ -282,7 +286,7 @@ public class AlertasConciliacion implements AlertasRevision {
 		// Pagos en línea de hace más de 5 días hábiles que ninguna liquidación trae.
 		LocalDate limite = hoy;
 		for (int i = 0; i < 5; i++) {
-			limite = Calendario.anteriorDiaHabil(limite);
+			limite = calendario.anteriorDiaHabil(limite);
 		}
 		List<Pago> enLinea = pagos.deCanalEntre(CanalCaja.PASARELA, hoy.minusDays(DiferenciasConciliacion.DIAS_ATRAS),
 				limite.minusDays(1));
@@ -301,7 +305,7 @@ public class AlertasConciliacion implements AlertasRevision {
 
 	private void sugeridasPendientes(List<AlertaRevision> alertas, LocalDate hoy) {
 		List<PartidaConciliacion> viejas = diferencias.sugeridas().stream().filter(p -> p.getCreadoEn() != null
-				&& ReglasEmparejamiento.diasHabilesEntre(p.getCreadoEn().toLocalDate(), hoy) > 1).toList();
+				&& ReglasEmparejamiento.diasHabilesEntre(calendario, p.getCreadoEn().toLocalDate(), hoy) > 1).toList();
 		if (!viejas.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, viejas.size() + " pareja(s) sugerida(s) del "
 					+ "extracto llevan más de 1 día hábil sin confirmar: Administración las revisa.", ENLACE));
@@ -316,7 +320,7 @@ public class AlertasConciliacion implements AlertasRevision {
 		for (CuentaBancaria cuenta : cuentas.findByActivaTrueOrderByIdAsc()) {
 			List<ExtractoBancario> cadena = extractos.findByCuentaIdAndSecuenciaVigenteIsNotNullOrderBySecuenciaAsc(
 					cuenta.getId());
-			LocalDate esperado = Calendario.anteriorDiaHabil(hoy);
+			LocalDate esperado = calendario.anteriorDiaHabil(hoy);
 			LocalDate cargado = cadena.isEmpty() ? null : cadena.getLast().getHasta();
 			if (habil && !ahora.toLocalTime().isBefore(propiedades.horaLimiteExtracto())
 					&& (cargado == null || cargado.isBefore(esperado))) {

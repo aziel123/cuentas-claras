@@ -48,6 +48,16 @@ public interface MatriculasReservadasRepository extends Repository<Matricula, Lo
 			+ " and c.estado in (" + CUOTA + "PENDIENTE, " + CUOTA + "PARCIAL)) order by m.id")
 	List<Matricula> activasConMatriculaPorPagar();
 
+	/**
+	 * Sprint 5, tanda 3 (pendiente de la tanda 2): renovaciones confirmadas (matrícula RESERVADA) cuya cuota de matrícula
+	 * sigue por pagar y vence hasta {@code hasta} (dentro de 7 días, o ya vencida).
+	 */
+	@Query("select m from Matricula m join fetch m.alumno where m.estado = " + RESERVADA + " and exists (select c.id "
+			+ "from Cuota c where c.matriculaId = m.id and c.tipo = " + TIPO_MATRICULA + " and c.estado in (" + CUOTA
+			+ "PENDIENTE, " + CUOTA + "PARCIAL) and c.fechaVencimiento <= :hasta) order by m.id")
+	List<Matricula> reservadasSinPagarQueVencenHasta(
+			@org.springframework.data.repository.query.Param("hasta") java.time.LocalDate hasta);
+
 	@Query("select count(m) from Matricula m where m.estado = " + RESERVADA + " and m.anioEscolar.id = :anio")
 	long reservadasDelAnio(@org.springframework.data.repository.query.Param("anio") Long anioId);
 

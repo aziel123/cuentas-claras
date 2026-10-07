@@ -36,7 +36,14 @@ public enum PlantillaMensaje {
 			"Colegio Virgen María: registramos en el colegio que {{1}} {{2}} el {{3}}. Si usted no lo pidió, avísenos "
 					+ "desde el portal."),
 	AVISO_ATENDIDO("cc_aviso_atendido", "Respondimos su aviso", 1, true,
-			"Colegio Virgen María: respondimos el aviso que nos envió el {{1}}. Vea la respuesta en el portal.");
+			"Colegio Virgen María: respondimos el aviso que nos envió el {{1}}. Vea la respuesta en el portal."),
+	// Sprint 5 · tanda 3: recordatorios (decisión 44). Sin mencionar lo académico ni amenazar (INDECOPI).
+	RECORDATORIO("cc_recordatorio", "Recordatorio de vencimiento", 4, true,
+			"Colegio Virgen María: le recordamos que {{1}} vence el {{2}} ({{3}}). Puede pagar en línea, en el banco con "
+					+ "el código {{4}} o en caja. Si ya pagó, ignore este mensaje."),
+	CUOTA_VENCIDA("cc_cuota_vencida", "Tiene un pago pendiente", 3, true,
+			"Colegio Virgen María: {{1}} venció el {{2}} ({{3}}). Puede pagar en línea, en el banco o en caja. Si ya pagó, "
+					+ "ignore este mensaje.");
 
 	private final String nombreMeta;
 

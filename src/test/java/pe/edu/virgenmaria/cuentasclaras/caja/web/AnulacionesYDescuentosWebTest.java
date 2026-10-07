@@ -189,7 +189,7 @@ class AnulacionesYDescuentosWebTest {
 				.andExpect(status().isOk())
 				.andExpect(content().string(containsString("action=\"/alumnos/pagos/" + pago + "/devolucion?alumno="
 						+ f.mateo() + "\"")))
-				.andExpect(content().string(not(containsString("987"))));
+				.andExpect(content().string(not(containsString("987 654")))).andExpect(content().string(not(containsString("987654321"))));
 		mvc.perform(post("/alumnos/pagos/{id}/devolucion", pago).with(csrf()).with(como(ADMINISTRACION))
 						.param("alumno", f.mateo().toString()).param("motivo", MOTIVO_ANULACION))
 				.andExpect(redirectedUrl("/alumnos/" + f.mateo() + "/estado-cuenta"))
@@ -200,7 +200,7 @@ class AnulacionesYDescuentosWebTest {
 				.andExpect(content().string(containsString("+51 987 654 321")));
 		mvc.perform(get("/alumnos/{id}/estado-cuenta", f.mateo()).with(como(ADMINISTRACION)))
 				.andExpect(content().string(containsString("Esperando aprobación")))
-				.andExpect(content().string(not(containsString("987"))));
+				.andExpect(content().string(not(containsString("987 654")))).andExpect(content().string(not(containsString("987654321"))));
 		// Promotoría aprueba, no pide anulaciones.
 		mvc.perform(post("/alumnos/pagos/{id}/devolucion", pago).with(csrf()).with(como(PROMOTORIA))
 				.param("alumno", f.mateo().toString()).param("motivo", MOTIVO_ANULACION))

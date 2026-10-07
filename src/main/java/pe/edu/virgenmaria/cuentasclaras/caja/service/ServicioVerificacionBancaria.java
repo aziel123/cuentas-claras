@@ -1,5 +1,7 @@
 package pe.edu.virgenmaria.cuentasclaras.caja.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.DiasHabiles;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -84,10 +86,13 @@ public class ServicioVerificacionBancaria {
 
 	private final Clock reloj;
 
+	private final CalendarioHabil calendario;
+
 	public ServicioVerificacionBancaria(PagoRepository pagos, DepositoCajaRepository depositos,
 			VerificacionBancariaRepository verificaciones, AnulacionPagoRepository anulaciones,
 			ReembolsoRepository reembolsos, ReembolsoPasarelaRepository reembolsosPasarela, ReembolsosEnLinea enLinea,
-			AuditoriaService auditoria, NombresUsuarios nombres, PropiedadesCaja propiedades, Clock reloj) {
+			AuditoriaService auditoria, NombresUsuarios nombres, PropiedadesCaja propiedades, Clock reloj, CalendarioHabil calendario) {
+		this.calendario = calendario;
 		this.pagos = pagos;
 		this.depositos = depositos;
 		this.verificaciones = verificaciones;
@@ -123,7 +128,7 @@ public class ServicioVerificacionBancaria {
 					.orElse(null);
 			return new VistaConciliacion.DepositoPorVerificar(d.getId(), d.getCaja().getFecha(), d.getCuenta(),
 					nombres.de(d.getCaja().getCajero()), ChronoUnit.DAYS.between(d.getFechaDeposito(), hoy),
-					sinVerificarDemasiado(d.getCreadoEn(), ahora), tardio(d.getCaja().getFecha(), d.getFechaDeposito()),
+					sinVerificarDemasiado(d.getCreadoEn(), ahora), tardio(calendario, d.getCaja().getFecha(), d.getFechaDeposito()),
 					parecido);
 		}).toList();
 		List<VistaConciliacion.DevolucionPorReembolsar> devoluciones = anulaciones.devolucionesSinReembolso().stream()
@@ -309,12 +314,12 @@ public class ServicioVerificacionBancaria {
 
 	/** Pasó la hora límite del día hábil siguiente al cobro (alerta crítica, A4). */
 	boolean criticoSinVerificar(LocalDate fecha, LocalDateTime ahora) {
-		return !ahora.isBefore(Calendario.siguienteDiaHabil(fecha).atTime(propiedades.horaLimiteCierre()));
+		return !ahora.isBefore(calendario.siguienteDiaHabil(fecha).atTime(propiedades.horaLimiteCierre()));
 	}
 
 	/** El depósito llegó al banco más de un día hábil después de la caja (M3: posible «lapping»). */
-	static boolean tardio(LocalDate fechaCaja, LocalDate fechaDeposito) {
-		return fechaDeposito != null && fechaDeposito.isAfter(Calendario.siguienteDiaHabil(fechaCaja));
+	static boolean tardio(DiasHabiles calendario, LocalDate fechaCaja, LocalDate fechaDeposito) {
+		return fechaDeposito != null && fechaDeposito.isAfter(calendario.siguienteDiaHabil(fechaCaja));
 	}
 
 	private static String enmascarar(String documento) {

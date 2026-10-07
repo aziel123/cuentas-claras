@@ -1,11 +1,12 @@
 package pe.edu.virgenmaria.cuentasclaras.conciliacion.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoVerificacion;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.VerificacionBancaria;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.VerificacionBancariaRepository;
-import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.DiasHabiles;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.CuentaBancaria;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoExtracto;
@@ -73,9 +74,12 @@ public class DiferenciasConciliacion {
 
 	private final VerificacionBancariaRepository verificaciones;
 
+	private final CalendarioHabil calendario;
+
 	public DiferenciasConciliacion(CuentaBancariaRepository cuentas, ExtractoBancarioRepository extractos,
 			MovimientoBancarioRepository movimientos, PartidaConciliacionRepository partidas, ObjetosConciliables objetos,
-			VerificacionBancariaRepository verificaciones) {
+			VerificacionBancariaRepository verificaciones, CalendarioHabil calendario) {
+		this.calendario = calendario;
 		this.cuentas = cuentas;
 		this.extractos = extractos;
 		this.movimientos = movimientos;
@@ -119,7 +123,7 @@ public class DiferenciasConciliacion {
 				: verificadosAMano(verificaciones.findByDepositoIdIn(idsDepositos), false);
 		return abiertos.stream().filter(o -> !(o.tipo() == ObjetoPartida.PAGO && pagosAMano.contains(o.id()))
 				&& !(o.tipo() == ObjetoPartida.DEPOSITO && depositosAMano.contains(o.id())))
-				.filter(o -> !limite(o).isAfter(cubierto))
+				.filter(o -> !limite(calendario, o).isAfter(cubierto))
 				.map(o -> new Faltante(o, true)).toList();
 	}
 
@@ -129,11 +133,11 @@ public class DiferenciasConciliacion {
 	 * (QA-S4-4: lo registra {@code sistema.recaudacion}), el día hábil siguiente; una liquidación, 2 días hábiles después
 	 * de su fecha de abono.
 	 */
-	static LocalDate limite(ObjetoAbierto o) {
+	static LocalDate limite(DiasHabiles calendario, ObjetoAbierto o) {
 		return switch (o.tipo()) {
-			case LOTE_RECAUDACION -> Calendario.siguienteDiaHabil(o.fecha());
-			case LIQUIDACION -> Calendario.siguienteDiaHabil(Calendario.siguienteDiaHabil(o.fecha()));
-			case PAGO -> ActorSistema.RECAUDACION.usuario().equals(o.responsable()) ? Calendario.siguienteDiaHabil(o.fecha())
+			case LOTE_RECAUDACION -> calendario.siguienteDiaHabil(o.fecha());
+			case LIQUIDACION -> calendario.sumarHabiles(o.fecha(), 2);
+			case PAGO -> ActorSistema.RECAUDACION.usuario().equals(o.responsable()) ? calendario.siguienteDiaHabil(o.fecha())
 					: o.fecha();
 			default -> o.fecha();
 		};
@@ -145,8 +149,8 @@ public class DiferenciasConciliacion {
 	}
 
 	/** Un abono sin pareja ya es crítico: pasaron más de 2 días hábiles desde su fecha. */
-	public static boolean abonoCritico(MovimientoBancario m, LocalDate hoy) {
-		return m.getTipo() == TipoMovimiento.ABONO && ReglasEmparejamiento.diasHabilesEntre(m.getFecha(), hoy) > 2;
+	public boolean abonoCritico(MovimientoBancario m, LocalDate hoy) {
+		return m.getTipo() == TipoMovimiento.ABONO && ReglasEmparejamiento.diasHabilesEntre(calendario, m.getFecha(), hoy) > 2;
 	}
 
 	/** Las parejas sugeridas que espera Administración (las manuales esperan en la bandeja de aprobaciones). */

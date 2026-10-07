@@ -17,6 +17,10 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Sprint 5 (tanda 3): cierre mensual (apunta a la cuenta), semilla del muestreo y feriados extra.
+		jdbc.update("DELETE FROM cierre_mensual_banco");
+		jdbc.update("DELETE FROM semilla_muestreo");
+		jdbc.update("DELETE FROM feriado");
 		// Sprint 5 (tanda 2): los avisos de la familia apuntan a pagos y cuotas; la renovación, a sus matrículas.
 		jdbc.update("DELETE FROM aviso_familia");
 		jdbc.update("DELETE FROM renovacion_matricula");

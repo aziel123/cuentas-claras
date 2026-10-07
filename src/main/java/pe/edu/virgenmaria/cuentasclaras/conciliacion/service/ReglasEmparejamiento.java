@@ -1,7 +1,7 @@
 package pe.edu.virgenmaria.cuentasclaras.conciliacion.service;
 
 import pe.edu.virgenmaria.cuentasclaras.caja.model.NumeroOperacion;
-import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.DiasHabiles;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.ObjetoPartida;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.ReglaPartida;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.TipoMovimiento;
@@ -79,12 +79,20 @@ public final class ReglasEmparejamiento {
 	 * @param descartadas pares que una persona ya descartó, como {@code movimientoId + "|" + clave del objeto}
 	 */
 	public record Parametros(int diasToleranciaFecha, BigDecimal toleranciaLiquidacion, String patronAbonoRecaudacion,
-			Set<String> descartadas) {
+			Set<String> descartadas, DiasHabiles calendario) {
 
 		public Parametros {
 			toleranciaLiquidacion = toleranciaLiquidacion == null ? BigDecimal.ZERO : toleranciaLiquidacion;
 			patronAbonoRecaudacion = patronAbonoRecaudacion == null ? "" : patronAbonoRecaudacion.strip();
 			descartadas = descartadas == null ? Set.of() : Set.copyOf(descartadas);
+			calendario = calendario == null ? DiasHabiles.NACIONALES : calendario;
+		}
+
+		/** Sin feriados (pruebas puras de bordes). */
+		public Parametros(int diasToleranciaFecha, BigDecimal toleranciaLiquidacion, String patronAbonoRecaudacion,
+				Set<String> descartadas) {
+			this(diasToleranciaFecha, toleranciaLiquidacion, patronAbonoRecaudacion, descartadas,
+					DiasHabiles.LUNES_A_VIERNES);
 		}
 	}
 
@@ -158,7 +166,7 @@ public final class ReglasEmparejamiento {
 			}
 			for (ObjetoAbierto o : objs) {
 				if (!objetosUsados.contains(o.clave()) && compatible(m, o) && montoParecido(m, o, p)
-						&& cercano(m.fecha(), o.fecha(), p.diasToleranciaFecha()) && !descartado(p, m, o)) {
+						&& cercano(p.calendario(), m.fecha(), o.fecha(), p.diasToleranciaFecha()) && !descartado(p, m, o)) {
 					porMovimiento.computeIfAbsent(i, k -> new ArrayList<>()).add(o);
 					porObjeto.computeIfAbsent(o.clave(), k -> new ArrayList<>()).add(i);
 				}
@@ -217,25 +225,17 @@ public final class ReglasEmparejamiento {
 		return m.id() != null && p.descartadas().contains(m.id() + "|" + o.clave());
 	}
 
-	/** Si dos fechas están a no más de {@code dias} días hábiles (lunes a viernes) una de otra. */
-	static boolean cercano(LocalDate a, LocalDate b, int dias) {
-		return diasHabilesEntre(a, b) <= dias;
+	/** Si dos fechas están a no más de {@code dias} días hábiles una de otra. */
+	static boolean cercano(DiasHabiles calendario, LocalDate a, LocalDate b, int dias) {
+		return calendario.habilesEntre(a, b) <= dias;
 	}
 
-	/** Días hábiles entre dos fechas (sin contar la primera): 0 si es el mismo día o un fin de semana de por medio. */
-	public static int diasHabilesEntre(LocalDate a, LocalDate b) {
-		LocalDate desde = a.isBefore(b) ? a : b;
-		LocalDate hasta = a.isBefore(b) ? b : a;
-		int dias = 0;
-		for (LocalDate d = desde.plusDays(1); !d.isAfter(hasta); d = d.plusDays(1)) {
-			if (d.getDayOfWeek() != java.time.DayOfWeek.SATURDAY && d.getDayOfWeek() != java.time.DayOfWeek.SUNDAY) {
-				dias++;
-			}
-			if (dias > 60) {
-				break;
-			}
-		}
-		return dias;
+	/**
+	 * Días hábiles entre dos fechas (sin contar la primera): 0 si es el mismo día o solo hay un fin de semana o un feriado
+	 * de por medio. Sprint 5, tanda 3: con el calendario del colegio (feriados nacionales y extra).
+	 */
+	public static int diasHabilesEntre(DiasHabiles calendario, LocalDate a, LocalDate b) {
+		return calendario.habilesEntre(a, b);
 	}
 
 	/** Letras y dígitos en mayúsculas (para buscar una referencia dentro de una glosa). */
@@ -251,22 +251,18 @@ public final class ReglasEmparejamiento {
 	}
 
 	/** Depósito de caja: su fecha y el día hábil siguiente. */
-	public static LocalDate[] ventanaDeposito(LocalDate fecha) {
-		return new LocalDate[] { fecha, Calendario.siguienteDiaHabil(fecha) };
+	public static LocalDate[] ventanaDeposito(DiasHabiles calendario, LocalDate fecha) {
+		return new LocalDate[] { fecha, calendario.siguienteDiaHabil(fecha) };
 	}
 
 	/** Liquidación de la pasarela: de un día hábil antes a tres hábiles después de su fecha de abono. */
-	public static LocalDate[] ventanaLiquidacion(LocalDate abono) {
-		LocalDate hasta = abono;
-		for (int i = 0; i < 3; i++) {
-			hasta = Calendario.siguienteDiaHabil(hasta);
-		}
-		return new LocalDate[] { Calendario.anteriorDiaHabil(abono), hasta };
+	public static LocalDate[] ventanaLiquidacion(DiasHabiles calendario, LocalDate abono) {
+		return new LocalDate[] { calendario.anteriorDiaHabil(abono), calendario.sumarHabiles(abono, 3) };
 	}
 
 	/** Lote (o pago) de recaudación: su fecha de proceso y el día hábil siguiente. */
-	public static LocalDate[] ventanaRecaudacion(LocalDate fechaProceso) {
-		return new LocalDate[] { fechaProceso, Calendario.siguienteDiaHabil(fechaProceso) };
+	public static LocalDate[] ventanaRecaudacion(DiasHabiles calendario, LocalDate fechaProceso) {
+		return new LocalDate[] { fechaProceso, calendario.siguienteDiaHabil(fechaProceso) };
 	}
 
 	/** Reembolso digital: de su fecha a 3 días después. */

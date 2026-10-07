@@ -5,7 +5,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
-import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.config.PropiedadesPasarela;
 import pe.edu.virgenmaria.cuentasclaras.pasarela.model.CobroConfirmado;
@@ -183,7 +182,7 @@ public class PasarelaSimulada implements PasarelaPagos {
 		}
 		List<LiquidacionLeida> resultado = new ArrayList<>();
 		porDia.forEach((dia, cobros) -> {
-			LocalDate abono = Calendario.siguienteDiaHabil(dia);
+			LocalDate abono = pe.edu.virgenmaria.cuentasclaras.comun.fecha.DiasHabiles.NACIONALES.siguienteDiaHabil(dia);
 			if (abono.isBefore(desde) || abono.isAfter(hasta) || abono.isAfter(hoy)) {
 				return;
 			}

@@ -1058,4 +1058,81 @@ BEGIN
     END IF;
 END$$
 
+-- ===================== Sprint 5 · tanda 3 (V19): feriados y cierre mensual =====================
+
+-- G20: solo fechas futuras en la hora de Lima (UTC-5, sin horario de verano): nadie «crea» un feriado para retrasar una
+-- alerta que ya venció. Nace vigente.
+DROP TRIGGER IF EXISTS trg_feriado_registro$$
+CREATE TRIGGER trg_feriado_registro BEFORE INSERT ON feriado FOR EACH ROW
+BEGIN
+    IF NOT (NEW.fecha > DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR)) OR NOT (NEW.vigente <=> TRUE)
+            OR NEW.anulado_por IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un feriado se registra solo para una fecha futura';
+    END IF;
+END$$
+
+-- Se anula una sola vez y antes de su fecha; uno anulado no cambia.
+DROP TRIGGER IF EXISTS trg_feriado_anulacion$$
+CREATE TRIGGER trg_feriado_anulacion BEFORE UPDATE ON feriado FOR EACH ROW
+BEGIN
+    IF OLD.vigente IS NULL OR (NEW.vigente IS NULL AND NOT (OLD.fecha > DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un feriado se anula una vez y antes de su fecha';
+    END IF;
+END$$
+
+-- G22: nace ABIERTO, sin números a ciegas, con los totales del mes calculados de los movimientos de los extractos
+-- CONFIRMADOS que cubren TODO el mes y con el saldo al cierre de su último día. Las variables llevan prefijo «v_» para no
+-- confundirse con las columnas desde y hasta del extracto.
+DROP TRIGGER IF EXISTS trg_cierre_mensual_banco_nace$$
+CREATE TRIGGER trg_cierre_mensual_banco_nace BEFORE INSERT ON cierre_mensual_banco FOR EACH ROW
+BEGIN
+    DECLARE v_desde DATE DEFAULT STR_TO_DATE(CONCAT(NEW.anio, '-', NEW.mes, '-01'), '%Y-%m-%d');
+    DECLARE v_hasta DATE DEFAULT LAST_DAY(STR_TO_DATE(CONCAT(NEW.anio, '-', NEW.mes, '-01'), '%Y-%m-%d'));
+    IF NOT (NEW.estado <=> 'ABIERTO') OR NOT (NEW.intentos <=> 0) OR NEW.abonos_ciego IS NOT NULL
+            OR NEW.cargos_ciego IS NOT NULL OR NEW.saldo_ciego IS NOT NULL OR NEW.registrado_por IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cierre mensual nace ABIERTO y sin números a ciegas';
+    END IF;
+    IF v_desde IS NULL OR NOT EXISTS (SELECT 1 FROM extracto_bancario e WHERE e.cuenta_id = NEW.cuenta_id
+                AND e.colegio_id = NEW.colegio_id AND e.estado = 'CONFIRMADO' AND e.desde <= v_desde
+                AND e.hasta >= v_desde)
+            OR NOT EXISTS (SELECT 1 FROM extracto_bancario e WHERE e.cuenta_id = NEW.cuenta_id
+                AND e.colegio_id = NEW.colegio_id AND e.estado = 'CONFIRMADO' AND e.desde <= v_hasta
+                AND e.hasta >= v_hasta)
+            OR NOT (NEW.total_abonos <=> (SELECT COALESCE(SUM(m.monto), 0.00) FROM movimiento_bancario m
+                JOIN extracto_bancario e ON e.id = m.extracto_id WHERE m.cuenta_id = NEW.cuenta_id
+                AND e.estado = 'CONFIRMADO' AND m.tipo = 'ABONO' AND m.fecha BETWEEN v_desde AND v_hasta))
+            OR NOT (NEW.total_cargos <=> (SELECT COALESCE(SUM(m.monto), 0.00) FROM movimiento_bancario m
+                JOIN extracto_bancario e ON e.id = m.extracto_id WHERE m.cuenta_id = NEW.cuenta_id
+                AND e.estado = 'CONFIRMADO' AND m.tipo = 'CARGO' AND m.fecha BETWEEN v_desde AND v_hasta))
+            OR NOT (NEW.saldo_final <=> (SELECT e.saldo_inicial + COALESCE((SELECT SUM(CASE WHEN m.tipo = 'ABONO'
+                    THEN m.monto ELSE -m.monto END) FROM movimiento_bancario m WHERE m.extracto_id = e.id
+                    AND m.fecha <= v_hasta), 0.00)
+                FROM extracto_bancario e WHERE e.cuenta_id = NEW.cuenta_id AND e.estado = 'CONFIRMADO'
+                AND e.desde <= v_hasta AND e.hasta >= v_hasta ORDER BY e.secuencia LIMIT 1)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los totales del mes salen de los extractos confirmados';
+    END IF;
+END$$
+
+-- Un cierre resuelto no cambia; los intentos suben de uno en uno; lo hace una persona que no subió ni confirmó extractos
+-- de ese mes; CUADRADO solo con un intento más (el que cuadró).
+DROP TRIGGER IF EXISTS trg_cierre_mensual_banco_estado$$
+CREATE TRIGGER trg_cierre_mensual_banco_estado BEFORE UPDATE ON cierre_mensual_banco FOR EACH ROW
+BEGIN
+    IF NOT (OLD.estado <=> 'ABIERTO') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un cierre mensual resuelto no cambia';
+    END IF;
+    IF NOT (NEW.intentos <=> OLD.intentos) AND NOT (NEW.intentos <=> OLD.intentos + 1) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los intentos del cierre suben de uno en uno';
+    END IF;
+    IF NOT (NEW.estado <=> OLD.estado) AND NOT (NEW.intentos <=> OLD.intentos + 1) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cierre se resuelve con un intento a ciegas';
+    END IF;
+    IF NEW.registrado_por IS NOT NULL AND EXISTS (SELECT 1 FROM extracto_bancario e WHERE e.cuenta_id = NEW.cuenta_id
+            AND (e.creado_por = NEW.registrado_por OR e.confirmado_por <=> NEW.registrado_por)
+            AND e.hasta >= STR_TO_DATE(CONCAT(NEW.anio, '-', NEW.mes, '-01'), '%Y-%m-%d')
+            AND e.desde <= LAST_DAY(STR_TO_DATE(CONCAT(NEW.anio, '-', NEW.mes, '-01'), '%Y-%m-%d'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cierre mensual lo hace quien no subió ni confirmó extractos del mes';
+    END IF;
+END$$
+
 DELIMITER ;

@@ -90,6 +90,12 @@ class AlertasCajaTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private ServicioVerificacionBancaria verificacion;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillasMuestreo semillas;
+
 	private Familias f;
 
 	private Long pago;
@@ -209,5 +215,56 @@ class AlertasCajaTest {
 				org.assertj.core.groups.Tuple.tuple("Efectivo", "S/ 450.00", "1 pago(s)"),
 				org.assertj.core.groups.Tuple.tuple("Digital", "S/ 450.00", "50 % del total"),
 				org.assertj.core.groups.Tuple.tuple("Cajas", "1 abierta(s) · 0 cerrada(s)", "Sin diferencias"));
+	}
+
+	/** Sprint 5, tanda 3 (G21): dos Yape del viernes verificados; el lunes Promotoría ve su muestra al azar. */
+	private List<String> muestraDelLunes() {
+		Long yape1 = cobro.cobrar(digital(f.quispe(), List.of(cuota(jdbc, f.valeria(), "PEN-2027-03")), MedioPago.YAPE,
+				"YP771001", "450.00"));
+		como(CAJA);
+		Long yape2 = cobro.cobrar(digital(f.quispe(), List.of(cuota(jdbc, f.mateo(), "PEN-2027-04")), MedioPago.YAPE,
+				"YP771002", "450.00"));
+		EscenarioCaja.verificadoEnBanco(verificacion, jdbc, yape1);
+		EscenarioCaja.verificadoEnBanco(verificacion, jdbc, yape2);
+		reloj.fijar(Instant.parse("2026-10-05T14:00:00Z"));
+		como(PROMOTORIA);
+		return alertas.alertas().stream().map(AlertaRevision::texto).filter(t -> t.startsWith("Revisa al azar")).toList();
+	}
+
+	@Test
+	void laMuestraUsaLaSemillaSecretaYNoLaFecha() {
+		List<String> muestra = muestraDelLunes();
+
+		assertThat(muestra).hasSize(2);
+		// La semilla del día quedó guardada (solo inserción), nació con SecureRandom y no es la fecha (antes era
+		// new Random(hoy.toEpochDay()) y la cajera podía calcular qué verificaciones vería Promotoría).
+		List<java.util.Map<String, Object>> filas = jdbc.queryForList("SELECT ambito, fecha, semilla, creado_por "
+				+ "FROM semilla_muestreo");
+		assertThat(filas).singleElement().satisfies(fila -> {
+			assertThat(fila).containsEntry("ambito", "CAJA").containsEntry("creado_por", "promotor");
+			assertThat(fila.get("fecha")).hasToString("2026-10-05");
+			assertThat((Long) fila.get("semilla")).isNotEqualTo(java.time.LocalDate.of(2026, 10, 5).toEpochDay());
+		});
+		// Con la semilla de la base, la muestra es reproducible para quien audita (y solo para él).
+		long semilla = (Long) filas.getFirst().get("semilla");
+		assertThat(pe.edu.virgenmaria.cuentasclaras.comun.texto.MuestraAlAzar.delDia(semilla, List.of(1, 2, 3, 4, 5), 3))
+				.isEqualTo(pe.edu.virgenmaria.cuentasclaras.comun.texto.MuestraAlAzar.delDia(semilla, List.of(1, 2, 3, 4, 5),
+						3));
+	}
+
+	@Test
+	void esEstableDuranteElDia() {
+		List<String> primera = muestraDelLunes();
+		reloj.fijar(Instant.parse("2026-10-05T22:00:00Z"));
+		como(PROMOTORIA);
+		List<String> segunda = alertas.alertas().stream().map(AlertaRevision::texto)
+				.filter(t -> t.startsWith("Revisa al azar")).toList();
+
+		assertThat(segunda).containsExactlyElementsOf(primera);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM semilla_muestreo", Long.class)).isEqualTo(1);
+		long guardada = jdbc.queryForObject("SELECT semilla FROM semilla_muestreo", Long.class);
+		assertThat(pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillaMuestreo.Ambito.CAJA).isNotNull();
+		assertThat(semillas.de(pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillaMuestreo.Ambito.CAJA,
+				java.time.LocalDate.of(2026, 10, 5))).isEqualTo(guardada);
 	}
 }

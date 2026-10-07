@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cierres bancarios del mes', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="cierres-mensuales">
+	<div class="cabecera">
+		<div>
+			<h1>Cierres bancarios del mes</h1>
+			<p class="secundario">Cada mes, quien no subió ni confirmó extractos escribe a ciegas los totales del estado de cuenta oficial del banco.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${#lists.isEmpty(cierres)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay cierres', 'El sistema crea el cierre de un mes cuando los extractos confirmados lo cubren completo.')}"></div>
+	</th:block>
+	<ul class="cuotas-familia" th:unless="${#lists.isEmpty(cierres)}">
+		<li th:each="c : ${cierres}" th:data-cierre="${c.id}">
+			<div class="cuota-cabecera">
+				<a th:href="@{/conciliacion/cierres-mensuales/{id}(id=${c.id})}" th:text="|${c.periodo} · ${c.cuenta}|">noviembre de 2026 · BCP</a>
+				<span th:replace="~{fragments/componentes :: badge(${c.estado}, ${c.variante})}"></span>
+			</div>
+		</li>
+	</ul>
+</main>
+</body>
+</html>

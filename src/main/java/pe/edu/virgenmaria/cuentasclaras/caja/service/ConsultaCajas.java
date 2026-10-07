@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.caja.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,9 +56,12 @@ public class ConsultaCajas {
 
 	private final Clock reloj;
 
+	private final CalendarioHabil calendario;
+
 	public ConsultaCajas(CajaDiariaRepository cajas, CierreCajaRepository cierres, DepositoCajaRepository depositos,
 			PagoRepository pagos, AnulacionPagoRepository anulaciones, VerificacionBancariaRepository verificaciones,
-			LibroCaja libro, NombresUsuarios nombres, Clock reloj) {
+			LibroCaja libro, NombresUsuarios nombres, Clock reloj, CalendarioHabil calendario) {
+		this.calendario = calendario;
 		this.cajas = cajas;
 		this.cierres = cierres;
 		this.depositos = depositos;
@@ -99,7 +103,7 @@ public class ConsultaCajas {
 					cierre == null ? "—" : ServicioCierreCaja.diferenciaTexto(cierre.getDiferencia()),
 					cierre == null || !cierre.conDiferencia() ? "exito" : "peligro",
 					deposito == null ? "—" : Dinero.formatear(deposito.getMonto()) + (deposito.distinto() ? " (distinto)" : "")
-							+ (ServicioVerificacionBancaria.tardio(caja.getFecha(), deposito.getFechaDeposito()) ? " (tardío)"
+							+ (ServicioVerificacionBancaria.tardio(calendario, caja.getFecha(), deposito.getFechaDeposito()) ? " (tardío)"
 									: "")));
 		}
 		return new CajasDelDia(dia, dia.minusDays(1), dia.isBefore(LocalDate.now(reloj)) ? dia.plusDays(1) : null,
@@ -139,8 +143,8 @@ public class ConsultaCajas {
 		String depositoVerificacion = deposito == null ? null
 				: delDeposito == null ? "Sin verificar"
 						: delDeposito.getResultado().etiqueta() + " (verificó " + delDeposito.getCreadoPor() + ")";
-		boolean tardio = deposito != null && (ServicioVerificacionBancaria.tardio(caja.getFecha(), deposito.getFechaDeposito())
-				|| ServicioVerificacionBancaria.tardio(caja.getFecha(), delDeposito == null ? null : delDeposito.getBancoFecha()));
+		boolean tardio = deposito != null && (ServicioVerificacionBancaria.tardio(calendario, caja.getFecha(), deposito.getFechaDeposito())
+				|| ServicioVerificacionBancaria.tardio(calendario, caja.getFecha(), delDeposito == null ? null : delDeposito.getBancoFecha()));
 		List<String> posteriores = suyos.isEmpty() ? List.of()
 				: anulaciones.findByPagoIdIn(suyos.stream().map(Pago::getId).toList()).stream()
 						.filter(AnulacionPago::isPosteriorAlCierre)

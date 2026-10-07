@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.conciliacion.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.DiasHabiles;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -38,13 +39,13 @@ class ReglasEmparejamientoTest {
 	}
 
 	private static ObjetoAbierto liquidacion(long id, LocalDate abono, String neto, String referencia) {
-		LocalDate[] v = ReglasEmparejamiento.ventanaLiquidacion(abono);
+		LocalDate[] v = ReglasEmparejamiento.ventanaLiquidacion(DiasHabiles.LUNES_A_VIERNES, abono);
 		return new ObjetoAbierto(ObjetoPartida.LIQUIDACION, id, abono, new BigDecimal(neto), null, referencia, v[0], v[1],
 				"Liquidación " + referencia, null);
 	}
 
 	private static ObjetoAbierto lote(long id, LocalDate proceso, String total) {
-		LocalDate[] v = ReglasEmparejamiento.ventanaRecaudacion(proceso);
+		LocalDate[] v = ReglasEmparejamiento.ventanaRecaudacion(DiasHabiles.LUNES_A_VIERNES, proceso);
 		return new ObjetoAbierto(ObjetoPartida.LOTE_RECAUDACION, id, proceso, new BigDecimal(total), null, null, v[0], v[1],
 				"Lote " + id, "administracion");
 	}
@@ -231,6 +232,6 @@ class ReglasEmparejamientoTest {
 	@CsvSource({ "2026-10-02, 2026-10-02, 0", "2026-10-02, 2026-10-05, 1", "2026-10-05, 2026-10-02, 1",
 			"2026-10-02, 2026-10-06, 2", "2026-10-03, 2026-10-04, 0" })
 	void diasHabilesEntre(LocalDate a, LocalDate b, int dias) {
-		assertThat(ReglasEmparejamiento.diasHabilesEntre(a, b)).isEqualTo(dias);
+		assertThat(ReglasEmparejamiento.diasHabilesEntre(DiasHabiles.LUNES_A_VIERNES, a, b)).isEqualTo(dias);
 	}
 }

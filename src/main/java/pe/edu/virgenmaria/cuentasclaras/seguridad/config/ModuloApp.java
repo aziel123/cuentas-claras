@@ -76,6 +76,10 @@ public enum ModuloApp {
 			+ "matrícula se generan sus pensiones.", "Sprint 5", true, "/matricula-2027",
 			new String[] { "/matricula-2027", "/matricula-2027/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 
+	FERIADOS("Feriados", "Feriados nacionales y días no laborables del colegio: no cuentan como hábiles en las alertas ni "
+			+ "salen recordatorios. Solo Promotoría y Dirección registran días nuevos.", "Sprint 5", true, "/feriados",
+			new String[] { "/feriados", "/feriados/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION, CAJA)),
+
 	PANEL("Panel del colegio", "Cuánto entró hoy, la morosidad y las alertas de caja, desde tu celular.", "Sprint 5",
 			false, "/panel", new String[] { "/panel", "/panel/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
 	REPORTES("Reportes", "Reportes de cobranza y exportación a Excel.", "Sprint 5", false, "/reportes",

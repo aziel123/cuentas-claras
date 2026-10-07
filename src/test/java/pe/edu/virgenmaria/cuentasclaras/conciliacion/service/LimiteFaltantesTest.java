@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.conciliacion.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.DiasHabiles;
 import org.junit.jupiter.api.Test;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.ObjetoPartida;
@@ -36,20 +37,20 @@ class LimiteFaltantesTest {
 
 	@Test
 	void debeEsperarAlDiaHabilSiguienteParaElAbonoDeUnLoteDeFinDeMes() {
-		assertThat(DiferenciasConciliacion.limite(objeto(ObjetoPartida.LOTE_RECAUDACION,
-				ReglasEmparejamiento.ventanaRecaudacion(VIERNES_30)))).isEqualTo(LUNES_2);
+		assertThat(DiferenciasConciliacion.limite(DiasHabiles.LUNES_A_VIERNES, objeto(ObjetoPartida.LOTE_RECAUDACION,
+				ReglasEmparejamiento.ventanaRecaudacion(DiasHabiles.LUNES_A_VIERNES, VIERNES_30)))).isEqualTo(LUNES_2);
 	}
 
 	@Test
 	void debeEsperarDosDiasHabilesParaElAbonoDeUnaLiquidacion() {
-		assertThat(DiferenciasConciliacion.limite(objeto(ObjetoPartida.LIQUIDACION,
-				ReglasEmparejamiento.ventanaLiquidacion(VIERNES_30)))).isEqualTo(LocalDate.of(2026, 11, 3));
+		assertThat(DiferenciasConciliacion.limite(DiasHabiles.LUNES_A_VIERNES, objeto(ObjetoPartida.LIQUIDACION,
+				ReglasEmparejamiento.ventanaLiquidacion(DiasHabiles.LUNES_A_VIERNES, VIERNES_30)))).isEqualTo(LocalDate.of(2026, 11, 3));
 	}
 
 	@Test
 	void debeExigirElYapeDeCajaElMismoDiaQueSeRegistro() {
 		// F13: el Yape inventado sale en rojo en cuanto el extracto de su día está confirmado.
-		assertThat(DiferenciasConciliacion.limite(objeto(ObjetoPartida.PAGO,
+		assertThat(DiferenciasConciliacion.limite(DiasHabiles.LUNES_A_VIERNES, objeto(ObjetoPartida.PAGO,
 				ReglasEmparejamiento.ventanaPago(VIERNES_30)))).isEqualTo(VIERNES_30);
 	}
 
@@ -61,7 +62,7 @@ class LimiteFaltantesTest {
 	 */
 	@Test
 	void debeEsperarAlDiaHabilSiguienteParaUnPagoDeRecaudacionPorPago() {
-		assertThat(DiferenciasConciliacion.limite(objeto(ObjetoPartida.PAGO,
-				ReglasEmparejamiento.ventanaRecaudacion(VIERNES_30), ActorSistema.RECAUDACION.usuario()))).isEqualTo(LUNES_2);
+		assertThat(DiferenciasConciliacion.limite(DiasHabiles.LUNES_A_VIERNES, objeto(ObjetoPartida.PAGO,
+				ReglasEmparejamiento.ventanaRecaudacion(DiasHabiles.LUNES_A_VIERNES, VIERNES_30), ActorSistema.RECAUDACION.usuario()))).isEqualTo(LUNES_2);
 	}
 }

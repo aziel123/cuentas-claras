@@ -162,6 +162,19 @@ class ReglasArquitecturaTest {
 			.orShould().callMethod(Clock.class, "systemDefaultZone")
 			.because("la hora se toma del Clock de ConfiguracionTiempo (America/Lima), así las pruebas la controlan");
 
+	/**
+	 * Sprint 5, tanda 3 (hallazgo 6): el día hábil sale de {@code CalendarioHabil} (feriados nacionales y del colegio).
+	 * Los estáticos de {@code Calendario} (lunes a viernes, sin feriados) quedan solo para las pruebas puras.
+	 */
+	@ArchTest
+	static final ArchRule diaHabilSoloConCalendarioHabil = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".comun.fecha..")
+			.should().callMethod(pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario.class, "siguienteDiaHabil",
+					LocalDate.class)
+			.orShould().callMethod(pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario.class, "anteriorDiaHabil",
+					LocalDate.class)
+			.because("una alerta de depósito o de abono debe saltar los feriados (G20): usa CalendarioHabil");
+
 	/** Los controladores trabajan con DTOs: una entidad JPA nunca llega a la vista ni a la API. */
 	@ArchTest
 	static final ArchRule controladoresNoExponenEntidades = noClasses()

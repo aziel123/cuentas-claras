@@ -2632,4 +2632,175 @@ class PermisosMySqlTest {
 		}
 		return null;
 	}
+	// --- Sprint 5, tanda 3 (V19): feriados, semilla del muestreo y cierre bancario mensual ---
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ServicioCierreMensual servicioCierreMensual;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.conciliacion.proceso.CierresMensuales cierresMensuales;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioFeriados servicioFeriados;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillasMuestreo semillasMuestreo;
+
+	private static final java.time.ZoneId LIMA = java.time.ZoneId.of("America/Lima");
+
+	/** Una cuenta nueva con el extracto CONFIRMADO de todo el mes anterior (real, en Lima). Devuelve la cuenta. */
+	private Long cuentaConMesAnteriorConfirmado(String sufijoPersonas) {
+		java.time.YearMonth mes = java.time.YearMonth.now(LIMA).minusMonths(1);
+		String numeroCuenta = cuentaUnica();
+		Long cuenta = registrarCuenta(numeroCuenta);
+		var extracto = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioConciliacion.extractoDe(numeroCuenta,
+				"20000.00").abono(mes.atDay(1).toString(), "YAPE RECIBIDO", "", "700.00")
+				.cargo(mes.atDay(15).toString(), "COMISION MANTENIMIENTO", "", "25.00")
+				.abono(mes.atEndOfMonth().toString(), "TRANSFERENCIA DE TERCEROS", "", "300.00");
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioConciliacion.registrar(servicioExtractos,
+				persona(530, "adm.mes" + sufijoPersonas, Rol.ADMINISTRACION), extracto);
+		UsuariosDePrueba.iniciarSesion(persona(531, "promotor.mes" + sufijoPersonas, Rol.PROMOTOR));
+		try {
+			var vista = servicioExtractos.paraConfirmar(cuenta);
+			servicioExtractos.confirmar(cuenta, vista.extractoId(), vista.version(), extracto.saldoFinal());
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		return cuenta;
+	}
+
+	/**
+	 * Tanda 3 (G22): con los permisos mínimos de cc_app, sistema.conciliacion crea el cierre del mes anterior (el trigger
+	 * recalcula los totales y el saldo), Dirección lo cuadra a ciegas tras un intento fallido, y nada de lo resuelto se
+	 * reescribe por SQL. Quien confirmó el extracto no puede firmar el cierre ni por SQL.
+	 */
+	@Test
+	void flujoCierreMensualConPermisosMinimos() {
+		java.time.YearMonth mes = java.time.YearMonth.now(LIMA).minusMonths(1);
+		Long cuenta = cuentaConMesAnteriorConfirmado("a");
+		cierresMensuales.enColegio(1L, java.time.LocalDate.now(LIMA));
+		java.util.Map<String, Object> fila = jdbc.queryForMap("SELECT * FROM cierre_mensual_banco WHERE cuenta_id = ? "
+				+ "AND anio = ? AND mes = ?", cuenta, mes.getYear(), mes.getMonthValue());
+		Long id = ((Number) fila.get("id")).longValue();
+		assertThat(fila).containsEntry("estado", "ABIERTO").containsEntry("creado_por", "sistema.conciliacion");
+		assertThat((java.math.BigDecimal) fila.get("total_abonos")).isEqualByComparingTo("1000.00");
+		assertThat((java.math.BigDecimal) fila.get("total_cargos")).isEqualByComparingTo("25.00");
+		assertThat((java.math.BigDecimal) fila.get("saldo_final")).isEqualByComparingTo("20975.00");
+
+		// Quien confirmó el extracto no firma el cierre, ni siquiera por SQL.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cierre_mensual_banco SET intentos = intentos + 1, registrado_por = "
+				+ "?, registrado_en = NOW(6), abonos_ciego = 1000, cargos_ciego = 25, saldo_ciego = 20975 WHERE id = ?",
+				"promotor.mesa." + sufijo, id))).isEqualTo(1644);
+		// Los intentos no saltan.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cierre_mensual_banco SET intentos = intentos + 2 WHERE id = ?", id)))
+				.isEqualTo(1644);
+
+		UsuariosDePrueba.iniciarSesion(persona(532, "director.mes", Rol.DIRECTOR));
+		try {
+			var vista = servicioCierreMensual.vista(id);
+			assertThat(vista.totalAbonos()).isNull();
+			assertThatThrownBy(() -> servicioCierreMensual.registrar(id, vista.version(), new java.math.BigDecimal(
+					"1000"), new java.math.BigDecimal("25"), new java.math.BigDecimal("20970")))
+					.isInstanceOf(pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ServicioCierreMensual
+							.CierreNoCoincideException.class);
+			var otraVez = servicioCierreMensual.vista(id);
+			assertThat(servicioCierreMensual.registrar(id, otraVez.version(), new java.math.BigDecimal("1000"),
+					new java.math.BigDecimal("25"), new java.math.BigDecimal("20975")))
+					.isEqualTo(pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoCierreMensual.CUADRADO);
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		assertThat(jdbc.queryForMap("SELECT estado, intentos FROM cierre_mensual_banco WHERE id = ?", id))
+				.containsEntry("estado", "CUADRADO").containsEntry("intentos", 2);
+		// Resuelto: no vuelve a ABIERTO ni cambia lo escrito; sus totales y su mes no cambian (1143); no se borra (1142).
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cierre_mensual_banco SET estado = 'ABIERTO' WHERE id = ?", id)))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE cierre_mensual_banco SET saldo_ciego = 0 WHERE id = ?", id)))
+				.isEqualTo(1644);
+		for (String columna : new String[] { "total_abonos", "total_cargos", "saldo_final", "cuenta_id", "anio", "mes" }) {
+			assertThat(codigoAl(() -> jdbc.update("UPDATE cierre_mensual_banco SET " + columna + " = " + columna
+					+ " WHERE id = ?", id))).as(columna).isEqualTo(1143);
+		}
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM cierre_mensual_banco WHERE id = ?", id))).isEqualTo(1142);
+	}
+
+	/** Tanda 3 (G22): nadie inserta un cierre con totales que no salen de los extractos confirmados, ni ya cuadrado. */
+	@Test
+	void cierreConTotalesInventadosFallaCon1644() {
+		java.time.YearMonth mes = java.time.YearMonth.now(LIMA).minusMonths(1);
+		Long cuenta = cuentaConMesAnteriorConfirmado("b");
+		String insertar = "INSERT INTO cierre_mensual_banco (colegio_id, cuenta_id, anio, mes, total_abonos, total_cargos, "
+				+ "saldo_final, estado, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, ?, ?, ?, ?, ?, NOW(6), "
+				+ "'sistema.conciliacion', NOW(6))";
+		// Un abono inventado de 500 compensado con cargos: el saldo cuadra, los totales no.
+		assertThat(codigoAl(() -> jdbc.update(insertar, cuenta, mes.getYear(), mes.getMonthValue(), "1500.00", "525.00",
+				"20975.00", "ABIERTO"))).isEqualTo(1644);
+		// Con los totales verdaderos pero otro saldo.
+		assertThat(codigoAl(() -> jdbc.update(insertar, cuenta, mes.getYear(), mes.getMonthValue(), "1000.00", "25.00",
+				"20000.00", "ABIERTO"))).isEqualTo(1644);
+		// Ya CUADRADO al nacer.
+		assertThat(codigoAl(() -> jdbc.update(insertar, cuenta, mes.getYear(), mes.getMonthValue(), "1000.00", "25.00",
+				"20975.00", "CUADRADO"))).isEqualTo(1644);
+		// Un mes que los extractos no cubren.
+		java.time.YearMonth otro = mes.minusMonths(1);
+		assertThat(codigoAl(() -> jdbc.update(insertar, cuenta, otro.getYear(), otro.getMonthValue(), "0.00", "0.00",
+				"20000.00", "ABIERTO"))).isEqualTo(1644);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cierre_mensual_banco WHERE cuenta_id = ?", Long.class,
+				cuenta)).isZero();
+	}
+
+	/** Tanda 3 (G20): un feriado se registra solo a futuro y se anula una vez y antes de su fecha (trigger). */
+	@Test
+	void feriadoEnElPasadoFallaCon1644() {
+		java.time.LocalDate hoy = java.time.LocalDate.now(LIMA);
+		String insertar = "INSERT INTO feriado (colegio_id, fecha, descripcion, vigente, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (1, ?, 'Feriado de prueba', TRUE, NOW(6), 'verificador', NOW(6))";
+		assertThat(codigoAl(() -> jdbc.update(insertar, hoy.minusDays(3)))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(insertar, hoy))).isEqualTo(1644);
+
+		// A futuro, por la aplicación (Dirección), con los permisos mínimos; se anula y no se vuelve a tocar.
+		java.time.LocalDate futuro = hoy.plusDays(40 + Math.floorMod(System.nanoTime(), 300));
+		while (futuro.getDayOfWeek() == java.time.DayOfWeek.SUNDAY
+				|| pe.edu.virgenmaria.cuentasclaras.comun.fecha.FeriadosNacionales.es(futuro)
+				|| jdbc.queryForObject("SELECT COUNT(*) FROM feriado WHERE colegio_id = 1 AND fecha = ? AND vigente",
+						Long.class, futuro) > 0) {
+			futuro = futuro.plusDays(1);
+		}
+		java.time.LocalDate fecha = futuro;
+		UsuariosDePrueba.iniciarSesion(persona(540, "director.feriado", Rol.DIRECTOR));
+		Long id;
+		try {
+			id = servicioFeriados.registrar(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.FeriadoRequest(fecha,
+					"Día no laborable de prueba"));
+			servicioFeriados.anular(id, "Prueba de anulación en MySQL");
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		assertThat(codigoAl(() -> jdbc.update("UPDATE feriado SET vigente = TRUE, anulado_por = NULL, anulado_en = NULL, "
+				+ "motivo_anulacion = NULL WHERE id = ?", id))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE feriado SET fecha = fecha WHERE id = ?", id))).isEqualTo(1143);
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM feriado WHERE id = ?", id))).isEqualTo(1142);
+	}
+
+	/** Tanda 3 (G21): la semilla del muestreo nace una vez por día y no se edita ni se borra. */
+	@Test
+	void semillaNoSeEditaFallaCon1142() {
+		java.time.LocalDate dia = java.time.LocalDate.of(2026, 1, 1).plusDays(Math.floorMod(System.nanoTime(), 3000));
+		UsuariosDePrueba.iniciarSesion(persona(550, "promotor.semilla", Rol.PROMOTOR));
+		long semilla;
+		try {
+			semilla = semillasMuestreo.de(pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillaMuestreo.Ambito.CAJA, dia);
+			assertThat(semillasMuestreo.de(pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillaMuestreo.Ambito.CAJA,
+					dia)).isEqualTo(semilla);
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		assertThat(codigoAl(() -> jdbc.update("UPDATE semilla_muestreo SET semilla = semilla + 1 WHERE fecha = ?", dia)))
+				.isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM semilla_muestreo WHERE fecha = ?", dia))).isEqualTo(1142);
+	}
 }

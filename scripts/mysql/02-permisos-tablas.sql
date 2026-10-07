@@ -139,6 +139,14 @@ GRANT INSERT, UPDATE (estado, grado_destino, seccion_destino_id, canal_respuesta
     matricula_id, actualizado_en, version) ON cuentasclaras.renovacion_matricula TO 'cc_app'@'%';
 GRANT INSERT, UPDATE (estado, atendido_por, atendido_en, respuesta, actualizado_en, version)
     ON cuentasclaras.aviso_familia TO 'cc_app'@'%';
+-- Sprint 5 · tanda 3 (V19): feriados extra, semilla del muestreo y cierre mensual. Nunca DELETE. La fecha del feriado,
+-- la semilla del día y los totales calculados del cierre no cambian (1143 y 1142). apoderado mantiene su UPDATE por tabla
+-- (recordatorios_activos lo cambia solo el propio apoderado, y se audita).
+GRANT INSERT, UPDATE (vigente, anulado_por, anulado_en, motivo_anulacion, actualizado_en, version)
+    ON cuentasclaras.feriado TO 'cc_app'@'%';
+GRANT INSERT ON cuentasclaras.semilla_muestreo TO 'cc_app'@'%';                   -- solo inserción
+GRANT INSERT, UPDATE (estado, intentos, abonos_ciego, cargos_ciego, saldo_ciego, registrado_por, registrado_en,
+    actualizado_en, version) ON cuentasclaras.cierre_mensual_banco TO 'cc_app'@'%';
 -- configuracion_bd sigue SIN GRANT. Filas nuevas que solo escribe el DBA:
 --   ('mensajeria_simulada', 'PERMITIDA')  -> solo en las bases de dev, test (MySQL) y piloto. NUNCA en prod.
 --   ('huella_correo_externo', '<correo del contador>') -> opcional, en prod (decisión 49).

@@ -248,6 +248,12 @@ dan 1143; una renovación que nace CONFIRMADA (o de un alumno inexistente), una 
 una RESERVADA ya activada dan 1644. Se agregan `trg_renovacion_matricula_nace|estado`, `trg_matricula_nace|estado` y
 `trg_aviso_familia_estado`: 51 triggers en total (46 de la tanda 1). Con un año EN CURSO, la matrícula de un año
 PLANIFICADO solo nace RESERVADA y pasa a ACTIVA cuando su cuota de matrícula está pagada, y solo `sistema.matricula`.
+Sprint 5, tanda 3 (V19, feriados, semilla del muestreo y cierre bancario mensual): `DELETE` sobre `feriado`,
+`semilla_muestreo` y `cierre_mensual_banco` y `UPDATE semilla_muestreo ...` dan 1142; `UPDATE feriado SET
+fecha|descripcion = ...` y `UPDATE cierre_mensual_banco SET total_abonos|total_cargos|saldo_final|cuenta_id|anio|mes = ...`
+dan 1143; un feriado de hoy o del pasado, un cierre que nace CUADRADO y un cierre con totales que no salen de los
+extractos CONFIRMADOS del mes dan 1644. Se agregan `trg_feriado_registro|anulacion` y
+`trg_cierre_mensual_banco_nace|estado`: 55 triggers en total.
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

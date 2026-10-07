@@ -241,6 +241,20 @@ public enum AccionAuditoria {
 	/** Se resalta: una matrícula reservada quedó retirada (desistimiento con la cuota de matrícula anulada). */
 	MATRICULA_DESISTIDA("Retiró una matrícula reservada (desistimiento)", true),
 
+	// Sprint 5, tanda 3: feriados, recordatorios y cierre bancario mensual
+	/** Se resalta: un día no laborable extra retrasa las alertas de depósito y de abono (G20). */
+	FERIADO_REGISTRADO("Registró un día no laborable del colegio", true),
+	/** Se resalta. */
+	FERIADO_ANULADO("Anuló un día no laborable del colegio", true),
+	RECORDATORIOS_DESACTIVADOS("El apoderado apagó o encendió sus recordatorios de vencimiento", false),
+	RECORDATORIOS_ENVIADOS("Preparó los recordatorios de vencimiento del día", false),
+	CIERRE_MENSUAL_CREADO("Creó el cierre bancario del mes con los totales de los extractos confirmados", false),
+	CIERRE_MENSUAL_CUADRADO("El cierre bancario del mes cuadró con el estado de cuenta oficial", false),
+	/** Se resalta: lo escrito a ciegas no coincide con lo que dicen los extractos confirmados del mes. */
+	CIERRE_MENSUAL_NO_COINCIDE("El cierre bancario del mes no coincidió con el estado de cuenta oficial", true),
+	/** Se resalta: dos intentos fallidos; Promotoría recibe una alerta crítica (G22). */
+	CIERRE_MENSUAL_DISCREPANCIA("El cierre bancario del mes quedó en discrepancia", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

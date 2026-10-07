@@ -78,6 +78,14 @@ public interface CuotaRepository extends Repository<Cuota, Long> {
 			+ "order by a.apellidoPaterno, a.id, c.fechaVencimiento, c.id")
 	List<Cuota> porPagar();
 
+	/** Sprint 5, tanda 3 (recordatorios): las cuotas por pagar que vencen entre dos fechas, con su alumno. */
+	@Query("select c from Cuota c join fetch c.alumno a where "
+			+ "c.estado in (pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PENDIENTE, "
+			+ "pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PARCIAL) "
+			+ "and c.fechaVencimiento between :desde and :hasta order by c.fechaVencimiento, a.id, c.id")
+	List<Cuota> porPagarQueVencenEntre(@Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta);
+
 	List<Cuota> findByLineaSaldoInicialIdIn(Collection<Long> lineas);
 
 	/**

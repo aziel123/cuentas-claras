@@ -1507,6 +1507,71 @@ las desviaciones de abajo son de reglas, no de sintaxis.
 - Promotoría ya no puede predecir la muestra de caja.
 - El cierre de noviembre cuadra con el estado de cuenta oficial; un abono inventado y tapado con cargos de otros montos lo deja en DISCREPANCIA.
 
+### Tanda 3 · Implementación (7 de octubre de 2026): lo probado y las desviaciones del diseño
+**Probado.** V19 se aplicó sobre V1–V18 en H2 2.4.240 (modo MySQL, con `./mvnw -B verify`) y en MySQL 8.4.11
+(contenedor `mysql:8` desechable), primero con el cliente `mysql` (V1–V19, `02` y `03`: la función ve los **55**
+triggers) y después replicando el job `mysql` completo del CI desde una base vacía, con los pasos tal como están en
+`ci.yml`: fase 1 (V1–V19), `02`, `03`, el colegio de renovación, fase 2 (64 pruebas de `PermisosMySqlTest`: 61 en verde y 3 omitidas a propósito, sin fallos), fase
+2b, el paso `comprobar` (con los casos 1142, 1143 y 1644 nuevos), el arranque real en `prod` con `cc_app` (con la línea
+nueva del verificador y «están los 55»), el rechazo con `cc_migrador` y M2 con `trg_mensaje_envio`. La sintaxis de V19 y
+de los 4 triggers funcionó en ambas bases; las desviaciones de abajo son de reglas (más estrictas), no de sintaxis.
+
+**Desviaciones (cada una con su motivo):**
+1. **Triggers del cierre mensual más estrictos que el diseño.** `trg_cierre_mensual_banco_nace` también recalcula el
+   `saldo_final` (saldo inicial del extracto CONFIRMADO que contiene el último día más sus movimientos hasta ese día),
+   exige que un extracto confirmado CONTENGA el día 1 (el diseño solo pedía `desde <= día 1`), filtra por colegio y
+   rechaza cualquier número a ciegas al nacer. Sus variables se llaman `v_desde` y `v_hasta`: el diseño las llamaba
+   `desde` y `hasta`, igual que las columnas del extracto (MySQL da prioridad a la variable, pero es frágil).
+   `trg_cierre_mensual_banco_estado` exige además que un cambio de estado venga con su intento (`intentos + 1`) y compara
+   `confirmado_por` con `<=>`. `trg_feriado_registro` rechaza también un feriado que nace anulado.
+2. **CHECK de V19 más estrictos:** `ck_cierre_mensual_cuadrado` escribe `col IS NOT NULL AND col = ...` (CHECK con NULL);
+   se agregan `ck_cierre_mensual_discrepancia` (DISCREPANCIA con al menos un intento y quién lo escribió),
+   `ck_cierre_mensual_registro` (ninguna cuenta `sistema...` escribe a ciegas) y `ix_cierre_mensual_estado`;
+   `ck_feriado_estado` exige que un feriado vigente no tenga motivo de anulación y que no lo anule un actor de sistema.
+3. **`CalendarioHabil` y las 20 llamadas.** Hay una interfaz `comun.fecha.DiasHabiles` (`esHabil`, `siguienteDiaHabil`,
+   `anteriorDiaHabil`, `sumarHabiles`, `habilesEntre`, y para mensajes `admiteMensajes`, `diaDeMensajesEnOAntes/EnODespues`)
+   con tres implementaciones: el bean `CalendarioHabil` (nacionales y del colegio actual, caché de 10 minutos por colegio
+   que se invalida al terminar la transacción que registra o anula), `NACIONALES` y `LUNES_A_VIERNES`. Las funciones puras
+   (`ReglasEmparejamiento.ventana*` y `diasHabilesEntre`, `DiferenciasConciliacion.limite`,
+   `ServicioVerificacionBancaria.tardio`) reciben el calendario como primer parámetro; `ReglasEmparejamiento.Parametros`
+   gana el campo `calendario` (el constructor de 4 argumentos usa `LUNES_A_VIERNES` y lo usan solo las pruebas puras de
+   bordes, que conservan sus fechas). `abonoCritico` pasó a método de instancia. `PasarelaSimulada` (sin colegio) usa
+   `NACIONALES`. La regla ArchUnit `diaHabilSoloConCalendarioHabil` prohíbe los estáticos fuera de `comun.fecha`.
+4. **Feriados:** `colegio.service.ServicioFeriados` y la pantalla `/feriados` (módulo `FERIADOS` en `ModuloApp`, con CAJA
+   para ver: por eso CAJA lo tiene en el menú; registrar y anular son `hasAnyRole('PROMOTOR','DIRECTOR')`, 403 para los
+   demás). Además del diseño, rechaza fechas que ya son feriado nacional, domingos y fechas a más de dos años. La alerta
+   INFORMATIVA «Feriado registrado» del inicio no se agregó: el evento `FERIADO_REGISTRADO` queda resaltado en la
+   bitácora («Revisar»), que es donde Promotoría ve los cambios sensibles.
+5. **Semilla del muestreo:** `comun.muestreo.SemillasMuestreo` crea la semilla en una transacción PROPIA (`REQUIRES_NEW`;
+   las alertas son de solo lectura), firmada por quien abre primero las alertas del día (Promotoría); ante dos a la vez,
+   la segunda choca con `uk_semilla_muestreo` y lee la ganadora. `MuestraAlAzar.delDia(semilla, lista, n)`.
+6. **Recordatorios:** `comunicacion.service.ServicioRecordatorios` (`hasRole('SISTEMA_MENSAJERIA')`) y el proceso
+   `comunicacion.proceso.Recordatorios` (lunes a sábado 08:00). El «3 días antes» que cae en domingo o feriado se adelanta
+   al día de mensajes anterior (lunes a SÁBADO sin feriados, como dice la decisión 44; el diseño decía «día hábil
+   anterior»). Van al responsable de pago de los alumnos de la familia (uno por apoderado, familia, tipo y fecha; la clave
+   termina en la fecha de vencimiento). La ventana de 08:00 a 20:00 la aplica `DespachoMensajes`: fuera de ella el
+   recordatorio se pospone (`Mensaje.posponerHasta`, sin contar intento) al inicio de la siguiente ventana. Se pueden
+   apagar con `cuentasclaras.recordatorios.activos=false`. La preferencia del apoderado es `POST /familia/preferencias`
+   (`familias.service.ServicioPreferencias`, auditada como `RECORDATORIOS_DESACTIVADOS` con el valor anterior y el nuevo).
+7. **Cierre mensual:** `CierresMensuales` corre CADA día a las 07:00 (no solo el día 1) y crea el cierre del mes anterior
+   en cuanto los extractos confirmados lo cubren; mientras tanto, «mes sin extractos completos» (ATENCIÓN), solo para
+   cuentas registradas antes de que empezara ese mes. La bitácora de la creación NO lleva los totales (la leen Promotoría
+   y Dirección, que escriben a ciegas); los dice el evento de DISCREPANCIA, cuando el cierre ya está resuelto. Quien subió
+   o confirmó extractos del mes se amplía con `ControlParticipantes` (quien preparó su cuenta). Pantallas
+   `/conciliacion/cierres-mensuales` y `/{id}` (Administración entra al módulo de conciliación pero el servicio le da 403).
+   Las alertas están en `conciliacion.service.AlertasCierreMensual`.
+8. **Alerta pendiente de la tanda 2:** `AlertasMatricula` avisa (ATENCIÓN) las matrículas RESERVADAS cuya cuota de
+   matrícula sigue PENDIENTE o PARCIAL y vence en 7 días o menos (o ya venció).
+9. **Prueba frágil corregida:** `AnulacionesYDescuentosWebTest` buscaba «987» (inicio del celular) en toda la página y
+   chocaba con ids autoincrementales (`data-cuota="3987"`); ahora busca el celular completo y con espacios.
+10. **MySQL de prueba:** las pruebas de la tanda en `PermisosMySqlTest` usan el mes ANTERIOR real de Lima y una cuenta
+    bancaria nueva por prueba (la base del CI no se limpia).
+
+**Pruebas nuevas de la tanda:** `CalendarioHabilTest` (5), `ServicioFeriadosTest` (5), `AlertasCajaTest` (+2),
+`RecordatoriosTest` (5), `CierreMensualTest` (7), `InmutabilidadCierreMensualTest` (4), `FeriadosYCierreMensualWebTest`
+(4), `AlertasRenovacionSinPagarTest` (1) y `PermisosMySqlTest` (+4: `flujoCierreMensualConPermisosMinimos`,
+`cierreConTotalesInventadosFallaCon1644`, `feriadoEnElPasadoFallaCon1644`, `semillaNoSeEditaFallaCon1142`).
+
 ## 16. Riesgos aceptados y residuales
 - **Ningún artefacto de este diseño está probado** (sesión de solo lectura). El riesgo principal es la sintaxis de los triggers y del `DROP CONSTRAINT` de `matricula` en H2 y MySQL. Se mitiga con el paso 1 de cada tanda.
 - **El control depende de que el padre lea y reaccione.** Se mitiga con:

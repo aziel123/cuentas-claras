@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.familias.web;
 
+import pe.edu.virgenmaria.cuentasclaras.familias.service.ServicioPreferencias;
 import jakarta.validation.Valid;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -37,8 +38,11 @@ public class PortalFamiliaController {
 
 	private final ServicioRenovacionFamilia renovaciones;
 
+	private final ServicioPreferencias preferencias;
+
 	public PortalFamiliaController(InicioPortalFamilia inicio, ConsultaEstadoCuentaFamilia estadoCuenta,
-			ServicioAvisosFamilia avisos, ServicioRenovacionFamilia renovaciones) {
+			ServicioAvisosFamilia avisos, ServicioRenovacionFamilia renovaciones, ServicioPreferencias preferencias) {
+		this.preferencias = preferencias;
 		this.inicio = inicio;
 		this.estadoCuenta = estadoCuenta;
 		this.avisos = avisos;
@@ -50,7 +54,17 @@ public class PortalFamiliaController {
 		InicioFamilia datos = inicio.inicio();
 		model.addAttribute("inicio", datos);
 		model.addAttribute("cuenta", datos.cuenta());
+		model.addAttribute("recordatoriosActivos", preferencias.recordatoriosActivos());
 		return "familia/inicio";
+	}
+
+	/** Tanda 3: el apoderado apaga o enciende SUS recordatorios (los avisos de pago no se apagan). */
+	@PostMapping("/familia/preferencias")
+	public String preferencias(@RequestParam(defaultValue = "false") boolean recordatorios, RedirectAttributes mensajes) {
+		preferencias.recordatorios(recordatorios);
+		mensajes.addFlashAttribute("exito", recordatorios ? "Listo: te recordaremos tus vencimientos."
+				: "Listo: ya no te enviaremos recordatorios. Los avisos de tus pagos siguen llegando.");
+		return "redirect:/familia";
 	}
 
 	@GetMapping("/familia/estado-de-cuenta")

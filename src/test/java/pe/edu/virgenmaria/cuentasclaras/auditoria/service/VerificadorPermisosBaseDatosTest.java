@@ -139,7 +139,7 @@ class VerificadorPermisosBaseDatosTest {
 	private static final java.util.regex.Pattern SOLO_INSERCION = java.util.regex.Pattern
 			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
 					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado|movimiento_bancario|"
-					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora) ");
+					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora|semilla_muestreo) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -366,8 +366,8 @@ class VerificadorPermisosBaseDatosTest {
 					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
 		}
 		// Sprint 5, tanda 1 (V17): 46 con los de mensajes, enlaces y huella; tanda 2 (V18): 51 con los de la renovación,
-		// la matrícula reservada y los avisos de las familias.
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(51);
+		// la matrícula reservada y los avisos de las familias; tanda 3 (V19): 55 con los de feriados y cierre mensual.
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(55);
 	}
 
 	/**

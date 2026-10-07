@@ -31,6 +31,8 @@ import java.util.stream.Collectors;
  *       {@code cuentasclaras.triggers_instalados()} (02-permisos-tablas.sql) y la compara con {@link #TRIGGERS_ESPERADOS};</li>
  *   <li>que los pagos en línea (sprint 4, tanda 1), la recaudación bancaria (tanda 2) y el extracto con su conciliación
  *       automática (tanda 3) tienen sus GRANT por columna, sus tablas de solo inserción y sus triggers;</li>
+ *   <li>sprint 5, tanda 3: que los feriados, la semilla secreta del muestreo y el cierre mensual tienen sus GRANT y
+ *       sus triggers;</li>
  *   <li>sprint 5: que los mensajes, el enlace con su mensaje y la huella diaria tienen sus GRANT, sus triggers y que en
  *       prod la base no admite la mensajería simulada;</li>
  *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes).</li>
@@ -252,7 +254,20 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "'verificador', NOW(6))", "trg_renovacion_matricula_nace"),
 			trigger("INSERT INTO matricula (colegio_id, alumno_id, anio_escolar_id, seccion_id, fecha_matricula, estado, "
 					+ "creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, '2000-01-01', 'ACTIVA', NOW(6), "
-					+ "'verificador', NOW(6))", "trg_matricula_nace"));
+					+ "'verificador', NOW(6))", "trg_matricula_nace"),
+			// Sprint 5, tanda 3 (V19): los feriados, la semilla y el cierre mensual no se borran; la semilla es de solo
+			// inserción; la fecha del feriado y los totales calculados del cierre no cambian; y cada trigger nuevo rechaza
+			// su inserción imposible (un feriado en el pasado y un cierre que nace CUADRADO).
+			sinBorrado("feriado"), sinBorrado("semilla_muestreo"), sinBorrado("cierre_mensual_banco"),
+			soloInsercion("semilla_muestreo"),
+			columna("UPDATE feriado SET fecha = fecha WHERE 1 = 0", "feriado"),
+			columna("UPDATE cierre_mensual_banco SET total_abonos = total_abonos WHERE 1 = 0", "cierre_mensual_banco"),
+			columna("UPDATE cierre_mensual_banco SET saldo_final = saldo_final WHERE 1 = 0", "cierre_mensual_banco"),
+			trigger("INSERT INTO feriado (colegio_id, fecha, descripcion, vigente, creado_en, creado_por, actualizado_en) "
+					+ "VALUES (0, '2000-01-01', 'verificador', TRUE, NOW(6), 'verificador', NOW(6))", "trg_feriado_registro"),
+			trigger("INSERT INTO cierre_mensual_banco (colegio_id, cuenta_id, anio, mes, total_abonos, total_cargos, "
+					+ "saldo_final, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 2026, 1, 0, 0, 0, 'CUADRADO', "
+					+ "NOW(6), 'sistema.conciliacion', NOW(6))", "trg_cierre_mensual_banco_nace"));
 
 	/** Sprint 5: la mensajería simulada solo existe en una base habilitada por el DBA (nunca en prod). */
 	static final String SQL_MENSAJERIA_SIMULADA =
@@ -290,7 +305,9 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_movimiento_bancario_registro", "trg_partida_conciliacion_registro", "trg_partida_conciliacion_estado",
 			"trg_reembolso_pasarela_registro", "trg_mensaje_nace", "trg_mensaje_envio", "trg_enlace_activacion_nace",
 			"trg_enlace_activacion_uso", "trg_huella_bitacora_registro", "trg_renovacion_matricula_nace",
-			"trg_renovacion_matricula_estado", "trg_matricula_nace", "trg_matricula_estado", "trg_aviso_familia_estado");
+			"trg_renovacion_matricula_estado", "trg_matricula_nace", "trg_matricula_estado", "trg_aviso_familia_estado",
+			"trg_feriado_registro", "trg_feriado_anulacion", "trg_cierre_mensual_banco_nace",
+			"trg_cierre_mensual_banco_estado");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -406,6 +423,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		LOG.info("Permisos y triggers de mensajería, acceso directo al titular y huella diaria verificados.");
 		LOG.info("Permisos y triggers de la renovación de matrícula, la matrícula reservada y los avisos de las familias "
 				+ "verificados.");
+		LOG.info("Permisos y triggers de feriados, semilla del muestreo y cierre bancario mensual verificados.");
 		return escribe;
 	}
 

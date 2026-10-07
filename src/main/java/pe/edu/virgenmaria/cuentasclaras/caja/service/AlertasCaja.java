@@ -1,5 +1,7 @@
 package pe.edu.virgenmaria.cuentasclaras.caja.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillasMuestreo;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -33,6 +35,8 @@ import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision.Gravedad;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillaMuestreo;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.MuestraAlAzar;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -93,12 +97,18 @@ public class AlertasCaja implements AlertasRevision {
 
 	private final Clock reloj;
 
+	private final CalendarioHabil calendario;
+
+	private final SemillasMuestreo semillas;
+
 	public AlertasCaja(CajaDiariaRepository cajas, CierreCajaRepository cierres, DepositoCajaRepository depositos,
 			PagoRepository pagos, AnulacionPagoRepository anulaciones, VerificacionBancariaRepository verificaciones,
 			SolicitudCambioRepository solicitudes, SerieComprobanteRepository series, ComprobanteRepository comprobantes,
 			NombresUsuarios nombres, PropiedadesCaja propiedades,
 			pe.edu.virgenmaria.cuentasclaras.comprobantes.config.PropiedadesComprobantes seriesConfiguradas,
-			pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService auditoria, Clock reloj) {
+			pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService auditoria, Clock reloj, CalendarioHabil calendario, SemillasMuestreo semillas) {
+		this.semillas = semillas;
+		this.calendario = calendario;
 		this.seriesConfiguradas = seriesConfiguradas;
 		this.auditoria = auditoria;
 		this.cajas = cajas;
@@ -248,7 +258,7 @@ public class AlertasCaja implements AlertasRevision {
 		int dias = propiedades.diasSinVerificar();
 		List<Pago> pendientes = pagos.digitalesSinVerificar();
 		List<Pago> criticos = pendientes.stream().filter(p -> !ahora.isBefore(
-				Calendario.siguienteDiaHabil(p.getFecha()).atTime(propiedades.horaLimiteCierre()))).toList();
+				calendario.siguienteDiaHabil(p.getFecha()).atTime(propiedades.horaLimiteCierre()))).toList();
 		if (!criticos.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, criticos.size() + " pago(s) digital(es) por "
 					+ Dinero.formatear(Dinero.sumar(criticos.stream().map(Pago::getTotal).toList())) + " siguen sin "
@@ -283,7 +293,7 @@ public class AlertasCaja implements AlertasRevision {
 			BigDecimal aDepositar = contado.subtract(caja.getFondoFijo());
 			if (aDepositar.signum() > 0) {
 				// M3 (lapping): pasado un día hábil completo sin depositar, es crítico.
-				boolean critico = hoy.isAfter(Calendario.siguienteDiaHabil(caja.getFecha()));
+				boolean critico = hoy.isAfter(calendario.siguienteDiaHabil(caja.getFecha()));
 				alertas.add(new AlertaRevision(critico ? Gravedad.CRITICA : Gravedad.ATENCION, MODULO, "El efectivo de la "
 						+ "caja de " + nombres.de(caja.getCajero()) + " del " + Calendario.formatear(caja.getFecha()) + " ("
 						+ Dinero.formatear(aDepositar) + ") aún no se deposita" + (critico ? ", y ya pasó un día hábil." : ".")
@@ -362,8 +372,8 @@ public class AlertasCaja implements AlertasRevision {
 		for (DepositoCaja d : depositos.findByFechaDepositoGreaterThanEqual(desde)) {
 			LocalDate banco = verificaciones.findByDepositoIdIn(List.of(d.getId())).stream().findFirst()
 					.map(VerificacionBancaria::getBancoFecha).orElse(null);
-			boolean tardio = ServicioVerificacionBancaria.tardio(d.getCaja().getFecha(), d.getFechaDeposito())
-					|| ServicioVerificacionBancaria.tardio(d.getCaja().getFecha(), banco);
+			boolean tardio = ServicioVerificacionBancaria.tardio(calendario, d.getCaja().getFecha(), d.getFechaDeposito())
+					|| ServicioVerificacionBancaria.tardio(calendario, d.getCaja().getFecha(), banco);
 			if (tardio) {
 				alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Depósito tardío: el efectivo de la caja de "
 						+ nombres.de(d.getCaja().getCajero()) + " del " + Calendario.formatear(d.getCaja().getFecha())
@@ -404,11 +414,15 @@ public class AlertasCaja implements AlertasRevision {
 	 * verificó y qué escribió del banco, para que Promotoría las compare con el estado de cuenta.
 	 */
 	private void muestraDeVerificaciones(List<AlertaRevision> alertas, LocalDate hoy) {
-		LocalDate dia = Calendario.anteriorDiaHabil(hoy);
+		LocalDate dia = calendario.anteriorDiaHabil(hoy);
 		List<VerificacionBancaria> delDia = new ArrayList<>(verificaciones.findByResultadoAndCreadoEnBetweenOrderByIdAsc(
 				ResultadoVerificacion.ENCONTRADO, dia.atStartOfDay(), dia.plusDays(1).atStartOfDay()));
-		java.util.Collections.shuffle(delDia, new java.util.Random(hoy.toEpochDay()));
-		for (VerificacionBancaria v : delDia.stream().limit(3).toList()) {
+		if (delDia.isEmpty()) {
+			return;
+		}
+		// G21: la semilla es SECRETA (SecureRandom, guardada por día); antes era la fecha y la cajera podía calcularla.
+		long semilla = semillas.de(SemillaMuestreo.Ambito.CAJA, hoy);
+		for (VerificacionBancaria v : MuestraAlAzar.delDia(semilla, delDia, 3)) {
 			String que = v.getPago() != null
 					? v.getPago().getMedio().etiqueta() + " de " + v.getPago().getFamilia().getNombre()
 					: "Depósito de la caja de " + nombres.de(v.getDeposito().getCaja().getCajero());

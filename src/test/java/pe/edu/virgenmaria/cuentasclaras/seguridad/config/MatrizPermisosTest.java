@@ -375,7 +375,7 @@ class MatrizPermisosTest {
 	@Test
 	void elMenuSaleDeLaMismaMatriz() {
 		assertThat(ModuloApp.para(UsuariosDePrueba.autenticado(Rol.CAJA).getAuthorities()))
-				.containsExactly(ModuloApp.INICIO, ModuloApp.CAJA_COBRO);
+				.containsExactly(ModuloApp.INICIO, ModuloApp.CAJA_COBRO, ModuloApp.FERIADOS);
 		assertThat(ModuloApp.para(UsuariosDePrueba.autenticado(Rol.DIRECTOR, Rol.DOCENTE).getAuthorities()))
 				.contains(ModuloApp.USUARIOS, ModuloApp.ACADEMICO)
 				.doesNotContain(ModuloApp.CAJA_COBRO, ModuloApp.FAMILIA);

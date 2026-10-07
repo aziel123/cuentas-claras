@@ -117,6 +117,16 @@
 		<p class="secundario">¿Pagaste y no lo ves, o ves algo que no reconoces? Avísanos: va directo a Promotoría.</p>
 		<a class="btn btn-secundario" th:href="@{/familia/algo-no-cuadra}">Avisar a Promotoría</a>
 	</section>
+	<section class="tarjeta" aria-labelledby="titulo-recordatorios">
+		<h2 id="titulo-recordatorios">Recordatorios de vencimiento</h2>
+		<p class="secundario" th:text="${recordatoriosActivos} ? 'Te escribimos 3 días antes de cada vencimiento y el día hábil siguiente si sigue pendiente, de lunes a sábado de 8:00 a 20:00.' : 'Tienes los recordatorios apagados.'">Te escribimos 3 días antes.</p>
+		<p class="secundario">Los avisos de tus pagos, anulaciones y descuentos siempre llegan: así compruebas que todo cuadra.</p>
+		<form method="post" th:action="@{/familia/preferencias}">
+			<input type="hidden" name="recordatorios" th:value="${!recordatoriosActivos}">
+			<button type="submit" class="btn btn-secundario" data-accion="recordatorios"
+				th:text="${recordatoriosActivos} ? 'Apagar recordatorios' : 'Encender recordatorios'">Apagar recordatorios</button>
+		</form>
+	</section>
 </main>
 </body>
 </html>
