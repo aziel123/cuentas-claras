@@ -1304,6 +1304,54 @@ Cada tanda termina con:
 - La huella de ayer está en el historial de Promotoría.
 - Con `prod` y sin canal real, la aplicación no arranca.
 
+### Tanda 1 · Implementación (7 de octubre de 2026): lo probado y las desviaciones del diseño
+**Probado.** V17 se aplicó sobre V1–V16 en H2 2.4.240 (modo MySQL) y en MySQL 8.4 (contenedor `mysql:8`), con `02` y
+`03` (46 triggers) en su versión de la tanda; se replicó el job `mysql` completo: fase 1, fase 2 (54 pruebas), fase 2b,
+el paso `comprobar`, el arranque real en `prod` con `cc_app`, el rechazo sin canal real y M2 con `trg_mensaje_envio`.
+La sintaxis de V17 y de los 5 triggers nuevos y los 2 cambiados del diseño funcionó sin cambios en ambas bases.
+
+**Desviaciones (cada una con su motivo):**
+1. V17 agrega `uk_usuario_id_colegio UNIQUE (id, colegio_id)` y la FK `fk_mensaje_usuario` es compuesta
+   `(usuario_id, colegio_id)` (el diseño la tenía solo por `usuario_id`): así la base rechaza un mensaje a un usuario de
+   otro colegio, como las demás FK de negocio.
+2. V17 agrega `ck_usuario_telefono` (el celular del personal, `^[+]?[0-9]{9,15}$`), igual que el CHECK del destino.
+3. La reverificación diaria (06:05 en el diseño) corre dentro de la misma tarea de las 06:00 (`HuellaDiaria`), ANTES de
+   guardar la huella de ayer: así el mensaje del día ya dice «Bitácora verificada: sí / NO». Un solo proceso:
+   `auditoria.proceso.HuellaDiaria`; el servicio es `HuellasDiarias` (`hasRole('SISTEMA_AUDITORIA')`). La entidad se
+   llama `HuellaGuardada` porque `auditoria.service.HuellaBitacora` ya existía (la huella anotada a mano).
+4. `ServicioUsuarios.restablecerClave` conserva su nombre (el diseño dice `restablecer`) y la bitácora conserva
+   `USUARIO_CREADO` y `CLAVE_RESTABLECIDA` (con «enlace nuevo de un solo uso al titular»): la bandeja «Revisar» y las
+   pruebas de A5 dependen de esas acciones. No se crearon `ACCESO_PERSONAL_CREADO` ni `ACCESO_PERSONAL_RESTABLECIDO`; sí
+   `ACCESO_PERSONAL_ACTIVADO`.
+5. `UsuarioCreado` y `AccesoEnviado` devuelven además el nombre de usuario y el vencimiento aproximado del enlace (el
+   real se fija al enviarlo; con el reloj de la aplicación coinciden).
+6. `EnlacesActivacion.generarParaMensaje(colegioId, mensajeId, usuarioId, proposito, vigencia)` recibe el colegio (la
+   ruta del enlace lo lleva) y la vigencia se limita a 71 h (el trigger admite 72 h desde `creado_en`).
+7. Con el conector de WhatsApp apagado y un correo registrado, el aviso sale solo por correo (en vez de crear un WhatsApp
+   que no puede salir). Sin ningún proveedor para su canal, el mensaje queda PENDIENTE (sin contar intentos) y aparece en
+   la alerta «pendientes por más de 15 minutos».
+8. G6 en la aplicación: si el contacto de un apoderado es del personal y nadie lo aprobó, ese canal se OMITE (queda en
+   el log) en los avisos financieros —el pago no se bloquea— y el acceso en línea no se da (no hay a dónde enviar el
+   enlace). En MySQL lo exige además `trg_mensaje_nace`.
+9. El aviso de anulación y el de descuento dicen el ROL de quien aprobó («Dirección») y no su usuario; si la cuenta no
+   existe, «el colegio».
+10. `PagoAnulado` lleva el motivo y quien aprobó; `DescuentoAprobado` (nuevo, en `cobranza.service`) lleva alumno, cuotas,
+    total y aprobador.
+11. Sin dependencia de `pasarela`: el webhook de WhatsApp tiene su propio límite por IP (`LimiteWebhookPorIp`, 120 por
+    minuto, `cuentasclaras.mensajeria.avisos-por-minuto-por-ip`) y responde 413 sobre 64 KB.
+12. `configuracion_bd` se lee con una entidad de solo lectura (`comunicacion.model.ConfiguracionBd`, `@Immutable`, sin
+    `BaseEntity`: no es de un colegio); ArchUnit la exceptúa de la regla de `BaseEntity`.
+13. CI: la fase 2 corre **sin** la fila `mensajeria_simulada` (el verificador de prod que usan varias pruebas exige que
+    no exista) y una fase 2b la inserta, corre los 3 flujos que envían con la mensajería simulada y la borra. El paso
+    `comprobar` intenta marcar como SIMULADO el mensaje `pendiente-para-ci-…` que deja la fase 2 y espera 1644. El
+    arranque en prod del CI configura un canal real (SMTP; no se conecta al arrancar) y `management.health.mail` está
+    apagado (la salud no depende del servidor de correo).
+14. La alerta «activación desde la misma IP de quien creó la cuenta» (S4-M2) ya no se dispara: el enlace lo genera el
+    proceso de envío y nadie lo recibe en su conexión. `AlertasActivacion` se mantiene para los enlaces del sprint 4.
+15. Pantallas de la tanda: la bandeja `/mensajes` (módulo `MENSAJES` en `ModuloApp`), el historial `/familia/mensajes`
+    (con un botón en el inicio de la familia) y las pantallas de alta y acceso que solo dicen «Enlace enviado a WhatsApp
+    +51 *** *** 321». El formulario de usuario pide el celular.
+
 ### Tanda 2 · Portal de familias y matrícula 2027 (V18)
 **Pasos**
 1. **Probar V18** y los triggers de la tanda (51). Revisar los datos demo que matriculan en 2027.

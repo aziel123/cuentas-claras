@@ -397,6 +397,10 @@ class MatrizPermisosTest {
 		if (PathPatternParser.defaultInstance.parse(ModuloApp.RUTA_WEBHOOK_PASARELA).matches(camino)) {
 			return true;
 		}
+		// Sprint 5: los avisos de WhatsApp (POST firmado) y su verificación (GET), en la cadena de los webhooks.
+		if (PathPatternParser.defaultInstance.parse(ModuloApp.RUTA_WEBHOOK_WHATSAPP).matches(camino)) {
+			return true;
+		}
 		return Arrays.stream(ModuloApp.values())
 				.flatMap(m -> Arrays.stream(m.patrones()))
 				.anyMatch(patron -> PathPatternParser.defaultInstance.parse(patron).matches(camino));

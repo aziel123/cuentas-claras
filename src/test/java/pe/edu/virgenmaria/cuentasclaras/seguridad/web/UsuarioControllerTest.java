@@ -31,7 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
 /**
- * Pantallas de usuarios: alta con clave temporal visible una sola vez, ficha con modales y avisos.
+ * Pantallas de usuarios: alta sin clave visible (sprint 5: el enlace va directo al titular), ficha con modales y avisos.
  */
 @PruebaIntegracion
 class UsuarioControllerTest {
@@ -77,24 +77,28 @@ class UsuarioControllerTest {
 	}
 
 	@Test
-	void crearMuestraLaClaveTemporalUnaSolaVez() throws Exception {
+	void crearSoloDiceADondeSeEnvioElEnlace() throws Exception {
 		MvcResult resultado = mvc.perform(post("/usuarios").with(UsuariosDePrueba.como(promotora)).with(csrf())
 						.param("nombreCompleto", "Lucía Ramos").param("nombreUsuario", "lucia.ramos")
-						.param("roles", "CAJA"))
+						.param("telefonoWhatsapp", "966 777 321").param("roles", "CAJA"))
 				.andExpect(status().isOk())
 				.andExpect(view().name("usuarios/creado"))
-				.andExpect(content().string(containsString("no la volverás a ver")))
+				.andExpect(content().string(containsString("Enlace enviado a WhatsApp +51 *** *** 321")))
 				.andExpect(header().string("Cache-Control", containsString("no-store")))
 				.andReturn();
-		Matcher clave = CLAVE_TEMPORAL.matcher(resultado.getResponse().getContentAsString());
-		assertThat(clave.find()).isTrue();
-		String temporal = clave.group(1);
+		assertThat(resultado.getResponse().getContentAsString()).doesNotContain("/activar/")
+				.doesNotContain("Clave temporal");
+		assertThat(CLAVE_TEMPORAL.matcher(resultado.getResponse().getContentAsString()).find()).isFalse();
+		assertThat(jdbc.queryForObject("SELECT telefono_whatsapp FROM usuario WHERE nombre_usuario = 'lucia.ramos'",
+				String.class)).isEqualTo("+51966777321");
+	}
 
-		long id = jdbc.queryForObject("SELECT id FROM usuario WHERE nombre_usuario = 'lucia.ramos'", Long.class);
-		mvc.perform(get("/usuarios/" + id).with(UsuariosDePrueba.como(promotora)))
-				.andExpect(content().string(not(containsString(temporal))));
-		mvc.perform(post("/login").with(csrf()).param("usuario", "lucia.ramos").param("clave", temporal))
-				.andExpect(redirectedUrl("/cuenta/cambiar-clave"));
+	@Test
+	void sinCelularNiCorreoElFormularioLoPide() throws Exception {
+		mvc.perform(post("/usuarios").with(UsuariosDePrueba.como(promotora)).with(csrf())
+						.param("nombreCompleto", "Sin Contacto").param("nombreUsuario", "sin.contacto").param("roles", "CAJA"))
+				.andExpect(status().isOk()).andExpect(view().name("usuarios/formulario"))
+				.andExpect(content().string(containsString("Escribe el celular (WhatsApp) o el correo")));
 	}
 
 	@Test
@@ -183,7 +187,7 @@ class UsuarioControllerTest {
 	void elNombreDeUsuarioSeNormalizaYElNombreCompletoSeEscapa() throws Exception {
 		mvc.perform(post("/usuarios").with(UsuariosDePrueba.como(promotora)).with(csrf())
 						.param("nombreCompleto", "<script>alert(1)</script> Ramos").param("nombreUsuario", "  Lucia.RAMOS ")
-						.param("roles", "DOCENTE"))
+						.param("correo", "lucia@colegio.pe").param("roles", "DOCENTE"))
 				.andExpect(status().isOk());
 
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM usuario WHERE nombre_usuario = 'lucia.ramos'", Long.class))

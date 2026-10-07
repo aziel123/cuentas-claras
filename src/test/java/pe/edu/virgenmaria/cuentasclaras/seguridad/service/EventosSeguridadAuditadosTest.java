@@ -199,7 +199,8 @@ class EventosSeguridadAuditadosTest {
 	@Test
 	void usuarioCreadoQuedaAuditado() throws Exception {
 		mvc.perform(post("/usuarios").with(UsuariosDePrueba.como(promotora())).with(csrf())
-				.param("nombreCompleto", "Ana Torres").param("nombreUsuario", "ana.torres").param("roles", "DOCENTE"))
+				.param("nombreCompleto", "Ana Torres").param("nombreUsuario", "ana.torres").param("telefonoWhatsapp",
+						"955123456").param("roles", "DOCENTE"))
 				.andExpect(status().isOk());
 
 		Map<String, Object> evento = ultimo("USUARIO_CREADO");
@@ -226,14 +227,15 @@ class EventosSeguridadAuditadosTest {
 
 	@Test
 	void claveRestablecidaQuedaAuditadaSinLaClave() throws Exception {
+		// Sprint 5: la pantalla ya no muestra ninguna clave ni enlace: solo a dónde se envió el enlace.
 		String html = accionSobreCaja("restablecer-clave").andExpect(status().isOk()).andReturn().getResponse()
 				.getContentAsString();
-		java.util.regex.Matcher clave = java.util.regex.Pattern.compile("clave-temporal-valor[^>]*>([^<]+)<").matcher(html);
-		assertThat(clave.find()).isTrue();
+		assertThat(html).contains("Enlace enviado a WhatsApp").doesNotContain("/activar/")
+				.doesNotContain("clave-temporal-valor");
 
 		Map<String, Object> evento = ultimo("CLAVE_RESTABLECIDA");
 		assertThat(evento.get("entidad_id")).isEqualTo(caja.getId().toString());
-		assertThat(evento.values().stream().map(String::valueOf)).noneMatch(v -> v.contains(clave.group(1)));
+		assertThat(evento.values().stream().map(String::valueOf)).noneMatch(v -> v.contains("/activar/"));
 	}
 
 	@Test

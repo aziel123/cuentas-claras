@@ -11,7 +11,8 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 
 /**
- * Enlace de activación de la cuenta en línea de un apoderado (correcciones del sprint 4, S4-M2): de UN solo uso y con
+ * Enlace de activación de la cuenta en línea de un apoderado (correcciones del sprint 4, S4-M2) o, desde el sprint 5,
+ * de una persona del personal: de UN solo uso y con
  * vencimiento. Se guarda solo el SHA-256 del token (quien lee la base no puede usarlo). Al usarlo, el apoderado elige su
  * propia clave; quedan la IP de quien lo creó y la de quien lo usó. Un restablecimiento de Promotoría lo anula. No se
  * borra.
@@ -41,11 +42,28 @@ public class EnlaceActivacion extends BaseEntity {
 	@Column(name = "anulado_en")
 	private LocalDateTime anuladoEn;
 
+	/** Sprint 5: el mensaje que lo llevó a su titular (el enlace nace con él; no cambia). */
+	@Column(name = "mensaje_id", updatable = false)
+	private Long mensajeId;
+
+	@jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+	@Column(nullable = false, updatable = false, length = 20)
+	private PropositoEnlace proposito = PropositoEnlace.APODERADO;
+
 	protected EnlaceActivacion() {
 		// requerido por JPA
 	}
 
-	public static EnlaceActivacion nuevo(Long usuarioId, String hashToken, LocalDateTime venceEn, String creadoIp) {
+	/** Sprint 5: el enlace nace con su mensaje al titular (lo genera el proceso de envío, nunca una pantalla). */
+	public static EnlaceActivacion paraMensaje(Long usuarioId, String hashToken, LocalDateTime venceEn, Long mensajeId,
+			PropositoEnlace proposito) {
+		EnlaceActivacion e = nuevo(usuarioId, hashToken, venceEn, null);
+		e.mensajeId = Objects.requireNonNull(mensajeId, "mensajeId");
+		e.proposito = Objects.requireNonNull(proposito, "proposito");
+		return e;
+	}
+
+	private static EnlaceActivacion nuevo(Long usuarioId, String hashToken, LocalDateTime venceEn, String creadoIp) {
 		EnlaceActivacion e = new EnlaceActivacion();
 		e.usuarioId = Objects.requireNonNull(usuarioId, "usuarioId");
 		e.hashToken = Objects.requireNonNull(hashToken, "hashToken");
@@ -117,5 +135,13 @@ public class EnlaceActivacion extends BaseEntity {
 
 	public LocalDateTime getAnuladoEn() {
 		return anuladoEn;
+	}
+
+	public Long getMensajeId() {
+		return mensajeId;
+	}
+
+	public PropositoEnlace getProposito() {
+		return proposito;
 	}
 }

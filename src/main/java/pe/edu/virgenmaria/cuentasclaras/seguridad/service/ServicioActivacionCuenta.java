@@ -9,6 +9,7 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.EnlaceActivacion;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PropositoEnlace;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.EnlaceActivacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
@@ -19,17 +20,21 @@ import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 /**
- * Activación de la cuenta en línea del apoderado con su enlace de un solo uso (correcciones del sprint 4, S4-M2). Es
- * PÚBLICA (el apoderado todavía no tiene clave): el token del enlace es lo que autentica (32 bytes al azar; en la base
- * solo su SHA-256) y, como confirmación, el apoderado escribe su número de documento. Elige su clave (con la política
+ * Activación de la cuenta con su enlace de un solo uso: del apoderado (correcciones del sprint 4, S4-M2) y, desde el
+ * sprint 5, del personal. Es PÚBLICA (el titular todavía no tiene clave): el token del enlace es lo que autentica (32
+ * bytes al azar; en la base solo su SHA-256) y, como confirmación, el apoderado escribe su número de documento y el
+ * personal su nombre de usuario (en ambos casos, su nombre de usuario). Elige su clave (con la política
  * de siempre), el enlace queda usado y se audita resaltado con su IP; si es la misma IP de quien creó la cuenta,
  * Promotoría lo ve como alerta.
  */
 @Service
 public class ServicioActivacionCuenta {
 
-	/** Lo que ve el apoderado antes de elegir su clave: su nombre y hasta cuándo sirve el enlace. */
-	public record VistaActivacion(String nombreCompleto, LocalDateTime venceEn) {
+	/**
+	 * Lo que ve el titular antes de elegir su clave: su nombre, hasta cuándo sirve el enlace y si es del personal (confirma
+	 * su nombre de usuario) o de un apoderado (confirma su documento).
+	 */
+	public record VistaActivacion(String nombreCompleto, LocalDateTime venceEn, boolean personal) {
 	}
 
 	private final EnlaceActivacionRepository enlaces;
@@ -63,7 +68,8 @@ public class ServicioActivacionCuenta {
 			LocalDateTime ahora = ahora();
 			return enlaces.bloquearPorHash(EnlacesActivacion.hash(token)).filter(e -> e.vigente(ahora))
 					.flatMap(e -> usuarios.findById(e.getUsuarioId()).filter(Usuario::isActivo)
-							.map(u -> new VistaActivacion(u.getNombreCompleto(), e.getVenceEn())))
+							.map(u -> new VistaActivacion(u.getNombreCompleto(), e.getVenceEn(),
+									e.getProposito() == PropositoEnlace.PERSONAL)))
 					.orElse(null);
 		})));
 	}
@@ -81,7 +87,9 @@ public class ServicioActivacionCuenta {
 					.orElseThrow(() -> new ReglaNegocioException(ENLACE_NO_SIRVE));
 			String escrito = documento == null ? "" : documento.strip().toLowerCase(java.util.Locale.ROOT);
 			if (!escrito.equals(usuario.getNombreUsuario())) {
-				throw new ReglaNegocioException("El número de documento no corresponde a esta cuenta.");
+				throw new ReglaNegocioException(enlace.getProposito() == PropositoEnlace.PERSONAL
+						? "El nombre de usuario no corresponde a esta cuenta."
+						: "El número de documento no corresponde a esta cuenta.");
 			}
 			if (clave == null || !clave.equals(confirmacion)) {
 				throw new ReglaNegocioException("La clave y su confirmación no coinciden.");
@@ -93,9 +101,12 @@ public class ServicioActivacionCuenta {
 			enlace.usar(ahora, EnlacesActivacion.ipActual());
 			enlaces.save(enlace);
 			boolean mismaIp = enlace.usadoDesdeLaIpDeQuienLoCreo();
-			auditoria.registrar(auditoria.actorPara(colegioId, usuario.getId(), usuario.getNombreUsuario(), "APODERADO"),
-					AccionAuditoria.ACCESO_APODERADO_ACTIVADO, "usuario", usuario.getId().toString(), null, "activada",
-					usuario.getNombreCompleto() + " activó su cuenta en línea con su enlace y eligió su clave, desde la IP "
+			boolean personal = enlace.getProposito() == PropositoEnlace.PERSONAL;
+			auditoria.registrar(auditoria.actorPara(colegioId, usuario.getId(), usuario.getNombreUsuario(),
+					usuario.getRoles().stream().map(Enum::name).sorted().collect(java.util.stream.Collectors.joining(","))),
+					personal ? AccionAuditoria.ACCESO_PERSONAL_ACTIVADO : AccionAuditoria.ACCESO_APODERADO_ACTIVADO,
+					"usuario", usuario.getId().toString(), null, "activada",
+					usuario.getNombreCompleto() + " activó su cuenta con su enlace y eligió su clave, desde la IP "
 							+ enlace.getUsadoIp() + ". El enlace lo creó " + enlace.getCreadoPor() + " desde la IP "
 							+ enlace.getCreadoIp() + "." + (mismaIp ? " ATENCIÓN: es la MISMA IP de quien creó la cuenta: "
 									+ "confirma con el apoderado que fue él." : ""));

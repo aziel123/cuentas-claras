@@ -139,7 +139,7 @@ class VerificadorPermisosBaseDatosTest {
 	private static final java.util.regex.Pattern SOLO_INSERCION = java.util.regex.Pattern
 			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
 					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado|movimiento_bancario|"
-					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela) ");
+					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -272,6 +272,7 @@ class VerificadorPermisosBaseDatosTest {
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
 				.thenReturn(String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS));
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_PASARELA_SIMULADA, Integer.class)).thenReturn(0);
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_MENSAJERIA_SIMULADA, Integer.class)).thenReturn(0);
 		return mysql;
 	}
 
@@ -343,8 +344,8 @@ class VerificadorPermisosBaseDatosTest {
 			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
 					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
 		}
-		// Correcciones del sprint 4 (V16): 41 con trg_reembolso_pasarela_registro.
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(41);
+		// Sprint 5, tanda 1 (V17): 46 con los de mensajes, enlaces y huella.
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(46);
 	}
 
 	/**
@@ -416,8 +417,57 @@ class VerificadorPermisosBaseDatosTest {
 
 		JdbcTemplate conFila = mysqlQueDeniega();
 		when(conFila.queryForObject(VerificadorPermisosBaseDatos.SQL_PASARELA_SIMULADA, Integer.class)).thenReturn(1);
+		when(conFila.queryForObject(VerificadorPermisosBaseDatos.SQL_MENSAJERIA_SIMULADA, Integer.class)).thenReturn(1);
 		assertThatCode(() -> new VerificadorPermisosBaseDatos(conFila, fuenteDatos, false).verificarPermisos())
 				.doesNotThrowAnyException();
+	}
+
+	/** Sprint 5 (G11): en prod la base no admite la mensajería simulada; en el piloto debe estar habilitada. */
+	@Test
+	void enProduccionLaBaseNoAdmiteMensajeriaSimulada() {
+		JdbcTemplate conFila = mysqlQueDeniega();
+		when(conFila.queryForObject(VerificadorPermisosBaseDatos.SQL_MENSAJERIA_SIMULADA, Integer.class)).thenReturn(1);
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(conFila, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("PRODUCCIÓN")
+				.hasMessageContaining("mensajeria_simulada");
+
+		JdbcTemplate pilotoSinFila = mysqlQueDeniega();
+		when(pilotoSinFila.queryForObject(VerificadorPermisosBaseDatos.SQL_PASARELA_SIMULADA, Integer.class)).thenReturn(1);
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(pilotoSinFila, fuenteDatos, false).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("mensajería simulada");
+	}
+
+	/** Sprint 5, tanda 1: mensajes, enlaces y huella; sin sus GRANT o sus triggers, prod no arranca. */
+	@Test
+	void fallaSiSePuedeTocarLaMensajeriaOFaltanSusTriggers() {
+		for (String[] caso : new String[][] { { "DELETE FROM mensaje WHERE 1 = 0", "mensaje se podrían borrar" },
+				{ "DELETE FROM huella_bitacora WHERE 1 = 0", "huella_bitacora se podrían borrar" },
+				{ "UPDATE huella_bitacora SET version = version WHERE 1 = 0", "solo inserción" },
+				{ "UPDATE mensaje SET destino = destino WHERE 1 = 0", "mensaje" },
+				{ "UPDATE mensaje SET parametros = parametros WHERE 1 = 0", "mensaje" },
+				{ "UPDATE enlace_activacion SET mensaje_id = mensaje_id WHERE 1 = 0", "enlace_activacion" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+		for (String[] caso : new String[][] { { "INSERT INTO mensaje", "trg_mensaje_nace" },
+				{ "INSERT INTO enlace_activacion", "trg_enlace_activacion_nace" },
+				{ "INSERT INTO huella_bitacora", "trg_huella_bitacora_registro" },
+				{ "INSERT INTO apoderado", "trg_apoderado_nace" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doThrow(denegado(1452)).when(mysql).update(org.mockito.ArgumentMatchers.startsWith(caso[0]));
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+		for (String borrado : List.of("trg_mensaje_envio", "trg_enlace_activacion_uso")) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class)).thenReturn(
+					String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream().filter(t -> !t.equals(borrado))
+							.toList()));
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
+					.as(borrado).isInstanceOf(IllegalStateException.class).hasMessageContaining(borrado);
+		}
 	}
 
 	/**

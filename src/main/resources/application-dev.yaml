@@ -15,6 +15,12 @@ server:
         secure: false
 
 cuentasclaras:
+  mensajeria:
+    # Sprint 5: mensajes SIMULADOS (nadie los recibe; en dev el enlace de activación sale en el log).
+    whatsapp:
+      proveedor: SIMULADO
+    correo:
+      proveedor: SIMULADO
   auditoria:
     # Clave fija SOLO para desarrollo local. Producción usa AUDITORIA_CLAVE_HMAC.
     clave-hmac: clave-hmac-de-desarrollo-no-usar-en-produccion-01

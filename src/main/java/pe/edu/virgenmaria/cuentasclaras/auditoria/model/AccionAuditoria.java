@@ -211,6 +211,19 @@ public enum AccionAuditoria {
 	/** Se resalta: la pasarela liquidó un cargo que no corresponde a ningún pago registrado. */
 	LIQUIDACION_SIN_PAGO("Una liquidación trae un cargo sin pago registrado", true),
 
+	// Sprint 5 · tanda 1: mensajes a las familias y al personal, acceso directo al titular y huella diaria.
+	/** Se resalta: un aviso no salió por ningún canal (el padre no se enteró). */
+	MENSAJE_FALLIDO("Un mensaje no se pudo enviar", true),
+	/** Se resalta: se usó la mensajería simulada (nadie recibió el mensaje). */
+	MENSAJERIA_SIMULADA_USADA("Se usó la mensajería simulada (no se envió)", true),
+	/** Se resalta: el contacto anterior del apoderado recibió el aviso del cambio. */
+	CONTACTO_CAMBIADO_AVISADO("Se avisó al contacto anterior de un apoderado", true),
+	/** Se resalta: una huella guardada ya no coincide con la bitácora (recorte o alteración). */
+	HUELLA_NO_COINCIDE("La bitácora no coincide con una huella guardada", true),
+	ACCESO_PERSONAL_ACTIVADO("Un usuario del personal activó su cuenta con su enlace", false),
+	ENLACE_ACTIVACION_ENVIADO("Se envió un enlace de activación a su titular", false),
+	HUELLA_ENVIADA("Se envió la huella diaria de la bitácora", false),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

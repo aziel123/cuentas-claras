@@ -128,6 +128,10 @@ public class DatosDemoDev implements ApplicationRunner {
 		ContextoColegio.en(colegioId, () -> transaccion.executeWithoutResult(estado -> {
 			String hash = codificador.encode(claveDemo);
 			Usuario usuario = Usuario.nuevo(demo.nombreUsuario(), demo.nombreCompleto(), null, hash, Set.of(demo.rol()));
+			// Sprint 5: celular de demostración (rango 966, que no usan los apoderados de ejemplo): ahí le llegaría su
+			// enlace y, a Promotoría, la huella diaria (mensajería SIMULADA en dev).
+			usuario.asignarTelefonoWhatsapp("+51966" + String.format("%06d",
+					Math.floorMod(demo.nombreUsuario().hashCode(), 1_000_000)));
 			// En demostración la clave no es temporal: se puede ingresar directo.
 			usuario.cambiarClave(hash, LocalDateTime.now(reloj), false);
 			usuarios.save(usuario);

@@ -79,8 +79,8 @@
 
 			<th:block th:if="${usuario.puedeDarAcceso}">
 				<th:block th:replace="~{fragments/componentes :: modalConfirmacion('modal-clave', '¿Restablecer la clave?',
-					'Se generará una clave temporal nueva, se cerrarán sus sesiones y tendrá que cambiarla al ingresar.',
-					@{/usuarios/{id}/restablecer-clave(id=${usuario.id})}, 'Restablecer clave', true)}"></th:block>
+					'Se enviará un enlace nuevo de un solo uso a su celular o correo, sus sesiones se cerrarán y los enlaces anteriores dejarán de servir. Nadie más ve el enlace.',
+					@{/usuarios/{id}/restablecer-clave(id=${usuario.id})}, 'Enviar enlace nuevo', true)}"></th:block>
 			</th:block>
 
 			<th:block th:if="${usuario.activo}">

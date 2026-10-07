@@ -42,6 +42,13 @@ public class Usuario extends BaseEntity {
 	@Column(length = 150)
 	private String correo;
 
+	/**
+	 * Sprint 5: celular del personal (formato {@code +51987654321}). Recibe su enlace de activación (y Promotoría, la
+	 * huella diaria). El personal nuevo necesita celular o correo.
+	 */
+	@Column(name = "telefono_whatsapp", length = 16)
+	private String telefonoWhatsapp;
+
 	@Column(name = "clave_hash", nullable = false, length = 100)
 	private String claveHash;
 
@@ -132,6 +139,22 @@ public class Usuario extends BaseEntity {
 		usuario.roles = EnumSet.copyOf(roles);
 		usuario.debeCambiarClave = true;
 		return usuario;
+	}
+
+	/**
+	 * Sprint 5: el celular del titular para su enlace de activación (ya normalizado, o {@code null}). Lo fija quien crea
+	 * la cuenta; un cambio se audita.
+	 */
+	public void asignarTelefonoWhatsapp(String telefono) {
+		if (telefono != null && !telefono.matches("^[+]?[0-9]{9,15}$")) {
+			throw new ReglaNegocioException("El celular no es válido: escribe 9 dígitos que empiecen con 9.");
+		}
+		telefonoWhatsapp = telefono;
+	}
+
+	/** {@code true} si el contacto (celular o correo) es uno de los de esta cuenta. */
+	public boolean tieneContacto(String contacto) {
+		return contacto != null && (contacto.equals(telefonoWhatsapp) || contacto.equalsIgnoreCase(String.valueOf(correo)));
 	}
 
 	/** {@code true} si el nombre (ya normalizado) cumple {@link #PATRON_NOMBRE_USUARIO}. */
@@ -253,6 +276,10 @@ public class Usuario extends BaseEntity {
 
 	public String getCorreo() {
 		return correo;
+	}
+
+	public String getTelefonoWhatsapp() {
+		return telefonoWhatsapp;
 	}
 
 	public String getClaveHash() {

@@ -20,7 +20,14 @@
 			<div th:replace="~{fragments/componentes :: campo('nombreUsuario', 'Usuario',
 				'Con el que ingresará. Minúsculas, sin espacios ni tildes. Por ejemplo: lucia.ramos', 'off')}"></div>
 			<div class="campo">
-				<label for="correo">Correo (opcional)</label>
+				<label for="telefonoWhatsapp">Celular con WhatsApp</label>
+				<input type="tel" class="input" th:field="*{telefonoWhatsapp}" autocomplete="off" inputmode="tel"
+					aria-describedby="telefono-ayuda" th:classappend="${#fields.hasErrors('telefonoWhatsapp')} ? 'input-con-error'">
+				<p class="ayuda" id="telefono-ayuda">Ahí le llega el enlace para activar su cuenta. Si no tiene WhatsApp, escribe su correo. Nadie más ve el enlace.</p>
+				<p class="error" th:if="${#fields.hasErrors('telefonoWhatsapp')}" th:errors="*{telefonoWhatsapp}">Error</p>
+			</div>
+			<div class="campo">
+				<label for="correo">Correo</label>
 				<input type="email" class="input" th:field="*{correo}" autocomplete="off"
 					th:classappend="${#fields.hasErrors('correo')} ? 'input-con-error'">
 				<p class="error" th:if="${#fields.hasErrors('correo')}" th:errors="*{correo}">Error</p>

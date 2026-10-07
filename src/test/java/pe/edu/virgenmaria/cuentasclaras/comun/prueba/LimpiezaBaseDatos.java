@@ -17,6 +17,11 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Sprint 5 (tanda 1): el enlace apunta a su mensaje y el respaldo al WhatsApp FALLIDO; la huella, a la bitácora.
+		jdbc.update("UPDATE enlace_activacion SET mensaje_id = NULL WHERE mensaje_id IS NOT NULL");
+		jdbc.update("DELETE FROM mensaje WHERE respaldo_de_id IS NOT NULL");
+		jdbc.update("DELETE FROM mensaje");
+		jdbc.update("DELETE FROM huella_bitacora");
 		// Sprint 4 (tanda 3): la conciliación apunta a pagos, depósitos, lotes, liquidaciones y reembolsos; el extracto se
 		// apunta a sí mismo (el anterior y el que lo confirmó): se borra del último al primero.
 		jdbc.update("DELETE FROM verificacion_bancaria");
@@ -66,6 +71,7 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("UPDATE cuota SET anulacion_solicitud_id = NULL WHERE anulacion_solicitud_id IS NOT NULL");
 		jdbc.update("UPDATE apoderado SET ruc = NULL, razon_social = NULL, facturacion_solicitud_id = NULL "
 				+ "WHERE facturacion_solicitud_id IS NOT NULL");
+		jdbc.update("UPDATE apoderado SET contacto_solicitud_id = NULL WHERE contacto_solicitud_id IS NOT NULL");
 		jdbc.update("DELETE FROM solicitud_cambio");
 		jdbc.update("DELETE FROM cuota");
 		jdbc.update("DELETE FROM linea_saldo_inicial");

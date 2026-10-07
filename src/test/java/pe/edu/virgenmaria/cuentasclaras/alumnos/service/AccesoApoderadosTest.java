@@ -17,6 +17,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EnlacesDePrueba;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.Familias;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza;
@@ -55,10 +56,10 @@ import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.con
  * Sprint 4: el acceso en línea del apoderado. Lo da Promotoría o Administración desde la ficha del apoderado (nunca
  * desde Usuarios), queda enlazado a ESE apoderado y se quita con motivo.
  * <p>
- * Correcciones del sprint 4 (S4-M2): quien lo crea ya no ve ninguna clave. Recibe un enlace de UN solo uso que vence;
- * con él, el apoderado confirma su documento y elige su clave. La activación y el primer ingreso quedan en la bitácora
- * con su IP; si la activación viene de la misma IP de quien creó la cuenta, Promotoría lo ve como alerta. Solo
- * Promotoría restablece el acceso (el enlace anterior deja de servir).
+ * Correcciones del sprint 4 (S4-M2) y sprint 5 (A2, G7): quien lo crea no ve ninguna clave NI el enlace. El enlace de
+ * UN solo uso lo genera el proceso de envío y llega directo al celular (o correo) registrado del apoderado; con él, el
+ * apoderado confirma su documento y elige su clave. La activación y el primer ingreso quedan en la bitácora con su IP.
+ * Solo Promotoría restablece el acceso (el enlace anterior deja de servir).
  */
 @PruebaIntegracion
 @Import(ConfiguracionRelojAjustable.class)
@@ -98,12 +99,23 @@ class AccesoApoderadosTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comunicacion.proceso.DespachoMensajes despacho;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comunicacion.proveedor.BuzonSimulado buzon;
+
+	private static final String CELULAR_ROSA = "+51" + EscenarioEscolar.CELULAR_ROSA;
+
+	private static final String CELULAR_PEDRO = "+51912345678";
+
 	private Familias f;
 
 	@BeforeEach
 	void preparar() {
 		reloj.fijar(ConfiguracionRelojAjustable.INICIO);
 		LimpiezaBaseDatos.limpiar(jdbc);
+		buzon.vaciar();
 		f = EscenarioCaja.preparar(estructura, alumnos, planes, jdbc);
 	}
 
@@ -124,7 +136,10 @@ class AccesoApoderadosTest {
 		var creado = acceso.darAcceso(f.rosa());
 		SecurityContextHolder.clearContext();
 
-		Usuario usuario = ContextoColegio.en(1L, () -> usuarios.findById(creado.id()).orElseThrow());
+		// Quien da el acceso solo ve a dónde se envió, nunca el enlace.
+		assertThat(creado.enviadoA()).isEqualTo("Enlace enviado a WhatsApp +51 *** *** 321");
+		assertThat(creado.toString()).doesNotContain("/activar/");
+		Usuario usuario = ContextoColegio.en(1L, () -> usuarios.findById(creado.usuarioId()).orElseThrow());
 		assertThat(usuario.getNombreUsuario()).isEqualTo(EscenarioEscolar.DNI_ROSA);
 		assertThat(usuario.getRoles()).containsExactly(Rol.APODERADO);
 		assertThat(usuario.getApoderadoId()).isEqualTo(f.rosa());
@@ -136,9 +151,10 @@ class AccesoApoderadosTest {
 				.hasMessageContaining("ya tiene");
 		SecurityContextHolder.clearContext();
 
-		// El enlace: un token de 256 bits; en la base solo su SHA-256.
-		String ruta = creado.enlace();
+		// El enlace llega al celular de Rosa: un token de 256 bits; en la base solo su SHA-256 (y en el mensaje, nada).
+		String ruta = EnlacesDePrueba.recibido(despacho, buzon, 1L, CELULAR_ROSA);
 		String token = token(ruta);
+		assertThat(contar(jdbc, "mensaje WHERE parametros LIKE '%" + token + "%'")).isZero();
 		assertThat(contar(jdbc, "enlace_activacion WHERE hash_token = '" + EnlacesActivacion.hash(token) + "'"))
 				.isEqualTo(1);
 		assertThat(contar(jdbc, "evento_auditoria WHERE detalle LIKE '%" + token + "%'")).isZero();
@@ -171,27 +187,28 @@ class AccesoApoderadosTest {
 		assertThat(ingreso.getResponse().getRedirectedUrl()).doesNotContain("error").doesNotContain("vencida");
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'INGRESO_EXITOSO' AND detalle LIKE 'PRIMER ingreso%'"))
 				.isEqualTo(1);
-		Usuario activo = ContextoColegio.en(1L, () -> usuarios.findById(creado.id()).orElseThrow());
+		Usuario activo = ContextoColegio.en(1L, () -> usuarios.findById(creado.usuarioId()).orElseThrow());
 		mvc.perform(get("/familia").with(UsuariosDePrueba.como(activo)))
 				.andExpect(status().isOk()).andExpect(content().string(containsString("Mateo")));
 
 		como(EscenarioCobranza.ADMINISTRACION);
 		acceso.quitarAcceso(f.rosa(), "La familia pidió cerrar la cuenta en línea");
-		assertThat(ContextoColegio.en(1L, () -> usuarios.findById(creado.id()).orElseThrow().isActivo())).isFalse();
+		assertThat(ContextoColegio.en(1L, () -> usuarios.findById(creado.usuarioId()).orElseThrow().isActivo())).isFalse();
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'ACCESO_APODERADO_QUITADO'")).isEqualTo(1);
 	}
 
 	@Test
 	void soloPromotoriaRestableceElAccesoYElEnlaceAnteriorDejaDeServir() {
 		como(EscenarioCobranza.ADMINISTRACION);
-		String primero = token(acceso.darAcceso(f.rosa()).enlace());
+		acceso.darAcceso(f.rosa());
+		String primero = token(EnlacesDePrueba.recibido(despacho, buzon, 1L, CELULAR_ROSA));
 		assertThatThrownBy(() -> acceso.restablecerAcceso(f.rosa())).isInstanceOfAny(AccessDeniedException.class,
 				AuthorizationDeniedException.class);
 
 		como(EscenarioCobranza.PROMOTORIA);
 		var restablecido = acceso.restablecerAcceso(f.rosa());
-		String segundo = token(restablecido.enlace());
 		SecurityContextHolder.clearContext();
+		String segundo = token(EnlacesDePrueba.recibido(despacho, buzon, 1L, CELULAR_ROSA));
 
 		assertThat(segundo).isNotEqualTo(primero);
 		assertThat(activacion.vista(1L, primero)).isEmpty();
@@ -214,48 +231,34 @@ class AccesoApoderadosTest {
 	}
 
 	@Test
-	void desdeLaFichaSeEntregaUnEnlaceYSiSeActivaDesdeLaMismaIpPromotoriaLoVe() throws Exception {
+	void desdeLaFichaElEnlaceVaDirectoAlTitularYLaPantallaNoLoMuestra() throws Exception {
 		mvc.perform(get("/alumnos/apoderados/" + f.pedro()).with(UsuariosDePrueba.como(EscenarioCobranza.ADMINISTRACION)))
 				.andExpect(status().isOk()).andExpect(content().string(containsString("Acceso en línea")));
-		String pagina = mvc.perform(post("/alumnos/apoderados/" + f.pedro() + "/acceso").with(csrf())
+		mvc.perform(post("/alumnos/apoderados/" + f.pedro() + "/acceso").with(csrf())
 				.with(UsuariosDePrueba.como(EscenarioCobranza.ADMINISTRACION)))
 				.andExpect(status().isOk()).andExpect(content().string(containsString(EscenarioCaja.DNI_PEDRO)))
-				.andExpect(content().string(containsString("un solo uso")))
-				.andExpect(content().string(not(containsString("Clave temporal"))))
-				.andReturn().getResponse().getContentAsString();
+				.andExpect(content().string(containsString("Enlace enviado a WhatsApp +51 *** *** 678")))
+				.andExpect(content().string(not(containsString("/activar/"))))
+				.andExpect(content().string(not(containsString("Clave temporal"))));
 		mvc.perform(post("/alumnos/apoderados/" + f.rosa() + "/acceso").with(csrf())
 				.with(UsuariosDePrueba.como(EscenarioCaja.CAJA)))
 				.andExpect(status().isForbidden());
 		assertThat(contar(jdbc, "usuario WHERE apoderado_id IS NOT NULL")).isEqualTo(1);
+		// El mensaje de activación nace sin token: el enlace se genera recién al enviarlo.
+		assertThat(contar(jdbc, "mensaje WHERE tipo = 'ACTIVACION_CUENTA' AND estado = 'PENDIENTE'")).isEqualTo(1);
+		assertThat(contar(jdbc, "enlace_activacion")).isZero();
 
-		// Quien creó la cuenta la activa desde su propia conexión: queda resaltado y Promotoría lo ve.
-		mvc.perform(post(rutaEn(pagina)).with(csrf()).param("documento", EscenarioCaja.DNI_PEDRO)
-				.param("clave", CLAVE_ROSA).param("confirmacion", CLAVE_ROSA))
-				.andExpect(redirectedUrl("/login?cuenta-activada"));
-		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'ACCESO_APODERADO_ACTIVADO' AND detalle LIKE "
-				+ "'%MISMA IP%'")).isEqualTo(1);
-
-		// Rosa la activa desde su celular (otra IP): sin alerta.
-		String paginaRosa = mvc.perform(post("/alumnos/apoderados/" + f.rosa() + "/acceso").with(csrf())
-				.with(UsuariosDePrueba.como(EscenarioCobranza.ADMINISTRACION))).andReturn().getResponse()
-				.getContentAsString();
-		mvc.perform(post(rutaEn(paginaRosa)).with(csrf()).with(r -> {
+		// Pedro lo recibe en su celular y activa su cuenta.
+		String ruta = EnlacesDePrueba.recibido(despacho, buzon, 1L, CELULAR_PEDRO);
+		assertThat(contar(jdbc, "enlace_activacion e JOIN mensaje m ON m.id = e.mensaje_id WHERE m.estado = 'ENVIADO' "
+				+ "AND e.proposito = 'APODERADO'")).isEqualTo(1);
+		mvc.perform(post(ruta).with(csrf()).with(r -> {
 			r.setRemoteAddr("181.65.10.20");
 			return r;
-		}).param("documento", EscenarioEscolar.DNI_ROSA).param("clave", CLAVE_ROSA).param("confirmacion", CLAVE_ROSA))
+		}).param("documento", EscenarioCaja.DNI_PEDRO).param("clave", CLAVE_ROSA).param("confirmacion", CLAVE_ROSA))
 				.andExpect(redirectedUrl("/login?cuenta-activada"));
-
-		como(EscenarioCobranza.PROMOTORIA);
-		List<AlertaRevision> alertas = alertasActivacion.alertas();
-		assertThat(alertas).singleElement().satisfies(a -> {
-			assertThat(a.gravedad()).isEqualTo(AlertaRevision.Gravedad.ATENCION);
-			assertThat(a.texto()).contains("Pedro").contains("misma conexión");
-			assertThat(a.enlace()).isEqualTo("/auditoria?accion=ACCESO_APODERADO_ACTIVADO");
-		});
-		como(EscenarioCobranza.ADMINISTRACION);
-		assertThatThrownBy(() -> alertasActivacion.alertas()).isInstanceOfAny(AccessDeniedException.class,
-				AuthorizationDeniedException.class);
-		SecurityContextHolder.clearContext();
+		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'ACCESO_APODERADO_ACTIVADO'")).isEqualTo(1);
+		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'ENLACE_ACTIVACION_ENVIADO'")).isEqualTo(1);
 
 		// Solo Promotoría ve el botón (en la familia) y puede restablecer; vuelve a la familia.
 		mvc.perform(get("/alumnos/familias/" + f.flores()).with(UsuariosDePrueba.como(EscenarioCobranza.PROMOTORIA)))
@@ -278,11 +281,5 @@ class AccesoApoderadosTest {
 		Matcher m = ENLACE.matcher(enlace);
 		assertThat(m.matches()).as(enlace).isTrue();
 		return m.group(2);
-	}
-
-	private static String rutaEn(String pagina) {
-		Matcher m = ENLACE.matcher(pagina);
-		assertThat(m.find()).as("la página muestra el enlace").isTrue();
-		return m.group();
 	}
 }

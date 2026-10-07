@@ -106,7 +106,8 @@ class ReglasArquitecturaTest {
 	@ArchTest
 	static final ArchRule entidadesDeNegocioExtiendenBaseEntity = classes()
 			.that().areAnnotatedWith(Entity.class)
-			.and().doNotBelongToAnyOf(Colegio.class, EventoAuditoria.class, EslabonCadena.class)
+			.and().doNotBelongToAnyOf(Colegio.class, EventoAuditoria.class, EslabonCadena.class,
+					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionBd.class)
 			.should().beAssignableTo(BaseEntity.class)
 			.because("BaseEntity aporta colegioId (@TenantId), autoría y versión");
 
@@ -334,14 +335,87 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#reembolsarEnLinea", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados#restablecerAcceso", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados#conCuentaActiva", LECTURA_ESCOLAR),
-			Map.entry(BASE + ".seguridad.service.AlertasActivacion", "hasRole('PROMOTOR')"));
+			Map.entry(BASE + ".seguridad.service.AlertasActivacion", "hasRole('PROMOTOR')"),
+			// Sprint 5, tanda 1: el enlace lo genera solo sistema.mensajeria; la huella, solo sistema.auditoria; la
+			// bandeja de envíos la ven Promotoría, Dirección y Administración (solo esta adelanta un reintento); el
+			// historial, el apoderado de SU familia.
+			Map.entry(BASE + ".seguridad.service.EnlacesActivacion#generarParaMensaje", "hasRole('SISTEMA_MENSAJERIA')"),
+			Map.entry(BASE + ".auditoria.service.HuellasDiarias", "hasRole('SISTEMA_AUDITORIA')"),
+			Map.entry(BASE + ".auditoria.service.VerificadorIntegridadAuditoria#verificarComoSistema",
+					"hasRole('SISTEMA_AUDITORIA')"),
+			Map.entry(BASE + ".auditoria.service.AlertasHuella", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".comunicacion.service.ConsultaMensajes", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".comunicacion.service.ConsultaMensajes#reintentar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".comunicacion.service.ConsultaMensajes#historialDeMiFamilia", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".comunicacion.service.AlertasComunicacion", "hasRole('PROMOTOR')"));
 
-	/** S4-M2: el enlace de activación lo generan solo los servicios protegidos que dan o restablecen el acceso. */
+	/**
+	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para
+	 * anular los enlaces anteriores) y el proceso de envío (que genera el enlace nuevo).
+	 */
 	@ArchTest
 	static final ArchRule enlacesActivacionSoloDesdeServiciosProtegidos = noClasses()
 			.that().resideOutsideOfPackages(BASE + ".alumnos.service..", BASE + ".seguridad.service..")
+			.and().doNotHaveFullyQualifiedName(BASE + ".comunicacion.proceso.DespachoMensajes")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".seguridad.service.EnlacesActivacion")
-			.because("EnlacesActivacion no exige rol: el permiso lo exige ServicioAccesoApoderados");
+			.because("EnlacesActivacion anula sin exigir rol: el permiso lo exige quien da o restablece el acceso");
+
+	/** Sprint 5 (G7): el token del enlace se genera SOLO en el envío, dentro del proceso de sistema.mensajeria. */
+	@ArchTest
+	static final ArchRule enlacesSoloDesdeDespachoMensajes = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".comunicacion.proceso.DespachoMensajes")
+			.should().callMethodWhere(new DescribedPredicate<>("EnlacesActivacion.generarParaMensaje") {
+				@Override
+				public boolean test(JavaMethodCall llamada) {
+					return llamada.getTargetOwner().getName().equals(BASE + ".seguridad.service.EnlacesActivacion")
+							&& llamada.getName().equals("generarParaMensaje");
+				}
+			})
+			.because("quien da el acceso nunca ve el enlace: lo genera el proceso de envío al enviarlo");
+
+	/** Sprint 5: caja, cobranza, alumnos, seguridad y auditoría publican eventos; la mensajería los escucha. */
+	@ArchTest
+	static final ArchRule cajaCobranzaAlumnosSeguridadNoDependenDeComunicacion = noClasses()
+			.that().resideInAnyPackage(BASE + ".caja..", BASE + ".cobranza..", BASE + ".comprobantes..",
+					BASE + ".alumnos..", BASE + ".seguridad..", BASE + ".auditoria..", BASE + ".comun..",
+					BASE + ".pasarela..", BASE + ".recaudacion..", BASE + ".conciliacion..")
+			.should().dependOnClassesThat().resideInAPackage(BASE + ".comunicacion..")
+			.because("los módulos financieros publican PagoRegistrado, PagoAnulado o DescuentoAprobado y no conocen la "
+					+ "mensajería");
+
+	/** Sprint 5 (G11): la mensajería simulada solo existe en dev, test y piloto (nunca en prod). */
+	@ArchTest
+	static final ArchRule simuladosDeComunicacionSoloEnDevTestPiloto = classes()
+			.that(new DescribedPredicate<JavaClass>("son clases de comunicacion que terminan en Simulado") {
+				@Override
+				public boolean test(JavaClass clase) {
+					return clase.getPackageName().startsWith(BASE + ".comunicacion")
+							&& clase.getSimpleName().endsWith("Simulado");
+				}
+			})
+			.should(new ArchCondition<>("estar anotadas con @Profile({\"dev\", \"test\", \"piloto\"})") {
+				@Override
+				public void check(JavaClass clase, ConditionEvents eventos) {
+					boolean ok = clase.tryGetAnnotationOfType(org.springframework.context.annotation.Profile.class)
+							.map(p -> Set.of(p.value()).equals(Set.of("dev", "test", "piloto"))).orElse(false);
+					if (!ok) {
+						eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " no está limitada a dev, test y "
+								+ "piloto"));
+					}
+				}
+			})
+			.because("la mensajería simulada no avisa a nadie: en producción los padres dejarían de ser auditores");
+
+	/** Sprint 5: los mensajes no se borran ni se editan por consulta (solo cambian por sus métodos). */
+	@ArchTest
+	static final ArchRule repositoriosDeComunicacionSinModifyingNiBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".comunicacion.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("el mensaje es el registro del aviso a la familia: no se borra ni se reescribe")
+			.allowEmptyShould(true);
 
 	@ArchTest
 	static void serviciosSensiblesExigenRol(JavaClasses clases) {

@@ -67,6 +67,14 @@ public class Apoderado extends BaseEntity {
 	@Column(name = "facturacion_solicitud_id")
 	private Long facturacionSolicitudId;
 
+	/**
+	 * Sprint 5 (hallazgo 4): la solicitud CAMBIO_CONTACTO_APODERADO aprobada que fijó el celular y el correo actuales. El
+	 * apoderado nace sin ella; en MySQL, trg_apoderado_facturacion exige SU solicitud aprobada para cada cambio, y
+	 * trg_mensaje_nace solo escribe a un contacto que también es del personal si otra persona lo aprobó.
+	 */
+	@Column(name = "contacto_solicitud_id")
+	private Long contactoSolicitudId;
+
 	protected Apoderado() {
 		// requerido por JPA
 	}
@@ -185,6 +193,15 @@ public class Apoderado extends BaseEntity {
 
 	public String getRazonSocial() {
 		return razonSocial;
+	}
+
+	/** El contacto cambió con la solicitud aprobada {@code solicitudId} (en MySQL lo exige trg_apoderado_facturacion). */
+	public void registrarSolicitudContacto(Long solicitudId) {
+		contactoSolicitudId = Objects.requireNonNull(solicitudId, "solicitudId");
+	}
+
+	public Long getContactoSolicitudId() {
+		return contactoSolicitudId;
 	}
 
 	public Long getFacturacionSolicitudId() {

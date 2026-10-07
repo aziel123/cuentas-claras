@@ -53,6 +53,11 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
+		<!-- Sprint 5 (decisión 39): correo de respaldo por SMTP. Única dependencia nueva del sprint; apagado por defecto. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
 
 		<!-- Excel (.xlsx): solo lo usa comun.excel, en modo streaming y endurecido (regla ArchUnit) -->
 		<dependency>

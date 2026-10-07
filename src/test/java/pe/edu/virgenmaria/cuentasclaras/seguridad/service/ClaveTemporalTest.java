@@ -14,6 +14,7 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.service.ConsultaAuditoriaServi
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.EventoVista;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.FiltroBitacora;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EnlacesDePrueba;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.LimpiezaBaseDatos;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PruebaIntegracion;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable;
@@ -41,9 +42,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 
 /**
- * Mitigación de suplantación (hasta que en el sprint 4 la clave temporal llegue directo al titular):
- * la clave temporal vence a las 48 horas, el titular ve quién restableció su clave, Promotoría ve qué revisar
- * y la bitácora marca "Revisar" los restablecimientos y las altas sensibles.
+ * Mitigación de suplantación. Sprint 5 (A2): ya no hay clave temporal visible; el enlace de un solo uso llega DIRECTO al
+ * celular del titular y vence a las 48 horas. El titular ve quién restableció su acceso, Promotoría ve qué revisar y la
+ * bitácora marca "Revisar" los restablecimientos y las altas sensibles.
  */
 @PruebaIntegracion
 @Import(ConfiguracionRelojAjustable.class)
@@ -70,6 +71,15 @@ class ClaveTemporalTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comunicacion.proceso.DespachoMensajes despacho;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comunicacion.proveedor.BuzonSimulado buzon;
+
+	@Autowired
+	private ServicioActivacionCuenta activacion;
+
 	private Usuario promotora;
 
 	private Usuario director;
@@ -77,6 +87,7 @@ class ClaveTemporalTest {
 	@BeforeEach
 	void preparar() {
 		LimpiezaBaseDatos.limpiar(jdbc);
+		buzon.vaciar();
 		reloj.fijar(ConfiguracionRelojAjustable.INICIO);
 		promotora = guardar("promotora", "María Elena Torres", Rol.PROMOTOR);
 		director = guardar("director", "Jorge Salazar", Rol.DIRECTOR);
@@ -91,29 +102,41 @@ class ClaveTemporalTest {
 	}
 
 	@Test
-	void laClaveTemporalVenceALas48Horas() throws Exception {
+	void elEnlaceDelPersonalVenceALas48HorasYNadieMasLoVe() throws Exception {
 		UsuarioCreado primero = crear("pedro.caja", Rol.CAJA);
 		UsuarioCreado segundo = crear("rosa.caja", Rol.CAJA);
+		assertThat(primero.enviadoA()).startsWith("Enlace enviado a WhatsApp +51 *** ***");
+		String rutaPedro = EnlacesDePrueba.recibido(despacho, buzon, 1L, celular("pedro.caja"));
+		String rutaRosa = EnlacesDePrueba.recibido(despacho, buzon, 1L, celular("rosa.caja"));
+		// Con la clave al azar no entra nadie: nunca se mostró y ya venció.
+		ingresar("pedro.caja", "cualquier-clave-123").andExpect(redirectedUrl("/login?error"));
 
 		reloj.avanzar(Duration.ofHours(47).plusMinutes(59));
-		ingresar("pedro.caja", primero.claveTemporal()).andExpect(redirectedUrl("/cuenta/cambiar-clave"));
+		assertThat(activacion.vista(1L, EnlacesDePrueba.token(rutaPedro))).hasValueSatisfying(v ->
+				assertThat(v.personal()).isTrue());
+		mvc.perform(post(rutaPedro).with(csrf()).param("documento", "pedro.caja").param("clave", CLAVE_PEDRO)
+				.param("confirmacion", CLAVE_PEDRO)).andExpect(redirectedUrl("/login?cuenta-activada"));
+		ingresar("pedro.caja", CLAVE_PEDRO).andExpect(redirectedUrl("/inicio"));
+		assertThat(contar("ACCESO_PERSONAL_ACTIVADO")).isEqualTo(1);
 
 		reloj.avanzar(Duration.ofMinutes(1));
-		ingresar("rosa.caja", segundo.claveTemporal()).andExpect(redirectedUrl("/login?vencida"));
-		mvc.perform(get("/login").param("vencida", ""))
-				.andExpect(content().string(containsString("Tu clave temporal venció: dura 48 horas")));
-		assertThat(contar("INGRESO_RECHAZADO_CLAVE_VENCIDA")).isEqualTo(1);
+		mvc.perform(get(rutaRosa)).andExpect(content().string(containsString("Este enlace ya no sirve")));
 	}
 
 	@Test
-	void unaClaveVencidaSeRestableceConOtras48Horas() throws Exception {
+	void unEnlaceVencidoSeRestableceConOtroDe48Horas() throws Exception {
 		UsuarioCreado creado = crear("pedro.caja", Rol.CAJA);
+		String primero = EnlacesDePrueba.recibido(despacho, buzon, 1L, celular("pedro.caja"));
 		reloj.avanzar(Duration.ofHours(49));
-		ingresar("pedro.caja", creado.claveTemporal()).andExpect(redirectedUrl("/login?vencida"));
+		mvc.perform(get(primero)).andExpect(content().string(containsString("Este enlace ya no sirve")));
 
-		UsuarioCreado nueva = conSesion(promotora, () -> servicio.restablecerClave(creado.id(), "La clave temporal le venció"));
-
-		ingresar("pedro.caja", nueva.claveTemporal()).andExpect(redirectedUrl("/cuenta/cambiar-clave"));
+		UsuarioCreado nueva = conSesion(promotora, () -> servicio.restablecerClave(creado.id(), "El enlace le venció"));
+		assertThat(nueva.enviadoA()).doesNotContain("/activar/");
+		String segundo = EnlacesDePrueba.recibido(despacho, buzon, 1L, celular("pedro.caja"));
+		assertThat(segundo).isNotEqualTo(primero);
+		mvc.perform(post(segundo).with(csrf()).param("documento", "pedro.caja").param("clave", CLAVE_PEDRO)
+				.param("confirmacion", CLAVE_PEDRO)).andExpect(redirectedUrl("/login?cuenta-activada"));
+		ingresar("pedro.caja", CLAVE_PEDRO).andExpect(redirectedUrl("/inicio"));
 	}
 
 	@Test
@@ -180,7 +203,8 @@ class ClaveTemporalTest {
 
 	private UsuarioCreado crear(String nombreUsuario, Rol rol) {
 		return conSesion(promotora,
-				() -> servicio.crear(new CrearUsuarioRequest("Nombre de " + nombreUsuario, nombreUsuario, null, Set.of(rol))));
+				() -> servicio.crear(new CrearUsuarioRequest("Nombre de " + nombreUsuario, nombreUsuario, null,
+						celular(nombreUsuario).substring(3), Set.of(rol))));
 	}
 
 	/** Llama al servicio con un usuario en sesión y la limpia: si no, MockMvc la usaría en las peticiones siguientes. */
@@ -198,6 +222,13 @@ class ClaveTemporalTest {
 		Usuario usuario = UsuariosDePrueba.guardar(usuarios, codificador, 1L, nombre, UsuariosDePrueba.CLAVE, false, rol);
 		jdbc.update("UPDATE usuario SET nombre_completo = ? WHERE id = ?", nombreCompleto, usuario.getId());
 		return usuario;
+	}
+
+	private static final String CLAVE_PEDRO = "la clave que elegi para caja 2026";
+
+	/** Un celular distinto por usuario (+519XXXXXXXX). */
+	static String celular(String nombreUsuario) {
+		return UsuariosDePrueba.celular(nombreUsuario);
 	}
 
 	private ResultActions ingresar(String usuario, String clave) throws Exception {

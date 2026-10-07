@@ -77,8 +77,12 @@ public class ManejadorDescuento implements ManejadorSolicitud {
 
 	private final Clock reloj;
 
+	private final org.springframework.context.ApplicationEventPublisher eventos;
+
 	public ManejadorDescuento(DescuentoRepository descuentos, AjusteCuotaRepository ajustes, CuotaRepository cuotas,
-			AlumnoRepository alumnos, MatriculaRepository matriculas, AuditoriaService auditoria, Clock reloj) {
+			AlumnoRepository alumnos, MatriculaRepository matriculas, AuditoriaService auditoria, Clock reloj,
+			org.springframework.context.ApplicationEventPublisher eventos) {
+		this.eventos = eventos;
 		this.descuentos = descuentos;
 		this.ajustes = ajustes;
 		this.cuotas = cuotas;
@@ -144,6 +148,8 @@ public class ManejadorDescuento implements ManejadorSolicitud {
 							+ Dinero.formatear(e.getValue()) + ". Pedido por " + solicitud.getSolicitadoPor()
 							+ ", aprobado por " + aprobador + ". Sustento: " + descuento.getSustento());
 		}
+		eventos.publishEvent(new DescuentoAprobado(descuento.getId(), descuento.getAlumno().getId(),
+				calculo.keySet().stream().map(Cuota::getId).toList(), total, aprobador));
 	}
 
 	@Override

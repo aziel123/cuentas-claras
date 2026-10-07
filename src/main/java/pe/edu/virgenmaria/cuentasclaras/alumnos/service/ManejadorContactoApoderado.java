@@ -12,8 +12,9 @@ import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.ManejadorSolicitud;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 
 /**
- * Cambio de celular o correo de un apoderado aprobado por otra persona (auditoría A4). Sprint 4: avisará también al
- * contacto anterior.
+ * Cambio de celular o correo de un apoderado aprobado por otra persona (auditoría A4). Sprint 5: el apoderado guarda la
+ * solicitud que lo aprobó ({@code contacto_solicitud_id}) y la mensajería avisa al contacto ANTERIOR
+ * ({@link ContactoCambiado}).
  */
 @Component
 @Transactional(propagation = Propagation.MANDATORY)
@@ -37,7 +38,7 @@ public class ManejadorContactoApoderado implements ManejadorSolicitud {
 	public void aplicar(SolicitudCambio solicitud, String aprobador) {
 		Apoderado apoderado = apoderados.findById(solicitud.getEntidadId())
 				.orElseThrow(() -> new ReglaNegocioException("El apoderado de la solicitud no existe."));
-		registro.cambiarContactoAprobado(apoderado, DatosSolicitud.leer(solicitud.getDatos()), solicitud.getMotivo(),
+		registro.cambiarContactoAprobado(apoderado, solicitud.getId(), DatosSolicitud.leer(solicitud.getDatos()), solicitud.getMotivo(),
 				solicitud.getSolicitadoPor(), aprobador);
 	}
 }

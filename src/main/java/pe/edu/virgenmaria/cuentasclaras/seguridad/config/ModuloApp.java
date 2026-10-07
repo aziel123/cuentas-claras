@@ -65,6 +65,10 @@ public enum ModuloApp {
 			"Sprint 4", true, "/comprobantes", new String[] { "/comprobantes", "/comprobantes/**" },
 			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 
+	MENSAJES("Mensajes a las familias", "Avisos de pago, anulación y descuento que salen solos por WhatsApp o correo: los "
+			+ "que fallaron, los pendientes y los de hoy.", "Sprint 5", true, "/mensajes",
+			new String[] { "/mensajes", "/mensajes/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+
 	PANEL("Panel del colegio", "Cuánto entró hoy, la morosidad y las alertas de caja, desde tu celular.", "Sprint 5",
 			false, "/panel", new String[] { "/panel", "/panel/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
 	REPORTES("Reportes", "Reportes de cobranza y exportación a Excel.", "Sprint 5", false, "/reportes",
@@ -90,6 +94,9 @@ public enum ModuloApp {
 	public static final String RUTAS_WEBHOOK = "/webhooks/**";
 
 	public static final String RUTA_WEBHOOK_PASARELA = "/webhooks/pasarela/*/*";
+
+	/** Sprint 5: avisos de estado de WhatsApp (POST firmado) y su verificación (GET con hub.challenge). */
+	public static final String RUTA_WEBHOOK_WHATSAPP = "/webhooks/whatsapp/*";
 
 	/** Única ruta para quien inició sesión con una clave temporal (autoridad {@code CLAVE_PENDIENTE}). */
 	public static final String RUTA_CAMBIAR_CLAVE = "/cuenta/cambiar-clave";

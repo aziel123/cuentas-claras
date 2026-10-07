@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Mensajes', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="mensajes-bandeja" th:with="b=${bandeja}">
+	<div class="cabecera">
+		<div>
+			<h1>Mensajes a las familias</h1>
+			<p class="secundario">Cada pago, anulación y descuento avisa solo a la familia por WhatsApp o correo. Aquí ves los que fallaron, los que esperan y los de hoy. Nadie edita el destino ni el texto.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<ul class="conteos" aria-label="Resumen">
+		<li><strong th:text="${#lists.size(b.fallidos)}">0</strong><span>No se pudieron enviar</span></li>
+		<li><strong th:text="${#lists.size(b.pendientes)}">0</strong><span>Esperan más de 15 min</span></li>
+		<li><strong th:text="${#lists.size(b.hoy)}">0</strong><span>De hoy</span></li>
+	</ul>
+
+	<section class="tarjeta" aria-labelledby="titulo-fallidos" data-seccion="fallidos">
+		<h2 id="titulo-fallidos">No se pudieron enviar</h2>
+		<th:block th:if="${#lists.isEmpty(b.fallidos)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Ninguno', 'Todos los mensajes salieron.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(b.fallidos)}">
+			<thead><tr><th scope="col">Fecha</th><th scope="col">Tipo</th><th scope="col">Canal</th><th scope="col">Destino</th><th scope="col">Qué pasó</th></tr></thead>
+			<tbody>
+				<tr th:each="m : ${b.fallidos}" th:data-mensaje="${m.id}">
+					<td data-etiqueta="Fecha" th:text="${#temporals.format(m.creadoEn, 'dd/MM HH:mm')}">05/10 10:40</td>
+					<td data-etiqueta="Tipo" th:text="${m.tipo}">Pago registrado</td>
+					<td data-etiqueta="Canal" th:text="${m.canal}">WhatsApp</td>
+					<td data-etiqueta="Destino" th:text="${m.destino}">+51 *** *** 321</td>
+					<td data-etiqueta="Qué pasó" th:text="${m.ultimoError != null} ? ${m.ultimoError} : '—'">—</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-pendientes" data-seccion="pendientes">
+		<h2 id="titulo-pendientes">Esperan más de 15 minutos</h2>
+		<th:block th:if="${#lists.isEmpty(b.pendientes)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Ninguno', 'No hay mensajes atrasados.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(b.pendientes)}">
+			<thead><tr><th scope="col">Fecha</th><th scope="col">Tipo</th><th scope="col">Canal</th><th scope="col">Destino</th><th scope="col">Intentos</th><th scope="col">Acción</th></tr></thead>
+			<tbody>
+				<tr th:each="m : ${b.pendientes}" th:data-mensaje="${m.id}">
+					<td data-etiqueta="Fecha" th:text="${#temporals.format(m.creadoEn, 'dd/MM HH:mm')}">05/10 10:40</td>
+					<td data-etiqueta="Tipo" th:text="${m.tipo}">Pago registrado</td>
+					<td data-etiqueta="Canal" th:text="${m.canal}">WhatsApp</td>
+					<td data-etiqueta="Destino" th:text="${m.destino}">+51 *** *** 321</td>
+					<td data-etiqueta="Intentos" th:text="${m.intentos}">2</td>
+					<td data-etiqueta="Acción">
+						<form th:if="${m.puedeReintentar}" method="post" th:action="@{/mensajes/{id}/reintentar(id=${m.id})}">
+							<button type="submit" class="btn btn-chico btn-secundario">Reintentar ahora</button>
+						</form>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-hoy" data-seccion="hoy">
+		<h2 id="titulo-hoy">De hoy</h2>
+		<th:block th:if="${#lists.isEmpty(b.hoy)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay mensajes hoy', 'Cuando se registre un pago, su aviso aparecerá aquí.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(b.hoy)}">
+			<thead><tr><th scope="col">Hora</th><th scope="col">Tipo</th><th scope="col">Canal</th><th scope="col">Destino</th><th scope="col">Estado</th></tr></thead>
+			<tbody>
+				<tr th:each="m : ${b.hoy}" th:data-mensaje="${m.id}">
+					<td data-etiqueta="Hora" th:text="${#temporals.format(m.creadoEn, 'HH:mm')}">10:40</td>
+					<td data-etiqueta="Tipo" th:text="${m.tipo}">Pago registrado</td>
+					<td data-etiqueta="Canal" th:text="${m.canal}">WhatsApp</td>
+					<td data-etiqueta="Destino" th:text="${m.destino}">+51 *** *** 321</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${m.estado}, ${m.variante})}"></span></td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

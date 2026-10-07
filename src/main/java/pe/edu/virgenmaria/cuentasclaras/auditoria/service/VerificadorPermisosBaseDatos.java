@@ -31,6 +31,8 @@ import java.util.stream.Collectors;
  *       {@code cuentasclaras.triggers_instalados()} (02-permisos-tablas.sql) y la compara con {@link #TRIGGERS_ESPERADOS};</li>
  *   <li>que los pagos en línea (sprint 4, tanda 1), la recaudación bancaria (tanda 2) y el extracto con su conciliación
  *       automática (tanda 3) tienen sus GRANT por columna, sus tablas de solo inserción y sus triggers;</li>
+ *   <li>sprint 5: que los mensajes, el enlace con su mensaje y la huella diaria tienen sus GRANT, sus triggers y que en
+ *       prod la base no admite la mensajería simulada;</li>
  *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes).</li>
  * </ul>
  * Si algo falla, la aplicación NO arranca. No hay interruptor para saltarse esta comprobación.
@@ -216,7 +218,33 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			sinBorrado("enlace_activacion"),
 			columna("UPDATE enlace_activacion SET hash_token = hash_token WHERE 1 = 0", "enlace_activacion"),
 			columna("UPDATE enlace_activacion SET vence_en = vence_en WHERE 1 = 0", "enlace_activacion"),
-			columna("UPDATE enlace_activacion SET usuario_id = usuario_id WHERE 1 = 0", "enlace_activacion"));
+			columna("UPDATE enlace_activacion SET usuario_id = usuario_id WHERE 1 = 0", "enlace_activacion"),
+			// Sprint 5, tanda 1 (V17): los mensajes no se borran ni cambian su destino, sus parámetros ni su destinatario;
+			// el enlace no cambia su mensaje; la huella diaria es de solo inserción; y cada trigger nuevo rechaza su
+			// inserción imposible (un mensaje que nace ENVIADO, un enlace sin su mensaje y una huella que no coincide).
+			sinBorrado("mensaje"), sinBorrado("huella_bitacora"), soloInsercion("huella_bitacora"),
+			columna("UPDATE mensaje SET destino = destino WHERE 1 = 0", "mensaje"),
+			columna("UPDATE mensaje SET parametros = parametros WHERE 1 = 0", "mensaje"),
+			columna("UPDATE mensaje SET apoderado_id = apoderado_id WHERE 1 = 0", "mensaje"),
+			columna("UPDATE enlace_activacion SET mensaje_id = mensaje_id WHERE 1 = 0", "enlace_activacion"),
+			trigger("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, usuario_id, destino, plantilla, "
+					+ "parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'verificador', 'HUELLA_BITACORA', "
+					+ "'CORREO', 'USUARIO', 0, 'x@y.pe', 'verificador', '', 'ENVIADO', NOW(6), 'verificador', NOW(6))",
+					"trg_mensaje_nace"),
+			trigger("INSERT INTO enlace_activacion (colegio_id, usuario_id, hash_token, vence_en, mensaje_id, proposito, "
+					+ "creado_en, creado_por, actualizado_en) VALUES (0, 0, REPEAT('0', 64), NOW(6) + INTERVAL 1 HOUR, 0, "
+					+ "'PERSONAL', NOW(6), 'verificador', NOW(6))", "trg_enlace_activacion_nace"),
+			trigger("INSERT INTO huella_bitacora (colegio_id, fecha, secuencia, codigo, eventos_del_dia, creado_en, "
+					+ "creado_por, actualizado_en) VALUES (0, '2000-01-01', 1, REPEAT('0', 16), 0, NOW(6), "
+					+ "'sistema.auditoria', NOW(6))", "trg_huella_bitacora_registro"),
+			trigger("INSERT INTO apoderado (colegio_id, familia_id, tipo_documento, numero_documento, apellido_paterno, "
+					+ "nombres, parentesco, nombre_busqueda, activo, contacto_solicitud_id, creado_en, creado_por, "
+					+ "actualizado_en) VALUES (0, 0, 'DNI', '00000000', 'verificador', 'verificador', 'MADRE', "
+					+ "'verificador', TRUE, 1, NOW(6), 'verificador', NOW(6))", "trg_apoderado_nace"));
+
+	/** Sprint 5: la mensajería simulada solo existe en una base habilitada por el DBA (nunca en prod). */
+	static final String SQL_MENSAJERIA_SIMULADA =
+			"SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'mensajeria_simulada'";
 
 	/** Solo en prod: la base no admite órdenes de la pasarela simulada (sin la fila 'pasarela_simulada'). */
 	static final SentenciaProhibida ORDEN_SIMULADA = new SentenciaProhibida(ordenImposible("SIMULADA", "CREADA"),
@@ -248,7 +276,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_lote_recaudacion_nace", "trg_lote_recaudacion_estado", "trg_linea_recaudacion_registro",
 			"trg_linea_recaudacion_estado", "trg_extracto_bancario_nace", "trg_extracto_bancario_estado",
 			"trg_movimiento_bancario_registro", "trg_partida_conciliacion_registro", "trg_partida_conciliacion_estado",
-			"trg_reembolso_pasarela_registro");
+			"trg_reembolso_pasarela_registro", "trg_mensaje_nace", "trg_mensaje_envio", "trg_enlace_activacion_nace",
+			"trg_enlace_activacion_uso", "trg_huella_bitacora_registro");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -360,6 +389,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		LOG.info("Permisos y triggers de caja, comprobantes, anulaciones, descuentos y cierres verificados.");
 		verificarPasarelaSimulada(escribe);
 		LOG.info("Permisos y triggers de pagos en línea, recaudación, conciliación y outbox del OSE verificados.");
+		verificarMensajeriaSimulada(escribe);
+		LOG.info("Permisos y triggers de mensajería, acceso directo al titular y huella diaria verificados.");
 		return escribe;
 	}
 
@@ -390,6 +421,31 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		else if (!habilitada && escribe) {
 			throw new IllegalStateException("En el piloto la base no tiene habilitada la pasarela simulada (falta la fila "
 					+ "'pasarela_simulada' en configuracion_bd, la registra el DBA). Revisa docs/operacion/mysql-usuarios.md.");
+		}
+	}
+
+	/**
+	 * Sprint 5 (G11): en prod la fila 'mensajeria_simulada' NO existe (trg_mensaje_envio rechaza un mensaje simulado);
+	 * en el piloto debe existir (si no, la mensajería simulada no podría marcar nada como enviado).
+	 */
+	private void verificarMensajeriaSimulada(boolean escribe) {
+		Integer filas;
+		try {
+			filas = jdbc.queryForObject(SQL_MENSAJERIA_SIMULADA, Integer.class);
+		}
+		catch (DataAccessException e) {
+			throw new IllegalStateException("No se pudo leer configuracion_bd (código " + codigoMySql(e) + "). Revisa "
+					+ "docs/operacion/mysql-usuarios.md.", e);
+		}
+		boolean habilitada = filas != null && filas > 0;
+		if (produccion && habilitada) {
+			throw new IllegalStateException("La base de PRODUCCIÓN tiene habilitada la mensajería simulada (fila "
+					+ "'mensajeria_simulada' en configuracion_bd): las familias no recibirían sus avisos. El DBA debe borrarla. "
+					+ "Revisa docs/operacion/mysql-usuarios.md.");
+		}
+		if (!produccion && !habilitada && escribe) {
+			throw new IllegalStateException("En el piloto la base no tiene habilitada la mensajería simulada (falta la fila "
+					+ "'mensajeria_simulada' en configuracion_bd, la registra el DBA). Revisa docs/operacion/mysql-usuarios.md.");
 		}
 	}
 

@@ -44,4 +44,16 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 
 	/** Sprint 4: la cuenta en línea de un apoderado (como máximo una: UNIQUE). */
 	Optional<Usuario> findByApoderadoId(Long apoderadoId);
+
+	/** Sprint 5: los activos con un rol (sin bloquear), por ejemplo Promotoría para la huella diaria. */
+	@Query("select u from Usuario u where u.activo = true and :rol member of u.roles order by u.id")
+	List<Usuario> activosConRol(@Param("rol") Rol rol);
+
+	/**
+	 * Sprint 5 (G6): si un celular o correo es de alguien del personal activo (no de una cuenta de apoderado). A un
+	 * apoderado no se le escribe ahí salvo que otra persona haya aprobado ese contacto.
+	 */
+	@Query("select count(u) > 0 from Usuario u where u.activo = true and u.apoderadoId is null "
+			+ "and (u.telefonoWhatsapp = :contacto or lower(u.correo) = lower(:contacto))")
+	boolean esContactoDelPersonal(@Param("contacto") String contacto);
 }

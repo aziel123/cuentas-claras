@@ -10,7 +10,11 @@ public enum ActorSistema {
 	PASARELA("sistema.pasarela"),
 	RECAUDACION("sistema.recaudacion"),
 	CONCILIACION("sistema.conciliacion"),
-	OSE("sistema.ose");
+	OSE("sistema.ose"),
+	/** Sprint 5: envía los mensajes (WhatsApp y correo), reintenta y registra las respuestas del proveedor. */
+	MENSAJERIA("sistema.mensajeria"),
+	/** Sprint 5: guarda y envía la huella diaria de la bitácora y la vuelve a verificar cada mañana. */
+	AUDITORIA("sistema.auditoria");
 
 	/** Prefijo reservado: ninguna persona puede tener un nombre de usuario que empiece así. */
 	public static final String PREFIJO_RESERVADO = "sistema";

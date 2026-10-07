@@ -43,7 +43,7 @@ public class UsuarioController {
 		return "usuarios/formulario";
 	}
 
-	/** Muestra la clave temporal en la misma respuesta (sin redirigir): no queda en la sesión ni en la URL. */
+	/** Muestra a dónde se envió el enlace (enmascarado), en la misma respuesta: nunca una clave ni el enlace. */
 	@PostMapping
 	public String crear(@Valid @ModelAttribute("solicitud") CrearUsuarioRequest solicitud, BindingResult validacion,
 			Model model) {

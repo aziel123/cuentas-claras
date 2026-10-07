@@ -29,6 +29,8 @@ public class NombresUsuarios {
 					case RECAUDACION -> "Recaudación bancaria (automático)";
 					case CONCILIACION -> "Conciliación (automático)";
 					case OSE -> "Envío al OSE (automático)";
+					case MENSAJERIA -> "Mensajería (automático)";
+					case AUDITORIA -> "Huella de la bitácora (automático)";
 				};
 			}
 		}

@@ -10,6 +10,11 @@ spring:
       maximum-pool-size: 50
 
 cuentasclaras:
+  mensajeria:
+    whatsapp:
+      proveedor: SIMULADO
+    correo:
+      proveedor: SIMULADO
   comprobantes:
     # Hallazgo 13 de QA: el envío al OSE corre en el mismo hilo; no quedan hilos vivos entre una prueba y otra.
     envio-sincrono: true

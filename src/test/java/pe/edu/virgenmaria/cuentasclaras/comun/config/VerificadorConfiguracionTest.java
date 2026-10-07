@@ -40,7 +40,7 @@ class VerificadorConfiguracionTest {
 
 	@Test
 	void conPerfilYClaveCorrectosArranca() {
-		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, CLAVE_REAL))
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, config()))
 				.doesNotThrowAnyException();
 		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "dev" }, CLAVE_DEV))
 				.doesNotThrowAnyException();
@@ -50,9 +50,104 @@ class VerificadorConfiguracionTest {
 
 	// Sprint 4, tanda 1: perfiles de despliegue, pasarela y OSE real.
 
+	private static final java.util.Map<String, String> CORREO_REAL = java.util.Map.of(VerificadorConfiguracion.CORREO,
+			"SMTP", VerificadorConfiguracion.SMTP_HOST, "smtp.colegio.pe", VerificadorConfiguracion.CORREO_REMITENTE,
+			"avisos@colegio.pe", VerificadorConfiguracion.CORREO_REAL_FUERA_DE_PROD, "true",
+			VerificadorConfiguracion.CORREO_PRUEBA, "prueba@colegio.pe");
+
+	private static java.util.Map<String, String> sinCorreo(String... pares) {
+		java.util.Map<String, String> mapa = new java.util.HashMap<>();
+		mapa.put(VerificadorConfiguracion.CLAVE_HMAC, CLAVE_REAL);
+		for (int i = 0; i < pares.length; i += 2) {
+			mapa.put(pares[i], pares[i + 1]);
+		}
+		return mapa;
+	}
+
+	// Sprint 5, sección 8.3: la mensajería simulada nunca en prod; prod sin canal real no arranca.
+
+	@Test
+	void mensajeriaSimuladaNuncaArrancaEnProduccion() {
+		for (String canal : new String[] { VerificadorConfiguracion.WHATSAPP, VerificadorConfiguracion.CORREO }) {
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" },
+					sinCorreo(canal, "SIMULADO", VerificadorConfiguracion.WHATSAPP_REAL_FUERA_DE_PROD, "false")))
+					.as(canal).isInstanceOf(IllegalStateException.class).hasMessageContaining("SIMULADA");
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "otro" }, sinCorreo(canal, "SIMULADO")))
+					.as(canal).isInstanceOf(IllegalStateException.class).hasMessageContaining("SIMULADA");
+		}
+		for (String perfil : new String[] { "dev", "test", "piloto" }) {
+			java.util.Map<String, String> conf = sinCorreo(VerificadorConfiguracion.WHATSAPP, "SIMULADO",
+					VerificadorConfiguracion.CORREO, "SIMULADO");
+			if (perfil.equals("piloto")) {
+				conf.put(VerificadorConfiguracion.CLAVE_HMAC, CLAVE_REAL);
+			}
+			else {
+				conf.put(VerificadorConfiguracion.CLAVE_HMAC, CLAVE_DEV);
+			}
+			assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { perfil }, conf)).as(perfil)
+					.doesNotThrowAnyException();
+		}
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" },
+				sinCorreo(VerificadorConfiguracion.WHATSAPP, "TWILIO")))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("no existe");
+	}
+
+	@Test
+	void prodSinCanalRealNoArranca() {
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, sinCorreo()))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("al menos un canal real");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" },
+				sinCorreo(VerificadorConfiguracion.CORREO, "NINGUNO", VerificadorConfiguracion.WHATSAPP, "NINGUNO")))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("al menos un canal real");
+		// SMTP sin servidor o sin remitente, o WhatsApp sin sus credenciales, tampoco.
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" },
+				sinCorreo(VerificadorConfiguracion.CORREO, "SMTP", VerificadorConfiguracion.CORREO_REMITENTE, "a@b.pe")))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("spring.mail.host");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" },
+				sinCorreo(VerificadorConfiguracion.WHATSAPP, "WHATSAPP_CLOUD", VerificadorConfiguracion.WHATSAPP_API,
+						"https://graph.facebook.com", VerificadorConfiguracion.WHATSAPP_TOKEN, "t")))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("WHATSAPP_SECRETO_APP");
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, whatsappReal()))
+				.doesNotThrowAnyException();
+		// Nadie apunta «WhatsApp» a un servidor propio.
+		java.util.Map<String, String> propio = whatsappReal();
+		propio.put(VerificadorConfiguracion.WHATSAPP_API, "https://evil.pe");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, propio))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("dominio permitido");
+	}
+
+	@Test
+	void realFueraDeProdSoloANumerosDePrueba() {
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" }, whatsappReal()))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("números de prueba");
+		java.util.Map<String, String> conMarcaSinLista = whatsappReal();
+		conMarcaSinLista.put(VerificadorConfiguracion.WHATSAPP_REAL_FUERA_DE_PROD, "true");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" }, conMarcaSinLista))
+				.isInstanceOf(IllegalStateException.class);
+		java.util.Map<String, String> conLista = whatsappReal();
+		conLista.put(VerificadorConfiguracion.WHATSAPP_REAL_FUERA_DE_PROD, "true");
+		conLista.put(VerificadorConfiguracion.WHATSAPP_PRUEBA, "51966777321");
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" }, conLista))
+				.doesNotThrowAnyException();
+		java.util.Map<String, String> correo = sinCorreo(VerificadorConfiguracion.CORREO, "SMTP",
+				VerificadorConfiguracion.SMTP_HOST, "smtp.colegio.pe", VerificadorConfiguracion.CORREO_REMITENTE,
+				"avisos@colegio.pe");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" }, correo))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("correos de prueba");
+	}
+
+	private static java.util.Map<String, String> whatsappReal() {
+		return sinCorreo(VerificadorConfiguracion.WHATSAPP, "WHATSAPP_CLOUD", VerificadorConfiguracion.WHATSAPP_API,
+				"https://graph.facebook.com", VerificadorConfiguracion.WHATSAPP_NUMERO_ID, "1234567890",
+				VerificadorConfiguracion.WHATSAPP_TOKEN, "token-real", VerificadorConfiguracion.WHATSAPP_SECRETO, "secreto",
+				VerificadorConfiguracion.WHATSAPP_VERIFICACION, "verifica");
+	}
+
 	private static java.util.Map<String, String> config(String... pares) {
 		java.util.Map<String, String> mapa = new java.util.HashMap<>();
 		mapa.put(VerificadorConfiguracion.CLAVE_HMAC, CLAVE_REAL);
+		// Sprint 5: prod no arranca sin un canal real para avisar a las familias (decisión 40).
+		mapa.putAll(CORREO_REAL);
 		for (int i = 0; i < pares.length; i += 2) {
 			mapa.put(pares[i], pares[i + 1]);
 		}

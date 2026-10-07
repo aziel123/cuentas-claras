@@ -9,13 +9,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAccesoApoderados;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.AccesoCreado;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.AccesoEnviado;
 
 /**
  * Cuenta en línea del apoderado (sprint 4): «Dar acceso en línea», «Restablecer acceso» (Promotoría) y «Quitar acceso»
- * desde su ficha. Correcciones del sprint 4 (S4-M2): no se muestra ninguna clave, sino un enlace de un solo uso que el
- * colegio entrega en persona o por un canal del titular (no pasa por la sesión). Sin lógica: delega en
+ * desde su ficha. Sprint 5: no se muestra ninguna clave ni enlace; el enlace de un solo uso llega directo al contacto
+ * registrado del titular y la pantalla solo dice a dónde se envió. Sin lógica: delega en
  * {@link ServicioAccesoApoderados}.
  */
 @Controller
@@ -55,10 +54,8 @@ public class AccesoApoderadoController {
 		}
 	}
 
-	private static String mostrar(AccesoCreado creado, Long id, boolean restablecido, Model model) {
+	private static String mostrar(AccesoEnviado creado, Long id, boolean restablecido, Model model) {
 		model.addAttribute("creado", creado);
-		model.addAttribute("enlace", ServletUriComponentsBuilder.fromCurrentContextPath().path(creado.enlace())
-				.toUriString());
 		model.addAttribute("restablecido", restablecido);
 		model.addAttribute("apoderadoId", id);
 		model.addAttribute("volverA", "/alumnos/apoderados/" + id);

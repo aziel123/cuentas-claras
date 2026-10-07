@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.seguridad.service;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -14,6 +15,8 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Enmascarar;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Telefono;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.TextoSeguro;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.PropiedadesSeguridad;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.CambiarRolesRequest;
@@ -21,6 +24,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.CrearUsuarioRequest;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.UsuarioCreado;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.UsuarioDetalle;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.UsuarioResumen;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PropositoEnlace;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
@@ -79,9 +83,16 @@ public class ServicioUsuarios {
 
 	private final Clock reloj;
 
+	private final EnlacesActivacion enlaces;
+
+	private final ApplicationEventPublisher eventos;
+
 	public ServicioUsuarios(UsuarioRepository usuarios, ServicioDetallesUsuario detalles, PasswordEncoder codificador,
 			GeneradorClaveTemporal generador, AuditoriaService auditoria, SesionesUsuario sesiones,
-			PropiedadesSeguridad propiedades, PlatformTransactionManager transacciones, Clock reloj) {
+			PropiedadesSeguridad propiedades, PlatformTransactionManager transacciones, Clock reloj,
+			EnlacesActivacion enlaces, ApplicationEventPublisher eventos) {
+		this.enlaces = enlaces;
+		this.eventos = eventos;
 		this.propiedades = propiedades;
 		this.usuarios = usuarios;
 		this.detalles = detalles;
@@ -127,7 +138,8 @@ public class ServicioUsuarios {
 	}
 
 	/**
-	 * Crea el usuario con una clave temporal aleatoria que debe cambiar en su primer ingreso.
+	 * Crea el usuario SIN clave conocida por nadie (una al azar, ya vencida) y le envía DIRECTO a su celular (WhatsApp) o
+	 * a su correo un enlace de un solo uso para que elija su clave (sprint 5, A2). Quien lo crea solo ve a dónde se envió.
 	 * No es {@code @Transactional}: el nombre se busca antes en toda la plataforma (fuera de transacción).
 	 */
 	public UsuarioCreado crear(CrearUsuarioRequest solicitud) {
@@ -142,18 +154,28 @@ public class ServicioUsuarios {
 		if (detalles.colegioDe(nombreUsuario).isPresent()) {
 			throw nombreRepetido(nombreUsuario);
 		}
-		String claveTemporal = generador.generar();
+		String telefono = telefono(solicitud.telefonoWhatsapp());
+		String correo = solicitud.correo() == null || solicitud.correo().isBlank() ? null : solicitud.correo().strip();
+		if (telefono == null && correo == null) {
+			throw new ReglaNegocioException("Escribe el celular (WhatsApp) o el correo de la persona: ahí le llega el "
+					+ "enlace para activar su cuenta. Nadie más ve ese enlace.");
+		}
 		Usuario usuario;
 		try {
 			usuario = transaccion.execute(estado -> {
+				exigirNoEsMiContacto(actor, telefono, correo);
 				LocalDateTime ahora = ahora();
-				Usuario nuevo = Usuario.nuevo(nombreUsuario, solicitud.nombreCompleto(), solicitud.correo(),
-						codificador.encode(claveTemporal), roles);
-				nuevo.vencerClaveTemporalEn(ahora.plus(propiedades.vigenciaClaveTemporal()));
-				usuarios.save(nuevo);
+				// Una clave al azar que nadie conoce y que ya venció: la cuenta solo se activa con el enlace.
+				Usuario nuevo = Usuario.nuevo(nombreUsuario, solicitud.nombreCompleto(), correo,
+						codificador.encode(generador.generar()), roles);
+				nuevo.asignarTelefonoWhatsapp(telefono);
+				nuevo.vencerClaveTemporalEn(ahora);
+				usuarios.saveAndFlush(nuevo);
 				auditoria.registrar(AccionAuditoria.USUARIO_CREADO, "usuario", nuevo.getId().toString(), null,
-						"roles=" + roles(nuevo.getRoles()) + "; activo; clave temporal",
-						"Usuario " + nuevo.getNombreUsuario() + " (" + nuevo.getNombreCompleto() + ").");
+						"roles=" + roles(nuevo.getRoles()) + "; activo; enlace de activación al titular",
+						"Usuario " + nuevo.getNombreUsuario() + " (" + nuevo.getNombreCompleto() + "). Su enlace de un solo "
+								+ "uso va a " + destinoEnmascarado(nuevo) + ": nadie más lo ve.");
+				eventos.publishEvent(new EnvioEnlaceSolicitado(nuevo.getId(), PropositoEnlace.PERSONAL, null));
 				return nuevo;
 			});
 		}
@@ -161,7 +183,7 @@ public class ServicioUsuarios {
 			// Otra persona creó el mismo nombre al mismo tiempo: lo detiene la restricción única de la base.
 			throw nombreRepetido(nombreUsuario);
 		}
-		return new UsuarioCreado(usuario.getId(), usuario.getNombreUsuario(), usuario.getNombreCompleto(), claveTemporal);
+		return enviado(usuario);
 	}
 
 	private static ReglaNegocioException nombreRepetido(String nombreUsuario) {
@@ -223,7 +245,10 @@ public class ServicioUsuarios {
 				detalle(usuario, texto));
 	}
 
-	/** Genera una nueva clave temporal (se muestra una sola vez), desbloquea la cuenta y cierra sus sesiones. */
+	/**
+	 * Restablece el acceso: anula los enlaces anteriores, deja una clave al azar ya vencida (nadie la conoce), desbloquea
+	 * la cuenta, cierra sus sesiones y envía un enlace nuevo DIRECTO al titular (sprint 5). No devuelve ninguna clave.
+	 */
 	@Transactional
 	public UsuarioCreado restablecerClave(Long id, String motivo) {
 		UsuarioAutenticado actor = actor();
@@ -232,14 +257,58 @@ public class ServicioUsuarios {
 		exigirPuedeTocar(actor, usuario);
 		exigirPuedeAsignar(actor, usuario.getRoles());
 		String texto = motivo(motivo);
-		String claveTemporal = generador.generar();
+		if (usuario.getTelefonoWhatsapp() == null && usuario.getCorreo() == null) {
+			throw new ReglaNegocioException("La cuenta de " + usuario.getNombreUsuario() + " no tiene celular ni correo: "
+					+ "no hay dónde enviarle su enlace. Registra primero su contacto.");
+		}
+		exigirNoEsMiContacto(actor, usuario.getTelefonoWhatsapp(), usuario.getCorreo());
 		LocalDateTime ahora = ahora();
-		usuario.restablecerClave(codificador.encode(claveTemporal), ahora, ahora.plus(propiedades.vigenciaClaveTemporal()),
-				actor.getUsername());
-		auditoria.registrar(AccionAuditoria.CLAVE_RESTABLECIDA, "usuario", id.toString(), null, "clave temporal",
-				detalle(usuario, texto));
+		enlaces.anularVigentes(usuario.getId());
+		usuario.restablecerClave(codificador.encode(generador.generar()), ahora, ahora, actor.getUsername());
+		usuarios.saveAndFlush(usuario);
+		auditoria.registrar(AccionAuditoria.CLAVE_RESTABLECIDA, "usuario", id.toString(), null,
+				"enlace nuevo de un solo uso al titular", detalle(usuario, texto) + ". El enlace va a "
+						+ destinoEnmascarado(usuario) + "; los anteriores ya no sirven.");
+		eventos.publishEvent(new EnvioEnlaceSolicitado(usuario.getId(), PropositoEnlace.PERSONAL, null));
 		sesiones.expirar(id);
-		return new UsuarioCreado(usuario.getId(), usuario.getNombreUsuario(), usuario.getNombreCompleto(), claveTemporal);
+		return enviado(usuario);
+	}
+
+	/** El enlace no va a un contacto de quien lo pide (G8; en MySQL también lo impide trg_mensaje_nace). */
+	private void exigirNoEsMiContacto(UsuarioAutenticado actor, String telefono, String correo) {
+		usuarios.findById(actor.usuarioId()).ifPresent(yo -> {
+			if (yo.tieneContacto(telefono) || yo.tieneContacto(correo)) {
+				throw new ReglaNegocioException("Ese celular o correo es tuyo: el enlace debe llegar solo a su titular.");
+			}
+		});
+	}
+
+	private static String telefono(String escrito) {
+		if (escrito == null || escrito.isBlank()) {
+			return null;
+		}
+		String normalizado = Telefono.normalizar(escrito);
+		if (normalizado == null) {
+			throw new ReglaNegocioException("Revisa el celular: escribe 9 dígitos que empiecen con 9.");
+		}
+		return normalizado;
+	}
+
+	/** El canal preferido: WhatsApp si tiene celular; si no, correo (lo mismo que hace la mensajería). */
+	static String canal(Usuario usuario) {
+		return usuario.getTelefonoWhatsapp() != null ? "WhatsApp" : "correo";
+	}
+
+	static String destinoEnmascarado(Usuario usuario) {
+		return usuario.getTelefonoWhatsapp() != null ? "WhatsApp " + Enmascarar.telefono(usuario.getTelefonoWhatsapp())
+				: "correo " + Enmascarar.correo(usuario.getCorreo());
+	}
+
+	private UsuarioCreado enviado(Usuario usuario) {
+		return new UsuarioCreado(usuario.getId(), usuario.getNombreUsuario(), usuario.getNombreCompleto(), canal(usuario),
+				usuario.getTelefonoWhatsapp() != null ? Enmascarar.telefono(usuario.getTelefonoWhatsapp())
+						: Enmascarar.correo(usuario.getCorreo()),
+				ahora().plus(propiedades.vigenciaClaveTemporal()));
 	}
 
 	@Transactional

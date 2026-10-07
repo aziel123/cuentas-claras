@@ -146,7 +146,7 @@ public class RegistroAlumnos {
 	 * Aplica el cambio de contacto aprobado (solo lo llama el manejador de la solicitud). Si el contacto cambió desde
 	 * que se pidió, no se aplica.
 	 */
-	public void cambiarContactoAprobado(Apoderado apoderado, Map<String, String> pedido, String motivo,
+	public void cambiarContactoAprobado(Apoderado apoderado, Long solicitudId, Map<String, String> pedido, String motivo,
 			String solicitante, String aprobador) {
 		if (!apoderado.isActivo()) {
 			throw new ReglaNegocioException(apoderado.nombreCompleto() + " está desactivado: ya no se cambia su contacto.");
@@ -163,7 +163,10 @@ public class RegistroAlumnos {
 				correoActual);
 		DatosApoderado nuevos = actuales.conContacto(nuloSiVacio(pedido.get("telefono")), nuloSiVacio(pedido.get("correo")));
 		List<String> campos = apoderado.actualizar(nuevos);
+		apoderado.registrarSolicitudContacto(solicitudId);
 		apoderados.saveAndFlush(apoderado);
+		// Sprint 5: la mensajería avisa al contacto ANTERIOR, en esta misma transacción.
+		eventos.publishEvent(new ContactoCambiado(apoderado.getId(), solicitudId, telefonoActual, correoActual));
 		auditoria.registrar(AccionAuditoria.APODERADO_CONTACTO_CAMBIADO, "apoderado", apoderado.getId().toString(),
 				DescripcionAuditoria.camposApoderado(actuales, campos), DescripcionAuditoria.camposApoderado(nuevos, campos),
 				"Apoderado " + apoderado.nombreCompleto() + ". Cambió: " + String.join(", ", campos) + ". Pedido por "

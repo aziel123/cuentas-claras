@@ -18,9 +18,9 @@
 			</th:block>
 			<form class="formulario" method="post" th:action="@{/activar/{c}/{t}(c=${colegio},t=${token})}">
 				<div class="campo">
-					<label for="documento">Tu número de documento</label>
-					<input type="text" class="input" id="documento" name="documento" inputmode="numeric" autocomplete="username"
-						maxlength="20" required autofocus>
+					<label for="documento" th:text="${vista.personal} ? 'Tu nombre de usuario' : 'Tu número de documento'">Tu número de documento</label>
+					<input type="text" class="input" id="documento" name="documento" autocomplete="username"
+						maxlength="60" required autofocus>
 				</div>
 				<div class="campo">
 					<label for="clave">Tu nueva clave</label>

@@ -75,7 +75,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V16): Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V17): Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Permisos por tabla de cc_app
@@ -90,6 +90,14 @@ jobs:
 
       - name: "Fase 2: la aplicación funciona con los permisos mínimos de cc_app"
         run: ./mvnw -B test -Dtest=PermisosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Fase 2b (sprint 5): con la mensajería simulada habilitada por el DBA, los mensajes y enlaces salen"
+        run: |
+          $MYSQL_ADMIN cuentasclaras -e "INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('mensajeria_simulada', 'PERMITIDA', NOW(6))"
+          ./mvnw -B test -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dtest='PermisosMySqlTest#flujoMensajeDePagoConPermisosMinimos+flujoActivacionDirectaConPermisosMinimos+reescribirElUsoDelEnlaceFallaCon1644'
+          # La base vuelve a ser como la de producción (sin mensajería simulada).
+          $MYSQL_ADMIN cuentasclaras -e "DELETE FROM configuracion_bd WHERE clave = 'mensajeria_simulada'"
 
       - name: "cc_app no edita la bitácora ni borra datos financieros (1142), ni cambia columnas inmutables (1143); triggers (1644)"
         run: |
@@ -223,6 +231,25 @@ jobs:
           comprobar 1143 "UPDATE enlace_activacion SET hash_token = hash_token WHERE 1 = 0"
           comprobar 1143 "UPDATE enlace_activacion SET vence_en = vence_en WHERE 1 = 0"
           comprobar 1143 "UPDATE enlace_activacion SET usuario_id = usuario_id WHERE 1 = 0"
+          # Sprint 5, tanda 1 (V17): mensajes, enlace con su mensaje y huella diaria.
+          for tabla in mensaje huella_bitacora; do
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          comprobar 1142 "UPDATE huella_bitacora SET version = version WHERE 1 = 0"
+          for columna in destino parametros apoderado_id usuario_id plantilla tipo clave; do
+            comprobar 1143 "UPDATE mensaje SET $columna = $columna WHERE 1 = 0"
+          done
+          comprobar 1143 "UPDATE enlace_activacion SET mensaje_id = mensaje_id WHERE 1 = 0"
+          comprobar 1143 "UPDATE enlace_activacion SET proposito = proposito WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, usuario_id, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'verificador', 'HUELLA_BITACORA', 'CORREO', 'USUARIO', 0, 'x@y.pe', 'verificador', '', 'ENVIADO', NOW(6), 'verificador', NOW(6))"
+          comprobar 1644 "INSERT INTO enlace_activacion (colegio_id, usuario_id, hash_token, vence_en, mensaje_id, proposito, creado_en, creado_por, actualizado_en) VALUES (0, 0, REPEAT('0', 64), NOW(6) + INTERVAL 1 HOUR, 0, 'PERSONAL', NOW(6), 'verificador', NOW(6))"
+          comprobar 1644 "INSERT INTO huella_bitacora (colegio_id, fecha, secuencia, codigo, eventos_del_dia, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-01', 1, REPEAT('0', 16), 0, NOW(6), 'sistema.auditoria', NOW(6))"
+          comprobar 1644 "INSERT INTO apoderado (colegio_id, familia_id, tipo_documento, numero_documento, apellido_paterno, nombres, parentesco, nombre_busqueda, activo, contacto_solicitud_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'DNI', '00000000', 'x', 'x', 'MADRE', 'x', TRUE, 1, NOW(6), 'x', NOW(6))"
+          # G10 y G11: sin la fila 'mensajeria_simulada' (como en prod), la base no acepta un mensaje simulado. El
+          # mensaje PENDIENTE lo dejó PermisosMySqlTest.simuladoSinPermisoDeLaBaseFallaCon1644.
+          filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'mensajeria_simulada'")
+          [ "$filas" = "0" ] || { echo "ERROR: la base tiene la fila mensajeria_simulada"; exit 1; }
+          comprobar 1644 "UPDATE mensaje SET proveedor = 'SIMULADO', proveedor_mensaje_id = CONCAT('SIM-', id), estado = 'ENVIADO', enviado_en = NOW(6), intentos = intentos + 1 WHERE clave LIKE 'pendiente-para-ci-%' AND estado = 'PENDIENTE'"
           # La base de producción no admite la pasarela simulada (sin la fila 'pasarela_simulada' del DBA).
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'pasarela_simulada'")
           [ "$filas" = "0" ] || { echo "ERROR: la base tiene la fila pasarela_simulada"; exit 1; }
@@ -237,6 +264,11 @@ jobs:
           SPRING_PROFILES_ACTIVE: prod
           DB_URL: ${{ env.CC_MYSQL_URL }}
           AUDITORIA_CLAVE_HMAC: "clave-hmac-del-job-de-integracion-continua-0001"
+          # Sprint 5 (decisión 40): prod no arranca sin un canal real para avisar a las familias. Correo SMTP (no se
+          # conecta al arrancar; la salud no depende del correo).
+          MENSAJERIA_CORREO_PROVEEDOR: SMTP
+          CORREO_REMITENTE: "avisos@ci.cuentasclaras.pe"
+          SPRING_MAIL_HOST: "127.0.0.1"
         run: |
           DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" \
             java -jar target/cuentas-claras-*.jar --server.port=18080 > prod.log 2>&1 &
@@ -251,6 +283,7 @@ jobs:
           grep -q "Permisos por columna y triggers de planes, lotes y solicitudes verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de caja, comprobantes, anulaciones, descuentos y cierres verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de pagos en línea, recaudación, conciliación y outbox del OSE verificados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Permisos y triggers de mensajería, acceso directo al titular y huella diaria verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Triggers verificados: están los" prod.log || { cat prod.log; exit 1; }
           kill "$PID_APP"
           if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \
@@ -265,14 +298,17 @@ jobs:
           SPRING_PROFILES_ACTIVE: prod
           DB_URL: ${{ env.CC_MYSQL_URL }}
           AUDITORIA_CLAVE_HMAC: "clave-hmac-del-job-de-integracion-continua-0001"
+          MENSAJERIA_CORREO_PROVEEDOR: SMTP
+          CORREO_REMITENTE: "avisos@ci.cuentasclaras.pe"
+          SPRING_MAIL_HOST: "127.0.0.1"
         run: |
           mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras \
-            -e "DROP TRIGGER trg_extracto_bancario_estado"
+            -e "DROP TRIGGER trg_mensaje_envio"
           if DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" timeout 120 \
                java -jar target/cuentas-claras-*.jar --server.port=18082 > prod-sin-trigger.log 2>&1; then
-            echo "ERROR: la aplicación arrancó sin trg_extracto_bancario_estado"; exit 1
+            echo "ERROR: la aplicación arrancó sin trg_mensaje_envio"; exit 1
           fi
-          grep -q "Faltan triggers en la base: trg_extracto_bancario_estado" prod-sin-trigger.log || { cat prod-sin-trigger.log; exit 1; }
+          grep -q "Faltan triggers en la base: trg_mensaje_envio" prod-sin-trigger.log || { cat prod-sin-trigger.log; exit 1; }
           mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras \
             < scripts/mysql/03-triggers.sql
           echo "OK: sin el trigger BEFORE UPDATE, prod no arranca; restaurado con 03-triggers.sql"

@@ -57,6 +57,8 @@ public class ConfiguracionSeguridad {
 			.securityMatcher(ModuloApp.RUTAS_WEBHOOK)
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers(HttpMethod.POST, ModuloApp.RUTA_WEBHOOK_PASARELA).permitAll()
+				.requestMatchers(HttpMethod.POST, ModuloApp.RUTA_WEBHOOK_WHATSAPP).permitAll()
+				.requestMatchers(HttpMethod.GET, ModuloApp.RUTA_WEBHOOK_WHATSAPP).permitAll()
 				.anyRequest().denyAll())
 			.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.csrf(c -> c.disable())

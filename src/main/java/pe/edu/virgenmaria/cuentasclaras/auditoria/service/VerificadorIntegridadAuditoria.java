@@ -76,6 +76,12 @@ public class VerificadorIntegridadAuditoria {
 		return ejecutar(huellaAnotada);
 	}
 
+	/** Sprint 5: la reverificación diaria de {@code sistema.auditoria} (06:00), en el colegio del contexto. */
+	@PreAuthorize("hasRole('SISTEMA_AUDITORIA')")
+	public ResultadoVerificacion verificarComoSistema() {
+		return ejecutar(null);
+	}
+
 	private ResultadoVerificacion ejecutar(HuellaBitacora huellaAnotada) {
 		Long colegioActual = ContextoColegio.actual();
 		Long visor = colegioActual != null && colegioActual > 0 ? colegioActual : null;

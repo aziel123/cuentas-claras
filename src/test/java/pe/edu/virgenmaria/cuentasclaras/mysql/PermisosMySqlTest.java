@@ -2102,24 +2102,62 @@ class PermisosMySqlTest {
 		}
 	}
 
-	/**
-	 * Correcciones del sprint 4 (S4-M2): dar, restablecer y activar el acceso en línea del apoderado con los permisos
-	 * mínimos (GRANT por columna en enlace_activacion); el enlace no se borra ni cambia su hash, su usuario ni su
-	 * vencimiento (1142/1143).
-	 */
-	@Test
-	void elEnlaceDeActivacionDelApoderadoFuncionaYNoSeReescribe() throws Exception {
+	// ---------------------------------------------------------------------------------------------------------------
+	// Sprint 5, tanda 1 (V17): mensajes, acceso directo al titular y huella. La fase 2 corre SIN la fila
+	// 'mensajeria_simulada' (como prod: el verificador de prod la exige ausente). Después el job la inserta como
+	// administrador y vuelve a correr solo los flujos que envían con la mensajería simulada (fase 2b), y la borra.
+	// ---------------------------------------------------------------------------------------------------------------
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comunicacion.proceso.DespachoMensajes despacho;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comunicacion.proveedor.BuzonSimulado buzon;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.auditoria.proceso.HuellaDiaria huellaDiaria;
+
+	private boolean mensajeriaSimuladaHabilitada() {
+		return jdbc.queryForObject("SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'mensajeria_simulada'",
+				Integer.class) > 0;
+	}
+
+	/** Rosa (apoderada nueva con celular) de una familia nueva: [familia, apoderado, celular guardado]. */
+	private Object[] familiaConCelular(String celular) {
 		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.ADMINISTRACION));
 		String base = String.format("%07d", Math.floorMod(System.nanoTime(), 10_000_000L));
-		String dni = "4" + base;
 		Long familia = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
-				.conApoderadoNuevo("5" + base, "Ramos", "Vega", "Lucía", java.time.LocalDate.of(2016, 4, 9), dni, "Vega",
-						"Soto", "Ana", "955444333", null, null)).familiaId();
-		Long apoderado = jdbc.queryForObject("SELECT id FROM apoderado WHERE familia_id = ?", Long.class, familia);
-		String primero = accesoApoderados.darAcceso(apoderado).enlace();
-		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.PROMOTOR));
-		String ruta = accesoApoderados.restablecerAcceso(apoderado).enlace();
+				.conApoderadoNuevo("5" + base, "Ramos", "Vega", "Lucía", java.time.LocalDate.of(2016, 4, 9), "4" + base,
+						"Vega", "Soto", "Ana", celular, null, null)).familiaId();
 		SecurityContextHolder.clearContext();
+		Long apoderado = jdbc.queryForObject("SELECT id FROM apoderado WHERE familia_id = ?", Long.class, familia);
+		String guardado = jdbc.queryForObject("SELECT telefono_whatsapp FROM apoderado WHERE id = ?", String.class,
+				apoderado);
+		return new Object[] { familia, apoderado, guardado, "4" + base };
+	}
+
+	/**
+	 * Sprint 5 (A2, S4-M2, G7, G9): dar y restablecer el acceso del apoderado envía el enlace DIRECTO a su celular; el
+	 * enlace nace con su mensaje (trigger) en el proceso de envío; se activa con los permisos mínimos; el uso no se
+	 * reescribe (1644) y el enlace no se borra ni cambia su hash, su usuario, su vencimiento ni su mensaje (1142/1143).
+	 */
+	@Test
+	void flujoActivacionDirectaConPermisosMinimos() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeTrue(mensajeriaSimuladaHabilitada(), "falta la fila mensajeria_simulada");
+		Object[] f = familiaConCelular("955444333");
+		Long apoderado = (Long) f[1];
+		String celular = (String) f[2];
+		String dni = (String) f[3];
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.ADMINISTRACION));
+		assertThat(accesoApoderados.darAcceso(apoderado).enviadoA()).doesNotContain("/activar/");
+		SecurityContextHolder.clearContext();
+		String primero = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EnlacesDePrueba.recibido(despacho, buzon, 1L,
+				celular);
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.PROMOTOR));
+		accesoApoderados.restablecerAcceso(apoderado);
+		SecurityContextHolder.clearContext();
+		String ruta = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EnlacesDePrueba.recibido(despacho, buzon, 1L, celular);
+		assertThat(ruta).isNotEqualTo(primero);
 
 		mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(primero))
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
@@ -2131,15 +2169,195 @@ class PermisosMySqlTest {
 				.andExpect(redirectedUrl("/inicio"));
 		Long usuario = jdbc.queryForObject("SELECT id FROM usuario WHERE apoderado_id = ?", Long.class, apoderado);
 		assertThat(jdbc.queryForObject("SELECT CONCAT(COUNT(*), ' ', SUM(usado_en IS NOT NULL), ' ', "
-				+ "SUM(anulado_en IS NOT NULL)) FROM enlace_activacion WHERE usuario_id = ?", String.class, usuario))
-				.isEqualTo("2 1 1");
+				+ "SUM(anulado_en IS NOT NULL), ' ', SUM(mensaje_id IS NOT NULL)) FROM enlace_activacion WHERE usuario_id = ?",
+				String.class, usuario)).isEqualTo("2 1 1 2");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE tipo = 'ACTIVACION_CUENTA' AND entidad_id = ? "
+				+ "AND estado = 'ENVIADO' AND proveedor = 'SIMULADO'", Long.class, usuario)).isEqualTo(2);
 		for (String[] caso : new String[][] { { "DELETE FROM enlace_activacion WHERE usuario_id = ?", "1142" },
 				{ "UPDATE enlace_activacion SET hash_token = REPEAT('0', 64) WHERE usuario_id = ?", "1143" },
 				{ "UPDATE enlace_activacion SET vence_en = NOW(6) WHERE usuario_id = ?", "1143" },
-				{ "UPDATE enlace_activacion SET usuario_id = usuario_id WHERE usuario_id = ?", "1143" } }) {
+				{ "UPDATE enlace_activacion SET usuario_id = usuario_id WHERE usuario_id = ?", "1143" },
+				{ "UPDATE enlace_activacion SET mensaje_id = mensaje_id WHERE usuario_id = ?", "1143" } }) {
 			assertThatThrownBy(() -> jdbc.update(caso[0], usuario)).as(caso[0]).isInstanceOf(DataAccessException.class)
 					.satisfies(e -> assertThat(codigoMySql(e)).as(caso[0]).isEqualTo(Integer.parseInt(caso[1])));
 		}
+	}
+
+	/** G9: el uso de un enlace se escribe una vez; uno anulado o vencido no se usa (trg_enlace_activacion_uso). */
+	@Test
+	void reescribirElUsoDelEnlaceFallaCon1644() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeTrue(mensajeriaSimuladaHabilitada(), "falta la fila mensajeria_simulada");
+		Object[] f = familiaConCelular("955201775");
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.ADMINISTRACION));
+		accesoApoderados.darAcceso((Long) f[1]);
+		SecurityContextHolder.clearContext();
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EnlacesDePrueba.recibido(despacho, buzon, 1L, (String) f[2]);
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.PROMOTOR));
+		accesoApoderados.restablecerAcceso((Long) f[1]);
+		SecurityContextHolder.clearContext();
+		String ruta = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EnlacesDePrueba.recibido(despacho, buzon, 1L,
+				(String) f[2]);
+		String clave = "otra clave elegida en mysql " + sufijo;
+		mvc.perform(post(ruta).with(csrf()).param("documento", (String) f[3]).param("clave", clave)
+				.param("confirmacion", clave)).andExpect(redirectedUrl("/login?cuenta-activada"));
+		Long usuario = jdbc.queryForObject("SELECT id FROM usuario WHERE apoderado_id = ?", Long.class, f[1]);
+		Long usado = jdbc.queryForObject("SELECT id FROM enlace_activacion WHERE usuario_id = ? AND usado_en IS NOT NULL",
+				Long.class, usuario);
+		Long anulado = jdbc.queryForObject("SELECT id FROM enlace_activacion WHERE usuario_id = ? AND anulado_en IS NOT NULL",
+				Long.class, usuario);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE enlace_activacion SET usado_en = NOW(6), usado_ip = '1.2.3.4' "
+				+ "WHERE id = ?", usado))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE enlace_activacion SET anulado_en = NULL WHERE id = ?", anulado)))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE enlace_activacion SET usado_en = NOW(6), usado_ip = '1.2.3.4' "
+				+ "WHERE id = ?", anulado))).isEqualTo(1644);
+	}
+
+	/** S4-M2 + A2: un enlace sin su mensaje de activación al titular no existe. */
+	@Test
+	void enlaceSinMensajeFallaCon1644() {
+		Usuario titular = guardar("titular.enlace." + sufijo, Rol.CAJA);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO enlace_activacion (colegio_id, usuario_id, hash_token, vence_en, "
+				+ "proposito, creado_en, creado_por, actualizado_en) VALUES (1, ?, REPEAT('a', 64), NOW(6) + INTERVAL 1 HOUR, "
+				+ "'PERSONAL', NOW(6), 'promotor', NOW(6))", titular.getId()))).isEqualTo(1644);
+	}
+
+	/**
+	 * G2 y G10 con los permisos mínimos: el cobro crea su aviso en la misma transacción; sale (ENVIADO con su proveedor,
+	 * id y fecha), se marca ENTREGADO y nunca vuelve atrás ni reescribe su envío.
+	 */
+	@Test
+	void flujoMensajeDePagoConPermisosMinimos() {
+		org.junit.jupiter.api.Assumptions.assumeTrue(mensajeriaSimuladaHabilitada(), "falta la fila mensajeria_simulada");
+		// Un alumno nuevo en la sección del escenario de caja (sus cuotas no las toca ninguna otra prueba).
+		FamiliasCaja familias = familiasDeCaja();
+		Long seccion = jdbc.queryForObject("SELECT seccion_id FROM matricula WHERE alumno_id = ?", Long.class,
+				familias.hermano1());
+		int anio = jdbc.queryForObject("SELECT a.anio FROM seccion s JOIN anio_escolar a ON a.id = s.anio_escolar_id "
+				+ "WHERE s.id = ?", Integer.class, seccion);
+		String base = String.format("%07d", Math.floorMod(System.nanoTime() + 77, 10_000_000L));
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		var nuevo = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoNuevo("7" + base, "Ríos", "Paz", "Camila", java.time.LocalDate.of(anio - 10, 5, 2), "4" + base,
+						"Paz", "León", "Elena", "955000222", null, seccion));
+		SecurityContextHolder.clearContext();
+		UsuariosDePrueba.iniciarSesion(cajera("caja.mensaje"));
+		Long pago = cobrarEfectivo(nuevo.familiaId(), java.util.List.of(cuotaDe(nuevo.alumnoId(), 3)), "450.00");
+		SecurityContextHolder.clearContext();
+		Long mensaje = jdbc.queryForObject("SELECT id FROM mensaje WHERE tipo = 'PAGO_REGISTRADO' AND entidad = 'pago' "
+				+ "AND entidad_id = ?", Long.class, pago);
+		assertThat(jdbc.queryForObject("SELECT parametros FROM mensaje WHERE id = ?", String.class, mensaje))
+				.contains("S/ 450.00").contains("B001-");
+		for (int pasada = 0; pasada < 50 && despacho.despacharColegio(1L) > 0; pasada++) {
+			// de a 20, el más antiguo primero
+		}
+		assertThat(jdbc.queryForMap("SELECT estado, proveedor FROM mensaje WHERE id = ?", mensaje))
+				.containsEntry("estado", "ENVIADO").containsEntry("proveedor", "SIMULADO");
+		assertThat(jdbc.update("UPDATE mensaje SET estado = 'ENTREGADO', entregado_en = NOW(6), version = version + 1 "
+				+ "WHERE id = ?", mensaje)).isEqualTo(1);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE mensaje SET estado = 'PENDIENTE' WHERE id = ?", mensaje)))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE mensaje SET proveedor_mensaje_id = 'otro' WHERE id = ?", mensaje)))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE mensaje SET intentos = intentos + 5 WHERE id = ?", mensaje)))
+				.isEqualTo(1644);
+	}
+
+	/** G12: el texto, el destino y el destinatario de un mensaje no cambian (1143) y no se borra (1142). */
+	@Test
+	void mensajeNoSeEditaNiSeBorra() {
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM mensaje WHERE 1 = 0"))).isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM huella_bitacora WHERE 1 = 0"))).isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE huella_bitacora SET version = version WHERE 1 = 0")))
+				.isEqualTo(1142);
+		for (String columna : new String[] { "destino", "parametros", "apoderado_id", "usuario_id", "plantilla", "tipo",
+				"clave" }) {
+			assertThat(codigoAl(() -> jdbc.update("UPDATE mensaje SET " + columna + " = " + columna + " WHERE 1 = 0")))
+					.as(columna).isEqualTo(1143);
+		}
+	}
+
+	/** G6: a un apoderado no se le escribe a un celular del personal si nadie más aprobó ese contacto. */
+	@Test
+	void mensajeAContactoDelPersonalFallaCon1644() {
+		Usuario personal = guardar("personal.g6." + sufijo, Rol.CAJA);
+		String suyo = jdbc.queryForObject("SELECT telefono_whatsapp FROM usuario WHERE id = ?", String.class,
+				personal.getId());
+		Object[] f = familiaConCelular(suyo.substring(3));
+		assertThat(f[2]).isEqualTo(suyo);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, "
+				+ "apoderado_id, familia_id, destino, plantilla, parametros, entidad, entidad_id, estado, creado_en, "
+				+ "creado_por, actualizado_en) VALUES (1, ?, 'PAGO_REGISTRADO', 'WHATSAPP', 'APODERADO', ?, ?, ?, "
+				+ "'PAGO_REGISTRADO', 'x', 'pago', 0, 'PENDIENTE', NOW(6), 'caja', NOW(6))", "g6-" + sufijo, f[1], f[0], suyo)))
+				.isEqualTo(1644);
+	}
+
+	/** G5: el celular del apoderado no cambia sin SU solicitud CAMBIO_CONTACTO_APODERADO aprobada. */
+	@Test
+	void cambiarElCelularSinSolicitudFallaCon1644() {
+		Object[] f = familiaConCelular("955201774");
+		assertThat(codigoAl(() -> jdbc.update("UPDATE apoderado SET telefono_whatsapp = '+51955000111' WHERE id = ?",
+				f[1]))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE apoderado SET correo = 'otro@correo.pe' WHERE id = ?", f[1])))
+				.isEqualTo(1644);
+	}
+
+	/** Un mensaje PENDIENTE válido (va al celular registrado de una familia nueva) que el despacho no toma (2100). */
+	private Long mensajePendiente(String prefijoClave) {
+		Object[] f = familiaConCelular("934567812");
+		jdbc.update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, apoderado_id, familia_id, "
+				+ "destino, plantilla, parametros, entidad, entidad_id, estado, proximo_intento_en, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (1, ?, 'PAGO_REGISTRADO', 'WHATSAPP', 'APODERADO', ?, ?, ?, 'PAGO_REGISTRADO', "
+				+ "'S/ 1.00', 'pago', 0, 'PENDIENTE', '2100-01-01', NOW(6), 'caja', NOW(6))", prefijoClave + sufijo, f[1],
+				f[0], f[2]);
+		return jdbc.queryForObject("SELECT id FROM mensaje WHERE clave = ?", Long.class, prefijoClave + sufijo);
+	}
+
+	/** G7: los parámetros de un mensaje nunca llevan el enlace de activación (CHECK ck_mensaje_sin_token). */
+	@Test
+	void mensajeConTokenFallaCon3819() {
+		Object[] f = familiaConCelular("934567812");
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, "
+				+ "apoderado_id, familia_id, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) "
+				+ "VALUES (1, ?, 'PAGO_REGISTRADO', 'WHATSAPP', 'APODERADO', ?, ?, ?, 'PAGO_REGISTRADO', "
+				+ "'https://colegio.pe/activar/1/abc', 'PENDIENTE', NOW(6), 'caja', NOW(6))", "token-" + sufijo, f[1], f[0],
+				f[2]))).isEqualTo(3819);
+	}
+
+	/** G10: ENVIADO exige el proveedor, su id y la fecha (CHECK ck_mensaje_envio). */
+	@Test
+	void enviadoSinIdDelProveedorFallaCon3819() {
+		Long mensaje = mensajePendiente("sin-id-");
+		assertThat(codigoAl(() -> jdbc.update("UPDATE mensaje SET estado = 'ENVIADO' WHERE id = ?", mensaje)))
+				.isEqualTo(3819);
+	}
+
+	/**
+	 * G10 y G11: sin la fila 'mensajeria_simulada' del DBA, la base no acepta un mensaje simulado. Deja un mensaje
+	 * PENDIENTE con la clave «pendiente-para-ci-…»: el paso «comprobar» del job (ya sin la fila) lo intenta y espera 1644.
+	 */
+	@Test
+	void simuladoSinPermisoDeLaBaseFallaCon1644() {
+		Long mensaje = mensajePendiente("pendiente-para-ci-");
+		String simulado = "UPDATE mensaje SET proveedor = 'SIMULADO', proveedor_mensaje_id = CONCAT('SIM-', id), "
+				+ "estado = 'ENVIADO', enviado_en = NOW(6), intentos = intentos + 1 WHERE id = ?";
+		if (!mensajeriaSimuladaHabilitada()) {
+			assertThat(codigoAl(() -> jdbc.update(simulado, mensaje))).isEqualTo(1644);
+		}
+		assertThat(jdbc.queryForObject("SELECT estado FROM mensaje WHERE id = ?", String.class, mensaje))
+				.isEqualTo("PENDIENTE");
+	}
+
+	/** G13: la huella diaria se guarda con los permisos mínimos y una que no coincide con la bitácora se rechaza. */
+	@Test
+	void huellaQueNoCoincideFallaCon1644() {
+		java.time.LocalDate manana = java.time.LocalDate.now(java.time.ZoneId.of("America/Lima")).plusDays(1);
+		huellaDiaria.enColegio(1L, manana);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM huella_bitacora WHERE colegio_id = 1 AND fecha = ?",
+				Long.class, manana.minusDays(1))).isEqualTo(1);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO huella_bitacora (colegio_id, fecha, secuencia, codigo, "
+				+ "eventos_del_dia, creado_en, creado_por, actualizado_en) VALUES (1, '1999-01-01', 1, "
+				+ "'ffffffffffffffff', 0, NOW(6), 'sistema.auditoria', NOW(6))"))).isEqualTo(1644);
 	}
 
 	private int anioLibre() {

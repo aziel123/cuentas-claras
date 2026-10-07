@@ -59,6 +59,11 @@ server:
         secure: true
 
 management:
+  health:
+    # El correo de respaldo (SMTP) no decide si la aplicación está viva: sin esto, un servidor de correo caído pondría
+    # la salud en DOWN.
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -146,6 +151,39 @@ cuentasclaras:
     patron-abono-recaudacion: ""     # p. ej. "RECAUD" si el banco abona el lote con esa glosa (EXACTA por glosa)
     abono-recaudacion: POR_LOTE      # POR_LOTE (un abono por día) | POR_PAGO (el banco abona pago por pago)
     maximo-lineas: 3000
+  mensajeria:
+    # Sprint 5: avisos a las familias (WhatsApp con correo de respaldo) y enlaces de activación al titular. Los
+    # conectores reales están APAGADOS (NINGUNO). SIMULADO solo existe en dev, test y piloto; en prod la aplicación no
+    # arranca sin al menos un canal real (decisión 40). Secretos solo por variable de entorno.
+    whatsapp:
+      proveedor: ${MENSAJERIA_WHATSAPP_PROVEEDOR:NINGUNO}   # NINGUNO | SIMULADO (dev, test, piloto) | WHATSAPP_CLOUD
+      api: https://graph.facebook.com
+      version-api: v21.0                  # confirmar la vigente con Meta al activar
+      numero-id: ${WHATSAPP_NUMERO_ID:}
+      token: ${WHATSAPP_TOKEN:}
+      secreto-app: ${WHATSAPP_SECRETO_APP:}               # firma X-Hub-Signature-256 de los avisos
+      token-verificacion: ${WHATSAPP_TOKEN_VERIFICACION:}
+      dominios-permitidos: graph.facebook.com
+      permitir-real-fuera-de-prod: false
+      numeros-de-prueba: ""               # fuera de prod, el real SOLO escribe a estos números
+      idioma-plantillas: es
+    correo:
+      proveedor: ${MENSAJERIA_CORREO_PROVEEDOR:NINGUNO}     # NINGUNO | SIMULADO (dev, test, piloto) | SMTP
+      remitente: ${CORREO_REMITENTE:}
+      permitir-real-fuera-de-prod: false
+      correos-de-prueba: ""
+    url-publica: ${CC_URL_PUBLICA:http://localhost:8080}   # base de los enlaces de los mensajes
+    vigencia-enlace: 48h
+    envio-cada: 30s
+    reintento-inicial: 1m
+    reintento-maximo: 60m
+    intentos-maximos: 8
+    alerta-pendiente-minutos: 15
+    alerta-pago-sin-entregar-minutos: 60
+    historial-familia-meses: 12
+  huella:
+    cron: "0 0 6 * * *"                   # 06:00 (Lima): reverifica la bitácora y envía la huella de ayer
+    reverificar-dias: 400
   auditoria:
     # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
     # aplicación no arranca. Nunca en el código: va en el gestor de secretos.

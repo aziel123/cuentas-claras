@@ -193,7 +193,7 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 				nota.numeroCompleto() + " · " + Dinero.formatear(nota.getTotal()), "Anula " + original.numeroCompleto()
 						+ " (pago " + pago.getId() + ").");
 		auditoria.registrar(AccionAuditoria.PAGO_ANULADO, "pago", pago.getId().toString(), "VIGENTE", "ANULADO", detalle);
-		eventos.publishEvent(new PagoAnulado(pago.getId()));
+		eventos.publishEvent(new PagoAnulado(pago.getId(), solicitud.getMotivo(), aprobador));
 	}
 
 	@Override

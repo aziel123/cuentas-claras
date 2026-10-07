@@ -27,7 +27,10 @@ import java.util.function.Function;
  *   <li>con una pasarela real sin su llave secreta y las credenciales de sus avisos, con una llave de pruebas en
  *       {@code prod} o una llave de producción fuera de {@code prod} (desde dev nunca se cobra de verdad);</li>
  *   <li>con Nubefact sin token, con una ruta que no es {@code https} a un dominio de la lista cerrada (nadie apunta el
- *       «OSE» a un servidor propio que responda ACEPTADO) o, fuera de {@code prod}, sin la marca explícita.</li>
+ *       «OSE» a un servidor propio que responda ACEPTADO) o, fuera de {@code prod}, sin la marca explícita;</li>
+ *   <li>sprint 5 (sección 8.3): con la mensajería SIMULADA en {@code prod} o fuera de dev, test o piloto; en {@code prod}
+ *       sin ningún canal real (WhatsApp o correo: sin aviso al padre no existe el control 4, decisión 40); con un canal
+ *       real sin sus credenciales o, fuera de {@code prod}, sin la marca y la lista de números o correos de prueba.</li>
  * </ul>
  */
 @Component
@@ -73,6 +76,37 @@ public class VerificadorConfiguracion implements InitializingBean {
 	static final String LLAVE_PRODUCCION = "sk_live_";
 
 	static final String LLAVE_PRUEBAS = "sk_test_";
+
+	static final String WHATSAPP = "cuentasclaras.mensajeria.whatsapp.proveedor";
+
+	static final String WHATSAPP_API = "cuentasclaras.mensajeria.whatsapp.api";
+
+	static final String WHATSAPP_DOMINIOS = "cuentasclaras.mensajeria.whatsapp.dominios-permitidos";
+
+	static final String WHATSAPP_NUMERO_ID = "cuentasclaras.mensajeria.whatsapp.numero-id";
+
+	static final String WHATSAPP_TOKEN = "cuentasclaras.mensajeria.whatsapp.token";
+
+	static final String WHATSAPP_SECRETO = "cuentasclaras.mensajeria.whatsapp.secreto-app";
+
+	static final String WHATSAPP_VERIFICACION = "cuentasclaras.mensajeria.whatsapp.token-verificacion";
+
+	static final String WHATSAPP_REAL_FUERA_DE_PROD = "cuentasclaras.mensajeria.whatsapp.permitir-real-fuera-de-prod";
+
+	static final String WHATSAPP_PRUEBA = "cuentasclaras.mensajeria.whatsapp.numeros-de-prueba";
+
+	static final String CORREO = "cuentasclaras.mensajeria.correo.proveedor";
+
+	static final String CORREO_REMITENTE = "cuentasclaras.mensajeria.correo.remitente";
+
+	static final String CORREO_REAL_FUERA_DE_PROD = "cuentasclaras.mensajeria.correo.permitir-real-fuera-de-prod";
+
+	static final String CORREO_PRUEBA = "cuentasclaras.mensajeria.correo.correos-de-prueba";
+
+	static final String SMTP_HOST = "spring.mail.host";
+
+	/** Donde puede existir la mensajería simulada (los beans tienen el mismo {@code @Profile}). */
+	static final Set<String> PERFILES_MENSAJERIA_SIMULADA = Set.of("dev", "test", "piloto");
 
 	/** Lista cerrada por defecto si no se configura otra. */
 	static final String DOMINIOS_NUBEFACT_POR_DEFECTO = "api.nubefact.com";
@@ -139,6 +173,66 @@ public class VerificadorConfiguracion implements InitializingBean {
 		boolean prod = activos.contains("prod");
 		verificarPasarela(activos, prod, propiedad);
 		verificarComprobantes(prod, propiedad);
+		verificarMensajeria(activos, prod, propiedad);
+	}
+
+	/** Sprint 5, sección 8.3: la mensajería simulada nunca en prod, y prod nunca sin un canal real. */
+	private static void verificarMensajeria(List<String> activos, boolean prod, Function<String, String> propiedad) {
+		String whatsapp = canal(propiedad.apply(WHATSAPP), "WHATSAPP_CLOUD", "WhatsApp");
+		String correo = canal(propiedad.apply(CORREO), "SMTP", "correo");
+		boolean simuladoPermitido = !prod && activos.stream().anyMatch(PERFILES_MENSAJERIA_SIMULADA::contains);
+		if ((whatsapp.equals("SIMULADO") || correo.equals("SIMULADO")) && !simuladoPermitido) {
+			throw new IllegalStateException("La mensajería SIMULADA no envía nada a las familias: solo existe en dev, test o "
+					+ "piloto, nunca en producción. Configura WhatsApp (WHATSAPP_CLOUD) o el correo (SMTP).");
+		}
+		if (prod && !whatsapp.equals("WHATSAPP_CLOUD") && !correo.equals("SMTP")) {
+			throw new IllegalStateException("En producción hace falta al menos un canal real para avisar a las familias "
+					+ "(WhatsApp con WHATSAPP_CLOUD o correo con SMTP): sin aviso al padre no existe el control de cada pago.");
+		}
+		if (whatsapp.equals("WHATSAPP_CLOUD")) {
+			if (!rutaPermitida(propiedad.apply(WHATSAPP_API), dominiosWhatsapp(propiedad.apply(WHATSAPP_DOMINIOS)))
+					|| vacio(propiedad.apply(WHATSAPP_NUMERO_ID)) || vacio(propiedad.apply(WHATSAPP_TOKEN))
+					|| vacio(propiedad.apply(WHATSAPP_SECRETO)) || vacio(propiedad.apply(WHATSAPP_VERIFICACION))) {
+				throw new IllegalStateException("WhatsApp necesita una URL https de un dominio permitido (graph.facebook.com), "
+						+ "el id del número, el token, el secreto de la app y el token de verificación (WHATSAPP_NUMERO_ID, "
+						+ "WHATSAPP_TOKEN, WHATSAPP_SECRETO_APP y WHATSAPP_TOKEN_VERIFICACION).");
+			}
+			exigirPruebaFueraDeProd(prod, propiedad.apply(WHATSAPP_REAL_FUERA_DE_PROD), propiedad.apply(WHATSAPP_PRUEBA),
+					"WhatsApp", "números");
+		}
+		if (correo.equals("SMTP")) {
+			String remitente = propiedad.apply(CORREO_REMITENTE);
+			if (vacio(propiedad.apply(SMTP_HOST)) || vacio(remitente) || !remitente.contains("@")) {
+				throw new IllegalStateException("El correo de respaldo necesita el servidor SMTP (spring.mail.host y sus "
+						+ "credenciales) y el remitente del colegio (CORREO_REMITENTE).");
+			}
+			exigirPruebaFueraDeProd(prod, propiedad.apply(CORREO_REAL_FUERA_DE_PROD), propiedad.apply(CORREO_PRUEBA),
+					"El correo", "correos");
+		}
+	}
+
+	private static String canal(String valor, String real, String nombre) {
+		String proveedor = mayusculas(valor);
+		if (proveedor == null) {
+			return "NINGUNO";
+		}
+		if (!proveedor.equals("NINGUNO") && !proveedor.equals("SIMULADO") && !proveedor.equals(real)) {
+			throw new IllegalStateException("El proveedor de " + nombre + " " + proveedor + " no existe: usa NINGUNO, "
+					+ "SIMULADO o " + real + ".");
+		}
+		return proveedor;
+	}
+
+	/** Fuera de prod, un canal real solo con la marca explícita y una lista de destinos de prueba (nunca un padre real). */
+	private static void exigirPruebaFueraDeProd(boolean prod, String marca, String lista, String canal, String que) {
+		if (!prod && (!"true".equalsIgnoreCase(String.valueOf(marca).strip()) || vacio(lista))) {
+			throw new IllegalStateException(canal + " real fuera de producción exige permitir-real-fuera-de-prod: true y "
+					+ "una lista de " + que + " de prueba: desde un entorno de prueba nunca se escribe a una familia real.");
+		}
+	}
+
+	private static String dominiosWhatsapp(String lista) {
+		return vacio(lista) ? "graph.facebook.com" : lista;
 	}
 
 	private static void verificarPasarela(List<String> activos, boolean prod, Function<String, String> propiedad) {

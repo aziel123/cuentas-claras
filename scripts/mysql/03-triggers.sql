@@ -470,11 +470,14 @@ END$$
 
 -- B2. Un apoderado nace sin datos de facturación; el RUC y la razón social solo cambian con SU solicitud
 -- DATOS_FACTURACION aprobada (enlazada por id, una sola vez).
+-- Sprint 5 · tanda 1 (V17, hallazgo 4): además nace sin contacto «aprobado»; celular y correo solo cambian con SU
+-- solicitud CAMBIO_CONTACTO_APODERADO aprobada, una por cambio.
 DROP TRIGGER IF EXISTS trg_apoderado_nace$$
 CREATE TRIGGER trg_apoderado_nace BEFORE INSERT ON apoderado FOR EACH ROW
 BEGIN
-    IF NEW.ruc IS NOT NULL OR NEW.razon_social IS NOT NULL OR NEW.facturacion_solicitud_id IS NOT NULL THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el RUC del apoderado se registra con una solicitud aprobada';
+    IF NEW.ruc IS NOT NULL OR NEW.razon_social IS NOT NULL OR NEW.facturacion_solicitud_id IS NOT NULL
+            OR NEW.contacto_solicitud_id IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el RUC y el cambio de contacto se registran con una solicitud aprobada';
     END IF;
 END$$
 
@@ -488,6 +491,14 @@ BEGIN
                     AND s.tipo = 'DATOS_FACTURACION' AND s.entidad = 'apoderado' AND s.entidad_id = NEW.id
                     AND s.estado = 'APROBADA')) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el RUC del apoderado solo cambia con su solicitud aprobada';
+    END IF;
+    IF (NOT (NEW.telefono_whatsapp <=> OLD.telefono_whatsapp) OR NOT (NEW.correo <=> OLD.correo)
+            OR NOT (NEW.contacto_solicitud_id <=> OLD.contacto_solicitud_id))
+            AND ((NEW.contacto_solicitud_id <=> OLD.contacto_solicitud_id)
+                OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.contacto_solicitud_id
+                    AND s.tipo = 'CAMBIO_CONTACTO_APODERADO' AND s.entidad = 'apoderado' AND s.entidad_id = NEW.id
+                    AND s.estado = 'APROBADA')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el contacto del apoderado solo cambia con su solicitud aprobada';
     END IF;
 END$$
 
@@ -808,6 +819,127 @@ BEGIN
             AND p.origen = 'PASARELA' AND n.monto = NEW.monto AND o.cargo_id = NEW.cargo_id AND o.contracargo_en IS NULL
             AND NEW.creado_por <> n.aprobado_por AND NEW.creado_por <> n.solicitado_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el reembolso por la pasarela no corresponde a la devolución';
+    END IF;
+END$$
+
+-- ===================== Sprint 5 · tanda 1 (V17): mensajes, acceso directo y huella =====================
+-- El mensaje nace PENDIENTE y va al contacto REGISTRADO de su destinatario. A un apoderado no se le escribe a un contacto
+-- que también es del personal, salvo que ese contacto lo haya aprobado otra persona. La activación del personal no va al
+-- contacto de quien la pidió. EXTERNO: solo el correo que el DBA dejó en configuracion_bd.
+DROP TRIGGER IF EXISTS trg_mensaje_nace$$
+CREATE TRIGGER trg_mensaje_nace BEFORE INSERT ON mensaje FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> 'PENDIENTE') OR NOT (NEW.intentos <=> 0) OR NEW.proveedor IS NOT NULL
+            OR NEW.proveedor_mensaje_id IS NOT NULL OR NEW.enviado_en IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un mensaje nace PENDIENTE y sin envío';
+    END IF;
+    IF NEW.destinatario_tipo = 'APODERADO' AND NEW.tipo <> 'CONTACTO_CAMBIADO' AND NOT EXISTS (SELECT 1 FROM apoderado a
+            WHERE a.id = NEW.apoderado_id AND a.colegio_id = NEW.colegio_id
+            AND ((NEW.canal = 'WHATSAPP' AND a.telefono_whatsapp = NEW.destino)
+                OR (NEW.canal = 'CORREO' AND a.correo = NEW.destino))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el mensaje va al contacto registrado del apoderado';
+    END IF;
+    IF NEW.destinatario_tipo = 'APODERADO' AND EXISTS (SELECT 1 FROM usuario u WHERE u.colegio_id = NEW.colegio_id
+            AND u.activo AND u.apoderado_id IS NULL AND (u.telefono_whatsapp = NEW.destino OR u.correo = NEW.destino))
+            AND NOT EXISTS (SELECT 1 FROM apoderado a WHERE a.id = NEW.apoderado_id
+                AND a.contacto_solicitud_id IS NOT NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: ese contacto es del personal; debe aprobarlo otra persona';
+    END IF;
+    IF NEW.tipo = 'CONTACTO_CAMBIADO' AND NOT (NEW.entidad <=> 'solicitud_cambio' AND EXISTS (SELECT 1
+            FROM solicitud_cambio s WHERE s.id = NEW.entidad_id AND s.tipo = 'CAMBIO_CONTACTO_APODERADO'
+            AND s.entidad = 'apoderado' AND s.entidad_id = NEW.apoderado_id AND s.estado = 'APROBADA')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el aviso al contacto anterior necesita el cambio aprobado';
+    END IF;
+    IF NEW.destinatario_tipo = 'USUARIO' AND NOT EXISTS (SELECT 1 FROM usuario u WHERE u.id = NEW.usuario_id
+            AND u.colegio_id = NEW.colegio_id
+            AND ((NEW.canal = 'WHATSAPP' AND u.telefono_whatsapp = NEW.destino)
+                OR (NEW.canal = 'CORREO' AND u.correo = NEW.destino))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el mensaje va al contacto registrado del usuario';
+    END IF;
+    IF NEW.tipo = 'ACTIVACION_CUENTA' AND EXISTS (SELECT 1 FROM usuario c WHERE c.nombre_usuario = NEW.creado_por
+            AND NOT (c.id <=> NEW.usuario_id) AND (c.telefono_whatsapp = NEW.destino OR c.correo = NEW.destino)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el enlace no va al contacto de quien lo pidió';
+    END IF;
+    IF NEW.destinatario_tipo = 'EXTERNO' AND NOT EXISTS (SELECT 1 FROM configuracion_bd c
+            WHERE c.clave = 'huella_correo_externo' AND c.valor = NEW.destino) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el correo externo lo configura el DBA';
+    END IF;
+    IF NEW.respaldo_de_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM mensaje o WHERE o.id = NEW.respaldo_de_id
+            AND o.canal = 'WHATSAPP' AND o.estado = 'FALLIDO' AND o.tipo = NEW.tipo
+            AND o.apoderado_id <=> NEW.apoderado_id AND o.usuario_id <=> NEW.usuario_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el respaldo es de un WhatsApp FALLIDO al mismo destinatario';
+    END IF;
+END$$
+
+-- Transiciones; intentos de uno en uno; proveedor e id una sola vez; SIMULADO solo en una base habilitada por el DBA;
+-- la activación sale solo con su enlace vigente.
+DROP TRIGGER IF EXISTS trg_mensaje_envio$$
+CREATE TRIGGER trg_mensaje_envio BEFORE UPDATE ON mensaje FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> OLD.estado) AND NOT (
+            (OLD.estado = 'PENDIENTE' AND NEW.estado IN ('ENVIADO', 'FALLIDO'))
+            OR (OLD.estado = 'ENVIADO' AND NEW.estado IN ('ENTREGADO', 'LEIDO', 'FALLIDO'))
+            OR (OLD.estado = 'ENTREGADO' AND NEW.estado IN ('LEIDO', 'FALLIDO'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: cambio de estado del mensaje no permitido';
+    END IF;
+    IF NOT (NEW.intentos <=> OLD.intentos) AND NOT (NEW.intentos <=> OLD.intentos + 1) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los intentos del mensaje suben de uno en uno';
+    END IF;
+    IF (OLD.proveedor IS NOT NULL AND NOT (NEW.proveedor <=> OLD.proveedor))
+            OR (OLD.proveedor_mensaje_id IS NOT NULL AND NOT (NEW.proveedor_mensaje_id <=> OLD.proveedor_mensaje_id))
+            OR (OLD.enviado_en IS NOT NULL AND NOT (NEW.enviado_en <=> OLD.enviado_en)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el envío del mensaje no se reescribe';
+    END IF;
+    IF NEW.proveedor = 'SIMULADO' AND NOT (NEW.proveedor <=> OLD.proveedor) AND NOT EXISTS (SELECT 1
+            FROM configuracion_bd c WHERE c.clave = 'mensajeria_simulada' AND c.valor = 'PERMITIDA') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: esta base no admite la mensajería simulada';
+    END IF;
+    IF NEW.tipo = 'ACTIVACION_CUENTA' AND NEW.estado = 'ENVIADO' AND OLD.estado = 'PENDIENTE'
+            AND NOT EXISTS (SELECT 1 FROM enlace_activacion e WHERE e.mensaje_id = NEW.id
+                AND e.usado_en IS NULL AND e.anulado_en IS NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la activación sale con su enlace vigente';
+    END IF;
+END$$
+
+-- S4-M2 + A2: el enlace nace con su mensaje de activación PENDIENTE para ESE titular, sin usar ni anular y con 72 h como
+-- máximo.
+DROP TRIGGER IF EXISTS trg_enlace_activacion_nace$$
+CREATE TRIGGER trg_enlace_activacion_nace BEFORE INSERT ON enlace_activacion FOR EACH ROW
+BEGIN
+    IF NEW.usado_en IS NOT NULL OR NEW.anulado_en IS NOT NULL OR NEW.usado_ip IS NOT NULL
+            OR NEW.vence_en <= NEW.creado_en OR NEW.vence_en > NEW.creado_en + INTERVAL 72 HOUR THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el enlace nace sin usar y vence en 72 h como máximo';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM mensaje m JOIN usuario u ON u.id = NEW.usuario_id
+            WHERE m.id = NEW.mensaje_id AND m.colegio_id = NEW.colegio_id AND m.tipo = 'ACTIVACION_CUENTA'
+            AND m.estado = 'PENDIENTE'
+            AND ((NEW.proposito = 'PERSONAL' AND m.usuario_id = u.id)
+                OR (NEW.proposito = 'APODERADO' AND m.apoderado_id = u.apoderado_id))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el enlace nace con su mensaje al titular';
+    END IF;
+END$$
+
+-- Riesgo residual de sprint-4-correcciones: el uso y la anulación se escriben una vez; nunca se usa uno anulado o vencido.
+DROP TRIGGER IF EXISTS trg_enlace_activacion_uso$$
+CREATE TRIGGER trg_enlace_activacion_uso BEFORE UPDATE ON enlace_activacion FOR EACH ROW
+BEGIN
+    IF (OLD.usado_en IS NOT NULL OR OLD.anulado_en IS NOT NULL) AND (NOT (NEW.usado_en <=> OLD.usado_en)
+            OR NOT (NEW.usado_ip <=> OLD.usado_ip) OR NOT (NEW.anulado_en <=> OLD.anulado_en)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un enlace usado o anulado no cambia';
+    END IF;
+    IF NEW.usado_en IS NOT NULL AND OLD.usado_en IS NULL
+            AND (NEW.anulado_en IS NOT NULL OR NEW.usado_en > OLD.vence_en OR NEW.usado_ip IS NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un enlace vencido o anulado no se usa';
+    END IF;
+END$$
+
+-- La huella coincide con un evento de ESE colegio en la bitácora.
+DROP TRIGGER IF EXISTS trg_huella_bitacora_registro$$
+CREATE TRIGGER trg_huella_bitacora_registro BEFORE INSERT ON huella_bitacora FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM evento_auditoria e WHERE e.secuencia = NEW.secuencia
+            AND e.colegio_id = NEW.colegio_id AND LEFT(e.hash, 16) = NEW.codigo) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la huella no coincide con la bitácora';
     END IF;
 END$$
 

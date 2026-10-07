@@ -77,26 +77,53 @@ class ServicioUsuariosTest {
 	}
 
 	@Test
-	void crearGeneraClaveTemporalQueDebeCambiarse() {
+	void crearNoDevuelveClaveYEnviaElEnlaceAlTitular() {
 		UsuarioCreado creado = servicio.crear(solicitud("Lucia.Ramos", Rol.CAJA));
 
 		assertThat(creado.nombreUsuario()).isEqualTo("lucia.ramos");
-		assertThat(creado.claveTemporal()).hasSize(12);
+		assertThat(creado.enviadoA()).isEqualTo("Enlace enviado a WhatsApp +51 *** *** "
+				+ UsuariosDePrueba.celular("lucia.ramos").substring(9));
 		Map<String, Object> fila = fila(creado.id());
 		assertThat(fila.get("debe_cambiar_clave")).isEqualTo(true);
 		assertThat(fila.get("colegio_id")).isEqualTo(1L);
-		assertThat(codificador.matches(creado.claveTemporal(), (String) fila.get("clave_hash"))).isTrue();
+		assertThat(fila.get("telefono_whatsapp")).isEqualTo(UsuariosDePrueba.celular("lucia.ramos"));
 		assertThat(accionesAuditadas()).contains("USUARIO_CREADO");
+		// El mensaje de activación nace PENDIENTE y sin token: el enlace se genera al enviarlo.
+		assertThat(jdbc.queryForMap("SELECT tipo, canal, destinatario_tipo, destino, estado, parametros FROM mensaje "
+				+ "WHERE usuario_id = ?", creado.id())).containsEntry("tipo", "ACTIVACION_CUENTA")
+				.containsEntry("canal", "WHATSAPP").containsEntry("destinatario_tipo", "USUARIO")
+				.containsEntry("destino", UsuariosDePrueba.celular("lucia.ramos")).containsEntry("estado", "PENDIENTE")
+				.containsEntry("parametros", "");
 	}
 
 	@Test
-	void laClaveTemporalNoSeGuardaEnTextoPlano() {
+	void laClaveAlAzarNoSeConoceYYaVencio() {
 		UsuarioCreado creado = servicio.crear(solicitud("lucia.ramos", Rol.CAJA));
 
-		assertThat((String) fila(creado.id()).get("clave_hash")).startsWith("{bcrypt}")
-				.doesNotContain(creado.claveTemporal());
-		assertThat(creado.toString()).doesNotContain(creado.claveTemporal());
-		assertThat(todaLaBitacora()).doesNotContain(creado.claveTemporal());
+		Map<String, Object> fila = fila(creado.id());
+		assertThat((String) fila.get("clave_hash")).startsWith("{bcrypt}");
+		assertThat(((java.sql.Timestamp) fila.get("clave_temporal_hasta")).toLocalDateTime()).isBeforeOrEqualTo(
+				java.time.LocalDateTime.now(reloj));
+		assertThat(creado.toString()).doesNotContain("/activar/");
+		assertThat(todaLaBitacora()).doesNotContain("/activar/");
+	}
+
+	@Test
+	void personalSinCelularNiCorreoNoSeCrea() {
+		assertThatThrownBy(() -> servicio.crear(new CrearUsuarioRequest("Sin Contacto", "sin.contacto", null, null,
+				Set.of(Rol.CAJA)))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("celular");
+		assertThatThrownBy(() -> servicio.crear(new CrearUsuarioRequest("Mal Celular", "mal.celular", null, "12345",
+				Set.of(Rol.CAJA)))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("celular");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM usuario WHERE nombre_usuario IN ('sin.contacto', "
+				+ "'mal.celular')", Long.class)).isZero();
+	}
+
+	@Test
+	void noSePuedeCrearUnUsuarioConMiPropioCelular() {
+		String mio = UsuariosDePrueba.celular("promotora").substring(3);
+		assertThatThrownBy(() -> servicio.crear(new CrearUsuarioRequest("Cuenta Fantasma", "cuenta.fantasma", null, mio,
+				Set.of(Rol.CAJA)))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("es tuyo");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje", Long.class)).isZero();
 	}
 
 	@Test
@@ -235,13 +262,13 @@ class ServicioUsuariosTest {
 				+ "'CLAVE_RESTABLECIDA', 'ROLES_CAMBIADOS')", Long.class)).isZero();
 
 		// Sí puede dar acceso a Docentes, y desactivar una cuenta de Caja (quita acceso, no lo da).
-		assertThat(servicio.restablecerClave(docente.getId(), MOTIVO).claveTemporal()).isNotBlank();
+		assertThat(servicio.restablecerClave(docente.getId(), MOTIVO).enviadoA()).startsWith("Enlace enviado a");
 		servicio.desactivar(caja.getId(), MOTIVO);
 
 		// Promotoría sí.
 		UsuariosDePrueba.iniciarSesion(promotora);
 		assertThat(servicio.obtener(administracion.getId()).puedeDarAcceso()).isTrue();
-		assertThat(servicio.restablecerClave(administracion.getId(), MOTIVO).claveTemporal()).isNotBlank();
+		assertThat(servicio.restablecerClave(administracion.getId(), MOTIVO).enviadoA()).startsWith("Enlace enviado a");
 	}
 
 	@Test
@@ -252,18 +279,21 @@ class ServicioUsuariosTest {
 	}
 
 	@Test
-	void restablecerClaveDaUnaTemporalNuevaYDesbloquea() {
+	void restablecerEnviaUnEnlaceNuevoYDesbloquea() {
 		bloquear(caja);
 		assertThat(fila(caja.getId()).get("bloqueado_hasta")).as("estaba bloqueada").isNotNull();
+		String hashAntes = (String) fila(caja.getId()).get("clave_hash");
 
 		UsuarioCreado nueva = servicio.restablecerClave(caja.getId(), "Olvidó su clave y la bloqueó");
 
 		Map<String, Object> fila = fila(caja.getId());
-		assertThat(codificador.matches(nueva.claveTemporal(), (String) fila.get("clave_hash"))).isTrue();
+		assertThat(fila.get("clave_hash")).as("una clave al azar que nadie conoce").isNotEqualTo(hashAntes);
+		assertThat(nueva.enviadoA()).doesNotContain("/activar/");
 		assertThat(fila).containsEntry("debe_cambiar_clave", true).containsEntry("intentos_fallidos", 0);
 		assertThat(fila.get("bloqueado_hasta")).isNull();
-		assertThat(ultimoEvento("CLAVE_RESTABLECIDA").get("valor_nuevo")).isEqualTo("clave temporal");
-		assertThat(todaLaBitacora()).doesNotContain(nueva.claveTemporal());
+		assertThat(ultimoEvento("CLAVE_RESTABLECIDA").get("valor_nuevo")).isEqualTo("enlace nuevo de un solo uso al titular");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ? AND tipo = 'ACTIVACION_CUENTA'",
+				Long.class, caja.getId())).isEqualTo(1);
 		assertThat(fila).containsEntry("clave_restablecida_por", "promotora");
 		assertThat(fila.get("clave_temporal_hasta")).as("la clave temporal vence").isNotNull();
 	}
@@ -343,9 +373,9 @@ class ServicioUsuariosTest {
 
 	@Test
 	void rolesVaciosONulosDanUnMensajeClaro() {
-		assertThatThrownBy(() -> servicio.crear(new CrearUsuarioRequest("Sin Roles", "sin.roles", null, Set.of())))
+		assertThatThrownBy(() -> servicio.crear(new CrearUsuarioRequest("Sin Roles", "sin.roles", null, "987000001", Set.of())))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("al menos un rol");
-		assertThatThrownBy(() -> servicio.crear(new CrearUsuarioRequest("Sin Roles", "sin.roles", null, null)))
+		assertThatThrownBy(() -> servicio.crear(new CrearUsuarioRequest("Sin Roles", "sin.roles", null, "987000001", null)))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("al menos un rol");
 		assertThatThrownBy(() -> servicio.cambiarRoles(caja.getId(), new CambiarRolesRequest(Set.of(), MOTIVO)))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("al menos un rol");
@@ -442,7 +472,8 @@ class ServicioUsuariosTest {
 	}
 
 	private static CrearUsuarioRequest solicitud(String nombreUsuario, Rol... roles) {
-		return new CrearUsuarioRequest("Nombre de " + nombreUsuario, nombreUsuario, null, Set.of(roles));
+		return new CrearUsuarioRequest("Nombre de " + nombreUsuario, nombreUsuario, null,
+				UsuariosDePrueba.celular(nombreUsuario.toLowerCase(java.util.Locale.ROOT)).substring(3), Set.of(roles));
 	}
 
 	private void bloquear(Usuario usuario) {

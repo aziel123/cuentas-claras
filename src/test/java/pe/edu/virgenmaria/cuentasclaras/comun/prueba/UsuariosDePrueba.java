@@ -87,10 +87,17 @@ public final class UsuariosDePrueba {
 			String hash = codificador.encode(clave);
 			Usuario usuario = Usuario.nuevo(nombreUsuario, "Nombre de " + nombreUsuario, null, hash,
 					EnumSet.copyOf(List.of(roles)));
+			// Sprint 5: el personal tiene celular (ahí le llega su enlace). Rango 966 para no chocar con los apoderados.
+			usuario.asignarTelefonoWhatsapp(celular(nombreUsuario));
 			if (!temporal) {
 				usuario.cambiarClave(hash, LocalDateTime.now(RELOJ), false);
 			}
 			return usuarios.save(usuario);
 		});
+	}
+
+	/** Sprint 5: el celular de prueba de un usuario del personal (+51966XXXXXX, distinto por nombre). */
+	public static String celular(String nombreUsuario) {
+		return "+51966" + String.format("%06d", Math.floorMod(nombreUsuario.hashCode(), 1_000_000));
 	}
 }

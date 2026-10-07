@@ -16,7 +16,10 @@ import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.PropiedadesSeguridad;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.AccesoCreado;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.AccesoEnviado;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PropositoEnlace;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.EnvioEnlaceSolicitado;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Enmascarar;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.EnlacesActivacion;
@@ -34,9 +37,9 @@ import java.util.Optional;
  * es su número de documento y queda enlazado a SU registro de apoderado (y por él, a su familia: solo ve y paga lo
  * suyo). Quitar el acceso desactiva la cuenta.
  * <p>
- * Correcciones del sprint 4 (S4-M2): quien la crea ya NO ve ninguna clave. Recibe un ENLACE de un solo uso que vence en
- * 48 horas (en la base solo queda su SHA-256) para entregarlo en persona o por un canal del titular; con él, el
- * apoderado elige su propia clave. La activación queda auditada con su IP (y con aviso a Promotoría si es la misma IP de
+ * Correcciones del sprint 4 (S4-M2) y sprint 5: quien la crea NO ve ninguna clave ni el enlace. El enlace de un solo uso
+ * (48 horas; en la base solo su SHA-256) lo genera el proceso de envío y llega DIRECTO al celular o al correo registrado
+ * del apoderado; con él, el apoderado elige su propia clave. La activación queda auditada con su IP (y con aviso a Promotoría si es la misma IP de
  * quien la creó). Si el enlace se perdió o lo usó otra persona, Promotoría restablece el acceso con un enlace nuevo.
  */
 @Service
@@ -65,11 +68,14 @@ public class ServicioAccesoApoderados {
 
 	private final EnlacesActivacion enlaces;
 
+	private final org.springframework.context.ApplicationEventPublisher eventos;
+
 	public ServicioAccesoApoderados(ApoderadoRepository apoderados, UsuarioRepository usuarios,
 			ServicioDetallesUsuario detalles, PasswordEncoder codificador, GeneradorClaveTemporal generador,
 			PropiedadesSeguridad propiedades, AuditoriaService auditoria, PlatformTransactionManager transacciones,
 			Clock reloj, pe.edu.virgenmaria.cuentasclaras.seguridad.service.SesionesUsuario sesiones,
-			EnlacesActivacion enlaces) {
+			EnlacesActivacion enlaces, org.springframework.context.ApplicationEventPublisher eventos) {
+		this.eventos = eventos;
 		this.sesiones = sesiones;
 		this.enlaces = enlaces;
 		this.apoderados = apoderados;
@@ -102,7 +108,7 @@ public class ServicioAccesoApoderados {
 	 * muestra y ya está vencida) y devuelve el enlace de activación de un solo uso. No es {@code @Transactional}: el
 	 * nombre se busca antes en toda la plataforma.
 	 */
-	public AccesoCreado darAcceso(Long apoderadoId) {
+	public AccesoEnviado darAcceso(Long apoderadoId) {
 		Apoderado apoderado = transaccion.execute(t -> apoderados.findById(apoderadoId).filter(Apoderado::isActivo)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Apoderado no encontrado")));
 		String nombreUsuario = apoderado.getDocumento().numero().toLowerCase(Locale.ROOT);
@@ -126,17 +132,16 @@ public class ServicioAccesoApoderados {
 				Usuario nuevo = Usuario.deApoderado(nombreUsuario, vigente.nombreCompleto(), vigente.getCorreo(),
 						codificador.encode(generador.generar()), vigente.getId());
 				nuevo.vencerClaveTemporalEn(ahora);
-				usuarios.save(nuevo);
-				EnlacesActivacion.Generado enlace = enlaces.generar(nuevo.getColegioId(), nuevo.getId(),
-						propiedades.vigenciaClaveTemporal());
+				usuarios.saveAndFlush(nuevo);
+				LocalDateTime vence = ahora.plus(propiedades.vigenciaClaveTemporal());
 				auditoria.registrar(AccionAuditoria.ACCESO_APODERADO_CREADO, "usuario", nuevo.getId().toString(), null,
-						"roles=APODERADO; activo; enlace de un solo uso", "Cuenta en línea del apoderado "
+						"roles=APODERADO; activo; enlace de un solo uso al titular", "Cuenta en línea del apoderado "
 								+ vigente.nombreCompleto() + " (" + vigente.getDocumento().enmascarado() + ") de "
-								+ vigente.getFamilia().getNombre() + ": solo ve y paga lo de su familia. Nadie ve su clave: "
-								+ "se entrega un enlace de un solo uso que vence el " + Calendario.formatear(enlace.venceEn()
-										.toLocalDate()) + " y con el que el apoderado elige su clave.");
-				return new AccesoCreado(nuevo.getId(), nuevo.getNombreUsuario(), nuevo.getNombreCompleto(),
-						enlace.ruta(), enlace.venceEn());
+								+ vigente.getFamilia().getNombre() + ": solo ve y paga lo de su familia. Nadie ve su clave ni "
+								+ "su enlace: el enlace de un solo uso va a " + destino(vigente) + " y vence el "
+								+ Calendario.formatear(vence.toLocalDate()) + ".");
+				eventos.publishEvent(new EnvioEnlaceSolicitado(nuevo.getId(), PropositoEnlace.APODERADO, vigente.getId()));
+				return enviado(nuevo, vigente, vence);
 			});
 		}
 		catch (DataIntegrityViolationException e) {
@@ -150,28 +155,44 @@ public class ServicioAccesoApoderados {
 	 * nuevo de un solo uso.
 	 */
 	@PreAuthorize("hasRole('PROMOTOR')")
-	public AccesoCreado restablecerAcceso(Long apoderadoId) {
-		AccesoCreado creado = transaccion.execute(t -> {
+	public AccesoEnviado restablecerAcceso(Long apoderadoId) {
+		AccesoEnviado creado = transaccion.execute(t -> {
 			Usuario usuario = usuarios.findByApoderadoId(apoderadoId)
 					.orElseThrow(() -> new ReglaNegocioException("Este apoderado no tiene cuenta en línea."));
 			if (!usuario.isActivo()) {
 				throw new ReglaNegocioException("La cuenta en línea del apoderado está desactivada.");
 			}
+			Apoderado apoderado = apoderados.findById(apoderadoId).filter(Apoderado::isActivo)
+					.orElseThrow(() -> new ReglaNegocioException("El apoderado está desactivado."));
 			LocalDateTime ahora = LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS);
+			enlaces.anularVigentes(usuario.getId());
 			usuario.restablecerClave(codificador.encode(generador.generar()), ahora, ahora,
 					SecurityContextHolder.getContext().getAuthentication().getName());
-			usuarios.save(usuario);
-			EnlacesActivacion.Generado enlace = enlaces.generar(usuario.getColegioId(), usuario.getId(),
-					propiedades.vigenciaClaveTemporal());
+			usuarios.saveAndFlush(usuario);
+			LocalDateTime vence = ahora.plus(propiedades.vigenciaClaveTemporal());
 			auditoria.registrar(AccionAuditoria.ACCESO_APODERADO_RESTABLECIDO, "usuario", usuario.getId().toString(), null,
-					"enlace nuevo de un solo uso", "Se restableció el acceso en línea de " + usuario.getNombreCompleto()
-							+ ": los enlaces anteriores ya no sirven y sus sesiones se cerraron. El enlace nuevo vence el "
-							+ Calendario.formatear(enlace.venceEn().toLocalDate()) + ".");
-			return new AccesoCreado(usuario.getId(), usuario.getNombreUsuario(), usuario.getNombreCompleto(),
-					enlace.ruta(), enlace.venceEn());
+					"enlace nuevo de un solo uso al titular", "Se restableció el acceso en línea de "
+							+ usuario.getNombreCompleto() + ": los enlaces anteriores ya no sirven y sus sesiones se cerraron. "
+							+ "El enlace nuevo va a " + destino(apoderado) + " y vence el "
+							+ Calendario.formatear(vence.toLocalDate()) + ".");
+			eventos.publishEvent(new EnvioEnlaceSolicitado(usuario.getId(), PropositoEnlace.APODERADO, apoderadoId));
+			return enviado(usuario, apoderado, vence);
 		});
-		sesiones.expirar(creado.id());
+		sesiones.expirar(creado.usuarioId());
 		return creado;
+	}
+
+	/** El contacto registrado al que va el enlace (WhatsApp primero; si no tiene, correo), enmascarado. */
+	private static String destino(Apoderado apoderado) {
+		return apoderado.getTelefonoWhatsapp() != null ? "WhatsApp " + Enmascarar.telefono(apoderado.getTelefonoWhatsapp())
+				: "correo " + Enmascarar.correo(apoderado.getCorreo());
+	}
+
+	private static AccesoEnviado enviado(Usuario usuario, Apoderado apoderado, LocalDateTime vence) {
+		boolean whatsapp = apoderado.getTelefonoWhatsapp() != null;
+		return new AccesoEnviado(usuario.getId(), usuario.getNombreUsuario(), usuario.getNombreCompleto(),
+				whatsapp ? "WhatsApp" : "correo", whatsapp ? Enmascarar.telefono(apoderado.getTelefonoWhatsapp())
+						: Enmascarar.correo(apoderado.getCorreo()), vence);
 	}
 
 	/** Desactiva la cuenta en línea del apoderado (con motivo, resaltado en la bitácora). */

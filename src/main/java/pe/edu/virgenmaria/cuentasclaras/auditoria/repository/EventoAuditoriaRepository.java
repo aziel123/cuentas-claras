@@ -53,6 +53,17 @@ public interface EventoAuditoriaRepository extends Repository<EventoAuditoria, L
 	long countByColegioIdAndAccionAndOcurridoEnGreaterThanEqual(Long colegioId, AccionAuditoria accion,
 			LocalDateTime desde);
 
+	/** Sprint 5: el último evento de un colegio antes de un momento (la huella del día). */
+	java.util.Optional<EventoAuditoria> findFirstByColegioIdAndOcurridoEnLessThanOrderBySecuenciaDesc(Long colegioId,
+			LocalDateTime antes);
+
+	/** Sprint 5: cuántos eventos tuvo un colegio en un rango (la huella del día). */
+	long countByColegioIdAndOcurridoEnGreaterThanEqualAndOcurridoEnLessThan(Long colegioId, LocalDateTime desde,
+			LocalDateTime hasta);
+
+	/** Sprint 5: el evento de una secuencia (para comparar una huella guardada). */
+	java.util.Optional<EventoAuditoria> findBySecuencia(long secuencia);
+
 	/** Lote de la cadena en orden, para verificar la integridad. */
 	List<EventoAuditoria> findBySecuenciaGreaterThanOrderBySecuenciaAsc(long secuencia, Limit limite);
 }

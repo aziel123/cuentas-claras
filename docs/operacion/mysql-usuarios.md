@@ -150,6 +150,26 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
 - OSE real: `COMPROBANTES_PROVEEDOR=NUBEFACT` con `NUBEFACT_RUTA` (https de `api.nubefact.com`) y `NUBEFACT_TOKEN`. Fuera
   de prod solo con `cuentasclaras.comprobantes.permitir-real-fuera-de-prod: true` (cuenta DEMO).
 
+## Mensajería a las familias (sprint 5, tanda 1)
+- Cada pago, anulación y descuento crea su aviso (WhatsApp, con correo de respaldo) en la misma transacción; lo envía
+  `sistema.mensajeria`. El destino es siempre el contacto registrado (trigger `trg_mensaje_nace`) y el mensaje no cambia
+  su destino ni su texto (1143).
+- **Producción no arranca sin un canal real** (decisión 40): `MENSAJERIA_WHATSAPP_PROVEEDOR=WHATSAPP_CLOUD` con
+  `WHATSAPP_NUMERO_ID`, `WHATSAPP_TOKEN`, `WHATSAPP_SECRETO_APP` y `WHATSAPP_TOKEN_VERIFICACION`, o
+  `MENSAJERIA_CORREO_PROVEEDOR=SMTP` con `SPRING_MAIL_HOST` (y `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`,
+  `SPRING_MAIL_PASSWORD`) y `CORREO_REMITENTE`. `CC_URL_PUBLICA` es la dirección del portal en los mensajes.
+- La mensajería **SIMULADA** solo existe en dev, test y piloto. En MySQL, un mensaje simulado solo pasa a ENVIADO si el
+  DBA registró la fila (nunca en prod; el verificador de prod exige que no exista y el del piloto, que exista):
+  ```sql
+  INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('mensajeria_simulada', 'PERMITIDA', NOW(6));
+  ```
+- Opcional en prod (decisión 49): el correo externo del contador que recibe la huella diaria de la bitácora:
+  ```sql
+  INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('huella_correo_externo', 'contador@estudio.pe', NOW(6));
+  ```
+- Webhook de WhatsApp: `https://<dominio>/webhooks/whatsapp/<colegioId>` (GET para la verificación de Meta, POST firmado
+  con `X-Hub-Signature-256`).
+
 ## Variables de entorno (perfil `prod`)
 | Variable | Contenido |
 |---|---|
