@@ -67,6 +67,9 @@ java -jar target/cuentas-claras-*.jar
 - El CI tiene un job `mysql` que aplica las migraciones y corre pruebas contra MySQL 8 real con estos mismos permisos.
 
 ## Documentación
+- `docs/CONTINUAR-EN-LOCAL.md`: cómo seguir el desarrollo en tu PC con Claude Code (estado, ramas y primer mensaje para el sprint 5).
+- `docs/estado-del-proyecto.md`: qué está hecho, decisiones pendientes y riesgos.
+- `docs/video/`: fuente del video de presentación.
 - `docs/plan-de-desarrollo.md`: sprints, hitos y decisiones.
 - `docs/prototipo/cuentas-claras.html`: prototipo navegable.
 - `docs/ux/`: kit para las reuniones con el colegio.

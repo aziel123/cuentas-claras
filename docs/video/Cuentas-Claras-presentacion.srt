@@ -1,0 +1,91 @@
+1
+00:00:00,400 --> 00:00:05,900
+Les presentamos Cuentas Claras, la nueva plataforma del Colegio Virgen María.
+
+2
+00:00:06,900 --> 00:00:16,100
+Hoy los cobros se anotan en un cuaderno. Una sola persona cobra y cuadra, y la dirección se entera tarde, o nunca.
+
+3
+00:00:17,100 --> 00:00:27,500
+Cuentas Claras reúne todo en una sola plataforma, en la computadora y en el celular: cobranza con control, comunicación con las familias y gestión académica.
+
+4
+00:00:28,500 --> 00:00:35,300
+Funciona con tres reglas. Cada sol queda registrado. Quien cobra, no aprueba. Y nada se borra.
+
+5
+00:00:36,300 --> 00:00:45,500
+Cobrar toma segundos. La cajera busca a la familia por apellido o DNI, y el sistema ya sabe cuánto debe cada alumno.
+
+6
+00:00:46,500 --> 00:00:54,500
+Solo marca las cuotas que paga el padre. Nadie escribe montos a mano: el monto lo pone el sistema.
+
+7
+00:00:55,500 --> 00:01:03,900
+El sistema calcula el vuelto y emite la boleta con numeración correlativa. Si falta un número, se nota de inmediato.
+
+8
+00:01:04,900 --> 00:01:11,700
+Cada pago queda guardado con su boleta, en un libro que nadie puede borrar ni modificar.
+
+9
+00:01:12,700 --> 00:01:22,700
+Al final del día, la cajera cuenta el efectivo sin ver cuánto debería haber. Si falta dinero, la promotora lo sabe ese mismo día.
+
+10
+00:01:23,700 --> 00:01:30,900
+Las anulaciones, los descuentos y los cierres con diferencia los aprueba otra persona. Quien pide, no aprueba.
+
+11
+00:01:31,900 --> 00:01:40,300
+La promotora ve lo cobrado en el día y las alertas importantes primero, sin tener que pedir reportes a nadie.
+
+12
+00:01:41,300 --> 00:01:50,100
+Todo queda en una bitácora sellada: quién hizo qué, cuándo y desde dónde. Si alguien intenta alterarla, el sistema lo detecta.
+
+13
+00:01:51,100 --> 00:02:01,100
+Los alumnos y las familias se cargan desde Excel. Las pensiones se aprueban entre dos personas, y el sistema genera el cronograma de cuotas.
+
+14
+00:02:02,100 --> 00:02:06,100
+Y esto es lo que viene.
+
+15
+00:02:07,100 --> 00:02:17,100
+Los padres podrán pagar desde el celular: con Yape, Plin, tarjeta o en el banco. El pago entra solo, sin que nadie lo digite.
+
+16
+00:02:18,100 --> 00:02:28,900
+Con cada pago, el padre recibe su boleta por WhatsApp: aunque nadie se la entregue, sabe que pagó. Y antes de cada vencimiento, un recordatorio amable.
+
+17
+00:02:29,900 --> 00:02:39,100
+En el portal, cada familia ve su estado de cuenta, descarga sus boletas y paga en línea. Menos llamadas y menos colas.
+
+18
+00:02:40,100 --> 00:02:49,300
+Administración sube el archivo del banco una vez al día, y el sistema cuadra todo solo. Solo hay que revisar las diferencias.
+
+19
+00:02:50,300 --> 00:02:56,300
+La boleta electrónica se emite y se envía a SUNAT automáticamente con cada pago.
+
+20
+00:02:57,300 --> 00:03:06,500
+La promotora tendrá el colegio en su celular: lo cobrado en el mes, la morosidad, y un resumen diario que llega solo.
+
+21
+00:03:07,500 --> 00:03:15,100
+Y en 2027, el módulo académico: asistencia con aviso a los padres, notas por competencias, libretas y SIAGIE.
+
+22
+00:03:16,100 --> 00:03:22,500
+Lo esencial ya está construido. Lo que sigue llega por etapas, entre noviembre y abril.
+
+23
+00:03:23,500 --> 00:03:28,1000
+Cuentas Claras. Cada sol, trazable.
