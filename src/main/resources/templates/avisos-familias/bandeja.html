@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Avisos de las familias', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="avisos-familias">
+	<div class="cabecera">
+		<div>
+			<h1>Avisos de las familias</h1>
+			<p class="secundario">Lo que las familias reportan desde el portal. Solo los ven Promotoría y Dirección: «Pagué y no aparece» puede ser un cobro sin registrar.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${#lists.isEmpty(avisos)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('No hay avisos', 'Cuando una familia avise que algo no cuadra, lo verás aquí.')}"></div>
+	</th:block>
+	<ul class="cuotas-familia" th:unless="${#lists.isEmpty(avisos)}">
+		<li th:each="a : ${avisos}" th:data-aviso="${a.id}" th:classappend="${a.abierto and a.critico} ? 'fila-atencion'">
+			<div class="cuota-cabecera">
+				<strong th:text="|${a.tipo} · ${a.familia}|">Pagué y no aparece · Familia Quispe</strong>
+				<span th:replace="~{fragments/componentes :: badge(${a.abierto} ? (${a.critico} ? 'Crítico' : 'Por responder') : 'Atendido', ${a.abierto} ? (${a.critico} ? 'peligro' : 'alerta') : 'exito')}"></span>
+			</div>
+			<span class="secundario" th:text="|${#temporals.format(a.creadoEn, 'dd/MM/yyyy HH:mm')} · ${a.apoderado}|">05/10/2026 10:40 · Rosa Huamán</span>
+			<span class="secundario" th:if="${a.referencia != null}" th:text="${a.referencia}">Pago B001-00000231</span>
+			<p class="texto-largo" th:text="${a.texto}">Pagué S/ 380 y no aparece.</p>
+			<p class="texto-largo" th:if="${a.respuesta != null}"><strong>Respuesta:</strong> <span th:text="${a.respuesta}">Ya lo revisamos.</span></p>
+			<form th:if="${a.abierto}" method="post" class="formulario" th:action="@{/avisos-familias/{id}/atender(id=${a.id})}">
+				<div class="campo">
+					<label th:for="|respuesta-${a.id}|">Respuesta para la familia</label>
+					<textarea class="input" th:id="|respuesta-${a.id}|" name="respuesta" rows="3" maxlength="500" required></textarea>
+				</div>
+				<div class="acciones acciones-izquierda">
+					<button type="submit" class="btn btn-primario">Responder y cerrar</button>
+				</div>
+			</form>
+		</li>
+	</ul>
+</main>
+</body>
+</html>

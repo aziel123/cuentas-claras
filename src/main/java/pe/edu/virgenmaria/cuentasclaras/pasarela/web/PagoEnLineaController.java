@@ -20,7 +20,7 @@ import pe.edu.virgenmaria.cuentasclaras.pasarela.service.ServicioPagoEnLinea;
  * El portal del apoderado (celular primero): estado de cuenta de SU familia → revisar → crear la orden (PRG) → nuestra
  * página con un ENLACE (GET) a la página segura de la pasarela. No se redirige a otro dominio después de un POST (la CSP
  * {@code form-action 'self'} lo bloquearía) y volver de la pasarela no marca nada como pagado. Sin lógica: delega en
- * {@link ServicioPagoEnLinea}.
+ * {@link ServicioPagoEnLinea}. Sprint 5: el inicio del portal ({@code GET /familia}) pasó a {@code familias}.
  */
 @Controller
 public class PagoEnLineaController {
@@ -35,12 +35,6 @@ public class PagoEnLineaController {
 	public PagoEnLineaController(ServicioPagoEnLinea pagos, ComprobantesDeFamilia comprobantes) {
 		this.pagos = pagos;
 		this.comprobantes = comprobantes;
-	}
-
-	@GetMapping("/familia")
-	public String inicio(Model model) {
-		model.addAttribute("cuenta", pagos.cuenta());
-		return "familia/inicio";
 	}
 
 	@PostMapping("/familia/pagar/revisar")

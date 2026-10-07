@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Renovación de matrícula', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="matricula-campana">
+	<div class="cabecera">
+		<div>
+			<h1 th:text="${campana != null} ? |Renovación de matrícula ${campana.anio}| : 'Renovación de matrícula'">Renovación de matrícula 2027</h1>
+			<p class="secundario">Cada familia confirma si su hijo continúa. Sin respuesta no se genera deuda. Al confirmar, el sistema reserva la matrícula con la cuota del plan aprobado y, al pagarla, genera las pensiones.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${campana == null}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('No hay un año planificado', 'Crea el año siguiente en Colegio, con sus secciones, y aprueba sus planes de pensiones.')}"></div>
+	</th:block>
+
+	<th:block th:if="${campana != null}" th:with="c=${campana}">
+		<ul class="conteos" aria-label="Avance de la campaña">
+			<li><strong th:text="${c.porResponder}">0</strong><span>Por responder</span></li>
+			<li><strong th:text="${c.confirmadas}">0</strong><span>Confirmadas</span></li>
+			<li><strong th:text="${c.reservadas}">0</strong><span>Reservadas, sin pagar la matrícula</span></li>
+			<li><strong th:text="${c.activadas}">0</strong><span>Pagadas y activas</span></li>
+			<li><strong th:text="${c.noContinuan}">0</strong><span>No continúan</span></li>
+			<li><strong th:text="${c.vencidas}">0</strong><span>Vencidas sin respuesta</span></li>
+		</ul>
+
+		<section class="tarjeta" aria-labelledby="titulo-abrir" th:if="${puedeAbrir and c.planificado}">
+			<h2 id="titulo-abrir" th:text="${c.total == 0} ? 'Abrir la campaña' : 'Agregar a los alumnos que faltan'">Abrir la campaña</h2>
+			<p class="secundario">Se propone a cada alumno activo el grado siguiente y la sección de la misma letra. 5.° de secundaria no se propone. Cada familia recibe su invitación.</p>
+			<form method="post" th:action="@{/matricula-2027/abrir}" class="formulario formulario-angosto">
+				<input type="hidden" name="anioId" th:value="${c.anioId}">
+				<div class="campo">
+					<label for="venceEn">Fecha límite para responder</label>
+					<input class="input" id="venceEn" name="venceEn" type="date" required>
+					<p class="ayuda">Después de esta fecha la propuesta vence y no se genera deuda.</p>
+				</div>
+				<div class="acciones acciones-izquierda">
+					<button th:replace="~{fragments/componentes :: boton('Abrir la renovación', 'primario')}"></button>
+				</div>
+			</form>
+		</section>
+
+		<section class="tarjeta" aria-labelledby="titulo-alumnos">
+			<h2 id="titulo-alumnos">Alumnos</h2>
+			<th:block th:if="${#lists.isEmpty(c.filas)}">
+				<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay propuestas', 'Cuando Administración abra la campaña, aquí verás a cada alumno.')}"></div>
+			</th:block>
+			<table class="tabla" th:unless="${#lists.isEmpty(c.filas)}">
+				<thead><tr><th scope="col">Alumno</th><th scope="col">Va a</th><th scope="col">Estado</th><th scope="col">Responde hasta</th><th scope="col">Acciones</th></tr></thead>
+				<tbody>
+					<tr th:each="f : ${c.filas}" th:data-renovacion="${f.id}">
+						<td data-etiqueta="Alumno">
+							<span th:text="${f.alumno}">Ana Quispe</span>
+							<span th:if="${f.conDeuda}" class="badge badge-alerta" th:text="|Con deuda: S/ ${#numbers.formatDecimal(f.deuda, 1, 'COMMA', 2, 'POINT')}|">Con deuda</span>
+						</td>
+						<td data-etiqueta="Va a" th:text="|${f.grado} ${f.seccion}|">2.° Primaria A</td>
+						<td data-etiqueta="Estado">
+							<span th:replace="~{fragments/componentes :: badge(${f.estado}, ${f.variante})}"></span>
+							<span class="secundario" th:if="${f.canal != null}" th:text="${f.canal}">Portal</span>
+						</td>
+						<td data-etiqueta="Responde hasta" th:text="${#temporals.format(f.venceEn, 'dd/MM/yyyy')}">31/01/2027</td>
+						<td data-etiqueta="Acciones">
+							<form th:if="${puedeCambiarDestino and f.propuesta}" method="post" class="fila"
+								th:action="@{/matricula-2027/{id}/destino(id=${f.id})}">
+								<label class="solo-lectores" th:for="|seccion-${f.id}|">Grado y sección</label>
+								<select class="input" th:id="|seccion-${f.id}|" name="seccionId">
+									<option th:each="s : ${c.secciones}" th:value="${s.id}" th:text="${s.etiqueta}"
+										th:selected="${s.id == f.seccionId}">2.° Primaria A</option>
+								</select>
+								<button type="submit" class="btn btn-chico btn-secundario">Cambiar</button>
+							</form>
+							<form th:if="${puedeRegistrar and f.propuesta}" method="post" class="fila"
+								th:action="@{/matricula-2027/{id}/presencial(id=${f.id})}">
+								<button type="submit" name="continua" value="true" class="btn btn-chico btn-secundario">Continúa (en persona)</button>
+								<button type="submit" name="continua" value="false" class="btn btn-chico btn-texto">No continuará</button>
+							</form>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</section>
+	</th:block>
+</main>
+</body>
+</html>

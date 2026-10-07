@@ -27,7 +27,16 @@ public enum PlantillaMensaje {
 			"Colegio Virgen María: este {{1}} dejó de recibir los avisos de pagos del colegio porque se registró otro. Si "
 					+ "usted no lo pidió, avísenos en el colegio o desde el portal."),
 	HUELLA("cc_huella", "Huella diaria de la bitácora", 4, false,
-			"Cuentas Claras: huella del {{1}}: evento {{2}}, código {{3}}. Bitácora verificada: {{4}}. Guarde este mensaje.");
+			"Cuentas Claras: huella del {{1}}: evento {{2}}, código {{3}}. Bitácora verificada: {{4}}. Guarde este mensaje."),
+	// Sprint 5 · tanda 2: renovación de matrícula y respuesta a los avisos de la familia.
+	RENOVACION("cc_renovacion", "Confirme si su hijo continúa el próximo año", 4, true,
+			"Colegio Virgen María: confirme en el portal si {{1}} continúa en {{2}} el {{3}}. Puede responder hasta el "
+					+ "{{4}}. Si no responde, no se genera ningún cobro."),
+	RENOVACION_REGISTRADA("cc_renovacion_registrada", "Registramos su respuesta sobre el próximo año", 3, true,
+			"Colegio Virgen María: registramos en el colegio que {{1}} {{2}} el {{3}}. Si usted no lo pidió, avísenos "
+					+ "desde el portal."),
+	AVISO_ATENDIDO("cc_aviso_atendido", "Respondimos su aviso", 1, true,
+			"Colegio Virgen María: respondimos el aviso que nos envió el {{1}}. Vea la respuesta en el portal.");
 
 	private final String nombreMeta;
 

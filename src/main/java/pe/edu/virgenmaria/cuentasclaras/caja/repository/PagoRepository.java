@@ -35,6 +35,9 @@ public interface PagoRepository extends Repository<Pago, Long> {
 
 	List<Pago> findTop5ByFamiliaIdOrderByIdDesc(Long familiaId);
 
+	/** Sprint 5: todos los pagos de la familia (estado de cuenta y comprobantes del portal). */
+	List<Pago> findByFamiliaIdOrderByIdDesc(Long familiaId);
+
 	Pago saveAndFlush(Pago pago);
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)

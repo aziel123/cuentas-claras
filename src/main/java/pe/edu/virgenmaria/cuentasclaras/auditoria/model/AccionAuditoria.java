@@ -224,6 +224,23 @@ public enum AccionAuditoria {
 	ENLACE_ACTIVACION_ENVIADO("Se envió un enlace de activación a su titular", false),
 	HUELLA_ENVIADA("Se envió la huella diaria de la bitácora", false),
 
+	// Sprint 5 · tanda 2: renovación de la matrícula 2027, matrícula reservada y avisos de las familias.
+	/** Se resalta: una familia avisa que algo no cuadra (solo lo ven Promotoría y Dirección). */
+	AVISO_FAMILIA_RECIBIDO("Una familia avisó que algo no cuadra", true),
+	AVISO_FAMILIA_ATENDIDO("Atendió el aviso de una familia", false),
+	RENOVACION_CAMPANA_ABIERTA("Abrió la campaña de renovación de matrícula", false),
+	RENOVACION_CONFIRMADA("La familia confirmó la renovación de matrícula", false),
+	RENOVACION_NO_CONTINUA("La familia avisó que el alumno no continuará", false),
+	/** Se resalta: Administración registró la respuesta de la familia en persona (la familia recibe un aviso). */
+	RENOVACION_PRESENCIAL("Registró en persona la respuesta de una familia a la renovación", true),
+	/** Se resalta: cambia el grado o la sección propuestos (repitencia o cambio de sección). */
+	RENOVACION_DESTINO_CAMBIADO("Cambió el grado o la sección propuestos para la renovación", true),
+	RENOVACION_VENCIDA("Venció la renovación sin respuesta de la familia", false),
+	MATRICULA_RESERVADA("Reservó la matrícula del año siguiente", false),
+	MATRICULA_ACTIVADA("Activó la matrícula al pagarse la cuota de matrícula", false),
+	/** Se resalta: una matrícula reservada quedó retirada (desistimiento con la cuota de matrícula anulada). */
+	MATRICULA_DESISTIDA("Retiró una matrícula reservada (desistimiento)", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

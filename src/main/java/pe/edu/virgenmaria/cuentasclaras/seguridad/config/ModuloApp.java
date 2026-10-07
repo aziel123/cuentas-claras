@@ -69,6 +69,13 @@ public enum ModuloApp {
 			+ "que fallaron, los pendientes y los de hoy.", "Sprint 5", true, "/mensajes",
 			new String[] { "/mensajes", "/mensajes/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 
+	AVISOS_FAMILIAS("Avisos de las familias", "Lo que las familias reportan desde el portal: pagos que no aparecen o "
+			+ "cobros que no reconocen. Solo Promotoría y Dirección.", "Sprint 5", true, "/avisos-familias",
+			new String[] { "/avisos-familias", "/avisos-familias/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
+	MATRICULA_2027("Renovación de matrícula", "Cada familia confirma si su hijo continúa el próximo año; al pagar la "
+			+ "matrícula se generan sus pensiones.", "Sprint 5", true, "/matricula-2027",
+			new String[] { "/matricula-2027", "/matricula-2027/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+
 	PANEL("Panel del colegio", "Cuánto entró hoy, la morosidad y las alertas de caja, desde tu celular.", "Sprint 5",
 			false, "/panel", new String[] { "/panel", "/panel/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
 	REPORTES("Reportes", "Reportes de cobranza y exportación a Excel.", "Sprint 5", false, "/reportes",

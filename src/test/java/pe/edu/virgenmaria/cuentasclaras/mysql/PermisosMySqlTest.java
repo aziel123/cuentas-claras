@@ -50,6 +50,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles({ "test", "mysql" })
 @EnabledIfEnvironmentVariable(named = "CC_PRUEBA_MYSQL", matches = "true")
+// Sprint 5, tanda 2 (G19): el pago a cuenta deja la cuota de matrícula PARCIAL (sin activar la matrícula reservada).
+@org.springframework.test.context.TestPropertySource(properties = "cuentasclaras.caja.permitir-pago-a-cuenta=true")
 class PermisosMySqlTest {
 
 	private final String sufijo = Long.toString(System.nanoTime(), 36);
@@ -2358,6 +2360,257 @@ class PermisosMySqlTest {
 		assertThat(codigoAl(() -> jdbc.update("INSERT INTO huella_bitacora (colegio_id, fecha, secuencia, codigo, "
 				+ "eventos_del_dia, creado_en, creado_por, actualizado_en) VALUES (1, '1999-01-01', 1, "
 				+ "'ffffffffffffffff', 0, NOW(6), 'sistema.auditoria', NOW(6))"))).isEqualTo(1644);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// Sprint 5, tanda 2 (V18): renovación de matrícula, matrícula reservada y avisos de las familias. La renovación
+	// necesita un año EN CURSO y uno PLANIFICADO; el colegio 1 de esta base no tiene año en curso (sus años son
+	// planificados y matriculan ACTIVA, como antes del sprint), así que estas pruebas usan un segundo colegio que el job
+	// crea como administrador («Colegio de renovacion CI»; cc_app no puede crear colegios).
+	// ---------------------------------------------------------------------------------------------------------------
+
+	static final String COLEGIO_RENOVACION = "Colegio de renovacion CI";
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.matricula.service.ServicioCampanaRenovacion campanaRenovacion;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.matricula.service.ServicioRenovacionFamilia renovacionFamilia;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.familias.service.ServicioAvisosFamilia avisosFamilia;
+
+	/** El colegio de renovación: año actual EN CURSO con 5.° A y el siguiente PLANIFICADO con 6.° A y su plan aprobado. */
+	private record ColegioRenovacion(long id, int anio, Long anioActual, Long anioSiguiente, Long quintoA, Long sextoA) {
+	}
+
+	private static ColegioRenovacion colegioRenovacion;
+
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado personalRenovacion(long colegio, long id,
+			String nombre, Rol rol) {
+		return UsuariosDePrueba.autenticado(colegio, id, nombre, "Nombre de " + nombre, false, EnumSet.of(rol));
+	}
+
+	private synchronized ColegioRenovacion colegioDeRenovacion() {
+		java.util.List<Long> ids = jdbc.queryForList("SELECT id FROM colegio WHERE nombre = ?", Long.class,
+				COLEGIO_RENOVACION);
+		org.junit.jupiter.api.Assumptions.assumeFalse(ids.isEmpty(), "falta el colegio de renovación (lo crea el job)");
+		if (colegioRenovacion != null) {
+			return colegioRenovacion;
+		}
+		long colegio = ids.getFirst();
+		int anio = java.time.LocalDate.now(java.time.ZoneId.of("America/Lima")).getYear();
+		UsuariosDePrueba.iniciarSesion(personalRenovacion(colegio, 2101L, "ren.administracion", Rol.ADMINISTRACION));
+		Long actual = anioDe(colegio, anio, true);
+		Long siguiente = anioDe(colegio, anio + 1, false);
+		Long quinto = seccionDe(colegio, actual, pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5);
+		Long sexto = seccionDe(colegio, siguiente, pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_6);
+		if (jdbc.queryForObject("SELECT COUNT(*) FROM plan_pension WHERE anio_escolar_id = ? AND nivel = 'PRIMARIA' "
+				+ "AND estado = 'APROBADO' AND vigente = TRUE", Long.class, siguiente) == 0) {
+			Long plan = planes.crearBorrador(siguiente, Nivel.PRIMARIA, EscenarioCobranza.plan(anio + 1, "450", "300", null));
+			UsuariosDePrueba.iniciarSesion(personalRenovacion(colegio, 2102L, "ren.administracion2", Rol.ADMINISTRACION));
+			planes.enviar(plan);
+			UsuariosDePrueba.iniciarSesion(personalRenovacion(colegio, 2103L, "ren.director", Rol.DIRECTOR));
+			planes.aprobar(plan, planes.obtener(plan).version());
+		}
+		SecurityContextHolder.clearContext();
+		colegioRenovacion = new ColegioRenovacion(colegio, anio, actual, siguiente, quinto, sexto);
+		return colegioRenovacion;
+	}
+
+	private Long anioDe(long colegio, int anio, boolean enCurso) {
+		java.util.List<Long> existente = jdbc.queryForList("SELECT id FROM anio_escolar WHERE colegio_id = ? AND anio = ?",
+				Long.class, colegio, anio);
+		return existente.isEmpty() ? estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto
+				.CrearAnioEscolarRequest(anio, java.time.LocalDate.of(anio, 3, 2), java.time.LocalDate.of(anio, 12, 18),
+						enCurso)) : existente.getFirst();
+	}
+
+	private Long seccionDe(long colegio, Long anio, pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado grado) {
+		java.util.List<Long> existente = jdbc.queryForList("SELECT id FROM seccion WHERE colegio_id = ? AND "
+				+ "anio_escolar_id = ? AND grado = ? AND nombre = 'A'", Long.class, colegio, anio, grado.name());
+		return existente.isEmpty() ? estructura.crearSeccion(anio, new pe.edu.virgenmaria.cuentasclaras.colegio.dto
+				.CrearSeccionRequest(grado, "A")) : existente.getFirst();
+	}
+
+	/** Un alumno nuevo en 5.° A del año en curso, con su apoderada (celular único): [familia, alumno, apoderado]. */
+	private Long[] alumnoDeRenovacion(ColegioRenovacion r) {
+		UsuariosDePrueba.iniciarSesion(personalRenovacion(r.id(), 2101L, "ren.administracion", Rol.ADMINISTRACION));
+		long n = Math.floorMod(System.nanoTime(), 10_000_000L);
+		String base = String.format("%07d", n);
+		var registro = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoNuevo("7" + base, "Quispe", "Huamán", "Mateo", java.time.LocalDate.of(r.anio() - 10, 6, 14),
+						"4" + base, "Huamán", "Ccori", "Rosa", "95" + base, null, r.quintoA()));
+		SecurityContextHolder.clearContext();
+		Long apoderado = jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class,
+				registro.alumnoId());
+		return new Long[] { registro.familiaId(), registro.alumnoId(), apoderado };
+	}
+
+	/** La cuenta en línea del apoderado (fila de usuario enlazada: el trigger de la respuesta por portal la exige). */
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado enLinea(ColegioRenovacion r,
+			Long apoderado) {
+		String nombre = "ren.familia." + apoderado + "." + sufijo;
+		// La cuenta de un apoderado solo nace desde su ficha (con el enlace al titular, fase 2b): aquí se enlaza por SQL
+		// con los permisos de cc_app, como quedaría después de activarla.
+		Usuario usuario = UsuariosDePrueba.guardar(usuarios, codificador, r.id(), nombre, UsuariosDePrueba.CLAVE, false,
+				Rol.DOCENTE);
+		jdbc.update("UPDATE usuario SET apoderado_id = ?, telefono_whatsapp = NULL WHERE id = ?", apoderado,
+				usuario.getId());
+		jdbc.update("UPDATE usuario_rol SET rol = 'APODERADO' WHERE usuario_id = ?", usuario.getId());
+		return new pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado(usuario.getId(), r.id(), nombre,
+				nombre, null, true, false, false, EnumSet.of(Rol.APODERADO), apoderado);
+	}
+
+	/** Abre (o completa) la campaña y devuelve la renovación del alumno. */
+	private Long propuestaDe(ColegioRenovacion r, Long alumno) {
+		UsuariosDePrueba.iniciarSesion(personalRenovacion(r.id(), 2101L, "ren.administracion", Rol.ADMINISTRACION));
+		campanaRenovacion.abrir(r.anioSiguiente(), java.time.LocalDate.now(java.time.ZoneId.of("America/Lima")).plusDays(1));
+		SecurityContextHolder.clearContext();
+		return jdbc.queryForObject("SELECT id FROM renovacion_matricula WHERE alumno_id = ?", Long.class, alumno);
+	}
+
+	/** La familia confirma en el portal; después del commit, sistema.matricula reserva. Devuelve la matrícula. */
+	private Long reservada(ColegioRenovacion r, Long[] familia) {
+		Long renovacion = propuestaDe(r, familia[1]);
+		UsuariosDePrueba.iniciarSesion(enLinea(r, familia[2]));
+		renovacionFamilia.responder(renovacion, true);
+		SecurityContextHolder.clearContext();
+		return jdbc.queryForObject("SELECT matricula_id FROM renovacion_matricula WHERE id = ?", Long.class, renovacion);
+	}
+
+	private Long cobrarEnRenovacion(ColegioRenovacion r, Long familia, Long cuota, String monto, boolean aCuenta) {
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(r.id(), 2104L, "ren.caja." + sufijo, "Cajera",
+				false, EnumSet.of(Rol.CAJA)));
+		Long pago = cobro.cobrar(new pe.edu.virgenmaria.cuentasclaras.caja.dto.CobroRequest(java.util.UUID.randomUUID(),
+				familia, java.util.List.of(cuota), pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago.EFECTIVO, null,
+				new java.math.BigDecimal(monto), aCuenta ? new java.math.BigDecimal(monto) : null,
+				new java.math.BigDecimal("300.00"), pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante.BOLETA,
+				null, null, null));
+		SecurityContextHolder.clearContext();
+		return pago;
+	}
+
+	/**
+	 * G18 con los permisos mínimos: propuesta → la familia confirma en el portal → sistema.matricula reserva (con la
+	 * cuota del plan) → la cajera cobra la matrícula → sistema.matricula activa → las 10 pensiones. Detecta un
+	 * saveAndFlush faltante: cada trigger valida contra la fila recién escrita.
+	 */
+	@Test
+	void flujoRenovacionYMatriculaConPermisosMinimos() {
+		ColegioRenovacion r = colegioDeRenovacion();
+		Long[] familia = alumnoDeRenovacion(r);
+		Long matricula = reservada(r, familia);
+		assertThat(jdbc.queryForMap("SELECT estado, seccion_id, creado_por FROM matricula WHERE id = ?", matricula))
+				.containsEntry("estado", "RESERVADA").containsEntry("seccion_id", r.sextoA())
+				.containsEntry("creado_por", "sistema.matricula");
+		assertThat(jdbc.queryForObject("SELECT estado FROM renovacion_matricula WHERE matricula_id = ?", String.class,
+				matricula)).isEqualTo("MATRICULADA");
+		Long cuota = jdbc.queryForObject("SELECT id FROM cuota WHERE matricula_id = ? AND tipo = 'MATRICULA'", Long.class,
+				matricula);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cuota WHERE matricula_id = ? AND tipo = 'PENSION'", Long.class,
+				matricula)).isZero();
+
+		cobrarEnRenovacion(r, familia[0], cuota, "300.00", false);
+		assertThat(jdbc.queryForMap("SELECT estado, activada_por FROM matricula WHERE id = ?", matricula))
+				.containsEntry("estado", "ACTIVA").containsEntry("activada_por", "sistema.matricula");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cuota WHERE matricula_id = ? AND tipo = 'PENSION'", Long.class,
+				matricula)).isEqualTo(10);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE tipo = 'RENOVACION_MATRICULA' AND "
+				+ "apoderado_id = ?", Long.class, familia[2])).isEqualTo(1);
+		// La activación no se reescribe ni vuelve atrás; la renovación no se borra ni cambia de alumno.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE matricula SET activada_por = 'otra.persona' WHERE id = ?",
+				matricula))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE matricula SET estado = 'RESERVADA', activada_en = NULL, "
+				+ "activada_por = NULL WHERE id = ?", matricula))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM renovacion_matricula WHERE matricula_id = ?", matricula)))
+				.isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE renovacion_matricula SET alumno_id = alumno_id WHERE "
+				+ "matricula_id = ?", matricula))).isEqualTo(1143);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE renovacion_matricula SET respondido_por = 'otra.persona' WHERE "
+				+ "matricula_id = ?", matricula))).isEqualTo(1644);
+	}
+
+	/** G18: nadie activa una matrícula reservada sin la matrícula pagada, ni firma como sistema.matricula sin pagar. */
+	@Test
+	void activarSinPagarFallaCon1644() {
+		ColegioRenovacion r = colegioDeRenovacion();
+		Long matricula = reservada(r, alumnoDeRenovacion(r));
+		assertThat(codigoAl(() -> jdbc.update("UPDATE matricula SET estado = 'ACTIVA', activada_en = NOW(6), "
+				+ "activada_por = 'sistema.matricula' WHERE id = ?", matricula))).isEqualTo(1644);
+		assertThat(jdbc.queryForObject("SELECT estado FROM matricula WHERE id = ?", String.class, matricula))
+				.isEqualTo("RESERVADA");
+	}
+
+	/** Con un año en curso, nadie inserta una matrícula ACTIVA en el año planificado (se saltaría la reserva). */
+	@Test
+	void matriculaActivaEnAnioPlanificadoFallaCon1644() {
+		ColegioRenovacion r = colegioDeRenovacion();
+		Long[] familia = alumnoDeRenovacion(r);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO matricula (colegio_id, alumno_id, anio_escolar_id, seccion_id, "
+				+ "fecha_matricula, estado, creado_en, creado_por, actualizado_en) VALUES (?, ?, ?, ?, CURRENT_DATE, "
+				+ "'ACTIVA', NOW(6), 'administracion', NOW(6))", r.id(), familia[1], r.anioSiguiente(), r.sextoA())))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO matricula (colegio_id, alumno_id, anio_escolar_id, seccion_id, "
+				+ "fecha_matricula, estado, activada_en, activada_por, creado_en, creado_por, actualizado_en) VALUES (?, ?, "
+				+ "?, ?, CURRENT_DATE, 'RESERVADA', NOW(6), 'sistema.matricula', NOW(6), 'administracion', NOW(6))", r.id(),
+				familia[1], r.anioSiguiente(), r.sextoA()))).isEqualTo(1644);
+	}
+
+	/** G19: una reservada con la matrícula pagada (o en pago parcial) no se retira para quedarse con el dinero. */
+	@Test
+	void retirarReservadaPagadaFallaCon1644() {
+		ColegioRenovacion r = colegioDeRenovacion();
+		Long[] familia = alumnoDeRenovacion(r);
+		Long matricula = reservada(r, familia);
+		Long cuota = jdbc.queryForObject("SELECT id FROM cuota WHERE matricula_id = ? AND tipo = 'MATRICULA'", Long.class,
+				matricula);
+		cobrarEnRenovacion(r, familia[0], cuota, "100.00", true);
+		assertThat(jdbc.queryForObject("SELECT estado FROM cuota WHERE id = ?", String.class, cuota)).isEqualTo("PARCIAL");
+		assertThat(jdbc.queryForObject("SELECT estado FROM matricula WHERE id = ?", String.class, matricula))
+				.isEqualTo("RESERVADA");
+		assertThat(codigoAl(() -> jdbc.update("UPDATE matricula SET estado = 'RETIRADA', retirada_en = CURRENT_DATE "
+				+ "WHERE id = ?", matricula))).isEqualTo(1644);
+	}
+
+	/** G17: en el portal responde un apoderado de ESA familia (la cuenta de otra familia no confirma la renovación). */
+	@Test
+	void respuestaPorPortalDeOtraFamiliaFallaCon1644() {
+		ColegioRenovacion r = colegioDeRenovacion();
+		Long[] suya = alumnoDeRenovacion(r);
+		Long[] otra = alumnoDeRenovacion(r);
+		Long renovacion = propuestaDe(r, suya[1]);
+		String deOtra = enLinea(r, otra[2]).getUsername();
+		assertThat(codigoAl(() -> jdbc.update("UPDATE renovacion_matricula SET estado = 'CONFIRMADA', "
+				+ "canal_respuesta = 'PORTAL', respondido_por = ?, respondido_en = NOW(6) WHERE id = ?", deOtra,
+				renovacion))).isEqualTo(1644);
+		assertThat(jdbc.queryForObject("SELECT estado FROM renovacion_matricula WHERE id = ?", String.class, renovacion))
+				.isEqualTo("PROPUESTA");
+	}
+
+	/** El aviso de una familia se atiende una vez: su respuesta no cambia (1644), su texto tampoco (1143) y no se borra. */
+	@Test
+	void avisoAtendidoNoCambiaFallaCon1644() {
+		ColegioRenovacion r = colegioDeRenovacion();
+		Long[] familia = alumnoDeRenovacion(r);
+		UsuariosDePrueba.iniciarSesion(enLinea(r, familia[2]));
+		Long aviso = avisosFamilia.enviar(new pe.edu.virgenmaria.cuentasclaras.familias.dto.AvisoRequest(
+				pe.edu.virgenmaria.cuentasclaras.familias.model.TipoAvisoFamilia.PAGUE_Y_NO_APARECE, null, null,
+				"Pagué en caja y no aparece " + sufijo));
+		UsuariosDePrueba.iniciarSesion(personalRenovacion(r.id(), 2105L, "ren.promotor", Rol.PROMOTOR));
+		avisosFamilia.atender(aviso, "Lo revisamos con caja y ya aparece en tu estado de cuenta.");
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT estado FROM aviso_familia WHERE id = ?", String.class, aviso))
+				.isEqualTo("ATENDIDO");
+		assertThat(codigoAl(() -> jdbc.update("UPDATE aviso_familia SET respuesta = 'Otra respuesta' WHERE id = ?",
+				aviso))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE aviso_familia SET estado = 'ABIERTO', atendido_por = NULL, "
+				+ "atendido_en = NULL, respuesta = NULL WHERE id = ?", aviso))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE aviso_familia SET texto = 'otro texto' WHERE id = ?", aviso)))
+				.isEqualTo(1143);
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM aviso_familia WHERE id = ?", aviso))).isEqualTo(1142);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE tipo = 'AVISO_ATENDIDO' AND entidad_id = ?",
+				Long.class, aviso)).isEqualTo(1);
 	}
 
 	private int anioLibre() {

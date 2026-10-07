@@ -7,12 +7,36 @@
 			<p class="etiqueta" th:text="${k.familia}">Familia Quispe Huamán</p>
 			<h1 th:text="|Hola, ${k.apoderado}|">Hola, Rosa</h1>
 			<p class="secundario">Aquí ves todo lo que debe tu familia y lo pagas desde el celular. Si ves un cobro que no reconoces, avisa al colegio.</p>
-			<p><a class="btn btn-secundario" th:href="@{/familia/mensajes}">Mensajes del colegio</a></p>
+			<nav class="fila" aria-label="Mi familia">
+				<a class="btn btn-secundario" th:href="@{/familia/estado-de-cuenta}">Estado de cuenta</a>
+				<a class="btn btn-secundario" th:href="@{/familia/comprobantes}">Mis boletas</a>
+				<a class="btn btn-secundario" th:href="@{/familia/mensajes}">Mensajes del colegio</a>
+			</nav>
 		</div>
 	</div>
 
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
 	<p class="marca-simulado" th:if="${k.simulada}">PAGO SIMULADO · NO ES DINERO REAL</p>
+
+	<th:block th:if="${inicio != null}">
+		<section class="tarjeta" aria-labelledby="titulo-resumen" data-seccion="resumen">
+			<h2 id="titulo-resumen" class="etiqueta">Tu resumen</h2>
+			<p th:if="${inicio.conDeudaVencida()}" class="texto-peligro" data-deuda-vencida>
+				<strong th:text="|Deuda vencida: S/ ${#numbers.formatDecimal(inicio.deudaVencida, 1, 'COMMA', 2, 'POINT')}|">Deuda vencida: S/ 380.00</strong>
+			</p>
+			<p th:unless="${inicio.conDeudaVencida()}">No tienes deuda vencida.</p>
+			<p th:if="${inicio.proximo != null}" class="secundario"
+				th:text="|Próximo vencimiento: ${inicio.proximo.descripcion} de ${inicio.proximo.alumno}, ${#temporals.format(inicio.proximo.vencimiento, 'dd/MM')}|">Próximo vencimiento: Pensión de marzo de Ana, 31/03</p>
+		</section>
+
+		<section class="tarjeta tarjeta-acento" th:each="r : ${inicio.renovaciones}" th:data-renovacion="${r.id}"
+			th:aria-label="|Matrícula ${r.anio} de ${r.alumno}|">
+			<h2 th:text="|Matrícula ${r.anio} de ${r.alumno}|">Matrícula 2027 de Ana</h2>
+			<p th:if="${r.porResponder}" th:text="|Confírmala antes del ${#temporals.format(r.respondeHasta, 'dd/MM/yyyy')}.|">Confírmala antes del 31/01/2027.</p>
+			<p th:unless="${r.porResponder}">Confirmada. Paga la matrícula en «Lo que debes» y quedará activa.</p>
+			<a class="btn btn-primario" th:if="${r.porResponder}" th:href="@{/familia/matricula/{id}(id=${r.id})}">Responder</a>
+		</section>
+	</th:block>
 
 	<section class="tarjeta total-cobro" aria-labelledby="titulo-total">
 		<h2 id="titulo-total" class="etiqueta">Total por pagar</h2>
@@ -87,6 +111,11 @@
 				<span th:replace="~{fragments/componentes :: monto(${p.total})}"></span>
 			</li>
 		</ul>
+	</section>
+	<section class="tarjeta" aria-labelledby="titulo-algo">
+		<h2 id="titulo-algo">¿Algo no cuadra?</h2>
+		<p class="secundario">¿Pagaste y no lo ves, o ves algo que no reconoces? Avísanos: va directo a Promotoría.</p>
+		<a class="btn btn-secundario" th:href="@{/familia/algo-no-cuadra}">Avisar a Promotoría</a>
 	</section>
 </main>
 </body>

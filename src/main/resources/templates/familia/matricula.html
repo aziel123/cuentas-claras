@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Matrícula del próximo año', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-matricula" th:with="r=${renovacion}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Mi familia</p>
+			<h1 th:text="|Matrícula ${r.anio} de ${r.alumno}|">Matrícula 2027 de Ana</h1>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta tarjeta-acento" aria-labelledby="titulo-propuesta">
+		<h2 id="titulo-propuesta" th:text="|${r.alumno} continúa en ${r.anio} en ${r.grado}, sección ${r.seccion}.|">Ana continúa en 2027 en 2.° Primaria, sección A.</h2>
+		<p th:if="${r.montoMatricula != null}"
+			th:text="|Matrícula S/ ${#numbers.formatDecimal(r.montoMatricula, 1, 'COMMA', 2, 'POINT')}, vence el ${#temporals.format(r.vencimientoMatricula, 'dd/MM/yyyy')}.|">Matrícula S/ 300.00, vence el 28/02/2027.</p>
+		<p class="fila"><span th:replace="~{fragments/componentes :: badge(${r.estado}, ${r.variante})}"></span></p>
+
+		<th:block th:if="${r.porResponder}">
+			<p class="secundario" th:text="|Responde hasta el ${#temporals.format(r.respondeHasta, 'dd/MM/yyyy')}. Si no respondes, no se genera ningún cobro.|">Responde hasta el 31/01/2027.</p>
+			<form method="post" th:action="@{/familia/matricula/{id}(id=${r.id})}" class="acciones acciones-izquierda">
+				<button type="submit" name="continua" value="true" class="btn btn-primario">Sí, continúa</button>
+				<button type="submit" name="continua" value="false" class="btn btn-secundario">No continuará</button>
+			</form>
+		</th:block>
+		<th:block th:if="${r.continua}">
+			<p>Listo. Ya puedes pagar la matrícula: aparece en «Lo que debes». Al pagarla, la matrícula queda activa.</p>
+			<a class="btn btn-primario" th:href="@{/familia}">Pagar la matrícula</a>
+		</th:block>
+	</section>
+	<p><a class="btn btn-texto" th:href="@{/familia}">Volver</a></p>
+</main>
+</body>
+</html>

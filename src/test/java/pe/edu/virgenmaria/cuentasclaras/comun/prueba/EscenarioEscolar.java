@@ -44,9 +44,23 @@ public final class EscenarioEscolar {
 			Long secundaria1A2026, Long primaria6A2027) {
 	}
 
+	/**
+	 * Años 2026 y 2027 SIN año en curso (sprint 5): así una matrícula de 2027 nace ACTIVA con su cronograma completo, como
+	 * en los escenarios de los sprints 2 a 4. Para la renovación de matrícula (2026 en curso y 2027 planificado, donde
+	 * la matrícula nace RESERVADA) usa {@link #crearEstructuraConAnioEnCurso}.
+	 */
 	public static Estructura crearEstructura(ServicioEstructura estructura) {
+		return crearEstructura(estructura, false);
+	}
+
+	/** 2026 EN_CURSO y 2027 PLANIFICADO: una matrícula de 2027 nace RESERVADA (sprint 5, tanda 2). */
+	public static Estructura crearEstructuraConAnioEnCurso(ServicioEstructura estructura) {
+		return crearEstructura(estructura, true);
+	}
+
+	private static Estructura crearEstructura(ServicioEstructura estructura, boolean enCurso2026) {
 		Long a2026 = estructura.crearAnio(new CrearAnioEscolarRequest(2026, LocalDate.of(2026, 3, 2),
-				LocalDate.of(2026, 12, 18), true));
+				LocalDate.of(2026, 12, 18), enCurso2026));
 		Long a2027 = estructura.crearAnio(new CrearAnioEscolarRequest(2027, LocalDate.of(2027, 3, 1),
 				LocalDate.of(2027, 12, 17), false));
 		return new Estructura(a2026, a2027,

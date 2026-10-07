@@ -80,12 +80,19 @@ public interface CuotaRepository extends Repository<Cuota, Long> {
 
 	List<Cuota> findByLineaSaldoInicialIdIn(Collection<Long> lineas);
 
-	/** Matrículas activas del año, de esos grados, que aún no tienen cuotas de matrícula ni de pensión. */
+	/**
+	 * Matrículas del año, de esos grados, sin cronograma: las activas sin cuotas de matrícula ni de pensión y (sprint 5)
+	 * las reservadas sin su cuota de matrícula.
+	 */
 	@Query("select m from Matricula m join fetch m.alumno join fetch m.seccion s "
-			+ "where m.anioEscolar.id = :anio and m.estado = pe.edu.virgenmaria.cuentasclaras.alumnos.model.EstadoMatricula.ACTIVA "
-			+ "and s.grado in :grados and not exists (select c.id from Cuota c where c.matriculaId = m.id "
+			+ "where m.anioEscolar.id = :anio and s.grado in :grados and ("
+			+ "(m.estado = pe.edu.virgenmaria.cuentasclaras.alumnos.model.EstadoMatricula.ACTIVA "
+			+ "and not exists (select c.id from Cuota c where c.matriculaId = m.id "
 			+ "and c.tipo in (pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoCuota.MATRICULA, "
-			+ "pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoCuota.PENSION)) order by m.id")
+			+ "pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoCuota.PENSION))) "
+			+ "or (m.estado = pe.edu.virgenmaria.cuentasclaras.alumnos.model.EstadoMatricula.RESERVADA "
+			+ "and not exists (select c.id from Cuota c where c.matriculaId = m.id "
+			+ "and c.tipo = pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoCuota.MATRICULA))) order by m.id")
 	List<Matricula> matriculasSinCronograma(@Param("anio") Long anioId, @Param("grados") Collection<Grado> grados);
 
 	/** Matrículas RETIRADAS del año, de esos grados, que no tienen ninguna cuota (un retiro que evitó todo el cobro). */

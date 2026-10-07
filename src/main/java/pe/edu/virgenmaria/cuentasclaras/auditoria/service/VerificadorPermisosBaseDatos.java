@@ -240,7 +240,19 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			trigger("INSERT INTO apoderado (colegio_id, familia_id, tipo_documento, numero_documento, apellido_paterno, "
 					+ "nombres, parentesco, nombre_busqueda, activo, contacto_solicitud_id, creado_en, creado_por, "
 					+ "actualizado_en) VALUES (0, 0, 'DNI', '00000000', 'verificador', 'verificador', 'MADRE', "
-					+ "'verificador', TRUE, 1, NOW(6), 'verificador', NOW(6))", "trg_apoderado_nace"));
+					+ "'verificador', TRUE, 1, NOW(6), 'verificador', NOW(6))", "trg_apoderado_nace"),
+			// Sprint 5, tanda 2 (V18): la renovación y el aviso de la familia no se borran ni cambian su alumno ni su
+			// texto; la renovación nace PROPUESTA y la matrícula ACTIVA solo en el año en curso.
+			sinBorrado("renovacion_matricula"), sinBorrado("aviso_familia"),
+			columna("UPDATE renovacion_matricula SET alumno_id = alumno_id WHERE 1 = 0", "renovacion_matricula"),
+			columna("UPDATE aviso_familia SET texto = texto WHERE 1 = 0", "aviso_familia"),
+			trigger("INSERT INTO renovacion_matricula (colegio_id, anio_destino_id, alumno_id, familia_id, "
+					+ "matricula_origen_id, grado_destino, seccion_destino_id, vence_en, estado, creado_en, creado_por, "
+					+ "actualizado_en) VALUES (0, 0, 0, 0, 0, 'PRIMARIA_1', 0, '2000-01-01', 'CONFIRMADA', NOW(6), "
+					+ "'verificador', NOW(6))", "trg_renovacion_matricula_nace"),
+			trigger("INSERT INTO matricula (colegio_id, alumno_id, anio_escolar_id, seccion_id, fecha_matricula, estado, "
+					+ "creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, '2000-01-01', 'ACTIVA', NOW(6), "
+					+ "'verificador', NOW(6))", "trg_matricula_nace"));
 
 	/** Sprint 5: la mensajería simulada solo existe en una base habilitada por el DBA (nunca en prod). */
 	static final String SQL_MENSAJERIA_SIMULADA =
@@ -277,7 +289,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_linea_recaudacion_estado", "trg_extracto_bancario_nace", "trg_extracto_bancario_estado",
 			"trg_movimiento_bancario_registro", "trg_partida_conciliacion_registro", "trg_partida_conciliacion_estado",
 			"trg_reembolso_pasarela_registro", "trg_mensaje_nace", "trg_mensaje_envio", "trg_enlace_activacion_nace",
-			"trg_enlace_activacion_uso", "trg_huella_bitacora_registro");
+			"trg_enlace_activacion_uso", "trg_huella_bitacora_registro", "trg_renovacion_matricula_nace",
+			"trg_renovacion_matricula_estado", "trg_matricula_nace", "trg_matricula_estado", "trg_aviso_familia_estado");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -391,6 +404,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		LOG.info("Permisos y triggers de pagos en línea, recaudación, conciliación y outbox del OSE verificados.");
 		verificarMensajeriaSimulada(escribe);
 		LOG.info("Permisos y triggers de mensajería, acceso directo al titular y huella diaria verificados.");
+		LOG.info("Permisos y triggers de la renovación de matrícula, la matrícula reservada y los avisos de las familias "
+				+ "verificados.");
 		return escribe;
 	}
 

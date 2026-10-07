@@ -50,7 +50,7 @@ class BusquedaAlumnosTest {
 	void preparar() {
 		LimpiezaBaseDatos.limpiar(jdbc);
 		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.ADMINISTRACION));
-		escuela = EscenarioEscolar.crearEstructura(estructura);
+		escuela = EscenarioEscolar.crearEstructuraConAnioEnCurso(estructura);
 		alumnos.registrar(EscenarioEscolar.mateoConRosa(escuela.primaria5A2026()));
 		alumnos.registrar(EscenarioEscolar.valeriaConRosaRegistrada(escuela.primaria2B2026()));
 		alumnos.registrar(EscenarioEscolar.conApoderadoNuevo("75330981", "Flores", "Rojas", "Sebastián",

@@ -17,6 +17,9 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Sprint 5 (tanda 2): los avisos de la familia apuntan a pagos y cuotas; la renovación, a sus matrículas.
+		jdbc.update("DELETE FROM aviso_familia");
+		jdbc.update("DELETE FROM renovacion_matricula");
 		// Sprint 5 (tanda 1): el enlace apunta a su mensaje y el respaldo al WhatsApp FALLIDO; la huella, a la bitácora.
 		jdbc.update("UPDATE enlace_activacion SET mensaje_id = NULL WHERE mensaje_id IS NOT NULL");
 		jdbc.update("DELETE FROM mensaje WHERE respaldo_de_id IS NOT NULL");

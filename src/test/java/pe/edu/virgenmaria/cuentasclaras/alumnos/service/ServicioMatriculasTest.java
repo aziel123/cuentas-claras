@@ -73,6 +73,33 @@ class ServicioMatriculasTest {
 		LimpiezaBaseDatos.limpiar(jdbc);
 	}
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension planes;
+
+	/**
+	 * Sprint 5, tanda 2: con 2026 en curso, un ingresante de 2027 (año planificado) nace RESERVADO con solo su cuota de
+	 * matrícula; las pensiones se generan cuando la paga (lo hace sistema.matricula).
+	 */
+	@Test
+	void ingresante2027NaceReservada() {
+		jdbc.update("UPDATE anio_escolar SET estado = 'EN_CURSO', vigente = TRUE WHERE id = ?", escuela.anio2026());
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.planAprobado(planes, escuela.anio2027(), 2027,
+				pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel.PRIMARIA, "450", "300", null);
+		Long matricula = matriculas.matricular(mateo, new MatricularRequest(escuela.primaria6A2027(), null)).matriculaId();
+
+		assertThat(jdbc.queryForMap("SELECT estado, activada_en FROM matricula WHERE id = ?", matricula))
+				.containsEntry("estado", "RESERVADA").containsEntry("activada_en", null);
+		assertThat(jdbc.queryForList("SELECT tipo FROM cuota WHERE matricula_id = ?", String.class, matricula))
+				.containsExactly("MATRICULA");
+		assertThat(EscenarioEscolar.ultimoEvento(jdbc, "MATRICULA_RESERVADA")).containsEntry("entidad_id",
+				matricula.toString());
+		// Un ingresante del año en curso sigue naciendo ACTIVO.
+		Long valeria = alumnos.registrar(EscenarioEscolar.valeriaConRosaRegistrada(null)).alumnoId();
+		Long de2026 = matriculas.matricular(valeria, new MatricularRequest(escuela.primaria2B2026(), null)).matriculaId();
+		assertThat(jdbc.queryForObject("SELECT estado FROM matricula WHERE id = ?", String.class, de2026))
+				.isEqualTo("ACTIVA");
+	}
+
 	@Test
 	void unaMatriculaPorAlumnoYAnio() {
 		matriculas.matricular(mateo, new MatricularRequest(escuela.primaria5A2026(), null));

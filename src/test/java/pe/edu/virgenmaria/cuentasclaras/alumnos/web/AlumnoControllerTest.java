@@ -54,7 +54,7 @@ class AlumnoControllerTest {
 	void preparar() {
 		LimpiezaBaseDatos.limpiar(jdbc);
 		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.ADMINISTRACION));
-		escuela = EscenarioEscolar.crearEstructura(estructura);
+		escuela = EscenarioEscolar.crearEstructuraConAnioEnCurso(estructura);
 		SecurityContextHolder.clearContext();
 	}
 

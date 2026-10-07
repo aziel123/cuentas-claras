@@ -333,6 +333,27 @@ class VerificadorPermisosBaseDatosTest {
 		}
 	}
 
+	/** Sprint 5, tanda 2: sin los triggers de la renovación o de la matrícula, o con DELETE o UPDATE de más, no arranca. */
+	@Test
+	void fallaSiFaltanLosPermisosOLosTriggersDeLaRenovacion() {
+		for (String[] caso : new String[][] { { "INSERT INTO renovacion_matricula", "trg_renovacion_matricula_nace" },
+				{ "INSERT INTO matricula", "trg_matricula_nace" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doThrow(denegado(1452)).when(mysql).update(org.mockito.ArgumentMatchers.startsWith(caso[0]));
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+		for (String[] caso : new String[][] { { "DELETE FROM renovacion_matricula WHERE 1 = 0", "renovacion_matricula" },
+				{ "DELETE FROM aviso_familia WHERE 1 = 0", "aviso_familia" },
+				{ "UPDATE renovacion_matricula SET alumno_id = alumno_id WHERE 1 = 0", "renovacion_matricula" },
+				{ "UPDATE aviso_familia SET texto = texto WHERE 1 = 0", "aviso_familia" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+	}
+
 	@Test
 	void fallaSiFaltanLosTriggersDelExtractoYLaConciliacion() {
 		for (String[] caso : new String[][] { { "INSERT INTO extracto_bancario", "trg_extracto_bancario_nace" },
@@ -344,8 +365,9 @@ class VerificadorPermisosBaseDatosTest {
 			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
 					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
 		}
-		// Sprint 5, tanda 1 (V17): 46 con los de mensajes, enlaces y huella.
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(46);
+		// Sprint 5, tanda 1 (V17): 46 con los de mensajes, enlaces y huella; tanda 2 (V18): 51 con los de la renovación,
+		// la matrícula reservada y los avisos de las familias.
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(51);
 	}
 
 	/**

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('¿Algo no cuadra?', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-algo-no-cuadra">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Mi familia</p>
+			<h1>¿Algo no cuadra?</h1>
+			<p class="secundario">Tu aviso le llega solo a Promotoría y Dirección. Te responderemos aquí.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<form method="post" th:action="@{/familia/algo-no-cuadra}" th:object="${aviso}" class="formulario tarjeta">
+		<fieldset class="grupo-opciones">
+			<legend>¿Qué pasó?</legend>
+			<label class="fila" th:each="t : ${tipos}">
+				<input type="radio" th:field="*{tipo}" th:value="${t}">
+				<span th:text="${t.etiqueta()}">Pagué y no aparece</span>
+			</label>
+			<p class="error" th:if="${#fields.hasErrors('tipo')}" th:errors="*{tipo}" role="alert">Elige qué no cuadra.</p>
+		</fieldset>
+		<div class="campo">
+			<label for="pagoId">¿Sobre qué pago? (opcional)</label>
+			<select class="input" id="pagoId" th:field="*{pagoId}">
+				<option value="">Ninguno</option>
+				<option th:each="o : ${opciones.pagos}" th:value="${o.id}" th:text="${o.etiqueta}">B001-00000231</option>
+			</select>
+		</div>
+		<div class="campo">
+			<label for="cuotaId">¿Sobre qué cuota? (opcional)</label>
+			<select class="input" id="cuotaId" th:field="*{cuotaId}">
+				<option value="">Ninguna</option>
+				<option th:each="o : ${opciones.cuotas}" th:value="${o.id}" th:text="${o.etiqueta}">Pensión octubre</option>
+			</select>
+		</div>
+		<div class="campo">
+			<label for="texto">Cuéntanos qué pasó</label>
+			<textarea class="input" id="texto" th:field="*{texto}" rows="4" maxlength="500" required></textarea>
+			<p class="ayuda">Hasta 500 caracteres. Por ejemplo: «Pagué S/ 380 en caja el 5 de octubre y no me llegó el mensaje».</p>
+			<p class="error" th:if="${#fields.hasErrors('texto')}" th:errors="*{texto}" role="alert">Cuéntanos qué pasó.</p>
+		</div>
+		<div class="acciones acciones-izquierda">
+			<button th:replace="~{fragments/componentes :: boton('Enviar a Promotoría', 'primario')}"></button>
+		</div>
+	</form>
+
+	<section class="tarjeta" aria-labelledby="titulo-mis-avisos" th:unless="${#lists.isEmpty(misAvisos)}">
+		<h2 id="titulo-mis-avisos">Tus avisos</h2>
+		<ul class="cuotas-familia">
+			<li th:each="a : ${misAvisos}" th:data-aviso="${a.id}">
+				<div class="cuota-cabecera">
+					<strong th:text="${a.tipo}">Pagué y no aparece</strong>
+					<span th:replace="~{fragments/componentes :: badge(${a.abierto} ? 'Enviado' : 'Respondido', ${a.abierto} ? 'alerta' : 'exito')}"></span>
+				</div>
+				<span class="secundario" th:text="${#temporals.format(a.creadoEn, 'dd/MM/yyyy HH:mm')}">05/10/2026 10:40</span>
+				<p class="texto-largo" th:text="${a.texto}">Pagué y no aparece</p>
+				<p class="texto-largo" th:if="${a.respuesta != null}"><strong>Respuesta del colegio:</strong> <span th:text="${a.respuesta}">Ya lo revisamos.</span></p>
+			</li>
+		</ul>
+	</section>
+	<p><a class="btn btn-secundario" th:href="@{/familia}">Volver</a></p>
+</main>
+</body>
+</html>

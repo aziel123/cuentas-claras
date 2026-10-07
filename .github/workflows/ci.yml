@@ -75,7 +75,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V17): Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V18): Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Permisos por tabla de cc_app
@@ -87,6 +87,12 @@ jobs:
           $MYSQL_ADMIN -e "SET PERSIST log_bin_trust_function_creators = 1"
           mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras \
             < scripts/mysql/03-triggers.sql
+
+      - name: "Sprint 5, tanda 2: un segundo colegio (con año en curso) para la renovación de matrícula"
+        run: |
+          # cc_app no crea colegios: lo hace el administrador, como el alta de un colegio real (nombre en ASCII: el
+          # cliente mysql no siempre envía UTF-8).
+          $MYSQL_ADMIN cuentasclaras -e "INSERT INTO colegio (nombre) VALUES ('Colegio de renovacion CI')"
 
       - name: "Fase 2: la aplicación funciona con los permisos mínimos de cc_app"
         run: ./mvnw -B test -Dtest=PermisosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
@@ -245,6 +251,20 @@ jobs:
           comprobar 1644 "INSERT INTO enlace_activacion (colegio_id, usuario_id, hash_token, vence_en, mensaje_id, proposito, creado_en, creado_por, actualizado_en) VALUES (0, 0, REPEAT('0', 64), NOW(6) + INTERVAL 1 HOUR, 0, 'PERSONAL', NOW(6), 'verificador', NOW(6))"
           comprobar 1644 "INSERT INTO huella_bitacora (colegio_id, fecha, secuencia, codigo, eventos_del_dia, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-01', 1, REPEAT('0', 16), 0, NOW(6), 'sistema.auditoria', NOW(6))"
           comprobar 1644 "INSERT INTO apoderado (colegio_id, familia_id, tipo_documento, numero_documento, apellido_paterno, nombres, parentesco, nombre_busqueda, activo, contacto_solicitud_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'DNI', '00000000', 'x', 'x', 'MADRE', 'x', TRUE, 1, NOW(6), 'x', NOW(6))"
+          # Sprint 5, tanda 2 (V18): renovación de matrícula, matrícula reservada y avisos de las familias.
+          for tabla in renovacion_matricula aviso_familia; do
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          for columna in alumno_id familia_id anio_destino_id matricula_origen_id deuda_al_proponer vence_en; do
+            comprobar 1143 "UPDATE renovacion_matricula SET $columna = $columna WHERE 1 = 0"
+          done
+          for columna in texto tipo familia_id apoderado_id pago_id cuota_id; do
+            comprobar 1143 "UPDATE aviso_familia SET $columna = $columna WHERE 1 = 0"
+          done
+          comprobar 1644 "INSERT INTO renovacion_matricula (colegio_id, anio_destino_id, alumno_id, familia_id, matricula_origen_id, grado_destino, seccion_destino_id, vence_en, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, 0, 'PRIMARIA_1', 0, '2000-01-01', 'CONFIRMADA', NOW(6), 'verificador', NOW(6))"
+          comprobar 1644 "INSERT INTO renovacion_matricula (colegio_id, anio_destino_id, alumno_id, familia_id, matricula_origen_id, grado_destino, seccion_destino_id, vence_en, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, 0, 'PRIMARIA_1', 0, '2000-01-01', 'PROPUESTA', NOW(6), 'verificador', NOW(6))"
+          comprobar 1644 "INSERT INTO matricula (colegio_id, alumno_id, anio_escolar_id, seccion_id, fecha_matricula, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, '2000-01-01', 'ACTIVA', NOW(6), 'verificador', NOW(6))"
+          comprobar 1644 "INSERT INTO matricula (colegio_id, alumno_id, anio_escolar_id, seccion_id, fecha_matricula, estado, activada_en, activada_por, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, '2000-01-01', 'RESERVADA', NOW(6), 'sistema.matricula', NOW(6), 'verificador', NOW(6))"
           # G10 y G11: sin la fila 'mensajeria_simulada' (como en prod), la base no acepta un mensaje simulado. El
           # mensaje PENDIENTE lo dejó PermisosMySqlTest.simuladoSinPermisoDeLaBaseFallaCon1644.
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'mensajeria_simulada'")
@@ -284,6 +304,7 @@ jobs:
           grep -q "Permisos y triggers de caja, comprobantes, anulaciones, descuentos y cierres verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de pagos en línea, recaudación, conciliación y outbox del OSE verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de mensajería, acceso directo al titular y huella diaria verificados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Permisos y triggers de la renovación de matrícula, la matrícula reservada y los avisos de las familias" prod.log || { cat prod.log; exit 1; }
           grep -q "Triggers verificados: están los" prod.log || { cat prod.log; exit 1; }
           kill "$PID_APP"
           if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \

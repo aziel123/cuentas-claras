@@ -347,7 +347,24 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".comunicacion.service.ConsultaMensajes", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".comunicacion.service.ConsultaMensajes#reintentar", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".comunicacion.service.ConsultaMensajes#historialDeMiFamilia", "hasRole('APODERADO')"),
-			Map.entry(BASE + ".comunicacion.service.AlertasComunicacion", "hasRole('PROMOTOR')"));
+			Map.entry(BASE + ".comunicacion.service.AlertasComunicacion", "hasRole('PROMOTOR')"),
+			// Sprint 5, tanda 2: renovación de matrícula (Administración abre y registra en persona; Dirección cambia el
+			// destino; la familia responde; sistema.matricula reserva y activa) y avisos de las familias (solo Promotoría y
+			// Dirección los ven y atienden).
+			Map.entry(BASE + ".matricula.service.ServicioCampanaRenovacion", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".matricula.service.ServicioCampanaRenovacion#abrir", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".matricula.service.ServicioCampanaRenovacion#registrarPresencial", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".matricula.service.ServicioCampanaRenovacion#cambiarDestino", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".matricula.service.ServicioRenovacionFamilia", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".matricula.service.ProcesosMatricula", "hasRole('SISTEMA_MATRICULA')"),
+			Map.entry(BASE + ".matricula.service.AlertasMatricula", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".alumnos.service.ReservasMatricula", "hasRole('SISTEMA_MATRICULA')"),
+			Map.entry(BASE + ".familias.service.ConsultaEstadoCuentaFamilia", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".familias.service.InicioPortalFamilia", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".familias.service.ServicioAvisosFamilia#enviar", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".familias.service.ServicioAvisosFamilia#bandeja", APROBACION),
+			Map.entry(BASE + ".familias.service.ServicioAvisosFamilia#atender", APROBACION),
+			Map.entry(BASE + ".familias.service.AlertasFamilias", "hasRole('PROMOTOR')"));
 
 	/**
 	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para
@@ -382,6 +399,35 @@ class ReglasArquitecturaTest {
 			.should().dependOnClassesThat().resideInAPackage(BASE + ".comunicacion..")
 			.because("los módulos financieros publican PagoRegistrado, PagoAnulado o DescuentoAprobado y no conocen la "
 					+ "mensajería");
+
+	/**
+	 * Sprint 5, tanda 2 (decisión 1): matricula y familias dependen de los módulos base, nunca al revés; matricula no
+	 * conoce el portal ni la mensajería (publica eventos que la mensajería escucha).
+	 */
+	@ArchTest
+	static final ArchRule losModulosBaseNoDependenDeMatriculaNiDeFamilias = noClasses()
+			.that().resideInAnyPackage(BASE + ".caja..", BASE + ".cobranza..", BASE + ".comprobantes..",
+					BASE + ".alumnos..", BASE + ".seguridad..", BASE + ".auditoria..", BASE + ".comun..",
+					BASE + ".colegio..", BASE + ".pasarela..", BASE + ".recaudacion..", BASE + ".conciliacion..",
+					BASE + ".aprobaciones..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".matricula..", BASE + ".familias..")
+			.because("la renovación y el portal usan los módulos base; ellos no los conocen");
+
+	@ArchTest
+	static final ArchRule matriculaNoDependeDelPortalNiDeLaMensajeria = noClasses()
+			.that().resideInAPackage(BASE + ".matricula..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".familias..", BASE + ".comunicacion..")
+			.because("matricula publica RenovacionesAbiertas y RenovacionRespondida; la mensajería las escucha");
+
+	/** Sprint 5, tanda 2: la renovación y los avisos de las familias no se borran ni se editan por consulta. */
+	@ArchTest
+	static final ArchRule repositoriosDeMatriculaYFamiliasSinModifyingNiBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".matricula.repository..",
+					BASE + ".familias.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("la renovación y el aviso de la familia cambian solo por sus métodos con regla")
+			.allowEmptyShould(true);
 
 	/** Sprint 5 (G11): la mensajería simulada solo existe en dev, test y piloto (nunca en prod). */
 	@ArchTest

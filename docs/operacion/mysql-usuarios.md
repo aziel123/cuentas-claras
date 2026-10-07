@@ -241,6 +241,13 @@ linea_recaudacion_id = linea_recaudacion_id` y `UPDATE enlace_activacion SET has
 con destino), `trg_anulacion_pago_registro` (CONTRACARGO), `trg_reembolso_registro` (sin pagos de la pasarela) y
 `trg_orden_pago_estado` (contracargo una vez; con contracargo no se aplica ni se devuelve); se agrega
 `trg_reembolso_pasarela_registro`: 41 triggers en total.
+Sprint 5, tanda 2 (V18, renovación de matrícula y avisos de las familias): `DELETE` sobre `renovacion_matricula` y
+`aviso_familia` da 1142; `UPDATE renovacion_matricula SET alumno_id|familia_id|anio_destino_id|matricula_origen_id|
+deuda_al_proponer|vence_en = ...` y `UPDATE aviso_familia SET texto|tipo|familia_id|apoderado_id|pago_id|cuota_id = ...`
+dan 1143; una renovación que nace CONFIRMADA (o de un alumno inexistente), una matrícula ACTIVA en un año inexistente y
+una RESERVADA ya activada dan 1644. Se agregan `trg_renovacion_matricula_nace|estado`, `trg_matricula_nace|estado` y
+`trg_aviso_familia_estado`: 51 triggers en total (46 de la tanda 1). Con un año EN CURSO, la matrícula de un año
+PLANIFICADO solo nace RESERVADA y pasa a ACTIVA cuando su cuota de matrícula está pagada, y solo `sistema.matricula`.
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

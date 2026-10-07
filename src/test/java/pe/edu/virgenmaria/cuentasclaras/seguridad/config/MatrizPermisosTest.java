@@ -383,6 +383,27 @@ class MatrizPermisosTest {
 				.getAuthorities())).as("con clave pendiente no hay menú").isEmpty();
 	}
 
+	/**
+	 * Sprint 5, tanda 2 (G1): los avisos de las familias («¿Algo no cuadra?») solo los ven y atienden Promotoría y
+	 * Dirección. Caja y Administración pueden ser parte del problema: 403 en la bandeja y al atender.
+	 */
+	@Test
+	void cajaYAdministracionNoVenLosAvisosDeFamilias() throws Exception {
+		for (Rol rol : new Rol[] { Rol.CAJA, Rol.ADMINISTRACION, Rol.DOCENTE, Rol.APODERADO }) {
+			mvc.perform(get("/avisos-familias").with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+			mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/avisos-familias/1/atender")
+					.with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf())
+					.param("respuesta", "La cierro yo").with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+		}
+		for (Rol rol : new Rol[] { Rol.PROMOTOR, Rol.DIRECTOR }) {
+			mvc.perform(get("/avisos-familias").with(UsuariosDePrueba.como(rol))).andExpect(status().isOk());
+		}
+		// La renovación de matrícula: Caja, Docente y Apoderado no entran a la campaña.
+		for (Rol rol : new Rol[] { Rol.CAJA, Rol.DOCENTE, Rol.APODERADO }) {
+			mvc.perform(get("/matricula-2027").with(UsuariosDePrueba.como(rol))).andExpect(status().isForbidden());
+		}
+	}
+
 	private static boolean estaCubierta(String ruta) {
 		if (Arrays.asList(ModuloApp.RUTAS_PUBLICAS).contains(ruta) || ModuloApp.RUTA_CAMBIAR_CLAVE.equals(ruta)) {
 			return true;

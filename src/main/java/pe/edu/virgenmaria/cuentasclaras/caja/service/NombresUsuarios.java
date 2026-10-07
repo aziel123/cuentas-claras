@@ -31,6 +31,7 @@ public class NombresUsuarios {
 					case OSE -> "Envío al OSE (automático)";
 					case MENSAJERIA -> "Mensajería (automático)";
 					case AUDITORIA -> "Huella de la bitácora (automático)";
+					case MATRICULA -> "Matrícula del año siguiente (automático)";
 				};
 			}
 		}

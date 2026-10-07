@@ -1,0 +1,117 @@
+package pe.edu.virgenmaria.cuentasclaras.familias.web;
+
+import jakarta.validation.Valid;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.familias.dto.AvisoRequest;
+import pe.edu.virgenmaria.cuentasclaras.familias.dto.InicioFamilia;
+import pe.edu.virgenmaria.cuentasclaras.familias.model.TipoAvisoFamilia;
+import pe.edu.virgenmaria.cuentasclaras.familias.service.ConsultaEstadoCuentaFamilia;
+import pe.edu.virgenmaria.cuentasclaras.familias.service.InicioPortalFamilia;
+import pe.edu.virgenmaria.cuentasclaras.familias.service.ServicioAvisosFamilia;
+import pe.edu.virgenmaria.cuentasclaras.matricula.dto.RenovacionFamilia;
+import pe.edu.virgenmaria.cuentasclaras.matricula.service.ServicioRenovacionFamilia;
+
+/**
+ * Portal de familias para el celular (sprint 5, pantallas 1, 2, 3, 5 y 6): inicio, estado de cuenta completo,
+ * comprobantes, «¿Algo no cuadra?» y la renovación de matrícula. La familia sale SIEMPRE de la cuenta en sesión (los
+ * servicios responden 404 con lo de otra familia). Sin lógica: delega en los servicios, que exigen el rol APODERADO. El
+ * pago en línea sigue en {@code pasarela} y el historial de mensajes en {@code comunicacion}.
+ */
+@Controller
+public class PortalFamiliaController {
+
+	private final InicioPortalFamilia inicio;
+
+	private final ConsultaEstadoCuentaFamilia estadoCuenta;
+
+	private final ServicioAvisosFamilia avisos;
+
+	private final ServicioRenovacionFamilia renovaciones;
+
+	public PortalFamiliaController(InicioPortalFamilia inicio, ConsultaEstadoCuentaFamilia estadoCuenta,
+			ServicioAvisosFamilia avisos, ServicioRenovacionFamilia renovaciones) {
+		this.inicio = inicio;
+		this.estadoCuenta = estadoCuenta;
+		this.avisos = avisos;
+		this.renovaciones = renovaciones;
+	}
+
+	@GetMapping("/familia")
+	public String inicio(Model model) {
+		InicioFamilia datos = inicio.inicio();
+		model.addAttribute("inicio", datos);
+		model.addAttribute("cuenta", datos.cuenta());
+		return "familia/inicio";
+	}
+
+	@GetMapping("/familia/estado-de-cuenta")
+	public String estadoDeCuenta(Model model) {
+		model.addAttribute("estado", estadoCuenta.deMiFamilia());
+		return "familia/estado-de-cuenta";
+	}
+
+	@GetMapping("/familia/comprobantes")
+	public String comprobantes(Model model) {
+		model.addAttribute("comprobantes", estadoCuenta.comprobantes());
+		return "familia/comprobantes";
+	}
+
+	@GetMapping("/familia/algo-no-cuadra")
+	public String algoNoCuadra(Model model) {
+		model.addAttribute("aviso", AvisoRequest.vacio());
+		prepararAviso(model);
+		return "familia/algo-no-cuadra";
+	}
+
+	@PostMapping("/familia/algo-no-cuadra")
+	public String enviarAviso(@Valid @ModelAttribute("aviso") AvisoRequest aviso, BindingResult validacion, Model model,
+			RedirectAttributes mensajes) {
+		if (!validacion.hasErrors()) {
+			try {
+				avisos.enviar(aviso);
+				mensajes.addFlashAttribute("exito", "Lo recibió Promotoría. Te responderemos aquí.");
+				return "redirect:/familia/algo-no-cuadra";
+			}
+			catch (ReglaNegocioException e) {
+				model.addAttribute("error", e.getMessage());
+			}
+		}
+		prepararAviso(model);
+		return "familia/algo-no-cuadra";
+	}
+
+	@GetMapping("/familia/matricula/{id:\\d+}")
+	public String renovacion(@PathVariable Long id, Model model) {
+		model.addAttribute("renovacion", renovaciones.una(id));
+		return "familia/matricula";
+	}
+
+	@PostMapping("/familia/matricula/{id:\\d+}")
+	public String responder(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean continua,
+			RedirectAttributes mensajes) {
+		try {
+			RenovacionFamilia respuesta = renovaciones.responder(id, continua);
+			mensajes.addFlashAttribute("exito", continua ? "Listo. Ya puedes pagar la matrícula de " + respuesta.alumno()
+					+ " en «Lo que debes»." : "Listo: registramos que " + respuesta.alumno() + " no continuará.");
+		}
+		catch (ReglaNegocioException e) {
+			mensajes.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/familia/matricula/" + id;
+	}
+
+	private void prepararAviso(Model model) {
+		model.addAttribute("tipos", TipoAvisoFamilia.values());
+		model.addAttribute("opciones", avisos.opciones());
+		model.addAttribute("misAvisos", avisos.misAvisos());
+	}
+}

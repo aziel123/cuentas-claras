@@ -346,10 +346,17 @@ public class RegistroAlumnos {
 		if (!tardio) {
 			exigirFechaMatriculaRegular(fecha, anio);
 		}
-		Matricula matricula = Matricula.nueva(alumno, seccion, fecha);
+		// Sprint 5: en el año PLANIFICADO siguiente al año en curso la matrícula nace RESERVADA (solo su cuota de
+		// matrícula; las pensiones se generan al pagarla). Un colegio sin año en curso (empieza con su primer año
+		// planificado) matricula ACTIVA, como hasta hoy. En MySQL lo exige trg_matricula_nace.
+		boolean reserva = anio.getEstado() == pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoAnioEscolar.PLANIFICADO
+				&& anios.findByEstado(pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoAnioEscolar.EN_CURSO).isPresent();
+		Matricula matricula = reserva ? Matricula.reservada(alumno, seccion, fecha) : Matricula.nueva(alumno, seccion, fecha);
 		guardar(() -> matriculas.saveAndFlush(matricula), () -> yaMatriculado(alumno, anio, seccion));
-		auditoria.registrar(AccionAuditoria.MATRICULA_REGISTRADA, "matricula", matricula.getId().toString(), null,
-				seccion.etiqueta() + " " + anio.getAnio() + "; desde el " + Calendario.formatear(fecha),
+		auditoria.registrar(reserva ? AccionAuditoria.MATRICULA_RESERVADA : AccionAuditoria.MATRICULA_REGISTRADA,
+				"matricula", matricula.getId().toString(), null,
+				seccion.etiqueta() + " " + anio.getAnio() + "; desde el " + Calendario.formatear(fecha)
+						+ (reserva ? " (reservada hasta pagar la matrícula)" : ""),
 				"Alumno " + alumno.nombreCompleto() + ".");
 		eventos.publishEvent(new MatriculaRegistrada(matricula.getId()));
 		if (tardio) {
@@ -361,6 +368,37 @@ public class RegistroAlumnos {
 					"Ingreso tardío pedido al matricular: hasta que se apruebe, se cobra desde el inicio de clases.");
 		}
 		return matricula;
+	}
+
+	/**
+	 * Sprint 5: activa una matrícula RESERVADA (solo lo llama {@link ReservasMatricula}, como {@code sistema.matricula},
+	 * cuando su cuota de matrícula quedó pagada o exonerada). Bloquea el año, audita y publica {@link MatriculaActivada}
+	 * en la misma transacción: cobranza genera ahí las pensiones.
+	 */
+	public void activar(Matricula matricula, String actor) {
+		anios.bloquear(matricula.getAnioEscolar().getId());
+		matricula.activar(java.time.LocalDateTime.now(reloj), actor);
+		matriculas.saveAndFlush(matricula);
+		auditoria.registrar(AccionAuditoria.MATRICULA_ACTIVADA, "matricula", matricula.getId().toString(), "RESERVADA",
+				"ACTIVA", "Alumno " + matricula.getAlumno().nombreCompleto() + ", " + matricula.getSeccion().etiqueta() + " "
+						+ matricula.getAnioEscolar().getAnio() + ": la cuota de matrícula quedó pagada.");
+		eventos.publishEvent(new MatriculaActivada(matricula.getId()));
+	}
+
+	/**
+	 * Sprint 5: desistimiento de una matrícula RESERVADA cuya cuota de matrícula ya se anuló con aprobación (solicitud
+	 * ANULACION_CUOTA). La base exige que no quede pagada ni en pago parcial.
+	 */
+	public void desistir(Matricula matricula, String detalle) {
+		anios.bloquear(matricula.getAnioEscolar().getId());
+		if (!matricula.reservada()) {
+			throw new ReglaNegocioException("Solo se retira así una matrícula reservada.");
+		}
+		matricula.retirar(LocalDate.now(reloj));
+		matriculas.saveAndFlush(matricula);
+		auditoria.registrar(AccionAuditoria.MATRICULA_DESISTIDA, "matricula", matricula.getId().toString(), "RESERVADA",
+				"RETIRADA", "Alumno " + matricula.getAlumno().nombreCompleto() + ", " + matricula.getAnioEscolar().getAnio()
+						+ ". " + detalle);
 	}
 
 	/**
@@ -416,8 +454,9 @@ public class RegistroAlumnos {
 	 * La fecha no puede ser anterior a la fecha de matrícula del año.
 	 */
 	public void retirar(Alumno alumno, LocalDate fecha, String motivo, String solicitante, String aprobador) {
+		// Sprint 5: también la reservada del año siguiente (en MySQL, solo si su matrícula no está pagada).
 		List<Matricula> activas = matriculas.findByAlumnoIdOrderByAnioEscolarAnioDesc(alumno.getId()).stream()
-				.filter(Matricula::activa).toList();
+				.filter(Matricula::vigente).toList();
 		activas.stream().map(m -> m.getAnioEscolar().getId()).sorted().forEach(anios::bloquear);
 		if (!alumno.activo()) {
 			throw new ReglaNegocioException(alumno.nombreCompleto() + " ya no está activo.");

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Matricula;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.MatriculaRepository;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.service.MatriculaActivada;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.MatriculaRegistrada;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
@@ -101,6 +102,18 @@ public class GeneradorCronograma {
 				.ifPresent(plan -> generarPara(matricula, plan));
 	}
 
+	/**
+	 * Sprint 5: la matrícula reservada se activó (su cuota de matrícula quedó pagada): genera las pensiones que faltan,
+	 * en la misma transacción (como {@code sistema.matricula}).
+	 */
+	@EventListener
+	public void alActivarMatricula(MatriculaActivada evento) {
+		Matricula matricula = matriculas.findById(evento.matriculaId())
+				.orElseThrow(() -> new IllegalStateException("La matrícula " + evento.matriculaId() + " no existe"));
+		planes.findByAnioEscolarIdAndNivelAndVigenteTrue(matricula.getAnioEscolar().getId(), matricula.nivel())
+				.ifPresent(plan -> generarPara(matricula, plan));
+	}
+
 	private ResultadoGeneracion generarConPlan(PlanPension plan) {
 		List<Grado> grados = Arrays.stream(Grado.values()).filter(g -> g.nivel() == plan.getNivel()).toList();
 		ResultadoGeneracion resultado = vacio();
@@ -112,14 +125,23 @@ public class GeneradorCronograma {
 
 	/** Genera el cronograma de una matrícula. Idempotente; cada cronograma queda en la bitácora. */
 	ResultadoGeneracion generarPara(Matricula matricula, PlanPension plan) {
-		if (!matricula.activa() || !matricula.getAlumno().activo() || !plan.aprobado()
+		if (!matricula.vigente() || !matricula.getAlumno().activo() || !plan.aprobado()
 				|| matricula.nivel() != plan.getNivel()
-				|| !matricula.getAnioEscolar().getId().equals(plan.getAnioEscolar().getId())
-				|| cuotas.existsByMatriculaIdAndTipoIn(matricula.getId(), DEL_PLAN)) {
+				|| !matricula.getAnioEscolar().getId().equals(plan.getAnioEscolar().getId())) {
 			return vacio();
 		}
+		// Sprint 5: la RESERVADA genera solo su cuota de matrícula; al activarse, las pensiones (una activa que ya tiene
+		// pensiones no se vuelve a generar).
+		boolean reservada = matricula.reservada();
+		if (cuotas.existsByMatriculaIdAndTipoIn(matricula.getId(), reservada ? EnumSet.of(TipoCuota.MATRICULA)
+				: EnumSet.of(TipoCuota.PENSION))) {
+			return vacio();
+		}
+		Set<TipoCuota> tipos = reservada ? EnumSet.of(TipoCuota.MATRICULA) : DEL_PLAN;
 		List<CuotaPlanificada> planificadas = CalculadoraCronograma.calcular(plan, matricula.getId(),
-				matricula.getFechaMatricula());
+				matricula.getFechaMatricula()).stream().filter(p -> tipos.contains(p.tipo()))
+				// La de matrícula ya generada al reservar no se vuelve a evaluar (no es «deuda existente»).
+				.filter(p -> !cuotas.existsByClave(p.clave())).toList();
 		Map<String, Cuota> existentes = cuotas
 				.findByAlumnoIdAndObligacionIn(matricula.getAlumno().getId(),
 						planificadas.stream().map(CuotaPlanificada::obligacion).toList())

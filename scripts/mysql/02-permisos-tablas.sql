@@ -132,6 +132,13 @@ GRANT INSERT, UPDATE (estado, proveedor, proveedor_mensaje_id, intentos, proximo
 GRANT INSERT ON cuentasclaras.huella_bitacora TO 'cc_app'@'%';                    -- solo inserción
 -- enlace_activacion: SIN cambios (mensaje_id y proposito no están en su UPDATE: 1143). usuario y apoderado mantienen su
 -- UPDATE por tabla: telefono_whatsapp se audita; el contacto del apoderado lo vigila trg_apoderado_facturacion.
+-- Sprint 5 · tanda 2 (V18): renovación y avisos de la familia. Nunca DELETE. El alumno, la familia, el año destino y la
+-- matrícula de origen de una renovación no cambian, ni el texto, el tipo y las referencias de un aviso (1143). matricula
+-- mantiene su GRANT por tabla: los estados y la activación los vigila trg_matricula_estado.
+GRANT INSERT, UPDATE (estado, grado_destino, seccion_destino_id, canal_respuesta, respondido_por, respondido_en,
+    matricula_id, actualizado_en, version) ON cuentasclaras.renovacion_matricula TO 'cc_app'@'%';
+GRANT INSERT, UPDATE (estado, atendido_por, atendido_en, respuesta, actualizado_en, version)
+    ON cuentasclaras.aviso_familia TO 'cc_app'@'%';
 -- configuracion_bd sigue SIN GRANT. Filas nuevas que solo escribe el DBA:
 --   ('mensajeria_simulada', 'PERMITIDA')  -> solo en las bases de dev, test (MySQL) y piloto. NUNCA en prod.
 --   ('huella_correo_externo', '<correo del contador>') -> opcional, en prod (decisión 49).

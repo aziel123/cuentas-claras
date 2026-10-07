@@ -943,4 +943,119 @@ BEGIN
     END IF;
 END$$
 
+
+-- ===================== Sprint 5 · tanda 2 (V18): renovación, matrícula reservada y avisos de la familia ==============
+
+-- La renovación nace PROPUESTA, sin respuesta, para un alumno ACTIVO de ESA familia con su matrícula de origen ACTIVA,
+-- hacia un año PLANIFICADO del mismo colegio y una sección del grado propuesto.
+DROP TRIGGER IF EXISTS trg_renovacion_matricula_nace$$
+CREATE TRIGGER trg_renovacion_matricula_nace BEFORE INSERT ON renovacion_matricula FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> 'PROPUESTA') OR NEW.matricula_id IS NOT NULL OR NEW.respondido_por IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la renovación nace PROPUESTA y sin respuesta';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM alumno a JOIN matricula m ON m.id = NEW.matricula_origen_id
+            JOIN anio_escolar d ON d.id = NEW.anio_destino_id JOIN seccion s ON s.id = NEW.seccion_destino_id
+            WHERE a.id = NEW.alumno_id AND a.colegio_id = NEW.colegio_id AND a.familia_id = NEW.familia_id
+            AND a.estado = 'ACTIVO' AND m.alumno_id = a.id AND m.estado = 'ACTIVA' AND d.estado = 'PLANIFICADO'
+            AND d.colegio_id = NEW.colegio_id AND s.grado = NEW.grado_destino) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: renovación de un alumno activo de su familia hacia un año planificado';
+    END IF;
+END$$
+
+-- Transiciones; grado y sección cambian solo en la propuesta; la respuesta se escribe una vez (en el portal, por un
+-- apoderado de ESA familia); MATRICULADA apunta a la matrícula de su alumno, año y sección.
+DROP TRIGGER IF EXISTS trg_renovacion_matricula_estado$$
+CREATE TRIGGER trg_renovacion_matricula_estado BEFORE UPDATE ON renovacion_matricula FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> OLD.estado) AND NOT (
+            (OLD.estado = 'PROPUESTA' AND NEW.estado IN ('CONFIRMADA', 'NO_CONTINUA', 'VENCIDA'))
+            OR (OLD.estado = 'CONFIRMADA' AND NEW.estado = 'MATRICULADA')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: cambio de estado de la renovación no permitido';
+    END IF;
+    IF (NOT (NEW.grado_destino <=> OLD.grado_destino) OR NOT (NEW.seccion_destino_id <=> OLD.seccion_destino_id))
+            AND (NOT (OLD.estado <=> 'PROPUESTA') OR NOT EXISTS (SELECT 1 FROM seccion s
+                WHERE s.id = NEW.seccion_destino_id AND s.grado = NEW.grado_destino)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el grado y la sección cambian solo en la propuesta';
+    END IF;
+    IF OLD.respondido_por IS NOT NULL AND (NOT (NEW.respondido_por <=> OLD.respondido_por)
+            OR NOT (NEW.respondido_en <=> OLD.respondido_en) OR NOT (NEW.canal_respuesta <=> OLD.canal_respuesta)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la respuesta de la familia no cambia';
+    END IF;
+    IF NEW.canal_respuesta <=> 'PORTAL' AND OLD.respondido_por IS NULL AND NOT EXISTS (SELECT 1 FROM usuario u
+            JOIN apoderado a ON a.id = u.apoderado_id
+            WHERE u.nombre_usuario = NEW.respondido_por AND u.colegio_id = NEW.colegio_id
+            AND a.familia_id = NEW.familia_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: en el portal responde un apoderado de la familia';
+    END IF;
+    IF NEW.estado <=> 'MATRICULADA' AND NOT (OLD.estado <=> 'MATRICULADA') AND NOT EXISTS (SELECT 1 FROM matricula m
+            WHERE m.id = NEW.matricula_id AND m.alumno_id = NEW.alumno_id AND m.anio_escolar_id = NEW.anio_destino_id
+            AND m.seccion_id = NEW.seccion_destino_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la renovación apunta a la matrícula de su alumno y año';
+    END IF;
+END$$
+
+-- RESERVADA solo en un año PLANIFICADO; ACTIVA en el año EN_CURSO (ingreso durante el año, como hasta hoy). Un colegio
+-- que todavía no tiene año EN_CURSO (empieza a usar el sistema con su primer año planificado) matricula ACTIVA en ese
+-- año planificado; en cuanto existe un año en curso, toda matrícula de un año planificado nace RESERVADA.
+DROP TRIGGER IF EXISTS trg_matricula_nace$$
+CREATE TRIGGER trg_matricula_nace BEFORE INSERT ON matricula FOR EACH ROW
+BEGIN
+    IF NEW.activada_en IS NOT NULL OR NEW.activada_por IS NOT NULL OR NOT EXISTS (SELECT 1 FROM anio_escolar d
+            WHERE d.id = NEW.anio_escolar_id AND d.colegio_id = NEW.colegio_id
+            AND ((NEW.estado <=> 'RESERVADA' AND d.estado = 'PLANIFICADO')
+                OR (NEW.estado <=> 'ACTIVA' AND d.estado = 'EN_CURSO')
+                OR (NEW.estado <=> 'ACTIVA' AND d.estado = 'PLANIFICADO' AND NOT EXISTS (SELECT 1 FROM anio_escolar e
+                    WHERE e.colegio_id = NEW.colegio_id AND e.estado = 'EN_CURSO')))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la matrícula del año siguiente nace RESERVADA';
+    END IF;
+END$$
+
+-- El alumno y el año no cambian. RESERVADA -> ACTIVA solo con su cuota de matrícula PAGADA o EXONERADA (o con un plan
+-- de matrícula 0) y solo por sistema.matricula. RESERVADA -> RETIRADA sin la matrícula pagada ni en pago parcial.
+DROP TRIGGER IF EXISTS trg_matricula_estado$$
+CREATE TRIGGER trg_matricula_estado BEFORE UPDATE ON matricula FOR EACH ROW
+BEGIN
+    IF NOT (NEW.alumno_id <=> OLD.alumno_id) OR NOT (NEW.anio_escolar_id <=> OLD.anio_escolar_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el alumno y el año de la matrícula no cambian';
+    END IF;
+    IF NOT (NEW.estado <=> OLD.estado) AND NOT (
+            (OLD.estado = 'RESERVADA' AND NEW.estado IN ('ACTIVA', 'RETIRADA'))
+            OR (OLD.estado = 'ACTIVA' AND NEW.estado = 'RETIRADA')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: cambio de estado de la matrícula no permitido';
+    END IF;
+    IF (OLD.activada_por IS NOT NULL AND NOT (NEW.activada_por <=> OLD.activada_por))
+            OR (OLD.activada_en IS NOT NULL AND NOT (NEW.activada_en <=> OLD.activada_en)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la activación de la matrícula no se reescribe';
+    END IF;
+    IF OLD.estado = 'RESERVADA' AND NEW.estado = 'ACTIVA' AND NOT (
+            EXISTS (SELECT 1 FROM cuota c WHERE c.matricula_id = NEW.id AND c.tipo = 'MATRICULA'
+                AND c.estado IN ('PAGADA', 'EXONERADA'))
+            OR (NOT EXISTS (SELECT 1 FROM cuota c WHERE c.matricula_id = NEW.id AND c.tipo = 'MATRICULA'
+                    AND c.estado <> 'ANULADA')
+                AND EXISTS (SELECT 1 FROM plan_pension p JOIN seccion s ON s.id = NEW.seccion_id
+                    WHERE p.anio_escolar_id = NEW.anio_escolar_id AND p.colegio_id = NEW.colegio_id
+                    AND p.estado = 'APROBADO' AND p.vigente = TRUE AND p.monto_matricula = 0
+                    AND p.nivel = SUBSTRING_INDEX(s.grado, '_', 1)))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la matrícula se activa con la matrícula pagada';
+    END IF;
+    IF OLD.estado = 'RESERVADA' AND NEW.estado = 'ACTIVA' AND NOT (NEW.activada_por <=> 'sistema.matricula') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la matrícula la activa el sistema';
+    END IF;
+    IF OLD.estado = 'RESERVADA' AND NEW.estado = 'RETIRADA' AND EXISTS (SELECT 1 FROM cuota c
+            WHERE c.matricula_id = NEW.id AND c.tipo = 'MATRICULA' AND c.estado IN ('PAGADA', 'PARCIAL')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: primero se anula el pago de la matrícula';
+    END IF;
+END$$
+
+-- Un aviso atendido no cambia (el CHECK exige la respuesta y que lo atienda una persona).
+DROP TRIGGER IF EXISTS trg_aviso_familia_estado$$
+CREATE TRIGGER trg_aviso_familia_estado BEFORE UPDATE ON aviso_familia FOR EACH ROW
+BEGIN
+    IF OLD.estado = 'ATENDIDO' AND (NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.respuesta <=> OLD.respuesta)
+            OR NOT (NEW.atendido_por <=> OLD.atendido_por) OR NOT (NEW.atendido_en <=> OLD.atendido_en)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un aviso atendido no cambia';
+    END IF;
+END$$
+
 DELIMITER ;

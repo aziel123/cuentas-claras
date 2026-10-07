@@ -15,6 +15,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.model.BaseEntity;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Objects;
 
 /**
@@ -48,6 +49,13 @@ public class Matricula extends BaseEntity {
 	@Column(name = "retirada_en")
 	private LocalDate retiradaEn;
 
+	/** Sprint 5: cuándo pasó de RESERVADA a ACTIVA (al pagarse la cuota de matrícula). Solo la escribe el sistema. */
+	@Column(name = "activada_en")
+	private LocalDateTime activadaEn;
+
+	@Column(name = "activada_por", length = 60)
+	private String activadaPor;
+
 	protected Matricula() {
 		// requerido por JPA
 	}
@@ -63,13 +71,33 @@ public class Matricula extends BaseEntity {
 	}
 
 	/**
+	 * Sprint 5: matrícula del año siguiente (PLANIFICADO). Nace RESERVADA: solo genera su cuota de matrícula y pasa a
+	 * ACTIVA cuando esa cuota queda pagada (lo exige la base en MySQL).
+	 */
+	public static Matricula reservada(Alumno alumno, Seccion seccion, LocalDate fecha) {
+		Matricula matricula = nueva(alumno, seccion, fecha);
+		matricula.estado = EstadoMatricula.RESERVADA;
+		return matricula;
+	}
+
+	/** La activa el sistema ({@code sistema.matricula}) al pagarse o exonerarse la cuota de matrícula. */
+	public void activar(LocalDateTime ahora, String actor) {
+		if (estado != EstadoMatricula.RESERVADA) {
+			throw new ReglaNegocioException("Solo se activa una matrícula reservada.");
+		}
+		estado = EstadoMatricula.ACTIVA;
+		activadaEn = Objects.requireNonNull(ahora, "ahora");
+		activadaPor = Objects.requireNonNull(actor, "actor");
+	}
+
+	/**
 	 * Cambia de sección dentro del mismo año.
 	 *
 	 * @param permitirOtroNivel {@code false} si la matrícula ya tiene cuotas: un cambio de nivel cambiaría la pensión
 	 */
 	public void cambiarSeccion(Seccion nueva, boolean permitirOtroNivel) {
 		Objects.requireNonNull(nueva, "nueva");
-		if (estado != EstadoMatricula.ACTIVA) {
+		if (estado == EstadoMatricula.RETIRADA) {
 			throw new ReglaNegocioException("La matrícula está retirada: no se cambia de sección.");
 		}
 		if (!nueva.getAnioEscolar().getId().equals(anioEscolar.getId())) {
@@ -94,6 +122,23 @@ public class Matricula extends BaseEntity {
 			throw new ReglaNegocioException("La matrícula está retirada: no se cambia su fecha de ingreso.");
 		}
 		fechaMatricula = Objects.requireNonNull(fecha, "fecha");
+	}
+
+	/** Activa o reservada: cuenta como matrícula del año (no retirada). */
+	public boolean vigente() {
+		return estado != EstadoMatricula.RETIRADA;
+	}
+
+	public boolean reservada() {
+		return estado == EstadoMatricula.RESERVADA;
+	}
+
+	public LocalDateTime getActivadaEn() {
+		return activadaEn;
+	}
+
+	public String getActivadaPor() {
+		return activadaPor;
 	}
 
 	public void retirar(LocalDate fecha) {

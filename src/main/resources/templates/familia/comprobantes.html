@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Mis boletas', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-comprobantes">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Mi familia</p>
+			<h1>Mis boletas</h1>
+			<p class="secundario">Abre una boleta y usa «Imprimir» o «Guardar como PDF» de tu navegador para guardarla.</p>
+		</div>
+	</div>
+
+	<th:block th:if="${#lists.isEmpty(comprobantes)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay boletas', 'Cuando pagues, aquí verás tu boleta para guardarla.')}"></div>
+	</th:block>
+	<ul class="cuotas-familia" th:unless="${#lists.isEmpty(comprobantes)}">
+		<li th:each="p : ${comprobantes}" th:data-comprobante="${p.comprobanteId}">
+			<div class="cuota-cabecera">
+				<a th:href="@{/familia/comprobantes/{id}(id=${p.comprobanteId})}" th:text="|Ver o guardar ${p.comprobante}|">Ver o guardar B001-00000231</a>
+				<span th:replace="~{fragments/componentes :: monto(${p.total})}"></span>
+			</div>
+			<span class="secundario" th:text="|${#temporals.format(p.fecha, 'dd/MM/yyyy')} · ${p.medio} · ${p.registradoPor}|">05/10/2026 · Yape · en caja</span>
+			<span th:unless="${p.vigente}" class="badge badge-neutro">Anulado</span>
+		</li>
+	</ul>
+	<p><a class="btn btn-secundario" th:href="@{/familia}">Volver</a></p>
+</main>
+</body>
+</html>

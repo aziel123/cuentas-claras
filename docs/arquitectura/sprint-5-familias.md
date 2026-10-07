@@ -1400,6 +1400,68 @@ La sintaxis de V17 y de los 5 triggers nuevos y los 2 cambiados del diseño func
   - ve todo en su estado de cuenta.
 - En producción, con WhatsApp o correo reales, lo mismo con una familia real (criterio del plan: «el cuaderno se archiva»).
 
+### Tanda 2 · Implementación (7 de octubre de 2026): lo probado y las desviaciones del diseño
+**Probado.** V18 se aplicó sobre V1–V17 en H2 2.4.240 (modo MySQL) y en MySQL 8.4 (contenedor `mysql:8`), con `02` y
+`03` (51 triggers) en su versión de la tanda; se replicó el job `mysql` completo desde una base vacía: fase 1 (V1–V18),
+el colegio de renovación, fase 2 (60 pruebas), fase 2b, el paso `comprobar`, el arranque real en `prod` con `cc_app`
+(con la línea nueva del verificador y «están los 51»), el rechazo con `cc_migrador` y M2 con `trg_mensaje_envio`. La
+sintaxis de V18 (incluido el `DROP CONSTRAINT` de `matricula`) y de los 5 triggers funcionó sin cambios en ambas bases;
+las desviaciones de abajo son de reglas, no de sintaxis.
+
+**Desviaciones (cada una con su motivo):**
+1. **La matrícula nace RESERVADA solo si el colegio tiene un año EN CURSO.** `trg_matricula_nace` admite ACTIVA en el año
+   EN_CURSO y también en un año PLANIFICADO cuando el colegio todavía no tiene año en curso (un colegio que empieza con su
+   primer año planificado); RESERVADA, solo en un año PLANIFICADO. `RegistroAlumnos.matricular` aplica la misma regla. Sin
+   esto, toda la base de pruebas de los sprints 2 a 4 (que matricula en años planificados sin año en curso) cambiaba de
+   significado, y un colegio nuevo no podría cargar su primer año. Con un año en curso, G18 se cumple igual.
+2. **Escenarios de prueba:** `EscenarioEscolar.crearEstructura` crea 2026 y 2027 PLANIFICADOS (sin año en curso: la
+   matrícula de 2027 sigue naciendo ACTIVA con su cronograma, como en los sprints anteriores) y
+   `crearEstructuraConAnioEnCurso` deja 2026 EN CURSO (renovación). `BusquedaAlumnosTest`, `ServicioAlumnosTest` y
+   `AlumnoControllerTest` pasan a la segunda porque muestran el grado del año en curso. `EscenarioRenovacion` es nuevo.
+3. **MySQL (fase 2):** el colegio 1 de la base del CI no tiene año en curso, así que las pruebas de la tanda usan un
+   segundo colegio que el job inserta como administrador (`Colegio de renovacion CI`, en ASCII porque el cliente `mysql`
+   no siempre envía UTF-8; `cc_app` no crea colegios). La cuenta en línea del apoderado se enlaza por SQL (la aplicación
+   solo la crea desde su ficha, con el enlace de la fase 2b). `PermisosMySqlTest` habilita el pago a cuenta
+   (`@TestPropertySource`) para llegar a una cuota de matrícula PARCIAL (G19). Las pruebas usan el año real de Lima, no
+   2026 fijo.
+4. **Triggers más estrictos que el diseño:** `trg_matricula_estado` impide reescribir `activada_en`/`activada_por` y el
+   plan de matrícula 0 debe ser el vigente del mismo colegio; `trg_matricula_nace` exige `activada_por` nulo; los de la
+   renovación filtran por colegio (alumno y usuario) y comparan con `<=>`; `trg_aviso_familia_estado` también protege
+   `atendido_en`. `ck_matricula_activacion` dice `activada_por IS NOT NULL AND ...` (CHECK con NULL). V18 agrega
+   `ix_aviso_familia_familia`.
+5. **Quién hace qué (sin `RegistroAlumnos` fuera de `alumnos`):** `alumnos.service.ReservasMatricula`
+   (`hasRole('SISTEMA_MATRICULA')`) reserva, activa y retira; `matricula.service.ProcesosMatricula` (mismo rol) decide
+   qué; los procesos `ReservaMatriculas`, `ActivacionMatriculas` y `VencimientoRenovaciones` corren como
+   `sistema.matricula`, cada elemento en su transacción (`REQUIRES_NEW`). `MatriculaActivada` está en
+   `alumnos.service` (cobranza no puede depender de matricula) y `GeneradorCronograma.alActivarMatricula` genera las
+   pensiones en la misma transacción.
+6. **Generador:** la RESERVADA genera solo la cuota MATRICULA; al activarse, las PENSION que falten, sin volver a evaluar
+   la de matrícula como «deuda existente». `matriculasSinCronograma` incluye las reservadas sin su cuota de matrícula. El
+   retiro de un alumno también retira su matrícula reservada (en MySQL, solo si no está pagada).
+7. **Desistimiento:** no tiene pantalla propia. Se usa la anulación de cuota existente (ANULACION_CUOTA, aprobada por otra
+   persona) y el barrido de `ActivacionMatriculas` retira como `sistema.matricula` la reservada cuya cuota de matrícula
+   quedó ANULADA (`MATRICULA_DESISTIDA`, resaltado).
+8. **Mensajes:** `cc_renovacion` (invitación al responsable de pago), `cc_renovacion_registrada` (respuesta en persona, a
+   todos los apoderados activos y por ambos canales) y `cc_aviso_atendido`. No se creó el mensaje «matrícula reservada»
+   (`alMatriculaReservada`): el CHECK `ck_mensaje_tipo` de V17 no tiene ese tipo y la invitación y el portal ya dicen el
+   monto y el vencimiento. La respuesta en el portal no genera mensaje (la dio la misma familia).
+9. **Portal:** `GET /familia` pasó de `pasarela.PagoEnLineaController` a `familias.PortalFamiliaController` (la pasarela no
+   puede depender de matricula); el modelo sigue llevando `cuenta`. El estado de cuenta vive en
+   `familias.service.ConsultaEstadoCuentaFamilia` (no en cobranza: cobranza no depende de caja). Las «pestañas por hijo y
+   año» son una tarjeta por hijo con un `<details>` por año (sin JavaScript). Muestra las cuotas y pagos anulados con su
+   motivo y el ROL de quien aprobó, y solo los descuentos APROBADOS. Las boletas siguen siendo la página imprimible.
+10. **«¿Algo no cuadra?»:** la bitácora (`AVISO_FAMILIA_RECIBIDO`, resaltado) guarda el tipo y la referencia, no el texto
+    de la familia (Ley 29733). El límite es `cuentasclaras.familias.avisos-por-dia` (5).
+11. **Alertas:** `AlertasMatricula` avisa las activas con la matrícula otra vez por pagar y las confirmadas sin reservar;
+    «confirmadas sin pagar a 7 días del vencimiento» queda para la tanda 3. `AlertasFamilias`: CRÍTICA para los tres tipos
+    graves y ATENCIÓN para «Otro».
+12. **Campaña:** la fecha límite va de hoy al inicio de clases del año destino; abrirla de nuevo solo agrega a los que
+    faltan. La deuda vencida es informativa (no bloquea). Módulos nuevos en `ModuloApp`: `AVISOS_FAMILIAS`
+    (Promotoría y Dirección) y `MATRICULA_2027` (Promotoría, Dirección y Administración).
+13. **`PortalFamiliaWebTest.cabeEnCelularSinScrollHorizontal`:** sin navegador en la suite, se comprueba por construcción
+    (viewport de celular, sin tablas en el portal, textos que se parten y ningún ancho fijo mayor a 360 px en el CSS del
+    portal), no con una captura real de 360 px.
+
 ### Tanda 3 · Recordatorios y pendientes del sprint 4 (V19)
 **Pasos**
 1. **Probar V19** y los triggers de la tanda (55).

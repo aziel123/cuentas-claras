@@ -2,6 +2,8 @@ package pe.edu.virgenmaria.cuentasclaras.alumnos.model;
 
 public enum EstadoMatricula {
 
+	/** Sprint 5: matrícula del año siguiente, solo con su cuota de matrícula; pasa a ACTIVA al pagarla. */
+	RESERVADA("Reservada"),
 	ACTIVA("Activa"),
 	RETIRADA("Retirada");
 
