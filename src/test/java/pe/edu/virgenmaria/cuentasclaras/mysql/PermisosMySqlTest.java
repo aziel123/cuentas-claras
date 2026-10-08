@@ -2468,6 +2468,19 @@ class PermisosMySqlTest {
 		return new Long[] { registro.familiaId(), registro.alumnoId(), apoderado };
 	}
 
+	/**
+	 * S5-A1: el apoderado recibe mensajes solo con su contacto confirmado por él mismo (enlace de verificación, fase 2b).
+	 */
+	private void confirmarContactoDe(ColegioRenovacion r, Long apoderado) throws Exception {
+		var a = jdbc.queryForMap("SELECT telefono_whatsapp, numero_documento FROM apoderado WHERE id = ?", apoderado);
+		String ruta = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EnlacesDePrueba.verificacionRecibida(despacho, buzon,
+				r.id(), (String) a.get("telefono_whatsapp"));
+		mvc.perform(post(ruta).with(csrf()).param("documento", (String) a.get("numero_documento")))
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().is3xxRedirection());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM apoderado WHERE id = ? AND telefono_verificado IS NOT NULL",
+				Long.class, apoderado)).isEqualTo(1);
+	}
+
 	/** La cuenta en línea del apoderado (fila de usuario enlazada: el trigger de la respuesta por portal la exige). */
 	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado enLinea(ColegioRenovacion r,
 			Long apoderado) {
@@ -2518,9 +2531,11 @@ class PermisosMySqlTest {
 	 * saveAndFlush faltante: cada trigger valida contra la fila recién escrita.
 	 */
 	@Test
-	void flujoRenovacionYMatriculaConPermisosMinimos() {
+	void flujoRenovacionYMatriculaConPermisosMinimos() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeTrue(mensajeriaSimuladaHabilitada(), "falta la fila mensajeria_simulada");
 		ColegioRenovacion r = colegioDeRenovacion();
 		Long[] familia = alumnoDeRenovacion(r);
+		confirmarContactoDe(r, familia[2]);
 		Long matricula = reservada(r, familia);
 		assertThat(jdbc.queryForMap("SELECT estado, seccion_id, creado_por FROM matricula WHERE id = ?", matricula))
 				.containsEntry("estado", "RESERVADA").containsEntry("seccion_id", r.sextoA())
@@ -2611,9 +2626,11 @@ class PermisosMySqlTest {
 
 	/** El aviso de una familia se atiende una vez: su respuesta no cambia (1644), su texto tampoco (1143) y no se borra. */
 	@Test
-	void avisoAtendidoNoCambiaFallaCon1644() {
+	void avisoAtendidoNoCambiaFallaCon1644() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeTrue(mensajeriaSimuladaHabilitada(), "falta la fila mensajeria_simulada");
 		ColegioRenovacion r = colegioDeRenovacion();
 		Long[] familia = alumnoDeRenovacion(r);
+		confirmarContactoDe(r, familia[2]);
 		UsuariosDePrueba.iniciarSesion(enLinea(r, familia[2]));
 		Long aviso = avisosFamilia.enviar(new pe.edu.virgenmaria.cuentasclaras.familias.dto.AvisoRequest(
 				pe.edu.virgenmaria.cuentasclaras.familias.model.TipoAvisoFamilia.PAGUE_Y_NO_APARECE, null, null,

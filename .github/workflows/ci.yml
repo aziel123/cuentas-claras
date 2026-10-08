@@ -101,7 +101,7 @@ jobs:
         run: |
           $MYSQL_ADMIN cuentasclaras -e "INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('mensajeria_simulada', 'PERMITIDA', NOW(6))"
           ./mvnw -B test -Dsurefire.failIfNoSpecifiedTests=false \
-            -Dtest='PermisosMySqlTest#flujoMensajeDePagoConPermisosMinimos+flujoActivacionDirectaConPermisosMinimos+reescribirElUsoDelEnlaceFallaCon1644'
+            -Dtest='PermisosMySqlTest#flujoMensajeDePagoConPermisosMinimos+flujoActivacionDirectaConPermisosMinimos+reescribirElUsoDelEnlaceFallaCon1644+flujoVerificacionDeContactoConPermisosMinimos+flujoRenovacionYMatriculaConPermisosMinimos+avisoAtendidoNoCambiaFallaCon1644'
           # La base vuelve a ser como la de producción (sin mensajería simulada).
           $MYSQL_ADMIN cuentasclaras -e "DELETE FROM configuracion_bd WHERE clave = 'mensajeria_simulada'"
 
