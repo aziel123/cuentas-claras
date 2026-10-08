@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Ingresos por medio de pago', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="panel-ingresos" th:with="r=${reporte}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Reportes</p>
+			<h1>Ingresos por medio de pago</h1>
+			<p class="secundario">Pagos vigentes por su día de cobro. Lo anulado se muestra aparte, para que nada desaparezca sin verse.</p>
+		</div>
+	</div>
+	<nav class="fila" aria-label="Reportes" th:fragment="navegacion">
+		<a class="btn btn-secundario btn-chico" th:href="@{/panel/reportes/ingresos}">Ingresos</a>
+		<a class="btn btn-secundario btn-chico" th:href="@{/panel/reportes/morosidad}">Morosidad por grado</a>
+		<a class="btn btn-secundario btn-chico" th:href="@{/panel/morosos}">Familias con deuda</a>
+	</nav>
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<form class="tarjeta formulario" method="get" th:action="@{/panel/reportes/ingresos}">
+		<div class="campos-rango">
+			<div class="campo">
+				<label for="desde">Desde</label>
+				<input class="input" id="desde" name="desde" type="date" required th:value="${r.desde}">
+			</div>
+			<div class="campo">
+				<label for="hasta">Hasta</label>
+				<input class="input" id="hasta" name="hasta" type="date" required th:value="${r.hasta}">
+			</div>
+		</div>
+		<p class="ayuda">Hasta 12 meses por consulta.</p>
+		<button type="submit" class="btn btn-secundario">Ver ingresos</button>
+	</form>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-total" data-seccion="total">
+		<h2 id="titulo-total" class="etiqueta"
+			th:text="|Del ${#temporals.format(r.desde, 'dd/MM/yyyy')} al ${#temporals.format(r.hasta, 'dd/MM/yyyy')}|">Del 01/10/2026 al 08/10/2026</h2>
+		<p class="cifra-grande num" data-total th:text="${r.total}">S/ 38,900.00</p>
+		<p th:text="|${r.pagos} pago(s) · ${r.digital} digital|">120 pagos · 64 % digital</p>
+		<p class="secundario" data-anulado th:text="|Anulado (aprobado en el rango): ${r.anulado} en ${r.anulados} pago(s)|">Anulado: S/ 350.00 en 1 pago</p>
+	</section>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-medio">
+		<h2 id="titulo-medio" class="etiqueta">Por medio de pago</h2>
+		<p th:if="${#lists.isEmpty(r.porMedio)}" class="secundario">No hubo pagos en el rango.</p>
+		<ul class="lista-panel lista-tarjetas" th:unless="${#lists.isEmpty(r.porMedio)}" data-por-medio>
+			<li th:each="l : ${r.porMedio}">
+				<div class="cuota-cabecera">
+					<strong th:text="${l.etiqueta}">Yape</strong>
+					<strong class="num" th:text="${l.total}">S/ 1,200.00</strong>
+				</div>
+				<span class="secundario" th:text="|${l.pagos} pago(s)|">3 pagos</span>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-origen">
+		<h2 id="titulo-origen" class="etiqueta">Por origen</h2>
+		<ul class="lista-panel lista-tarjetas" th:unless="${#lists.isEmpty(r.porOrigen)}" data-por-origen>
+			<li th:each="l : ${r.porOrigen}">
+				<div class="cuota-cabecera">
+					<strong th:text="${l.etiqueta}">Ventanilla</strong>
+					<strong class="num" th:text="${l.total}">S/ 1,200.00</strong>
+				</div>
+				<span class="secundario" th:text="|${l.pagos} pago(s)|">3 pagos</span>
+			</li>
+		</ul>
+	</section>
+
+	<form class="tarjeta formulario" method="post" th:if="${r.puedeExportar}" th:action="@{/panel/reportes/ingresos.xlsx}" data-exportar>
+		<input type="hidden" name="desde" th:value="${r.desde}">
+		<input type="hidden" name="hasta" th:value="${r.hasta}">
+		<div th:replace="~{fragments/componentes :: alerta('info', 'La descarga queda registrada en la bitácora con tu nombre y un código impreso en el archivo. El Excel no lleva documentos, nombres de alumnos ni contactos.')}"></div>
+		<button type="submit" class="btn btn-primario btn-bloque">Descargar Excel para el contador</button>
+	</form>
+</main>
+</body>
+</html>

@@ -298,6 +298,13 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".pasarela.service.AlertasPagosEnLinea", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".comprobantes.service.ConsultaComprobantes", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".comprobantes.service.ConsultaComprobantes#adelantarReintento", SOLO_ADMINISTRACION),
+			// Sprint 6, tanda 1: panel (solo Promotoría), cifras y reportes en pantalla (PROM, DIR, ADM) y Excel (PROM, ADM).
+			Map.entry(BASE + ".caja.service.CifrasCaja", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".cobranza.service.CifrasCobranza", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".panel.service.CifrasDelDia", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".panel.service.PanelPromotoria", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".panel.service.ReportesCobranza", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".panel.service.ExportacionContador", "hasAnyRole('PROMOTOR','ADMINISTRACION')"),
 			Map.entry(BASE + ".comprobantes.service.AlertasComprobantes", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".caja.service.ServicioReemision", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados", "hasAnyRole('PROMOTOR','ADMINISTRACION')"),
@@ -980,6 +987,42 @@ class ReglasArquitecturaTest {
 			}
 		};
 	}
+
+	// ------------------------------------------------------------------ Sprint 6 · panel y reportes
+
+	/** Decisión 1: nadie depende de panel (solo combina caja, cobranza, aprobaciones, comunicacion y auditoria). */
+	@ArchTest
+	static final ArchRule nadieDependeDelPanel = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".panel..")
+			.should().dependOnClassesThat().resideInAPackage(BASE + ".panel..")
+			.because("el panel solo lee por los puertos de los módulos dueños del dato");
+
+	/** El panel no usa repositorios de otros módulos: lee por CifrasCaja y CifrasCobranza. */
+	@ArchTest
+	static final ArchRule panelNoUsaRepositorios = noClasses()
+			.that().resideInAPackage(BASE + ".panel..")
+			.should().dependOnClassesThat().areAssignableTo(Repository.class)
+			.because("las cifras salen de los puertos de solo lectura de cada módulo");
+
+	/** P10: ningún código escribe una fórmula en un Excel ni la evalúa. */
+	@ArchTest
+	static final ArchRule nadieEscribeFormulas = noClasses()
+			.should().callMethodWhere(llamadaA("setCellFormula", "una llamada a setCellFormula"))
+			.orShould().dependOnClassesThat().haveSimpleName("FormulaEvaluator")
+			.because("el Excel del contador lleva solo valores: una fórmula es inyección (decisión 9)");
+
+	/** Sección 10.1: el único que escribe un double es CeldaDinero (Excel guarda doble precisión). */
+	@ArchTest
+	static final ArchRule soloCeldaDineroEscribeNumerosDouble = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".comun.excel.CeldaDinero")
+			.should().callMethodWhere(new DescribedPredicate<>("setCellValue(double)") {
+				@Override
+				public boolean test(JavaMethodCall llamada) {
+					return llamada.getName().equals("setCellValue") && llamada.getTarget().getRawParameterTypes().size() == 1
+							&& llamada.getTarget().getRawParameterTypes().get(0).isEquivalentTo(double.class);
+				}
+			})
+			.because("el dinero se convierte en un solo lugar y con comprobación de ida y vuelta");
 
 	private static DescribedPredicate<JavaMethodCall> llamadaA(String prefijo, String descripcion) {
 		return new DescribedPredicate<>(descripcion) {

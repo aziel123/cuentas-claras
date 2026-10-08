@@ -80,10 +80,15 @@ public enum ModuloApp {
 			+ "salen recordatorios. Solo Promotoría y Dirección registran días nuevos.", "Sprint 5", true, "/feriados",
 			new String[] { "/feriados", "/feriados/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION, CAJA)),
 
-	PANEL("Panel del colegio", "Cuánto entró hoy, la morosidad y las alertas de caja, desde tu celular.", "Sprint 5",
-			false, "/panel", new String[] { "/panel", "/panel/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
-	REPORTES("Reportes", "Reportes de cobranza y exportación a Excel.", "Sprint 5", false, "/reportes",
-			new String[] { "/reportes", "/reportes/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+	// Sprint 6 (decisión 64). REPORTES va ANTES que PANEL: las reglas de URL se aplican en el orden de la matriz y la
+	// primera que coincide gana. Morosidad e ingresos en pantalla: Promotoría, Dirección y Administración (el Excel, solo
+	// Promotoría y Administración: lo exige ExportacionContador). El panel /panel: solo Promotoría.
+	REPORTES("Reportes", "Morosidad por grado, ingresos por medio de pago y familias morosas; Excel para el contador.",
+			"Sprint 6", true, "/panel/reportes",
+			new String[] { "/panel/morosos", "/panel/reportes", "/panel/reportes/**" },
+			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+	PANEL("Panel del colegio", "Cuánto entró hoy y en el mes, la deuda vencida y las alertas, desde tu celular.",
+			"Sprint 6", true, "/panel", new String[] { "/panel", "/panel/**" }, EnumSet.of(PROMOTOR)),
 
 	CONCILIACION("Conciliación bancaria", "Sube el extracto del banco cada día: el sistema empareja solo los Yape, "
 			+ "depósitos, pagos en línea y recaudación, y te muestra solo las diferencias.",

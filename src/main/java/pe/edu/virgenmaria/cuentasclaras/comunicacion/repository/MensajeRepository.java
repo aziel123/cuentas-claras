@@ -96,4 +96,13 @@ public interface MensajeRepository extends Repository<Mensaje, Long> {
 			+ "where o.tipo = m.tipo and o.entidad = m.entidad and o.entidadId = m.entidadId and o.estado in :salieron)")
 	List<Mensaje> fallidosEnTodosSusCanales(@Param("tipos") Collection<TipoMensaje> tipos,
 			@Param("desde") LocalDateTime desde, @Param("salieron") Collection<EstadoMensaje> salieron);
+
+	/**
+	 * Sprint 6 (lista de familias morosas): el último aviso ENTREGADO de esos tipos a cada familia, como familia, tipo y
+	 * momento de entrega. Solo lectura.
+	 */
+	@Query("select m.familiaId, m.tipo, max(m.entregadoEn) from Mensaje m where m.familiaId in :familias "
+			+ "and m.tipo in :tipos and m.entregadoEn is not null group by m.familiaId, m.tipo")
+	List<Object[]> ultimosEntregados(@Param("familias") Collection<Long> familias,
+			@Param("tipos") Collection<TipoMensaje> tipos);
 }

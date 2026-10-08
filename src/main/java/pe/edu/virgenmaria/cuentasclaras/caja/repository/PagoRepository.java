@@ -122,4 +122,29 @@ public interface PagoRepository extends Repository<Pago, Long> {
 	/** El pago de ese origen con esa operación (canónica), si existe (la línea de una liquidación se ata a su pago). */
 	Optional<Pago> findFirstByNumeroOperacionAndOrigenOrderByIdDesc(String numeroOperacion,
 			pe.edu.virgenmaria.cuentasclaras.caja.model.OrigenPago origen);
+
+	// --- Sprint 6, tanda 1: cifras del panel y del Excel para el contador (JPQL agregado, sin entidades) ---
+
+	/** Pagos VIGENTES de un rango de días de caja, agrupados por medio y canal: medio, canal, cantidad, suma. */
+	@Query("select p.medio, k.canal, count(p), sum(p.total) from Pago p join p.caja k "
+			+ "where p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE "
+			+ "and p.fecha between :desde and :hasta group by p.medio, k.canal")
+	List<Object[]> vigentesPorMedioYCanal(@Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta);
+
+	/** Cuántos pagos (de cualquier estado) tiene un rango: el tope de filas del Excel se revisa antes de cargarlos. */
+	@Query("select count(p) from Pago p where p.fecha between :desde and :hasta")
+	long contarEntre(@Param("desde") java.time.LocalDate desde, @Param("hasta") java.time.LocalDate hasta);
+
+	/**
+	 * Filas del Excel para el contador (datos mínimos, Ley 29733): id, fecha, serie, número, tipo, medio, canal,
+	 * operación, total, estado, código de familia, quién registró y el RUC SOLO si el comprobante es factura (el
+	 * documento de una boleta nunca sale de la base).
+	 */
+	@Query("select p.id, p.fecha, c.serie, c.numero, c.tipo, p.medio, k.canal, p.numeroOperacion, p.total, p.estado, "
+			+ "p.familia.id, p.cajero, case when c.tipo = pe.edu.virgenmaria.cuentasclaras.comprobantes.model."
+			+ "TipoComprobante.FACTURA and c.receptorTipoDocumento = pe.edu.virgenmaria.cuentasclaras.comprobantes."
+			+ "model.DocumentoReceptor.RUC then c.receptorNumeroDocumento else null end "
+			+ "from Pago p join p.comprobante c join p.caja k where p.fecha between :desde and :hasta order by p.fecha, p.id")
+	List<Object[]> paraContador(@Param("desde") java.time.LocalDate desde, @Param("hasta") java.time.LocalDate hasta);
 }

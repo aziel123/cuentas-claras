@@ -50,6 +50,10 @@ public interface EventoAuditoriaRepository extends Repository<EventoAuditoria, L
 			Collection<AccionAuditoria> acciones, LocalDateTime desde, Limit limite);
 
 	/** Cuántos eventos de una acción hubo en un colegio desde un momento (alertas de Promotoría). */
+	/** Sprint 6: cuántos eventos de esa acción hizo una persona desde un momento (tope diario de exportaciones). */
+	long countByColegioIdAndAccionAndNombreUsuarioAndOcurridoEnGreaterThanEqual(Long colegioId, AccionAuditoria accion,
+			String nombreUsuario, LocalDateTime desde);
+
 	long countByColegioIdAndAccionAndOcurridoEnGreaterThanEqual(Long colegioId, AccionAuditoria accion,
 			LocalDateTime desde);
 

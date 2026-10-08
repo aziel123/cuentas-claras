@@ -85,6 +85,21 @@ public class AuditoriaService {
 	}
 
 	/**
+	 * Cuántos eventos de esa acción hizo la persona en sesión en el colegio actual desde un momento (solo lectura; tope
+	 * diario de exportaciones del sprint 6). Sin persona en sesión, 0.
+	 */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public long contarDesdeDelUsuarioActual(AccionAuditoria accion, LocalDateTime desde) {
+		Long colegio = ContextoColegio.actual();
+		Authentication autenticacion = SecurityContextHolder.getContext().getAuthentication();
+		if (colegio == null || colegio <= 0 || autenticacion == null || !autenticacion.isAuthenticated()) {
+			return 0;
+		}
+		return eventos.countByColegioIdAndAccionAndNombreUsuarioAndOcurridoEnGreaterThanEqual(colegio, accion,
+				autenticacion.getName(), desde);
+	}
+
+	/**
 	 * Actor explícito con la IP de la petición actual (si la hay). Para eventos en los que el usuario
 	 * aún no está en el contexto de seguridad, como los intentos de ingreso o el cierre de sesión.
 	 */

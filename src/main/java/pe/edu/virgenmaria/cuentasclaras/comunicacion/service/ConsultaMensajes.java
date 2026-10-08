@@ -11,6 +11,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.texto.Enmascarar;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.config.PropiedadesMensajeria;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.dto.BandejaMensajes;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.dto.MensajeVista;
+import pe.edu.virgenmaria.cuentasclaras.comunicacion.dto.UltimoAviso;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.CanalMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.EstadoMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.Mensaje;
@@ -22,7 +23,10 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Consulta de mensajes (sprint 5): la bandeja de envíos del personal y el historial de la familia en el portal. Nadie
@@ -46,6 +50,27 @@ public class ConsultaMensajes {
 		this.sesion = sesion;
 		this.propiedades = propiedades;
 		this.reloj = reloj;
+	}
+
+	/** Avisos de cobranza que cuentan como «último aviso entregado» en la lista de familias morosas (sprint 6). */
+	private static final List<TipoMensaje> AVISOS_DE_COBRANZA = List.of(TipoMensaje.RECORDATORIO_VENCIMIENTO,
+			TipoMensaje.CUOTA_VENCIDA);
+
+	/**
+	 * Sprint 6: el último recordatorio o aviso de cuota vencida ENTREGADO a cada familia (sin destino ni texto). Las
+	 * familias sin ninguno no aparecen en el mapa.
+	 */
+	@Transactional(readOnly = true)
+	public Map<Long, UltimoAviso> ultimosAvisosDeCobranza(Collection<Long> familias) {
+		Map<Long, UltimoAviso> ultimos = new HashMap<>();
+		if (familias == null || familias.isEmpty()) {
+			return ultimos;
+		}
+		for (Object[] fila : mensajes.ultimosEntregados(familias, AVISOS_DE_COBRANZA)) {
+			UltimoAviso aviso = new UltimoAviso(((TipoMensaje) fila[1]).etiqueta(), (LocalDateTime) fila[2]);
+			ultimos.merge((Long) fila[0], aviso, (a, b) -> a.entregadoEn().isAfter(b.entregadoEn()) ? a : b);
+		}
+		return ultimos;
 	}
 
 	/** Bandeja del personal: los fallidos, los pendientes de más de {@code alerta-pendiente-minutos} y los de hoy. */

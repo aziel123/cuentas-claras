@@ -693,3 +693,49 @@ Cada tanda termina con:
   - `comunicacion/model/TipoMensaje`;
   - `seguridad/model/Usuario`; `seguridad/service/ServicioUsuarios`; `seguridad/config/ConfiguracionSeguridad` (sesión única);
   - `auditoria/service/VerificadorPermisosBaseDatos`.
+
+## Tanda 1 · Implementación
+> Agente `backend-spring`, 8 de octubre de 2026, rama `claude/sprint-6-panel-promotora`. **Sin migración (sigue en V20) y sin cambios en `scripts/mysql/`: 58 triggers.** Ninguna consulta nueva necesitó índice ni SQL nativo.
+
+### Lo que el diseño marcó como no verificado (comprobado al implementar)
+| Supuesto | Resultado |
+|---|---|
+| `cuota.monto_descuento` | Existe. Nace en **V9** (línea 218, `DECIMAL(10,2) NOT NULL DEFAULT 0.00`), no en V10; V10 solo lo menciona en un comentario. La entidad `Cuota` ya lo mapea. |
+| `usuario.apoderado_id` | Existe. Nace en **V13** (`ALTER TABLE usuario ADD COLUMN apoderado_id BIGINT`, con `uk_usuario_apoderado` y FK compuesta). |
+| `usuario.colegio_id` `NOT NULL` (nota de V21) | Sí (V2): `uk_usuario_contacto_solicitud` de la tanda 2 no admite varios NULL de colegio. |
+| «Hoy en Lima» en los triggers | `trg_feriado_registro` y `trg_feriado_anulacion` usan **`DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR)`** (Lima no tiene horario de verano). Para la tanda 3, `trg_llamada_control_registro` debe usar esa expresión en lugar de `DATE(NEW.creado_en)` (la aplicación escribe `creado_en`; la base no debe confiar en él). En la aplicación, «hoy» es `LocalDate.now(reloj)` con el `Clock` de Lima, como siempre. |
+| `semilla_muestreo` sin CHECK de ámbitos (nota de V22) | **Tiene CHECK:** `ck_semilla_muestreo_ambito CHECK (ambito IN ('CAJA'))` (V19). V22 debe recrearlo agregando `LLAMADA_CONTROL` (patrón `DROP CONSTRAINT` / `ADD CONSTRAINT`). |
+| `solicitud_cambio.tipo` sin CHECK (hallazgo 10) | Confirmado: `VARCHAR(40)` sin CHECK de tipos (V8). `CAMBIO_CONTACTO_PERSONAL` no necesita migración de CHECK. |
+| `evento_auditoria.accion` | `VARCHAR(40)` sin CHECK (V3): `REPORTE_EXPORTADO` y `EXPORTACION_RECHAZADA` no necesitan migración. |
+
+### Qué se implementó
+- **Puertos de cifras (solo lectura, JPQL agregado):**
+  - `caja.service.CifrasCaja`: `cobrado(desde, hasta)` (por medio y por canal), `anulado(desde, hasta)` (por fecha de aprobación), `cajas(fecha)`, `pagosEnRango` y `pagosParaContador` (proyección, sin cargar familias ni alumnos). Consultas nuevas en `PagoRepository`, `AnulacionPagoRepository` y `AplicacionPagoRepository`.
+  - `cobranza.service.CifrasCobranza`: `deudaVencida`, `familiasMorosas`, `morosidadPorGrado` (con la fila «Sin matrícula en ese año»), `rebajas` (descuentos según el libro `ajuste_cuota` y cuotas anuladas, con quién aprobó), `avanceDelMes`, `anios` y `anio`. Consultas nuevas en `CuotaRepository` y `AjusteCuotaRepository`.
+  - `comunicacion.service.ConsultaMensajes.ultimosAvisosDeCobranza`: último recordatorio o aviso de cuota vencida ENTREGADO por familia (solo tipo y fecha), para la lista de morosos.
+- **Módulo `panel`:** `CifrasDelDia`, `PanelPromotoria`, `ReportesCobranza`, `ExportacionContador`, `PanelController` y `ReportesController`; vistas `panel/inicio`, `panel/morosos`, `panel/ingresos` y `panel/morosidad`, para celular (bloques apilados, sin `<table>`, sin estilos ni scripts en línea; CSS nuevo solo con tokens y sin anchos fijos mayores a 360 px).
+- **Excel seguro (`comun.excel`):** `EscritorXlsxSeguro`, `HojaReporte`, `Celda` (sellada: texto, dinero, fecha, entero), `TextoCelda` y `CeldaDinero` (único lugar con `double`, con comprobación de ida y vuelta).
+- **Bitácora:** `REPORTE_EXPORTADO` y `EXPORTACION_RECHAZADA` (ambos resaltados) y `AuditoriaService.contarDesdeDelUsuarioActual` para el tope diario.
+- **Matriz de permisos (`ModuloApp`):** `REPORTES` (`/panel/morosos`, `/panel/reportes/**`: PROM, DIR, ADM) va **antes** que `PANEL` (`/panel/**`: solo PROM), porque la primera regla que coincide gana. Exportar exige además `hasAnyRole('PROMOTOR','ADMINISTRACION')` en el servicio.
+
+### El Excel para el contador (las tres condiciones)
+1. **No admite fórmulas.** Nadie llama a `setCellFormula` ni usa `FormulaEvaluator` (ArchUnit `nadieEscribeFormulas`). Todo texto pasa por `TextoCelda`: se quitan U+0000–U+001F, U+007F, U+2028 y U+2029; si empieza (también tras espacios) con `= + - @`, tabulación, retorno, `|`, `%` o sus variantes de ancho completo, la celda lleva `setQuotePrefixed(true)` **y** el texto un apóstrofo delante. Sin hipervínculos, comentarios, macros ni hojas ocultas. Lo prueba `EscritorXlsxSeguroTest` (12 ataques leídos con POI como `STRING` con prefijo de comilla, y el XML de la hoja sin `<f>`).
+2. **Solo datos mínimos (Ley 29733).** «Ingresos»: fecha, comprobante, tipo, medio, origen, operación, monto, estado, nota de crédito, conceptos que genera el sistema (el saldo inicial, con texto fijo), **código** de familia, quién registró y el RUC **solo en facturas** (la consulta JPQL devuelve `NULL` para el documento de una boleta: nunca sale de la base). «Morosidad por grado»: por grado, nunca por sección. La lista de morosos no se exporta. Lo prueba `ReportesWebTest` buscando en todas las celdas los DNI, celulares, correos y nombres de la semilla y los patrones de DNI, celular y correo.
+3. **Cada descarga queda en la bitácora antes de entregar el archivo.** `ExportacionContador` es `@Transactional`: arma el libro, calcula el SHA-256 y registra `REPORTE_EXPORTADO` (tipo, rango, filas, SHA-256 y código; nunca el contenido) en la misma transacción; el controlador escribe los bytes solo cuando el servicio volvió (transacción confirmada). Si la bitácora falla, hay excepción y no hay archivo (`ExportacionContadorTest.sinBitacoraNoHayArchivo`). El código de exportación va impreso en la hoja «Control» (`ReportesWebTest`: código de la hoja = `entidad_id` del evento; SHA-256 del archivo = el del evento). Exportar es solo POST con CSRF (GET 405, sin CSRF 403).
+
+### Desviaciones del diseño
+1. **`SISTEMA_PANEL` aún no está en las expresiones de permisos** de `CifrasCaja`, `CifrasCobranza` y `CifrasDelDia`: el actor `sistema.panel` nace en la tanda 2 con el resumen, y agregarlo antes sería un rol que nadie tiene. La tanda 2 lo agrega (y actualiza `EXPRESIONES_EXIGIDAS`).
+2. **`ExportacionContador.exportarIngresos(desde, hasta)` y `exportarMorosidad(anioId)` no reciben `ip`:** la IP la toma `AuditoriaService` de la petición, como en todo el sistema, y queda en la columna `ip` del evento.
+3. **El `TextoSeguro` del diseño se llama `TextoCelda`** (`comun.excel`, de paquete): `comun.texto.TextoSeguro` ya existe y rechaza textos al guardarlos.
+4. **`CeldaDinero` también escribe los enteros** (cantidades y código de familia), que son el otro `double` del archivo; así sigue habiendo un solo lugar con `double`.
+5. **Límites como constantes, no como propiedades** (`ExportacionContador.MAX_DIARIAS = 20`, `RangoReporte.MAX_MESES = 12`, `EscritorXlsxSeguro.MAX_FILAS = 20000`). Pasan a `cuentasclaras.panel.*` en la tanda 2, junto con las demás propiedades del panel.
+6. **Rechazos en la bitácora:** `EXPORTACION_RECHAZADA` sale por rango no válido, tope diario y más de 20 000 filas, con `ExportacionRechazadaException` y `noRollbackFor` (mismo patrón que `AUTOAPROBACION_RECHAZADA`). Pedir el año de otro colegio responde 404 y no cuenta como rechazo.
+7. **Nombre del archivo:** `ingresos-2027-04.xlsx` si el rango es de un mes, `ingresos-2027-01-a-2027-04.xlsx` si abarca varios, y `morosidad-2027.xlsx`.
+8. **El panel no muestra «Resumen de hoy» ni «Llamadas de control»** (son de las tandas 2 y 3).
+9. **Antes de entregar el Excel de ingresos se compara el detalle con `CifrasCaja.cobrado`** (dos lecturas del mismo libro en la misma transacción); si no cuadran, no hay archivo. La hoja «Control» escribe emitido, vigente y anulado como texto calculado con `BigDecimal`.
+10. **«Anulado» tiene dos lecturas, ambas a la vista:** en el panel y en el reporte en pantalla es lo **aprobado** en el periodo (decisión 67); en el Excel son los pagos **del rango** que hoy están anulados, con su nota de crédito, para que vigente + anulado = emitido cuadre fila por fila.
+
+### Pruebas nuevas
+- `comun.excel.EscritorXlsxSeguroTest` (P10), `cobranza.service.CifrasCobranzaTest` (fila «Sin matrícula en ese año», tramos), `panel.service.ExportacionContadorTest` (P12, límites, cuadre), `panel.service.PanelPromotoriaTest` (P3, P16, montos exactos con la semilla `EscenarioPanel`), `panel.web.ReportesWebTest` (P11, P12, P13, P14, P15, celular y tope diario) y `panel.AislamientoPanelTest` (P20).
+- `ReglasArquitecturaTest`: `nadieDependeDelPanel`, `panelNoUsaRepositorios`, `nadieEscribeFormulas`, `soloCeldaDineroEscribeNumerosDouble` y las expresiones de `@PreAuthorize` de los servicios nuevos. `MatrizPermisosTest` cubre `/panel` y `/panel/reportes` para los 6 roles.
+- **MySQL:** la tanda 1 no cambia esquema, permisos ni triggers (el panel lee con el `SELECT` general de `cc_app`), así que no hay casos nuevos en `PermisosMySqlTest`. Pendiente: correr las consultas JPQL nuevas contra MySQL 8 cuando se reproduzca el job `mysql` (en esta sesión el motor de Docker no estaba disponible).

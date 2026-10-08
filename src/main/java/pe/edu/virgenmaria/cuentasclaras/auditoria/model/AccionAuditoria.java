@@ -267,6 +267,12 @@ public enum AccionAuditoria {
 	/** Se resalta (S5-M4): faltan huellas diarias de uno o más días. */
 	HUELLA_FALTAN_DIAS("Faltan huellas diarias de la bitácora", true),
 
+	// Sprint 6 · tanda 1: panel y reportes (ver el panel no se audita: no cambia nada)
+	/** Se resalta: cada Excel descargado, con tipo, rango, filas, SHA-256 y código de exportación (nunca el contenido). */
+	REPORTE_EXPORTADO("Descargó un reporte en Excel", true),
+	/** Se resalta: una exportación rechazada por el rango, el tope diario o el tamaño. */
+	EXPORTACION_RECHAZADA("Intentó descargar un reporte fuera de los límites", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);
