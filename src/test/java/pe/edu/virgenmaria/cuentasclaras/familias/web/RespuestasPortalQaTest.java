@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.familias.web;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -95,8 +94,6 @@ class RespuestasPortalQaTest {
 	 * navegador que no manda el botón, un enlace mal armado) no puede decidir por la familia.
 	 */
 	@Test
-	@Disabled("QA-S5-2: PortalFamiliaController.responder usa @RequestParam(defaultValue = \"false\") continua: un POST "
-			+ "sin el campo registra NO_CONTINUA para siempre")
 	void unPostSinRespuestaNoRegistraQueElAlumnoNoContinua() throws Exception {
 		mvc.perform(post("/familia/matricula/" + renovacion).with(csrf()).with(UsuariosDePrueba.como(d.rosaEnLinea())));
 
@@ -104,8 +101,6 @@ class RespuestasPortalQaTest {
 	}
 
 	@Test
-	@Disabled("QA-S5-2: PortalFamiliaController.preferencias usa @RequestParam(defaultValue = \"false\"): un POST sin "
-			+ "el campo apaga los recordatorios del apoderado")
 	void unPostSinValorNoApagaLosRecordatorios() throws Exception {
 		mvc.perform(post("/familia/preferencias").with(csrf()).with(UsuariosDePrueba.como(d.rosaEnLinea())));
 

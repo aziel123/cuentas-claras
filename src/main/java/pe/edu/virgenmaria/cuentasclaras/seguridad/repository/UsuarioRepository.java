@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.ContactoNormal;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 
@@ -49,11 +50,25 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 	@Query("select u from Usuario u where u.activo = true and :rol member of u.roles order by u.id")
 	List<Usuario> activosConRol(@Param("rol") Rol rol);
 
+	/** Celulares y correos del personal activo (no de cuentas de apoderado), para compararlos normalizados. */
+	@Query("select u from Usuario u where u.activo = true and u.apoderadoId is null")
+	List<Usuario> personalActivo();
+
 	/**
-	 * Sprint 5 (G6): si un celular o correo es de alguien del personal activo (no de una cuenta de apoderado). A un
-	 * apoderado no se le escribe ahí salvo que otra persona haya aprobado ese contacto.
+	 * Sprint 5 (G6; correcciones S5-A1): si un celular o correo es de alguien del personal activo (no de una cuenta de
+	 * apoderado), comparando su forma NORMALIZADA ({@link ContactoNormal}): un alias de Gmail con «+» o con puntos es el
+	 * mismo buzón. A un apoderado no se le escribe ahí salvo que otra persona haya aprobado ESE contacto.
 	 */
-	@Query("select count(u) > 0 from Usuario u where u.activo = true and u.apoderadoId is null "
-			+ "and (u.telefonoWhatsapp = :contacto or lower(u.correo) = lower(:contacto))")
-	boolean esContactoDelPersonal(@Param("contacto") String contacto);
+	default boolean esContactoDelPersonal(String contacto) {
+		return quienTieneElContacto(contacto).isPresent();
+	}
+
+	/** El usuario del personal activo cuyo celular o correo es (normalizado) ese contacto. */
+	default Optional<Usuario> quienTieneElContacto(String contacto) {
+		if (ContactoNormal.de(contacto).isEmpty()) {
+			return Optional.empty();
+		}
+		return personalActivo().stream().filter(u -> ContactoNormal.iguales(u.getTelefonoWhatsapp(), contacto)
+				|| ContactoNormal.iguales(u.getCorreo(), contacto)).findFirst();
+	}
 }

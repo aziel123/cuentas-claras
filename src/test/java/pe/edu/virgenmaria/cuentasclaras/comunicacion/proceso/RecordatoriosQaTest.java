@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.comunicacion.proceso;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -127,8 +126,6 @@ class RecordatoriosQaTest {
 	 * salir el siguiente día de mensajes antes del vencimiento (el lunes 29).
 	 */
 	@Test
-	@Disabled("QA-S5-4: ServicioRecordatorios.preparar solo envía si el «día de mensajes» calculado es HOY; si ese día "
-			+ "se declara no laborable después de pasar el día anterior, el recordatorio no sale nunca")
 	void unNoLaborableRegistradoTardeNoHacePerderElRecordatorio() {
 		assertThat(recordatorios.enColegio(1L, MIERCOLES_24)).isZero();
 		feriadoDelColegio(1L, SABADO_27);
@@ -145,8 +142,6 @@ class RecordatoriosQaTest {
 	 * despacho lo envíe, entonces el despacho ya no debe recordarle una deuda que no existe.
 	 */
 	@Test
-	@Disabled("QA-S5-3: DespachoMensajes.procesar no vuelve a mirar las cuotas de un recordatorio: se envía aunque ya "
-			+ "estén pagadas (pospuesto por la ventana o por reintentos puede salir días después)")
 	void noDebeEnviarseElRecordatorioDeCuotasQueYaSePagaron() {
 		recordatorios.enColegio(1L, SABADO_27);
 		como(CAJA);

@@ -32,4 +32,8 @@ public interface AvisoFamiliaRepository extends Repository<AvisoFamilia, Long> {
 	List<AvisoFamilia> findByEstadoOrderByIdAsc(EstadoAvisoFamilia estado);
 
 	List<AvisoFamilia> findTop50ByEstadoOrderByIdDesc(EstadoAvisoFamilia estado);
+
+	/** S5-M2: los atendidos desde una fecha (los críticos que no cerró Promotoría siguen visibles 7 días). */
+	List<AvisoFamilia> findByEstadoAndAtendidoEnGreaterThanEqualOrderByIdAsc(EstadoAvisoFamilia estado,
+			LocalDateTime desde);
 }

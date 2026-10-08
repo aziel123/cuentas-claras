@@ -25,7 +25,13 @@ import pe.edu.virgenmaria.cuentasclaras.familias.model.AvisoFamilia;
 import pe.edu.virgenmaria.cuentasclaras.familias.model.EstadoAvisoFamilia;
 import pe.edu.virgenmaria.cuentasclaras.familias.repository.AvisoFamiliaRepository;
 
+import pe.edu.virgenmaria.cuentasclaras.caja.repository.AnulacionPagoRepository;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.DescuentoRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+
 import java.time.Clock;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -64,10 +70,20 @@ public class ServicioAvisosFamilia {
 
 	private final int maximoPorDia;
 
+	private final AnulacionPagoRepository anulaciones;
+
+	private final DescuentoRepository descuentos;
+
+	private final ControlParticipantes participantes;
+
 	public ServicioAvisosFamilia(AvisoFamiliaRepository avisos, SesionApoderado sesion, PagoRepository pagos,
 			CuotaRepository cuotas, FamiliaRepository familias, ApoderadoRepository apoderados, AuditoriaService auditoria,
 			AvisosMatricula mensajes, Clock reloj,
-			@Value("${cuentasclaras.familias.avisos-por-dia:5}") int maximoPorDia) {
+			@Value("${cuentasclaras.familias.avisos-por-dia:5}") int maximoPorDia, AnulacionPagoRepository anulaciones,
+			DescuentoRepository descuentos, ControlParticipantes participantes) {
+		this.anulaciones = anulaciones;
+		this.descuentos = descuentos;
+		this.participantes = participantes;
 		this.avisos = avisos;
 		this.sesion = sesion;
 		this.pagos = pagos;
@@ -143,15 +159,51 @@ public class ServicioAvisosFamilia {
 	}
 
 	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
+	@Transactional(noRollbackFor = AutoatencionAvisoException.class)
 	public void atender(Long id, String respuesta) {
 		AvisoFamilia aviso = avisos.bloquear(id).orElseThrow(() -> new RecursoNoEncontradoException("Aviso no encontrado"));
-		aviso.atender(respuesta, SecurityContextHolder.getContext().getAuthentication().getName(),
-				LocalDateTime.now(reloj));
+		String quien = SecurityContextHolder.getContext().getAuthentication().getName();
+		// S5-M2: quien registró el pago, o pidió o aprobó la anulación o el descuento del que se queja la familia, no
+		// cierra su queja (ni quien preparó su cuenta).
+		Set<String> involucrados = participantes.ampliar(involucrados(aviso));
+		if (involucrados.contains(quien)) {
+			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "aviso_familia", id.toString(), null,
+					aviso.getTipo().etiqueta(), "Intentó atender el aviso de una familia sobre un pago, una anulación o un "
+							+ "descuento en el que participó. Se rechazó.");
+			throw new AutoatencionAvisoException("No puedes atender este aviso: tú registraste el pago, o pediste o "
+					+ "aprobaste la anulación o el descuento del que se queja la familia. Debe atenderlo otra persona "
+					+ "(Promotoría).");
+		}
+		aviso.atender(respuesta, quien, LocalDateTime.now(reloj));
 		avisos.saveAndFlush(aviso);
 		auditoria.registrar(AccionAuditoria.AVISO_FAMILIA_ATENDIDO, "aviso_familia", id.toString(), "ABIERTO",
 				"ATENDIDO", "Aviso «" + aviso.getTipo().etiqueta() + "» de la familia " + nombreFamilia(aviso.getFamiliaId())
 						+ ": se respondió a la familia.");
 		mensajes.avisoAtendido(aviso.getApoderadoId(), aviso.getId(), aviso.getCreadoEn().toLocalDate());
+	}
+
+	/** S5-M2: quienes registraron, pidieron o aprobaron lo que la familia no reconoce. */
+	Set<String> involucrados(AvisoFamilia aviso) {
+		Set<String> quienes = new LinkedHashSet<>();
+		if (aviso.getPagoId() != null) {
+			pagos.findById(aviso.getPagoId()).ifPresent(p -> {
+				quienes.add(p.getCajero());
+				quienes.add(p.getCreadoPor());
+			});
+			anulaciones.findByPagoId(aviso.getPagoId()).ifPresent(a -> {
+				quienes.add(a.getSolicitadoPor());
+				quienes.add(a.getAprobadoPor());
+			});
+		}
+		if (aviso.getCuotaId() != null) {
+			cuotas.findById(aviso.getCuotaId()).ifPresent(c -> descuentos.findByAlumnoIdOrderByIdDesc(c.getAlumno().getId())
+					.stream().filter(d -> d.cuotaIds().contains(aviso.getCuotaId())).forEach(d -> {
+						quienes.add(d.getCreadoPor());
+						quienes.add(d.getResueltoPor());
+					}));
+		}
+		quienes.remove(null);
+		return quienes;
 	}
 
 	private AvisoVista vistaPersonal(AvisoFamilia a) {

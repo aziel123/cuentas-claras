@@ -75,7 +75,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V19): Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V20): Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Permisos por tabla de cc_app
@@ -281,6 +281,21 @@ jobs:
           comprobar 1644 "INSERT INTO feriado (colegio_id, fecha, descripcion, vigente, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-01', 'verificador', TRUE, NOW(6), 'verificador', NOW(6))"
           comprobar 1644 "INSERT INTO cierre_mensual_banco (colegio_id, cuenta_id, anio, mes, total_abonos, total_cargos, saldo_final, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 2026, 1, 0, 0, 0, 'CUADRADO', NOW(6), 'sistema.conciliacion', NOW(6))"
           comprobar 1644 "INSERT INTO cierre_mensual_banco (colegio_id, cuenta_id, anio, mes, total_abonos, total_cargos, saldo_final, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 2026, 1, 1, 0, 0, 'ABIERTO', NOW(6), 'sistema.conciliacion', NOW(6))"
+          # Correcciones del sprint 5 (V20): la verificación del contacto y la huella de la hora no se borran; la huella
+          # de la hora es de solo inserción; la verificación no cambia su contacto, su hash ni su mensaje; un apoderado que
+          # nace verificado, una verificación sin su mensaje, una huella de la hora que no coincide y un feriado que nace
+          # aprobado fallan con 1644.
+          for tabla in verificacion_contacto huella_hora; do
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          comprobar 1142 "UPDATE huella_hora SET version = version WHERE 1 = 0"
+          for columna in contacto hash_token mensaje_id apoderado_id vence_en; do
+            comprobar 1143 "UPDATE verificacion_contacto SET $columna = $columna WHERE 1 = 0"
+          done
+          comprobar 1644 "INSERT INTO verificacion_contacto (colegio_id, apoderado_id, canal, contacto, hash_token, mensaje_id, vence_en, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'CORREO', 'x@y.pe', REPEAT('0', 64), 0, NOW(6) + INTERVAL 1 HOUR, NOW(6), 'sistema.mensajeria', NOW(6))"
+          comprobar 1644 "INSERT INTO huella_hora (colegio_id, momento, secuencia, codigo, creado_en, creado_por, actualizado_en) VALUES (0, NOW(6), 1, REPEAT('0', 16), NOW(6), 'sistema.auditoria', NOW(6))"
+          comprobar 1644 "INSERT INTO apoderado (colegio_id, familia_id, tipo_documento, numero_documento, apellido_paterno, nombres, parentesco, nombre_busqueda, activo, telefono_whatsapp, telefono_verificado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'DNI', '00000000', 'x', 'x', 'MADRE', 'x', TRUE, '+51999999999', '+51999999999', NOW(6), 'x', NOW(6))"
+          comprobar 1644 "INSERT INTO feriado (colegio_id, fecha, descripcion, vigente, pendiente, aprobado_por, aprobado_en, creado_en, creado_por, actualizado_en) VALUES (0, '2999-01-04', 'verificador', TRUE, FALSE, 'b', NOW(6), NOW(6), 'verificador', NOW(6))"
           # G10 y G11: sin la fila 'mensajeria_simulada' (como en prod), la base no acepta un mensaje simulado. El
           # mensaje PENDIENTE lo dejó PermisosMySqlTest.simuladoSinPermisoDeLaBaseFallaCon1644.
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'mensajeria_simulada'")
@@ -322,6 +337,7 @@ jobs:
           grep -q "Permisos y triggers de mensajería, acceso directo al titular y huella diaria verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de la renovación de matrícula, la matrícula reservada y los avisos de las familias" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de feriados, semilla del muestreo y cierre bancario mensual verificados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Permisos y triggers de la verificación de contactos, la huella por hora y los feriados aprobados" prod.log || { cat prod.log; exit 1; }
           grep -q "Triggers verificados: están los" prod.log || { cat prod.log; exit 1; }
           kill "$PID_APP"
           if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \

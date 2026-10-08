@@ -139,7 +139,7 @@ class VerificadorPermisosBaseDatosTest {
 	private static final java.util.regex.Pattern SOLO_INSERCION = java.util.regex.Pattern
 			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
 					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado|movimiento_bancario|"
-					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora|semilla_muestreo) ");
+					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora|semilla_muestreo|huella_hora) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -366,8 +366,9 @@ class VerificadorPermisosBaseDatosTest {
 					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
 		}
 		// Sprint 5, tanda 1 (V17): 46 con los de mensajes, enlaces y huella; tanda 2 (V18): 51 con los de la renovación,
-		// la matrícula reservada y los avisos de las familias; tanda 3 (V19): 55 con los de feriados y cierre mensual.
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(55);
+		// la matrícula reservada y los avisos de las familias; tanda 3 (V19): 55 con los de feriados y cierre mensual;
+		// correcciones (V20): 58 con los de la verificación de contactos y la huella por hora.
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(58);
 	}
 
 	/**
@@ -483,6 +484,37 @@ class VerificadorPermisosBaseDatosTest {
 					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
 		}
 		for (String borrado : List.of("trg_mensaje_envio", "trg_enlace_activacion_uso")) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class)).thenReturn(
+					String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream().filter(t -> !t.equals(borrado))
+							.toList()));
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
+					.as(borrado).isInstanceOf(IllegalStateException.class).hasMessageContaining(borrado);
+		}
+	}
+
+	/** Correcciones del sprint 5 (V20): verificación de contactos y huella por hora; sin sus GRANT o triggers, no arranca. */
+	@Test
+	void fallaSiSePuedenTocarLasCorreccionesDelSprint5() {
+		for (String[] caso : new String[][] {
+				{ "DELETE FROM verificacion_contacto WHERE 1 = 0", "verificacion_contacto se podrían borrar" },
+				{ "DELETE FROM huella_hora WHERE 1 = 0", "huella_hora se podrían borrar" },
+				{ "UPDATE huella_hora SET version = version WHERE 1 = 0", "solo inserción" },
+				{ "UPDATE verificacion_contacto SET contacto = contacto WHERE 1 = 0", "verificacion_contacto" },
+				{ "UPDATE verificacion_contacto SET hash_token = hash_token WHERE 1 = 0", "verificacion_contacto" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+		for (String[] caso : new String[][] { { "INSERT INTO verificacion_contacto", "trg_verificacion_contacto_nace" },
+				{ "INSERT INTO huella_hora", "trg_huella_hora_registro" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doThrow(denegado(1452)).when(mysql).update(org.mockito.ArgumentMatchers.startsWith(caso[0]));
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+		for (String borrado : List.of("trg_verificacion_contacto_uso", "trg_feriado_anulacion")) {
 			JdbcTemplate mysql = mysqlQueDeniega();
 			when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class)).thenReturn(
 					String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream().filter(t -> !t.equals(borrado))

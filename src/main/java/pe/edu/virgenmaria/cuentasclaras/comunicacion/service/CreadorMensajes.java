@@ -51,7 +51,7 @@ public class CreadorMensajes {
 		this.whatsapp = whatsapp;
 	}
 
-	/** WhatsApp si hay celular; si el conector de WhatsApp está apagado y hay correo, solo correo. */
+	/** Personal: WhatsApp si hay celular; si el conector de WhatsApp está apagado y hay correo, solo correo. */
 	private boolean usarWhatsapp(String celular, String correo) {
 		return celular != null && (correo == null || whatsapp.getIfAvailable() != null);
 	}
@@ -79,22 +79,43 @@ public class CreadorMensajes {
 		List<Mensaje> creados = new ArrayList<>();
 		String celular = apoderado.getTelefonoWhatsapp();
 		String correo = apoderado.getCorreo();
-		boolean porWhatsapp = usarWhatsapp(celular, correo);
+		boolean celularApto = celular != null && apto(apoderado, CanalMensaje.WHATSAPP, celular, contenido.tipo());
+		boolean correoApto = correo != null && apto(apoderado, CanalMensaje.CORREO, correo, contenido.tipo());
+		// S5-B1 y QA-S5-1: si el WhatsApp se omite (contacto del personal sin aprobar o sin verificar), sale por correo.
+		boolean porWhatsapp = celularApto && (!correoApto || whatsapp.getIfAvailable() != null);
 		if (porWhatsapp) {
 			crearParaApoderado(apoderado, CanalMensaje.WHATSAPP, celular, contenido, sufijoClave, null)
 					.ifPresent(creados::add);
 		}
-		if (correo != null && (ambosCanales || !porWhatsapp)) {
+		if (correoApto && (ambosCanales || !porWhatsapp)) {
 			crearParaApoderado(apoderado, CanalMensaje.CORREO, correo, contenido, sufijoClave, null)
 					.ifPresent(creados::add);
 		}
 		return creados;
 	}
 
+	/**
+	 * S5-A1: el enlace de verificación a un contacto NUEVO del apoderado (todavía sin verificar). Sale solo si ese contacto
+	 * sigue siendo el registrado y no es del personal sin aprobación (G6): si no, el personal se verificaría a sí mismo.
+	 */
+	public Optional<Mensaje> verificacion(Apoderado apoderado, CanalMensaje canal, String contacto, Contenido contenido,
+			String sufijoClave) {
+		String registrado = canal == CanalMensaje.WHATSAPP ? apoderado.getTelefonoWhatsapp() : apoderado.getCorreo();
+		if (contacto == null || !contacto.equals(registrado) || !aprobadoSiEsDelPersonal(apoderado, canal, contacto)) {
+			LOG.warn("No se envió la verificación del contacto {} del apoderado {}: no es el registrado o es del personal "
+					+ "sin aprobación.", canal, apoderado.getId());
+			return Optional.empty();
+		}
+		return crear(apoderado, canal, contacto, contenido, sufijoClave, null);
+	}
+
 	/** Mensaje a un contacto ANTERIOR del apoderado (aviso de cambio de contacto: tipo CONTACTO_CAMBIADO). */
 	public Optional<Mensaje> alContactoAnterior(Apoderado apoderado, CanalMensaje canal, String contactoAnterior,
 			Contenido contenido) {
-		return crearParaApoderado(apoderado, canal, contactoAnterior, contenido, null, null);
+		if (!apto(apoderado, canal, contactoAnterior, TipoMensaje.CONTACTO_CAMBIADO)) {
+			return Optional.empty();
+		}
+		return crear(apoderado, canal, contactoAnterior, contenido, null, null);
 	}
 
 	/** Mensaje a una persona del personal: WhatsApp si tiene celular; si no, correo. */
@@ -137,24 +158,59 @@ public class CreadorMensajes {
 				? new Mensaje.Destinatario(DestinatarioTipo.APODERADO, apoderado.getId(), apoderado.getFamilia().getId(),
 						null, CanalMensaje.CORREO, correo)
 				: new Mensaje.Destinatario(DestinatarioTipo.USUARIO, null, null, usuario.getId(), CanalMensaje.CORREO, correo);
-		if (apoderado != null && !puedeEscribirAlApoderado(apoderado, correo)) {
+		if (apoderado != null && !apto(apoderado, CanalMensaje.CORREO, correo, original.getTipo())) {
 			return Optional.empty();
 		}
 		return guardar(clave, contenido, para, original.getId());
 	}
 
-	/** G6: el contacto es del personal y nadie más lo aprobó para este apoderado. */
+	/** G6 + S5-M1 + S5-A1: el apoderado puede recibir este mensaje en ese contacto del canal. */
 	public boolean puedeEscribirAlApoderado(Apoderado apoderado, String destino) {
-		return apoderado.getContactoSolicitudId() != null || !usuarios.esContactoDelPersonal(destino);
+		CanalMensaje canal = destino != null && destino.contains("@") ? CanalMensaje.CORREO : CanalMensaje.WHATSAPP;
+		return apto(apoderado, canal, destino, null);
+	}
+
+	/**
+	 * Un contacto recibe mensajes si:
+	 * <ul>
+	 *   <li>S5-A1: su titular lo verificó (salvo el aviso al contacto ANTERIOR, que ya no es el registrado);</li>
+	 *   <li>G6 y S5-M1: si (normalizado) es de alguien del personal, otra persona aprobó EXACTAMENTE ese contacto para ese
+	 *       canal.</li>
+	 * </ul>
+	 */
+	private boolean apto(Apoderado apoderado, CanalMensaje canal, String destino, TipoMensaje tipo) {
+		boolean verificado = canal == CanalMensaje.WHATSAPP
+				? apoderado.telefonoVerificado() && destino.equals(apoderado.getTelefonoWhatsapp())
+				: apoderado.correoVerificado() && destino.equals(apoderado.getCorreo());
+		if (!verificado && tipo != TipoMensaje.CONTACTO_CAMBIADO) {
+			LOG.warn("No se creó el mensaje {} al apoderado {} por {}: el contacto aún no está verificado.", tipo,
+					apoderado.getId(), canal);
+			return false;
+		}
+		return aprobadoSiEsDelPersonal(apoderado, canal, destino);
+	}
+
+	private boolean aprobadoSiEsDelPersonal(Apoderado apoderado, CanalMensaje canal, String destino) {
+		if (!usuarios.esContactoDelPersonal(destino)) {
+			return true;
+		}
+		String aprobado = canal == CanalMensaje.WHATSAPP ? apoderado.getContactoAprobadoTelefono()
+				: apoderado.getContactoAprobadoCorreo();
+		if (destino.equals(aprobado)) {
+			return true;
+		}
+		LOG.warn("No se creó el mensaje al apoderado {} por {}: ese contacto es del personal y nadie lo aprobó.",
+				apoderado.getId(), canal);
+		return false;
 	}
 
 	private Optional<Mensaje> crearParaApoderado(Apoderado apoderado, CanalMensaje canal, String destino,
 			Contenido contenido, String sufijoClave, Long respaldoDe) {
-		if (!puedeEscribirAlApoderado(apoderado, destino)) {
-			LOG.warn("No se creó el mensaje {} al apoderado {} por {}: ese contacto es del personal y nadie lo aprobó.",
-					contenido.tipo(), apoderado.getId(), canal);
-			return Optional.empty();
-		}
+		return crear(apoderado, canal, destino, contenido, sufijoClave, respaldoDe);
+	}
+
+	private Optional<Mensaje> crear(Apoderado apoderado, CanalMensaje canal, String destino, Contenido contenido,
+			String sufijoClave, Long respaldoDe) {
 		return guardar(clave(contenido, "APODERADO", apoderado.getId(), canal, sufijoClave), contenido,
 				new Mensaje.Destinatario(DestinatarioTipo.APODERADO, apoderado.getId(), apoderado.getFamilia().getId(), null,
 						canal, destino), respaldoDe);

@@ -10,7 +10,7 @@ import java.util.List;
  */
 public record ApoderadoVista(Long id, String nombreCompleto, String documento, Parentesco parentesco,
 		String parentescoEtiqueta, String telefonoWhatsapp, String correo, boolean activo, List<String> responsableDe,
-		String ruc, String razonSocial) {
+		String ruc, String razonSocial, boolean contactoPendiente) {
 
 	public boolean esResponsable() {
 		return !responsableDe.isEmpty();

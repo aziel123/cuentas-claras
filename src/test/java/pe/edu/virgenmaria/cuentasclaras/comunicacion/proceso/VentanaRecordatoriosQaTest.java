@@ -19,7 +19,7 @@ import static org.mockito.Mockito.mock;
 class VentanaRecordatoriosQaTest {
 
 	private final DespachoMensajes despacho = new DespachoMensajes(null, null, null, null, null, null, null, null, null,
-			null, null, null, new CalendarioHabil(mock(FeriadoRepository.class)));
+			null, null, null, new CalendarioHabil(mock(FeriadoRepository.class)), null, null);
 
 	@Test
 	void soloLosRecordatoriosYLasCuotasVencidasRespetanLaVentana() {

@@ -14,6 +14,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.sistema.RecorridoColegios;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * Cada día a las 06:00 (Lima), en cada colegio y como {@code sistema.auditoria} (sprint 5, G13):
@@ -59,6 +60,28 @@ public class HuellaDiaria {
 				LOG.error("La huella diaria falló en el colegio {}: {}", colegio, e.getClass().getSimpleName());
 			}
 		}
+	}
+
+	/**
+	 * S5-M4: la huella de la hora en horario de caja (lunes a sábado, de 08:00 a 19:00, hora de Lima). Un recorte del
+	 * mismo día ya no pasa desapercibido: la huella del día siguiente no puede quedar por debajo de esta.
+	 */
+	@Scheduled(cron = "${cuentasclaras.huella.cron-hora:0 0 8-19 * * MON-SAT}", zone = ConfiguracionTiempo.ZONA)
+	public void cadaHora() {
+		LocalDateTime ahora = LocalDateTime.now(reloj);
+		for (Long colegio : colegios.activos()) {
+			try {
+				horaEnColegio(colegio, ahora);
+			}
+			catch (RuntimeException e) {
+				LOG.error("La huella de la hora falló en el colegio {}: {}", colegio, e.getClass().getSimpleName());
+			}
+		}
+	}
+
+	/** La huella de la hora de un colegio (lo llama la tarea programada; las pruebas, directamente). */
+	public void horaEnColegio(Long colegio, LocalDateTime momento) {
+		EjecucionComoSistema.como(ActorSistema.AUDITORIA, colegio, () -> huellas.registrarHora(momento));
 	}
 
 	/** La huella de ayer de un colegio (lo llama la tarea programada; las pruebas, directamente). */

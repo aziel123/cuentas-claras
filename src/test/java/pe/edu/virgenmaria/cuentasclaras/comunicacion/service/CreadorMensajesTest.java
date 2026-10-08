@@ -69,6 +69,14 @@ class CreadorMensajesTest {
 		when(a.getCorreo()).thenReturn(correo);
 		when(a.getContactoSolicitudId()).thenReturn(contactoAprobado);
 		when(a.isActivo()).thenReturn(true);
+		// Correcciones del sprint 5: los contactos ya los verificó su titular (S5-A1) y, si hubo solicitud aprobada, la
+		// aprobación vale para ESOS contactos (S5-M1).
+		when(a.telefonoVerificado()).thenReturn(celular != null);
+		when(a.correoVerificado()).thenReturn(correo != null);
+		if (contactoAprobado != null) {
+			when(a.getContactoAprobadoTelefono()).thenReturn(celular);
+			when(a.getContactoAprobadoCorreo()).thenReturn(correo);
+		}
 		return a;
 	}
 

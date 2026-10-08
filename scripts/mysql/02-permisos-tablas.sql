@@ -142,8 +142,18 @@ GRANT INSERT, UPDATE (estado, atendido_por, atendido_en, respuesta, actualizado_
 -- Sprint 5 · tanda 3 (V19): feriados extra, semilla del muestreo y cierre mensual. Nunca DELETE. La fecha del feriado,
 -- la semilla del día y los totales calculados del cierre no cambian (1143 y 1142). apoderado mantiene su UPDATE por tabla
 -- (recordatorios_activos lo cambia solo el propio apoderado, y se audita).
-GRANT INSERT, UPDATE (vigente, anulado_por, anulado_en, motivo_anulacion, actualizado_en, version)
-    ON cuentasclaras.feriado TO 'cc_app'@'%';
+GRANT INSERT, UPDATE (vigente, anulado_por, anulado_en, motivo_anulacion, pendiente, aprobado_por, aprobado_en,
+    actualizado_en, version) ON cuentasclaras.feriado TO 'cc_app'@'%';
+-- Correcciones del sprint 5 (V20). Nunca DELETE.
+-- S5-M3: el día propuesto lo aprueba otra persona (pendiente, aprobado_por y aprobado_en están en el GRANT de feriado
+-- de arriba; los vigila trg_feriado_anulacion).
+-- S5-A1: la verificación del contacto solo cambia al usarse o anularse (nunca su hash, su contacto ni su mensaje: 1143).
+GRANT INSERT, UPDATE (verificado_en, verificado_ip, anulado_en, actualizado_en, version)
+    ON cuentasclaras.verificacion_contacto TO 'cc_app'@'%';
+-- S5-M4: huella por hora, solo inserción (1142).
+GRANT INSERT ON cuentasclaras.huella_hora TO 'cc_app'@'%';
+-- apoderado mantiene su UPDATE por tabla: telefono_verificado, correo_verificado y contacto_aprobado_* los vigila
+-- trg_apoderado_facturacion (verificación usada y solicitud aprobada).
 GRANT INSERT ON cuentasclaras.semilla_muestreo TO 'cc_app'@'%';                   -- solo inserción
 GRANT INSERT, UPDATE (estado, intentos, abonos_ciego, cargos_ciego, saldo_ciego, registrado_por, registrado_en,
     actualizado_en, version) ON cuentasclaras.cierre_mensual_banco TO 'cc_app'@'%';

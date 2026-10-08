@@ -17,6 +17,9 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Correcciones del sprint 5 (V20): la verificación apunta a su mensaje y al apoderado; la huella de la hora.
+		jdbc.update("DELETE FROM verificacion_contacto");
+		jdbc.update("DELETE FROM huella_hora");
 		// Sprint 5 (tanda 3): cierre mensual (apunta a la cuenta), semilla del muestreo y feriados extra.
 		jdbc.update("DELETE FROM cierre_mensual_banco");
 		jdbc.update("DELETE FROM semilla_muestreo");

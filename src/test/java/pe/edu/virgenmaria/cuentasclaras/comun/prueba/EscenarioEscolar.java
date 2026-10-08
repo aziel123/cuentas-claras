@@ -120,4 +120,18 @@ public final class EscenarioEscolar {
 	public static long contar(JdbcTemplate jdbc, String tabla) {
 		return jdbc.queryForObject("SELECT COUNT(*) FROM " + tabla, Long.class);
 	}
+
+	/**
+	 * Correcciones del sprint 5 (S5-A1): los titulares confirman sus contactos (en H2 no hay triggers; en la aplicación lo
+	 * hace la página pública del enlace de verificación). Para los escenarios cuyo tema no es la verificación; también
+	 * quita los mensajes de verificación y de «apoderado agregado» que dejó el registro.
+	 */
+	public static void contactosConfirmados(org.springframework.jdbc.core.JdbcTemplate jdbc) {
+		jdbc.update("UPDATE apoderado SET telefono_verificado = telefono_whatsapp, correo_verificado = correo");
+		// Los mensajes de la verificación y los avisos a la familia que generó el registro no son el tema de estos
+		// escenarios: se quitan (solo H2) para que las pruebas cuenten sus propios mensajes.
+		jdbc.update("DELETE FROM verificacion_contacto");
+		jdbc.update("DELETE FROM mensaje WHERE tipo IN ('VERIFICACION_CONTACTO', 'APODERADO_AGREGADO', "
+				+ "'CONTACTO_POR_VERIFICAR')");
+	}
 }

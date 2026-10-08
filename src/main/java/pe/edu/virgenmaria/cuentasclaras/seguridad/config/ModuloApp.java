@@ -96,7 +96,7 @@ public enum ModuloApp {
 			"/comunicados", new String[] { "/comunicados", "/comunicados/**" }, EnumSet.of(PROMOTOR, DIRECTOR, DOCENTE));
 
 	/** Rutas públicas: no exigen sesión. */
-	public static final String[] RUTAS_PUBLICAS = { "/login", "/error", "/actuator/health", "/activar/*/*" };
+	public static final String[] RUTAS_PUBLICAS = { "/login", "/error", "/actuator/health", "/activar/*/*", "/verificar/*/*" };
 
 	/**
 	 * Sprint 4: avisos (webhooks) de la pasarela. Sin sesión ni CSRF, SOLO por POST y en una cadena de seguridad aparte:

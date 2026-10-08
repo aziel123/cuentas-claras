@@ -255,6 +255,18 @@ public enum AccionAuditoria {
 	/** Se resalta: dos intentos fallidos; Promotoría recibe una alerta crítica (G22). */
 	CIERRE_MENSUAL_DISCREPANCIA("El cierre bancario del mes quedó en discrepancia", true),
 
+	// Correcciones del sprint 5
+	/** S5-A1: el titular verificó su celular o correo con el enlace de un solo uso (con su IP). */
+	CONTACTO_VERIFICADO("El apoderado verificó su contacto con el enlace", false),
+	/** Se resalta (S5-M3): un día no laborable propuesto espera la aprobación de otra persona. */
+	FERIADO_PROPUESTO("Propuso un día no laborable del colegio", true),
+	/** Se resalta (S5-M3). */
+	FERIADO_APROBADO("Aprobó un día no laborable del colegio", true),
+	/** Se resalta (S5-M4): la huella nueva tiene una secuencia menor que una ya guardada o enviada. */
+	HUELLA_RETROCEDIO("La bitácora retrocedió: la huella nueva es anterior a una ya guardada", true),
+	/** Se resalta (S5-M4): faltan huellas diarias de uno o más días. */
+	HUELLA_FALTAN_DIAS("Faltan huellas diarias de la bitácora", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

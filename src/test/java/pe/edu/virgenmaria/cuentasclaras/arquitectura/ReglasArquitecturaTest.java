@@ -377,7 +377,12 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".familias.service.ServicioAvisosFamilia#enviar", "hasRole('APODERADO')"),
 			Map.entry(BASE + ".familias.service.ServicioAvisosFamilia#bandeja", APROBACION),
 			Map.entry(BASE + ".familias.service.ServicioAvisosFamilia#atender", APROBACION),
-			Map.entry(BASE + ".familias.service.AlertasFamilias", "hasRole('PROMOTOR')"));
+			Map.entry(BASE + ".familias.service.AlertasFamilias", "hasRole('PROMOTOR')"),
+			// Correcciones del sprint 5: el enlace de verificación lo genera solo sistema.mensajeria; el día no laborable
+			// lo aprueba Promotoría o Dirección (otra persona: lo exige el servicio); las alertas de contactos, Promotoría.
+			Map.entry(BASE + ".alumnos.service.VerificacionesContacto#generarParaMensaje", "hasRole('SISTEMA_MENSAJERIA')"),
+			Map.entry(BASE + ".colegio.service.ServicioFeriados#aprobar", APROBACION),
+			Map.entry(BASE + ".comunicacion.service.AlertasContactos", "hasRole('PROMOTOR')"));
 
 	/**
 	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para
@@ -402,6 +407,19 @@ class ReglasArquitecturaTest {
 				}
 			})
 			.because("quien da el acceso nunca ve el enlace: lo genera el proceso de envío al enviarlo");
+
+	/** Correcciones del sprint 5 (S5-A1): el token de verificación de un contacto se genera SOLO en el envío. */
+	@ArchTest
+	static final ArchRule verificacionesSoloDesdeDespachoMensajes = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".comunicacion.proceso.DespachoMensajes")
+			.should().callMethodWhere(new DescribedPredicate<>("VerificacionesContacto.generarParaMensaje") {
+				@Override
+				public boolean test(JavaMethodCall llamada) {
+					return llamada.getTargetOwner().getName().equals(BASE + ".alumnos.service.VerificacionesContacto")
+							&& llamada.getName().equals("generarParaMensaje");
+				}
+			})
+			.because("nadie del colegio ve el enlace que verifica el contacto de un apoderado: lo genera el envío");
 
 	/** Sprint 5: caja, cobranza, alumnos, seguridad y auditoría publican eventos; la mensajería los escucha. */
 	@ArchTest

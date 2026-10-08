@@ -17,7 +17,12 @@ public enum TipoMensaje {
 	CUOTA_VENCIDA("Cuota vencida", false),
 	RENOVACION_MATRICULA("Renovación de matrícula", false),
 	RENOVACION_REGISTRADA("Renovación registrada", false),
-	AVISO_ATENDIDO("Respuesta a tu aviso", false);
+	AVISO_ATENDIDO("Respuesta a tu aviso", false),
+	// Correcciones del sprint 5
+	VERIFICACION_CONTACTO("Confirmar contacto", false),
+	APODERADO_AGREGADO("Apoderado agregado", false),
+	CONTACTO_POR_VERIFICAR("Contacto por confirmar", false),
+	FERIADO_PROPUESTO("Día no laborable propuesto", false);
 
 	private final String etiqueta;
 

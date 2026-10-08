@@ -13,8 +13,12 @@ public record FeriadosVista(int anio, List<Nacional> nacionales, List<Extra> ext
 	public record Nacional(LocalDate fecha, String nombre) {
 	}
 
-	/** @param anulable vigente y su fecha aún no llega */
+	/**
+	 * @param anulable  vigente y su fecha aún no llega
+	 * @param pendiente propuesto: espera que otra persona lo apruebe (S5-M3)
+	 * @param aprobable el usuario en sesión puede aprobarlo (no lo propuso)
+	 */
 	public record Extra(Long id, LocalDate fecha, String descripcion, boolean vigente, boolean anulable,
-			String registradoPor, String anulacion) {
+			String registradoPor, String anulacion, boolean pendiente, boolean aprobable, String aprobadoPor) {
 	}
 }

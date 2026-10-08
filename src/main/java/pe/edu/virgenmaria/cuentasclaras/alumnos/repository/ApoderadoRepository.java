@@ -25,6 +25,9 @@ public interface ApoderadoRepository extends JpaRepository<Apoderado, Long> {
 
 	List<Apoderado> findByFamiliaIdOrderByApellidoPaternoAsc(Long familiaId);
 
+	/** Correcciones del sprint 5 (S5-A1 y S5-M5): los activos, para comparar sus contactos normalizados. */
+	List<Apoderado> findByActivoTrueOrderByIdAsc();
+
 	/**
 	 * Búsqueda por nombre (hasta tres palabras, sin tildes) o por el inicio del documento, como la de alumnos. Cada
 	 * parámetro ya viene escapado y con sus comodines; si no se usa, va null (al menos uno debe venir).

@@ -68,7 +68,8 @@ class SinMensajeNoHayPagoTest {
 		Long marzo = cuota(jdbc, f.mateo(), "PEN-2027-03");
 		// Un celular que la base no admite como destino de un mensaje (CHECK ck_mensaje_destino): el aviso no se crea.
 		String celular = jdbc.queryForObject("SELECT telefono_whatsapp FROM apoderado WHERE id = ?", String.class, f.rosa());
-		jdbc.update("UPDATE apoderado SET telefono_whatsapp = '12-34' WHERE id = ?", f.rosa());
+		jdbc.update("UPDATE apoderado SET telefono_whatsapp = '12-34', telefono_verificado = '12-34' WHERE id = ?",
+				f.rosa());
 		como(EscenarioCaja.CAJA);
 
 		assertThatThrownBy(() -> cobro.cobrar(efectivo(f.quispe(), List.of(marzo), "450.00", "450.00")))
@@ -81,7 +82,8 @@ class SinMensajeNoHayPagoTest {
 		assertThat(EscenarioCaja.estado(jdbc, marzo)).isEqualTo("PENDIENTE");
 
 		// Con el aviso funcionando, el mismo cobro sí se registra con su mensaje.
-		jdbc.update("UPDATE apoderado SET telefono_whatsapp = ? WHERE id = ?", celular, f.rosa());
+		jdbc.update("UPDATE apoderado SET telefono_whatsapp = ?, telefono_verificado = ? WHERE id = ?", celular, celular,
+				f.rosa());
 		Long pago = cobro.cobrar(efectivo(f.quispe(), List.of(marzo), "450.00", "450.00"));
 		assertThat(contar(jdbc, "mensaje WHERE entidad = 'pago' AND entidad_id = " + pago)).isEqualTo(1);
 	}

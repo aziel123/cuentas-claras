@@ -82,6 +82,26 @@ public class Apoderado extends BaseEntity {
 	@Column(name = "recordatorios_activos", nullable = false)
 	private boolean recordatoriosActivos = true;
 
+	/**
+	 * Correcciones del sprint 5 (S5-A1): el último celular y el último correo que su titular VERIFICÓ con el enlace de un
+	 * solo uso. Un contacto recibe avisos y enlaces solo si es igual al verificado; cambiarlo lo deja pendiente.
+	 */
+	@Column(name = "telefono_verificado", length = 16)
+	private String telefonoVerificado;
+
+	@Column(name = "correo_verificado", length = 150)
+	private String correoVerificado;
+
+	/**
+	 * S5-M1: el celular y el correo que otra persona APROBÓ en una solicitud de contacto. Un contacto que también es del
+	 * personal solo recibe avisos si es exactamente el aprobado para su canal.
+	 */
+	@Column(name = "contacto_aprobado_telefono", length = 16)
+	private String contactoAprobadoTelefono;
+
+	@Column(name = "contacto_aprobado_correo", length = 150)
+	private String contactoAprobadoCorreo;
+
 	protected Apoderado() {
 		// requerido por JPA
 	}
@@ -214,6 +234,60 @@ public class Apoderado extends BaseEntity {
 	/** El contacto cambió con la solicitud aprobada {@code solicitudId} (en MySQL lo exige trg_apoderado_facturacion). */
 	public void registrarSolicitudContacto(Long solicitudId) {
 		contactoSolicitudId = Objects.requireNonNull(solicitudId, "solicitudId");
+	}
+
+	/** El celular registrado ya lo verificó su titular. */
+	public boolean telefonoVerificado() {
+		return telefonoWhatsapp != null && telefonoWhatsapp.equals(telefonoVerificado);
+	}
+
+	/** El correo registrado ya lo verificó su titular. */
+	public boolean correoVerificado() {
+		return correo != null && correo.equals(correoVerificado);
+	}
+
+	/**
+	 * El titular verificó {@code contacto} con su enlace (solo si sigue siendo el registrado para ese canal; en MySQL lo
+	 * exige trg_apoderado_facturacion con la verificación usada).
+	 *
+	 * @return {@code false} si el contacto ya no es el registrado
+	 */
+	public boolean verificarContacto(boolean whatsapp, String contacto) {
+		if (whatsapp && contacto != null && contacto.equals(telefonoWhatsapp)) {
+			telefonoVerificado = contacto;
+			return true;
+		}
+		if (!whatsapp && contacto != null && contacto.equals(correo)) {
+			correoVerificado = contacto;
+			return true;
+		}
+		return false;
+	}
+
+	/** S5-M1: otra persona aprobó el contacto ACTUAL de estos canales (solo los cambiados o los pedidos). */
+	public void aprobarContacto(boolean telefono, boolean elCorreo) {
+		if (telefono) {
+			contactoAprobadoTelefono = telefonoWhatsapp;
+		}
+		if (elCorreo) {
+			contactoAprobadoCorreo = correo;
+		}
+	}
+
+	public String getTelefonoVerificado() {
+		return telefonoVerificado;
+	}
+
+	public String getCorreoVerificado() {
+		return correoVerificado;
+	}
+
+	public String getContactoAprobadoTelefono() {
+		return contactoAprobadoTelefono;
+	}
+
+	public String getContactoAprobadoCorreo() {
+		return contactoAprobadoCorreo;
 	}
 
 	public Long getContactoSolicitudId() {

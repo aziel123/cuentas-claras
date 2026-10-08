@@ -267,7 +267,27 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "VALUES (0, '2000-01-01', 'verificador', TRUE, NOW(6), 'verificador', NOW(6))", "trg_feriado_registro"),
 			trigger("INSERT INTO cierre_mensual_banco (colegio_id, cuenta_id, anio, mes, total_abonos, total_cargos, "
 					+ "saldo_final, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 2026, 1, 0, 0, 0, 'CUADRADO', "
-					+ "NOW(6), 'sistema.conciliacion', NOW(6))", "trg_cierre_mensual_banco_nace"));
+					+ "NOW(6), 'sistema.conciliacion', NOW(6))", "trg_cierre_mensual_banco_nace"),
+			// Correcciones del sprint 5 (V20): la verificación del contacto y la huella de la hora no se borran; la huella
+			// de la hora es de solo inserción; la verificación no cambia su contacto ni su hash; y cada trigger nuevo
+			// rechaza su inserción imposible (una verificación sin su mensaje, una huella que no coincide, un apoderado
+			// que nace verificado y un feriado que nace aprobado).
+			sinBorrado("verificacion_contacto"), sinBorrado("huella_hora"), soloInsercion("huella_hora"),
+			columna("UPDATE verificacion_contacto SET contacto = contacto WHERE 1 = 0", "verificacion_contacto"),
+			columna("UPDATE verificacion_contacto SET hash_token = hash_token WHERE 1 = 0", "verificacion_contacto"),
+			trigger("INSERT INTO verificacion_contacto (colegio_id, apoderado_id, canal, contacto, hash_token, mensaje_id, "
+					+ "vence_en, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'CORREO', 'x@y.pe', REPEAT('0', 64), 0, "
+					+ "NOW(6) + INTERVAL 1 HOUR, NOW(6), 'sistema.mensajeria', NOW(6))", "trg_verificacion_contacto_nace"),
+			trigger("INSERT INTO huella_hora (colegio_id, momento, secuencia, codigo, creado_en, creado_por, actualizado_en) "
+					+ "VALUES (0, NOW(6), 1, REPEAT('0', 16), NOW(6), 'sistema.auditoria', NOW(6))", "trg_huella_hora_registro"),
+			trigger("INSERT INTO apoderado (colegio_id, familia_id, tipo_documento, numero_documento, apellido_paterno, "
+					+ "nombres, parentesco, nombre_busqueda, activo, telefono_whatsapp, telefono_verificado, creado_en, "
+					+ "creado_por, actualizado_en) VALUES (0, 0, 'DNI', '00000000', 'verificador', 'verificador', 'MADRE', "
+					+ "'verificador', TRUE, '+51999999999', '+51999999999', NOW(6), 'verificador', NOW(6))",
+					"trg_apoderado_nace"),
+			trigger("INSERT INTO feriado (colegio_id, fecha, descripcion, vigente, pendiente, aprobado_por, aprobado_en, "
+					+ "creado_en, creado_por, actualizado_en) VALUES (0, '2999-01-04', 'verificador', TRUE, FALSE, 'b', NOW(6), "
+					+ "NOW(6), 'verificador', NOW(6))", "trg_feriado_registro"));
 
 	/** Sprint 5: la mensajería simulada solo existe en una base habilitada por el DBA (nunca en prod). */
 	static final String SQL_MENSAJERIA_SIMULADA =
@@ -307,7 +327,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_enlace_activacion_uso", "trg_huella_bitacora_registro", "trg_renovacion_matricula_nace",
 			"trg_renovacion_matricula_estado", "trg_matricula_nace", "trg_matricula_estado", "trg_aviso_familia_estado",
 			"trg_feriado_registro", "trg_feriado_anulacion", "trg_cierre_mensual_banco_nace",
-			"trg_cierre_mensual_banco_estado");
+			"trg_cierre_mensual_banco_estado", "trg_verificacion_contacto_nace", "trg_verificacion_contacto_uso",
+			"trg_huella_hora_registro");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -424,6 +445,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		LOG.info("Permisos y triggers de la renovación de matrícula, la matrícula reservada y los avisos de las familias "
 				+ "verificados.");
 		LOG.info("Permisos y triggers de feriados, semilla del muestreo y cierre bancario mensual verificados.");
+		LOG.info("Permisos y triggers de la verificación de contactos, la huella por hora y los feriados aprobados por "
+				+ "otra persona verificados.");
 		return escribe;
 	}
 

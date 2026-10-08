@@ -10,6 +10,11 @@ import pe.edu.virgenmaria.cuentasclaras.familias.model.AvisoFamilia;
 import pe.edu.virgenmaria.cuentasclaras.familias.model.EstadoAvisoFamilia;
 import pe.edu.virgenmaria.cuentasclaras.familias.repository.AvisoFamiliaRepository;
 
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,8 +31,19 @@ public class AlertasFamilias implements AlertasRevision {
 
 	private final AvisoFamiliaRepository avisos;
 
-	public AlertasFamilias(AvisoFamiliaRepository avisos) {
+	private final UsuarioRepository usuarios;
+
+	private final Clock reloj;
+
+	public AlertasFamilias(AvisoFamiliaRepository avisos, UsuarioRepository usuarios, Clock reloj) {
 		this.avisos = avisos;
+		this.usuarios = usuarios;
+		this.reloj = reloj;
+	}
+
+	private boolean esPromotoria(String usuario) {
+		return usuario != null && usuarios.findByNombreUsuario(usuario).map(u -> u.getRoles().contains(Rol.PROMOTOR))
+				.orElse(false);
 	}
 
 	@Override
@@ -39,6 +55,15 @@ public class AlertasFamilias implements AlertasRevision {
 		if (criticos > 0) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, criticos + " familia(s) avisan que pagaron y no "
 					+ "aparece, o que no reconocen un pago, una anulación o un descuento. Revísalo hoy.", "/avisos-familias"));
+		}
+		// S5-M2: un aviso crítico que no cerró Promotoría sigue visible para Promotoría durante 7 días.
+		long cerradosPorOtros = avisos.findByEstadoAndAtendidoEnGreaterThanEqualOrderByIdAsc(EstadoAvisoFamilia.ATENDIDO,
+				LocalDateTime.now(reloj).minusDays(7)).stream().filter(a -> a.getTipo().critico())
+				.filter(a -> !esPromotoria(a.getAtendidoPor())).count();
+		if (cerradosPorOtros > 0) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, cerradosPorOtros + " aviso(s) graves de familias los "
+					+ "cerró alguien que no es Promotoría en los últimos 7 días. Revisa la respuesta y llama a la familia.",
+					"/avisos-familias"));
 		}
 		if (otros > 0) {
 			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, otros + " aviso(s) de familias por responder.",

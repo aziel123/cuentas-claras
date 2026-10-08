@@ -57,6 +57,7 @@ public final class EscenarioCaja {
 		Long rosa = jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class, mateo.alumnoId());
 		Long pedro = jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class,
 				sebastian.alumnoId());
+		EscenarioEscolar.contactosConfirmados(jdbc);
 		return new Familias(mateo.familiaId(), mateo.alumnoId(), valeria.alumnoId(), rosa, sebastian.familiaId(),
 				sebastian.alumnoId(), pedro, escuela.anio2027());
 	}

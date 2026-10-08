@@ -131,7 +131,7 @@ public class Mensaje extends BaseEntity {
 		m.usuarioId = para.usuarioId();
 		m.destino = para.destino();
 		m.parametros = unir(parametros);
-		if (m.parametros.contains("/activar/")) {
+		if (m.parametros.contains("/activar/") || m.parametros.contains("/verificar/")) {
 			throw new IllegalArgumentException("Los parámetros de un mensaje nunca llevan el enlace de activación");
 		}
 		m.entidad = entidad;

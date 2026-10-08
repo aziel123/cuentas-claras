@@ -15,4 +15,8 @@ public interface HuellaGuardadaRepository extends Repository<HuellaGuardada, Lon
 	Optional<HuellaGuardada> findByFecha(LocalDate fecha);
 
 	List<HuellaGuardada> findByFechaGreaterThanEqualOrderByFechaAsc(LocalDate desde);
+
+	Optional<HuellaGuardada> findFirstByOrderBySecuenciaDesc();
+
+	Optional<HuellaGuardada> findFirstByOrderByFechaDesc();
 }

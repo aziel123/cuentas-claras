@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.alumnos.service;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,8 +45,11 @@ public class ServicioFamilias {
 
 	private final RegistroAlumnos registro;
 
+	private final ApplicationEventPublisher eventos;
+
 	ServicioFamilias(FamiliaRepository familias, ApoderadoRepository apoderados, AlumnoRepository alumnos,
-			VistasAlumnos vistas, RegistroAlumnos registro) {
+			VistasAlumnos vistas, RegistroAlumnos registro, ApplicationEventPublisher eventos) {
+		this.eventos = eventos;
 		this.familias = familias;
 		this.apoderados = apoderados;
 		this.alumnos = alumnos;
@@ -112,6 +116,25 @@ public class ServicioFamilias {
 	public Long solicitarDatosFacturacion(Long apoderadoId, String ruc, String razonSocial, String motivo) {
 		Apoderado apoderado = buscarApoderado(apoderadoId);
 		registro.solicitarDatosFacturacion(apoderado, ruc, razonSocial, Motivo.exigir(motivo));
+		return apoderado.getFamilia().getId();
+	}
+
+	/**
+	 * S5-A1: vuelve a enviar el enlace de confirmación a los contactos pendientes del apoderado (por ejemplo, si el
+	 * anterior venció). No cambia ningún dato; el envío lo hace el proceso de mensajería.
+	 *
+	 * @return id de la familia del apoderado
+	 */
+	@Transactional
+	public Long reenviarVerificacion(Long apoderadoId) {
+		Apoderado apoderado = buscarApoderado(apoderadoId);
+		String telefono = apoderado.getTelefonoWhatsapp() != null && !apoderado.telefonoVerificado()
+				? apoderado.getTelefonoWhatsapp() : null;
+		String correo = apoderado.getCorreo() != null && !apoderado.correoVerificado() ? apoderado.getCorreo() : null;
+		if (!apoderado.isActivo() || telefono == null && correo == null) {
+			throw new ReglaNegocioException("Los contactos de " + apoderado.nombreCompleto() + " ya están confirmados.");
+		}
+		eventos.publishEvent(new ContactoPorVerificar(apoderado.getId(), telefono, correo, false, false));
 		return apoderado.getFamilia().getId();
 	}
 

@@ -56,7 +56,7 @@ class CalendarioHabilTest {
 	@Test
 	void feriadoExtraDelColegio() {
 		FeriadoRepository repositorio = mock(FeriadoRepository.class);
-		when(repositorio.findByVigenteTrue()).thenReturn(List.of(Feriado.nuevo(d(2026, 10, 9), "Aniversario del colegio")));
+		when(repositorio.findByVigenteTrueAndPendienteFalse()).thenReturn(List.of(Feriado.nuevo(d(2026, 10, 9), "Aniversario del colegio")));
 		CalendarioHabil calendario = new CalendarioHabil(repositorio);
 
 		ContextoColegio.en(1L, () -> {
@@ -66,13 +66,13 @@ class CalendarioHabilTest {
 			assertThat(calendario.delColegio()).containsExactly(d(2026, 10, 9));
 		});
 		// Otro colegio, o ninguno, no ve ese día (los nacionales sí).
-		when(repositorio.findByVigenteTrue()).thenReturn(List.of());
+		when(repositorio.findByVigenteTrueAndPendienteFalse()).thenReturn(List.of());
 		ContextoColegio.en(2L, () -> assertThat(calendario.esHabil(d(2026, 10, 9))).isTrue());
 		assertThat(calendario.esHabil(d(2026, 10, 9))).isTrue();
 		assertThat(calendario.esHabil(d(2026, 10, 8))).isFalse();
 		// Con caché: el colegio 1 no vuelve a leer la base hasta que se invalida.
 		ContextoColegio.en(1L, () -> assertThat(calendario.esHabil(d(2026, 10, 9))).isFalse());
-		verify(repositorio, times(2)).findByVigenteTrue();
+		verify(repositorio, times(2)).findByVigenteTrueAndPendienteFalse();
 		calendario.invalidar(1L);
 		ContextoColegio.en(1L, () -> assertThat(calendario.esHabil(d(2026, 10, 9))).isTrue());
 	}

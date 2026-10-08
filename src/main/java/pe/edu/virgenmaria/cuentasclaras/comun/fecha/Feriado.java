@@ -37,6 +37,16 @@ public class Feriado extends BaseEntity {
 	@Column(name = "motivo_anulacion", length = 500)
 	private String motivoAnulacion;
 
+	/** S5-M3: lo propuso una persona y espera que OTRA lo apruebe; mientras tanto no cuenta en el calendario. */
+	@Column(nullable = false)
+	private boolean pendiente;
+
+	@Column(name = "aprobado_por", length = 60)
+	private String aprobadoPor;
+
+	@Column(name = "aprobado_en")
+	private LocalDateTime aprobadoEn;
+
 	protected Feriado() {
 	}
 
@@ -45,7 +55,31 @@ public class Feriado extends BaseEntity {
 		f.fecha = Objects.requireNonNull(fecha, "fecha");
 		f.descripcion = Objects.requireNonNull(descripcion, "descripcion");
 		f.vigente = Boolean.TRUE;
+		f.pendiente = true;
 		return f;
+	}
+
+	/** S5-M3: otra persona lo aprueba (en MySQL lo exige trg_feriado_anulacion). */
+	public void aprobar(String por, LocalDateTime cuando) {
+		if (!isVigente() || !pendiente) {
+			throw new IllegalStateException("Solo se aprueba un día propuesto y vigente");
+		}
+		pendiente = false;
+		aprobadoPor = Objects.requireNonNull(por, "por");
+		aprobadoEn = Objects.requireNonNull(cuando, "cuando");
+	}
+
+	public boolean isPendiente() {
+		return pendiente;
+	}
+
+	/** Cuenta en el calendario: vigente y aprobado. */
+	public boolean isAprobado() {
+		return isVigente() && !pendiente;
+	}
+
+	public String getAprobadoPor() {
+		return aprobadoPor;
 	}
 
 	public void anular(String motivo, String por, LocalDateTime cuando) {

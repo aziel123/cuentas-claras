@@ -88,10 +88,17 @@ class VistasAlumnos {
 		if (enmascararDatosPersonales()) {
 			return new ApoderadoVista(a.getId(), a.nombreCompleto(), a.getDocumento().enmascarado(), a.getParentesco(),
 					a.getParentesco().etiqueta(), Enmascarar.telefono(a.getTelefonoWhatsapp()),
-					Enmascarar.correo(a.getCorreo()), a.isActivo(), responsableDe, a.getRuc(), a.getRazonSocial());
+					Enmascarar.correo(a.getCorreo()), a.isActivo(), responsableDe, a.getRuc(), a.getRazonSocial(),
+					pendiente(a));
 		}
 		return new ApoderadoVista(a.getId(), a.nombreCompleto(), a.getDocumento().texto(), a.getParentesco(),
 				a.getParentesco().etiqueta(), Telefono.formatear(a.getTelefonoWhatsapp()), a.getCorreo(), a.isActivo(),
-				responsableDe, a.getRuc(), a.getRazonSocial());
+				responsableDe, a.getRuc(), a.getRazonSocial(), pendiente(a));
+	}
+
+	/** S5-A1: tiene un celular o un correo que su titular aún no confirmó (no recibe avisos por ahí). */
+	static boolean pendiente(Apoderado a) {
+		return a.isActivo() && (a.getTelefonoWhatsapp() != null && !a.telefonoVerificado()
+				|| a.getCorreo() != null && !a.correoVerificado());
 	}
 }

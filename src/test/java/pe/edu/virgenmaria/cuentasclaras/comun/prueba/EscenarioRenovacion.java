@@ -61,6 +61,7 @@ public final class EscenarioRenovacion {
 		Long rosa = jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class, mateo.alumnoId());
 		Long pedro = jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class,
 				sebastian.alumnoId());
+		EscenarioEscolar.contactosConfirmados(jdbc);
 		return new Datos(escuela.anio2026(), escuela.anio2027(), mateo.familiaId(), mateo.alumnoId(), valeria.alumnoId(),
 				rosa, sebastian.familiaId(), sebastian.alumnoId(), pedro, escuela.primaria6A2027(), p6B, p3A);
 	}

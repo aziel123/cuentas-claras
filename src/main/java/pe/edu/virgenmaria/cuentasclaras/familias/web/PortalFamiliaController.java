@@ -60,7 +60,12 @@ public class PortalFamiliaController {
 
 	/** Tanda 3: el apoderado apaga o enciende SUS recordatorios (los avisos de pago no se apagan). */
 	@PostMapping("/familia/preferencias")
-	public String preferencias(@RequestParam(defaultValue = "false") boolean recordatorios, RedirectAttributes mensajes) {
+	public String preferencias(@RequestParam(required = false) Boolean recordatorios, RedirectAttributes mensajes) {
+		// QA-S5-2: sin el campo no se decide nada por el apoderado (antes, un POST vacío los apagaba).
+		if (recordatorios == null) {
+			mensajes.addFlashAttribute("error", "No recibimos tu elección. Vuelve a intentarlo.");
+			return "redirect:/familia";
+		}
 		preferencias.recordatorios(recordatorios);
 		mensajes.addFlashAttribute("exito", recordatorios ? "Listo: te recordaremos tus vencimientos."
 				: "Listo: ya no te enviaremos recordatorios. Los avisos de tus pagos siguen llegando.");
@@ -110,8 +115,13 @@ public class PortalFamiliaController {
 	}
 
 	@PostMapping("/familia/matricula/{id:\\d+}")
-	public String responder(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean continua,
+	public String responder(@PathVariable Long id, @RequestParam(required = false) Boolean continua,
 			RedirectAttributes mensajes) {
+		// QA-S5-2: un POST sin la respuesta (doble envío, botón que no llegó) no registra «no continúa» para siempre.
+		if (continua == null) {
+			mensajes.addFlashAttribute("error", "No recibimos tu respuesta. Elige «Sí, continúa» o «No continuará».");
+			return "redirect:/familia/matricula/" + id;
+		}
 		try {
 			RenovacionFamilia respuesta = renovaciones.responder(id, continua);
 			mensajes.addFlashAttribute("exito", continua ? "Listo. Ya puedes pagar la matrícula de " + respuesta.alumno()

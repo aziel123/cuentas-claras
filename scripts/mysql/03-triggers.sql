@@ -10,6 +10,35 @@
 
 DELIMITER $$
 
+-- Correcciones del sprint 5 (S5-A1 y S5-M5): forma canónica de un celular o un correo para COMPARAR contactos, igual que
+-- ContactoNormal.de en Java. Correo: minúsculas, sin lo que va desde el primer «+» de la parte local y, en gmail.com y
+-- googlemail.com, sin puntos (googlemail.com es gmail.com). Celular: solo dígitos; uno peruano de 9 dígitos gana el 51.
+-- No lee tablas (NO SQL); la usan trg_mensaje_nace y las alertas no la necesitan (las calcula la aplicación).
+DROP FUNCTION IF EXISTS cc_contacto_normal$$
+CREATE FUNCTION cc_contacto_normal(c VARCHAR(150)) RETURNS VARCHAR(150) DETERMINISTIC NO SQL
+BEGIN
+    DECLARE v VARCHAR(150) DEFAULT LOWER(TRIM(c));
+    DECLARE dominio VARCHAR(150);
+    DECLARE localpart VARCHAR(150);
+    DECLARE digitos VARCHAR(150);
+    IF v IS NULL OR v = '' THEN
+        RETURN '';
+    END IF;
+    IF LOCATE('@', v) > 1 THEN
+        SET dominio = SUBSTRING_INDEX(v, '@', -1);
+        SET localpart = SUBSTRING_INDEX(LEFT(v, CHAR_LENGTH(v) - CHAR_LENGTH(dominio) - 1), '+', 1);
+        IF dominio IN ('gmail.com', 'googlemail.com') THEN
+            RETURN CONCAT(REPLACE(localpart, '.', ''), '@gmail.com');
+        END IF;
+        RETURN CONCAT(localpart, '@', dominio);
+    END IF;
+    SET digitos = REGEXP_REPLACE(v, '[^0-9]', '');
+    IF REGEXP_LIKE(digitos, '^9[0-9]{8}$') THEN
+        RETURN CONCAT('51', digitos);
+    END IF;
+    RETURN digitos;
+END$$
+
 -- Un plan nace en BORRADOR (nadie inserta un plan ya aprobado).
 DROP TRIGGER IF EXISTS trg_plan_pension_nace_borrador$$
 CREATE TRIGGER trg_plan_pension_nace_borrador BEFORE INSERT ON plan_pension FOR EACH ROW
@@ -479,6 +508,11 @@ BEGIN
             OR NEW.contacto_solicitud_id IS NOT NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el RUC y el cambio de contacto se registran con una solicitud aprobada';
     END IF;
+    -- Correcciones del sprint 5 (S5-A1 y S5-M1): nace sin contactos verificados ni aprobados.
+    IF NEW.telefono_verificado IS NOT NULL OR NEW.correo_verificado IS NOT NULL
+            OR NEW.contacto_aprobado_telefono IS NOT NULL OR NEW.contacto_aprobado_correo IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el apoderado nace con sus contactos sin verificar ni aprobar';
+    END IF;
 END$$
 
 DROP TRIGGER IF EXISTS trg_apoderado_facturacion$$
@@ -499,6 +533,28 @@ BEGIN
                     AND s.tipo = 'CAMBIO_CONTACTO_APODERADO' AND s.entidad = 'apoderado' AND s.entidad_id = NEW.id
                     AND s.estado = 'APROBADA')) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el contacto del apoderado solo cambia con su solicitud aprobada';
+    END IF;
+    -- S5-M1: el contacto aprobado lo fija una solicitud aprobada nueva y es el contacto registrado de ese canal.
+    IF (NOT (NEW.contacto_aprobado_telefono <=> OLD.contacto_aprobado_telefono)
+                AND ((NEW.contacto_solicitud_id <=> OLD.contacto_solicitud_id)
+                    OR NOT (NEW.contacto_aprobado_telefono <=> NEW.telefono_whatsapp)))
+            OR (NOT (NEW.contacto_aprobado_correo <=> OLD.contacto_aprobado_correo)
+                AND ((NEW.contacto_solicitud_id <=> OLD.contacto_solicitud_id)
+                    OR NOT (NEW.contacto_aprobado_correo <=> NEW.correo))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el contacto aprobado sale de su solicitud aprobada';
+    END IF;
+    -- S5-A1: un contacto queda verificado solo con SU verificación usada (el enlace que recibió ese contacto).
+    IF NOT (NEW.telefono_verificado <=> OLD.telefono_verificado) AND (NOT (NEW.telefono_verificado <=> NEW.telefono_whatsapp)
+            OR NOT EXISTS (SELECT 1 FROM verificacion_contacto v WHERE v.apoderado_id = NEW.id
+                AND v.colegio_id = NEW.colegio_id AND v.canal = 'WHATSAPP' AND v.contacto = NEW.telefono_verificado
+                AND v.verificado_en IS NOT NULL)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el celular se verifica solo con su enlace';
+    END IF;
+    IF NOT (NEW.correo_verificado <=> OLD.correo_verificado) AND (NOT (NEW.correo_verificado <=> NEW.correo)
+            OR NOT EXISTS (SELECT 1 FROM verificacion_contacto v WHERE v.apoderado_id = NEW.id
+                AND v.colegio_id = NEW.colegio_id AND v.canal = 'CORREO' AND v.contacto = NEW.correo_verificado
+                AND v.verificado_en IS NOT NULL)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el correo se verifica solo con su enlace';
     END IF;
 END$$
 
@@ -839,11 +895,24 @@ BEGIN
                 OR (NEW.canal = 'CORREO' AND a.correo = NEW.destino))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el mensaje va al contacto registrado del apoderado';
     END IF;
+    -- G6 + S5-A1 + S5-M1: un contacto del personal (comparado NORMALIZADO: alias y formatos) solo recibe si otra persona
+    -- aprobó EXACTAMENTE ese contacto para ese canal.
     IF NEW.destinatario_tipo = 'APODERADO' AND EXISTS (SELECT 1 FROM usuario u WHERE u.colegio_id = NEW.colegio_id
-            AND u.activo AND u.apoderado_id IS NULL AND (u.telefono_whatsapp = NEW.destino OR u.correo = NEW.destino))
+            AND u.activo AND u.apoderado_id IS NULL
+            AND (cc_contacto_normal(u.telefono_whatsapp) = cc_contacto_normal(NEW.destino)
+                OR cc_contacto_normal(u.correo) = cc_contacto_normal(NEW.destino)))
             AND NOT EXISTS (SELECT 1 FROM apoderado a WHERE a.id = NEW.apoderado_id
-                AND a.contacto_solicitud_id IS NOT NULL) THEN
+                AND ((NEW.canal = 'WHATSAPP' AND a.contacto_aprobado_telefono <=> NEW.destino)
+                    OR (NEW.canal = 'CORREO' AND a.contacto_aprobado_correo <=> NEW.destino))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: ese contacto es del personal; debe aprobarlo otra persona';
+    END IF;
+    -- S5-A1: un contacto recibe avisos y enlaces solo si su titular lo verificó (salvo su propia verificación y el aviso
+    -- al contacto anterior).
+    IF NEW.destinatario_tipo = 'APODERADO' AND NEW.tipo NOT IN ('CONTACTO_CAMBIADO', 'VERIFICACION_CONTACTO')
+            AND NOT EXISTS (SELECT 1 FROM apoderado a WHERE a.id = NEW.apoderado_id
+                AND ((NEW.canal = 'WHATSAPP' AND a.telefono_verificado <=> NEW.destino)
+                    OR (NEW.canal = 'CORREO' AND a.correo_verificado <=> NEW.destino))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el contacto del apoderado aún no está verificado';
     END IF;
     IF NEW.tipo = 'CONTACTO_CAMBIADO' AND NOT (NEW.entidad <=> 'solicitud_cambio' AND EXISTS (SELECT 1
             FROM solicitud_cambio s WHERE s.id = NEW.entidad_id AND s.tipo = 'CAMBIO_CONTACTO_APODERADO'
@@ -899,6 +968,11 @@ BEGIN
                 AND e.usado_en IS NULL AND e.anulado_en IS NULL) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la activación sale con su enlace vigente';
     END IF;
+    IF NEW.tipo = 'VERIFICACION_CONTACTO' AND NEW.estado = 'ENVIADO' AND OLD.estado = 'PENDIENTE'
+            AND NOT EXISTS (SELECT 1 FROM verificacion_contacto v WHERE v.mensaje_id = NEW.id
+                AND v.verificado_en IS NULL AND v.anulado_en IS NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la verificación sale con su enlace vigente';
+    END IF;
 END$$
 
 -- S4-M2 + A2: el enlace nace con su mensaje de activación PENDIENTE para ESE titular, sin usar ni anular y con 72 h como
@@ -940,6 +1014,11 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM evento_auditoria e WHERE e.secuencia = NEW.secuencia
             AND e.colegio_id = NEW.colegio_id AND LEFT(e.hash, 16) = NEW.codigo) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la huella no coincide con la bitácora';
+    END IF;
+    -- S5-M4: la secuencia nunca es menor que la de una huella ya guardada (diaria o por hora) del colegio.
+    IF NEW.secuencia < COALESCE((SELECT MAX(h.secuencia) FROM huella_bitacora h WHERE h.colegio_id = NEW.colegio_id), 0)
+            OR NEW.secuencia < COALESCE((SELECT MAX(h.secuencia) FROM huella_hora h WHERE h.colegio_id = NEW.colegio_id), 0) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la huella no retrocede (la bitácora fue recortada)';
     END IF;
 END$$
 
@@ -1056,6 +1135,17 @@ BEGIN
             OR NOT (NEW.atendido_por <=> OLD.atendido_por) OR NOT (NEW.atendido_en <=> OLD.atendido_en)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un aviso atendido no cambia';
     END IF;
+    -- S5-M2: quien registró el pago, o pidió o aprobó la anulación o el descuento del que se queja la familia, no lo cierra.
+    IF OLD.estado = 'ABIERTO' AND NEW.estado = 'ATENDIDO' AND (
+            EXISTS (SELECT 1 FROM pago p WHERE p.id = OLD.pago_id AND p.colegio_id = OLD.colegio_id
+                AND (p.cajero = NEW.atendido_por OR p.creado_por = NEW.atendido_por))
+            OR EXISTS (SELECT 1 FROM anulacion_pago a WHERE a.pago_id = OLD.pago_id AND a.colegio_id = OLD.colegio_id
+                AND (a.solicitado_por = NEW.atendido_por OR a.aprobado_por = NEW.atendido_por))
+            OR EXISTS (SELECT 1 FROM descuento d WHERE OLD.cuota_id IS NOT NULL AND d.colegio_id = OLD.colegio_id
+                AND d.cuotas LIKE CONCAT('%,', OLD.cuota_id, ',%')
+                AND (d.creado_por = NEW.atendido_por OR d.resuelto_por <=> NEW.atendido_por))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: quien participó en lo que reclama la familia no atiende su aviso';
+    END IF;
 END$$
 
 -- ===================== Sprint 5 · tanda 3 (V19): feriados y cierre mensual =====================
@@ -1069,6 +1159,22 @@ BEGIN
             OR NEW.anulado_por IS NOT NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un feriado se registra solo para una fecha futura';
     END IF;
+    -- S5-M3: nace PROPUESTO (lo aprueba otra persona), con 3 por mes como máximo y sin 3 días seguidos.
+    IF NOT (NEW.pendiente <=> TRUE) OR NEW.aprobado_por IS NOT NULL OR NEW.aprobado_en IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un feriado nace propuesto y lo aprueba otra persona';
+    END IF;
+    IF (SELECT COUNT(*) FROM feriado f WHERE f.colegio_id = NEW.colegio_id AND f.vigente
+            AND YEAR(f.fecha) = YEAR(NEW.fecha) AND MONTH(f.fecha) = MONTH(NEW.fecha)) >= 3 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: como máximo 3 días no laborables del colegio por mes';
+    END IF;
+    IF (SELECT COUNT(*) FROM feriado f WHERE f.colegio_id = NEW.colegio_id AND f.vigente
+                AND f.fecha IN (NEW.fecha - INTERVAL 1 DAY, NEW.fecha - INTERVAL 2 DAY)) = 2
+            OR (SELECT COUNT(*) FROM feriado f WHERE f.colegio_id = NEW.colegio_id AND f.vigente
+                AND f.fecha IN (NEW.fecha - INTERVAL 1 DAY, NEW.fecha + INTERVAL 1 DAY)) = 2
+            OR (SELECT COUNT(*) FROM feriado f WHERE f.colegio_id = NEW.colegio_id AND f.vigente
+                AND f.fecha IN (NEW.fecha + INTERVAL 1 DAY, NEW.fecha + INTERVAL 2 DAY)) = 2 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: no más de 2 días no laborables del colegio seguidos';
+    END IF;
 END$$
 
 -- Se anula una sola vez y antes de su fecha; uno anulado no cambia.
@@ -1077,6 +1183,15 @@ CREATE TRIGGER trg_feriado_anulacion BEFORE UPDATE ON feriado FOR EACH ROW
 BEGIN
     IF OLD.vigente IS NULL OR (NEW.vigente IS NULL AND NOT (OLD.fecha > DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un feriado se anula una vez y antes de su fecha';
+    END IF;
+    -- S5-M3: se aprueba una vez, antes de su fecha y por OTRA persona; uno aprobado no vuelve a propuesto.
+    IF (OLD.pendiente = FALSE AND (NOT (NEW.pendiente <=> OLD.pendiente)
+                OR NOT (NEW.aprobado_por <=> OLD.aprobado_por) OR NOT (NEW.aprobado_en <=> OLD.aprobado_en)))
+            OR (OLD.pendiente = TRUE AND NEW.pendiente = FALSE AND (NEW.vigente IS NULL
+                OR NEW.aprobado_por IS NULL OR NEW.aprobado_por = OLD.creado_por
+                OR NOT (OLD.fecha > DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR))))
+            OR (OLD.pendiente = TRUE AND NEW.pendiente = TRUE AND NEW.aprobado_por IS NOT NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un feriado lo aprueba otra persona, una vez y antes de su fecha';
     END IF;
 END$$
 
@@ -1135,4 +1250,51 @@ BEGIN
     END IF;
 END$$
 
+-- ===================== Correcciones del sprint 5 (V20) =====================
+
+-- S5-A1: la verificación nace con su mensaje VERIFICACION_CONTACTO PENDIENTE a ESE contacto del apoderado, sin usar ni
+-- anular y con 72 h como máximo.
+DROP TRIGGER IF EXISTS trg_verificacion_contacto_nace$$
+CREATE TRIGGER trg_verificacion_contacto_nace BEFORE INSERT ON verificacion_contacto FOR EACH ROW
+BEGIN
+    IF NEW.verificado_en IS NOT NULL OR NEW.anulado_en IS NOT NULL OR NEW.verificado_ip IS NOT NULL
+            OR NEW.vence_en <= NEW.creado_en OR NEW.vence_en > NEW.creado_en + INTERVAL 72 HOUR THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la verificación nace sin usar y vence en 72 h como máximo';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM mensaje m WHERE m.id = NEW.mensaje_id AND m.colegio_id = NEW.colegio_id
+            AND m.tipo = 'VERIFICACION_CONTACTO' AND m.estado = 'PENDIENTE' AND m.apoderado_id = NEW.apoderado_id
+            AND m.canal = NEW.canal AND m.destino = NEW.contacto) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la verificación nace con su mensaje a ese contacto';
+    END IF;
+END$$
+
+-- S5-A1: se usa o se anula una vez; nunca vencida ni anulada.
+DROP TRIGGER IF EXISTS trg_verificacion_contacto_uso$$
+CREATE TRIGGER trg_verificacion_contacto_uso BEFORE UPDATE ON verificacion_contacto FOR EACH ROW
+BEGIN
+    IF (OLD.verificado_en IS NOT NULL OR OLD.anulado_en IS NOT NULL) AND (NOT (NEW.verificado_en <=> OLD.verificado_en)
+            OR NOT (NEW.verificado_ip <=> OLD.verificado_ip) OR NOT (NEW.anulado_en <=> OLD.anulado_en)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una verificación usada o anulada no cambia';
+    END IF;
+    IF NEW.verificado_en IS NOT NULL AND OLD.verificado_en IS NULL
+            AND (NEW.anulado_en IS NOT NULL OR NEW.verificado_en > OLD.vence_en OR NEW.verificado_ip IS NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una verificación vencida o anulada no se usa';
+    END IF;
+END$$
+
+-- S5-M4: la huella de la hora coincide con un evento de ESE colegio y nunca retrocede.
+DROP TRIGGER IF EXISTS trg_huella_hora_registro$$
+CREATE TRIGGER trg_huella_hora_registro BEFORE INSERT ON huella_hora FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM evento_auditoria e WHERE e.secuencia = NEW.secuencia
+            AND e.colegio_id = NEW.colegio_id AND LEFT(e.hash, 16) = NEW.codigo) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la huella de la hora no coincide con la bitácora';
+    END IF;
+    IF NEW.secuencia < COALESCE((SELECT MAX(h.secuencia) FROM huella_bitacora h WHERE h.colegio_id = NEW.colegio_id), 0)
+            OR NEW.secuencia < COALESCE((SELECT MAX(h.secuencia) FROM huella_hora h WHERE h.colegio_id = NEW.colegio_id), 0) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la huella no retrocede (la bitácora fue recortada)';
+    END IF;
+END$$
+
 DELIMITER ;
+

@@ -39,6 +39,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.FeriadosNacionales;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -46,6 +47,7 @@ import java.util.EnumSet;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.cuota;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.efectivo;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.ADMINISTRACION;
@@ -53,8 +55,9 @@ import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.DI
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.como;
 
 /**
- * Auditoría del sprint 5 (auditor-seguridad-antifraude): ataques que PASAN con el código actual. Cada prueba está en
- * verde porque demuestra el hueco; al corregirlo, la aserción marcada «HUECO» debe invertirse.
+ * Auditoría del sprint 5 (auditor-seguridad-antifraude): los ataques S5-A1 y S5-M1 a S5-M3. Las aserciones que antes
+ * demostraban el hueco («HUECO») se invirtieron con las correcciones (V20): cada prueba en verde significa que el ataque
+ * ya NO funciona («CORREGIDO»).
  */
 @PruebaIntegracion
 @Import(ConfiguracionRelojAjustable.class)
@@ -117,67 +120,84 @@ class AtaquesSprint5Test {
 		return jdbc.queryForObject("SELECT familia_id FROM alumno WHERE id = ?", Long.class, alumno);
 	}
 
+	/** Pagos registrados con su aviso, a qué destinos. */
 	private List<String> destinosDelPago(Long pago) {
 		return jdbc.queryForList("SELECT destino FROM mensaje WHERE tipo = 'PAGO_REGISTRADO' AND entidad_id = ?",
 				String.class, pago);
 	}
 
 	/**
-	 * S5-A1 (G6): el control compara el contacto por igualdad exacta. Con un alias de Gmail (o con un segundo chip) el
-	 * aviso de pago Y el enlace de activación del portal de la familia llegan a la cajera.
+	 * S5-A1 (G6), CORREGIDO: el contacto se compara NORMALIZADO, así que el alias de Gmail de la cajera es su correo: el
+	 * registro pide la aprobación de otra persona y, aunque alguien lo diera por verificado, ni el aviso de pago ni el enlace
+	 * del portal llegan a la cajera.
 	 */
 	@Test
 	void s5A1_aliasDelCorreoDeLaCajeraRecibeElAvisoDePagoYElEnlaceDelPortal() {
-		String alias = "lucia.caja+ramos@gmail.com"; // Gmail lo entrega en lucia.caja@gmail.com
+		String alias = "Lucia.Caja+ramos@googlemail.com"; // Gmail lo entrega en lucia.caja@gmail.com
 		como(EscenarioCobranza.CAJA);
 		assertThat(usuarios.esContactoDelPersonal(CORREO_CAJERA)).as("control: el correo exacto sí se detecta").isTrue();
-		assertThat(usuarios.esContactoDelPersonal(alias)).as("HUECO: el alias no se detecta").isFalse();
+		assertThat(usuarios.esContactoDelPersonal(alias)).as("CORREGIDO: el alias también se detecta").isTrue();
 
 		Long lucas = familiaNueva("72345611", "40000012", null, alias);
+		assertThat(jdbc.queryForObject("SELECT resumen FROM solicitud_cambio WHERE tipo = 'CAMBIO_CONTACTO_APODERADO' "
+				+ "AND estado = 'PENDIENTE' AND entidad_id = ?", String.class, responsable(lucas)))
+				.as("CORREGIDO: el registro con un contacto del personal pide la aprobación de otra persona")
+				.contains("Coincide con el contacto de alguien del personal");
+		// Aunque el alias figurara como verificado, la regla del personal (normalizada) lo bloquea.
+		jdbc.update("UPDATE apoderado SET correo_verificado = correo WHERE id = ?", responsable(lucas));
 		como(EscenarioCobranza.CAJA);
 		Long pago = cobro.cobrar(efectivo(familiaDe(lucas), List.of(cuota(jdbc, lucas, "PEN-2027-03")), "450.00",
 				"450.00"));
-		assertThat(destinosDelPago(pago)).as("HUECO: el aviso de pago va al buzón de la cajera").containsExactly(alias);
+		assertThat(destinosDelPago(pago)).as("CORREGIDO: el aviso de pago no va al buzón de la cajera").isEmpty();
 
 		como(ADMINISTRACION);
-		accesos.darAcceso(responsable(lucas));
+		assertThatThrownBy(() -> accesos.darAcceso(responsable(lucas))).isInstanceOf(ReglaNegocioException.class);
 		SecurityContextHolder.clearContext();
 		assertThat(jdbc.queryForList("SELECT destino FROM mensaje WHERE tipo = 'ACTIVACION_CUENTA'", String.class))
-				.as("HUECO: el enlace del portal de la familia va al buzón de la cajera").containsExactly(alias);
+				.as("CORREGIDO: el enlace del portal no va al buzón de la cajera").isEmpty();
 	}
 
 	/**
-	 * S5-M1 (G6): cualquier solicitud de contacto aprobada (aunque solo cambie el correo) llena contacto_solicitud_id y
-	 * desde ese momento el celular del personal, que nadie aprobó, recibe los avisos.
+	 * S5-M1, CORREGIDO: aprobar un cambio de SOLO el correo no blanquea el celular del personal. La aprobación vale para el
+	 * contacto concreto aprobado (contacto_aprobado_correo); el celular de la cajera sigue sin aprobar y no recibe nada.
 	 */
 	@Test
 	void s5M1_cambiarSoloElCorreoBlanqueaElCelularDelPersonal() {
 		String celularCajera = UsuariosDePrueba.celular("caja"); // +51966XXXXXX
 		Long lucas = familiaNueva("72345622", "40000023", celularCajera.substring(3), "ana.ramos@gmail.com");
+		Long ana = responsable(lucas);
+		// El registro pidió aprobar el celular del personal: Dirección lo rechaza (no es de la familia).
+		Long aprobarCelular = EscenarioAprobaciones.pendiente(jdbc, "apoderado", ana);
+		como(DIRECCION);
+		bandeja.rechazar(aprobarCelular, "No es el celular de la madre: es de la cajera");
+		EscenarioEscolar.contactosConfirmados(jdbc);
 		como(EscenarioCobranza.CAJA);
 		Long pago1 = cobro.cobrar(efectivo(familiaDe(lucas), List.of(cuota(jdbc, lucas, "PEN-2027-03")), "450.00",
 				"450.00"));
-		assertThat(destinosDelPago(pago1)).as("control: el WhatsApp a la cajera se omite (y el correo tampoco sale)")
-				.isEmpty();
+		assertThat(destinosDelPago(pago1)).as("control: el WhatsApp a la cajera se omite y el aviso sale por correo")
+				.containsExactly("ana.ramos@gmail.com");
 
 		// Administración pide corregir SOLO el correo (cambio legítimo); Dirección lo aprueba.
-		Long ana = responsable(lucas);
 		como(ADMINISTRACION);
 		familias.actualizarApoderado(ana, new ApoderadoRequest(TipoDocumento.DNI, "40000023", "Ramos", "Soto", "Ana",
 				Parentesco.MADRE, celularCajera.substring(3), "ana.ramos.soto@gmail.com", "Corrige el correo de la madre"));
 		EscenarioAprobaciones.aprueba(DIRECCION, bandeja, jdbc, "apoderado", ana);
+		assertThat(jdbc.queryForMap("SELECT contacto_aprobado_telefono, contacto_aprobado_correo FROM apoderado "
+				+ "WHERE id = ?", ana)).containsEntry("contacto_aprobado_telefono", null)
+				.containsEntry("contacto_aprobado_correo", "ana.ramos.soto@gmail.com");
+		EscenarioEscolar.contactosConfirmados(jdbc);
 
 		como(EscenarioCobranza.CAJA);
 		Long pago2 = cobro.cobrar(efectivo(familiaDe(lucas), List.of(cuota(jdbc, lucas, "PEN-2027-04")), "450.00",
 				"450.00"));
 		SecurityContextHolder.clearContext();
-		assertThat(destinosDelPago(pago2)).as("HUECO: ahora el WhatsApp va al celular de la cajera")
-				.contains(celularCajera);
+		assertThat(destinosDelPago(pago2)).as("CORREGIDO: el WhatsApp no va al celular de la cajera")
+				.doesNotContain(celularCajera).containsExactly("ana.ramos.soto@gmail.com");
 	}
 
 	/**
-	 * S5-M2: Dirección aprueba la anulación y luego ella misma «atiende» la queja de la familia sobre esa anulación. La
-	 * alerta CRÍTICA desaparece de Promotoría sin que Promotoría la haya visto.
+	 * S5-M2, CORREGIDO: Dirección aprobó la anulación y no puede atender la queja de la familia sobre ella; la alerta
+	 * CRÍTICA sigue en el inicio de Promotoría.
 	 */
 	@Test
 	void s5M2_direccionCierraLaQuejaSobreLaAnulacionQueElMismoAprobo() {
@@ -194,31 +214,42 @@ class AtaquesSprint5Test {
 				"Yo no pedí anular mi pago"));
 
 		como(DIRECCION);
-		avisos.atender(aviso, "Revisado: fue un error de caja, ya está corregido.");
+		assertThatThrownBy(() -> avisos.atender(aviso, "Revisado: fue un error de caja, ya está corregido."))
+				.as("CORREGIDO: quien aprobó la anulación no cierra la queja").isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("otra persona");
+		assertThat(EscenarioEscolar.ultimoEvento(jdbc, "AUTOAPROBACION_RECHAZADA")).containsEntry("entidad",
+				"aviso_familia");
 
 		como(EscenarioCobranza.PROMOTORIA);
-		assertThat(alertasFamilias.alertas()).as("HUECO: Promotoría ya no ve ninguna alerta crítica")
-				.noneMatch(a -> a.gravedad() == AlertaRevision.Gravedad.CRITICA);
+		assertThat(alertasFamilias.alertas()).as("CORREGIDO: Promotoría sigue viendo la alerta crítica")
+				.anyMatch(a -> a.gravedad() == AlertaRevision.Gravedad.CRITICA);
 	}
 
 	/**
-	 * S5-M3 (G20): Dirección sola registra todos los días hábiles del mes siguiente como «no laborables». Nada lo limita
-	 * ni lo aprueba otra persona; el siguiente día hábil (base de las alertas de depósito y de abono) salta un mes.
+	 * S5-M3 (G20), CORREGIDO: Dirección sola ya no congela un mes. Cada día queda PROPUESTO (no cuenta hasta que Promotoría
+	 * lo apruebe), con 3 por mes como máximo y no más de 2 días hábiles seguidos.
 	 */
 	@Test
 	void s5M3_direccionCongelaUnMesDeAlertasConFeriados() {
 		LocalDate hoy = LocalDate.of(2026, 10, 2); // reloj de ConfiguracionRelojAjustable (viernes)
 		como(DIRECCION);
 		int registrados = 0;
+		int rechazados = 0;
 		for (LocalDate d = hoy.plusDays(1); d.isBefore(LocalDate.of(2026, 11, 1)); d = d.plusDays(1)) {
 			if (d.getDayOfWeek() == DayOfWeek.SATURDAY || d.getDayOfWeek() == DayOfWeek.SUNDAY || FeriadosNacionales.es(d)) {
 				continue;
 			}
-			feriados.registrar(new FeriadoRequest(d, "Jornada de capacitación docente"));
-			registrados++;
+			try {
+				feriados.registrar(new FeriadoRequest(d, "Jornada de capacitación docente"));
+				registrados++;
+			}
+			catch (ReglaNegocioException e) {
+				rechazados++;
+			}
 		}
-		assertThat(registrados).isEqualTo(19);
-		assertThat(calendario.siguienteDiaHabil(hoy)).as("HUECO: la caja de hoy recién es crítica en noviembre")
-				.isAfterOrEqualTo(LocalDate.of(2026, 11, 2));
+		assertThat(registrados).as("CORREGIDO: tope por mes y días seguidos").isLessThanOrEqualTo(3);
+		assertThat(rechazados).isGreaterThanOrEqualTo(16);
+		assertThat(calendario.siguienteDiaHabil(hoy)).as("CORREGIDO: sin la aprobación de otra persona nada cambia")
+				.isEqualTo(LocalDate.of(2026, 10, 5));
 	}
 }

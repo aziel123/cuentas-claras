@@ -57,6 +57,12 @@ class ServicioFeriadosTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository usuarios;
+
+	@Autowired
+	private org.springframework.security.crypto.password.PasswordEncoder codificador;
+
 	@BeforeEach
 	void preparar() {
 		reloj.fijar(ConfiguracionRelojAjustable.INICIO);
@@ -79,10 +85,18 @@ class ServicioFeriadosTest {
 
 		Long id = feriados.registrar(new FeriadoRequest(VIERNES_9, "Aniversario del colegio"));
 
-		assertThat(calendario.siguienteDiaHabil(LocalDate.of(2026, 10, 7))).isEqualTo(LocalDate.of(2026, 10, 12));
-		Map<String, Object> evento = ultimoEvento(jdbc, "FERIADO_REGISTRADO");
+		// S5-M3: propuesto no cuenta; lo aprueba otra persona (Dirección) y recién entonces el calendario lo salta.
+		assertThat(calendario.siguienteDiaHabil(LocalDate.of(2026, 10, 7))).isEqualTo(VIERNES_9);
+		Map<String, Object> evento = ultimoEvento(jdbc, "FERIADO_PROPUESTO");
 		assertThat(evento).containsEntry("nombre_usuario", "promotor").containsEntry("entidad_id", id.toString());
 		assertThat(evento.get("valor_nuevo")).asString().contains("09/10/2026", "Aniversario del colegio");
+		assertThatThrownBy(() -> feriados.aprobar(id)).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("otra persona");
+		UsuariosDePrueba.iniciarSesion(DIRECCION);
+		feriados.aprobar(id);
+		assertThat(calendario.siguienteDiaHabil(LocalDate.of(2026, 10, 7))).isEqualTo(LocalDate.of(2026, 10, 12));
+		assertThat(ultimoEvento(jdbc, "FERIADO_APROBADO").get("detalle")).asString()
+				.contains("Propuesto por promotor, aprobado por director");
 		FeriadosVista vista = feriados.vista(2026);
 		assertThat(vista.nacionales()).hasSize(16);
 		assertThat(vista.extras()).singleElement().satisfies(f -> {
@@ -158,5 +172,44 @@ class ServicioFeriadosTest {
 		assertThat(calendario.esHabil(VIERNES_9)).isTrue();
 		assertThatThrownBy(() -> feriados.anular(id, "Intento desde otro colegio"))
 				.isInstanceOf(RecursoNoEncontradoException.class);
+	}
+
+	/** S5-M3: la propuesta se avisa por mensaje a Promotoría (en la misma transacción). */
+	@Test
+	void laPropuestaSeAvisaPorMensajeAPromotoria() {
+		UsuariosDePrueba.guardar(usuarios, codificador, 1L, "promotora.dos", UsuariosDePrueba.CLAVE, false, Rol.PROMOTOR);
+		UsuariosDePrueba.iniciarSesion(DIRECCION);
+		Long id = feriados.registrar(new FeriadoRequest(VIERNES_9, "Aniversario del colegio"));
+
+		assertThat(jdbc.queryForList("SELECT parametros FROM mensaje WHERE tipo = 'FERIADO_PROPUESTO' AND entidad_id = ?",
+				String.class, id)).singleElement().asString().contains("director", "09/10/2026");
+	}
+
+	/** S5-M3: como máximo 3 por mes y 2 días hábiles seguidos (los fines de semana y feriados no cortan la racha). */
+	@Test
+	void topeDeTresPorMesYDosSeguidos() {
+		UsuariosDePrueba.iniciarSesion(DIRECCION);
+		feriados.registrar(new FeriadoRequest(LocalDate.of(2026, 11, 5), "Jornada de capacitación docente"));
+		feriados.registrar(new FeriadoRequest(LocalDate.of(2026, 11, 6), "Jornada de capacitación docente"));
+		// El lunes 9 seguiría a jueves 5 y viernes 6 (el fin de semana no corta): serían 3 seguidos.
+		assertThatThrownBy(() -> feriados.registrar(new FeriadoRequest(LocalDate.of(2026, 11, 9), "Un día más")))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("seguidos");
+		feriados.registrar(new FeriadoRequest(LocalDate.of(2026, 11, 20), "Día del colegio"));
+		assertThatThrownBy(() -> feriados.registrar(new FeriadoRequest(LocalDate.of(2026, 11, 25), "Otro día más")))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("máximo es 3");
+		assertThat(contar(jdbc, "feriado WHERE pendiente")).isEqualTo(3);
+	}
+
+	/** S5-M3: Promotoría propone y la aprueba Dirección (y al revés): otro promotor no basta. */
+	@Test
+	void loQuePropusoPromotoriaLoApruebaDireccion() {
+		UsuariosDePrueba.guardar(usuarios, codificador, 1L, "promotor", UsuariosDePrueba.CLAVE, false, Rol.PROMOTOR);
+		UsuariosDePrueba.iniciarSesion(PROMOTORIA);
+		Long id = feriados.registrar(new FeriadoRequest(VIERNES_9, "Aniversario del colegio"));
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(1L, 91L, "promotora.dos", "Promotora Dos", false,
+				EnumSet.of(Rol.PROMOTOR)));
+		assertThatThrownBy(() -> feriados.aprobar(id)).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("debe aprobarlo Dirección");
+		assertThat(calendario.esHabil(VIERNES_9)).isTrue();
 	}
 }

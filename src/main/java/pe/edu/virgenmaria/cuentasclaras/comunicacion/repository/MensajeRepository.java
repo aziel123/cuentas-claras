@@ -58,16 +58,32 @@ public interface MensajeRepository extends Repository<Mensaje, Long> {
 
 	long countByProveedor(ProveedorMensajeria proveedor);
 
+	/** QA-S5-4: si ya existe el recordatorio de una familia, tipo y fecha de vencimiento (la clave termina en la fecha). */
+	boolean existsByTipoAndFamiliaIdAndClaveEndingWith(TipoMensaje tipo, Long familiaId, String fin);
+
+	/** S5-M4: los últimos mensajes de un tipo (la huella enviada). */
+	List<Mensaje> findTop60ByTipoOrderByIdDesc(TipoMensaje tipo);
+
+	/** S5-B3: si el mensaje de una entidad ya salió. */
+	boolean existsByTipoAndEntidadAndEntidadIdAndEstadoIn(TipoMensaje tipo, String entidad, Long entidadId,
+			Collection<EstadoMensaje> estados);
+
+	/** S5-A1: los mensajes a un apoderado de un tipo (la verificación de su contacto). */
+	List<Mensaje> findByTipoAndApoderadoIdOrderByIdAsc(TipoMensaje tipo, Long apoderadoId);
+
 	long countByEstadoAndCreadoEnLessThan(EstadoMensaje estado, LocalDateTime antes);
 
 	/**
-	 * Pagos vigentes registrados en el rango que no tienen ningún aviso que haya salido (ENVIADO, ENTREGADO o LEIDO):
-	 * alerta CRÍTICA de Promotoría (G2 y G10).
+	 * S5-B2: pagos vigentes registrados en el rango en los que a ALGÚN responsable de pago de los alumnos pagados no le
+	 * salió (ENVIADO, ENTREGADO o LEIDO) su aviso: alerta CRÍTICA de Promotoría (G2 y G10). Antes bastaba un aviso a
+	 * cualquiera; ahora cada responsable es auditor de sus hijos.
 	 */
-	@Query("select p.id from Pago p where p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE "
-			+ "and p.creadoEn >= :desde and p.creadoEn < :hasta and not exists (select 1 from Mensaje m "
+	@Query("select distinct p.id from Pago p, AplicacionPago a join a.cuota c join c.alumno al join al.responsablePago r "
+			+ "where a.pago = p and a.tipo = pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAplicacion.APLICACION "
+			+ "and p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE "
+			+ "and p.creadoEn >= :desde and p.creadoEn < :hasta and r.activo = true and not exists (select 1 from Mensaje m "
 			+ "where m.tipo = pe.edu.virgenmaria.cuentasclaras.comunicacion.model.TipoMensaje.PAGO_REGISTRADO "
-			+ "and m.entidad = 'pago' and m.entidadId = p.id and m.estado in :salieron)")
+			+ "and m.entidad = 'pago' and m.entidadId = p.id and m.apoderadoId = r.id and m.estado in :salieron)")
 	List<Long> pagosSinAvisoEnviado(@Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta,
 			@Param("salieron") Collection<EstadoMensaje> salieron);
 

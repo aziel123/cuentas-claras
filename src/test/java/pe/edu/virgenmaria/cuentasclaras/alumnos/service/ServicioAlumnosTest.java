@@ -60,6 +60,12 @@ class ServicioAlumnosTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository usuarios;
+
+	@Autowired
+	private org.springframework.security.crypto.password.PasswordEncoder codificador;
+
 	private Estructura escuela;
 
 	@BeforeEach
@@ -328,5 +334,37 @@ class ServicioAlumnosTest {
 				MOTIVO))).isInstanceOf(AccessDeniedException.class);
 		assertThatThrownBy(() -> familias.agregarApoderado(mateo.familiaId(), EscenarioEscolar.apoderado("40112233",
 				"Quispe", "Juan", Parentesco.PADRE, "976540129", null, null))).isInstanceOf(AccessDeniedException.class);
+	}
+
+	/**
+	 * G6 (lo cita el diseño) y correcciones del sprint 5 (S5-A1 y S5-M1): quien registra a un apoderado con el celular de
+	 * alguien del personal (escrito en otro formato) no lo deja listo para recibir avisos: queda una solicitud que debe
+	 * aprobar otra persona, la bandeja advierte que es del personal y, al aprobarla, la aprobación vale solo para ESE
+	 * celular.
+	 */
+	@Test
+	void registrarApoderadoConCelularDelPersonalPideAprobacion() {
+		UsuariosDePrueba.guardar(usuarios, codificador, 1L, "caja", UsuariosDePrueba.CLAVE, false, Rol.CAJA);
+		String celularCaja = UsuariosDePrueba.celular("caja"); // +51966XXXXXX
+		String escrito = celularCaja.substring(3, 6) + " " + celularCaja.substring(6, 9) + " " + celularCaja.substring(9);
+
+		RegistroResultado lucas = alumnos.registrar(EscenarioEscolar.conApoderadoNuevo("72345633", "Ramos", "Vega", "Lucas",
+				LocalDate.of(2015, 3, 3), "40000034", "Ramos", "Soto", "Ana", escrito, null, escuela.primaria5A2026()));
+		Long ana = jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class,
+				lucas.alumnoId());
+
+		Map<String, Object> solicitud = jdbc.queryForMap("SELECT id, resumen, solicitado_por FROM solicitud_cambio WHERE "
+				+ "tipo = 'CAMBIO_CONTACTO_APODERADO' AND estado = 'PENDIENTE' AND entidad_id = ?", ana);
+		assertThat(solicitud.get("resumen")).asString().contains("Coincide con el contacto de alguien del personal");
+		assertThat(jdbc.queryForMap("SELECT telefono_verificado, contacto_aprobado_telefono FROM apoderado WHERE id = ?",
+				ana)).containsEntry("telefono_verificado", null).containsEntry("contacto_aprobado_telefono", null);
+
+		UsuariosDePrueba.iniciarSesion(OtraPersona.APROBADOR);
+		assertThat(bandeja.bandeja().pendientes()).filteredOn(v -> v.id().equals(solicitud.get("id"))).singleElement()
+				.satisfies(v -> assertThat(v.advertencia()).contains("el celular es de", "(personal)"));
+		bandeja.aprobar((Long) solicitud.get("id"), "La madre trabaja en caja: lo confirmé en persona");
+		assertThat(jdbc.queryForMap("SELECT contacto_aprobado_telefono, contacto_aprobado_correo FROM apoderado "
+				+ "WHERE id = ?", ana)).containsEntry("contacto_aprobado_telefono", celularCaja)
+				.containsEntry("contacto_aprobado_correo", null);
 	}
 }

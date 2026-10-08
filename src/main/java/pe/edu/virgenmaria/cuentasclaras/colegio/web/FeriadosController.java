@@ -44,12 +44,25 @@ public class FeriadosController {
 		}
 		try {
 			feriados.registrar(pedido);
-			mensajes.addFlashAttribute("exito", "Listo: ese día ya no cuenta como hábil y quedó en la bitácora.");
+			mensajes.addFlashAttribute("exito", "Listo: el día quedó PROPUESTO. Cuenta como no laborable cuando lo apruebe otra persona de "
+					+ "Promotoría o Dirección (se le avisó por mensaje).");
 		}
 		catch (ReglaNegocioException e) {
 			mensajes.addFlashAttribute("error", e.getMessage());
 		}
 		return "redirect:/feriados?anio=" + pedido.fecha().getYear();
+	}
+
+	@PostMapping("/feriados/{id:\\d+}/aprobar")
+	public String aprobar(@PathVariable Long id, RedirectAttributes mensajes) {
+		try {
+			feriados.aprobar(id);
+			mensajes.addFlashAttribute("exito", "Listo: ese día ya no cuenta como hábil y quedó en la bitácora.");
+		}
+		catch (ReglaNegocioException e) {
+			mensajes.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/feriados";
 	}
 
 	@PostMapping("/feriados/{id:\\d+}/anular")

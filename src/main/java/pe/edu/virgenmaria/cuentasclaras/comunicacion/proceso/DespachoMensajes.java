@@ -36,7 +36,11 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.EnlacesActivacion;
 
+import pe.edu.virgenmaria.cuentasclaras.alumnos.service.VerificacionesContacto;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
+
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -92,12 +96,18 @@ public class DespachoMensajes {
 
 	private final CalendarioHabil calendario;
 
+	private final VerificacionesContacto verificaciones;
+
+	private final CuotaRepository cuotas;
+
 	public DespachoMensajes(MensajeRepository mensajes, ObjectProvider<ProveedorWhatsApp> whatsapp,
 			ObjectProvider<ProveedorCorreo> correo, EnlacesActivacion enlaces, UsuarioRepository usuarios,
 			ApoderadoRepository apoderados, CreadorMensajes creador, AuditoriaService auditoria,
 			PropiedadesMensajeria propiedades, RecorridoColegios colegios, PlatformTransactionManager transacciones,
-			Clock reloj, CalendarioHabil calendario) {
+			Clock reloj, CalendarioHabil calendario, VerificacionesContacto verificaciones, CuotaRepository cuotas) {
 		this.calendario = calendario;
+		this.verificaciones = verificaciones;
+		this.cuotas = cuotas;
 		this.mensajes = mensajes;
 		this.whatsapp = whatsapp;
 		this.correo = correo;
@@ -181,11 +191,23 @@ public class DespachoMensajes {
 					mensajes.saveAndFlush(mensaje);
 					return null;
 				}
+				if (esRecordatorio(mensaje.getTipo()) && yaSePago(mensaje)) {
+					// QA-S5-3: las cuotas de ese vencimiento ya se pagaron: no se recuerda una deuda que no existe.
+					mensaje.fallar("No se envió: las cuotas de ese vencimiento ya se pagaron.", false);
+					mensajes.saveAndFlush(mensaje);
+					return null;
+				}
 				Envio envio = preparar(mensaje);
 				ResultadoEnvio resultado = enviar(mensaje, envio);
 				if (resultado.aceptado()) {
 					mensaje.marcarEnviado(resultado.proveedor(), resultado.idProveedor(), ahora());
 					mensajes.saveAndFlush(mensaje);
+					if (mensaje.getTipo() == TipoMensaje.VERIFICACION_CONTACTO) {
+						auditoria.registrar(AccionAuditoria.ENLACE_ACTIVACION_ENVIADO, "apoderado",
+								String.valueOf(mensaje.getApoderadoId()), null, mensaje.getCanal().etiqueta(),
+								"El enlace para confirmar el contacto salió directo a ese contacto por "
+										+ mensaje.getCanal().etiqueta() + " (mensaje " + mensaje.getId() + "). Nadie más lo ve.");
+					}
 					if (mensaje.getTipo() == TipoMensaje.ACTIVACION_CUENTA) {
 						auditoria.registrar(AccionAuditoria.ENLACE_ACTIVACION_ENVIADO, "usuario",
 								String.valueOf(mensaje.getEntidadId()), null, mensaje.getCanal().etiqueta(),
@@ -219,7 +241,32 @@ public class DespachoMensajes {
 		return intento.aceptadoPor();
 	}
 
+	/** El recordatorio es de una familia y una fecha (la clave termina en la fecha de vencimiento). */
+	private boolean yaSePago(Mensaje mensaje) {
+		String clave = mensaje.getClave();
+		LocalDate vencimiento;
+		try {
+			vencimiento = LocalDate.parse(clave.substring(clave.lastIndexOf(':') + 1));
+		}
+		catch (java.time.format.DateTimeParseException e) {
+			return false;
+		}
+		return cuotas.porPagarQueVencenEntre(vencimiento, vencimiento).stream()
+				.noneMatch(c -> c.getAlumno().getFamilia().getId().equals(mensaje.getFamiliaId())
+						&& c.saldo().signum() > 0);
+	}
+
 	private Envio preparar(Mensaje mensaje) {
+		if (mensaje.getTipo() == TipoMensaje.VERIFICACION_CONTACTO) {
+			// S5-A1: el enlace de verificación se genera AQUÍ, en la transacción del envío (nadie del colegio lo ve).
+			LocalDateTime vence = ahora().plus(propiedades.vigenciaEnlace());
+			boolean whatsappCanal = mensaje.getCanal() == CanalMensaje.WHATSAPP;
+			String ruta = verificaciones.generarParaMensaje(ContextoColegio.actual(), mensaje.getId(),
+					mensaje.getApoderadoId(), whatsappCanal, mensaje.getDestino(), propiedades.vigenciaEnlace());
+			List<String> parametros = List.of(whatsappCanal ? "número" : "correo", vence.format(VENCE));
+			String cuerpo = PlantillaMensaje.VERIFICACION.componer(parametros) + "\n\n" + propiedades.urlPublica() + ruta;
+			return new Envio(parametros, ruta, cuerpo);
+		}
 		if (mensaje.getTipo() != TipoMensaje.ACTIVACION_CUENTA) {
 			List<String> parametros = mensaje.parametrosLista();
 			String cuerpo = mensaje.getPlantilla().componer(parametros)

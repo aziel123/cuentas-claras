@@ -24,8 +24,9 @@ public class CorreoSimulado implements ProveedorCorreo {
 
 	@Override
 	public ResultadoEnvio enviar(String destino, String asunto, String cuerpo) {
-		String enlace = cuerpo == null || !cuerpo.contains("/activar/") ? null
-				: cuerpo.substring(cuerpo.indexOf("/activar/")).split("\\s")[0];
+		String marca = cuerpo == null ? null : cuerpo.contains("/activar/") ? "/activar/"
+				: cuerpo.contains("/verificar/") ? "/verificar/" : null;
+		String enlace = marca == null ? null : cuerpo.substring(cuerpo.indexOf(marca)).split("\\s")[0];
 		return buzon.recibir(CanalMensaje.CORREO, destino, asunto, cuerpo, enlace);
 	}
 }

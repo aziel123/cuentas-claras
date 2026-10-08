@@ -27,14 +27,16 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.contar;
 
 /**
- * S5-M4 (G13): la huella diaria solo protege los días ya «huellados» y solo contra las filas que el atacante no borró.
- * Quien tiene acceso de DBA recorta sin que el sistema lo note si (a) recorta el mismo día, antes de las 06:00, o (b)
- * borra también las filas de huella_bitacora de esos días.
+ * S5-M4 (G13): antes, la huella diaria solo protegía los días ya «huellados» y solo contra las filas que el atacante no
+ * borró. Con las correcciones (V20): huella por hora en horario de caja, la secuencia nunca retrocede por debajo de una
+ * huella guardada o ENVIADA, alerta si faltan días y el mensaje de hoy repite la huella anterior. Las aserciones «HUECO»
+ * se invirtieron («CORREGIDO»).
  */
 @PruebaIntegracion
 @Import(ConfiguracionRelojAjustable.class)
@@ -94,24 +96,33 @@ class AtaquesHuellaSprint5Test {
 		reloj.fijar(siguiente.atTime(6, 0).atZone(reloj.getZone()).toInstant());
 	}
 
-	/** (a) Fraude y recorte el MISMO día, antes de las 06:00 del siguiente: la huella nace sobre la bitácora recortada. */
+	/**
+	 * (a) CORREGIDO: fraude y recorte el MISMO día, antes de las 06:00 del siguiente. La huella de la hora (horario de caja)
+	 * ya guardó el último evento: al día siguiente no coincide, la huella diaria no puede retroceder por debajo de ella y
+	 * Promotoría recibe «Bitácora verificada: NO». (Un recorte dentro de la MISMA hora sigue siendo un riesgo residual.)
+	 */
 	@Test
 	void s5M4a_recorteDelMismoDiaNoSeDetecta() {
 		eventos(2);
 		long conservado = ultima();
 		eventos(3); // la anulación y el cierre que el DBA quiere esconder
+		huella.horaEnColegio(1L, LocalDateTime.now(reloj).plusMinutes(30)); // la huella de las 10:30
 		recortarHasta(conservado);
 		a0600DelDiaSiguiente();
 
 		huella.enColegio(1L, LocalDate.now(reloj));
 
-		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'HUELLA_NO_COINCIDE'")).as("HUECO").isZero();
-		assertThat(jdbc.queryForObject("SELECT secuencia FROM huella_bitacora", Long.class)).isEqualTo(conservado);
+		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'HUELLA_NO_COINCIDE'")).as("CORREGIDO").isPositive();
+		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'HUELLA_RETROCEDIO'")).as("CORREGIDO").isPositive();
+		assertThat(contar(jdbc, "huella_bitacora")).as("CORREGIDO: la huella recortada no se guarda").isZero();
 		assertThat(jdbc.queryForObject("SELECT parametros FROM mensaje WHERE tipo = 'HUELLA_BITACORA'", String.class))
-				.as("HUECO: Promotoría recibe «Bitácora verificada: sí»").endsWith("sí");
+				.as("CORREGIDO: Promotoría recibe «Bitácora verificada: NO»").endsWith("NO, avise al contador");
 	}
 
-	/** (b) El DBA borra también la huella guardada: la reverificación solo mira las filas que quedan. */
+	/**
+	 * (b) CORREGIDO: el DBA borra también la huella guardada. La secuencia no puede quedar por debajo de la que ya salió por
+	 * mensaje a Promotoría, y faltan días de huella: dos alertas CRÍTICAS y el mensaje de hoy dice cuál fue la anterior.
+	 */
 	@Test
 	void s5M4b_borrarTambienLaHuellaGuardadaNoSeDetecta() {
 		eventos(1);
@@ -126,10 +137,14 @@ class AtaquesHuellaSprint5Test {
 		reloj.avanzar(Duration.ofDays(1));
 		huella.enColegio(1L, LocalDate.now(reloj));
 
-		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'HUELLA_NO_COINCIDE'")).as("HUECO").isZero();
+		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'HUELLA_RETROCEDIO'")).as("CORREGIDO").isPositive();
+		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'HUELLA_FALTAN_DIAS'")).as("CORREGIDO").isPositive();
 		UsuariosDePrueba.iniciarSesion(promotora);
-		assertThat(alertas.alertas()).as("HUECO: ninguna alerta").isEmpty();
-		assertThat(jdbc.queryForObject("SELECT MAX(secuencia) FROM huella_bitacora", Long.class))
-				.as("HUECO: la secuencia retrocedió y nadie lo comprueba").isLessThan(enviadaAyer);
+		assertThat(alertas.alertas()).as("CORREGIDO: alertas CRÍTICAS").isNotEmpty();
+		assertThat(jdbc.queryForObject("SELECT COALESCE(MAX(secuencia), 0) FROM huella_bitacora", Long.class))
+				.as("CORREGIDO: la secuencia no retrocede").satisfiesAnyOf(v -> assertThat(v).isZero(),
+						v -> assertThat(v).isGreaterThanOrEqualTo(enviadaAyer));
+		assertThat(jdbc.queryForList("SELECT parametros FROM mensaje WHERE tipo = 'HUELLA_BITACORA' ORDER BY id",
+				String.class)).last().asString().contains("evento " + enviadaAyer).endsWith("NO, avise al contador");
 	}
 }

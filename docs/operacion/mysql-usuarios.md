@@ -254,6 +254,17 @@ fecha|descripcion = ...` y `UPDATE cierre_mensual_banco SET total_abonos|total_c
 dan 1143; un feriado de hoy o del pasado, un cierre que nace CUADRADO y un cierre con totales que no salen de los
 extractos CONFIRMADOS del mes dan 1644. Se agregan `trg_feriado_registro|anulacion` y
 `trg_cierre_mensual_banco_nace|estado`: 55 triggers en total.
+Correcciones del sprint 5 (V20, `docs/arquitectura/sprint-5-correcciones.md`): `DELETE` sobre `verificacion_contacto` y
+`huella_hora` y `UPDATE huella_hora ...` dan 1142; `UPDATE verificacion_contacto SET contacto|hash_token|mensaje_id|
+apoderado_id|vence_en = ...` da 1143; una verificación sin su mensaje, una huella de la hora que no coincide (o que
+retrocede), un apoderado que nace verificado y un feriado que nace aprobado dan 1644. Se agregan
+`trg_verificacion_contacto_nace|uso` y `trg_huella_hora_registro`, y cambian `trg_apoderado_nace|facturacion`
+(contacto verificado solo con su enlace usado; contacto aprobado solo con su solicitud), `trg_mensaje_nace` (contacto del
+personal comparado NORMALIZADO con la función `cc_contacto_normal` y aprobado para ESE contacto; contacto del apoderado
+verificado), `trg_mensaje_envio`, `trg_huella_bitacora_registro` (no retrocede), `trg_aviso_familia_estado` (no lo
+cierra quien participó) y `trg_feriado_registro|anulacion` (propuesto, aprobado por otra persona, 3 por mes, no 3
+seguidos): 58 triggers en total. `03-triggers.sql` crea además la función `cc_contacto_normal` (necesita
+`log_bin_trust_function_creators = 1`, como `triggers_instalados`).
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

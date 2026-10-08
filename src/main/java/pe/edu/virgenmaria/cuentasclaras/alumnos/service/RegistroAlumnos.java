@@ -26,6 +26,9 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.model.Seccion;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -64,9 +67,12 @@ public class RegistroAlumnos {
 
 	private final Clock reloj;
 
+	private final UsuarioRepository usuarios;
+
 	public RegistroAlumnos(FamiliaRepository familias, ApoderadoRepository apoderados, AlumnoRepository alumnos,
 			MatriculaRepository matriculas, AnioEscolarRepository anios, AuditoriaService auditoria,
-			RegistroSolicitudes solicitudes, ApplicationEventPublisher eventos, Clock reloj) {
+			RegistroSolicitudes solicitudes, ApplicationEventPublisher eventos, Clock reloj, UsuarioRepository usuarios) {
+		this.usuarios = usuarios;
 		this.anios = anios;
 		this.solicitudes = solicitudes;
 		this.familias = familias;
@@ -101,8 +107,43 @@ public class RegistroAlumnos {
 		guardar(() -> apoderados.saveAndFlush(apoderado), () -> apoderadoRepetido(datos.documento()));
 		auditoria.registrar(AccionAuditoria.APODERADO_REGISTRADO, "apoderado", apoderado.getId().toString(), null,
 				DescripcionAuditoria.apoderado(apoderado), null);
+		pedirAprobacionSiEsDelPersonal(apoderado);
+		// S5-A1: sus contactos quedan pendientes hasta que su titular los verifique; se avisa a los demás apoderados.
+		eventos.publishEvent(new ContactoPorVerificar(apoderado.getId(), apoderado.getTelefonoWhatsapp(),
+				apoderado.getCorreo(), true, true));
 		return apoderado;
 	}
+
+	/**
+	 * G6 (y la prueba que cita el diseño, {@code registrarApoderadoConCelularDelPersonalPideAprobacion}): si quien registra
+	 * escribe un celular o un correo que (normalizado) es de alguien del personal, ese contacto no recibe nada hasta que
+	 * OTRA persona lo apruebe en la bandeja: se crea la solicitud de contacto con los canales que hay que aprobar.
+	 */
+	private void pedirAprobacionSiEsDelPersonal(Apoderado apoderado) {
+		Optional<Usuario> porCelular = usuarios.quienTieneElContacto(apoderado.getTelefonoWhatsapp());
+		Optional<Usuario> porCorreo = usuarios.quienTieneElContacto(apoderado.getCorreo());
+		if (porCelular.isEmpty() && porCorreo.isEmpty()) {
+			return;
+		}
+		List<String> canales = new ArrayList<>();
+		porCelular.ifPresent(u -> canales.add("telefono"));
+		porCorreo.ifPresent(u -> canales.add("correo"));
+		Map<String, String> pedido = new HashMap<>();
+		pedido.put("telefonoAnterior", vacioSiNulo(apoderado.getTelefonoWhatsapp()));
+		pedido.put("correoAnterior", vacioSiNulo(apoderado.getCorreo()));
+		pedido.put("telefono", vacioSiNulo(apoderado.getTelefonoWhatsapp()));
+		pedido.put("correo", vacioSiNulo(apoderado.getCorreo()));
+		pedido.put(APROBAR, String.join(",", canales));
+		solicitudes.crear(TipoSolicitud.CAMBIO_CONTACTO_APODERADO, "apoderado", apoderado.getId(),
+				"Aprobar contacto de " + apoderado.nombreCompleto() + " (" + apoderado.getFamilia().getNombre() + "): "
+						+ DescripcionAuditoria.contactoVisible(apoderado.getTelefonoWhatsapp(), apoderado.getCorreo())
+						+ ". Coincide con el contacto de alguien del personal",
+				pedido, "Se registró un apoderado con un contacto que también es del personal: otra persona debe "
+						+ "confirmar que es de la familia.");
+	}
+
+	/** Clave de la solicitud de contacto con los canales que se aprueban sin cambiar (registro con contacto del personal). */
+	static final String APROBAR = "aprobar";
 
 	/**
 	 * Corrige los datos del apoderado. Nombres, documento y parentesco se corrigen al momento; el celular y el correo
@@ -164,9 +205,21 @@ public class RegistroAlumnos {
 		DatosApoderado nuevos = actuales.conContacto(nuloSiVacio(pedido.get("telefono")), nuloSiVacio(pedido.get("correo")));
 		List<String> campos = apoderado.actualizar(nuevos);
 		apoderado.registrarSolicitudContacto(solicitudId);
+		// S5-M1: la aprobación vale solo para los canales que cambiaron (o que se pidió aprobar), y para ESE contacto.
+		String aprobar = vacioSiNulo(pedido.get(APROBAR));
+		boolean telefono = campos.contains("celular") || aprobar.contains("telefono");
+		boolean elCorreo = campos.contains("correo") || aprobar.contains("correo");
+		apoderado.aprobarContacto(telefono, elCorreo);
 		apoderados.saveAndFlush(apoderado);
 		// Sprint 5: la mensajería avisa al contacto ANTERIOR, en esta misma transacción.
 		eventos.publishEvent(new ContactoCambiado(apoderado.getId(), solicitudId, telefonoActual, correoActual));
+		// S5-A1: el contacto nuevo (o recién aprobado) se verifica antes de recibir nada.
+		String telefonoPorVerificar = telefono && !apoderado.telefonoVerificado() ? apoderado.getTelefonoWhatsapp() : null;
+		String correoPorVerificar = elCorreo && !apoderado.correoVerificado() ? apoderado.getCorreo() : null;
+		if (telefonoPorVerificar != null || correoPorVerificar != null) {
+			eventos.publishEvent(new ContactoPorVerificar(apoderado.getId(), telefonoPorVerificar, correoPorVerificar,
+					false, !campos.isEmpty()));
+		}
 		auditoria.registrar(AccionAuditoria.APODERADO_CONTACTO_CAMBIADO, "apoderado", apoderado.getId().toString(),
 				DescripcionAuditoria.camposApoderado(actuales, campos), DescripcionAuditoria.camposApoderado(nuevos, campos),
 				"Apoderado " + apoderado.nombreCompleto() + ". Cambió: " + String.join(", ", campos) + ". Pedido por "

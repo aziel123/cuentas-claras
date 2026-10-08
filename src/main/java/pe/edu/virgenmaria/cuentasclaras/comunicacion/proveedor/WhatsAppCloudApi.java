@@ -125,7 +125,8 @@ public class WhatsAppCloudApi implements ProveedorWhatsApp {
 		componentes.add(Map.of("type", "body", "parameters",
 				parametros.stream().map(p -> Map.<String, Object>of("type", "text", "text", p)).toList()));
 		if (sufijoBoton != null) {
-			String sufijo = sufijoBoton.startsWith("/activar/") ? sufijoBoton.substring("/activar/".length()) : sufijoBoton;
+			String sufijo = sufijoBoton.startsWith("/activar/") ? sufijoBoton.substring("/activar/".length())
+					: sufijoBoton.startsWith("/verificar/") ? sufijoBoton.substring("/verificar/".length()) : sufijoBoton;
 			componentes.add(Map.of("type", "button", "sub_type", "url", "index", "0", "parameters",
 					List.of(Map.of("type", "text", "text", sufijo))));
 		}

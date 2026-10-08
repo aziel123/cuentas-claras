@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.auditoria.service;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,10 +34,14 @@ public class AlertasHuella implements AlertasRevision {
 
 	private final Clock reloj;
 
-	public AlertasHuella(HuellaGuardadaRepository huellas, AuditoriaService auditoria, Clock reloj) {
+	private final ObjectProvider<EnviosHuella> envios;
+
+	public AlertasHuella(HuellaGuardadaRepository huellas, AuditoriaService auditoria, Clock reloj,
+			ObjectProvider<EnviosHuella> envios) {
 		this.huellas = huellas;
 		this.auditoria = auditoria;
 		this.reloj = reloj;
+		this.envios = envios;
 	}
 
 	@Override
@@ -48,11 +53,29 @@ public class AlertasHuella implements AlertasRevision {
 					+ "alguien la recortó o la alteró. Compárala con la huella que recibiste en tu celular.",
 					"/auditoria?accion=HUELLA_NO_COINCIDE"));
 		}
+		if (auditoria.contarDesde(AccionAuditoria.HUELLA_RETROCEDIO, ahora.minusDays(7)) > 0) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La bitácora retrocedió: su último evento es anterior "
+					+ "a una huella que ya se guardó o que recibiste. Alguien la recortó. Compárala con tus mensajes.",
+					"/auditoria?accion=HUELLA_RETROCEDIO"));
+		}
+		if (auditoria.contarDesde(AccionAuditoria.HUELLA_FALTAN_DIAS, ahora.minusDays(7)) > 0) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Faltan huellas diarias de la bitácora de uno o más "
+					+ "días. Compara con los mensajes que recibiste.", "/auditoria?accion=HUELLA_FALTAN_DIAS"));
+		}
 		LocalDate ayer = ahora.toLocalDate().minusDays(1);
-		if (ahora.toLocalTime().isAfter(LocalTime.of(7, 0)) && huellas.findByFecha(ayer).isEmpty()
-				&& auditoria.contarDesde(AccionAuditoria.HUELLA_ENVIADA, ahora.minusDays(30)) > 0) {
+		EnviosHuella enviadas = envios.getIfAvailable();
+		boolean huboHuellas = auditoria.contarDesde(AccionAuditoria.HUELLA_ENVIADA, ahora.minusDays(30)) > 0
+				|| (enviadas != null && enviadas.mayorEnviada().isPresent());
+		var deAyer = huellas.findByFecha(ayer);
+		if (ahora.toLocalTime().isAfter(LocalTime.of(7, 0)) && deAyer.isEmpty() && huboHuellas) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La huella de la bitácora de ayer no se generó a las "
 					+ "07:00. Avisa al responsable técnico.", "/auditoria"));
+		}
+		// S5-B3: guardarla no basta; lo que protege es la copia en el celular de Promotoría.
+		if (ahora.toLocalTime().isAfter(LocalTime.of(7, 0)) && deAyer.isPresent() && enviadas != null
+				&& !enviadas.salio(deAyer.get().getId())) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La huella de la bitácora de ayer se guardó pero su "
+					+ "mensaje no salió a Promotoría. Revisa la bandeja de envíos.", "/mensajes"));
 		}
 		return alertas;
 	}

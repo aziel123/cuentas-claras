@@ -27,8 +27,8 @@ public final class EnlacesDePrueba {
 		for (int pasada = 0; pasada < 50 && despacho.despacharColegio(colegioId) > 0; pasada++) {
 			// sigue hasta que no quede nada por enviar
 		}
-		return buzon.entregas().reversed().stream().filter(e -> e.destino().equals(destino) && e.sufijoBoton() != null)
-				.map(e -> ruta(e.sufijoBoton())).findFirst()
+		return buzon.entregas().reversed().stream().filter(e -> e.destino().equals(destino) && e.sufijoBoton() != null
+				&& e.sufijoBoton().contains("/activar/")).map(e -> ruta(e.sufijoBoton())).findFirst()
 				.orElseThrow(() -> new AssertionError("No llegó ningún enlace a " + destino + ": " + buzon.entregas()));
 	}
 
@@ -46,5 +46,19 @@ public final class EnlacesDePrueba {
 			throw new AssertionError("No es un enlace de activación: " + ruta);
 		}
 		return m.group(2);
+	}
+
+	/**
+	 * Correcciones del sprint 5 (S5-A1): envía los pendientes y devuelve la ruta {@code /verificar/{colegio}/{token}}
+	 * que llegó a {@code destino} para confirmar ese contacto.
+	 */
+	public static String verificacionRecibida(DespachoMensajes despacho, BuzonSimulado buzon, long colegioId,
+			String destino) {
+		for (int pasada = 0; pasada < 50 && despacho.despacharColegio(colegioId) > 0; pasada++) {
+			// sigue hasta que no quede nada por enviar
+		}
+		return buzon.entregas().reversed().stream().filter(e -> e.destino().equals(destino) && e.sufijoBoton() != null
+				&& e.sufijoBoton().startsWith("/verificar/")).map(BuzonSimulado.Entrega::sufijoBoton).findFirst()
+				.orElseThrow(() -> new AssertionError("No llegó ninguna verificación a " + destino + ": " + buzon.entregas()));
 	}
 }

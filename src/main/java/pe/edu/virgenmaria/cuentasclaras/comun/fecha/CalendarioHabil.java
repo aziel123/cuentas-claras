@@ -50,7 +50,7 @@ public class CalendarioHabil implements DiasHabiles {
 		long ahora = System.nanoTime();
 		Entrada entrada = cache.get(colegio);
 		if (entrada == null || ahora - entrada.expiraNanos() > 0) {
-			Set<LocalDate> fechas = feriados.findByVigenteTrue().stream().map(Feriado::getFecha)
+			Set<LocalDate> fechas = feriados.findByVigenteTrueAndPendienteFalse().stream().map(Feriado::getFecha)
 					.collect(Collectors.toUnmodifiableSet());
 			entrada = new Entrada(fechas, ahora + VIGENCIA_CACHE.toNanos());
 			cache.put(colegio, entrada);

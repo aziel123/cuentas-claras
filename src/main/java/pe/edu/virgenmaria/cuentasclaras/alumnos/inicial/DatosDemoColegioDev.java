@@ -192,6 +192,9 @@ public class DatosDemoColegioDev implements ApplicationRunner {
 		Apoderado apoderado = registro.registrarApoderado(familia, new DatosApoderado(
 				new DocumentoIdentidad(TipoDocumento.DNI, a.dni()), a.paterno(), a.materno(), a.nombres(), a.parentesco(),
 				a.celular(), a.correo()));
+		// Datos de demostración (solo dev, H2): los contactos de las familias demo nacen confirmados (S5-A1).
+		apoderado.verificarContacto(true, apoderado.getTelefonoWhatsapp());
+		apoderado.verificarContacto(false, apoderado.getCorreo());
 		for (AlumnoDemo al : demo.alumnos()) {
 			Alumno alumno = registro.registrarAlumno(new DatosAlumno(new DocumentoIdentidad(TipoDocumento.DNI, al.dni()),
 					al.paterno(), al.materno(), al.nombres(), al.nacimiento()), apoderado);

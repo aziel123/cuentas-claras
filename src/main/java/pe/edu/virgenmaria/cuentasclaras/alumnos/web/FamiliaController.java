@@ -142,6 +142,20 @@ public class FamiliaController {
 		return "redirect:/alumnos/familias/" + familia;
 	}
 
+	/** S5-A1: reenviar el enlace de confirmación del contacto (no cambia datos). */
+	@PostMapping("/apoderados/{id:\\d+}/verificacion")
+	public String reenviarVerificacion(@PathVariable Long id, @RequestParam Long familiaId, RedirectAttributes avisos) {
+		try {
+			Long familia = familias.reenviarVerificacion(id);
+			avisos.addFlashAttribute("exito", "Listo: le enviamos otra vez el enlace para confirmar su contacto.");
+			return "redirect:/alumnos/familias/" + familia;
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+			return "redirect:/alumnos/familias/" + familiaId;
+		}
+	}
+
 	@PostMapping("/apoderados/{id:\\d+}/desactivar")
 	public String desactivarApoderado(@PathVariable Long id, @RequestParam Long familiaId, @Valid MotivoRequest solicitud,
 			BindingResult validacion, RedirectAttributes avisos) {

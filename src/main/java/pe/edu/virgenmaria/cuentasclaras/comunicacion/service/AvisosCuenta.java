@@ -7,6 +7,8 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Apoderado;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.ApoderadoRepository;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ContactoCambiado;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ContactoPorVerificar;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.FeriadoPropuesto;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.HuellaDelDia;
@@ -81,8 +83,9 @@ public class AvisosCuenta {
 			creado = !creador.paraApoderado(apoderado, contenido, false, pedido).isEmpty();
 		}
 		if (!creado) {
-			throw new ReglaNegocioException("No hay a dónde enviar el enlace: el titular no tiene celular ni correo, o su "
-					+ "contacto es de alguien del personal y otra persona debe aprobarlo primero (cambio de contacto).");
+			throw new ReglaNegocioException("No hay a dónde enviar el enlace: el titular no tiene celular ni correo, su "
+					+ "contacto aún no está verificado (debe abrir el enlace de confirmación que le llegó), o su contacto es "
+					+ "de alguien del personal y otra persona debe aprobarlo primero.");
 		}
 	}
 
@@ -116,10 +119,78 @@ public class AvisosCuenta {
 	public void alHuellaDelDia(HuellaDelDia evento) {
 		CreadorMensajes.Contenido contenido = new CreadorMensajes.Contenido(TipoMensaje.HUELLA_BITACORA,
 				PlantillaMensaje.HUELLA, List.of(evento.fecha().format(FECHA), Long.toString(evento.secuencia()),
-						evento.codigo(), evento.verificacionOk() ? "sí" : "NO, avise al contador"),
+						evento.codigo(), evento.anterior() == null ? "ninguna" : evento.anterior(),
+						evento.verificacionOk() ? "sí" : "NO, avise al contador"),
 				"huella_bitacora", evento.huellaId());
-		usuarios.activosConRol(Rol.PROMOTOR).forEach(p -> creador.paraUsuario(p, contenido, null));
+		// La clave lleva la fecha: una huella que NO se guardó (la bitácora retrocedió) no tiene id.
+		String sufijo = evento.fecha().toString();
+		usuarios.activosConRol(Rol.PROMOTOR).forEach(p -> creador.paraUsuario(p, contenido, sufijo));
 		configuracion.findById(ConfiguracionBd.HUELLA_CORREO_EXTERNO).map(ConfiguracionBd::getValor)
 				.filter(c -> c.contains("@")).ifPresent(c -> creador.externo(c.strip(), contenido));
+	}
+
+	/**
+	 * S5-A1: un contacto nuevo o cambiado recibe su enlace de verificación (el token lo genera el envío) y los demás
+	 * apoderados activos de la familia se enteran: «se agregó un apoderado» o «se registró un contacto nuevo».
+	 */
+	@EventListener
+	public void alContactoPorVerificar(ContactoPorVerificar evento) {
+		Apoderado apoderado = apoderados.findById(evento.apoderadoId())
+				.orElseThrow(() -> new IllegalStateException("El apoderado del contacto no existe"));
+		String pedido = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+		verificar(apoderado, CanalMensaje.WHATSAPP, evento.telefono(), pedido);
+		verificar(apoderado, CanalMensaje.CORREO, evento.correo(), pedido);
+		if (!evento.avisarFamilia()) {
+			return;
+		}
+		List<Apoderado> otros = apoderados.findByFamiliaIdOrderByApellidoPaternoAsc(apoderado.getFamilia().getId())
+				.stream().filter(Apoderado::isActivo).filter(o -> !o.getId().equals(apoderado.getId())).toList();
+		if (otros.isEmpty()) {
+			return;
+		}
+		String nombre = apoderado.getNombres() + " " + apoderado.getApellidoPaterno();
+		if (evento.apoderadoNuevo()) {
+			CreadorMensajes.Contenido contenido = new CreadorMensajes.Contenido(TipoMensaje.APODERADO_AGREGADO,
+					PlantillaMensaje.APODERADO_AGREGADO, List.of(nombre, visible(apoderado.getTelefonoWhatsapp(),
+							apoderado.getCorreo())), "apoderado", apoderado.getId());
+			otros.forEach(o -> creador.paraApoderado(o, contenido, true, null));
+			return;
+		}
+		avisarContactoNuevo(otros, apoderado, CanalMensaje.WHATSAPP, evento.telefono(), nombre, pedido);
+		avisarContactoNuevo(otros, apoderado, CanalMensaje.CORREO, evento.correo(), nombre, pedido);
+	}
+
+	private void verificar(Apoderado apoderado, CanalMensaje canal, String contacto, String pedido) {
+		if (contacto == null) {
+			return;
+		}
+		CreadorMensajes.Contenido contenido = new CreadorMensajes.Contenido(TipoMensaje.VERIFICACION_CONTACTO,
+				PlantillaMensaje.VERIFICACION, List.of(), "apoderado", apoderado.getId());
+		creador.verificacion(apoderado, canal, contacto, contenido, pedido);
+	}
+
+	private void avisarContactoNuevo(List<Apoderado> otros, Apoderado apoderado, CanalMensaje canal, String contacto,
+			String nombre, String pedido) {
+		if (contacto == null) {
+			return;
+		}
+		CreadorMensajes.Contenido contenido = new CreadorMensajes.Contenido(TipoMensaje.CONTACTO_POR_VERIFICAR,
+				PlantillaMensaje.CONTACTO_POR_VERIFICAR, List.of(canal == CanalMensaje.WHATSAPP ? "WhatsApp" : "correo",
+						canal == CanalMensaje.WHATSAPP ? Enmascarar.telefono(contacto) : Enmascarar.correo(contacto),
+						nombre), "apoderado", apoderado.getId());
+		otros.forEach(o -> creador.paraApoderado(o, contenido, true, canal.name() + ":" + pedido));
+	}
+
+	private static String visible(String telefono, String correo) {
+		return telefono != null ? "WhatsApp " + Enmascarar.telefono(telefono) : "correo " + Enmascarar.correo(correo);
+	}
+
+	/** S5-M3: un día no laborable propuesto se avisa por mensaje a Promotoría (lo aprueba otra persona). */
+	@EventListener
+	public void alFeriadoPropuesto(FeriadoPropuesto evento) {
+		CreadorMensajes.Contenido contenido = new CreadorMensajes.Contenido(TipoMensaje.FERIADO_PROPUESTO,
+				PlantillaMensaje.FERIADO_PROPUESTO, List.of(evento.propuestoPor(), evento.fecha().format(FECHA),
+						evento.descripcion()), "feriado", evento.feriadoId());
+		usuarios.activosConRol(Rol.PROMOTOR).forEach(p -> creador.paraUsuario(p, contenido, null));
 	}
 }

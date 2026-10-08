@@ -14,6 +14,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.PlantillaMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.TipoMensaje;
+import pe.edu.virgenmaria.cuentasclaras.comunicacion.repository.MensajeRepository;
 import pe.edu.virgenmaria.cuentasclaras.matricula.service.ServicioRenovacionFamilia;
 
 import java.time.LocalDate;
@@ -46,6 +47,9 @@ public class ServicioRecordatorios {
 	/** Días antes del vencimiento. */
 	public static final int DIAS_ANTES = 3;
 
+	/** QA-S5-4: días que el «cuota vencida» puede salir tarde si su día se volvió no laborable o el proceso no corrió. */
+	static final int PONERSE_AL_DIA = 5;
+
 	private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
 	private final CuotaRepository cuotas;
@@ -56,8 +60,11 @@ public class ServicioRecordatorios {
 
 	private final AuditoriaService auditoria;
 
+	private final MensajeRepository mensajes;
+
 	public ServicioRecordatorios(CuotaRepository cuotas, CreadorMensajes creador, CalendarioHabil calendario,
-			AuditoriaService auditoria) {
+			AuditoriaService auditoria, MensajeRepository mensajes) {
+		this.mensajes = mensajes;
 		this.cuotas = cuotas;
 		this.creador = creador;
 		this.calendario = calendario;
@@ -72,16 +79,21 @@ public class ServicioRecordatorios {
 		}
 		int creados = 0;
 		// Antes: el día de mensajes en o antes de (vencimiento - 3). Con feriados seguidos puede adelantarse varios días.
+		// QA-S5-4: si ese día ya pasó sin enviarlo (un no laborable registrado tarde lo movió a un día que ya pasó, o el
+		// proceso no corrió), sale HOY mientras la cuota no haya vencido. La clave idempotente evita duplicados.
 		Map<Grupo, List<Cuota>> antes = agrupar(cuotas.porPagarQueVencenEntre(hoy.plusDays(1), hoy.plusDays(DIAS_ANTES + 10))
-				.stream().filter(c -> calendario.diaDeMensajesEnOAntes(c.getFechaVencimiento().minusDays(DIAS_ANTES))
-						.equals(hoy))
+				.stream().filter(c -> !calendario.diaDeMensajesEnOAntes(c.getFechaVencimiento().minusDays(DIAS_ANTES))
+						.isAfter(hoy))
 				.toList());
 		for (var e : antes.entrySet()) {
 			creados += enviar(e.getKey(), e.getValue(), TipoMensaje.RECORDATORIO_VENCIMIENTO);
 		}
-		// Después: el día hábil siguiente al vencimiento.
+		// Después: el día hábil siguiente al vencimiento (QA-S5-4: o el primer día de mensajes después, hasta 5 días).
 		Map<Grupo, List<Cuota>> despues = agrupar(cuotas.porPagarQueVencenEntre(hoy.minusDays(20), hoy.minusDays(1))
-				.stream().filter(c -> calendario.siguienteDiaHabil(c.getFechaVencimiento()).equals(hoy)).toList());
+				.stream().filter(c -> {
+					LocalDate toca = calendario.siguienteDiaHabil(c.getFechaVencimiento());
+					return !toca.isAfter(hoy) && !hoy.isAfter(toca.plusDays(PONERSE_AL_DIA));
+				}).toList());
 		for (var e : despues.entrySet()) {
 			creados += enviar(e.getKey(), e.getValue(), TipoMensaje.CUOTA_VENCIDA);
 		}
@@ -104,6 +116,10 @@ public class ServicioRecordatorios {
 	}
 
 	private int enviar(Grupo grupo, List<Cuota> lista, TipoMensaje tipo) {
+		// Ya salió (o está por salir) el de esta familia, tipo y fecha: no se cuenta de nuevo (QA-S5-4 lo reintenta a diario).
+		if (mensajes.existsByTipoAndFamiliaIdAndClaveEndingWith(tipo, grupo.familiaId(), ":" + grupo.vencimiento())) {
+			return 0;
+		}
 		Set<Apoderado> responsables = new LinkedHashSet<>();
 		lista.forEach(c -> responsables.add(c.getAlumno().getResponsablePago()));
 		String concepto = concepto(lista);

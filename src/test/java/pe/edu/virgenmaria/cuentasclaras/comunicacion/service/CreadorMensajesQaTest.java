@@ -1,7 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.comunicacion.service;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Apoderado;
@@ -68,6 +67,14 @@ class CreadorMensajesQaTest {
 		when(a.getCorreo()).thenReturn(correo);
 		when(a.getContactoSolicitudId()).thenReturn(contactoAprobado);
 		when(a.isActivo()).thenReturn(true);
+		// Correcciones del sprint 5: los contactos ya los verificó su titular (S5-A1) y, si hubo solicitud aprobada, la
+		// aprobación vale para ESOS contactos (S5-M1).
+		when(a.telefonoVerificado()).thenReturn(celular != null);
+		when(a.correoVerificado()).thenReturn(correo != null);
+		if (contactoAprobado != null) {
+			when(a.getContactoAprobadoTelefono()).thenReturn(celular);
+			when(a.getContactoAprobadoCorreo()).thenReturn(correo);
+		}
 		return a;
 	}
 
@@ -77,8 +84,6 @@ class CreadorMensajesQaTest {
 	 * dejar a la familia sin ningún aviso (el pago se registra igual y nadie se entera).
 	 */
 	@Test
-	@Disabled("QA-S5-1: con el celular del personal sin aprobación, CreadorMensajes.paraApoderado omite el WhatsApp y "
-			+ "tampoco usa el correo legítimo: el pago queda sin ningún aviso a la familia")
 	void debeAvisarPorCorreoCuandoElCelularRegistradoEsDelPersonalSinAprobacion() {
 		when(usuarios.esContactoDelPersonal("+51966000111")).thenReturn(true);
 		when(usuarios.esContactoDelPersonal("rosa@correo.pe")).thenReturn(false);

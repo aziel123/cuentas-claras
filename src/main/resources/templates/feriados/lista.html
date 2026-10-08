@@ -13,7 +13,7 @@
 
 	<section class="tarjeta">
 		<h2>Días no laborables del colegio</h2>
-		<p class="secundario">Solo Promotoría o Dirección los registran, desde mañana en adelante. Quedan resaltados en la bitácora.</p>
+		<p class="secundario">Los propone Promotoría o Dirección, desde mañana en adelante, y los aprueba la otra (como máximo 3 por mes y 2 días hábiles seguidos). Quedan resaltados en la bitácora.</p>
 		<th:block th:if="${#lists.isEmpty(vista.extras)}">
 			<div th:replace="~{fragments/componentes :: estadoVacio('Sin días extra', 'Este año el colegio no registró días no laborables.')}"></div>
 		</th:block>
@@ -21,9 +21,14 @@
 			<li th:each="f : ${vista.extras}" th:data-feriado="${f.id}">
 				<div class="cuota-cabecera">
 					<strong th:text="|${#temporals.format(f.fecha, 'dd/MM/yyyy')} · ${f.descripcion}|">15/03/2027 · Aniversario</strong>
-					<span th:replace="~{fragments/componentes :: badge(${f.vigente} ? 'Vigente' : 'Anulado', ${f.vigente} ? 'info' : 'peligro')}"></span>
+					<span th:replace="~{fragments/componentes :: badge(${f.pendiente} ? 'Por aprobar' : (${f.vigente} ? 'Vigente' : 'Anulado'), ${f.pendiente} ? 'alerta' : (${f.vigente} ? 'info' : 'peligro'))}"></span>
 				</div>
-				<span class="secundario" th:text="|Registró ${f.registradoPor}|">Registró promotor</span>
+				<span class="secundario" th:text="|Propuso ${f.registradoPor}|">Propuso promotor</span>
+				<span class="secundario" th:if="${f.aprobadoPor != null}" th:text="|Aprobó ${f.aprobadoPor}|">Aprobó director</span>
+				<form th:if="${vista.puedeEditar and f.aprobable}" method="post" class="acciones acciones-izquierda"
+					th:action="@{/feriados/{id}/aprobar(id=${f.id})}">
+					<button type="submit" class="btn btn-primario">Aprobar este día</button>
+				</form>
 				<span class="secundario" th:if="${f.anulacion != null}" th:text="${f.anulacion}">Anulado</span>
 				<form th:if="${vista.puedeEditar and f.anulable}" method="post" class="formulario"
 					th:action="@{/feriados/{id}/anular(id=${f.id})}">
@@ -40,7 +45,7 @@
 	</section>
 
 	<section class="tarjeta" th:if="${vista.puedeEditar}">
-		<h2>Registrar un día no laborable</h2>
+		<h2>Proponer un día no laborable</h2>
 		<form method="post" class="formulario" th:action="@{/feriados}">
 			<div class="campo">
 				<label for="fecha">Fecha</label>
@@ -52,7 +57,7 @@
 				<small class="ayuda">Por ejemplo: «Día no laborable decretado por el Gobierno».</small>
 			</div>
 			<div class="acciones acciones-izquierda">
-				<button type="submit" class="btn btn-primario">Registrar día no laborable</button>
+				<button type="submit" class="btn btn-primario">Proponer día no laborable</button>
 			</div>
 		</form>
 	</section>

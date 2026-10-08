@@ -38,6 +38,9 @@ public class AlertasComunicacion implements AlertasRevision {
 
 	static final String MODULO = "Comunicación";
 
+	/** S5-B2: ventana de la alerta «pago sin aviso enviado». */
+	static final int DIAS_PAGO_SIN_AVISO = 35;
+
 	private static final Set<String> PERFILES_SIMULADO = Set.of("dev", "test", "piloto");
 
 	private static final Set<EstadoMensaje> SALIERON = EnumSet.of(EstadoMensaje.ENVIADO, EstadoMensaje.ENTREGADO,
@@ -66,11 +69,12 @@ public class AlertasComunicacion implements AlertasRevision {
 	public List<AlertaRevision> alertas() {
 		LocalDateTime ahora = LocalDateTime.now(reloj);
 		List<AlertaRevision> alertas = new ArrayList<>();
-		List<Long> sinAviso = mensajes.pagosSinAvisoEnviado(ahora.minusDays(7),
+		// S5-B2: 35 días (antes 7): un pago sin aviso no deja de importar a la semana.
+		List<Long> sinAviso = mensajes.pagosSinAvisoEnviado(ahora.minusDays(DIAS_PAGO_SIN_AVISO),
 				ahora.minusMinutes(propiedades.alertaPagoSinEntregarMinutos()), SALIERON);
 		if (!sinAviso.isEmpty()) {
-			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, sinAviso.size() + " pago(s) sin aviso enviado a la "
-					+ "familia después de " + propiedades.alertaPagoSinEntregarMinutos() + " minutos: la familia no se "
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, sinAviso.size() + " pago(s) sin aviso enviado a su "
+					+ "responsable de pago después de " + propiedades.alertaPagoSinEntregarMinutos() + " minutos: la familia no se "
 					+ "enteró. Revisa la bandeja de envíos.", "/mensajes"));
 		}
 		List<Mensaje> fallidos = mensajes.fallidosEnTodosSusCanales(FINANCIEROS, ahora.minusDays(7), SALIERON);

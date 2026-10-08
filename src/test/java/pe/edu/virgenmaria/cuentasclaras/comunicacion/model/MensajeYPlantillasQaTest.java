@@ -1,6 +1,5 @@
 package pe.edu.virgenmaria.cuentasclaras.comunicacion.model;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.config.PropiedadesMensajeria;
 
@@ -106,8 +105,6 @@ class MensajeYPlantillasQaTest {
 	 * el texto que recibe la familia debe mostrarlo tal cual, sin reemplazarlo por otro parámetro.
 	 */
 	@Test
-	@Disabled("QA-S5-5: PlantillaMensaje.componer reemplaza en cadena; un «{{n}}» dentro de un parámetro escrito por "
-			+ "una persona (motivo de anulación) se sustituye por otro parámetro")
 	void unMarcadorDentroDelMotivoNoSeReemplaza() {
 		String texto = PlantillaMensaje.PAGO_ANULADO.componer(List.of("B001-00000007", "S/ 450.00", "Efectivo",
 				"error de digitación {{5}}", "Dirección"));
