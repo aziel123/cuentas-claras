@@ -67,6 +67,7 @@ class PlantillasMensajeTest {
 			assertThat(plantilla.botonPortal()).as(plantilla.name()).isFalse();
 			assertThat(plantilla.texto()).as(plantilla.name()).doesNotContain("http", "/activar", "/verificar", "enlace");
 		}
-		assertThat(PlantillaMensaje.RESUMEN_DIARIO.parametros()).isEqualTo(11);
+		// Correcciones del sprint 6: 12 (los resultados de las llamadas de control, S6-M2).
+		assertThat(PlantillaMensaje.RESUMEN_DIARIO.parametros()).isEqualTo(12);
 	}
 }

@@ -196,7 +196,7 @@ public class ServicioCierreCaja {
 				: AccionAuditoria.CAJA_CERRADA, "caja_diaria", caja.getId().toString(), EstadoCaja.ABIERTA.name(),
 				EstadoCaja.CERRADA.name() + " · " + diferencia, detalle);
 		if (cierre.conDiferencia()) {
-			eventos.publishEvent(new CierreConDiferencia(cierre.getId()));
+			eventos.publishEvent(new CierreConDiferencia(cierre.getColegioId(), cierre.getId(), cierre.getDiferencia()));
 		}
 	}
 

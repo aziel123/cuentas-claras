@@ -211,6 +211,28 @@ public class CifrasCaja {
 		return pagos.familiasConEfectivoEntre(desde, hasta);
 	}
 
+	/** Correcciones del sprint 6 (S6-A2): las familias con algún pago VIGENTE de cualquier medio en el rango, por id. */
+	public List<Long> familiasConPagos(LocalDate desde, LocalDate hasta) {
+		exigirRango(desde, hasta);
+		return pagos.familiasConPagosEntre(desde, hasta);
+	}
+
+	/**
+	 * Correcciones del sprint 6 (S6-M3): los cierres de caja con diferencia (faltante o sobrante) hechos entre dos momentos,
+	 * aunque ya estén aprobados: el resumen diario los informa «desde el resumen anterior».
+	 */
+	public CierresConDiferencia cierresConDiferencia(java.time.LocalDateTime desde, java.time.LocalDateTime hasta) {
+		Objects.requireNonNull(desde, "desde");
+		Objects.requireNonNull(hasta, "hasta");
+		List<Object[]> filas = cierres.cierresConDiferenciaEntre(desde, hasta);
+		Object[] fila = filas.isEmpty() ? new Object[2] : filas.getFirst();
+		return new CierresConDiferencia(fila[0] == null ? 0 : ((Number) fila[0]).longValue(), monto(fila[1]));
+	}
+
+	/** Cuántos cierres con diferencia y la suma de sus diferencias (negativa si predominan los faltantes). */
+	public record CierresConDiferencia(long cantidad, java.math.BigDecimal suma) {
+	}
+
 	/**
 	 * Sprint 6, tanda 3: los pagos de una familia en un rango (todos los medios y estados), para comparar DESPUÉS de que la
 	 * familia dijo cuánto y cuándo pagó. Solo quien hace la llamada de control: Promotoría o Dirección.

@@ -17,6 +17,12 @@ public enum TipoAviso {
 	RESUMEN_NO_SALIO("El resumen diario no salió"),
 	CIFRAS_CAMBIARON("Las cifras de un día ya informado cambiaron"),
 	LLAMADA_NO_CONFIRMA("Una familia no confirma lo registrado"),
+	/** Correcciones del sprint 6 (S6-M1): hay una foto del resumen que no guardó sistema.panel. */
+	RESUMEN_SUPLANTADO("Hay un resumen diario que no generó el sistema"),
+	/** S6-M2 (ATENCIÓN): una familia de la llamada de control no contestó dos veces y se eligió otra. */
+	LLAMADA_REEMPLAZADA("Una familia de la llamada de control no contestó dos veces"),
+	/** S6-M2 (ATENCIÓN): Dirección registró una llamada de control con la semana delegada. */
+	LLAMADA_POR_DIRECCION("Dirección registró una llamada de control"),
 	OTRA_CRITICA("Alerta crítica");
 
 	private final String texto;
@@ -32,6 +38,15 @@ public enum TipoAviso {
 
 	/** Las ATENCIÓN que también salen al celular (decisión 70); de las demás, solo las CRÍTICAS. */
 	public boolean saleAunqueNoSeaCritica() {
-		return this == CIERRE_NO_REALIZADO || this == ANULACION_PAGO_PENDIENTE;
+		return this == CIERRE_NO_REALIZADO || this == ANULACION_PAGO_PENDIENTE || this == LLAMADA_REEMPLAZADA
+				|| this == LLAMADA_POR_DIRECCION;
+	}
+
+	/**
+	 * S6-B2 (QA-S6-7): los tipos que solo salen como CRÍTICA. No cuentan para el tope diario: la cajera no puede agotarlo
+	 * con anulaciones por aprobar para que su faltante de caja no llegue ese día.
+	 */
+	public boolean esCritico() {
+		return !saleAunqueNoSeaCritica();
 	}
 }

@@ -80,7 +80,9 @@ public class ConsultaMensajes {
 		List<Mensaje> delResumen = mensajes.findByTipoAndEntidadAndEntidadIdOrderByIdAsc(TipoMensaje.RESUMEN_DIARIO,
 				"resumen_diario", resumenId).stream().filter(m -> m.getDestinatarioTipo() == DestinatarioTipo.USUARIO)
 				.toList();
-		List<Usuario> promotores = usuarios.activosConRol(Rol.PROMOTOR);
+		// S6-A1: solo cuentas del personal (una cuenta enlazada a un apoderado no recibe el resumen).
+		List<Usuario> promotores = usuarios.activosConRol(Rol.PROMOTOR).stream().filter(u -> u.getApoderadoId() == null)
+				.toList();
 		int salieron = (int) promotores.stream().filter(p -> delResumen.stream()
 				.anyMatch(m -> p.getId().equals(m.getUsuarioId()) && SALIERON.contains(m.getEstado()))).count();
 		LocalDateTime enviadoEn = delResumen.stream().map(Mensaje::getEnviadoEn).filter(java.util.Objects::nonNull)

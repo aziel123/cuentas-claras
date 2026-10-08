@@ -23,4 +23,10 @@ public interface ResumenDiarioRepository extends Repository<ResumenDiario, Long>
 	List<ResumenDiario> findByFechaGreaterThanEqualOrderByFechaAsc(LocalDate desde);
 
 	boolean existsByFechaGreaterThanEqual(LocalDate desde);
+
+	/** Correcciones del sprint 6 (S6-B1, QA-S6-5): las fotos hasta un día, de la más reciente a la más antigua. */
+	List<ResumenDiario> findTop400ByFechaLessThanEqualOrderByFechaDesc(LocalDate hasta);
+
+	/** La foto anterior a un día (S6-M3: los cierres con diferencia «desde el resumen anterior»). */
+	Optional<ResumenDiario> findFirstByFechaLessThanOrderByFechaDesc(LocalDate fecha);
 }

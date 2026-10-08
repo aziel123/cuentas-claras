@@ -10,12 +10,20 @@ import java.util.Objects;
  * destinatario y aviso con la clave {@code ALERTA:tipo:referencia} (se avisa UNA sola vez), con el texto FIJO del tipo,
  * el tope diario por persona y sin los excluidos. Vive en {@code comun} para que {@code comunicacion} no dependa del panel.
  *
- * @param fecha el día de la pasada (va en el mensaje si la alerta no trae un monto o una hora)
+ * @param fecha     el día de la pasada (va en el mensaje si la alerta no trae un monto o una hora)
+ * @param inmediato S6-M3: el aviso nace de un hecho que acaba de confirmarse (un cierre con diferencia), no de una pasada:
+ *                  sale aunque sea domingo, feriado o de noche (la alerta puede desaparecer antes de la próxima pasada si
+ *                  el cierre se aprueba)
  */
-public record AvisosPromotoriaListos(long colegioId, LocalDate fecha, List<Aviso> avisos) {
+public record AvisosPromotoriaListos(long colegioId, LocalDate fecha, List<Aviso> avisos, boolean inmediato) {
 
 	public AvisosPromotoriaListos {
 		Objects.requireNonNull(fecha, "fecha");
 		avisos = List.copyOf(avisos);
+	}
+
+	/** Una pasada de {@code sistema.panel} (cada 15 minutos). */
+	public AvisosPromotoriaListos(long colegioId, LocalDate fecha, List<Aviso> avisos) {
+		this(colegioId, fecha, avisos, false);
 	}
 }

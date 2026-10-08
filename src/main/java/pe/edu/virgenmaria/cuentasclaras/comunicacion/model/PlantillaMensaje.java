@@ -62,10 +62,12 @@ public enum PlantillaMensaje {
 					+ "persona de Promotoría o Dirección."),
 	// Sprint 6 · tanda 2 (sección 12.2): al personal, SOLO cifras, tipos fijos y la huella; nunca nombres de familias, de
 	// alumnos ni de cajeras, ni texto escrito por una persona. Sin enlaces que aprueben (P9): sin botón.
-	RESUMEN_DIARIO("cc_resumen_diario", "Resumen del día", 11, false,
+	// Correcciones del sprint 6: {{6}} dice también los cierres con diferencia desde el resumen anterior (S6-M3) y {{12}}
+	// los resultados de las llamadas de control de la semana (S6-M2).
+	RESUMEN_DIARIO("cc_resumen_diario", "Resumen del día", 12, false,
 			"Cuentas Claras · {{1}}. Cobrado hoy: {{2}} en {{3}} pagos ({{4}} digital). Efectivo: {{5}}. Cajas: {{6}}. "
 					+ "Cobrado en el mes: {{7}}. Vencido por cobrar: {{8}}. Por aprobar: {{9}}. Alertas críticas: {{10}}. "
-					+ "Huella 19:00: {{11}}. Si algo no te cuadra, revisa el panel."),
+					+ "Huella 19:00: {{11}}. Llamadas de control: {{12}}. Si algo no te cuadra, revisa el panel."),
 	ALERTA_PROMOTORIA("cc_alerta_promotoria", "Alerta en Cuentas Claras", 2, false,
 			"Cuentas Claras: {{1}} ({{2}}). Revísalo en el sistema."),
 	ALERTA_MAS("cc_alerta_mas", "Más alertas en Cuentas Claras", 1, false,

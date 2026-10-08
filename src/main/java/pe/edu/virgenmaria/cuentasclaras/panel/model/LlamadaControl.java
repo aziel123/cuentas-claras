@@ -17,7 +17,9 @@ import java.util.Objects;
 /**
  * Resultado de una llamada de control (sprint 6, tanda 3; decisión 77, P17): Promotoría o Dirección llama a una familia
  * de la muestra secreta de la semana, le pregunta PRIMERO cuánto y cuándo pagó y después compara con lo registrado. Una
- * por colegio, semana y familia ({@code uk_llamada_control}) y de SOLO INSERCIÓN (sin GRANT de UPDATE ni DELETE: 1142).
+ * por colegio, semana, familia e intento ({@code uk_llamada_control_intento}, V23) y de SOLO INSERCIÓN (sin GRANT de UPDATE
+ * ni DELETE: 1142). S6-M2: «No contesta» no cierra la plaza; se reintenta una vez (intento 2) y, si tampoco contesta, la
+ * familia se reemplaza en la muestra.
  * En MySQL, {@code trg_llamada_control_registro} exige la persona, el lunes y el pago en efectivo.
  */
 @Entity
@@ -42,12 +44,32 @@ public class LlamadaControl extends BaseEntity {
 	@Column(updatable = false, length = MAX_NOTA)
 	private String nota;
 
+	/** 1 o 2: el segundo intento solo después de un «No contesta» (V23). */
+	@Column(nullable = false, updatable = false)
+	private int intento;
+
+	/** S6-M2: la registró Dirección porque Promotoría le delegó la semana (Promotoría recibe el aviso). */
+	@Column(name = "por_delegacion", nullable = false, updatable = false)
+	private boolean porDelegacion;
+
 	protected LlamadaControl() {
 		// requerido por JPA
 	}
 
 	/** La nota ya viene validada por el servicio («No confirma» exige una de 10 caracteres como mínimo). */
 	public static LlamadaControl registrar(LocalDate semana, Long familiaId, ResultadoLlamada resultado, String nota) {
+		return registrar(semana, familiaId, resultado, nota, 1, false);
+	}
+
+	/**
+	 * El intento {@code intento} (1 o 2) de la llamada a esa familia en esa semana; {@code porDelegacion} si la registra
+	 * Dirección con la semana delegada por Promotoría.
+	 */
+	public static LlamadaControl registrar(LocalDate semana, Long familiaId, ResultadoLlamada resultado, String nota,
+			int intento, boolean porDelegacion) {
+		if (intento != 1 && intento != 2) {
+			throw new IllegalArgumentException("Una llamada de control tiene uno o dos intentos");
+		}
 		Objects.requireNonNull(semana, "semana");
 		if (semana.getDayOfWeek() != DayOfWeek.MONDAY) {
 			throw new IllegalArgumentException("La semana de una llamada de control es su lunes");
@@ -63,6 +85,8 @@ public class LlamadaControl extends BaseEntity {
 		l.familiaId = Objects.requireNonNull(familiaId, "familiaId");
 		l.resultado = Objects.requireNonNull(resultado, "resultado");
 		l.nota = nota;
+		l.intento = intento;
+		l.porDelegacion = porDelegacion;
 		return l;
 	}
 
@@ -90,5 +114,13 @@ public class LlamadaControl extends BaseEntity {
 
 	public String getNota() {
 		return nota;
+	}
+
+	public int getIntento() {
+		return intento;
+	}
+
+	public boolean isPorDelegacion() {
+		return porDelegacion;
 	}
 }

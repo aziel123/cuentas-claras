@@ -113,6 +113,19 @@ public class AuditoriaService {
 				valorNuevo);
 	}
 
+	/**
+	 * Correcciones del sprint 6 (S6-M1): si en el colegio actual hay un evento de esa acción sobre ese registro (solo
+	 * lectura). La foto del resumen que guardó sistema.panel tiene su RESUMEN_DIARIO_GUARDADO; una plantada por SQL, no.
+	 */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public boolean existeSobre(AccionAuditoria accion, String entidad, String entidadId) {
+		Long colegio = ContextoColegio.actual();
+		if (colegio == null || colegio <= 0) {
+			return false;
+		}
+		return eventos.existsByColegioIdAndAccionAndEntidadAndEntidadId(colegio, accion, entidad, entidadId);
+	}
+
 	/** Sprint 6: la secuencia del último evento de esa acción en el colegio actual desde un momento (solo lectura). */
 	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
 	public java.util.Optional<Long> ultimaSecuenciaDesde(AccionAuditoria accion, LocalDateTime desde) {

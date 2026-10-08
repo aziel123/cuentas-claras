@@ -107,7 +107,8 @@ class ReglasArquitecturaTest {
 	static final ArchRule entidadesDeNegocioExtiendenBaseEntity = classes()
 			.that().areAnnotatedWith(Entity.class)
 			.and().doNotBelongToAnyOf(Colegio.class, EventoAuditoria.class, EslabonCadena.class,
-					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionBd.class)
+					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionBd.class,
+					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionColegio.class)
 			.should().beAssignableTo(BaseEntity.class)
 			.because("BaseEntity aporta colegioId (@TenantId), autoría y versión");
 
@@ -419,6 +420,12 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".panel.service.LlamadasControl", APROBACION),
 			Map.entry(BASE + ".panel.service.LlamadasControl#avance", ALERTAS),
 			Map.entry(BASE + ".panel.service.LlamadasControl#noConfirmanRecientes", ALERTAS),
+			// Correcciones del sprint 6 (S6-M2): solo Promotoría delega la semana a Dirección; el resumen (sistema.panel) lee
+			// los resultados de la semana, y las alertas, los reemplazos y las llamadas de Dirección.
+			Map.entry(BASE + ".panel.service.LlamadasControl#delegarADireccion", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".panel.service.LlamadasControl#avanceDe", ALERTAS),
+			Map.entry(BASE + ".panel.service.LlamadasControl#sinRespuestaRecientes", ALERTAS),
+			Map.entry(BASE + ".panel.service.LlamadasControl#registradasPorDireccion", ALERTAS),
 			Map.entry(BASE + ".alumnos.service.FamiliasParaLlamada", APROBACION),
 			Map.entry(BASE + ".caja.service.CifrasCaja#pagosDeFamilia", APROBACION));
 

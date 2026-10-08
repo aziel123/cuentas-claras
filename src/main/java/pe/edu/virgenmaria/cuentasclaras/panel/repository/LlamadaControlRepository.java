@@ -21,6 +21,12 @@ public interface LlamadaControlRepository extends Repository<LlamadaControl, Lon
 
 	boolean existsBySemanaAndFamiliaId(LocalDate semana, Long familiaId);
 
+	/** S6-M2: las registradas por Dirección con la semana delegada, desde un momento (aviso a Promotoría). */
+	List<LlamadaControl> findByPorDelegacionTrueAndCreadoEnGreaterThanEqualOrderByIdAsc(LocalDateTime desde);
+
+	/** Las de una semana desde un momento (los resultados que van en el resumen diario). */
+	List<LlamadaControl> findBySemanaAndCreadoEnLessThanOrderByIdAsc(LocalDate semana, LocalDateTime hasta);
+
 	/** Las de un resultado desde un momento (las «No confirma» recientes para la alerta CRÍTICA). */
 	List<LlamadaControl> findByResultadoAndCreadoEnGreaterThanEqualOrderByIdAsc(ResultadoLlamada resultado,
 			LocalDateTime desde);

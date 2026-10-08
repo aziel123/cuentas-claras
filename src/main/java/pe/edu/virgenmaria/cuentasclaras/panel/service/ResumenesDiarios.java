@@ -24,6 +24,7 @@ import pe.edu.virgenmaria.cuentasclaras.comunicacion.dto.AvisosDelDia;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.dto.EntregaResumen;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.service.ConsultaMensajes;
 import pe.edu.virgenmaria.cuentasclaras.panel.config.PropiedadesPanel;
+import pe.edu.virgenmaria.cuentasclaras.panel.dto.AvanceLlamadas;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.CifrasResumen;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.ComparacionResumen;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.ResumenVista;
@@ -56,6 +57,16 @@ import java.util.function.Predicate;
  * </ul>
  * Orden de bloqueos: la foto va ANTES que sus mensajes (trg_mensaje_nace exige que el mensaje apunte a su foto) y la
  * bitácora al final.
+ * <p>
+ * Correcciones del sprint 6:
+ * <ul>
+ *   <li>S6-M1: la foto guarda el texto exacto del mensaje (en MySQL, cada RESUMEN_DIARIO debe llevar ESE texto y el texto
+ *       debe decir las cifras de la foto), y una foto sin su {@code RESUMEN_DIARIO_GUARDADO} en la bitácora (plantada por
+ *       SQL) no se da por buena: queda {@code RESUMEN_DIARIO_SUPLANTADO} y es una alerta CRÍTICA.</li>
+ *   <li>S6-M3: el resumen informa los cierres con diferencia desde el resumen anterior, aunque ya estén aprobados.</li>
+ *   <li>S6-M2: el resumen lleva los resultados de las llamadas de control de la semana.</li>
+ *   <li>S6-B1, QA-S6-1 y QA-S6-5: «el resumen no salió» se revisa desde el último resumen CONFIRMADO, sin ventana.</li>
+ * </ul>
  */
 @Service
 @Transactional(readOnly = true)
@@ -95,10 +106,12 @@ public class ResumenesDiarios {
 
 	private final Clock reloj;
 
+	private final LlamadasControl llamadas;
+
 	public ResumenesDiarios(ResumenDiarioRepository resumenes, CifrasDelDia cifras, CifrasCaja caja,
 			BandejaAprobaciones bandeja, ConsultaMensajes mensajes, ConsultaHuellas huellas,
 			ObjectProvider<AlertasRevision> alertas, CalendarioHabil calendario, AuditoriaService auditoria,
-			ApplicationEventPublisher eventos, PropiedadesPanel propiedades, Clock reloj) {
+			ApplicationEventPublisher eventos, PropiedadesPanel propiedades, Clock reloj, LlamadasControl llamadas) {
 		this.resumenes = resumenes;
 		this.cifras = cifras;
 		this.caja = caja;
@@ -111,11 +124,13 @@ public class ResumenesDiarios {
 		this.eventos = eventos;
 		this.propiedades = propiedades;
 		this.reloj = reloj;
+		this.llamadas = llamadas;
 	}
 
 	/**
 	 * Guarda la foto del día y la envía (decisión 68: de lunes a sábado; domingo y feriado solo si hubo cobros). Si ya
-	 * existe, no hace nada ({@code uk_resumen_diario}).
+	 * existe, no hace nada ({@code uk_resumen_diario}); pero si esa foto no la guardó sistema.panel (no tiene su
+	 * {@code RESUMEN_DIARIO_GUARDADO}), deja {@code RESUMEN_DIARIO_SUPLANTADO} resaltado (S6-M1).
 	 *
 	 * @return la foto guardada, o vacío si ya existía o ese día no corresponde
 	 */
@@ -123,7 +138,9 @@ public class ResumenesDiarios {
 	@Transactional
 	public Optional<ResumenDiario> generar(LocalDate fecha) {
 		Objects.requireNonNull(fecha, "fecha");
-		if (resumenes.findByFecha(fecha).isPresent()) {
+		Optional<ResumenDiario> existente = resumenes.findByFecha(fecha);
+		if (existente.isPresent()) {
+			registrarSiFueSuplantada(existente.get());
 			return Optional.empty();
 		}
 		LocalDateTime corte = LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS);
@@ -135,15 +152,18 @@ public class ResumenesDiarios {
 		long pendientes = bandeja.contarPendientes();
 		long criticas = alertasCriticas();
 		AvisosDelDia avisos = mensajes.avisosFinancieros(fecha);
+		LocalDateTime desdeElAnterior = resumenes.findFirstByFechaLessThanOrderByFechaDesc(fecha)
+				.map(ResumenDiario::getCortadoEn).orElse(fecha.atStartOfDay());
+		CifrasCaja.CierresConDiferencia cierres = caja.cierresConDiferencia(desdeElAnterior, corte);
+		List<String> parametros = parametros(fecha, c, pendientes, criticas, huella, cierres, llamadas.avanceDe(fecha));
 		ResumenDiario foto = resumenes.saveAndFlush(ResumenDiario.de(fecha, corte,
 				new ResumenDiario.Cifras(c.dia().total(), c.dia().cantidad(), c.dia().efectivo(), c.dia().pagosEfectivo(),
 						c.mes().total(), c.deuda().monto(), c.deuda().familias()),
 				new ResumenDiario.Conteos(c.cajas().abiertas(), c.cajas().conDiferencia(), pendientes, criticas,
 						avisos.creados(), Math.min(avisos.salieron(), avisos.creados())),
 				huella.map(ConsultaHuellas.HuellaDeLaHora::secuencia).orElse(null),
-				huella.map(ConsultaHuellas.HuellaDeLaHora::codigo).orElse(null)));
-		eventos.publishEvent(new ResumenDiarioListo(ContextoColegio.actual(), foto.getId(), fecha,
-				parametros(fecha, c, pendientes, criticas, huella)));
+				huella.map(ConsultaHuellas.HuellaDeLaHora::codigo).orElse(null), texto(parametros)));
+		eventos.publishEvent(new ResumenDiarioListo(ContextoColegio.actual(), foto.getId(), fecha, parametros));
 		auditoria.registrar(AccionAuditoria.RESUMEN_DIARIO_GUARDADO, "resumen_diario", foto.getId().toString(), null,
 				"cobrado " + Dinero.formatear(foto.getCobradoTotal()) + " en " + foto.getPagosCantidad() + " pago(s)",
 				"Resumen del " + fecha.format(FECHA) + " guardado (comprobado contra los libros) y enviado a Promotoría. "
@@ -162,16 +182,95 @@ public class ResumenesDiarios {
 						+ "panel: si las cifras de los libros cambiaron mientras se calculaba, se reintenta solo.");
 	}
 
-	/** Los 11 parámetros de cc_resumen_diario: solo cifras, la fecha y la huella (sección 12.2). */
+	/**
+	 * Los 12 parámetros de cc_resumen_diario: solo cifras, la fecha, la huella y las llamadas (sección 12.2). En MySQL,
+	 * trg_resumen_diario_registro comprueba que la fecha, lo cobrado, los pagos, el efectivo, las cajas, el mes, la deuda,
+	 * lo pendiente y las alertas del texto sean los de la foto (S6-M1): no cambies su forma sin cambiar el trigger.
+	 */
 	static List<String> parametros(LocalDate fecha, CifrasResumen c, long pendientes, long criticas,
-			Optional<ConsultaHuellas.HuellaDeLaHora> huella) {
+			Optional<ConsultaHuellas.HuellaDeLaHora> huella, CifrasCaja.CierresConDiferencia cierres,
+			AvanceLlamadas llamadas) {
 		return List.of(fecha.format(FECHA), Dinero.formatear(c.dia().total()), String.valueOf(c.dia().cantidad()),
 				Formato.porcentaje(c.dia().porcentajeDigital()), Dinero.formatear(c.dia().efectivo()),
 				c.cajas().cerradas() + " cerrada(s), " + c.cajas().abiertas() + " sin cerrar, " + c.cajas().conDiferencia()
-						+ " con diferencia",
+						+ " con diferencia; desde el resumen anterior, " + cierres.cantidad() + " cierre(s) con diferencia"
+						+ (cierres.cantidad() == 0 ? "" : " (" + Dinero.formatear(cierres.suma()) + ")"),
 				Dinero.formatear(c.mes().total()),
 				Dinero.formatear(c.deuda().monto()) + " de " + c.deuda().familias() + " familia(s)",
-				String.valueOf(pendientes), String.valueOf(criticas), textoHuella(fecha, huella));
+				String.valueOf(pendientes), String.valueOf(criticas), textoHuella(fecha, huella), textoLlamadas(llamadas));
+	}
+
+	/** S6-M2: «1 de 3 hechas: 1 confirma, 0 no confirma, 1 no contesta, 0 reemplazada(s)». */
+	static String textoLlamadas(AvanceLlamadas a) {
+		if (a.esperadas() == 0 && a.hechas() == 0) {
+			return "esta semana no hay a quién llamar";
+		}
+		return a.hechas() + " de " + a.esperadas() + " hechas: " + a.confirman() + " confirma, " + a.noConfirman()
+				+ " no confirma, " + a.noContestan() + " no contesta, " + a.reemplazadas() + " reemplazada(s)";
+	}
+
+	/** El texto que se guarda en la foto: como {@code mensaje.parametros} (separados por un salto de línea). */
+	static String texto(List<String> parametros) {
+		return String.join("\n", parametros.stream().map(v -> v.replace("\n", " ").replace("\r", " ").strip()).toList());
+	}
+
+	/** S6-M1: una foto que no guardó sistema.panel (sin su evento GUARDADO) queda resaltada, una vez. */
+	private void registrarSiFueSuplantada(ResumenDiario foto) {
+		String id = foto.getId().toString();
+		if (guardadaPorElSistema(foto) || auditoria.existeSobre(AccionAuditoria.RESUMEN_DIARIO_SUPLANTADO, "resumen_diario",
+				id)) {
+			return;
+		}
+		auditoria.registrar(AccionAuditoria.RESUMEN_DIARIO_SUPLANTADO, "resumen_diario", id, null,
+				foto.getFecha().toString(), "La foto del resumen del " + foto.getFecha().format(FECHA) + " no la guardó "
+						+ "sistema.panel (no tiene su evento en la bitácora): alguien la insertó por fuera de la aplicación. "
+						+ "El resumen verdadero de ese día no salió. Revisa los pagos del día y quién tiene acceso a la base.");
+	}
+
+	/** S6-M1: la foto la guardó sistema.panel (tiene su RESUMEN_DIARIO_GUARDADO en la bitácora). */
+	private boolean guardadaPorElSistema(ResumenDiario foto) {
+		return auditoria.existeSobre(AccionAuditoria.RESUMEN_DIARIO_GUARDADO, "resumen_diario", foto.getId().toString());
+	}
+
+	/** S6-M1: las fotos de la ventana del recálculo que no guardó sistema.panel (alerta CRÍTICA). */
+	public List<ResumenDiario> suplantadas() {
+		return fotosDeLaVentana().stream().filter(f -> !guardadaPorElSistema(f)).toList();
+	}
+
+	/**
+	 * S6-B1, QA-S6-1 y QA-S6-5: los días que debían tener resumen desde el último resumen CONFIRMADO (guardado por
+	 * sistema.panel y enviado a todas las personas de Promotoría) hasta {@code hasta}, sin ventana: un sábado, un día antes
+	 * de feriados o un colegio que dejó de enviar hace meses siguen alertando. Vacío si el colegio aún no tiene resúmenes
+	 * (no hay nada que suprimir).
+	 */
+	public List<LocalDate> diasSinResumen(LocalDate hasta) {
+		List<ResumenDiario> fotos = resumenes.findTop400ByFechaLessThanEqualOrderByFechaDesc(hasta);
+		if (fotos.isEmpty()) {
+			return List.of();
+		}
+		LocalDate desde = fotos.getLast().getFecha();
+		for (ResumenDiario foto : fotos) {
+			if (confirmada(foto)) {
+				desde = foto.getFecha().plusDays(1);
+				break;
+			}
+		}
+		if (desde.isAfter(hasta)) {
+			return List.of();
+		}
+		Map<LocalDate, CobradoDia> cobros = caja.cobradoPorDia(desde, hasta);
+		List<LocalDate> faltan = new ArrayList<>();
+		for (LocalDate dia = desde; !dia.isAfter(hasta); dia = dia.plusDays(1)) {
+			CobradoDia cobrado = cobros.get(dia);
+			if (calendario.admiteMensajes(dia) || (cobrado != null && cobrado.cantidad() > 0)) {
+				faltan.add(dia);
+			}
+		}
+		return faltan;
+	}
+
+	private boolean confirmada(ResumenDiario foto) {
+		return guardadaPorElSistema(foto) && mensajes.entregaDelResumen(foto.getId()).completa();
 	}
 
 	private static String textoHuella(LocalDate fecha, Optional<ConsultaHuellas.HuellaDeLaHora> huella) {
@@ -191,19 +290,18 @@ public class ResumenesDiarios {
 		return calendario.admiteMensajes(fecha) || caja.cobrado(fecha, fecha).cantidad() > 0;
 	}
 
-	/** Si el colegio ya tiene resúmenes en la ventana del recálculo (la alerta «no salió» se activa con el primero). */
-	public boolean huboResumenes() {
-		return resumenes.existsByFechaGreaterThanEqual(LocalDate.now(reloj).minusDays(propiedades.recalculoDias()));
-	}
 
 	/** La foto de un día con su envío y si los libros cambiaron desde entonces. */
 	public Optional<ResumenVista> deFecha(LocalDate fecha) {
 		return resumenes.findByFecha(fecha).map(r -> vista(r, comparar(List.of(r)).getFirst()));
 	}
 
-	/** Si el resumen de ese día ya salió a todas las personas de Promotoría activas. */
+	/**
+	 * Si el resumen de ese día ya salió a todas las personas de Promotoría activas, desde una foto que guardó
+	 * sistema.panel (S6-M1: una foto plantada con su mensaje no cuenta).
+	 */
 	public boolean salioATodos(LocalDate fecha) {
-		return resumenes.findByFecha(fecha).map(r -> mensajes.entregaDelResumen(r.getId()).completa()).orElse(false);
+		return resumenes.findByFecha(fecha).map(this::confirmada).orElse(false);
 	}
 
 	/** Los resúmenes de la ventana del recálculo, del más reciente al más antiguo, con «cambió desde que se envió». */

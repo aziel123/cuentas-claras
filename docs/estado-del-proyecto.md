@@ -13,7 +13,7 @@
 | 3 · Caja (pagos, comprobantes, anulaciones, descuentos, cierre ciego, conciliación) | ✅ Terminado, auditado y corregido | `claude/sprint-3-correcciones` | 967 |
 | 4 · Cero digitación (pago en línea, comprobante automático, recaudación bancaria, conciliación automática) | ✅ Terminado, auditado y corregido | `claude/sprint-4-cero-digitacion` | 1429 |
 | 5 · Familias y matrícula 2027 (avisos por WhatsApp, acceso directo al titular, huella diaria, portal, renovación 2027, feriados, cierre mensual) | ✅ Terminado, auditado y corregido | `claude/sprint-5-familias` | 1694 (más las de MySQL real, que corren en el CI) |
-| 6 · Panel de la promotora (panel, reportes y Excel, resumen diario, alertas y aprobaciones en el celular, contacto del personal, llamada de control) | En curso: implementado en 3 tandas; falta la auditoría (`qa-tester` y `auditor-seguridad-antifraude`) | `claude/sprint-6-panel-promotora` | 1815 (86 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
+| 6 · Panel de la promotora (panel, reportes y Excel, resumen diario, alertas y aprobaciones en el celular, contacto del personal, llamada de control) | Implementado en 3 tandas, auditado y corregido (`docs/arquitectura/sprint-6-correcciones.md`, V23, 63 triggers) | `claude/sprint-6-panel-promotora` | 1883 (92 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
 
 El sprint 4 se implementó en 3 tandas verificadas, cada una con su migración y probada también contra MySQL 8 real, y luego se corrigió todo lo que encontraron la auditoría antifraude y QA:
 
@@ -93,7 +93,8 @@ Diseño en `docs/arquitectura/sprint-5-familias.md` y correcciones en `sprint-5-
 
 ### Panel de la promotora (sprint 6)
 Diseño en `docs/arquitectura/sprint-6-panel-promotora.md`, con una sección de implementación por tanda (migraciones V21 y
-V22, 61 triggers en MySQL). Guía de una página para la promotora: `docs/operacion/guia-promotora.md`.
+V22, 61 triggers en MySQL) y correcciones de la auditoría y QA en `sprint-6-correcciones.md` (V23, 63 triggers). Guía
+de una página para la promotora: `docs/operacion/guia-promotora.md`.
 - **Panel en el celular** (`/panel`, solo Promotoría): lo cobrado hoy y en el mes, la deuda vencida por tramos, el % de pagos digitales, las rebajas del mes con quién aprobó, lo que espera aprobación y las alertas. Ninguna cifra se guarda ni se escribe a mano.
 - **Reportes y Excel para el contador:** morosidad por grado (nunca por sección) e ingresos por medio de pago; el Excel no admite fórmulas, lleva datos mínimos y cada descarga queda en la bitácora con su código impreso en el archivo.
 - **Resumen diario a las 19:30** por WhatsApp (o correo), con una foto de las cifras que la base compara al centavo con los libros, y la huella de las 19:00. Las cifras de un día ya enviado que cambian sin explicación son alerta crítica.

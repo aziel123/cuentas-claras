@@ -77,6 +77,14 @@ public class ResumenDiario extends BaseEntity {
 	@Column(name = "huella_codigo", updatable = false, length = 16)
 	private String huellaCodigo;
 
+	/**
+	 * Correcciones del sprint 6 (S6-M1): el TEXTO exacto que sale en el resumen (los parámetros de cc_resumen_diario
+	 * separados por un salto de línea). En MySQL, trg_mensaje_nace exige que cada RESUMEN_DIARIO lleve este texto y
+	 * trg_resumen_diario_registro, que diga las cifras de la foto. {@code null} solo en fotos anteriores a V23.
+	 */
+	@Column(updatable = false, length = 1000)
+	private String parametros;
+
 	protected ResumenDiario() {
 		// requerido por JPA
 	}
@@ -93,13 +101,22 @@ public class ResumenDiario extends BaseEntity {
 		}
 	}
 
-	/** Lo demás que informa el resumen (no sale de pago ni cuota; el trigger no lo recalcula). */
+	/**
+	 * Lo demás que informa el resumen. Desde V23 el trigger recalcula las cajas sin cerrar, los cierres con diferencia,
+	 * las solicitudes pendientes y los avisos financieros del día; las alertas críticas y los avisos entregados no.
+	 */
 	public record Conteos(long cajasSinCerrar, long cierresConDiferencia, long solicitudesPendientes, long alertasCriticas,
 			long avisosFamilias, long avisosEntregados) {
 	}
 
 	public static ResumenDiario de(LocalDate fecha, LocalDateTime cortadoEn, Cifras cifras, Conteos conteos,
 			Long huellaSecuencia, String huellaCodigo) {
+		return de(fecha, cortadoEn, cifras, conteos, huellaSecuencia, huellaCodigo, null);
+	}
+
+	/** Con el texto que sale en el mensaje (S6-M1): los parámetros unidos por un salto de línea. */
+	public static ResumenDiario de(LocalDate fecha, LocalDateTime cortadoEn, Cifras cifras, Conteos conteos,
+			Long huellaSecuencia, String huellaCodigo, String parametros) {
 		Objects.requireNonNull(cifras, "cifras");
 		Objects.requireNonNull(conteos, "conteos");
 		if ((huellaSecuencia == null) != (huellaCodigo == null)) {
@@ -123,6 +140,10 @@ public class ResumenDiario extends BaseEntity {
 		r.avisosEntregados = Math.toIntExact(conteos.avisosEntregados());
 		r.huellaSecuencia = huellaSecuencia;
 		r.huellaCodigo = huellaCodigo;
+		if (parametros != null && parametros.length() > 1000) {
+			throw new IllegalArgumentException("El texto del resumen no cabe en la columna");
+		}
+		r.parametros = parametros;
 		return r;
 	}
 
@@ -202,5 +223,9 @@ public class ResumenDiario extends BaseEntity {
 
 	public String getHuellaCodigo() {
 		return huellaCodigo;
+	}
+
+	public String getParametros() {
+		return parametros;
 	}
 }

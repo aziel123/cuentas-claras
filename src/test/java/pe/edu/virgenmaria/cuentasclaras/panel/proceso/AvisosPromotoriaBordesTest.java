@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.panel.proceso;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -103,8 +102,13 @@ class AvisosPromotoriaBordesTest {
 				quien.getId(), plantilla);
 	}
 
-	private static List<Aviso> criticas(String prefijo, int cuantas) {
-		return IntStream.rangeClosed(1, cuantas).mapToObj(i -> new Aviso(TipoAviso.OTRA_CRITICA, prefijo + i)).toList();
+	/**
+	 * Alertas de ATENCIÓN que salen al celular (cajas sin cerrar a la hora límite). Correcciones del sprint 6 (S6-B2): el
+	 * tope diario cuenta solo las ATENCIÓN; las CRÍTICAS ya no lo llenan (antes este ayudante usaba CRÍTICAS).
+	 */
+	private static List<Aviso> atenciones(String prefijo, int cuantas) {
+		return IntStream.rangeClosed(1, cuantas).mapToObj(i -> new Aviso(TipoAviso.CIERRE_NO_REALIZADO, prefijo + i))
+				.toList();
 	}
 
 	@Test
@@ -128,12 +132,12 @@ class AvisosPromotoriaBordesTest {
 	void lasAlertasDelDomingoNoConsumenElTopeDelLunes() {
 		LocalDate domingo = LocalDate.of(2027, 4, 18);
 		a(domingo, 10, 0);
-		publicar(domingo, criticas("D", 12));
+		publicar(domingo, atenciones("D", 12));
 		assertThat(alertasDe(promotora, "ALERTA_PROMOTORIA")).isZero();
 
 		LocalDate lunes = domingo.plusDays(1);
 		a(lunes, 7, 0);
-		publicar(lunes, criticas("D", 12));
+		publicar(lunes, atenciones("D", 12));
 		assertThat(alertasDe(promotora, "ALERTA_PROMOTORIA")).isEqualTo(10);
 		assertThat(jdbc.queryForList("SELECT parametros FROM mensaje WHERE usuario_id = ? AND plantilla = 'ALERTA_MAS'",
 				String.class, promotora.getId())).containsExactly("2");
@@ -158,10 +162,10 @@ class AvisosPromotoriaBordesTest {
 	void elTopeDeUnaPersonaNoFrenaLasAlertasDeOtra() {
 		LocalDate jueves = LocalDate.of(2027, 4, 15);
 		a(jueves, 9, 0);
-		publicar(jueves, criticas("A", 10));
+		publicar(jueves, atenciones("A", 10));
 		Usuario segunda = guardar("promotora.dos", Rol.PROMOTOR);
 		a(jueves, 9, 15);
-		publicar(jueves, criticas("B", 3));
+		publicar(jueves, atenciones("B", 3));
 
 		assertThat(alertasDe(promotora, "ALERTA_PROMOTORIA")).isEqualTo(10);
 		assertThat(alertasDe(promotora, "ALERTA_MAS")).isEqualTo(1);
@@ -175,8 +179,6 @@ class AvisosPromotoriaBordesTest {
 	 * más» del día. Cuando después cierra con faltante (CRÍTICA), ese aviso queda retenido sin ningún mensaje hasta el día
 	 * siguiente a las 07:00.
 	 */
-	@Disabled("QA-S6-7: el tope diario no reserva lugar para las CRÍTICAS: las ATENCIÓN (anulaciones por aprobar) lo "
-			+ "agotan y el cierre con faltante no llega ese día (MensajesPromotoria.alAvisos)")
 	@Test
 	void debeAvisarElCierreConFaltanteAunqueLasAnulacionesPendientesHayanAgotadoElTope() {
 		LocalDate jueves = LocalDate.of(2027, 4, 15);

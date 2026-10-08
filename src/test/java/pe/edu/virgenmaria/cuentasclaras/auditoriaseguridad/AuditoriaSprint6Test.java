@@ -18,8 +18,8 @@ import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioCobro;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioDescuentos;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.TipoAviso;
-import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones;
@@ -52,8 +52,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.como;
 
 /**
- * Auditoría de seguridad y antifraude del sprint 6, rama auditoria/sprint-6. Cada prueba REPRODUCE un ataque y queda en
- * verde mientras el hallazgo siga abierto: cuando se corrija, la prueba fallará y habrá que invertir sus aserciones.
+ * Auditoría de seguridad y antifraude del sprint 6, rama auditoria/sprint-6. Cada prueba reproducía un ataque y quedaba en
+ * verde mientras el hallazgo seguía abierto. Correcciones del sprint 6: sus aserciones se INVIRTIERON y ahora dicen
+ * «CORREGIDO»: cada prueba en verde significa que el ataque ya no funciona.
  * Sobre EscenarioPanel: el jueves 15/04/2027 la familia Quispe pagó en efectivo y por Yape; la familia Flores, de
  * Sebastián, tiene la matrícula y marzo vencidos y ningún pago registrado; la caja de la cajera sigue abierta.
  */
@@ -66,6 +67,8 @@ class AuditoriaSprint6Test {
 	private static final LocalDate LUNES = LocalDate.of(2027, 4, 19);
 
 	private static final String ALERTAS_AL_CELULAR = "SELECT COUNT(1) FROM mensaje WHERE tipo = ? AND clave LIKE ?";
+
+	private static final String NOTA = "Dice que pagó S/ 450.00 en efectivo y no aparece";
 
 	@Autowired
 	private LlamadasControl llamadas;
@@ -151,54 +154,77 @@ class AuditoriaSprint6Test {
 		return jdbc.queryForObject(ALERTAS_AL_CELULAR, Long.class, "ALERTA_PROMOTORIA", clave);
 	}
 
-	// S6-M2. Dirección registra la llamada de control antes que Promotoría y la anula sin dejar ninguna alerta.
+	// S6-M2. Dirección registraba la llamada de control antes que Promotoría y la anulaba sin dejar ninguna alerta.
 
 	/**
-	 * Lunes 00:05, antes de que llame la promotora: la directora, de acuerdo con la cajera, abre /panel/llamadas y
-	 * registra «No contesta» o «Confirma» en TODAS las familias de la muestra sin llamar. La muestra queda completa, la
-	 * promotora ya no puede registrar nada, el panel dice que no falta ninguna, el sábado no hay recordatorio y no sale
-	 * ninguna alerta al celular: el único control contra el efectivo no registrado quedó anulado.
+	 * CORREGIDO. Lunes 00:05, antes de que llame la promotora: la directora, de acuerdo con la cajera, abre /panel/llamadas
+	 * e intenta registrar «No contesta» en TODAS las familias de la muestra sin llamar. Sin la semana delegada por
+	 * Promotoría no queda nada; la promotora registra su «No confirma». Cuando Promotoría delega la semana, cada llamada
+	 * de Dirección sale al celular de Promotoría, y un «No contesta» no cierra la plaza: hay que volver a llamar, y al
+	 * segundo sale un aviso de ATENCIÓN. Los resultados van en el resumen de las 19:30.
 	 */
 	@Test
 	void direccionCierraLaMuestraConNoContestaYPromotoriaYaNoPuedeLlamar() {
 		a(LUNES, 0, 5);
 		UsuariosDePrueba.iniciarSesion(directora);
 		LlamadasSemana muestra = llamadas.deEstaSemana();
-		assertThat(muestra.familias()).isNotEmpty();
+		assertThat(muestra.familias()).hasSize(2);
+		assertThat(muestra.puedeRegistrar()).as("Dirección solo mira").isFalse();
 		for (LlamadasSemana.Familia f : muestra.familias()) {
-			llamadas.registrar(f.familiaId(), new LlamadaRequest(ResultadoLlamada.NO_CONTESTA, null));
+			assertThatThrownBy(() -> llamadas.registrar(f.familiaId(), new LlamadaRequest(ResultadoLlamada.NO_CONTESTA,
+					null))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("Promotoría se las delega");
 		}
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM llamada_control", Long.class)).as("CORREGIDO").isZero();
 
 		a(LUNES, 9, 0);
 		UsuariosDePrueba.iniciarSesion(promotora);
 		LlamadasSemana vistaPromotora = llamadas.deEstaSemana();
-		assertThat(vistaPromotora.faltan()).as("la promotora ve la semana ya hecha").isZero();
-		assertThat(vistaPromotora.familias()).noneMatch(LlamadasSemana.Familia::pendiente);
+		assertThat(vistaPromotora.faltan()).as("la promotora ve la semana entera por hacer").isEqualTo(2);
 		Long primera = muestra.familias().getFirst().familiaId();
-		LlamadaRequest real = new LlamadaRequest(ResultadoLlamada.NO_CONFIRMA, "Dice que pagó S/ 450.00 en efectivo y no aparece");
-		assertThatThrownBy(() -> llamadas.registrar(primera, real)).isInstanceOf(ReglaNegocioException.class);
-		assertThat(panel.ver().llamadas().faltan()).isZero();
+		Long segunda = muestra.familias().get(1).familiaId();
+		assertThat(llamadas.registrar(primera, new LlamadaRequest(ResultadoLlamada.NO_CONFIRMA, NOTA))).isNotNull();
+		llamadas.delegarADireccion();
 
-		a(LUNES.plusDays(5), 10, 0);
-		assertThat(alertasPanel.alertas()).as("sábado: ni recordatorio ni nada CRÍTICO")
-				.noneMatch(x -> x.texto().contains("llamadas de control"))
-				.noneMatch(x -> x.aviso() != null && x.aviso().tipo() == TipoAviso.LLAMADA_NO_CONFIRMA);
+		a(LUNES, 9, 30);
+		UsuariosDePrueba.iniciarSesion(directora);
+		llamadas.registrar(segunda, new LlamadaRequest(ResultadoLlamada.NO_CONTESTA, null));
+		assertThat(llamadas.deEstaSemana().familias()).filteredOn(f -> f.familiaId().equals(segunda)).singleElement()
+				.satisfies(f -> assertThat(f.pendiente()).as("«No contesta» no cierra la plaza").isTrue())
+				.satisfies(f -> assertThat(f.reintento()).isTrue());
+		assertThatThrownBy(() -> llamadas.registrar(segunda, new LlamadaRequest(ResultadoLlamada.NO_CONTESTA, null)))
+				.as("el segundo intento, una hora después").isInstanceOf(ReglaNegocioException.class);
+		a(LUNES, 10, 45);
+		llamadas.registrar(segunda, new LlamadaRequest(ResultadoLlamada.NO_CONTESTA, null));
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM llamada_control WHERE por_delegacion", Long.class))
+				.isEqualTo(2);
+
 		SecurityContextHolder.clearContext();
-		avisos.enColegio(1L, LUNES.plusDays(5));
-		assertThat(alertasAlCelular("ALERTA:LLAMADA%")).isZero();
-		String registradas = "SELECT COUNT(1) FROM evento_auditoria WHERE accion = ? AND nombre_usuario = ?";
-		Long eventos = jdbc.queryForObject(registradas, Long.class, "LLAMADA_CONTROL_REGISTRADA", "directora");
-		assertThat(eventos).as("solo eventos SIN resaltar").isEqualTo(muestra.familias().size());
+		a(LUNES, 11, 0);
+		avisos.enColegio(1L, LUNES);
+		assertThat(jdbc.queryForList("SELECT usuario_id FROM mensaje WHERE tipo = 'ALERTA_PROMOTORIA' AND clave LIKE "
+				+ "'ALERTA:LLAMADA_POR_DIRECCION:%'", Long.class)).as("cada llamada de Dirección, a Promotoría")
+				.hasSize(2).containsOnly(promotora.getId());
+		assertThat(alertasAlCelular("ALERTA:LLAMADA_REEMPLAZADA:%")).as("dos «No contesta»: ATENCIÓN al celular")
+				.isEqualTo(1);
+		assertThat(alertasAlCelular("ALERTA:LLAMADA_NO_CONFIRMA:%")).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'LLAMADAS_DELEGADAS' AND "
+				+ "nombre_usuario = 'promotora'", Long.class)).isEqualTo(1);
+
+		a(LUNES, 19, 30);
+		resumen.enColegio(1L, LUNES);
+		String texto = jdbc.queryForObject("SELECT parametros FROM resumen_diario WHERE fecha = ?", String.class, LUNES);
+		assertThat(texto.split("\n")).hasSize(12);
+		assertThat(texto.split("\n")[11]).as("los resultados de las llamadas van en el resumen")
+				.isEqualTo("2 de 2 hechas: 0 confirma, 1 no confirma, 2 no contesta, 0 reemplazada(s)");
 	}
 
-	// S6-A2. La muestra de la llamada de control solo ve familias con un pago en efectivo REGISTRADO.
+	// S6-A2. La muestra de la llamada de control solo veía familias con un pago en efectivo REGISTRADO.
 
 	/**
-	 * El 15/04 la familia Flores pagó en efectivo la matrícula de Sebastián, S/ 350, y la cajera se quedó con el dinero sin
-	 * registrar nada: el fraude original. La familia tiene un solo apoderado y no usa el portal, justo el caso que la
-	 * llamada de control debía cubrir según P17. Pero la muestra se arma SOLO con familias que tienen un pago en efectivo
-	 * registrado: Flores no entra en ninguna de las 8 semanas siguientes, con ninguna semilla, y registrar su llamada da
-	 * 404. Solo aparece como morosa, mezclada con las demás.
+	 * CORREGIDO. El 15/04 la familia Flores pagó en efectivo la matrícula de Sebastián, S/ 350, y la cajera se quedó con
+	 * el dinero sin registrar nada: el fraude original. La familia tiene un solo apoderado y no usa el portal. Su deuda
+	 * vencida la hace candidata (con una plaza reservada para la deuda): entra a la muestra cada semana y su «No
+	 * confirma» queda registrado y es CRÍTICA.
 	 */
 	@Test
 	void laFamiliaCuyoEfectivoNoSeRegistroNuncaEntraALaMuestra() {
@@ -207,22 +233,27 @@ class AuditoriaSprint6Test {
 			LocalDate lunes = LUNES.plusWeeks(semana);
 			a(lunes.plusDays(1), 10, 0);
 			UsuariosDePrueba.iniciarSesion(promotora);
-			assertThat(llamadas.deEstaSemana().familias()).as("semana del " + lunes).extracting(LlamadasSemana.Familia::familiaId).doesNotContain(flores);
+			assertThat(llamadas.deEstaSemana().familias()).as("semana del " + lunes)
+					.filteredOn(f -> f.familiaId().equals(flores)).singleElement()
+					.satisfies(f -> assertThat(f.motivo()).contains("deuda vencida"));
 		}
 		a(LUNES.plusDays(1), 10, 0);
 		UsuariosDePrueba.iniciarSesion(promotora);
 		LlamadaRequest real = new LlamadaRequest(ResultadoLlamada.NO_CONFIRMA, "Dice que pagó S/ 350.00 en efectivo el 15/04");
-		assertThatThrownBy(() -> llamadas.registrar(flores, real)).isInstanceOf(RecursoNoEncontradoException.class);
-		assertThat(panel.ver().deuda().familias()).as("solo se ve como una morosa más").isGreaterThanOrEqualTo(1);
+		Long id = llamadas.registrar(flores, real);
+		assertThat(id).as("CORREGIDO").isNotNull();
+		assertThat(alertasPanel.alertas()).anyMatch(x -> x.gravedad() == AlertaRevision.Gravedad.CRITICA
+				&& x.aviso() != null && x.aviso().tipo() == TipoAviso.LLAMADA_NO_CONFIRMA
+				&& x.aviso().referencia().equals("LC:" + id));
 	}
 
-	// S6-M3. Un cierre con faltante aprobado antes de la siguiente pasada nunca llega al celular de Promotoría.
+	// S6-M3. Un cierre con faltante aprobado antes de la siguiente pasada nunca llegaba al celular de Promotoría.
 
 	/**
-	 * La cajera no cierra a la hora límite, y sale el aviso de caja no cerrada, que parece un olvido. Cierra a las 20:50,
-	 * después de la última pasada de las 20:45 y del resumen de las 19:30, con un faltante, y Dirección lo aprueba a las
-	 * 21:10 desde el celular. Como la alerta CRÍTICA solo existe mientras el cierre está POR_REVISAR, la pasada de las
-	 * 07:00 ya no la encuentra: el faltante no sale nunca al celular ni en ningún resumen.
+	 * CORREGIDO. La cajera cierra a las 20:50 (después de la última pasada y del resumen de las 19:30) con un faltante, y
+	 * Dirección lo aprueba a las 21:10. El aviso sale apenas se confirma el cierre (oyente después del commit, con la clave
+	 * C:id), una sola vez aunque después corran las pasadas, y el resumen del viernes informa el cierre con diferencia
+	 * ocurrido desde el resumen anterior.
 	 */
 	@Test
 	void cierreConFaltanteAprobadoDeNocheNoLlegaNuncaAlCelular() {
@@ -235,9 +266,12 @@ class AuditoriaSprint6Test {
 		como(EscenarioCaja.CAJA);
 		cierres.contar(new ConteoRequest(new BigDecimal("1.00"), null));
 		cierres.recontar(new ReconteoRequest(new BigDecimal("1.00"), null, "Me faltó el efectivo de la tarde"));
+		SecurityContextHolder.clearContext();
 		Long cierre = jdbc.queryForObject("SELECT MAX(id) FROM cierre_caja", Long.class);
 		String sqlDiferencia = "SELECT diferencia FROM cierre_caja WHERE id = ?";
 		assertThat(jdbc.queryForObject(sqlDiferencia, BigDecimal.class, cierre)).isNegative();
+		assertThat(alertasAlCelular("ALERTA:CIERRE_CON_DIFERENCIA:C:" + cierre + ":U" + promotora.getId() + ":%"))
+				.as("CORREGIDO: sale apenas se cierra").isEqualTo(1);
 
 		a(JUEVES, 21, 10);
 		String comentario = "Conversé con la cajera, lo repone el lunes";
@@ -249,17 +283,20 @@ class AuditoriaSprint6Test {
 		avisos.enColegio(1L, viernes);
 		a(viernes, 19, 30);
 		avisos.enColegio(1L, viernes);
-		assertThat(alertasAlCelular("ALERTA:CIERRE_CON_DIFERENCIA:%")).as("el faltante nunca sale al celular").isZero();
-		como(EscenarioCobranza.PROMOTORIA);
-		assertThat(alertasPanel.alertas()).noneMatch(x -> x.aviso() != null && x.aviso().tipo() == TipoAviso.CIERRE_CON_DIFERENCIA);
+		assertThat(alertasAlCelular("ALERTA:CIERRE_CON_DIFERENCIA:%")).as("una sola vez").isEqualTo(1);
+		resumen.enColegio(1L, viernes);
+		String cajas = jdbc.queryForObject("SELECT parametros FROM resumen_diario WHERE fecha = ?", String.class, viernes)
+				.split("\n")[5];
+		assertThat(cajas).as("el resumen del viernes lo informa").contains("desde el resumen anterior, 1 cierre(s) con "
+				+ "diferencia (-S/ ");
 	}
 
-	// S6-B1. El aviso de que el resumen del sábado no salió nunca llega al celular.
+	// S6-B1. El aviso de que el resumen del sábado no salió nunca llegaba al celular.
 
 	/**
-	 * Con resúmenes anteriores del jueves y el viernes, el del sábado 17/04 no sale. El sábado la alerta aparece recién a
-	 * las 21:00, después de la última pasada de las 20:45; el domingo no se envía nada; y el lunes «ayer» es el domingo,
-	 * que no debía tener resumen: la alerta del sábado desaparece del panel sin haber llegado nunca al celular.
+	 * CORREGIDO. Con resúmenes anteriores del jueves y el viernes, el del sábado 17/04 no sale. «No salió» se revisa desde
+	 * el último resumen confirmado (el del viernes): el lunes a las 07:00 la alerta del sábado sigue en el panel y sale al
+	 * celular.
 	 */
 	@Test
 	void elResumenDelSabadoQueNoSalioNuncaSeAvisa() {
@@ -282,11 +319,14 @@ class AuditoriaSprint6Test {
 		a(LUNES, 7, 0);
 		avisos.enColegio(1L, LUNES);
 		como(EscenarioCobranza.PROMOTORIA);
-		assertThat(alertasPanel.alertas()).as("el lunes ya no").noneMatch(x -> x.aviso() != null && x.aviso().tipo() == TipoAviso.RESUMEN_NO_SALIO);
-		assertThat(alertasAlCelular("ALERTA:RESUMEN_NO_SALIO:%")).as("nunca llegó al celular").isZero();
+		assertThat(alertasPanel.alertas()).as("CORREGIDO: el lunes sigue").anyMatch(x -> x.aviso() != null
+				&& x.aviso().referencia().equals(referencia));
+		SecurityContextHolder.clearContext();
+		assertThat(alertasAlCelular("ALERTA:RESUMEN_NO_SALIO:RS:" + sabado + ":%")).as("CORREGIDO: llegó al celular")
+				.isEqualTo(1);
 	}
 
-	/** Control de S6-M3: si la pasada llega ANTES de la aprobación, el mismo faltante sí sale al celular. */
+	/** Control de S6-M3: si la pasada llega ANTES de la aprobación, el mismo faltante sale una sola vez al celular. */
 	@Test
 	void controlElMismoFaltanteSinAprobarSiSaleAlCelular() {
 		a(JUEVES, 20, 40);
@@ -297,5 +337,52 @@ class AuditoriaSprint6Test {
 		a(JUEVES, 20, 45);
 		avisos.enColegio(1L, JUEVES);
 		assertThat(alertasAlCelular("ALERTA:CIERRE_CON_DIFERENCIA:%")).isEqualTo(1);
+	}
+
+	// S6-M1 (parte de la aplicación; la de la base está en AuditoriaSprint6MySqlTest).
+
+	/**
+	 * CORREGIDO. Alguien con acceso a la base planta la foto del jueves (en H2 no hay triggers: aquí se prueba lo que hace
+	 * la aplicación). A las 19:30 sistema.panel la encuentra sin su RESUMEN_DIARIO_GUARDADO: deja RESUMEN_DIARIO_SUPLANTADO
+	 * resaltado, la alerta es CRÍTICA (con aviso al celular) y «el resumen no salió» también salta, aunque haya un mensaje
+	 * plantado ENVIADO.
+	 */
+	@Test
+	void unaFotoPlantadaPorSqlEsCriticaYNoCuentaComoEnviada() {
+		a(JUEVES, 19, 0);
+		jdbc.update("INSERT INTO resumen_diario (colegio_id, fecha, cortado_en, cobrado_total, pagos_cantidad, "
+				+ "cobrado_efectivo, pagos_efectivo, cobrado_mes, deuda_vencida, familias_morosas, cajas_sin_cerrar, "
+				+ "cierres_con_diferencia, solicitudes_pendientes, alertas_criticas, avisos_familias, avisos_entregados, "
+				+ "parametros, creado_en, creado_por, actualizado_en, version) VALUES (1, ?, ?, 800.00, 2, 350.00, 1, 800.00, "
+				+ "1600.00, 2, 0, 0, 0, 0, 0, 0, 'inventado', ?, 'sistema.panel', ?, 0)", JUEVES, JUEVES.atTime(19, 0),
+				JUEVES.atTime(19, 0), JUEVES.atTime(19, 0));
+		Long foto = jdbc.queryForObject("SELECT id FROM resumen_diario WHERE fecha = ?", Long.class, JUEVES);
+		jdbc.update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, usuario_id, destino, plantilla, "
+				+ "parametros, entidad, entidad_id, estado, intentos, proveedor, proveedor_mensaje_id, enviado_en, creado_en, "
+				+ "creado_por, actualizado_en, version) VALUES (1, 'plantado', 'RESUMEN_DIARIO', 'WHATSAPP', 'USUARIO', ?, ?, "
+				+ "'RESUMEN_DIARIO', 'inventado', 'resumen_diario', ?, 'ENVIADO', 1, 'SIMULADO', 'SIM-plantado', ?, ?, "
+				+ "'sistema.panel', ?, 0)", promotora.getId(),
+				promotora.getTelefonoWhatsapp(), foto, JUEVES.atTime(19, 1), JUEVES.atTime(19, 1), JUEVES.atTime(19, 1));
+
+		a(JUEVES, 19, 30);
+		assertThat(resumen.enColegio(1L, JUEVES)).isEmpty();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'RESUMEN_DIARIO_SUPLANTADO' "
+				+ "AND entidad_id = ?", Long.class, foto.toString())).as("CORREGIDO: queda resaltado").isEqualTo(1);
+		resumen.enColegio(1L, JUEVES);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'RESUMEN_DIARIO_SUPLANTADO'",
+				Long.class)).as("una sola vez").isEqualTo(1);
+
+		a(JUEVES, 21, 30);
+		como(EscenarioCobranza.PROMOTORIA);
+		List<AlertaRevision> criticas = alertasPanel.alertas().stream()
+				.filter(x -> x.gravedad() == AlertaRevision.Gravedad.CRITICA && x.aviso() != null).toList();
+		assertThat(criticas).anyMatch(x -> x.aviso().tipo() == TipoAviso.RESUMEN_SUPLANTADO
+				&& x.aviso().referencia().equals("RF:" + foto));
+		assertThat(criticas).as("el mensaje plantado no cuenta como enviado")
+				.anyMatch(x -> x.aviso().tipo() == TipoAviso.RESUMEN_NO_SALIO && x.aviso().referencia().equals("RS:" + JUEVES));
+		SecurityContextHolder.clearContext();
+		a(JUEVES, 20, 45);
+		avisos.enColegio(1L, JUEVES);
+		assertThat(alertasAlCelular("ALERTA:RESUMEN_SUPLANTADO:RF:" + foto + ":%")).isEqualTo(1);
 	}
 }

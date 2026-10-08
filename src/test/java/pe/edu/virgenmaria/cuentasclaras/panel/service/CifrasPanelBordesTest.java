@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.panel.service;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -224,8 +223,6 @@ class CifrasPanelBordesTest {
 	 * familia Flores. Hoy suma S/ 450.00 por mes después del retiro: la familia aparece morosa por pensiones que no
 	 * corresponden y la deuda vencida del panel y del resumen crece sola.
 	 */
-	@Disabled("QA-S6-3: las pensiones que vencen después del retiro del alumno siguen sumando como deuda vencida y "
-			+ "mantienen morosa a la familia (CifrasCobranza.vencidos / CuotaRepository.vencidasPorAlumno)")
 	@Test
 	void debeExcluirDeLaDeudaVencidaLasPensionesQueVencenDespuesDelRetiro() {
 		retirar(datos.f().sebastian(), HOY);
@@ -250,8 +247,6 @@ class CifrasPanelBordesTest {
 	 * Primaria, cuando Administración mira la morosidad por grado, entonces «alumnos con deuda» no puede ser mayor que
 	 * «matriculados» (hoy la pantalla dice «2 con deuda vencida de 1 matriculado(s)» y el Excel lo repite).
 	 */
-	@Disabled("QA-S6-4: la morosidad por grado cuenta como «con deuda» a alumnos retirados que no cuenta como "
-			+ "matriculados (CifrasCobranza.morosidadPorGrado: matriculados solo ACTIVA, con deuda de cualquier estado)")
 	@Test
 	void laMorosidadPorGradoNoDebeTenerMasAlumnosConDeudaQueMatriculados() {
 		retirar(datos.f().valeria(), HOY);

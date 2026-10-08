@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.panel.service;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -163,6 +162,12 @@ class LlamadasControlBordesTest {
 		return new FamiliaParaLlamada(f.familiaId(), f.nombre(), f.apoderadosActivos(), true, f.contactos());
 	}
 
+	/** La muestra como la arma el servicio: con la deuda vencida de cada familia (todas pagaron hace poco en efectivo). */
+	private static List<FamiliaParaLlamada> elegir(long semilla, List<FamiliaParaLlamada> perfiles, List<Long> conDeuda) {
+		return MuestraLlamadas.elegirCandidatas(semilla, perfiles.stream().map(f -> new MuestraLlamadas.Candidata(f,
+				conDeuda.contains(f.familiaId()), false)).toList(), 3).stream().map(MuestraLlamadas.Candidata::perfil).toList();
+	}
+
 	private static boolean contiene(List<FamiliaParaLlamada> muestra, Long familiaId) {
 		return muestra.stream().anyMatch(f -> f.familiaId().equals(familiaId));
 	}
@@ -175,8 +180,6 @@ class LlamadasControlBordesTest {
 	 * Para que la prueba sea determinista se busca una semilla con la que esa familia sale de la muestra (con la misma
 	 * función {@link MuestraLlamadas#elegir}) y se deja como la semilla secreta de la semana.
 	 */
-	@Disabled("QA-S6-2: la muestra de la llamada de control cambia a mitad de semana si una familia mostrada cambia de "
-			+ "prioridad; registrar su resultado da 404 (LlamadasControl.muestra / registrar)")
 	@Test
 	void debeDejarRegistrarLaLlamadaAUnaFamiliaYaMostradaAunqueActiveSuPortalAMitadDeSemana() {
 		familiaQuePaga("71234591", "41234591", "923456791", MedioPago.EFECTIVO);
@@ -188,13 +191,17 @@ class LlamadasControlBordesTest {
 		UsuariosDePrueba.iniciarSesion(promotora);
 		List<FamiliaParaLlamada> antes = perfiles.de(ids);
 		SecurityContextHolder.clearContext();
+		// Correcciones del sprint 6 (S6-A2): la muestra pondera también la deuda vencida al lunes; se arma igual que el
+		// servicio para buscar la semilla con la que la familia saldría si la muestra se recalculara.
+		List<Long> conDeuda = jdbc.queryForList("SELECT DISTINCT a.familia_id FROM cuota c JOIN alumno a ON a.id = "
+				+ "c.alumno_id WHERE c.estado IN ('PENDIENTE', 'PARCIAL') AND c.fecha_vencimiento < ?", Long.class, LUNES);
 		long semilla = 0;
 		Long sale = null;
 		for (long s = 1; s < 10_000 && sale == null; s++) {
-			for (FamiliaParaLlamada x : MuestraLlamadas.elegir(s, antes, 3)) {
+			for (FamiliaParaLlamada x : elegir(s, antes, conDeuda)) {
 				List<FamiliaParaLlamada> despues = new ArrayList<>();
 				antes.forEach(f -> despues.add(f.familiaId().equals(x.familiaId()) ? conPortal(f) : f));
-				if (!contiene(MuestraLlamadas.elegir(s, despues, 3), x.familiaId())) {
+				if (!contiene(elegir(s, despues, conDeuda), x.familiaId())) {
 					semilla = s;
 					sale = x.familiaId();
 					break;
@@ -224,9 +231,25 @@ class LlamadasControlBordesTest {
 				.extracting(LlamadasSemana.Familia::familiaId).contains(familia);
 	}
 
+	/**
+	 * Correcciones del sprint 6 (S6-A2): una familia con deuda vencida entra a las candidatas aunque solo pague por Yape
+	 * (el efectivo no registrado deja deuda). Esta prueba deja a la familia de Yape AL DÍA (paga también marzo por Yape):
+	 * sin efectivo y sin deuda vencida no es candidata.
+	 */
 	@Test
 	void noDebeIncluirEnLaMuestraAUnaFamiliaQueSoloPagoConYape() {
 		Long soloYape = familiaQuePaga("71234593", "41234593", "923456793", MedioPago.YAPE);
+		Long alumno = jdbc.queryForObject("SELECT MIN(id) FROM alumno WHERE familia_id = ?", Long.class, soloYape);
+		List<Long> vencidas = jdbc.queryForList("SELECT id FROM cuota WHERE alumno_id = ? AND estado IN ('PENDIENTE', "
+				+ "'PARCIAL') AND fecha_vencimiento < ? ORDER BY fecha_vencimiento", Long.class, alumno, LUNES);
+		BigDecimal saldo = jdbc.queryForObject("SELECT COALESCE(SUM(monto - monto_pagado - monto_descuento), 0) FROM cuota "
+				+ "WHERE alumno_id = ? AND estado IN ('PENDIENTE', 'PARCIAL') AND fecha_vencimiento < ?", BigDecimal.class,
+				alumno, LUNES);
+		if (!vencidas.isEmpty()) {
+			EscenarioCobranza.como(EscenarioCaja.CAJA);
+			cobro.cobrar(EscenarioCaja.digital(soloYape, vencidas, MedioPago.YAPE, "YP2" + alumno, saldo.toPlainString()));
+			SecurityContextHolder.clearContext();
+		}
 		a(LUNES.plusDays(1), 10, 0);
 		UsuariosDePrueba.iniciarSesion(promotora);
 		LlamadasSemana semana = llamadas.deEstaSemana();

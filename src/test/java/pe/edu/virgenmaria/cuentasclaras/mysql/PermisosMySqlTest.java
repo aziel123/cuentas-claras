@@ -2489,11 +2489,12 @@ class PermisosMySqlTest {
 		// con los permisos de cc_app, como quedaría después de activarla.
 		Usuario usuario = UsuariosDePrueba.guardar(usuarios, codificador, r.id(), nombre, UsuariosDePrueba.CLAVE, false,
 				Rol.DOCENTE);
-		// Sprint 6 (trg_usuario_contacto): el contacto del PERSONAL no cambia por SQL; primero la cuenta pasa a ser del
-		// apoderado y después pierde el celular (la regla del apoderado no cambió).
+		// Sprint 6 (trg_usuario_contacto): el contacto del PERSONAL no cambia por SQL; la cuenta pasa a ser del apoderado y
+		// después pierde el celular (la regla del apoderado no cambió). Correcciones del sprint 6 (S6-A1): una cuenta con
+		// roles del personal no se enlaza a un apoderado, así que primero cambia el rol y después se enlaza.
+		jdbc.update("UPDATE usuario_rol SET rol = 'APODERADO' WHERE usuario_id = ?", usuario.getId());
 		jdbc.update("UPDATE usuario SET apoderado_id = ? WHERE id = ?", apoderado, usuario.getId());
 		jdbc.update("UPDATE usuario SET telefono_whatsapp = NULL WHERE id = ?", usuario.getId());
-		jdbc.update("UPDATE usuario_rol SET rol = 'APODERADO' WHERE usuario_id = ?", usuario.getId());
 		return new pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado(usuario.getId(), r.id(), nombre,
 				nombre, null, true, false, false, EnumSet.of(Rol.APODERADO), apoderado);
 	}
@@ -3092,7 +3093,8 @@ class PermisosMySqlTest {
 				+ "'VIGENTE' AND fecha BETWEEN ? AND ?", java.math.BigDecimal.class, dia.withDayOfMonth(1), dia));
 		libros.putAll(jdbc.queryForMap("SELECT COALESCE(SUM(c.monto - c.monto_pagado - c.monto_descuento), 0) AS deuda, "
 				+ "COUNT(DISTINCT a.familia_id) AS familias FROM cuota c JOIN alumno a ON a.id = c.alumno_id WHERE "
-				+ "c.colegio_id = 1 AND c.estado IN ('PENDIENTE', 'PARCIAL') AND c.fecha_vencimiento < ?", dia));
+				+ "c.colegio_id = 1 AND c.estado IN ('PENDIENTE', 'PARCIAL') AND c.fecha_vencimiento < ? AND "
+				+ "(a.retirado_en IS NULL OR c.fecha_vencimiento <= a.retirado_en)", dia));
 		return libros;
 	}
 
@@ -3132,8 +3134,8 @@ class PermisosMySqlTest {
 				.longValue());
 		assertThat(fila).containsEntry("creado_por", "sistema.panel");
 		long promotores = jdbc.queryForObject("SELECT COUNT(DISTINCT u.id) FROM usuario u JOIN usuario_rol r ON "
-				+ "r.usuario_id = u.id WHERE u.colegio_id = 1 AND u.activo AND r.rol = 'PROMOTOR' AND (u.telefono_whatsapp "
-				+ "IS NOT NULL OR u.correo IS NOT NULL)", Long.class);
+				+ "r.usuario_id = u.id WHERE u.colegio_id = 1 AND u.activo AND u.apoderado_id IS NULL AND r.rol = 'PROMOTOR' "
+				+ "AND (u.telefono_whatsapp IS NOT NULL OR u.correo IS NOT NULL)", Long.class);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE tipo = 'RESUMEN_DIARIO' AND entidad_id = ? AND "
 				+ "estado = 'PENDIENTE' AND creado_por = 'sistema.panel'", Long.class, foto.get().getId())).isEqualTo(promotores);
 		assertThat(resumenDiario.enColegio(1L, hoy)).as("idempotente").isEmpty();
@@ -3165,7 +3167,7 @@ class PermisosMySqlTest {
 				String.class, foto)).isNotEmpty().allMatch("ENVIADO"::equals);
 	}
 
-	/** Una foto válida de un día sin movimientos (todo en cero) de los años 50: [fecha, sentencia]. */
+	/** Un día pasado cualquiera de los años 50 (sin movimientos). */
 	private java.time.LocalDate diaSinMovimientos() {
 		return java.time.LocalDate.of(1950, 1, 1).plusDays(Math.floorMod(System.nanoTime(), 3000));
 	}
@@ -3173,73 +3175,125 @@ class PermisosMySqlTest {
 	private static final String INSERTAR_FOTO = "INSERT INTO resumen_diario (colegio_id, fecha, cortado_en, cobrado_total, "
 			+ "pagos_cantidad, cobrado_efectivo, pagos_efectivo, cobrado_mes, deuda_vencida, familias_morosas, "
 			+ "cajas_sin_cerrar, cierres_con_diferencia, solicitudes_pendientes, alertas_criticas, avisos_familias, "
-			+ "avisos_entregados, huella_secuencia, huella_codigo, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, ?, "
-			+ "0, 0, 0, ?, 0, 0, 0, 0, 0, 0, 0, 0, ?, ?, NOW(6), ?, NOW(6))";
+			+ "avisos_entregados, huella_secuencia, huella_codigo, parametros, creado_en, creado_por, actualizado_en) VALUES "
+			+ "(1, ?, ?, ?, 0, 0, 0, ?, 0, 0, 0, 0, 0, 0, 0, 0, ?, ?, ?, NOW(6), ?, NOW(6))";
 
 	private int foto(java.time.LocalDate dia, java.time.LocalDateTime corte, String cobrado, Long huella, String codigo,
 			String actor) {
 		return jdbc.update(INSERTAR_FOTO, dia, corte, new java.math.BigDecimal(cobrado), new java.math.BigDecimal(cobrado),
-				huella, codigo, actor);
+				huella, codigo, "x", actor);
 	}
 
 	/**
-	 * P3, P5, P18 y P21: la base solo acepta una foto con las cifras de los libros, de su día, de sistema.panel y con una
-	 * huella guardada; y nadie la edita ni la borra (1142).
+	 * La foto de hoy del colegio 1: si aún no existe, la guarda sistema.panel después de un cobro (así también sale un
+	 * domingo o un feriado). Su id, o vacío si no se pudo.
+	 */
+	private java.util.Optional<Long> fotoDeHoy() {
+		java.time.LocalDate hoy = java.time.LocalDate.now(LIMA);
+		if (jdbc.queryForObject("SELECT COUNT(*) FROM resumen_diario WHERE colegio_id = 1 AND fecha = ?", Long.class,
+				hoy) == 0) {
+			guardar("promo.foto." + sufijo, Rol.PROMOTOR);
+			familiaQuePagoEnEfectivo("caja.foto");
+			resumenDiario.enColegio(1L, hoy);
+		}
+		return java.util.Optional.ofNullable(jdbc.queryForObject("SELECT MAX(id) FROM resumen_diario WHERE colegio_id = 1 "
+				+ "AND fecha = ?", Long.class, hoy));
+	}
+
+	/**
+	 * P3, P5, P18 y P21 con las correcciones del sprint 6 (S6-M1): la base solo acepta la foto de HOY, cortada AHORA, con
+	 * las cifras y los conteos de los libros, de sistema.panel, con una huella guardada y con el texto de sus cifras; y
+	 * nadie la edita ni la borra (1142). La foto válida la guarda el flujo con los permisos mínimos.
 	 */
 	@Test
 	void laFotoDelResumenSoloSeAceptaConLasCifrasDeLosLibros() {
 		java.time.LocalDate dia = diaSinMovimientos();
-		java.time.LocalDateTime corte = dia.atTime(19, 30);
-		assertThat(codigoAl(() -> foto(dia, corte, "1.00", null, null, "sistema.panel"))).as("cifras inventadas")
+		java.time.LocalDate hoy = java.time.LocalDate.now(LIMA);
+		java.time.LocalDateTime ahora = java.time.LocalDateTime.now(LIMA);
+		assertThat(codigoAl(() -> foto(dia, dia.atTime(19, 30), "0.00", null, null, "sistema.panel")))
+				.as("un día pasado, aunque todo esté en cero").isEqualTo(1644);
+		assertThat(codigoAl(() -> foto(hoy, ahora, "0.00", null, null, "caja"))).as("otro actor").isEqualTo(1644);
+		assertThat(codigoAl(() -> foto(hoy, ahora.minusHours(2), "0.00", null, null, "sistema.panel")))
+				.as("un corte que no es de ahora").isEqualTo(1644);
+		assertThat(codigoAl(() -> foto(hoy, ahora, "123456.00", null, null, "sistema.panel"))).as("cifras inventadas")
 				.isEqualTo(1644);
-		assertThat(codigoAl(() -> foto(dia, corte, "0.00", null, null, "caja"))).as("otro actor").isEqualTo(1644);
-		assertThat(codigoAl(() -> foto(dia, dia.plusDays(1).atTime(7, 0), "0.00", null, null, "sistema.panel")))
-				.as("corte de otro día").isEqualTo(1644);
-		assertThat(codigoAl(() -> foto(dia, corte, "0.00", 999_999_999L, "0123456789abcdef", "sistema.panel")))
-				.as("huella inventada").isEqualTo(1644);
-		assertThat(foto(dia, corte, "0.00", null, null, "sistema.panel")).isEqualTo(1);
+		assertThat(codigoAl(() -> foto(hoy, ahora, "0.00", 999_999_999L, "0123456789abcdef", "sistema.panel")))
+				.as("huella inventada (o, antes, las cifras de hoy)").isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE resumen_diario SET cobrado_total = 1 WHERE fecha = ?", dia)))
 				.isEqualTo(1142);
 		assertThat(codigoAl(() -> jdbc.update("DELETE FROM resumen_diario WHERE fecha = ?", dia))).isEqualTo(1142);
 	}
 
-	/** P7 y P21: el resumen y las alertas los crea solo sistema.panel y van solo a Promotoría (y Dirección, las alertas). */
+	/**
+	 * P7 y P21: el resumen y las alertas los crea solo sistema.panel y van solo a Promotoría (y Dirección, las alertas).
+	 * Correcciones del sprint 6: el resumen lleva el texto exacto de su foto (S6-M1) y el correo externo es el de la fila
+	 * de configuracion_colegio de ESE colegio (QA-S6-6).
+	 */
 	@Test
 	void elResumenYLasAlertasSoloVanAPromotoria() {
-		java.time.LocalDate dia = diaSinMovimientos();
-		foto(dia, dia.atTime(19, 30), "0.00", null, null, "sistema.panel");
-		Long foto = jdbc.queryForObject("SELECT id FROM resumen_diario WHERE colegio_id = 1 AND fecha = ?", Long.class, dia);
+		java.util.Optional<Long> deHoy = fotoDeHoy();
+		org.junit.jupiter.api.Assumptions.assumeTrue(deHoy.isPresent(), "hoy no corresponde resumen (domingo o feriado)");
+		Long foto = deHoy.get();
+		String texto = jdbc.queryForObject("SELECT parametros FROM resumen_diario WHERE id = ?", String.class, foto);
 		Usuario cajera = guardar("caja.p7." + sufijo, Rol.CAJA);
 		Usuario promotora = guardar("promo.p7." + sufijo, Rol.PROMOTOR);
 		Usuario directora = guardar("dir.p7." + sufijo, Rol.DIRECTOR);
 		String insertar = "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, usuario_id, destino, "
 				+ "plantilla, parametros, entidad, entidad_id, estado, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, "
-				+ "'WHATSAPP', 'USUARIO', ?, ?, ?, 'x', ?, ?, 'PENDIENTE', NOW(6), ?, NOW(6))";
+				+ "'WHATSAPP', 'USUARIO', ?, ?, ?, ?, ?, ?, 'PENDIENTE', NOW(6), ?, NOW(6))";
 		assertThat(codigoAl(() -> jdbc.update(insertar, "p7a-" + sufijo, "RESUMEN_DIARIO", cajera.getId(),
-				cajera.getTelefonoWhatsapp(), "RESUMEN_DIARIO", "resumen_diario", foto, "sistema.panel")))
+				cajera.getTelefonoWhatsapp(), "RESUMEN_DIARIO", texto, "resumen_diario", foto, "sistema.panel")))
 				.as("resumen a una cajera").isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update(insertar, "p7b-" + sufijo, "ALERTA_PROMOTORIA", cajera.getId(),
-				cajera.getTelefonoWhatsapp(), "ALERTA_PROMOTORIA", "aviso", null, "sistema.panel")))
+				cajera.getTelefonoWhatsapp(), "ALERTA_PROMOTORIA", "x", "aviso", null, "sistema.panel")))
 				.as("alerta a una cajera").isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update(insertar, "p7c-" + sufijo, "ALERTA_PROMOTORIA", promotora.getId(),
-				promotora.getTelefonoWhatsapp(), "ALERTA_PROMOTORIA", "aviso", null, "caja")))
+				promotora.getTelefonoWhatsapp(), "ALERTA_PROMOTORIA", "x", "aviso", null, "caja")))
 				.as("alerta que no crea sistema.panel").isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update(insertar, "p7d-" + sufijo, "RESUMEN_DIARIO", promotora.getId(),
-				promotora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", "resumen_diario", 0L, "sistema.panel")))
+				promotora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", texto, "resumen_diario", 0L, "sistema.panel")))
 				.as("resumen sin su foto").isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update(insertar, "p7e-" + sufijo, "RESUMEN_DIARIO", directora.getId(),
-				directora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", "resumen_diario", foto, "sistema.panel")))
+				directora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", texto, "resumen_diario", foto, "sistema.panel")))
 				.as("resumen a Dirección").isEqualTo(1644);
-		assertThat(codigoAl(() -> jdbc.update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, "
-				+ "destino, plantilla, parametros, entidad, entidad_id, estado, creado_en, creado_por, actualizado_en) VALUES "
-				+ "(1, ?, 'RESUMEN_DIARIO', 'CORREO', 'EXTERNO', 'otro@contador.pe', 'RESUMEN_DIARIO', 'x', 'resumen_diario', "
-				+ "?, 'PENDIENTE', NOW(6), 'sistema.panel', NOW(6))", "p7f-" + sufijo, foto)))
+		assertThat(codigoAl(() -> jdbc.update(insertar, "p7i-" + sufijo, "RESUMEN_DIARIO", promotora.getId(),
+				promotora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", texto.replaceFirst("S/ ", "S/ 9"), "resumen_diario", foto,
+				"sistema.panel"))).as("S6-M1: con otro texto que el de su foto").isEqualTo(1644);
+		String externo = "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, destino, plantilla, "
+				+ "parametros, entidad, entidad_id, estado, creado_en, creado_por, actualizado_en) VALUES (1, ?, "
+				+ "'RESUMEN_DIARIO', 'CORREO', 'EXTERNO', ?, 'RESUMEN_DIARIO', ?, 'resumen_diario', ?, 'PENDIENTE', NOW(6), "
+				+ "'sistema.panel', NOW(6))";
+		assertThat(codigoAl(() -> jdbc.update(externo, "p7f-" + sufijo, "otro@contador.pe", texto, foto)))
 				.as("correo externo sin la fila del DBA").isEqualTo(1644);
-		// Lo que sí: sistema.panel a Promotoría (el resumen y la alerta) y a Dirección (la alerta).
+		String claveMigrador = System.getenv("CC_MYSQL_CLAVE_MIGRADOR");
+		if (claveMigrador != null && !claveMigrador.isBlank()) {
+			// QA-S6-6: la fila del DBA es de un colegio; la de otro colegio (o la vieja de configuracion_bd) no sirve.
+			JdbcTemplate migrador = new JdbcTemplate(new org.springframework.jdbc.datasource.DriverManagerDataSource(
+					System.getenv().getOrDefault("CC_MYSQL_URL",
+							"jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false"),
+					"cc_migrador", claveMigrador));
+			String correo = "contador." + sufijo + "@estudio.pe";
+			Long otroColegio = migrador.queryForObject("SELECT MAX(id) FROM colegio", Long.class);
+			if (otroColegio != null && otroColegio != 1L) {
+				migrador.update("INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en) VALUES (?, "
+						+ "'resumen_correo_externo', ?, NOW(6))", otroColegio, correo);
+				assertThat(codigoAl(() -> jdbc.update(externo, "p7j-" + sufijo, correo, texto, foto)))
+						.as("QA-S6-6: el correo del contador de OTRO colegio").isEqualTo(1644);
+				migrador.update("DELETE FROM configuracion_colegio WHERE colegio_id = ? AND valor = ?", otroColegio, correo);
+			}
+		}
+		// Lo que sí: sistema.panel a Promotoría (el resumen con su texto y la alerta) y a Dirección (la alerta).
 		assertThat(jdbc.update(insertar, "p7g-" + sufijo, "RESUMEN_DIARIO", promotora.getId(),
-				promotora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", "resumen_diario", foto, "sistema.panel")).isEqualTo(1);
+				promotora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", texto, "resumen_diario", foto, "sistema.panel"))
+				.isEqualTo(1);
 		assertThat(jdbc.update(insertar, "p7h-" + sufijo, "ALERTA_PROMOTORIA", directora.getId(),
-				directora.getTelefonoWhatsapp(), "ALERTA_PROMOTORIA", "aviso", null, "sistema.panel")).isEqualTo(1);
+				directora.getTelefonoWhatsapp(), "ALERTA_PROMOTORIA", "x", "aviso", null, "sistema.panel")).isEqualTo(1);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en) "
+				+ "VALUES (1, 'resumen_correo_externo', 'x@y.pe', NOW(6))"))).as("cc_app no escribe la fila del DBA")
+				.isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE configuracion_colegio SET valor = valor WHERE 1 = 0")))
+				.isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM configuracion_colegio WHERE 1 = 0"))).isEqualTo(1142);
 	}
 
 	/**
@@ -3266,7 +3320,9 @@ class PermisosMySqlTest {
 		avisosPromotoria.enColegio(1L, lunes);
 		avisosPromotoria.enColegio(1L, lunes);
 
-		String clave = "ALERTA:ANULACION_PAGO_PENDIENTE:S:" + solicitud + ":U%";
+		// Correcciones del sprint 6 (S6-B2): las anulaciones pendientes son UN aviso por día (S:<fecha>).
+		assertThat(solicitud).isNotNull();
+		String clave = "ALERTA:ANULACION_PAGO_PENDIENTE:S:" + java.time.LocalDate.now(LIMA) + ":U%";
 		assertThat(jdbc.queryForList("SELECT usuario_id FROM mensaje WHERE clave LIKE ? AND creado_por = 'sistema.panel'",
 				Long.class, clave)).contains(promotora.getId(), directora.getId()).doesNotHaveDuplicates();
 	}
@@ -3392,6 +3448,155 @@ class PermisosMySqlTest {
 		return jdbc.update(INSERTAR_LLAMADA, semana, familia, resultado, nota, quien);
 	}
 
+	/**
+	 * Correcciones del sprint 6 (S6-B3): si la muestra de esta semana aún no está congelada, la congela el SERVICIO (con su
+	 * semilla y los permisos mínimos: así trg_muestra_llamada_registro prueba las filas que elige la aplicación). Cada
+	 * prueba que agrega familias a la muestra por SQL lo llama ANTES de crear sus familias.
+	 */
+	private void congelarConElServicio() {
+		if (jdbc.queryForObject("SELECT COUNT(*) FROM muestra_llamada WHERE colegio_id = 1 AND semana = ?", Long.class,
+				lunesDeEstaSemana()) > 0) {
+			return;
+		}
+		// Una familia nueva con cuotas vencidas: hay al menos una candidata (DEUDA) aunque nadie haya pagado antes del lunes.
+		alumnoParaElPanel();
+		UsuariosDePrueba.iniciarSesion(guardar("promo.congela." + sufijo, Rol.PROMOTOR));
+		try {
+			llamadasControl.deEstaSemana();
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+	}
+
+	/** Correcciones del sprint 6: la familia entra a la muestra congelada de esta semana (con los permisos de cc_app). */
+	private int enLaMuestra(Long familia, String motivo, String quien) {
+		if (jdbc.queryForObject("SELECT COUNT(*) FROM muestra_llamada WHERE colegio_id = 1 AND semana = ? AND familia_id = ?",
+				Long.class, lunesDeEstaSemana(), familia) > 0) {
+			return 1;
+		}
+		return jdbc.update("INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (1, ?, ?, ?, NOW(6), ?, NOW(6))", lunesDeEstaSemana(), familia, motivo, quien);
+	}
+
+	private int llamadaIntento(Long familia, String resultado, int intento, boolean porDelegacion, String quien,
+			java.time.LocalDateTime creadoEn) {
+		return jdbc.update("INSERT INTO llamada_control (colegio_id, semana, familia_id, resultado, intento, por_delegacion, "
+				+ "creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, ?, ?, ?, ?, ?, NOW(6))", lunesDeEstaSemana(), familia,
+				resultado, intento, porDelegacion, creadoEn, quien);
+	}
+
+	/**
+	 * Correcciones del sprint 6 (S6-A2 y S6-B3): trg_muestra_llamada_registro. La muestra la fija Promotoría, Dirección o
+	 * sistema.panel (no Caja), para la semana en curso, con familias candidatas según su motivo (EFECTIVO: pagó en
+	 * efectivo; DEUDA: tiene deuda vencida) y un reemplazo solo de quien no contestó dos veces. Solo inserción (1142).
+	 */
+	@Test
+	void laMuestraCongeladaSoloAceptaCandidatasDeLaSemana() {
+		congelarConElServicio();
+		Long familia = familiaQuePagoEnEfectivo("caja.mu1");
+		Long sinEfectivo = alumnoParaElPanel()[0];
+		Usuario promotora = guardar("promo.mu1." + sufijo, Rol.PROMOTOR);
+		Usuario caja = guardar("caja.mu1b." + sufijo, Rol.CAJA);
+		assertThat(codigoAl(() -> enLaMuestra(familia, "EFECTIVO", caja.getNombreUsuario()))).as("Caja").isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, "
+				+ "creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'EFECTIVO', NOW(6), ?, NOW(6))",
+				lunesDeEstaSemana().minusWeeks(1), familia, promotora.getNombreUsuario()))).as("otra semana").isEqualTo(1644);
+		assertThat(codigoAl(() -> enLaMuestra(sinEfectivo, "EFECTIVO", promotora.getNombreUsuario())))
+				.as("EFECTIVO de una familia que no pagó en efectivo").isEqualTo(1644);
+		assertThat(enLaMuestra(familia, "EFECTIVO", promotora.getNombreUsuario())).isEqualTo(1);
+		Long otra = familiaQuePagoEnEfectivo("caja.mu1c");
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, "
+				+ "reemplaza_familia_id, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'REEMPLAZO', ?, NOW(6), ?, "
+				+ "NOW(6))", lunesDeEstaSemana(), otra, familia, promotora.getNombreUsuario())))
+				.as("reemplazo de una familia que no dejó de contestar dos veces").isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE muestra_llamada SET motivo = 'DEUDA' WHERE familia_id = ?", familia)))
+				.isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM muestra_llamada WHERE familia_id = ?", familia))).isEqualTo(1142);
+	}
+
+	/**
+	 * Correcciones del sprint 6 (S6-M2): trg_delegacion_llamada_registro y trg_llamada_control_registro. Dirección no
+	 * registra sin la semana delegada; la delegación la hace solo Promotoría, para la semana en curso; con ella, Dirección
+	 * registra marcando por_delegacion (y Promotoría, sin marcarlo); el segundo intento solo tras un «No contesta», y a una
+	 * familia reemplazada ya no se la registra.
+	 */
+	@Test
+	void direccionRegistraSoloConLaSemanaDelegadaYElSegundoIntentoTrasNoContesta() {
+		congelarConElServicio();
+		Long familia = familiaQuePagoEnEfectivo("caja.de1");
+		Long otra = familiaQuePagoEnEfectivo("caja.de2");
+		Usuario promotora = guardar("promo.de1." + sufijo, Rol.PROMOTOR);
+		Usuario directora = guardar("dir.de1." + sufijo, Rol.DIRECTOR);
+		java.time.LocalDateTime ahora = java.time.LocalDateTime.now(LIMA);
+		enLaMuestra(familia, "EFECTIVO", promotora.getNombreUsuario());
+		enLaMuestra(otra, "EFECTIVO", promotora.getNombreUsuario());
+		boolean yaDelegada = jdbc.queryForObject("SELECT COUNT(*) FROM delegacion_llamada WHERE colegio_id = 1 AND semana = ?",
+				Long.class, lunesDeEstaSemana()) > 0;
+		if (!yaDelegada) {
+			assertThat(codigoAl(() -> llamadaIntento(familia, "CONFIRMA", 1, true, directora.getNombreUsuario(), ahora)))
+					.as("Dirección sin la semana delegada").isEqualTo(1644);
+		}
+		String delegar = "INSERT INTO delegacion_llamada (colegio_id, semana, creado_en, creado_por, actualizado_en) VALUES "
+				+ "(1, ?, NOW(6), ?, NOW(6))";
+		assertThat(codigoAl(() -> jdbc.update(delegar, lunesDeEstaSemana(), directora.getNombreUsuario())))
+				.as("Dirección no se delega sola").isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(delegar, lunesDeEstaSemana().minusWeeks(1), promotora.getNombreUsuario())))
+				.as("otra semana").isEqualTo(1644);
+		if (!yaDelegada) {
+			assertThat(jdbc.update(delegar, lunesDeEstaSemana(), promotora.getNombreUsuario())).isEqualTo(1);
+		}
+		assertThat(codigoAl(() -> jdbc.update(delegar, lunesDeEstaSemana(), promotora.getNombreUsuario())))
+				.as("una por semana").isEqualTo(1062);
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM delegacion_llamada WHERE 1 = 0"))).isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE delegacion_llamada SET version = version WHERE 1 = 0")))
+				.isEqualTo(1142);
+
+		assertThat(codigoAl(() -> llamadaIntento(familia, "NO_CONTESTA", 1, false, directora.getNombreUsuario(), ahora)))
+				.as("Dirección sin marcar por_delegacion").isEqualTo(1644);
+		assertThat(codigoAl(() -> llamadaIntento(familia, "NO_CONTESTA", 1, true, promotora.getNombreUsuario(), ahora)))
+				.as("Promotoría marcando por_delegacion").isEqualTo(1644);
+		assertThat(codigoAl(() -> llamadaIntento(familia, "CONFIRMA", 2, false, promotora.getNombreUsuario(), ahora)))
+				.as("segundo intento sin un primero").isEqualTo(1644);
+		assertThat(llamadaIntento(familia, "CONFIRMA", 1, true, directora.getNombreUsuario(), ahora)).isEqualTo(1);
+		assertThat(codigoAl(() -> llamadaIntento(familia, "NO_CONTESTA", 2, false, promotora.getNombreUsuario(), ahora)))
+				.as("segundo intento tras un «Confirma»").isEqualTo(1644);
+		assertThat(llamadaIntento(otra, "NO_CONTESTA", 1, false, promotora.getNombreUsuario(), ahora)).isEqualTo(1);
+		assertThat(llamadaIntento(otra, "NO_CONTESTA", 2, false, promotora.getNombreUsuario(), ahora)).isEqualTo(1);
+		assertThat(codigoAl(() -> llamadaIntento(otra, "CONFIRMA", 3, false, promotora.getNombreUsuario(), ahora)))
+				.as("un tercer intento").isEqualTo(1644);
+	}
+
+	/**
+	 * Correcciones del sprint 6 (S6-M2) con los permisos mínimos: el primer «No contesta» (de hace dos horas), el segundo
+	 * por el servicio y el reemplazo que elige el servicio con la semilla pasan los triggers (muestra con REEMPLAZO y
+	 * llamada); la familia reemplazada ya no se registra.
+	 */
+	@Test
+	void flujoReemplazoConPermisosMinimos() {
+		congelarConElServicio();
+		Long familia = familiaQuePagoEnEfectivo("caja.re1");
+		familiaQuePagoEnEfectivo("caja.re2");
+		Usuario promotora = guardar("promo.re1." + sufijo, Rol.PROMOTOR);
+		UsuariosDePrueba.iniciarSesion(promotora);
+		llamadasControl.deEstaSemana();
+		SecurityContextHolder.clearContext();
+		enLaMuestra(familia, "EFECTIVO", promotora.getNombreUsuario());
+		assertThat(llamadaIntento(familia, "NO_CONTESTA", 1, false, promotora.getNombreUsuario(),
+				java.time.LocalDateTime.now(LIMA).minusHours(2))).isEqualTo(1);
+		UsuariosDePrueba.iniciarSesion(promotora);
+		llamadasControl.registrar(familia, new pe.edu.virgenmaria.cuentasclaras.panel.dto.LlamadaRequest(
+				pe.edu.virgenmaria.cuentasclaras.panel.model.ResultadoLlamada.NO_CONTESTA, null));
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM muestra_llamada WHERE colegio_id = 1 AND semana = ? AND "
+				+ "motivo = 'REEMPLAZO' AND reemplaza_familia_id = ?", Long.class, lunesDeEstaSemana(), familia))
+				.as("el servicio eligió otra con la semilla").isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'LLAMADA_CONTROL_REEMPLAZADA' "
+				+ "AND entidad_id = ?", Long.class, familia.toString())).isEqualTo(1);
+		assertThat(codigoAl(() -> llamadaIntento(familia, "CONFIRMA", 1, false, promotora.getNombreUsuario(),
+				java.time.LocalDateTime.now(LIMA)))).as("a la reemplazada ya no").isIn(1644, 1062);
+	}
+
 	/** P17: Administración o Caja no registran llamadas de control (aunque la familia pagó en efectivo). */
 	@Test
 	void llamadaPorAdministracionFallaCon1644() {
@@ -3419,19 +3624,24 @@ class PermisosMySqlTest {
 	@Test
 	void llamadaDeOtraSemanaFallaCon1644() {
 		Long familia = familiaQuePagoEnEfectivo("caja.lc3");
-		Usuario directora = guardar("dir.lc3." + sufijo, Rol.DIRECTOR);
+		Usuario promotora = guardar("promo.lc3." + sufijo, Rol.PROMOTOR);
 		java.time.LocalDate lunes = lunesDeEstaSemana();
 		for (java.time.LocalDate semana : java.util.List.of(lunes.minusWeeks(1), lunes.plusWeeks(1), lunes.plusDays(1))) {
-			assertThat(codigoAl(() -> llamada(semana, familia, "CONFIRMA", null, directora.getNombreUsuario())))
+			assertThat(codigoAl(() -> llamada(semana, familia, "CONFIRMA", null, promotora.getNombreUsuario())))
 					.as(semana.toString()).isEqualTo(1644);
 		}
 	}
 
-	/** Solo inserción: ni la corrige quien la hizo (1142); una por familia y semana (1062); «No confirma» lleva nota (3819). */
+	/**
+	 * Solo inserción: ni la corrige quien la hizo (1142); una por familia, semana e intento (1062); «No confirma» lleva
+	 * nota (3819). La familia está en la muestra congelada de la semana (correcciones del sprint 6).
+	 */
 	@Test
 	void llamadaNoSeEditaNiSeBorra() {
+		congelarConElServicio();
 		Long familia = familiaQuePagoEnEfectivo("caja.lc4");
 		Usuario promotora = guardar("promo.lc4." + sufijo, Rol.PROMOTOR);
+		assertThat(enLaMuestra(familia, "EFECTIVO", promotora.getNombreUsuario())).isEqualTo(1);
 		assertThat(codigoAl(() -> llamada(lunesDeEstaSemana(), familia, "NO_CONFIRMA", null,
 				promotora.getNombreUsuario()))).as("«No confirma» sin nota").isEqualTo(3819);
 		assertThat(llamada(lunesDeEstaSemana(), familia, "NO_CONFIRMA", "Dice que pagó 500 soles, no 450",
@@ -3455,8 +3665,15 @@ class PermisosMySqlTest {
 		UsuariosDePrueba.iniciarSesion(promotora);
 		var semana = llamadasControl.deEstaSemana();
 		assertThat(semana.familias()).isNotEmpty();
+		// Correcciones del sprint 6 (S6-B3): la muestra queda congelada en muestra_llamada; la fija SIEMPRE el servicio con
+		// la semilla LLAMADA_CONTROL (las pruebas que agregan familias por SQL la congelan antes con congelarConElServicio).
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM muestra_llamada WHERE colegio_id = 1 AND semana = ?",
+				Long.class, lunesDeEstaSemana())).isPositive();
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM semilla_muestreo WHERE colegio_id = 1 AND ambito = "
 				+ "'LLAMADA_CONTROL' AND fecha = ?", Long.class, lunesDeEstaSemana())).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE colegio_id = 1 AND accion = "
+				+ "'MUESTRA_LLAMADAS_FIJADA'", Long.class)).as("la congeló el servicio (trigger con las filas de la aplicación)")
+				.isPositive();
 		var pendiente = semana.familias().stream().filter(f -> f.pendiente()).findFirst();
 		org.junit.jupiter.api.Assumptions.assumeTrue(pendiente.isPresent(), "ya se llamó a toda la muestra (otra corrida)");
 		Long familia = pendiente.get().familiaId();

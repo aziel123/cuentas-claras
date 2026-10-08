@@ -19,8 +19,9 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 
 /**
  * {@code GET /panel/llamadas}: la llamada de control de la semana; {@code POST /panel/llamadas/{familiaId}}: su resultado
- * (sprint 6, tanda 3). Promotoría y Dirección. Sin lógica: delega en {@link LlamadasControl} (que exige el rol, que la
- * familia esté en la muestra de la semana y que no se haya registrado antes).
+ * (sprint 6, tanda 3). Promotoría y Dirección (Dirección registra solo la semana que Promotoría se la delega:
+ * {@code POST /panel/llamadas/delegar}, S6-M2). Sin lógica: delega en {@link LlamadasControl} (que exige el rol, que la
+ * familia esté en la muestra de la semana y que la plaza siga abierta).
  */
 @Controller
 public class LlamadasControlController {
@@ -36,6 +37,20 @@ public class LlamadasControlController {
 		model.addAttribute("llamadas", llamadas.deEstaSemana());
 		model.addAttribute("volver", usuario != null && usuario.roles().contains(Rol.PROMOTOR) ? "/panel" : "/inicio");
 		return "panel/llamadas";
+	}
+
+	/** S6-M2: Promotoría delega a Dirección las llamadas de esta semana (el servicio exige Promotoría). */
+	@PostMapping("/panel/llamadas/delegar")
+	public String delegar(RedirectAttributes avisos) {
+		try {
+			llamadas.delegarADireccion();
+			avisos.addFlashAttribute("exito", "Listo: esta semana Dirección también puede registrar las llamadas. Te "
+					+ "avisaremos de cada una.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/panel/llamadas";
 	}
 
 	@PostMapping("/panel/llamadas/{familiaId:\\d+}")

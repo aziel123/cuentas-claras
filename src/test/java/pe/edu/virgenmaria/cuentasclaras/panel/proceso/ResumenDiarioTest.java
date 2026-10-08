@@ -237,11 +237,14 @@ class ResumenDiarioTest {
 				.isEqualTo(1);
 	}
 
-	/** Decisión 69: si el DBA dejó el correo del contador, también le llega (EXTERNO, solo con su fila). */
+	/**
+	 * Decisión 69: si el DBA dejó el correo del contador, también le llega (EXTERNO, solo con su fila). Correcciones del
+	 * sprint 6 (QA-S6-6): la fila es de configuracion_colegio, del colegio de la foto.
+	 */
 	@Test
 	void alCorreoExternoSoloSiElDbaLoConfiguro() {
-		jdbc.update("INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('resumen_correo_externo', "
-				+ "'contador@estudio.pe', CURRENT_TIMESTAMP)");
+		jdbc.update("INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en) VALUES (1, "
+				+ "'resumen_correo_externo', 'contador@estudio.pe', CURRENT_TIMESTAMP)");
 		a(19, 30);
 		resumenDe(JUEVES);
 		assertThat(jdbc.queryForList("SELECT destinatario_tipo, canal, destino FROM mensaje WHERE tipo = 'RESUMEN_DIARIO' "

@@ -175,6 +175,13 @@ public interface PagoRepository extends Repository<Pago, Long> {
 	List<Long> familiasConEfectivoEntre(@Param("desde") java.time.LocalDate desde,
 			@Param("hasta") java.time.LocalDate hasta);
 
+	/** Correcciones del sprint 6 (S6-A2): las familias con algún pago VIGENTE (cualquier medio) en el rango, por id. */
+	@Query("select distinct p.familia.id from Pago p where p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model"
+			+ ".EstadoPago.VIGENTE and p.fecha between :desde and :hasta order by p.familia.id")
+	List<Long> familiasConPagosEntre(@Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta);
+
+
 	/** Los pagos de una familia en un rango (todos los medios y estados): fecha, medio, total, estado, serie, número, cajero. */
 	@Query("select p.fecha, p.medio, p.total, p.estado, c.serie, c.numero, p.cajero from Pago p join p.comprobante c "
 			+ "where p.familia.id = :familia and p.fecha between :desde and :hasta order by p.fecha, p.id")

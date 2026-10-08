@@ -75,7 +75,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V22): Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V23): Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Permisos por tabla de cc_app
@@ -96,6 +96,9 @@ jobs:
 
       - name: "Fase 2: la aplicación funciona con los permisos mínimos de cc_app"
         run: ./mvnw -B test -Dtest=PermisosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint6MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Fase 2b (sprint 5): con la mensajería simulada habilitada por el DBA, los mensajes y enlaces salen"
         run: |
@@ -302,7 +305,9 @@ jobs:
           # responde 1644 antes que el CHECK); y el celular del personal no cambia sin su solicitud aprobada.
           comprobar 1142 "DELETE FROM resumen_diario WHERE 1 = 0"
           comprobar 1142 "UPDATE resumen_diario SET version = version WHERE 1 = 0"
-          comprobar 1644 "INSERT INTO resumen_diario (colegio_id, fecha, cortado_en, cobrado_total, pagos_cantidad, cobrado_efectivo, pagos_efectivo, cobrado_mes, deuda_vencida, familias_morosas, cajas_sin_cerrar, cierres_con_diferencia, solicitudes_pendientes, alertas_criticas, avisos_familias, avisos_entregados, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-01', '2000-01-01 19:30:00', 1.00, 1, 0, 0, 1.00, 0, 0, 0, 0, 0, 0, 0, 0, NOW(6), 'sistema.panel', NOW(6))"
+          # (Correcciones del sprint 6: la foto en cero de un día pasado; la versión de V23 del trigger la rechaza por la
+          # fecha y la anterior la dejaba llegar a la FK del colegio: 1452.)
+          comprobar 1644 "INSERT INTO resumen_diario (colegio_id, fecha, cortado_en, cobrado_total, pagos_cantidad, cobrado_efectivo, pagos_efectivo, cobrado_mes, deuda_vencida, familias_morosas, cajas_sin_cerrar, cierres_con_diferencia, solicitudes_pendientes, alertas_criticas, avisos_familias, avisos_entregados, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-01', '2000-01-01 19:30:00', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NOW(6), 'sistema.panel', NOW(6))"
           comprobar 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'verificador-panel', 'ALERTA_PROMOTORIA', 'CORREO', 'X', 'x@y.pe', 'verificador', '', 'PENDIENTE', NOW(6), 'verificador', NOW(6))"
           personal=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT MIN(id) FROM usuario WHERE apoderado_id IS NULL AND telefono_whatsapp IS NOT NULL")
           comprobar 1644 "UPDATE usuario SET telefono_whatsapp = '+51900000009' WHERE id = ${personal}"
@@ -311,6 +316,20 @@ jobs:
           comprobar 1142 "DELETE FROM llamada_control WHERE 1 = 0"
           comprobar 1142 "UPDATE llamada_control SET version = version WHERE 1 = 0"
           comprobar 1644 "INSERT INTO llamada_control (colegio_id, semana, familia_id, resultado, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-03', 0, 'CONFIRMA', NOW(6), 'verificador', NOW(6))"
+          # Correcciones del sprint 6 (V23): la muestra congelada y la delegación de las llamadas son de solo inserción y
+          # sus triggers rechazan a quien no es de Promotoría ni Dirección (1644); configuracion_colegio solo la escribe
+          # el DBA (1142); una cuenta del personal no se enlaza a un apoderado (1644, S6-A1).
+          for tabla in muestra_llamada delegacion_llamada configuracion_colegio; do
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          for tabla in muestra_llamada delegacion_llamada; do
+            comprobar 1142 "UPDATE $tabla SET version = version WHERE 1 = 0"
+          done
+          comprobar 1142 "INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en) VALUES (1, 'resumen_correo_externo', 'x@y.pe', NOW(6))"
+          comprobar 1142 "UPDATE configuracion_colegio SET valor = valor WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-03', 0, 'EFECTIVO', NOW(6), 'verificador', NOW(6))"
+          comprobar 1644 "INSERT INTO delegacion_llamada (colegio_id, semana, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-03', NOW(6), 'verificador', NOW(6))"
+          comprobar 1644 "UPDATE usuario SET apoderado_id = (SELECT MIN(id) FROM apoderado) WHERE id = ${personal}"
           # G10 y G11: sin la fila 'mensajeria_simulada' (como en prod), la base no acepta un mensaje simulado. El
           # mensaje PENDIENTE lo dejó PermisosMySqlTest.simuladoSinPermisoDeLaBaseFallaCon1644.
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'mensajeria_simulada'")
@@ -354,6 +373,7 @@ jobs:
           grep -q "Permisos y triggers de feriados, semilla del muestreo y cierre bancario mensual verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de la verificación de contactos, la huella por hora y los feriados aprobados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers del panel (resumen diario, alertas a Promotoría, contacto del personal y llamadas de control) verificados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Permisos y triggers de las correcciones del sprint 6 (muestra congelada, delegación de las llamadas, texto del resumen y correo externo por colegio) verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Triggers verificados: están los" prod.log || { cat prod.log; exit 1; }
           kill "$PID_APP"
           if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \

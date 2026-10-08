@@ -19,6 +19,8 @@ public final class LimpiezaBaseDatos {
 	public static void limpiar(JdbcTemplate jdbc) {
 		// Sprint 6, tanda 3 (V22): la llamada de control apunta a la familia.
 		jdbc.update("DELETE FROM llamada_control");
+		jdbc.update("DELETE FROM muestra_llamada");
+		jdbc.update("DELETE FROM delegacion_llamada");
 		// Sprint 6, tanda 2 (V21): la foto del resumen diario (sus mensajes se borran con los demás, más abajo).
 		jdbc.update("DELETE FROM resumen_diario");
 		// Correcciones del sprint 5 (V20): la verificación apunta a su mensaje y al apoderado; la huella de la hora.
@@ -107,6 +109,7 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM enlace_activacion");
 		jdbc.update("DELETE FROM usuario_rol");
 		jdbc.update("DELETE FROM usuario");
+		jdbc.update("DELETE FROM configuracion_colegio");
 		jdbc.update("DELETE FROM colegio WHERE id <> 1");
 		jdbc.update("DELETE FROM configuracion_bd");
 	}

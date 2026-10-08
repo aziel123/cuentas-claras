@@ -86,6 +86,14 @@ public class CifrasCobranza {
 				masAntiguaPorFamilia.size(), filas.stream().mapToLong(Vencido::cuotas).sum(), tramos);
 	}
 
+	/**
+	 * Correcciones del sprint 6 (S6-A2): las familias con deuda vencida al día {@code al}, por id. Son candidatas de la
+	 * llamada de control: el efectivo que la cajera no registró no deja pago, pero sí deuda.
+	 */
+	public List<Long> familiasConDeudaVencida(LocalDate al) {
+		return vencidos(al).stream().map(Vencido::familiaId).distinct().sorted().toList();
+	}
+
 	/** Familias con deuda vencida, de la que más debe a la que menos (solo en pantalla: no se exporta). */
 	public List<FamiliaMorosa> familiasMorosas(LocalDate al) {
 		record Acumulado(String familia, Set<Long> alumnos, BigDecimal[] monto, LocalDate[] masAntigua) {
@@ -110,17 +118,23 @@ public class CifrasCobranza {
 	/**
 	 * Morosidad por grado de las cuotas de un año al día {@code al}. El grado sale de la matrícula del alumno en el año
 	 * de la cuota (hallazgo 8); las cuotas sin matrícula en ese año van a la fila «Sin matrícula en ese año», al final.
-	 * Matriculados = matrículas ACTIVAS del grado. Nunca por sección.
+	 * Matriculados = matrículas ACTIVAS del grado. QA-S6-4: «con deuda» cuenta solo a esos matriculados; la deuda de los
+	 * alumnos retirados (o con la matrícula reservada) va a la fila «Retirados o sin matrícula activa», cuyos
+	 * «matriculados» son esas matrículas del año: ninguna fila tiene más alumnos con deuda que alumnos. Nunca por sección.
 	 */
 	public List<MorosidadGrado> morosidadPorGrado(Long anioEscolarId, LocalDate al) {
 		Objects.requireNonNull(anioEscolarId, "anioEscolarId");
 		Map<Long, Grado> gradoDe = new HashMap<>();
+		Set<Long> sinMatriculaActiva = new HashSet<>();
 		Map<Grado, long[]> matriculados = new EnumMap<>(Grado.class);
 		for (Object[] m : cuotas.gradosDelAnio(anioEscolarId)) {
 			Grado grado = (Grado) m[1];
 			gradoDe.put((Long) m[0], grado);
 			if (m[2] == EstadoMatricula.ACTIVA) {
 				matriculados.computeIfAbsent(grado, g -> new long[1])[0]++;
+			}
+			else {
+				sinMatriculaActiva.add((Long) m[0]);
 			}
 		}
 		Map<Long, Vencido> porAlumno = new HashMap<>();
@@ -131,10 +145,14 @@ public class CifrasCobranza {
 		}
 		Map<Grado, List<Vencido>> porGrado = new EnumMap<>(Grado.class);
 		List<Vencido> sinMatricula = new ArrayList<>();
+		List<Vencido> retirados = new ArrayList<>();
 		porAlumno.values().forEach(v -> {
 			Grado grado = gradoDe.get(v.alumnoId());
 			if (grado == null) {
 				sinMatricula.add(v);
+			}
+			else if (sinMatriculaActiva.contains(v.alumnoId())) {
+				retirados.add(v);
 			}
 			else {
 				porGrado.computeIfAbsent(grado, g -> new ArrayList<>()).add(v);
@@ -148,6 +166,9 @@ public class CifrasCobranza {
 				filas.add(fila(grado, enGrado, deudores, al));
 			}
 		}
+		if (!retirados.isEmpty()) {
+			filas.add(fila(null, true, sinMatriculaActiva.size(), retirados, al));
+		}
 		if (!sinMatricula.isEmpty()) {
 			filas.add(fila(null, 0, sinMatricula, al));
 		}
@@ -155,11 +176,16 @@ public class CifrasCobranza {
 	}
 
 	private static MorosidadGrado fila(Grado grado, long matriculados, List<Vencido> deudores, LocalDate al) {
+		return fila(grado, false, matriculados, deudores, al);
+	}
+
+	private static MorosidadGrado fila(Grado grado, boolean retirados, long matriculados, List<Vencido> deudores,
+			LocalDate al) {
 		Tramos tramos = Tramos.NINGUNO;
 		for (Vencido v : deudores) {
 			tramos = tramos.sumar(ChronoUnit.DAYS.between(v.masAntigua(), al));
 		}
-		return new MorosidadGrado(grado, matriculados, deudores.size(),
+		return new MorosidadGrado(grado, retirados, matriculados, deudores.size(),
 				Dinero.sumar(deudores.stream().map(Vencido::saldo).toList()), tramos);
 	}
 

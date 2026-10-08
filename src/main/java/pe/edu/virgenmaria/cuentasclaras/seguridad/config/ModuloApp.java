@@ -90,7 +90,7 @@ public enum ModuloApp {
 	// Sprint 6, tanda 3 (decisión 77): la llamada de control la hacen Promotoría o Dirección. Va ANTES que PANEL (la
 	// primera regla que coincide gana: /panel/** es solo de Promotoría).
 	LLAMADAS_CONTROL("Llamadas de control", "Cada semana, llama a las familias que el sistema eligió al azar entre las que "
-			+ "pagaron en efectivo y compara lo que te dicen con lo registrado.", "Sprint 6", true, "/panel/llamadas",
+			+ "pagaron en efectivo o tienen deuda vencida, y compara lo que te dicen con lo registrado.", "Sprint 6", true, "/panel/llamadas",
 			new String[] { "/panel/llamadas", "/panel/llamadas/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
 	PANEL("Panel del colegio", "Cuánto entró hoy y en el mes, la deuda vencida y las alertas, desde tu celular.",
 			"Sprint 6", true, "/panel", new String[] { "/panel", "/panel/**" }, EnumSet.of(PROMOTOR)),

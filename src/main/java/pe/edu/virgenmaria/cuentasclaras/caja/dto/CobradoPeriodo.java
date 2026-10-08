@@ -4,7 +4,6 @@ import pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.OptionalLong;
@@ -45,15 +44,11 @@ public record CobradoPeriodo(LocalDate desde, LocalDate hasta, BigDecimal total,
 
 	/** % de pagos digitales por NÚMERO de pagos (decisión 65). Vacío si no hubo pagos: no es lo mismo que 0 %. */
 	public OptionalLong porcentajeDigital() {
-		return cantidad == 0 ? OptionalLong.empty()
-				: OptionalLong.of(BigDecimal.valueOf(pagosDigitales() * 100L)
-						.divide(BigDecimal.valueOf(cantidad), 0, RoundingMode.HALF_UP).longValue());
+		return pe.edu.virgenmaria.cuentasclaras.comun.dinero.Porcentaje.de(pagosDigitales(), cantidad);
 	}
 
 	/** % digital por monto (se muestra debajo). Vacío si no hubo pagos. */
 	public OptionalLong porcentajeDigitalPorMonto() {
-		return total.signum() == 0 ? OptionalLong.empty()
-				: OptionalLong.of(digital().multiply(BigDecimal.valueOf(100)).divide(total, 0, RoundingMode.HALF_UP)
-						.longValue());
+		return pe.edu.virgenmaria.cuentasclaras.comun.dinero.Porcentaje.de(digital(), total);
 	}
 }

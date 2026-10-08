@@ -143,7 +143,7 @@ public class AlertasCaja implements AlertasRevision {
 		devolucionesSinReembolso(alertas);
 		sinVerificar(alertas, ahora);
 		sinDepositar(alertas, hoy);
-		anulacionesPendientes(alertas);
+		anulacionesPendientes(alertas, hoy);
 		devolucionesEnEfectivoDeHoy(alertas, hoy);
 		verificacionesQueNoCoincidieron(alertas, hoy);
 		oseNoReconoce(alertas, hoy);
@@ -315,10 +315,12 @@ public class AlertasCaja implements AlertasRevision {
 	}
 
 	/**
-	 * Sprint 6 (decisión 71): sale también al celular de Dirección, con la solicitud MÁS RECIENTE como referencia (llega
-	 * otra, sale un aviso nuevo) y sin avisar a quien la pidió ni a la cajera del pago.
+	 * Sprint 6 (decisión 71): sale también al celular de Dirección, sin avisar a quien la pidió ni a la cajera del pago.
+	 * Correcciones del sprint 6 (S6-B2, QA-S6-7): UN solo aviso por día con todas las pendientes (referencia
+	 * {@code S:<fecha>}): antes cada solicitud nueva era otro aviso y la cajera podía agotar el tope diario pidiendo
+	 * anulaciones.
 	 */
-	private void anulacionesPendientes(List<AlertaRevision> alertas) {
+	private void anulacionesPendientes(List<AlertaRevision> alertas, LocalDate hoy) {
 		List<SolicitudCambio> pendientes = solicitudes.findByEstadoOrderByIdAsc(EstadoSolicitud.PENDIENTE).stream()
 				.filter(s -> s.getTipo() == TipoSolicitud.ANULACION_PAGO).toList();
 		List<Long> ids = pendientes.stream().map(SolicitudCambio::getEntidadId).toList();
@@ -328,10 +330,9 @@ public class AlertasCaja implements AlertasRevision {
 			java.util.Set<String> excluidos = new java.util.HashSet<>();
 			pendientes.forEach(s -> excluidos.add(s.getSolicitadoPor()));
 			delPago.forEach(p -> excluidos.add(p.getCajero()));
-			long masReciente = pendientes.stream().mapToLong(SolicitudCambio::getId).max().orElse(0);
 			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, ids.size() + " anulación(es) de pago por "
 					+ Dinero.formatear(monto) + " esperan aprobación.", "/aprobaciones",
-					new Aviso(TipoAviso.ANULACION_PAGO_PENDIENTE, "S:" + masReciente, Dinero.formatear(monto), excluidos)));
+					new Aviso(TipoAviso.ANULACION_PAGO_PENDIENTE, "S:" + hoy, Dinero.formatear(monto), excluidos)));
 		}
 	}
 

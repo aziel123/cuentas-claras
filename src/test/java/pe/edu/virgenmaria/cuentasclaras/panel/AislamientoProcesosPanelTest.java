@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.panel;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -164,8 +163,6 @@ class AislamientoProcesosPanelTest {
 	 * contador de un colegio hace que el resumen de TODOS los colegios (cobrado, deuda vencida, huella) salga a ese
 	 * correo. En una instalación con varios colegios, el contador del A recibe las cifras del B.
 	 */
-	@Disabled("QA-S6-6: el resumen diario de cualquier colegio sale al único correo externo de configuracion_bd "
-			+ "(MensajesPromotoria.alResumenDiario; configuracion_bd sin colegio_id)")
 	@Test
 	void elCorreoDelContadorNoDebeRecibirElResumenDeOtroColegio() {
 		jdbc.update("INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('resumen_correo_externo', "

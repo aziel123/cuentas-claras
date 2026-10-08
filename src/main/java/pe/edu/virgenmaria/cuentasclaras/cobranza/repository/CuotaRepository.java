@@ -114,11 +114,13 @@ public interface CuotaRepository extends Repository<Cuota, Long> {
 	/**
 	 * Saldo vencido al día {@code al} por alumno y año de la cuota: familia, nombre de la familia, alumno, año, vencimiento
 	 * más antiguo, saldo ({@code monto − pagado − descuento}) y cuántas cuotas. Vencida = PENDIENTE o PARCIAL con
-	 * vencimiento ANTERIOR al día (la misma definición que {@code Cuota.vencidaAl}).
+	 * vencimiento ANTERIOR al día (la misma definición que {@code Cuota.vencidaAl}). QA-S6-3: de un alumno retirado no
+	 * cuentan las cuotas que vencen DESPUÉS de su retiro (en MySQL, trg_resumen_diario_registro usa la misma regla).
 	 */
 	@Query("select f.id, f.nombre, a.id, c.anioEscolar.id, min(c.fechaVencimiento), "
 			+ "sum(c.monto - c.montoPagado - c.montoDescuento), count(c) from Cuota c join c.alumno a join a.familia f "
 			+ "where c.estado in (pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PENDIENTE, pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoCuota.PARCIAL) and c.fechaVencimiento < :al "
+			+ "and (a.retiradoEn is null or c.fechaVencimiento <= a.retiradoEn) "
 			+ "group by f.id, f.nombre, a.id, c.anioEscolar.id")
 	List<Object[]> vencidasPorAlumno(@Param("al") java.time.LocalDate al);
 

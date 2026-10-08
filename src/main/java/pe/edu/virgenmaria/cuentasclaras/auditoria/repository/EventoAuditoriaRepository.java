@@ -69,6 +69,10 @@ public interface EventoAuditoriaRepository extends Repository<EventoAuditoria, L
 	java.util.Optional<EventoAuditoria> findBySecuencia(long secuencia);
 
 	/** Sprint 6: si ya hay un evento igual (el recálculo de las fotos no repite el mismo hallazgo cada mañana). */
+	/** Correcciones del sprint 6 (S6-M1): si hay un evento de esa acción sobre ese registro (la foto con su GUARDADO). */
+	boolean existsByColegioIdAndAccionAndEntidadAndEntidadId(Long colegioId, AccionAuditoria accion, String entidad,
+			String entidadId);
+
 	boolean existsByColegioIdAndAccionAndEntidadAndEntidadIdAndValorNuevo(Long colegioId, AccionAuditoria accion,
 			String entidad, String entidadId, String valorNuevo);
 

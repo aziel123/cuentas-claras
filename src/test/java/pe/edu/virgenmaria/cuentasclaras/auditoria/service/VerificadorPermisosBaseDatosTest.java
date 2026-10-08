@@ -140,7 +140,7 @@ class VerificadorPermisosBaseDatosTest {
 			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
 					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado|movimiento_bancario|"
 					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora|semilla_muestreo|huella_hora|"
-					+ "resumen_diario|llamada_control) ");
+					+ "resumen_diario|llamada_control|muestra_llamada|delegacion_llamada|configuracion_colegio) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -259,7 +259,7 @@ class VerificadorPermisosBaseDatosTest {
 		JdbcTemplate mysql = mock(JdbcTemplate.class);
 		when(mysql.update(anyString())).thenAnswer(invocacion -> {
 			String sql = invocacion.getArgument(0);
-			if (sql.startsWith("INSERT INTO configuracion_bd")) {
+			if (sql.startsWith("INSERT INTO configuracion_bd") || sql.startsWith("INSERT INTO configuracion_colegio")) {
 				throw denegado(1142);
 			}
 			if (sql.startsWith("INSERT")) {
@@ -369,8 +369,40 @@ class VerificadorPermisosBaseDatosTest {
 		// Sprint 5, tanda 1 (V17): 46 con los de mensajes, enlaces y huella; tanda 2 (V18): 51 con los de la renovación,
 		// la matrícula reservada y los avisos de las familias; tanda 3 (V19): 55 con los de feriados y cierre mensual;
 		// correcciones (V20): 58 con los de la verificación de contactos y la huella por hora; sprint 6, tanda 2 (V21): 60
-		// con la foto del resumen diario y el contacto del personal; tanda 3 (V22): 61 con la llamada de control.
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(61);
+		// con la foto del resumen diario y el contacto del personal; tanda 3 (V22): 61 con la llamada de control;
+		// correcciones del sprint 6 (V23): 63 con la muestra congelada y la delegación de las llamadas.
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(63);
+	}
+
+	/**
+	 * Correcciones del sprint 6 (V23): sin los triggers de la muestra y de la delegación, con la versión anterior de
+	 * trg_resumen_diario_registro (la foto en cero de un día pasado llega a la FK: 1452), o si la muestra, la delegación o
+	 * configuracion_colegio se pueden editar o borrar, prod no arranca.
+	 */
+	@Test
+	void fallaSiFaltanLosControlesDeLasCorreccionesDelSprint6() {
+		for (String[] caso : new String[][] { { "INSERT INTO muestra_llamada", "trg_muestra_llamada_registro" },
+				{ "INSERT INTO delegacion_llamada", "trg_delegacion_llamada_registro" },
+				{ "INSERT INTO resumen_diario", "trg_resumen_diario_registro" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doThrow(denegado(1452)).when(mysql).update(org.mockito.ArgumentMatchers.startsWith(caso[0]));
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+		for (String[] caso : new String[][] { { "DELETE FROM muestra_llamada WHERE 1 = 0", "muestra_llamada" },
+				{ "UPDATE muestra_llamada SET version = version WHERE 1 = 0", "muestra_llamada" },
+				{ "DELETE FROM delegacion_llamada WHERE 1 = 0", "delegacion_llamada" },
+				{ "UPDATE delegacion_llamada SET version = version WHERE 1 = 0", "delegacion_llamada" },
+				{ "DELETE FROM configuracion_colegio WHERE 1 = 0", "configuracion_colegio" },
+				{ "UPDATE configuracion_colegio SET valor = valor WHERE 1 = 0", "correo externo" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.RESUMEN_IMPOSIBLE)
+				.as("la foto imposible está en cero: solo la versión de V23 la rechaza (por la fecha)")
+				.contains("'2000-01-01 19:30:00', 0, 0, 0, 0, 0, 0, 0,");
 	}
 
 	/**

@@ -237,9 +237,14 @@ class LlamadasControlTest {
 		});
 	}
 
-	/** Lo que confirma o no contesta queda en la bitácora sin resaltar, con su valor nuevo; y no se registra dos veces. */
+	/**
+	 * Lo que confirma o no contesta queda en la bitácora sin resaltar, con su valor nuevo; y no se registra dos veces.
+	 * Correcciones del sprint 6 (S6-M2): Dirección registra solo porque Promotoría le delegó la semana.
+	 */
 	@Test
 	void confirmaQuedaEnLaBitacoraYNoSeRegistraDosVeces() {
+		UsuariosDePrueba.iniciarSesion(promotora);
+		llamadas.delegarADireccion();
 		UsuariosDePrueba.iniciarSesion(directora);
 		Long id = llamadas.registrar(datos.f().flores(), new LlamadaRequest(ResultadoLlamada.CONFIRMA, null));
 
@@ -259,9 +264,15 @@ class LlamadasControlTest {
 				});
 	}
 
-	/** Solo una familia de la muestra de esta semana: otra (o una que no existe) es 404 y no deja nada. */
+	/**
+	 * Solo una familia de la muestra de esta semana: otra (o una que no existe) es 404 y no deja nada. Correcciones del
+	 * sprint 6 (S6-B3): la muestra quedó fija al consultarla; una familia nueva (con deuda vencida) no entra hasta la
+	 * semana siguiente.
+	 */
 	@Test
 	void unaFamiliaFueraDeLaMuestraNoSeRegistra() {
+		comoPromotora();
+		SecurityContextHolder.clearContext();
 		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
 		Long otra = alumnos.registrar(EscenarioEscolar.conApoderadoNuevo("71234598", "Ríos", "Vega", "Ana",
 				LocalDate.of(2016, 3, 3), "41234599", "Ríos", "Soto", "Luis", "923456781", null,
@@ -334,6 +345,10 @@ class LlamadasControlTest {
 					assertThat(a.aviso()).as("no sale al celular").isNull();
 				});
 		llamadas.registrar(datos.f().quispe(), new LlamadaRequest(ResultadoLlamada.CONFIRMA, null));
+		llamadas.registrar(datos.f().flores(), new LlamadaRequest(ResultadoLlamada.NO_CONTESTA, null));
+		// S6-M2: «No contesta» no cierra la plaza; el segundo intento (una hora después) sí.
+		assertThat(panel.ver().llamadas().texto()).isEqualTo("Te faltan 1 de 2 esta semana.");
+		a(LUNES.plusDays(5), 10, 0);
 		llamadas.registrar(datos.f().flores(), new LlamadaRequest(ResultadoLlamada.NO_CONTESTA, null));
 		assertThat(panel.ver().llamadas().texto()).isEqualTo("Hiciste las 2 de esta semana.");
 		assertThat(alertasPanel.alertas()).noneMatch(a -> a.texto().startsWith("Faltan "));

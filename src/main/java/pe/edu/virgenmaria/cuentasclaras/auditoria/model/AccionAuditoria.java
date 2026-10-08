@@ -295,6 +295,16 @@ public enum AccionAuditoria {
 	/** Se resalta (P17): una familia de la llamada de control no confirma lo registrado. */
 	LLAMADA_CONTROL_NO_CONFIRMA("Una familia no confirmó lo registrado en la llamada de control", true),
 
+	// Correcciones del sprint 6 (auditoría y QA)
+	/** Se resalta (S6-M1): hay una foto del resumen diario que no guardó sistema.panel (no tiene su evento GUARDADO). */
+	RESUMEN_DIARIO_SUPLANTADO("Hay una foto del resumen diario que no guardó el sistema", true),
+	/** La muestra de la llamada de control de la semana quedó fija (S6-B3; sin decir a quiénes). */
+	MUESTRA_LLAMADAS_FIJADA("Quedó fija la muestra de la llamada de control de la semana", false),
+	/** Se resalta (S6-M2): Promotoría delegó a Dirección las llamadas de control de la semana. */
+	LLAMADAS_DELEGADAS("Delegó a Dirección las llamadas de control de la semana", true),
+	/** Se resalta (S6-M2): una familia de la llamada de control no contestó dos veces y se reemplazó. */
+	LLAMADA_CONTROL_REEMPLAZADA("Una familia de la llamada de control no contestó dos veces", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

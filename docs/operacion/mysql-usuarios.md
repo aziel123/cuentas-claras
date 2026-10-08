@@ -55,8 +55,11 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `linea_recaudacion` | INSERT y UPDATE **solo** de estado, motivo de la excepción y devolución | Monto, fecha, código, alumno, cuota y operación no cambian (1143); entra PENDIENTE a un lote CARGADO y en sus fechas; APLICADA exige su pago; DEVUELTA exige la devolución aprobada por otra persona (trigger) |
 | `reembolso_pasarela` | INSERT | **Solo inserción** (correcciones del sprint 4, V16): la devolución de un pago en línea por la API de la pasarela (al mismo medio de origen), una por anulación aprobada de tipo DEVOLUCION y nunca con contracargo (trigger `trg_reembolso_pasarela_registro`). `reembolso` rechaza los pagos de la pasarela (trigger) |
 | `enlace_activacion` | INSERT y UPDATE **solo** de `usado_en, usado_ip, anulado_en, actualizado_en, version` | Enlace de un solo uso para que el apoderado elija su clave (S4-M2). El hash del token, el usuario, el vencimiento y la IP de quien lo creó no cambian (1143); no se borra (1142) |
-| `resumen_diario` | INSERT | **Solo inserción** (sprint 6, tanda 2): la foto del resumen de las 19:30. La escribe solo `sistema.panel` y cada cifra debe ser la suma de `pago` y `cuota` en ese momento (trigger `trg_resumen_diario_registro`); nadie la corrige ni la borra (1142) |
-| `llamada_control` | INSERT | **Solo inserción** (sprint 6, tanda 3): el resultado de la llamada de control semanal. La registra una persona activa de Promotoría o Dirección, para el lunes de la semana en curso (hora de Lima) y a una familia que pagó en efectivo (trigger `trg_llamada_control_registro`); no se corrige ni se borra (1142) |
+| `resumen_diario` | INSERT | **Solo inserción** (sprint 6, tanda 2): la foto del resumen de las 19:30. La escribe solo `sistema.panel` y cada cifra debe ser la suma de `pago` y `cuota` en ese momento (trigger `trg_resumen_diario_registro`); desde V23, además, es de HOY (Lima), su corte es de ahora, los conteos de cajas, cierres, solicitudes y avisos salen de las tablas y su texto (`parametros`, el que exige cada mensaje RESUMEN_DIARIO) dice esas cifras; nadie la corrige ni la borra (1142) |
+| `llamada_control` | INSERT | **Solo inserción** (sprint 6, tanda 3): el resultado de la llamada de control semanal. Desde V23 la registra una persona activa de Promotoría (Dirección, solo con la semana delegada y marcando `por_delegacion`), para el lunes de la semana en curso (hora de Lima), a una familia de la muestra congelada que no fue reemplazada, y el segundo intento solo tras un «No contesta» (trigger `trg_llamada_control_registro`); no se corrige ni se borra (1142) |
+| `muestra_llamada` | INSERT | **Solo inserción** (correcciones del sprint 6, V23): la muestra congelada de la semana. La fija Promotoría, Dirección o `sistema.panel`, para la semana en curso, con familias que pagaron en efectivo o tienen deuda vencida; un reemplazo solo de quien no contestó dos veces (trigger `trg_muestra_llamada_registro`) |
+| `delegacion_llamada` | INSERT | **Solo inserción** (V23): Promotoría delega a Dirección las llamadas de la semana en curso (trigger `trg_delegacion_llamada_registro`) |
+| `configuracion_colegio` | Ninguno (solo el SELECT general) | La escribe solo el DBA (V23, QA-S6-6): `resumen_correo_externo` por colegio. INSERT, UPDATE y DELETE dan 1142 |
 
 ## Triggers (paso 3, después de los permisos)
 Los aplica `cc_migrador` (no van en Flyway: H2 no los soporta):
@@ -170,9 +173,11 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
   INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('huella_correo_externo', 'contador@estudio.pe', NOW(6));
   ```
 - Opcional en prod (sprint 6, decisión 69): el correo externo del contador que recibe también el resumen diario de las
-  19:30 (sin la fila, el resumen sale solo a Promotoría):
+  19:30 (sin la fila, el resumen sale solo a Promotoría). Correcciones del sprint 6 (QA-S6-6, V23): la fila es **por
+  colegio**, en `configuracion_colegio` (cc_app tampoco la escribe: 1142); la de `configuracion_bd` ya no se usa:
   ```sql
-  INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('resumen_correo_externo', 'contador@estudio.pe', NOW(6));
+  INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en)
+  VALUES (<id del colegio>, 'resumen_correo_externo', 'contador@estudio.pe', NOW(6));
   ```
 - Webhook de WhatsApp: `https://<dominio>/webhooks/whatsapp/<colegioId>` (GET para la verificación de Meta, POST firmado
   con `X-Hub-Signature-256`).

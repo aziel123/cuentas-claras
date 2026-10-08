@@ -29,8 +29,14 @@ import java.util.stream.Collectors;
 /**
  * Alertas del panel para «Para revisar» (sprint 6, tanda 2, sección 13). Se calculan al consultar:
  * <ul>
- *   <li>CRÍTICA (P5): el resumen de hoy no salió pasada la {@code resumen-alerta-hora} (21:00), o el de ayer no salió;
- *       se activa con el primer resumen del colegio (antes no hay nada que suprimir).</li>
+ *   <li>CRÍTICA (P5): el resumen de hoy no salió pasada la {@code resumen-alerta-hora} (21:00), o el de un día anterior
+ *       no salió. Correcciones del sprint 6 (S6-B1, QA-S6-1 y QA-S6-5): se revisa desde el último resumen CONFIRMADO, sin
+ *       ventana (un sábado o el día antes de un feriado ya no se pierden, y la alerta no se apaga sola a los 35 días). Una
+ *       alerta por día de los últimos {@value #DIAS_UNO_POR_UNO}; los anteriores, en una sola. Se activa con el primer
+ *       resumen del colegio (antes no hay nada que suprimir).</li>
+ *   <li>CRÍTICA (S6-M1): una foto del resumen que no guardó sistema.panel (plantada por fuera de la aplicación).</li>
+ *   <li>ATENCIÓN con aviso al celular (S6-M2): una familia de la llamada de control no contestó dos veces y se reemplazó;
+ *       Dirección registró una llamada con la semana delegada (no se avisa a quien la registró).</li>
  *   <li>CRÍTICA (P4): las cifras de un día ya informado cambiaron y no lo explica ninguna anulación aprobada ni pago
  *       tardío (un pago borrado o alterado por SQL). Si lo explican, PARA SABER.</li>
  *   <li>ATENCIÓN: alguien descargó más de {@code exportaciones-atencion} reportes hoy; el celular o el correo de alguien
@@ -47,6 +53,9 @@ import java.util.stream.Collectors;
 public class AlertasPanel implements AlertasRevision {
 
 	static final String MODULO = "Panel";
+
+	/** S6-B1: los días sin resumen más recientes salen uno por uno; los anteriores, juntos. */
+	static final int DIAS_UNO_POR_UNO = 7;
 
 	private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
@@ -75,6 +84,13 @@ public class AlertasPanel implements AlertasRevision {
 		LocalDate hoy = ahora.toLocalDate();
 		List<AlertaRevision> alertas = new ArrayList<>();
 		resumenNoSalio(alertas, ahora);
+		for (pe.edu.virgenmaria.cuentasclaras.panel.model.ResumenDiario foto : resumenes.suplantadas()) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La foto del resumen del " + foto.getFecha().format(FECHA)
+					+ " no la guardó el sistema (no está en la bitácora): alguien la insertó por fuera de la aplicación y el "
+					+ "resumen verdadero de ese día no salió. Revisa los pagos de ese día y quién tiene acceso a la base.",
+					"/panel/resumenes", new Aviso(TipoAviso.RESUMEN_SUPLANTADO, "RF:" + foto.getId(),
+							foto.getFecha().format(FECHA))));
+		}
 		for (ComparacionResumen c : resumenes.comparar()) {
 			if (c.sinExplicar()) {
 				alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Las cifras del " + c.fecha().format(FECHA)
@@ -122,6 +138,20 @@ public class AlertasPanel implements AlertasRevision {
 					+ "los cobró.", "/alumnos/familias/" + l.getFamiliaId(),
 					new Aviso(TipoAviso.LLAMADA_NO_CONFIRMA, "LC:" + l.getId(), l.getSemana().format(FECHA))));
 		}
+		for (LlamadaControl l : llamadas.sinRespuestaRecientes()) {
+			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, "Llamada de control de la semana del "
+					+ l.getSemana().format(FECHA) + ": la familia (código " + l.getFamiliaId() + ") no contestó dos veces y "
+					+ "se eligió otra en su lugar. Si vuelve a pasar con la misma familia, visítala o cítala.",
+					"/panel/llamadas", new Aviso(TipoAviso.LLAMADA_REEMPLAZADA, "LR:" + l.getId(),
+							l.getSemana().format(FECHA))));
+		}
+		for (LlamadaControl l : llamadas.registradasPorDireccion()) {
+			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, l.getCreadoPor() + " (Dirección) registró «"
+					+ l.getResultado().etiqueta() + "» en la llamada de control a la familia (código " + l.getFamiliaId()
+					+ ") de la semana del " + l.getSemana().format(FECHA) + ". Confírmalo si te parece raro.",
+					"/panel/llamadas", new Aviso(TipoAviso.LLAMADA_POR_DIRECCION, "LD:" + l.getId(),
+							l.getSemana().format(FECHA), java.util.Set.of(l.getCreadoPor()))));
+		}
 		if (hoy.getDayOfWeek() == DayOfWeek.SATURDAY || hoy.getDayOfWeek() == DayOfWeek.SUNDAY) {
 			AvanceLlamadas avance = llamadas.avance();
 			if (avance.faltan() > 0) {
@@ -132,24 +162,31 @@ public class AlertasPanel implements AlertasRevision {
 		}
 	}
 
-	/** P5: hoy pasada la hora de la alerta, y ayer todo el día (así el aviso sale también a las 07:00). */
+	/**
+	 * P5 con S6-B1, QA-S6-1 y QA-S6-5: cada día que debía tener resumen desde el último resumen confirmado (hoy, solo
+	 * pasada la hora de la alerta). Así el aviso del sábado o del día antes de un feriado sale en la primera pasada del
+	 * siguiente día de mensajes, y un resumen que dejó de salir hace más de 35 días sigue alertando.
+	 */
 	private void resumenNoSalio(List<AlertaRevision> alertas, LocalDateTime ahora) {
-		if (!resumenes.huboResumenes()) {
+		LocalDate hoy = ahora.toLocalDate();
+		LocalDate hasta = ahora.toLocalTime().isBefore(propiedades.resumenAlertaHora()) ? hoy.minusDays(1) : hoy;
+		List<LocalDate> dias = resumenes.diasSinResumen(hasta);
+		if (dias.isEmpty()) {
 			return;
 		}
-		LocalDate hoy = ahora.toLocalDate();
-		List<LocalDate> dias = new ArrayList<>();
-		dias.add(hoy.minusDays(1));
-		if (!ahora.toLocalTime().isBefore(propiedades.resumenAlertaHora())) {
-			dias.add(hoy);
+		List<LocalDate> anteriores = dias.subList(0, Math.max(0, dias.size() - DIAS_UNO_POR_UNO));
+		if (!anteriores.isEmpty()) {
+			LocalDate primero = anteriores.getFirst();
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Desde el " + primero.format(FECHA) + " el resumen "
+					+ "diario no sale (" + dias.size() + " días sin resumen confirmado). Revisa el panel y la bandeja de "
+					+ "envíos.", "/panel/resumenes", new Aviso(TipoAviso.RESUMEN_NO_SALIO, "RSD:" + primero,
+							primero.format(FECHA))));
 		}
-		for (LocalDate dia : dias) {
-			if (resumenes.debiaSalir(dia) && !resumenes.salioATodos(dia)) {
-				alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "El resumen del " + dia.format(FECHA) + " no salió "
-						+ "a todas las personas de Promotoría (o no se generó). Si no te llegó, revisa el panel y la "
-						+ "bandeja de envíos.", "/panel/resumenes",
-						new Aviso(TipoAviso.RESUMEN_NO_SALIO, "RS:" + dia, dia.format(FECHA))));
-			}
+		for (LocalDate dia : dias.subList(anteriores.size(), dias.size())) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "El resumen del " + dia.format(FECHA) + " no salió "
+					+ "a todas las personas de Promotoría (o no se generó). Si no te llegó, revisa el panel y la "
+					+ "bandeja de envíos.", "/panel/resumenes",
+					new Aviso(TipoAviso.RESUMEN_NO_SALIO, "RS:" + dia, dia.format(FECHA))));
 		}
 	}
 }

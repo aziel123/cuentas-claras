@@ -7,7 +7,8 @@
 			<p class="etiqueta">Llamadas de control</p>
 			<h1 th:text="|Semana del ${l.semana}|">Semana del 19/04/2027</h1>
 			<p class="secundario">El sistema eligió al azar estas familias entre las que pagaron en efectivo desde el
-				<span th:text="${l.desde}">15/03/2027</span>. Nadie más sabe a quiénes vas a llamar.</p>
+				<span th:text="${l.desde}">15/03/2027</span> o tienen deuda vencida. La muestra no cambia en la semana y nadie
+				más sabe a quiénes vas a llamar.</p>
 		</div>
 	</div>
 
@@ -20,22 +21,35 @@
 			<li>Pregunta primero: «¿Cuánto pagó en el colegio en las últimas semanas y qué día?». No le digas los montos.</li>
 			<li>Cuando te responda, toca «Ya me dijo» y compara con lo registrado.</li>
 			<li>Registra el resultado. Si no coincide, escribe qué te dijo: se avisa al celular de Promotoría.</li>
+			<li>Si no contesta, vuelve a llamar más tarde (una hora después como mínimo). Si tampoco contesta, el sistema
+				elige otra familia en su lugar.</li>
 		</ol>
+		<p data-delegacion class="secundario" th:if="${l.delegada}">Esta semana Promotoría delegó las llamadas: Dirección
+			también puede registrarlas y Promotoría recibe un aviso de cada una.</p>
+		<p data-solo-lectura class="secundario" th:unless="${l.puedeRegistrar}">Puedes ver la muestra, pero las llamadas las
+			registra Promotoría. Si esta semana te toca a ti, pídele que te las delegue.</p>
+		<form th:if="${l.puedeDelegar}" method="post" th:action="@{/panel/llamadas/delegar}" class="formulario" data-delegar>
+			<button type="submit" class="btn btn-secundario btn-bloque">Esta semana llama Dirección (delegar)</button>
+			<p class="ayuda">Solo esta semana. Te avisaremos al celular de cada llamada que registre Dirección.</p>
+		</form>
 		<p data-avance th:classappend="${l.faltan > 0} ? 'texto-alerta'"
 			th:text="${l.esperadas == 0} ? 'Esta semana no hay a quién llamar.' : (${l.faltan > 0} ? |Te faltan ${l.faltan} de ${l.esperadas} esta semana.| : |Hiciste las ${l.esperadas} de esta semana.|)">Te faltan 2 de 3 esta semana.</p>
 	</section>
 
 	<th:block th:if="${#lists.isEmpty(l.familias)}">
-		<div th:replace="~{fragments/componentes :: estadoVacio('Esta semana no hay a quién llamar', 'Nadie pagó en efectivo en las últimas 5 semanas. La próxima semana el sistema vuelve a elegir.')}"></div>
+		<div th:replace="~{fragments/componentes :: estadoVacio('Esta semana no hay a quién llamar', 'Nadie pagó en efectivo en las últimas 5 semanas ni tiene deuda vencida. La próxima semana el sistema vuelve a elegir.')}"></div>
 	</th:block>
 
 	<section th:each="f : ${l.familias}" class="tarjeta panel-bloque llamada-familia" th:data-familia="${f.familiaId}"
 		th:aria-labelledby="|familia-${f.familiaId}|">
 		<p class="fila entre">
 			<strong th:id="|familia-${f.familiaId}|" th:text="${f.nombre}">Quispe Huamán</strong>
-			<th:block th:if="${f.pendiente}"><span th:replace="~{fragments/componentes :: badge('Por llamar', 'alerta')}"></span></th:block>
-			<th:block th:unless="${f.pendiente}"><span th:replace="~{fragments/componentes :: badge(${f.registrada.resultado}, ${f.registrada.variante})}"></span></th:block>
+			<th:block th:if="${f.reemplazada}"><span th:replace="~{fragments/componentes :: badge('Reemplazada', 'neutro')}"></span></th:block>
+			<th:block th:if="${!f.reemplazada and f.pendiente}"><span th:replace="~{fragments/componentes :: badge(${f.reintento} ? 'Volver a llamar' : 'Por llamar', 'alerta')}"></span></th:block>
+			<th:block th:if="${!f.reemplazada and !f.pendiente}"><span th:replace="~{fragments/componentes :: badge(${f.registrada.resultado}, ${f.registrada.variante})}"></span></th:block>
 		</p>
+		<p class="secundario" data-motivo th:text="${f.motivo}">Pagó en efectivo en las últimas semanas.</p>
+		<p class="texto-alerta" data-reintento th:if="${f.reintento}">La primera vez no contestó: vuelve a llamar.</p>
 		<p class="secundario" th:if="${f.sinPortal or f.unSoloApoderado}"
 			th:text="${f.sinPortal and f.unSoloApoderado} ? 'No usa el portal y tiene un solo apoderado.' : (${f.sinPortal} ? 'No usa el portal.' : 'Tiene un solo apoderado.')">No usa el portal.</p>
 		<ul class="lista-panel" aria-label="Celulares registrados">
@@ -62,7 +76,7 @@
 			</ul>
 		</details>
 
-		<form th:if="${f.pendiente}" method="post" th:action="@{/panel/llamadas/{id}(id=${f.familiaId})}" class="formulario">
+		<form th:if="${f.pendiente and l.puedeRegistrar}" method="post" th:action="@{/panel/llamadas/{id}(id=${f.familiaId})}" class="formulario">
 			<fieldset class="grupo-opciones">
 				<legend>¿Qué respondió la familia?</legend>
 				<label class="opcion"><input type="radio" name="resultado" value="CONFIRMA" required> Confirma lo registrado</label>
@@ -77,8 +91,8 @@
 			</div>
 			<button type="submit" class="btn btn-primario btn-bloque">Registrar resultado</button>
 		</form>
-		<th:block th:unless="${f.pendiente}">
-			<p class="secundario" th:text="|Registrada por ${f.registrada.por} · ${f.registrada.en}|">Registrada por promotora · 19/04/2027 10:15</p>
+		<th:block th:if="${f.registrada != null}">
+			<p class="secundario" th:text="|Última llamada registrada por ${f.registrada.por} · ${f.registrada.en}|">Registrada por promotora · 19/04/2027 10:15</p>
 			<p class="texto-largo" th:if="${f.registrada.nota != null}" th:text="|Nota: ${f.registrada.nota}|">Nota</p>
 		</th:block>
 	</section>

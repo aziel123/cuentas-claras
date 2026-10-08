@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.panel.proceso;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -159,8 +158,6 @@ class ResumenDiarioBordesTest {
 	 * 21:00, el domingo no salen mensajes y el lunes la alerta solo revisa «ayer» (el domingo, que sin cobros no debía
 	 * salir): el aviso nunca llega al celular.
 	 */
-	@Disabled("QA-S6-1: «El resumen diario no salió» del sábado nunca llega al celular ni se ve el lunes "
-			+ "(AlertasPanel.resumenNoSalio solo revisa hoy y ayer)")
 	@Test
 	void debeAvisarAlCelularElLunesQueElResumenDelSabadoNoSalio() {
 		LocalDate viernes = JUEVES.plusDays(1);
@@ -180,8 +177,6 @@ class ResumenDiarioBordesTest {
 	}
 
 	/** QA-S6-1 (P5) con feriados: el resumen del martes 27/07/2027 no sale; el 28 y el 29 son Fiestas Patrias. */
-	@Disabled("QA-S6-1: el resumen que no salió antes de uno o más feriados nunca llega al celular "
-			+ "(AlertasPanel.resumenNoSalio solo revisa hoy y ayer)")
 	@Test
 	void debeAvisarAlCelularQueNoSalioElResumenDelDiaPrevioALosFeriados() {
 		LocalDate lunes = LocalDate.of(2027, 7, 26);
@@ -205,8 +200,6 @@ class ResumenDiarioBordesTest {
 	 * activa solo si hay un resumen en la ventana del recálculo (35 días): si el resumen deja de salir 36 días, la alerta
 	 * CRÍTICA desaparece sola y el colegio parece «nuevo».
 	 */
-	@Disabled("QA-S6-5: la alerta «el resumen no salió» se apaga sola cuando el último resumen tiene más de 35 días "
-			+ "(ResumenesDiarios.huboResumenes usa la ventana del recálculo)")
 	@Test
 	void debeSeguirAlertandoQueElResumenNoSaleAunqueLleveMasDe35DiasSinSalir() {
 		resumenEnviado(JUEVES);

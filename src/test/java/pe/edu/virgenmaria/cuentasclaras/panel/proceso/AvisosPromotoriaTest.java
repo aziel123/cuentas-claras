@@ -187,28 +187,49 @@ class AvisosPromotoriaTest {
 				.isEqualTo("Anulación de pago por aprobar\nS/ 350.00"));
 	}
 
-	/** P19: 10 alertas por persona y día como máximo; a partir de la siguiente, un solo «hoy hay N alertas más». */
+	/**
+	 * P19 con S6-B2 (QA-S6-7): 10 alertas de ATENCIÓN por persona y día como máximo; lo retenido en cada pasada sale en un
+	 * solo «hoy hay N alertas más» de esa pasada; las CRÍTICAS no cuentan para el tope ni se retienen.
+	 */
 	@Test
 	void tope10PorDiaYUnoDeResumen() {
 		a(JUEVES, 9, 0);
-		publicar(JUEVES, IntStream.rangeClosed(1, 12).mapToObj(i -> new Aviso(TipoAviso.OTRA_CRITICA, "T" + i)).toList());
+		publicar(JUEVES, IntStream.rangeClosed(1, 12).mapToObj(i -> new Aviso(TipoAviso.CIERRE_NO_REALIZADO, "T" + i))
+				.toList());
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ? AND plantilla = "
 				+ "'ALERTA_PROMOTORIA'", Long.class, promotora.getId())).isEqualTo(10);
 		assertThat(jdbc.queryForList("SELECT parametros FROM mensaje WHERE usuario_id = ? AND plantilla = 'ALERTA_MAS'",
 				String.class, promotora.getId())).containsExactly("2");
-		// Más alertas el mismo día: ni otra alerta ni otro «más».
-		publicar(JUEVES, List.of(new Aviso(TipoAviso.OTRA_CRITICA, "T13")));
+		// Otra pasada el mismo día: la ATENCIÓN nueva se retiene y sale su propio «1 más»; la CRÍTICA sale igual.
+		a(JUEVES, 9, 15);
+		publicar(JUEVES, List.of(new Aviso(TipoAviso.CIERRE_NO_REALIZADO, "T13"), new Aviso(TipoAviso.OTRA_CRITICA, "C1")));
+		assertThat(jdbc.queryForList("SELECT parametros FROM mensaje WHERE usuario_id = ? AND plantilla = 'ALERTA_MAS' "
+				+ "ORDER BY id", String.class, promotora.getId())).containsExactly("2", "1");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ? AND clave LIKE "
+				+ "'ALERTA:OTRA_CRITICA:C1:%'", Long.class, promotora.getId())).isEqualTo(1);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ?", Long.class, promotora.getId()))
-				.isEqualTo(11);
+				.isEqualTo(13);
 		// Al día siguiente salen las retenidas (una sola vez cada una).
 		LocalDate viernes = JUEVES.plusDays(1);
 		a(viernes, 7, 0);
-		publicar(viernes, IntStream.rangeClosed(1, 13).mapToObj(i -> new Aviso(TipoAviso.OTRA_CRITICA, "T" + i)).toList());
+		publicar(viernes, IntStream.rangeClosed(1, 13).mapToObj(i -> new Aviso(TipoAviso.CIERRE_NO_REALIZADO, "T" + i))
+				.toList());
 		assertThat(jdbc.queryForList("SELECT clave FROM mensaje WHERE usuario_id = ? AND plantilla = 'ALERTA_PROMOTORIA' "
 				+ "AND creado_en >= ?", String.class, promotora.getId(), viernes.atStartOfDay()))
-				.containsExactlyInAnyOrder("ALERTA:OTRA_CRITICA:T11:U" + promotora.getId() + ":WHATSAPP",
-						"ALERTA:OTRA_CRITICA:T12:U" + promotora.getId() + ":WHATSAPP",
-						"ALERTA:OTRA_CRITICA:T13:U" + promotora.getId() + ":WHATSAPP");
+				.containsExactlyInAnyOrder("ALERTA:CIERRE_NO_REALIZADO:T11:U" + promotora.getId() + ":WHATSAPP",
+						"ALERTA:CIERRE_NO_REALIZADO:T12:U" + promotora.getId() + ":WHATSAPP",
+						"ALERTA:CIERRE_NO_REALIZADO:T13:U" + promotora.getId() + ":WHATSAPP");
+	}
+
+	/** S6-B2: veinte CRÍTICAS en un día salen todas (no hay tope para lo crítico). */
+	@Test
+	void lasCriticasNoTienenTope() {
+		a(JUEVES, 9, 0);
+		publicar(JUEVES, IntStream.rangeClosed(1, 20).mapToObj(i -> new Aviso(TipoAviso.OTRA_CRITICA, "X" + i)).toList());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ? AND plantilla = "
+				+ "'ALERTA_PROMOTORIA'", Long.class, promotora.getId())).isEqualTo(20);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ? AND plantilla = 'ALERTA_MAS'",
+				Long.class, promotora.getId())).isZero();
 	}
 
 	/** Domingos y feriados no sale nada: sale el siguiente día de mensajes. */

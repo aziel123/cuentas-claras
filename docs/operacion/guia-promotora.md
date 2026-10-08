@@ -9,11 +9,17 @@ Para la sesión de 30 minutos del plan de adopción (sprint 6). Todo se hace des
 4. **A las 19:30 te llega el resumen del día** por WhatsApp (o correo). **Si a las 20:00 no te llegó, avisa**: el panel también marca «El resumen no salió».
 
 ## Cada semana: la llamada de control
-El sistema elige al azar, con una semilla secreta, hasta 3 familias que pagaron en efectivo. Nadie más sabe a quiénes vas a llamar.
+El sistema elige al azar, con una semilla secreta, hasta 3 familias que pagaron en efectivo o tienen deuda vencida (una
+familia que «pagó» en efectivo y la cajera no lo registró aparece como deudora). La muestra no cambia en la semana y nadie
+más sabe a quiénes vas a llamar.
 1. Entra a «Llamadas de control» (`/panel/llamadas`) y llama al celular registrado de cada familia.
 2. **Pregunta primero:** «¿Cuánto pagó en el colegio en las últimas semanas y qué día?». No digas los montos.
 3. Cuando te responda, toca **«Ya me dijo: ver lo registrado»** y compara.
 4. Registra el resultado: **Confirma**, **No confirma** (escribe qué te dijo) o **No contesta**. No se puede cambiar.
+   Si no contesta, vuelve a llamar una hora después como mínimo; si tampoco contesta, el sistema elige otra familia y te
+   avisa al celular.
+   Las llamadas las registras tú. Si una semana no puedes, toca «Esta semana llama Dirección»: te llegará un aviso de cada
+   llamada que registre Dirección.
 5. **«No confirma» es una alerta crítica:** revisa los pagos de esa familia y la caja de quien los cobró.
 6. El sábado el panel te recuerda las llamadas que faltan. Hazlas antes de que termine el domingo.
 

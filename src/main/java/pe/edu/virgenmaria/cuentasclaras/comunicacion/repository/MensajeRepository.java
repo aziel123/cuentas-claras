@@ -110,6 +110,10 @@ public interface MensajeRepository extends Repository<Mensaje, Long> {
 	long countByTipoAndPlantillaAndUsuarioIdAndRespaldoDeIdIsNullAndCreadoEnGreaterThanEqual(TipoMensaje tipo,
 			PlantillaMensaje plantilla, Long usuarioId, LocalDateTime desde);
 
+	/** S6-B2: lo mismo, solo las claves que empiezan así (las alertas ATENCIÓN de un tipo: el tope no cuenta las CRÍTICAS). */
+	long countByTipoAndPlantillaAndUsuarioIdAndRespaldoDeIdIsNullAndCreadoEnGreaterThanEqualAndClaveStartingWith(
+			TipoMensaje tipo, PlantillaMensaje plantilla, Long usuarioId, LocalDateTime desde, String prefijo);
+
 	/**
 	 * Sprint 6 (lista de familias morosas): el último aviso ENTREGADO de esos tipos a cada familia, como familia, tipo y
 	 * momento de entrega. Solo lectura.
