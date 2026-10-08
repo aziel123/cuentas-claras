@@ -163,4 +163,21 @@ public interface PagoRepository extends Repository<Pago, Long> {
 			+ "and p.fecha between :desde and :hasta and p.creadoEn > :despues")
 	List<Object[]> vigentesRegistradosDespuesDe(@Param("desde") java.time.LocalDate desde,
 			@Param("hasta") java.time.LocalDate hasta, @Param("despues") java.time.LocalDateTime despues);
+
+	// --- Sprint 6, tanda 3: llamada de control (decisión 77) ---
+
+	/**
+	 * Familias con algún pago en EFECTIVO (vigente o anulado: también interesa confirmar un pago anulado) con día de caja
+	 * en el rango, por id (el orden de entrada de la muestra al azar debe ser siempre el mismo).
+	 */
+	@Query("select distinct p.familia.id from Pago p where p.medio = pe.edu.virgenmaria.cuentasclaras.caja.model"
+			+ ".MedioPago.EFECTIVO and p.fecha between :desde and :hasta order by p.familia.id")
+	List<Long> familiasConEfectivoEntre(@Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta);
+
+	/** Los pagos de una familia en un rango (todos los medios y estados): fecha, medio, total, estado, serie, número, cajero. */
+	@Query("select p.fecha, p.medio, p.total, p.estado, c.serie, c.numero, p.cajero from Pago p join p.comprobante c "
+			+ "where p.familia.id = :familia and p.fecha between :desde and :hasta order by p.fecha, p.id")
+	List<Object[]> deFamiliaEntre(@Param("familia") Long familiaId, @Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta);
 }

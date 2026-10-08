@@ -38,6 +38,7 @@ import java.util.stream.Collectors;
  *   <li>sprint 6, tanda 2: que la foto del resumen diario es de solo inserción y su trigger la compara con los libros, que
  *       el resumen y las alertas los crea solo sistema.panel, y que está trg_usuario_contacto (BEFORE UPDATE: se comprueba
  *       por su presencia en {@link #TRIGGERS_ESPERADOS});</li>
+ *   <li>sprint 6, tanda 3: que la llamada de control es de solo inserción y su trigger exige Promotoría o Dirección;</li>
  *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes).</li>
  * </ul>
  * Si algo falla, la aplicación NO arranca. No hay interruptor para saltarse esta comprobación.
@@ -300,7 +301,15 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			trigger("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, destino, plantilla, parametros, "
 					+ "estado, creado_en, creado_por, actualizado_en) VALUES (0, 'verificador-panel', 'ALERTA_PROMOTORIA', "
 					+ "'CORREO', 'X', 'x@y.pe', 'verificador', '', 'PENDIENTE', NOW(6), 'verificador', NOW(6))",
-						"trg_mensaje_nace (versión del sprint 6)"));
+						"trg_mensaje_nace (versión del sprint 6)"),
+			// Sprint 6, tanda 3 (V22): la llamada de control no se borra ni se edita; una llamada del colegio 0 (nadie de
+			// Promotoría ni Dirección firma como «verificador») falla en su trigger.
+			sinBorrado("llamada_control"), soloInsercion("llamada_control"),
+			trigger(VerificadorPermisosBaseDatos.LLAMADA_IMPOSIBLE, "trg_llamada_control_registro"));
+
+	/** Sprint 6, tanda 3: una llamada de control del colegio 0 firmada por quien no es de Promotoría ni Dirección. */
+	static final String LLAMADA_IMPOSIBLE = "INSERT INTO llamada_control (colegio_id, semana, familia_id, resultado, "
+			+ "creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-03', 0, 'CONFIRMA', NOW(6), 'verificador', NOW(6))";
 
 	/** Sprint 6, tanda 2: una foto del colegio 0 que dice S/ 1.00 cobrados (no tiene pagos): trg_resumen_diario_registro. */
 	static final String RESUMEN_IMPOSIBLE = "INSERT INTO resumen_diario (colegio_id, fecha, cortado_en, cobrado_total, "
@@ -348,7 +357,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_renovacion_matricula_estado", "trg_matricula_nace", "trg_matricula_estado", "trg_aviso_familia_estado",
 			"trg_feriado_registro", "trg_feriado_anulacion", "trg_cierre_mensual_banco_nace",
 			"trg_cierre_mensual_banco_estado", "trg_verificacion_contacto_nace", "trg_verificacion_contacto_uso",
-			"trg_huella_hora_registro", "trg_resumen_diario_registro", "trg_usuario_contacto");
+			"trg_huella_hora_registro", "trg_resumen_diario_registro", "trg_usuario_contacto",
+			"trg_llamada_control_registro");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -467,7 +477,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		LOG.info("Permisos y triggers de feriados, semilla del muestreo y cierre bancario mensual verificados.");
 		LOG.info("Permisos y triggers de la verificación de contactos, la huella por hora y los feriados aprobados por "
 				+ "otra persona verificados.");
-		LOG.info("Permisos y triggers del panel (resumen diario, alertas a Promotoría y contacto del personal) verificados.");
+		LOG.info("Permisos y triggers del panel (resumen diario, alertas a Promotoría, contacto del personal y llamadas de "
+				+ "control) verificados.");
 		return escribe;
 	}
 

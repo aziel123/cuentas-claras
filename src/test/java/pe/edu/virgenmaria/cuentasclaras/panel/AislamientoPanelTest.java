@@ -166,4 +166,27 @@ class AislamientoPanelTest {
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
 						.string(org.hamcrest.Matchers.containsString("Todavía no hay resúmenes")));
 	}
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.panel.service.LlamadasControl llamadas;
+
+	/**
+	 * Tanda 3 (P20): las familias del A que pagaron en efectivo no salen en la llamada de control del B, y el B no puede
+	 * registrar una llamada a una familia del A (404, sin dejar nada).
+	 */
+	@Test
+	void elColegioBNoVeNiLlamaALasFamiliasDelA() throws Exception {
+		reloj.fijar(java.time.LocalDate.of(2027, 4, 20).atTime(10, 0).atZone(reloj.getZone()).toInstant());
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(1L, 92L, "promotor.a", "Promotor A", false,
+				EnumSet.of(Rol.PROMOTOR)));
+		assertThat(llamadas.deEstaSemana().familias()).as("el A sí ve a su familia")
+				.extracting(f -> f.familiaId()).contains(a.f().quispe());
+		UsuariosDePrueba.iniciarSesion(promotorB);
+		assertThat(llamadas.deEstaSemana().familias()).isEmpty();
+		assertThat(llamadas.avance().esperadas()).isZero();
+		SecurityContextHolder.clearContext();
+		mvc.perform(post("/panel/llamadas/" + a.f().quispe()).param("resultado", "CONFIRMA").with(csrf())
+				.with(UsuariosDePrueba.como(promotorB))).andExpect(status().isNotFound());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM llamada_control", Long.class)).isZero();
+	}
 }

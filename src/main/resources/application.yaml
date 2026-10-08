@@ -197,6 +197,7 @@ cuentasclaras:
     exportacion-max-diarias: 20
     exportacion-max-filas: 20000
     exportaciones-atencion: 5             # más descargas de una persona en el día: ATENCIÓN en el panel
+    llamadas-por-semana: 3                # decisión 77: familias de la llamada de control de cada semana
   auditoria:
     # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
     # aplicación no arranca. Nunca en el código: va en el gestor de secretos.

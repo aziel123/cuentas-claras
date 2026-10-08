@@ -75,7 +75,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V21): Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V22): Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Permisos por tabla de cc_app
@@ -306,6 +306,11 @@ jobs:
           comprobar 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'verificador-panel', 'ALERTA_PROMOTORIA', 'CORREO', 'X', 'x@y.pe', 'verificador', '', 'PENDIENTE', NOW(6), 'verificador', NOW(6))"
           personal=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT MIN(id) FROM usuario WHERE apoderado_id IS NULL AND telefono_whatsapp IS NOT NULL")
           comprobar 1644 "UPDATE usuario SET telefono_whatsapp = '+51900000009' WHERE id = ${personal}"
+          # Sprint 6, tanda 3 (V22): la llamada de control es de solo inserción (no se corrige ni se borra) y la registra
+          # solo una persona activa de Promotoría o Dirección (el colegio 0 no tiene a nadie: su trigger responde 1644).
+          comprobar 1142 "DELETE FROM llamada_control WHERE 1 = 0"
+          comprobar 1142 "UPDATE llamada_control SET version = version WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO llamada_control (colegio_id, semana, familia_id, resultado, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-03', 0, 'CONFIRMA', NOW(6), 'verificador', NOW(6))"
           # G10 y G11: sin la fila 'mensajeria_simulada' (como en prod), la base no acepta un mensaje simulado. El
           # mensaje PENDIENTE lo dejó PermisosMySqlTest.simuladoSinPermisoDeLaBaseFallaCon1644.
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'mensajeria_simulada'")
@@ -348,7 +353,7 @@ jobs:
           grep -q "Permisos y triggers de la renovación de matrícula, la matrícula reservada y los avisos de las familias" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de feriados, semilla del muestreo y cierre bancario mensual verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de la verificación de contactos, la huella por hora y los feriados aprobados" prod.log || { cat prod.log; exit 1; }
-          grep -q "Permisos y triggers del panel (resumen diario, alertas a Promotoría y contacto del personal) verificados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Permisos y triggers del panel (resumen diario, alertas a Promotoría, contacto del personal y llamadas de control) verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Triggers verificados: están los" prod.log || { cat prod.log; exit 1; }
           kill "$PID_APP"
           if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \

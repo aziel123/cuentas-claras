@@ -50,7 +50,7 @@ class ExportacionContadorTest {
 
 	/** Los valores por defecto de cuentasclaras.panel (decisión 73). */
 	static final PropiedadesPanel PROPIEDADES = new PropiedadesPanel(10, 35, java.time.LocalTime.of(21, 0), 12, 20, 20000,
-			5);
+			5, 3);
 
 	@BeforeEach
 	void preparar() {
@@ -107,7 +107,7 @@ class ExportacionContadorTest {
 	void elTopeDiarioYElRangoSonConfigurables() {
 		ExportacionContador conTres = new ExportacionContador(caja, cobranza, new EscritorXlsxSeguro(), auditoria,
 				Clock.fixed(Instant.parse("2027-04-15T15:00:00Z"), ZoneId.of("America/Lima")),
-				new PropiedadesPanel(10, 35, java.time.LocalTime.of(21, 0), 3, 3, 20000, 5));
+				new PropiedadesPanel(10, 35, java.time.LocalTime.of(21, 0), 3, 3, 20000, 5, 3));
 		assertThatThrownBy(() -> conTres.exportarIngresos(LocalDate.of(2027, 1, 1), LocalDate.of(2027, 4, 15)))
 				.as("rango de 3 meses como máximo").isInstanceOf(ExportacionRechazadaException.class)
 				.hasMessageContaining("3 meses");

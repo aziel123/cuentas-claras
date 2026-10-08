@@ -140,7 +140,7 @@ class VerificadorPermisosBaseDatosTest {
 			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
 					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado|movimiento_bancario|"
 					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora|semilla_muestreo|huella_hora|"
-					+ "resumen_diario) ");
+					+ "resumen_diario|llamada_control) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -369,8 +369,8 @@ class VerificadorPermisosBaseDatosTest {
 		// Sprint 5, tanda 1 (V17): 46 con los de mensajes, enlaces y huella; tanda 2 (V18): 51 con los de la renovación,
 		// la matrícula reservada y los avisos de las familias; tanda 3 (V19): 55 con los de feriados y cierre mensual;
 		// correcciones (V20): 58 con los de la verificación de contactos y la huella por hora; sprint 6, tanda 2 (V21): 60
-		// con la foto del resumen diario y el contacto del personal.
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(60);
+		// con la foto del resumen diario y el contacto del personal; tanda 3 (V22): 61 con la llamada de control.
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(61);
 	}
 
 	/**
@@ -524,6 +524,32 @@ class VerificadorPermisosBaseDatosTest {
 			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
 					.as(borrado).isInstanceOf(IllegalStateException.class).hasMessageContaining(borrado);
 		}
+	}
+
+	/**
+	 * Sprint 6, tanda 3 (V22): si la llamada de control se puede borrar o editar, o falta su trigger, no arranca; y la
+	 * línea del panel en el log nombra las llamadas de control (la busca el CI).
+	 */
+	@Test
+	void fallaSiSePuedeTocarLaLlamadaDeControlOFaltaSuTrigger() {
+		for (String[] caso : new String[][] {
+				{ "DELETE FROM llamada_control WHERE 1 = 0", "llamada_control se podrían borrar" },
+				{ "UPDATE llamada_control SET version = version WHERE 1 = 0", "solo inserción" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doThrow(denegado(1452)).when(mysql).update(VerificadorPermisosBaseDatos.LLAMADA_IMPOSIBLE);
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("trg_llamada_control_registro");
+		JdbcTemplate sinTrigger = mysqlQueDeniega();
+		when(sinTrigger.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class)).thenReturn(
+				String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream()
+						.filter(t -> !t.equals("trg_llamada_control_registro")).toList()));
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(sinTrigger, fuenteDatos).afterPropertiesSet())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("trg_llamada_control_registro");
 	}
 
 	/**

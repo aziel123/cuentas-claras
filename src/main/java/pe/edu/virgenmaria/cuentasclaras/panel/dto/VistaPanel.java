@@ -9,7 +9,14 @@ import java.util.List;
  * («S/ 1,250.00», «72 %», «—» si no hubo pagos) y salen de los libros al consultar: ninguna se guarda.
  */
 public record VistaPanel(String fecha, List<AlertaRevision> alertas, long criticas, int porAprobar, Hoy hoy, Mes mes,
-		Deuda deuda, Rebajas rebajas, Resumen resumen) {
+		Deuda deuda, Rebajas rebajas, Resumen resumen, Llamadas llamadas) {
+
+	/**
+	 * Tanda 3: la llamada de control de la semana. {@code texto}: «Te faltan 2 de 3 esta semana», «Hiciste las 3 de esta
+	 * semana» o que no hay familias que hayan pagado en efectivo.
+	 */
+	public record Llamadas(int hechas, int esperadas, int faltan, String texto) {
+	}
 
 	/**
 	 * Tanda 2: el resumen de hoy. {@code estado}: «Enviado 19:30 · Entregado», «Aún no sale» o «Hoy no corresponde».

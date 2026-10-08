@@ -23,7 +23,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Sprint 6, tanda 2: la foto del resumen diario es de SOLO INSERCIÓN: ninguna columna propia actualizable (un save de
  * una entidad cargada intentaría un UPDATE que MySQL rechaza con 1142), {@code @Immutable}, {@code @PreUpdate} y
- * {@code @PreRemove} que fallan, y en 02-permisos-tablas.sql solo un GRANT INSERT.
+ * {@code @PreRemove} que fallan, y en 02-permisos-tablas.sql solo un GRANT INSERT. Tanda 3: lo mismo para la llamada de
+ * control.
  */
 class InmutabilidadPanelTest {
 
@@ -69,5 +70,39 @@ class InmutabilidadPanelTest {
 		String script = Files.readString(Path.of("scripts/mysql/02-permisos-tablas.sql"));
 		assertThat(script).contains("GRANT INSERT ON cuentasclaras.resumen_diario TO 'cc_app'@'%';")
 				.doesNotContainPattern("(?m)^GRANT[^;]*(UPDATE|DELETE)[^;]*ON cuentasclaras\\.resumen_diario ");
+	}
+
+	@Test
+	void laLlamadaDeControlEsDeSoloInsercion() {
+		assertThat(ColumnasActualizables.de(LlamadaControl.class)).as("solo las de BaseEntity")
+				.containsExactlyInAnyOrder("actualizado_en", "version");
+		assertThat(LlamadaControl.class.isAnnotationPresent(Immutable.class)).isTrue();
+		LlamadaControl llamada = LlamadaControl.registrar(LocalDate.of(2027, 4, 19), 7L, ResultadoLlamada.CONFIRMA, null);
+		int anotados = 0;
+		for (Method m : LlamadaControl.class.getDeclaredMethods()) {
+			if (m.isAnnotationPresent(PreUpdate.class) || m.isAnnotationPresent(PreRemove.class)) {
+				anotados++;
+				m.setAccessible(true);
+				assertThatThrownBy(() -> m.invoke(llamada)).hasCauseInstanceOf(IllegalStateException.class);
+			}
+		}
+		assertThat(anotados).isEqualTo(2);
+		assertThat(Arrays.stream(LlamadaControl.class.getDeclaredMethods()).map(Method::getName))
+				.noneMatch(n -> n.startsWith("set"));
+	}
+
+	@Test
+	void laLlamadaEsDeUnLunesYNoConfirmaLlevaNota() {
+		assertThatThrownBy(() -> LlamadaControl.registrar(LocalDate.of(2027, 4, 20), 7L, ResultadoLlamada.CONFIRMA, null))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> LlamadaControl.registrar(LocalDate.of(2027, 4, 19), 7L, ResultadoLlamada.NO_CONFIRMA,
+				" ")).isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void enMySqlCcAppSoloInsertaLlamadas() throws IOException {
+		String script = Files.readString(Path.of("scripts/mysql/02-permisos-tablas.sql"));
+		assertThat(script).contains("GRANT INSERT ON cuentasclaras.llamada_control TO 'cc_app'@'%';")
+				.doesNotContainPattern("(?m)^GRANT[^;]*(UPDATE|DELETE)[^;]*ON cuentasclaras\\.llamada_control ");
 	}
 }

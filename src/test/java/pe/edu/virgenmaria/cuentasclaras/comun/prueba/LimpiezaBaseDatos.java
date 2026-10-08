@@ -17,6 +17,8 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Sprint 6, tanda 3 (V22): la llamada de control apunta a la familia.
+		jdbc.update("DELETE FROM llamada_control");
 		// Sprint 6, tanda 2 (V21): la foto del resumen diario (sus mensajes se borran con los demás, más abajo).
 		jdbc.update("DELETE FROM resumen_diario");
 		// Correcciones del sprint 5 (V20): la verificación apunta a su mensaje y al apoderado; la huella de la hora.

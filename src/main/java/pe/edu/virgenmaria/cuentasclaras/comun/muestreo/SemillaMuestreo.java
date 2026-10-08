@@ -21,7 +21,12 @@ public class SemillaMuestreo extends BaseEntity {
 	/** Para qué muestreo es. */
 	public enum Ambito {
 		/** Las 3 verificaciones bancarias del día hábil anterior que ve Promotoría. */
-		CAJA
+		CAJA,
+		/**
+		 * Sprint 6, tanda 3 (decisión 77): las familias de la llamada de control de la semana. La fecha es el LUNES: la
+		 * muestra es estable durante toda la semana.
+		 */
+		LLAMADA_CONTROL
 	}
 
 	@Enumerated(EnumType.STRING)

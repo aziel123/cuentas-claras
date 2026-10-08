@@ -289,6 +289,12 @@ public enum AccionAuditoria {
 	/** Se resalta (P6): se cambió el celular o el correo de alguien del personal y se avisó al contacto anterior. */
 	CONTACTO_PERSONAL_CAMBIADO("Cambió el celular o el correo de alguien del personal", true),
 
+	// Sprint 6 · tanda 3: llamada de control semanal (decisión 77, P17)
+	/** Promotoría o Dirección registró el resultado de una llamada de control (confirma o no contesta). */
+	LLAMADA_CONTROL_REGISTRADA("Registró una llamada de control", false),
+	/** Se resalta (P17): una familia de la llamada de control no confirma lo registrado. */
+	LLAMADA_CONTROL_NO_CONFIRMA("Una familia no confirmó lo registrado en la llamada de control", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

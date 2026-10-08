@@ -14,6 +14,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.panel.dto.AvanceLlamadas;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.CifrasResumen;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.ComparacionResumen;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.VistaPanel;
@@ -46,14 +47,17 @@ public class PanelPromotoria {
 
 	private final ResumenesDiarios resumenes;
 
+	private final LlamadasControl llamadas;
+
 	public PanelPromotoria(CifrasDelDia cifras, CifrasCobranza cobranza, BandejaAprobaciones bandeja,
-			ObjectProvider<AlertasRevision> alertas, Clock reloj, ResumenesDiarios resumenes) {
+			ObjectProvider<AlertasRevision> alertas, Clock reloj, ResumenesDiarios resumenes, LlamadasControl llamadas) {
 		this.cifras = cifras;
 		this.cobranza = cobranza;
 		this.bandeja = bandeja;
 		this.alertas = alertas;
 		this.reloj = reloj;
 		this.resumenes = resumenes;
+		this.llamadas = llamadas;
 	}
 
 	public VistaPanel ver() {
@@ -81,7 +85,17 @@ public class PanelPromotoria {
 				new VistaPanel.Rebajas(Dinero.formatear(rebajas.descuentos()), rebajas.cantidadDescuentos(),
 						quienes(rebajas.descuentosPorAprobador()), Dinero.formatear(rebajas.cuotasAnuladas()),
 						rebajas.cantidadCuotasAnuladas(), quienes(rebajas.anuladasPorAprobador())),
-				resumen(hoy));
+				resumen(hoy), llamadas());
+	}
+
+	/** Tanda 3: cuántas llamadas de control faltan esta semana. */
+	private VistaPanel.Llamadas llamadas() {
+		AvanceLlamadas a = llamadas.avance();
+		String texto = a.esperadas() == 0
+				? "Nadie pagó en efectivo en las últimas 5 semanas: esta semana no hay a quién llamar."
+				: a.faltan() > 0 ? "Te faltan " + a.faltan() + " de " + a.esperadas() + " esta semana."
+						: "Hiciste las " + a.esperadas() + " de esta semana.";
+		return new VistaPanel.Llamadas(a.hechas(), a.esperadas(), a.faltan(), texto);
 	}
 
 	/** Tanda 2: el resumen de hoy (su envío) y cuántos días ya informados cambiaron sin explicación. */

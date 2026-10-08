@@ -1401,3 +1401,30 @@ BEGIN
 END$$
 
 DELIMITER ;
+
+-- ===================== Sprint 6 · tanda 3 (V22): llamada de control =====================
+DELIMITER $$
+
+-- Decisión 77 (P17). La llamada de control la registra una persona ACTIVA de Promotoría o Dirección de ESE colegio, para
+-- el lunes de la semana EN CURSO en la hora de Lima (UTC-5, sin horario de verano; nadie «rellena» semanas pasadas ni
+-- adelanta las futuras) y sobre una familia que pagó en EFECTIVO (vigente o anulado) desde 35 días antes de ese lunes
+-- hasta el domingo de esa semana. La muestra la elige la aplicación con la semilla secreta; la base no la recalcula.
+DROP TRIGGER IF EXISTS trg_llamada_control_registro$$
+CREATE TRIGGER trg_llamada_control_registro BEFORE INSERT ON llamada_control FOR EACH ROW
+BEGIN
+    DECLARE v_hoy DATE DEFAULT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR);
+    IF NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+            WHERE u.nombre_usuario = NEW.creado_por AND u.colegio_id = NEW.colegio_id AND u.activo
+              AND u.apoderado_id IS NULL AND r.rol IN ('PROMOTOR', 'DIRECTOR')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la llamada de control la hace Promotoría o Dirección';
+    END IF;
+    IF NEW.semana IS NULL OR NOT (NEW.semana <=> v_hoy - INTERVAL WEEKDAY(v_hoy) DAY) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la llamada de control es de la semana en curso (su lunes)';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pago p WHERE p.colegio_id = NEW.colegio_id AND p.familia_id = NEW.familia_id
+            AND p.medio = 'EFECTIVO' AND p.fecha BETWEEN NEW.semana - INTERVAL 35 DAY AND NEW.semana + INTERVAL 6 DAY) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la llamada es a una familia que pagó en efectivo';
+    END IF;
+END$$
+
+DELIMITER ;

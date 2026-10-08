@@ -19,6 +19,7 @@ import java.time.LocalTime;
  * @param exportacionMaxDiarias descargas por persona y día (decisión 73)
  * @param exportacionMaxFilas   filas de un Excel (como máximo, las que admite el escritor)
  * @param exportacionesAtencion más de estas descargas de una persona en el día es ATENCIÓN en el panel
+ * @param llamadasPorSemana     familias de la llamada de control de cada semana (decisión 77; tanda 3)
  */
 @ConfigurationProperties("cuentasclaras.panel")
 public record PropiedadesPanel(
@@ -28,7 +29,8 @@ public record PropiedadesPanel(
 		@DefaultValue("12") int exportacionMaxMeses,
 		@DefaultValue("20") int exportacionMaxDiarias,
 		@DefaultValue("20000") int exportacionMaxFilas,
-		@DefaultValue("5") int exportacionesAtencion) {
+		@DefaultValue("5") int exportacionesAtencion,
+		@DefaultValue("3") int llamadasPorSemana) {
 
 	public PropiedadesPanel {
 		if (avisosTopeDiario < 1) {
@@ -52,6 +54,9 @@ public record PropiedadesPanel(
 		}
 		if (exportacionesAtencion < 1) {
 			throw new IllegalArgumentException("cuentasclaras.panel.exportaciones-atencion: 1 o más");
+		}
+		if (llamadasPorSemana < 1 || llamadasPorSemana > 10) {
+			throw new IllegalArgumentException("cuentasclaras.panel.llamadas-por-semana: de 1 a 10");
 		}
 	}
 }

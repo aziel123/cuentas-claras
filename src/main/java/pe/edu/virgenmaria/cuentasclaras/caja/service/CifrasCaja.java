@@ -8,6 +8,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.dto.CambiosPosteriores;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CobradoDia;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CobradoPeriodo;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.EstadoCajas;
+import pe.edu.virgenmaria.cuentasclaras.caja.dto.PagoDeFamilia;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.PagoExportable;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.CajaDiaria;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja;
@@ -199,6 +200,29 @@ public class CifrasCaja {
 					(java.time.LocalDateTime) a[3], (java.time.LocalDateTime) a[4]));
 		}
 		return new CambiosPosteriores(registrados, anulados);
+	}
+
+	/**
+	 * Sprint 6, tanda 3 (decisión 77): las familias con algún pago en EFECTIVO (vigente o anulado) con día de caja en el
+	 * rango, por id. Son las candidatas de la llamada de control; la muestra la elige el panel con la semilla secreta.
+	 */
+	public List<Long> familiasConEfectivo(LocalDate desde, LocalDate hasta) {
+		exigirRango(desde, hasta);
+		return pagos.familiasConEfectivoEntre(desde, hasta);
+	}
+
+	/**
+	 * Sprint 6, tanda 3: los pagos de una familia en un rango (todos los medios y estados), para comparar DESPUÉS de que la
+	 * familia dijo cuánto y cuándo pagó. Solo quien hace la llamada de control: Promotoría o Dirección.
+	 */
+	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
+	public List<PagoDeFamilia> pagosDeFamilia(Long familiaId, LocalDate desde, LocalDate hasta) {
+		exigirRango(desde, hasta);
+		Objects.requireNonNull(familiaId, "familiaId");
+		return pagos.deFamiliaEntre(familiaId, desde, hasta).stream()
+				.map(p -> new PagoDeFamilia((LocalDate) p[0], (MedioPago) p[1], monto(p[2]), (EstadoPago) p[3],
+						p[4] + "-" + String.format("%08d", ((Number) p[5]).intValue()), (String) p[6]))
+				.toList();
 	}
 
 	private static void exigirRango(LocalDate desde, LocalDate hasta) {

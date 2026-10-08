@@ -412,7 +412,15 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".aprobaciones.service.BandejaAprobaciones#contarPendientes",
 					"hasAnyRole('PROMOTOR','DIRECTOR','SISTEMA_PANEL')"),
 			Map.entry(BASE + ".seguridad.service.ServicioContactoPersonal",
-					"hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','CAJA','DOCENTE')"));
+					"hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','CAJA','DOCENTE')"),
+			// Sprint 6, tanda 3 (decisión 77): la llamada de control la hacen Promotoría o Dirección (ven la muestra, los
+			// celulares registrados y los pagos de la familia); el panel y sistema.panel solo cuentan cuántas faltan y
+			// leen las «No confirma» para la alerta CRÍTICA.
+			Map.entry(BASE + ".panel.service.LlamadasControl", APROBACION),
+			Map.entry(BASE + ".panel.service.LlamadasControl#avance", ALERTAS),
+			Map.entry(BASE + ".panel.service.LlamadasControl#noConfirmanRecientes", ALERTAS),
+			Map.entry(BASE + ".alumnos.service.FamiliasParaLlamada", APROBACION),
+			Map.entry(BASE + ".caja.service.CifrasCaja#pagosDeFamilia", APROBACION));
 
 	/**
 	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para

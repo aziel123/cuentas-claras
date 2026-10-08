@@ -36,6 +36,13 @@
 		<a class="btn btn-texto btn-chico" th:href="@{/panel/resumenes}">Ver resúmenes enviados</a>
 	</section>
 
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-llamadas" data-seccion="llamadas">
+		<h2 id="titulo-llamadas" class="etiqueta">Llamadas de control</h2>
+		<p data-llamadas th:classappend="${p.llamadas.faltan > 0} ? 'texto-alerta'" th:text="${p.llamadas.texto}">Te faltan 2 de 3 esta semana.</p>
+		<p class="secundario">Cada semana el sistema elige al azar familias que pagaron en efectivo. Llámalas y pregunta primero cuánto y cuándo pagaron.</p>
+		<a class="btn btn-secundario btn-bloque" th:href="@{/panel/llamadas}">Ver a quién llamar</a>
+	</section>
+
 	<section class="tarjeta panel-bloque" aria-labelledby="titulo-hoy" data-seccion="hoy">
 		<h2 id="titulo-hoy" class="etiqueta">Hoy</h2>
 		<p class="cifra-grande num" data-cobrado-hoy th:text="${p.hoy.cobrado}">S/ 4,350.00</p>

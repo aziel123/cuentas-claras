@@ -793,3 +793,70 @@ Job `mysql` del CI reproducido **completo** con un script generado desde `.githu
 - **READ COMMITTED:** si otra transacción confirma un pago entre el cálculo y el INSERT de la foto, el trigger la rechaza; la tarea reintenta 3 veces y después deja `RESUMEN_DIARIO_NO_SALIO` y la alerta de las 21:00.
 - **El trigger de la foto recorre los pagos del mes y las cuotas vencidas** del colegio una vez al día (no se midió su tiempo; con 300 familias son miles de filas, no millones).
 - Los avisos al celular dependen de que cada alerta tenga un registro estable; las de conteo solo se ven en el panel.
+
+## Tanda 3 · Implementación
+> Agente `backend-spring`, 8 de octubre de 2026, rama `claude/sprint-6-panel-promotora`. **Migración V22 y 61 triggers.** La tanda 2 ya adelantó las alertas al celular y las aprobaciones desde el celular (puntos 1 a 3 de la tanda 3 de la sección 15). Aquí van el punto 4 (la llamada de control, P17), lo que la sección 13 asigna a la tanda 3 y los documentos de «Después de la tanda 3».
+
+### Verificado en MySQL 8 real
+Job `mysql` del CI reproducido **completo** con un script generado desde `.github/workflows/ci.yml` (los 12 pasos con `run`, mismos comandos y variables; el cliente `mysql` corre dentro del contenedor) contra un contenedor desechable `mysql:8` (8.4.11) en el puerto 3317, borrado al terminar:
+- V1–V22 con `cc_migrador`; Hibernate valida el esquema con `cc_app` (`MigracionMySqlTest`, 2/2). V22 recrea `ck_semilla_muestreo_ambito` sin errores;
+- `02` y `03` aplicados sin errores; `cc_app` ve los **61** triggers con `triggers_instalados()`;
+- fase 2: `PermisosMySqlTest` 84 pruebas, 0 fallas (las 7 de la fase 2b se saltan, como antes); fase 2b: 7/7;
+- paso `comprobar`: todos los 1142, 1143 y 1644, con los nuevos de `llamada_control` (UPDATE y DELETE 1142; la llamada imposible del colegio 0, 1644);
+- arranque real en `prod` con `cc_app` (en el log: «Permisos y triggers del panel (resumen diario, alertas a Promotoría, contacto del personal y llamadas de control) verificados» y «están los 61 de 03-triggers.sql») y rechazo con `cc_migrador`; M2 (sin `trg_mensaje_envio` prod no arranca).
+- **El flujo con los permisos mínimos guardó** la semilla `LLAMADA_CONTROL` del lunes y una llamada `CONFIRMA` por el servicio (con su evento `LLAMADA_CONTROL_REGISTRADA`); `llamadaNoSeEditaNiSeBorra` dejó una `NO_CONFIRMA` con nota y comprobó 3819, 1062 y 1142.
+
+### Qué se implementó
+- **V22** (`V22__llamada_de_control.sql`): `llamada_control` (solo inserción; `uk_llamada_control (colegio_id, semana, familia_id)`, FK compuesta a `familia`, CHECK del resultado y de la nota) e índice `ix_llamada_control_resultado (colegio_id, resultado, creado_en)` para la alerta. Recrea `ck_semilla_muestreo_ambito` con `('CAJA', 'LLAMADA_CONTROL')` (V19 solo admitía `CAJA`), con el patrón `DROP CONSTRAINT` / `ADD CONSTRAINT` de V20 y V21.
+- **`trg_llamada_control_registro`** (el trigger 61):
+  - la registra una persona ACTIVA del personal (`apoderado_id IS NULL`) con rol PROMOTOR o DIRECTOR del mismo colegio;
+  - `semana` es el lunes de la semana en curso en Lima, calculado con `DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR)` (como `trg_feriado_registro`; nunca con `creado_en`, que escribe la aplicación);
+  - la familia tiene un pago en EFECTIVO (vigente o anulado) entre 35 días antes de ese lunes y el domingo de esa semana.
+  - GRANT: solo `INSERT` sobre `llamada_control` (UPDATE y DELETE dan 1142).
+- **Puertos en los módulos dueños del dato** (el panel sigue sin usar repositorios ajenos):
+  - `caja.service.CifrasCaja.familiasConEfectivo(desde, hasta)` (ids en orden, JPQL `distinct`) y `pagosDeFamilia(familiaId, desde, hasta)` (fecha, medio, monto, estado, comprobante y quién lo registró; `hasAnyRole('PROMOTOR','DIRECTOR')`);
+  - `alumnos.service.FamiliasParaLlamada.de(ids)` (`hasAnyRole('PROMOTOR','DIRECTOR')`): nombre, apoderados ACTIVOS con su celular REGISTRADO y si alguno usa el portal (cuenta en línea activa que ya entró al menos una vez). Sin documentos ni correos.
+- **`panel.service.LlamadasControl`** (`hasAnyRole('PROMOTOR','DIRECTOR')`):
+  - `deEstaSemana()`: la muestra con sus contactos, lo ya registrado y los pagos de cada familia desde 35 días antes del lunes hasta hoy;
+  - `registrar(familiaId, LlamadaRequest)` (`@Transactional`): solo una familia de la muestra (si no, 404), una vez por semana (`ReglaNegocioException`, con la UNIQUE detrás), «No confirma» con nota de 10 a 300 caracteres (`TextoSeguro`), `saveAndFlush` y bitácora `LLAMADA_CONTROL_REGISTRADA` o `LLAMADA_CONTROL_NO_CONFIRMA` (resaltada) en la misma transacción;
+  - `avance()` y `noConfirmanRecientes()` (`hasAnyRole('PROMOTOR','SISTEMA_PANEL')`): para el panel, el resumen y los avisos al celular, sin crear la semilla.
+- **Muestra (`MuestraLlamadas`)**: candidatas ordenadas por id y barajadas con `SemillasMuestreo.de(LLAMADA_CONTROL, lunes)` (secreta, una por semana). Todas las plazas menos una van a las de mayor prioridad (sin portal Y con un solo apoderado; después las que cumplen una de las dos) y la última es al azar entre todas.
+- **Alertas (`AlertasPanel`)**:
+  - CRÍTICA por cada «No confirma» de los últimos 30 días, con `Aviso(LLAMADA_NO_CONFIRMA, "LC:<id>", lunes)` y enlace a la ficha de la familia. Sale al celular de Promotoría una sola vez con el texto fijo «Una familia no confirma lo registrado»; la nota de quien llamó solo se ve en el panel;
+  - ATENCIÓN el sábado y el domingo si faltan llamadas de la semana (no sale al celular).
+- **Pantallas**:
+  - `panel/llamadas` (Promotoría y Dirección; módulo `LLAMADAS_CONTROL` en `ModuloApp`, ANTES que `PANEL`), en tarjetas para celular: cómo hacer la llamada, celulares registrados con enlace `tel:`, los pagos registrados detrás de «Ya me dijo: ver lo registrado» (`<details>`, sin scripts) y el formulario con «Confirma», «No confirma» (con nota) o «No contesta» (POST con CSRF);
+  - el panel muestra el bloque «Llamadas de control» («Te faltan 2 de 3 esta semana.»).
+- **Propiedad** `cuentasclaras.panel.llamadas-por-semana: 3` (de 1 a 10) en `PropiedadesPanel`.
+- **Documentos de «Después de la tanda 3»**:
+  - `docs/estado-del-proyecto.md`: avance, sección del sprint 6, decisiones 64 a 81 y riesgos;
+  - `docs/operacion/mysql-usuarios.md`: filas de `resumen_diario` y `llamada_control`, la fila `resumen_correo_externo` del DBA y los códigos de error de las tandas 2 y 3;
+  - la guía de una página `docs/operacion/guia-promotora.md`.
+
+### Desviaciones del diseño
+1. **Semana del trigger: la EN CURSO, no «un lunes no futuro».** Con «no futuro», alguien con las credenciales de la aplicación podía registrar llamadas «hechas» en semanas pasadas. Ahora el lunes debe ser exactamente el de hoy en Lima.
+2. **Ventana del pago en efectivo.**
+   - La aplicación elige entre quienes pagaron en efectivo en los 35 días ANTERIORES al lunes, para que la muestra no cambie durante la semana.
+   - Si no alcanzan para la muestra (los primeros días del sistema), agrega a quienes pagaron en efectivo esa semana hasta hoy.
+   - Por eso el trigger acepta desde 35 días antes del lunes hasta el domingo de esa semana (el diseño decía `BETWEEN semana - 35 AND semana`).
+3. **Muestra: todas las plazas menos una por prioridad y la última al azar entre todas.** Con prioridad estricta, si había 3 o más familias sin portal y con un solo apoderado, las demás nunca salían, y la cajera sabría a quién no llamarán. Además, las familias ya llamadas en la semana siguen en la muestra aunque cambien las candidatas (por ejemplo, si un apoderado activa su portal a mitad de semana).
+4. **«Usa el portal»** significa que un apoderado activo tiene cuenta en línea activa y ya entró al menos una vez (`ultimo_ingreso_en`), no solo que se le creó la cuenta.
+5. **«No confirma» exige 10 caracteres de nota también en la base** (`CHAR_LENGTH(nota) >= 10` en el CHECK), no solo `nota IS NOT NULL`.
+6. **El trigger exige personal** (`u.apoderado_id IS NULL`) además del rol. El pago puede estar ANULADO, como dice el diseño.
+7. **La alerta CRÍTICA dura 30 días** desde el registro: la llamada es de solo inserción y no tiene estado «resuelta». En la bitácora queda resaltada para siempre.
+8. **La pantalla muestra los celulares registrados** de los apoderados activos para poder llamar desde el celular (Promotoría y Dirección ya los ven en la ficha de la familia). No muestra documentos ni correos.
+9. **`AVISOS_PROMOTORIA_ENVIADOS`** ya lo dejó la tanda 2 (una línea por pasada con mensajes nuevos; desviación 4 de la tanda 2).
+
+### Pruebas nuevas
+- **H2:**
+  - `panel.service.LlamadasControlTest` (P17): semilla secreta de la semana, estable durante la semana y otra la siguiente; «No confirma» exige nota, queda resaltado, es CRÍTICA y sale una sola vez al celular de Promotoría sin la nota ni el apellido; una familia fuera de la muestra da 404; Administración, Caja, Docente y Apoderado reciben 403; la pantalla con CSRF; el panel y la alerta del sábado;
+  - `panel.service.MuestraLlamadasTest`: estabilidad, prioridad y plaza abierta;
+  - casos nuevos en `InmutabilidadPanelTest` (columnas no actualizables, `@PreUpdate` y `@PreRemove`, solo GRANT INSERT), `AislamientoPanelTest` (P20: el colegio B no ve ni llama a las familias del A, 404), `VerificadorPermisosBaseDatosTest` (61 triggers; sin el trigger o con UPDATE o DELETE no arranca) y `ReglasArquitecturaTest` (expresiones de `@PreAuthorize` de los servicios nuevos).
+- **MySQL (`PermisosMySqlTest`):** `llamadaPorAdministracionFallaCon1644`, `llamadaAFamiliaSinEfectivoFallaCon1644`, `llamadaDeOtraSemanaFallaCon1644`, `llamadaNoSeEditaNiSeBorra` (3819, 1062 y 1142) y `flujoLlamadaControlConPermisosMinimos`. `MigracionMySqlTest` espera V1–V22.
+- **Resultado:** `./mvnw -B verify` con 1815 pruebas, 0 fallas y 86 omitidas (las de MySQL real, sin `CC_PRUEBA_MYSQL`); lo mismo con `-DargLine=-Duser.timezone=America/Los_Angeles`. `MigradorBaseDatosTest` espera 22 migraciones.
+- **CI:** fase 1 con V1–V22, `comprobar` con 1142 (UPDATE y DELETE de `llamada_control`) y 1644 (la llamada imposible del colegio 0), y la línea nueva del log del verificador.
+
+### Riesgos que quedan
+- La llamada de control depende de que Promotoría o Dirección llamen. El recordatorio del sábado es ATENCIÓN y no sale al celular.
+- La muestra cubre a pocas familias por semana: es un control por muestreo, no un arqueo de todas las familias.
+- `cc_app` puede escribir `creado_por` (riesgo M1 del sprint 3): con sus credenciales, alguien podría firmar como una persona de Promotoría. No puede, en cambio, registrar llamadas de otra semana ni a familias sin efectivo, ni corregir o borrar una ya registrada.

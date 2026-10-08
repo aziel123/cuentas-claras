@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Llamadas de control', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="llamadas-control" th:with="l=${llamadas}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Llamadas de control</p>
+			<h1 th:text="|Semana del ${l.semana}|">Semana del 19/04/2027</h1>
+			<p class="secundario">El sistema eligió al azar estas familias entre las que pagaron en efectivo desde el
+				<span th:text="${l.desde}">15/03/2027</span>. Nadie más sabe a quiénes vas a llamar.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-como" data-seccion="como">
+		<h2 id="titulo-como" class="etiqueta">Cómo hacer la llamada</h2>
+		<ol class="lista-panel">
+			<li>Llama al celular registrado de la familia.</li>
+			<li>Pregunta primero: «¿Cuánto pagó en el colegio en las últimas semanas y qué día?». No le digas los montos.</li>
+			<li>Cuando te responda, toca «Ya me dijo» y compara con lo registrado.</li>
+			<li>Registra el resultado. Si no coincide, escribe qué te dijo: se avisa al celular de Promotoría.</li>
+		</ol>
+		<p data-avance th:classappend="${l.faltan > 0} ? 'texto-alerta'"
+			th:text="${l.esperadas == 0} ? 'Esta semana no hay a quién llamar.' : (${l.faltan > 0} ? |Te faltan ${l.faltan} de ${l.esperadas} esta semana.| : |Hiciste las ${l.esperadas} de esta semana.|)">Te faltan 2 de 3 esta semana.</p>
+	</section>
+
+	<th:block th:if="${#lists.isEmpty(l.familias)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Esta semana no hay a quién llamar', 'Nadie pagó en efectivo en las últimas 5 semanas. La próxima semana el sistema vuelve a elegir.')}"></div>
+	</th:block>
+
+	<section th:each="f : ${l.familias}" class="tarjeta panel-bloque llamada-familia" th:data-familia="${f.familiaId}"
+		th:aria-labelledby="|familia-${f.familiaId}|">
+		<p class="fila entre">
+			<strong th:id="|familia-${f.familiaId}|" th:text="${f.nombre}">Quispe Huamán</strong>
+			<th:block th:if="${f.pendiente}"><span th:replace="~{fragments/componentes :: badge('Por llamar', 'alerta')}"></span></th:block>
+			<th:block th:unless="${f.pendiente}"><span th:replace="~{fragments/componentes :: badge(${f.registrada.resultado}, ${f.registrada.variante})}"></span></th:block>
+		</p>
+		<p class="secundario" th:if="${f.sinPortal or f.unSoloApoderado}"
+			th:text="${f.sinPortal and f.unSoloApoderado} ? 'No usa el portal y tiene un solo apoderado.' : (${f.sinPortal} ? 'No usa el portal.' : 'Tiene un solo apoderado.')">No usa el portal.</p>
+		<ul class="lista-panel" aria-label="Celulares registrados">
+			<li th:each="c : ${f.contactos}">
+				<span th:text="${c.parentesco != null} ? |${c.nombre} (${c.parentesco})| : ${c.nombre}">Rosa Huamán (Madre)</span>
+				<a th:if="${c.celular != null}" class="btn btn-secundario btn-bloque" th:href="|tel:${c.celular}|"
+					th:text="|Llamar al ${c.celular}|">Llamar al +51987654321</a>
+				<span th:if="${c.celular == null}" class="secundario">Sin celular registrado</span>
+			</li>
+		</ul>
+
+		<details class="desplegable" data-pagos>
+			<summary>Ya me dijo: ver lo registrado</summary>
+			<p th:if="${#lists.isEmpty(f.pagos)}" class="secundario">No hay pagos registrados en estas semanas.</p>
+			<ul class="lista-panel lista-tarjetas" th:unless="${#lists.isEmpty(f.pagos)}">
+				<li th:each="pg : ${f.pagos}" th:classappend="${pg.anulado} ? 'alerta-critica'">
+					<span class="fila entre">
+						<strong class="num" th:text="${pg.monto}">S/ 350.00</strong>
+						<span th:text="${pg.estado}">Vigente</span>
+					</span>
+					<span th:text="|${pg.fecha} · ${pg.medio} · ${pg.comprobante}|">15/04/2027 · Efectivo · B001-00000012</span>
+					<span class="secundario" th:text="|Lo registró ${pg.registradoPor}|">Lo registró caja</span>
+				</li>
+			</ul>
+		</details>
+
+		<form th:if="${f.pendiente}" method="post" th:action="@{/panel/llamadas/{id}(id=${f.familiaId})}" class="formulario">
+			<fieldset class="grupo-opciones">
+				<legend>¿Qué respondió la familia?</legend>
+				<label class="opcion"><input type="radio" name="resultado" value="CONFIRMA" required> Confirma lo registrado</label>
+				<label class="opcion"><input type="radio" name="resultado" value="NO_CONFIRMA"> No confirma lo registrado</label>
+				<label class="opcion"><input type="radio" name="resultado" value="NO_CONTESTA"> No contesta</label>
+			</fieldset>
+			<div class="campo">
+				<label th:for="|nota-${f.familiaId}|">Qué te dijo (obligatorio si no confirma)</label>
+				<textarea class="input" th:id="|nota-${f.familiaId}|" name="nota" maxlength="300"
+					th:aria-describedby="|nota-${f.familiaId}-ayuda|"></textarea>
+				<p class="ayuda" th:id="|nota-${f.familiaId}-ayuda|">Por ejemplo: «Dice que pagó S/ 450.00 en efectivo el 12/04 y no aparece».</p>
+			</div>
+			<button type="submit" class="btn btn-primario btn-bloque">Registrar resultado</button>
+		</form>
+		<th:block th:unless="${f.pendiente}">
+			<p class="secundario" th:text="|Registrada por ${f.registrada.por} · ${f.registrada.en}|">Registrada por promotora · 19/04/2027 10:15</p>
+			<p class="texto-largo" th:if="${f.registrada.nota != null}" th:text="|Nota: ${f.registrada.nota}|">Nota</p>
+		</th:block>
+	</section>
+
+	<a class="btn btn-texto btn-chico" th:href="@{${volver}}" th:text="${volver == '/panel'} ? 'Volver al panel' : 'Volver al inicio'">Volver al panel</a>
+</main>
+</body>
+</html>

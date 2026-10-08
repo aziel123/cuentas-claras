@@ -169,6 +169,10 @@ GRANT INSERT, UPDATE (estado, intentos, abonos_ciego, cargos_ciego, saldo_ciego,
 GRANT INSERT ON cuentasclaras.resumen_diario TO 'cc_app'@'%';                     -- solo inserción
 -- configuracion_bd sigue SIN GRANT. Fila nueva que solo escribe el DBA (opcional, en prod; decisión 69):
 --   ('resumen_correo_externo', '<correo del contador>') -> el resumen diario también le llega por correo.
+-- Sprint 6 · tanda 3 (V22): llamada de control, SOLO inserción (1142): el resultado de una llamada no se corrige ni se
+-- borra. semilla_muestreo no cambia su GRANT (el ámbito nuevo LLAMADA_CONTROL usa las mismas columnas). Quién la
+-- registra, la semana y el pago en efectivo de la familia los vigila trg_llamada_control_registro.
+GRANT INSERT ON cuentasclaras.llamada_control TO 'cc_app'@'%';                    -- solo inserción
 
 -- M2: cc_app no lee information_schema.TRIGGERS (necesitaría el privilegio TRIGGER, que no debe tener). Esta función
 -- (SQL SECURITY DEFINER: corre con los permisos de quien la crea) devuelve solo los nombres de los triggers del esquema,

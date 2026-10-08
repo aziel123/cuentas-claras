@@ -3363,4 +3363,116 @@ class PermisosMySqlTest {
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'REPORTE_EXPORTADO' AND "
 				+ "nombre_usuario = ?", Long.class, "promo.cifras." + sufijo)).isEqualTo(2);
 	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// Sprint 6, tanda 3 (V22): llamada de control (decisión 77, P17). trg_llamada_control_registro calcula «hoy en Lima»
+	// con DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR); la prueba usa LocalDate.now(LIMA).
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.panel.service.LlamadasControl llamadasControl;
+
+	private static final String INSERTAR_LLAMADA = "INSERT INTO llamada_control (colegio_id, semana, familia_id, "
+			+ "resultado, nota, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, ?, ?, NOW(6), ?, NOW(6))";
+
+	private static java.time.LocalDate lunesDeEstaSemana() {
+		return java.time.LocalDate.now(LIMA).with(java.time.temporal.TemporalAdjusters.previousOrSame(
+				java.time.DayOfWeek.MONDAY));
+	}
+
+	/** Una familia nueva que pagó hoy en efectivo (en la ventanilla, con los permisos mínimos): su id. */
+	private Long familiaQuePagoEnEfectivo(String caja) {
+		Long[] alumno = alumnoParaElPanel();
+		UsuariosDePrueba.iniciarSesion(cajera(caja));
+		cobrarEfectivo(alumno[0], java.util.List.of(cuotaDe(alumno[1], 3)), "450.00");
+		SecurityContextHolder.clearContext();
+		return alumno[0];
+	}
+
+	private int llamada(java.time.LocalDate semana, Long familia, String resultado, String nota, String quien) {
+		return jdbc.update(INSERTAR_LLAMADA, semana, familia, resultado, nota, quien);
+	}
+
+	/** P17: Administración o Caja no registran llamadas de control (aunque la familia pagó en efectivo). */
+	@Test
+	void llamadaPorAdministracionFallaCon1644() {
+		Long familia = familiaQuePagoEnEfectivo("caja.lc1");
+		Usuario administracion = guardar("adm.lc." + sufijo, Rol.ADMINISTRACION);
+		Usuario caja = guardar("caja.lc." + sufijo, Rol.CAJA);
+		assertThat(codigoAl(() -> llamada(lunesDeEstaSemana(), familia, "CONFIRMA", null,
+				administracion.getNombreUsuario()))).as("Administración").isEqualTo(1644);
+		assertThat(codigoAl(() -> llamada(lunesDeEstaSemana(), familia, "CONFIRMA", null, caja.getNombreUsuario())))
+				.as("Caja").isEqualTo(1644);
+		assertThat(codigoAl(() -> llamada(lunesDeEstaSemana(), familia, "CONFIRMA", null, "nadie." + sufijo)))
+				.as("alguien que no existe").isEqualTo(1644);
+	}
+
+	/** P17: la familia de la llamada pagó en efectivo; una que no pagó (o solo por Yape) no se «confirma». */
+	@Test
+	void llamadaAFamiliaSinEfectivoFallaCon1644() {
+		Usuario promotora = guardar("promo.lc2." + sufijo, Rol.PROMOTOR);
+		Long[] sinPagos = alumnoParaElPanel();
+		assertThat(codigoAl(() -> llamada(lunesDeEstaSemana(), sinPagos[0], "CONFIRMA", null,
+				promotora.getNombreUsuario()))).isEqualTo(1644);
+	}
+
+	/** La semana es el lunes de la semana EN CURSO en Lima: ni una pasada, ni una futura, ni otro día. */
+	@Test
+	void llamadaDeOtraSemanaFallaCon1644() {
+		Long familia = familiaQuePagoEnEfectivo("caja.lc3");
+		Usuario directora = guardar("dir.lc3." + sufijo, Rol.DIRECTOR);
+		java.time.LocalDate lunes = lunesDeEstaSemana();
+		for (java.time.LocalDate semana : java.util.List.of(lunes.minusWeeks(1), lunes.plusWeeks(1), lunes.plusDays(1))) {
+			assertThat(codigoAl(() -> llamada(semana, familia, "CONFIRMA", null, directora.getNombreUsuario())))
+					.as(semana.toString()).isEqualTo(1644);
+		}
+	}
+
+	/** Solo inserción: ni la corrige quien la hizo (1142); una por familia y semana (1062); «No confirma» lleva nota (3819). */
+	@Test
+	void llamadaNoSeEditaNiSeBorra() {
+		Long familia = familiaQuePagoEnEfectivo("caja.lc4");
+		Usuario promotora = guardar("promo.lc4." + sufijo, Rol.PROMOTOR);
+		assertThat(codigoAl(() -> llamada(lunesDeEstaSemana(), familia, "NO_CONFIRMA", null,
+				promotora.getNombreUsuario()))).as("«No confirma» sin nota").isEqualTo(3819);
+		assertThat(llamada(lunesDeEstaSemana(), familia, "NO_CONFIRMA", "Dice que pagó 500 soles, no 450",
+				promotora.getNombreUsuario())).isEqualTo(1);
+		assertThat(codigoAl(() -> llamada(lunesDeEstaSemana(), familia, "CONFIRMA", null, promotora.getNombreUsuario())))
+				.as("otra vez la misma familia").isEqualTo(1062);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE llamada_control SET resultado = 'CONFIRMA' WHERE familia_id = ?",
+				familia))).isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM llamada_control WHERE familia_id = ?", familia)))
+				.isEqualTo(1142);
+	}
+
+	/**
+	 * P17 con los permisos mínimos: la muestra de esta semana (semilla LLAMADA_CONTROL guardada con el CHECK de V22), los
+	 * pagos de la familia y el registro por el servicio pasan el trigger; la bitácora queda con el resultado.
+	 */
+	@Test
+	void flujoLlamadaControlConPermisosMinimos() {
+		familiaQuePagoEnEfectivo("caja.lc5");
+		Usuario promotora = guardar("promo.lc5." + sufijo, Rol.PROMOTOR);
+		UsuariosDePrueba.iniciarSesion(promotora);
+		var semana = llamadasControl.deEstaSemana();
+		assertThat(semana.familias()).isNotEmpty();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM semilla_muestreo WHERE colegio_id = 1 AND ambito = "
+				+ "'LLAMADA_CONTROL' AND fecha = ?", Long.class, lunesDeEstaSemana())).isEqualTo(1);
+		var pendiente = semana.familias().stream().filter(f -> f.pendiente()).findFirst();
+		org.junit.jupiter.api.Assumptions.assumeTrue(pendiente.isPresent(), "ya se llamó a toda la muestra (otra corrida)");
+		Long familia = pendiente.get().familiaId();
+		assertThat(pendiente.get().pagos()).isNotEmpty();
+
+		Long id = llamadasControl.registrar(familia, new pe.edu.virgenmaria.cuentasclaras.panel.dto.LlamadaRequest(
+				pe.edu.virgenmaria.cuentasclaras.panel.model.ResultadoLlamada.CONFIRMA, null));
+
+		assertThat(jdbc.queryForMap("SELECT semana, familia_id, resultado, creado_por FROM llamada_control WHERE id = ?",
+				id)).containsEntry("semana", java.sql.Date.valueOf(lunesDeEstaSemana())).containsEntry("familia_id", familia)
+				.containsEntry("resultado", "CONFIRMA").containsEntry("creado_por", promotora.getNombreUsuario());
+		assertThat(jdbc.queryForObject("SELECT valor_nuevo FROM evento_auditoria WHERE accion = "
+				+ "'LLAMADA_CONTROL_REGISTRADA' AND entidad_id = ?", String.class, id.toString())).isEqualTo("CONFIRMA");
+		assertThat(llamadasControl.deEstaSemana().hechas()).isGreaterThanOrEqualTo(1);
+		assertThatThrownBy(() -> llamadasControl.registrar(familia, new pe.edu.virgenmaria.cuentasclaras.panel.dto
+				.LlamadaRequest(pe.edu.virgenmaria.cuentasclaras.panel.model.ResultadoLlamada.NO_CONTESTA, null)))
+				.isInstanceOf(pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException.class);
+	}
 }

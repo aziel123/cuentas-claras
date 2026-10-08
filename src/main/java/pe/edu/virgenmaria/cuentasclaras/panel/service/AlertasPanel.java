@@ -12,9 +12,12 @@ import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.Aviso;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.TipoAviso;
 import pe.edu.virgenmaria.cuentasclaras.panel.config.PropiedadesPanel;
+import pe.edu.virgenmaria.cuentasclaras.panel.dto.AvanceLlamadas;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.ComparacionResumen;
+import pe.edu.virgenmaria.cuentasclaras.panel.model.LlamadaControl;
 
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -32,6 +35,8 @@ import java.util.stream.Collectors;
  *       tardío (un pago borrado o alterado por SQL). Si lo explican, PARA SABER.</li>
  *   <li>ATENCIÓN: alguien descargó más de {@code exportaciones-atencion} reportes hoy; el celular o el correo de alguien
  *       del personal cambió en los últimos 7 días. PARA SABER: las descargas de hoy.</li>
+ *   <li>Tanda 3 (P17): CRÍTICA, una familia de la llamada de control no confirmó lo registrado (30 días, con aviso al
+ *       celular); ATENCIÓN, el sábado y el domingo, si faltan llamadas de la semana.</li>
  * </ul>
  * No dependen de la persona en sesión: también las calcula {@code sistema.panel} (resumen y avisos al celular).
  */
@@ -53,12 +58,15 @@ public class AlertasPanel implements AlertasRevision {
 
 	private final Clock reloj;
 
+	private final LlamadasControl llamadas;
+
 	public AlertasPanel(ResumenesDiarios resumenes, AuditoriaService auditoria, PropiedadesPanel propiedades,
-			Clock reloj) {
+			Clock reloj, LlamadasControl llamadas) {
 		this.resumenes = resumenes;
 		this.auditoria = auditoria;
 		this.propiedades = propiedades;
 		this.reloj = reloj;
+		this.llamadas = llamadas;
 	}
 
 	@Override
@@ -98,7 +106,30 @@ public class AlertasPanel implements AlertasRevision {
 					+ "personal en los últimos 7 días. Confirma con cada persona que el nuevo es suyo.",
 					"/auditoria?accion=CONTACTO_PERSONAL_CAMBIADO"));
 		}
+		llamadasDeControl(alertas, hoy);
 		return alertas;
+	}
+
+	/**
+	 * Tanda 3 (P17): cada «No confirma» de los últimos 30 días es CRÍTICA (sale al celular una vez, con texto fijo: el
+	 * de la alerta lleva la nota de quien llamó); el sábado y el domingo, si faltan llamadas de la semana, ATENCIÓN.
+	 */
+	private void llamadasDeControl(List<AlertaRevision> alertas, LocalDate hoy) {
+		for (LlamadaControl l : llamadas.noConfirmanRecientes()) {
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Llamada de control de la semana del "
+					+ l.getSemana().format(FECHA) + ": la familia (código " + l.getFamiliaId() + ") no confirma lo "
+					+ "registrado. Anotó " + l.getCreadoPor() + ": «" + l.getNota() + "». Revisa sus pagos y la caja de quien "
+					+ "los cobró.", "/alumnos/familias/" + l.getFamiliaId(),
+					new Aviso(TipoAviso.LLAMADA_NO_CONFIRMA, "LC:" + l.getId(), l.getSemana().format(FECHA))));
+		}
+		if (hoy.getDayOfWeek() == DayOfWeek.SATURDAY || hoy.getDayOfWeek() == DayOfWeek.SUNDAY) {
+			AvanceLlamadas avance = llamadas.avance();
+			if (avance.faltan() > 0) {
+				alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, "Faltan " + avance.faltan() + " de "
+						+ avance.esperadas() + " llamadas de control de esta semana. Hazlas antes de que termine el domingo.",
+						"/panel/llamadas"));
+			}
+		}
 	}
 
 	/** P5: hoy pasada la hora de la alerta, y ayer todo el día (así el aviso sale también a las 07:00). */

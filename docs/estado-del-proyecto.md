@@ -13,6 +13,7 @@
 | 3 · Caja (pagos, comprobantes, anulaciones, descuentos, cierre ciego, conciliación) | ✅ Terminado, auditado y corregido | `claude/sprint-3-correcciones` | 967 |
 | 4 · Cero digitación (pago en línea, comprobante automático, recaudación bancaria, conciliación automática) | ✅ Terminado, auditado y corregido | `claude/sprint-4-cero-digitacion` | 1429 |
 | 5 · Familias y matrícula 2027 (avisos por WhatsApp, acceso directo al titular, huella diaria, portal, renovación 2027, feriados, cierre mensual) | ✅ Terminado, auditado y corregido | `claude/sprint-5-familias` | 1694 (más las de MySQL real, que corren en el CI) |
+| 6 · Panel de la promotora (panel, reportes y Excel, resumen diario, alertas y aprobaciones en el celular, contacto del personal, llamada de control) | En curso: implementado en 3 tandas; falta la auditoría (`qa-tester` y `auditor-seguridad-antifraude`) | `claude/sprint-6-panel-promotora` | 1815 (86 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
 
 El sprint 4 se implementó en 3 tandas verificadas, cada una con su migración y probada también contra MySQL 8 real, y luego se corrigió todo lo que encontraron la auditoría antifraude y QA:
 
@@ -90,6 +91,16 @@ Diseño en `docs/arquitectura/sprint-5-familias.md` y correcciones en `sprint-5-
 - **Feriados:** los 16 nacionales en el código; los días no laborables extra los propone un rol y los aprueba otro, con tope.
 - **Muestra de caja con semilla secreta** y **cierre bancario mensual a ciegas** contra el estado de cuenta oficial.
 
+### Panel de la promotora (sprint 6)
+Diseño en `docs/arquitectura/sprint-6-panel-promotora.md`, con una sección de implementación por tanda (migraciones V21 y
+V22, 61 triggers en MySQL). Guía de una página para la promotora: `docs/operacion/guia-promotora.md`.
+- **Panel en el celular** (`/panel`, solo Promotoría): lo cobrado hoy y en el mes, la deuda vencida por tramos, el % de pagos digitales, las rebajas del mes con quién aprobó, lo que espera aprobación y las alertas. Ninguna cifra se guarda ni se escribe a mano.
+- **Reportes y Excel para el contador:** morosidad por grado (nunca por sección) e ingresos por medio de pago; el Excel no admite fórmulas, lleva datos mínimos y cada descarga queda en la bitácora con su código impreso en el archivo.
+- **Resumen diario a las 19:30** por WhatsApp (o correo), con una foto de las cifras que la base compara al centavo con los libros, y la huella de las 19:00. Las cifras de un día ya enviado que cambian sin explicación son alerta crítica.
+- **Alertas al celular** (una vez cada una, con texto fijo y sin nombres) y **aprobaciones desde el celular** con la misma regla de «quien pidió no aprueba».
+- **Contacto del personal:** el celular o correo de una persona del personal solo cambia con su solicitud aprobada por otra persona (trigger en MySQL).
+- **Llamada de control semanal** (`/panel/llamadas`, Promotoría y Dirección): el sistema elige con una semilla secreta familias que pagaron en efectivo (con prioridad para las que no usan el portal o tienen un solo apoderado); se pregunta primero cuánto y cuándo pagaron, y después se compara. «No confirma» es alerta crítica.
+
 ## Cómo probarlo en tu computadora
 Requisito: Java 21.
 ```bash
@@ -161,6 +172,28 @@ Todas tienen un valor por defecto ya implementado y se pueden cambiar.
 | 36 | Cuenta en línea del apoderado | Enlace de un solo uso (48 h) entregado en persona o por un canal del titular; desde el sprint 5, por WhatsApp o correo |
 | 37 | Contracargos | Alerta CRÍTICA y anulación de tipo CONTRACARGO, sin reembolso, que aprueba Promotoría o Dirección |
 
+### Sprint 6
+| # | Tema | Valor actual |
+|---|---|---|
+| 64 | Quién ve qué | Panel: Promotoría. Morosidad e ingresos en pantalla: Promotoría, Dirección y Administración. Excel: Promotoría y Administración. Llamada de control: Promotoría y Dirección. Caja y Docente: nada |
+| 65 | % de pagos digitales | Por número de pagos, con el % por monto debajo |
+| 66 | Familia morosa | Al menos una cuota con saldo vencido; tramos 1–30, 31–60, 61–90 y más de 90 días |
+| 67 | Cobrado y anulado | Cobrado = pagos vigentes por día de caja; lo anulado, aparte, en el periodo en que se aprobó |
+| 68 | Hora del resumen diario | 19:30, de lunes a sábado; domingo y feriado solo si hubo cobros |
+| 69 | Destinatarios del resumen | Cada Promotor activo (WhatsApp, con correo si falla) y el correo del contador si el DBA lo configura |
+| 70 | Alertas al celular | Las críticas más «caja sin cerrar a la hora límite» y «anulación por aprobar»; de 07:00 a 21:00; 10 por persona y día |
+| 71 | Anulaciones por aprobar a Dirección | Sí, nunca a quien la pidió ni a la cajera del pago |
+| 72 | Aprobar desde el celular | Misma bandeja, con sesión; sin enlaces que aprueben; una sesión por persona |
+| 73 | Exportación | Solo .xlsx; hasta 12 meses por archivo y 20 descargas por persona y día |
+| 74 | Datos del Excel del contador | Sin DNI, nombres de alumnos ni contactos; familia por código; RUC solo en facturas |
+| 75 | Montos en el Excel | Como número con dos decimales; los totales de control también como texto |
+| 76 | Lista de familias morosas | Solo en pantalla; no se exporta |
+| 77 | Llamada de control | 3 familias por semana que pagaron en efectivo en las 5 semanas anteriores: 2 con prioridad (sin portal o con un solo apoderado) y 1 al azar entre todas |
+| 78 | Cambio de celular o correo del personal | Lo pide el titular o Promotoría; lo aprueba otra persona; aviso al contacto anterior |
+| 79 | Segundo factor para aprobar desde el celular | No en este sprint (sesión de 30 minutos); se evalúa en el sprint 7 |
+| 80 | «Excepciones grandes» solo para Promotoría | Sin umbral: aprueba Promotoría o Dirección |
+| 81 | Ventana del recálculo de las fotos del resumen | 35 días |
+
 La lista completa está en los documentos de `docs/arquitectura/`, incluidas la sección 16 de `sprint-3-caja.md` y la 17 de `sprint-4-cero-digitacion.md`.
 
 ## Pendiente fuera del código
@@ -185,4 +218,6 @@ La lista completa está en los documentos de `docs/arquitectura/`, incluidas la 
 - `cc_app` puede escribir cualquier texto en `creado_por`: con sus credenciales, alguien podría firmar como `sistema.conciliacion`. Lo frenan los triggers (una verificación automática exige una partida confirmada sobre un extracto confirmado) y la bitácora.
 - Los formatos reales de los bancos y de la pasarela no se pudieron verificar: el extracto y la recaudación usan un formato genérico hasta tener un archivo de ejemplo.
 - Los feriados no se consideran días hábiles todavía: un feriado puede adelantar una alerta de «no aparece en el banco» o «sin abono»; se resuelve con nota.
+- **El panel y sus controles dependen de que la promotora los mire:** el resumen diario, las alertas al celular y la llamada de control semanal no sirven si nadie los lee o nadie llama. Lo mitigan la alerta «el resumen no salió», el recordatorio del sábado de las llamadas que faltan y la capacitación (`docs/operacion/guia-promotora.md`).
+- **La llamada de control** detecta efectivo no registrado solo en la muestra de la semana (3 familias). Una familia que confirma de memoria un monto equivocado da un falso «Confirma»: por eso se pregunta primero y se compara después.
 - El comprobante simulado no tiene validez tributaria: mientras no se active el OSE, el colegio sigue emitiendo su comprobante legal también por los pagos en línea y por banco.
