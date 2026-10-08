@@ -15,6 +15,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.CifrasResumen;
+import pe.edu.virgenmaria.cuentasclaras.panel.dto.ComparacionResumen;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.VistaPanel;
 
 import java.time.Clock;
@@ -43,13 +44,16 @@ public class PanelPromotoria {
 
 	private final Clock reloj;
 
+	private final ResumenesDiarios resumenes;
+
 	public PanelPromotoria(CifrasDelDia cifras, CifrasCobranza cobranza, BandejaAprobaciones bandeja,
-			ObjectProvider<AlertasRevision> alertas, Clock reloj) {
+			ObjectProvider<AlertasRevision> alertas, Clock reloj, ResumenesDiarios resumenes) {
 		this.cifras = cifras;
 		this.cobranza = cobranza;
 		this.bandeja = bandeja;
 		this.alertas = alertas;
 		this.reloj = reloj;
+		this.resumenes = resumenes;
 	}
 
 	public VistaPanel ver() {
@@ -64,7 +68,7 @@ public class PanelPromotoria {
 		DeudaVencida deuda = c.deuda();
 		return new VistaPanel(Calendario.formatear(hoy), todas,
 				todas.stream().filter(a -> a.gravedad() == AlertaRevision.Gravedad.CRITICA).count(),
-				bandeja.bandeja().pendientes().size(),
+				Math.toIntExact(bandeja.contarPendientes()),
 				new VistaPanel.Hoy(Dinero.formatear(dia.total()), dia.cantidad(), Formato.porcentaje(dia.porcentajeDigital()),
 						Formato.porcentaje(dia.porcentajeDigitalPorMonto()), Dinero.formatear(dia.efectivo()),
 						dia.pagosEfectivo(), c.cajas().abiertas(), c.cajas().cerradas(), c.cajas().conDiferencia()),
@@ -76,7 +80,16 @@ public class PanelPromotoria {
 						deuda.tramos().hasta60(), deuda.tramos().hasta90(), deuda.tramos().masDe90()),
 				new VistaPanel.Rebajas(Dinero.formatear(rebajas.descuentos()), rebajas.cantidadDescuentos(),
 						quienes(rebajas.descuentosPorAprobador()), Dinero.formatear(rebajas.cuotasAnuladas()),
-						rebajas.cantidadCuotasAnuladas(), quienes(rebajas.anuladasPorAprobador())));
+						rebajas.cantidadCuotasAnuladas(), quienes(rebajas.anuladasPorAprobador())),
+				resumen(hoy));
+	}
+
+	/** Tanda 2: el resumen de hoy (su envío) y cuántos días ya informados cambiaron sin explicación. */
+	private VistaPanel.Resumen resumen(LocalDate hoy) {
+		long sinExplicar = resumenes.comparar().stream().filter(ComparacionResumen::sinExplicar).count();
+		return resumenes.deFecha(hoy).map(r -> new VistaPanel.Resumen(r.envio(), r.salioATodos(), sinExplicar))
+				.orElseGet(() -> new VistaPanel.Resumen(resumenes.debiaSalir(hoy) ? "Aún no sale (sale a las 19:30)"
+						: "Hoy no corresponde (domingo o feriado sin cobros)", false, sinExplicar));
 	}
 
 	/** «director: 2 por S/ 90.00». */

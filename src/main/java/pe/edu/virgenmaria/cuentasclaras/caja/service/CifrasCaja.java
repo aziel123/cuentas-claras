@@ -4,6 +4,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.AnuladoPeriodo;
+import pe.edu.virgenmaria.cuentasclaras.caja.dto.CambiosPosteriores;
+import pe.edu.virgenmaria.cuentasclaras.caja.dto.CobradoDia;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CobradoPeriodo;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.EstadoCajas;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.PagoExportable;
@@ -40,7 +42,7 @@ import java.util.Objects;
  */
 @Service
 @Transactional(readOnly = true)
-@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION')")
+@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','SISTEMA_PANEL')")
 public class CifrasCaja {
 
 	private final PagoRepository pagos;
@@ -149,6 +151,54 @@ public class CifrasCaja {
 		}
 		filas.sort(Comparator.comparing(PagoExportable::fecha));
 		return filas;
+	}
+
+	/**
+	 * Sprint 6, tanda 2: lo cobrado (pagos VIGENTES) en cada día de caja de un rango, con la parte en efectivo. Los días
+	 * sin pagos no aparecen. Mismas definiciones que {@link #cobrado} (y que el trigger de la foto del resumen).
+	 */
+	public java.util.Map<LocalDate, CobradoDia> cobradoPorDia(LocalDate desde, LocalDate hasta) {
+		exigirRango(desde, hasta);
+		java.util.Map<LocalDate, BigDecimal[]> montos = new java.util.TreeMap<>();
+		java.util.Map<LocalDate, long[]> cantidades = new java.util.TreeMap<>();
+		for (Object[] fila : pagos.vigentesPorDiaYMedio(desde, hasta)) {
+			LocalDate fecha = (LocalDate) fila[0];
+			boolean efectivo = fila[1] == MedioPago.EFECTIVO;
+			long cantidad = ((Number) fila[2]).longValue();
+			BigDecimal suma = monto(fila[3]);
+			BigDecimal[] m = montos.computeIfAbsent(fecha, f -> new BigDecimal[] { Dinero.CERO, Dinero.CERO });
+			long[] c = cantidades.computeIfAbsent(fecha, f -> new long[2]);
+			m[0] = m[0].add(suma);
+			c[0] += cantidad;
+			if (efectivo) {
+				m[1] = m[1].add(suma);
+				c[1] += cantidad;
+			}
+		}
+		java.util.Map<LocalDate, CobradoDia> porDia = new java.util.TreeMap<>();
+		montos.forEach((fecha, m) -> porDia.put(fecha, new CobradoDia(fecha, Dinero.normalizar(m[0]),
+				cantidades.get(fecha)[0], Dinero.normalizar(m[1]), cantidades.get(fecha)[1])));
+		return porDia;
+	}
+
+	/**
+	 * Sprint 6, tanda 2 (P4): pagos de un rango de días registrados o anulados DESPUÉS de {@code despuesDe}. Explica por
+	 * qué la foto de un día ya informado no coincide con los libros de hoy.
+	 */
+	public CambiosPosteriores cambiosPosteriores(LocalDate desde, LocalDate hasta, java.time.LocalDateTime despuesDe) {
+		exigirRango(desde, hasta);
+		Objects.requireNonNull(despuesDe, "despuesDe");
+		List<CambiosPosteriores.Movimiento> registrados = new ArrayList<>();
+		for (Object[] p : pagos.vigentesRegistradosDespuesDe(desde, hasta, despuesDe)) {
+			registrados.add(new CambiosPosteriores.Movimiento((LocalDate) p[0], (MedioPago) p[1], monto(p[2]),
+					(java.time.LocalDateTime) p[3], null));
+		}
+		List<CambiosPosteriores.Movimiento> anulados = new ArrayList<>();
+		for (Object[] a : anulaciones.anuladasDespuesDe(desde, hasta, despuesDe)) {
+			anulados.add(new CambiosPosteriores.Movimiento((LocalDate) a[0], (MedioPago) a[1], monto(a[2]),
+					(java.time.LocalDateTime) a[3], (java.time.LocalDateTime) a[4]));
+		}
+		return new CambiosPosteriores(registrados, anulados);
 	}
 
 	private static void exigirRango(LocalDate desde, LocalDate hasta) {

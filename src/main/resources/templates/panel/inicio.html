@@ -24,8 +24,17 @@
 		<p th:if="${#lists.isEmpty(p.alertas)}" class="secundario">Sin alertas por ahora.</p>
 	</section>
 
-	<a class="btn btn-primario btn-bloque" th:href="@{/aprobaciones}" data-por-aprobar
+	<a class="btn btn-primario btn-bloque" th:href="@{/aprobaciones(vista='movil')}" data-por-aprobar
 		th:text="|Para aprobar: ${p.porAprobar}|">Para aprobar: 3</a>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-resumen" data-seccion="resumen">
+		<h2 id="titulo-resumen" class="etiqueta">Resumen de hoy</h2>
+		<p data-resumen th:text="${p.resumen.estado}">Enviado 19:30 · Entregado</p>
+		<p class="secundario">Te llega a las 19:30 por WhatsApp (o correo). Si a las 20:00 no te llegó, revísalo aquí.</p>
+		<p th:if="${p.resumen.cambiosSinExplicar > 0}" class="texto-peligro" data-cambios-sin-explicar
+			th:text="|${p.resumen.cambiosSinExplicar} día(s) ya informado(s) cambiaron sin explicación.|">1 día cambió sin explicación.</p>
+		<a class="btn btn-texto btn-chico" th:href="@{/panel/resumenes}">Ver resúmenes enviados</a>
+	</section>
 
 	<section class="tarjeta panel-bloque" aria-labelledby="titulo-hoy" data-seccion="hoy">
 		<h2 id="titulo-hoy" class="etiqueta">Hoy</h2>

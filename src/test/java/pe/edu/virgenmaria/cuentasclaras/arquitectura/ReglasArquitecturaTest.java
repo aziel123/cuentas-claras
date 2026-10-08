@@ -214,6 +214,11 @@ class ReglasArquitecturaTest {
 
 	private static final String APROBACION = "hasAnyRole('PROMOTOR','DIRECTOR')";
 
+	/** Sprint 6, tanda 2: las alertas las calculan Promotoría y sistema.panel (resumen diario y avisos al celular). */
+	private static final String ALERTAS = "hasAnyRole('PROMOTOR','SISTEMA_PANEL')";
+
+	private static final String LECTURA_CIFRAS = "hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','SISTEMA_PANEL')";
+
 	private static final Map<String, String> EXPRESIONES_EXIGIDAS = Map.ofEntries(
 			Map.entry(BASE + ".seguridad.service.ServicioUsuarios", "hasAnyRole('PROMOTOR','DIRECTOR')"),
 			Map.entry(BASE + ".auditoria.service.ConsultaAuditoriaService", "hasAnyRole('PROMOTOR','DIRECTOR')"),
@@ -251,7 +256,7 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#aprobar", APROBACION),
 			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#enviar", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#devolver", APROBACION),
-			Map.entry(BASE + ".cobranza.service.AlertasCobranza", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".cobranza.service.AlertasCobranza", ALERTAS),
 			Map.entry(BASE + ".cobranza.service.ServicioCronograma", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".cobranza.service.GeneradorCronograma#generarPendientes", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial", LECTURA_ESCOLAR),
@@ -277,7 +282,7 @@ class ReglasArquitecturaTest {
 			// Sprint 3, tanda 3: la cajera cierra; Promotoría y Dirección miran las cajas; Administración verifica.
 			Map.entry(BASE + ".caja.service.ServicioCierreCaja", "hasRole('CAJA')"),
 			Map.entry(BASE + ".caja.service.ConsultaCajas", "hasAnyRole('PROMOTOR','DIRECTOR')"),
-			Map.entry(BASE + ".caja.service.AlertasCaja", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".caja.service.AlertasCaja", ALERTAS),
 			Map.entry(BASE + ".caja.service.IndicadoresCaja", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#verificarPago", SOLO_ADMINISTRACION),
@@ -295,17 +300,18 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".pasarela.service.ServicioIngresosPorRevisar#solicitarAplicacion", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".pasarela.service.ServicioIngresosPorRevisar#solicitarDevolucion", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".pasarela.service.DevolucionesPasarela", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".pasarela.service.AlertasPagosEnLinea", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".pasarela.service.AlertasPagosEnLinea", ALERTAS),
 			Map.entry(BASE + ".comprobantes.service.ConsultaComprobantes", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".comprobantes.service.ConsultaComprobantes#adelantarReintento", SOLO_ADMINISTRACION),
 			// Sprint 6, tanda 1: panel (solo Promotoría), cifras y reportes en pantalla (PROM, DIR, ADM) y Excel (PROM, ADM).
-			Map.entry(BASE + ".caja.service.CifrasCaja", LECTURA_ESCOLAR),
-			Map.entry(BASE + ".cobranza.service.CifrasCobranza", LECTURA_ESCOLAR),
-			Map.entry(BASE + ".panel.service.CifrasDelDia", "hasRole('PROMOTOR')"),
+			// Sprint 6, tanda 2 (desviación 1 de la tanda 1): las cifras también las lee sistema.panel (la foto del resumen).
+			Map.entry(BASE + ".caja.service.CifrasCaja", LECTURA_CIFRAS),
+			Map.entry(BASE + ".cobranza.service.CifrasCobranza", LECTURA_CIFRAS),
+			Map.entry(BASE + ".panel.service.CifrasDelDia", ALERTAS),
 			Map.entry(BASE + ".panel.service.PanelPromotoria", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".panel.service.ReportesCobranza", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".panel.service.ExportacionContador", "hasAnyRole('PROMOTOR','ADMINISTRACION')"),
-			Map.entry(BASE + ".comprobantes.service.AlertasComprobantes", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".comprobantes.service.AlertasComprobantes", ALERTAS),
 			Map.entry(BASE + ".caja.service.ServicioReemision", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados", "hasAnyRole('PROMOTOR','ADMINISTRACION')"),
 			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados#cuentaDe", LECTURA_ESCOLAR),
@@ -326,7 +332,7 @@ class ReglasArquitecturaTest {
 					SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".recaudacion.service.ServicioExcepcionesRecaudacion#registrarDevolucion",
 					SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".recaudacion.service.AlertasRecaudacion", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".recaudacion.service.AlertasRecaudacion", ALERTAS),
 			// Sprint 4, tanda 3: Administración sube el extracto y revisa las diferencias; Promotoría o Dirección lo confirman
 			// a ciegas (nunca quien lo subió); solo Promotoría registra las cuentas; lo automático, solo el sistema.
 			Map.entry(BASE + ".conciliacion.service.ServicioExtractos", LECTURA_ESCOLAR),
@@ -345,7 +351,7 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".conciliacion.service.ServicioCuentasBancarias#registrar", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".conciliacion.service.ServicioCuentasBancarias#desactivar", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".conciliacion.service.ResumenConciliacion", LECTURA_ESCOLAR),
-			Map.entry(BASE + ".conciliacion.service.AlertasConciliacion", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".conciliacion.service.AlertasConciliacion", ALERTAS),
 			Map.entry(BASE + ".conciliacion.service.IndicadoresConciliacion", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".caja.service.RegistroVerificacionAutomatica", "hasRole('SISTEMA_CONCILIACION')"),
 			Map.entry(BASE + ".pasarela.service.RegistroLiquidaciones", "hasRole('SISTEMA_PASARELA')"),
@@ -355,7 +361,7 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".caja.service.ServicioVerificacionBancaria#reembolsarEnLinea", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados#restablecerAcceso", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".alumnos.service.ServicioAccesoApoderados#conCuentaActiva", LECTURA_ESCOLAR),
-			Map.entry(BASE + ".seguridad.service.AlertasActivacion", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".seguridad.service.AlertasActivacion", ALERTAS),
 			// Sprint 5, tanda 1: el enlace lo genera solo sistema.mensajeria; la huella, solo sistema.auditoria; la
 			// bandeja de envíos la ven Promotoría, Dirección y Administración (solo esta adelanta un reintento); el
 			// historial, el apoderado de SU familia.
@@ -363,11 +369,11 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".auditoria.service.HuellasDiarias", "hasRole('SISTEMA_AUDITORIA')"),
 			Map.entry(BASE + ".auditoria.service.VerificadorIntegridadAuditoria#verificarComoSistema",
 					"hasRole('SISTEMA_AUDITORIA')"),
-			Map.entry(BASE + ".auditoria.service.AlertasHuella", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".auditoria.service.AlertasHuella", ALERTAS),
 			Map.entry(BASE + ".comunicacion.service.ConsultaMensajes", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".comunicacion.service.ConsultaMensajes#reintentar", SOLO_ADMINISTRACION),
 			Map.entry(BASE + ".comunicacion.service.ConsultaMensajes#historialDeMiFamilia", "hasRole('APODERADO')"),
-			Map.entry(BASE + ".comunicacion.service.AlertasComunicacion", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".comunicacion.service.AlertasComunicacion", ALERTAS),
 			// Sprint 5, tanda 2: renovación de matrícula (Administración abre y registra en persona; Dirección cambia el
 			// destino; la familia responde; sistema.matricula reserva y activa) y avisos de las familias (solo Promotoría y
 			// Dirección los ven y atienden).
@@ -377,19 +383,36 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".matricula.service.ServicioCampanaRenovacion#cambiarDestino", "hasRole('DIRECTOR')"),
 			Map.entry(BASE + ".matricula.service.ServicioRenovacionFamilia", "hasRole('APODERADO')"),
 			Map.entry(BASE + ".matricula.service.ProcesosMatricula", "hasRole('SISTEMA_MATRICULA')"),
-			Map.entry(BASE + ".matricula.service.AlertasMatricula", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".matricula.service.AlertasMatricula", ALERTAS),
 			Map.entry(BASE + ".alumnos.service.ReservasMatricula", "hasRole('SISTEMA_MATRICULA')"),
 			Map.entry(BASE + ".familias.service.ConsultaEstadoCuentaFamilia", "hasRole('APODERADO')"),
 			Map.entry(BASE + ".familias.service.InicioPortalFamilia", "hasRole('APODERADO')"),
 			Map.entry(BASE + ".familias.service.ServicioAvisosFamilia#enviar", "hasRole('APODERADO')"),
 			Map.entry(BASE + ".familias.service.ServicioAvisosFamilia#bandeja", APROBACION),
 			Map.entry(BASE + ".familias.service.ServicioAvisosFamilia#atender", APROBACION),
-			Map.entry(BASE + ".familias.service.AlertasFamilias", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".familias.service.AlertasFamilias", ALERTAS),
 			// Correcciones del sprint 5: el enlace de verificación lo genera solo sistema.mensajeria; el día no laborable
 			// lo aprueba Promotoría o Dirección (otra persona: lo exige el servicio); las alertas de contactos, Promotoría.
 			Map.entry(BASE + ".alumnos.service.VerificacionesContacto#generarParaMensaje", "hasRole('SISTEMA_MENSAJERIA')"),
 			Map.entry(BASE + ".colegio.service.ServicioFeriados#aprobar", APROBACION),
-			Map.entry(BASE + ".comunicacion.service.AlertasContactos", "hasRole('PROMOTOR')"));
+			Map.entry(BASE + ".comunicacion.service.AlertasContactos", ALERTAS),
+			// Sprint 6, tanda 2: la foto del resumen la guarda solo sistema.panel (y la ve Promotoría); los avisos al
+			// celular los difunde solo sistema.panel; el contacto del personal lo pide el titular (cualquier rol del
+			// personal) o Promotoría (lo exige el servicio); la huella de la hora y la entrega del resumen las leen
+			// Promotoría y sistema.panel; las solicitudes pendientes las cuenta también sistema.panel.
+			Map.entry(BASE + ".panel.service.ResumenesDiarios", ALERTAS),
+			Map.entry(BASE + ".panel.service.ResumenesDiarios#generar", "hasRole('SISTEMA_PANEL')"),
+			Map.entry(BASE + ".panel.service.ResumenesDiarios#registrarCambios", "hasRole('SISTEMA_PANEL')"),
+			Map.entry(BASE + ".panel.service.ResumenesDiarios#registrarQueNoSalio", "hasRole('SISTEMA_PANEL')"),
+			Map.entry(BASE + ".panel.service.DifusionAvisos", "hasRole('SISTEMA_PANEL')"),
+			Map.entry(BASE + ".panel.service.AlertasPanel", ALERTAS),
+			Map.entry(BASE + ".auditoria.service.ConsultaHuellas", ALERTAS),
+			Map.entry(BASE + ".comunicacion.service.ConsultaMensajes#entregaDelResumen", ALERTAS),
+			Map.entry(BASE + ".comunicacion.service.ConsultaMensajes#avisosFinancieros", ALERTAS),
+			Map.entry(BASE + ".aprobaciones.service.BandejaAprobaciones#contarPendientes",
+					"hasAnyRole('PROMOTOR','DIRECTOR','SISTEMA_PANEL')"),
+			Map.entry(BASE + ".seguridad.service.ServicioContactoPersonal",
+					"hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','CAJA','DOCENTE')"));
 
 	/**
 	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para
@@ -559,7 +582,7 @@ class ReglasArquitecturaTest {
 	static final ArchRule registroSolicitudesSoloDesdeServicios = noClasses()
 			.that().resideOutsideOfPackages(BASE + ".aprobaciones.service..", BASE + ".alumnos.service..",
 					BASE + ".cobranza.service..", BASE + ".caja.service..", BASE + ".pasarela.service..",
-					BASE + ".recaudacion.service..", BASE + ".conciliacion.service..")
+					BASE + ".recaudacion.service..", BASE + ".conciliacion.service..", BASE + ".seguridad.service..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".aprobaciones.service.RegistroSolicitudes")
 			.because("la solicitud la crea el servicio protegido que valida el cambio pedido");
 
@@ -997,12 +1020,41 @@ class ReglasArquitecturaTest {
 			.should().dependOnClassesThat().resideInAPackage(BASE + ".panel..")
 			.because("el panel solo lee por los puertos de los módulos dueños del dato");
 
-	/** El panel no usa repositorios de otros módulos: lee por CifrasCaja y CifrasCobranza. */
+	/**
+	 * El panel no usa repositorios de otros módulos: lee por CifrasCaja y CifrasCobranza. Tanda 2: el único repositorio
+	 * que usa es el suyo (la foto del resumen diario).
+	 */
 	@ArchTest
 	static final ArchRule panelNoUsaRepositorios = noClasses()
 			.that().resideInAPackage(BASE + ".panel..")
-			.should().dependOnClassesThat().areAssignableTo(Repository.class)
+			.should().dependOnClassesThat(JavaClass.Predicates.assignableTo(Repository.class)
+					.and(JavaClass.Predicates.resideInAPackage(BASE + ".."))
+					.and(DescribedPredicate.not(JavaClass.Predicates.resideInAPackage(BASE + ".panel.."))))
 			.because("las cifras salen de los puertos de solo lectura de cada módulo");
+
+	/** Tanda 2: los repositorios del panel solo insertan y leen (la foto es de solo inserción). */
+	@ArchTest
+	static final ArchRule repositoriosDelPanelSinBorradosNiModifying = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".panel.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("la foto del resumen diario es de solo inserción (1142 en MySQL)")
+			.allowEmptyShould(true);
+
+	/**
+	 * Tanda 2 (hallazgo 1): todas las alertas de «Para revisar» admiten a sistema.panel (el resumen diario las cuenta y
+	 * los avisos al celular las difunden) y a Promotoría; ninguna a otro rol.
+	 */
+	@ArchTest
+	static void todasLasAlertasAdmitenAlPanel(JavaClasses clases) {
+		List<String> problemas = new ArrayList<>();
+		List<JavaClass> alertas = clases.stream()
+				.filter(c -> c.isAssignableTo(BASE + ".comun.alertas.AlertasRevision") && !c.isInterface()).toList();
+		assertThat(alertas).as("implementaciones de AlertasRevision").hasSizeGreaterThanOrEqualTo(14);
+		alertas.forEach(c -> revisar(problemas, c.getName(), c.tryGetAnnotationOfType(PreAuthorize.class)
+				.map(PreAuthorize::value).orElse(null), ALERTAS));
+		assertThat(problemas).isEmpty();
+	}
 
 	/** P10: ningún código escribe una fórmula en un Excel ni la evalúa. */
 	@ArchTest

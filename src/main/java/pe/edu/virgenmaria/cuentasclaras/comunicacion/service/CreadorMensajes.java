@@ -130,7 +130,46 @@ public class CreadorMensajes {
 				new Mensaje.Destinatario(DestinatarioTipo.USUARIO, null, null, usuario.getId(), canal, destino), null);
 	}
 
-	/** Correo EXTERNO (solo la huella al contador; el correo lo dejó el DBA en configuracion_bd). */
+	/**
+	 * Sprint 6: mensaje a una persona del personal con una clave propia ({@code claveBase:U<id>:<canal>}), por ejemplo
+	 * {@code ALERTA:CIERRE_CON_DIFERENCIA:15}: la misma alerta no se avisa dos veces a la misma persona aunque el proceso
+	 * corra de nuevo (uk_mensaje_clave). WhatsApp si tiene celular; si no, correo.
+	 */
+	public Optional<Mensaje> paraUsuarioConClave(Usuario usuario, Contenido contenido, String claveBase) {
+		Objects.requireNonNull(claveBase, "claveBase");
+		CanalMensaje canal = usarWhatsapp(usuario.getTelefonoWhatsapp(), usuario.getCorreo()) ? CanalMensaje.WHATSAPP
+				: CanalMensaje.CORREO;
+		String destino = canal == CanalMensaje.WHATSAPP ? usuario.getTelefonoWhatsapp() : usuario.getCorreo();
+		if (destino == null) {
+			return Optional.empty();
+		}
+		return guardar(claveBase + ":U" + usuario.getId() + ":" + canal.name(), contenido,
+				new Mensaje.Destinatario(DestinatarioTipo.USUARIO, null, null, usuario.getId(), canal, destino), null);
+	}
+
+	/** Sprint 6: si a esa persona ya se le creó el mensaje de esa clave por algún canal (se avisa una sola vez). */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public boolean yaExisteParaUsuario(String claveBase, Long usuarioId) {
+		return mensajes.findByClave(claveBase + ":U" + usuarioId + ":" + CanalMensaje.WHATSAPP.name()).isPresent()
+				|| mensajes.findByClave(claveBase + ":U" + usuarioId + ":" + CanalMensaje.CORREO.name()).isPresent();
+	}
+
+	/**
+	 * Sprint 6 (P6): aviso al contacto ANTERIOR de una persona del personal («este número dejó de recibir los avisos»),
+	 * después de su cambio aprobado. En MySQL, trg_mensaje_nace exige la solicitud aprobada y que el destino sea el
+	 * contacto anterior que quedó en ella.
+	 */
+	public Optional<Mensaje> alContactoAnteriorDeUsuario(Usuario usuario, CanalMensaje canal, String contactoAnterior,
+			Contenido contenido) {
+		if (contactoAnterior == null || contactoAnterior.isBlank()) {
+			return Optional.empty();
+		}
+		return guardar(clave(contenido, "USUARIO", usuario.getId(), canal, "ANTERIOR"), contenido,
+				new Mensaje.Destinatario(DestinatarioTipo.USUARIO, null, null, usuario.getId(), canal, contactoAnterior),
+				null);
+	}
+
+	/** Correo EXTERNO (la huella y el resumen al contador; el correo lo dejó el DBA en configuracion_bd). */
 	public Optional<Mensaje> externo(String correo, Contenido contenido) {
 		return guardar(clave(contenido, "EXTERNO", 0L, CanalMensaje.CORREO, null), contenido,
 				new Mensaje.Destinatario(DestinatarioTipo.EXTERNO, null, null, null, CanalMensaje.CORREO, correo), null);

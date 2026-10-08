@@ -59,7 +59,21 @@ public enum PlantillaMensaje {
 					+ "reconoce, avísenos desde el portal."),
 	FERIADO_PROPUESTO("cc_feriado_propuesto", "Día no laborable por aprobar", 3, false,
 			"Cuentas Claras: {{1}} propuso el {{2}} como día no laborable ({{3}}). No cuenta hasta que lo apruebe otra "
-					+ "persona de Promotoría o Dirección.");
+					+ "persona de Promotoría o Dirección."),
+	// Sprint 6 · tanda 2 (sección 12.2): al personal, SOLO cifras, tipos fijos y la huella; nunca nombres de familias, de
+	// alumnos ni de cajeras, ni texto escrito por una persona. Sin enlaces que aprueben (P9): sin botón.
+	RESUMEN_DIARIO("cc_resumen_diario", "Resumen del día", 11, false,
+			"Cuentas Claras · {{1}}. Cobrado hoy: {{2}} en {{3}} pagos ({{4}} digital). Efectivo: {{5}}. Cajas: {{6}}. "
+					+ "Cobrado en el mes: {{7}}. Vencido por cobrar: {{8}}. Por aprobar: {{9}}. Alertas críticas: {{10}}. "
+					+ "Huella 19:00: {{11}}. Si algo no te cuadra, revisa el panel."),
+	ALERTA_PROMOTORIA("cc_alerta_promotoria", "Alerta en Cuentas Claras", 2, false,
+			"Cuentas Claras: {{1}} ({{2}}). Revísalo en el sistema."),
+	ALERTA_MAS("cc_alerta_mas", "Más alertas en Cuentas Claras", 1, false,
+			"Cuentas Claras: hoy hay {{1}} alertas más. Revísalas en el panel."),
+	// P6: aviso al contacto ANTERIOR de alguien del personal (tipo CONTACTO_CAMBIADO).
+	CONTACTO_PERSONAL_CAMBIADO("cc_contacto_personal_cambiado", "Cambió tu contacto en Cuentas Claras", 1, false,
+			"Cuentas Claras: este {{1}} dejó de recibir los mensajes de tu cuenta porque se registró otro. Si no lo "
+					+ "pediste, avisa hoy a Promotoría.");
 
 	private static final Pattern MARCADOR = Pattern.compile("\\{\\{(\\d+)}}");
 

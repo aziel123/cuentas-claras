@@ -38,7 +38,9 @@
 
 	<section class="tarjeta" aria-labelledby="titulo-acciones">
 		<h2 id="titulo-acciones">Acciones</h2>
-		<p class="secundario" th:if="${usuario.esUnoMismo}">Este es tu usuario. Para cambiar tu clave usa «Cambiar clave»; otros cambios los hace otra persona de Promotoría o Dirección.</p>
+		<p class="secundario" th:if="${usuario.esUnoMismo}">Este es tu usuario. Para cambiar tu clave usa «Cambiar clave»; para
+			cambiar tu celular o correo, <a th:href="@{/cuenta/contacto}">pídelo aquí</a>. Otros cambios los hace otra persona de
+			Promotoría o Dirección.</p>
 		<p class="secundario" th:if="${!usuario.esUnoMismo and !usuario.puedeGestionar}">Solo Promotoría puede modificar usuarios de Promotoría o Dirección.</p>
 		<p class="secundario" th:if="${usuario.puedeGestionar and !usuario.puedeDarAcceso}">Solo Promotoría cambia los roles o restablece la clave de usuarios de Administración o Caja.</p>
 
@@ -81,6 +83,36 @@
 				<th:block th:replace="~{fragments/componentes :: modalConfirmacion('modal-clave', '¿Restablecer la clave?',
 					'Se enviará un enlace nuevo de un solo uso a su celular o correo, sus sesiones se cerrarán y los enlaces anteriores dejarán de servir. Nadie más ve el enlace.',
 					@{/usuarios/{id}/restablecer-clave(id=${usuario.id})}, 'Enviar enlace nuevo', true)}"></th:block>
+			</th:block>
+
+			<!--/* Sprint 6 (P6): el contacto de otra persona lo pide Promotoría; lo aprueba otra persona (nunca el titular). */-->
+			<th:block th:if="${usuario.puedeDarAcceso and usuario.activo and !usuario.esUnoMismo}">
+			<button type="button" class="btn btn-secundario" popovertarget="modal-contacto">Cambiar celular o correo</button>
+			<div class="modal" id="modal-contacto" popover role="dialog" aria-modal="true" aria-labelledby="modal-contacto-titulo">
+				<form method="post" th:action="@{/usuarios/{id}/contacto(id=${usuario.id})}" class="modal-cuerpo">
+					<h2 id="modal-contacto-titulo">Cambiar celular o correo</h2>
+					<p>Queda como solicitud: la aprueba otra persona de Promotoría o Dirección (nunca el titular) y se avisa al
+						contacto anterior.</p>
+					<div class="campo">
+						<label for="modal-contacto-telefono">Celular nuevo (WhatsApp)</label>
+						<input type="tel" class="input" id="modal-contacto-telefono" name="telefono" inputmode="tel"
+							autocomplete="off" maxlength="20" placeholder="987 654 321">
+					</div>
+					<div class="campo">
+						<label for="modal-contacto-correo">Correo nuevo</label>
+						<input type="email" class="input" id="modal-contacto-correo" name="correo" autocomplete="off" maxlength="150">
+						<p class="ayuda">Escribe cómo deben quedar los dos: un campo vacío deja la cuenta sin ese canal.</p>
+					</div>
+					<div class="campo">
+						<label for="modal-contacto-motivo">Motivo (obligatorio)</label>
+						<textarea class="input" id="modal-contacto-motivo" name="motivo" required minlength="10" maxlength="500"></textarea>
+					</div>
+					<div class="acciones">
+						<button type="button" class="btn btn-secundario" popovertarget="modal-contacto" popovertargetaction="hide">Cancelar</button>
+						<button type="submit" class="btn btn-primario">Pedir el cambio</button>
+					</div>
+				</form>
+			</div>
 			</th:block>
 
 			<th:block th:if="${usuario.activo}">

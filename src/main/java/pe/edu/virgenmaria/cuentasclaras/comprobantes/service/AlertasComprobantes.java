@@ -11,6 +11,8 @@ import pe.edu.virgenmaria.cuentasclaras.comprobantes.repository.ComprobanteRepos
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision.Gravedad;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.Aviso;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.TipoAviso;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -30,7 +32,7 @@ import java.util.List;
  * (La de «el OSE no reconoce un aceptado» la da caja, que lee la bitácora.)
  */
 @Service
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 public class AlertasComprobantes implements AlertasRevision {
 
 	static final String MODULO = "Comprobantes";
@@ -57,23 +59,28 @@ public class AlertasComprobantes implements AlertasRevision {
 		LocalDateTime ahora = LocalDateTime.now(reloj);
 		LocalDate hoy = ahora.toLocalDate();
 		List<AlertaRevision> alertas = new ArrayList<>();
-		List<String> rechazados = comprobantes.findByEstadoEnvioInOrderByFechaEmisionAscIdAsc(
+		List<Comprobante> sinReemitir = comprobantes.findByEstadoEnvioInOrderByFechaEmisionAscIdAsc(
 				EnumSet.of(EstadoEnvio.RECHAZADO)).stream().filter(c -> !comprobantes.existsByReemplazaId(c.getId()))
+				.toList();
+		List<String> rechazados = sinReemitir.stream()
 				.map(c -> c.numeroCompleto() + (c.getCodigoRespuesta() == null ? "" : " (código " + c.getCodigoRespuesta()
 						+ ")"))
 				.toList();
 		if (!rechazados.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "SUNAT rechazó " + cuantos(rechazados.size(),
 					"comprobante") + ": " + resumen(rechazados) + ". Corrige el dato y reemítelo: mientras tanto el pago no "
-					+ "tiene comprobante válido.", ENLACE));
+					+ "tiene comprobante válido.", ENLACE, new Aviso(TipoAviso.OTRA_CRITICA, "RECH:"
+							+ sinReemitir.stream().mapToLong(Comprobante::getId).max().orElse(0))));
 		}
 		List<String> porVencer = new ArrayList<>();
+		long porVencerMasReciente = 0;
 		List<String> demorados = new ArrayList<>();
 		for (Comprobante c : comprobantes.findByEstadoEnvioInOrderByFechaEmisionAscIdAsc(
 				EnumSet.of(EstadoEnvio.PENDIENTE, EstadoEnvio.ENVIADO))) {
 			if (c.vencePlazo(hoy, propiedades.plazoEnvioDias())) {
 				porVencer.add(c.numeroCompleto() + " (vence el " + DIA.format(c.fechaLimiteEnvio(propiedades.plazoEnvioDias()))
 						+ ")");
+				porVencerMasReciente = Math.max(porVencerMasReciente, c.getId());
 			}
 			else if (c.getCreadoEn() != null
 					&& c.getCreadoEn().isBefore(ahora.minusHours(propiedades.alertaHorasSinAceptar()))) {
@@ -83,7 +90,8 @@ public class AlertasComprobantes implements AlertasRevision {
 		if (!porVencer.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, cuantos(porVencer.size(), "comprobante")
 					+ " sin aceptar por el OSE a un día del plazo legal: " + resumen(porVencer)
-					+ ". Fuera de plazo dejan de tener calidad de comprobante.", ENLACE));
+					+ ". Fuera de plazo dejan de tener calidad de comprobante.", ENLACE,
+					new Aviso(TipoAviso.OTRA_CRITICA, "PLAZO:" + porVencerMasReciente)));
 		}
 		if (!demorados.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, cuantos(demorados.size(), "comprobante")

@@ -22,7 +22,11 @@ public enum TipoMensaje {
 	VERIFICACION_CONTACTO("Confirmar contacto", false),
 	APODERADO_AGREGADO("Apoderado agregado", false),
 	CONTACTO_POR_VERIFICAR("Contacto por confirmar", false),
-	FERIADO_PROPUESTO("Día no laborable propuesto", false);
+	FERIADO_PROPUESTO("Día no laborable propuesto", false),
+	// Sprint 6 · tanda 2: al personal de Promotoría (y de Dirección, las anulaciones por aprobar). Los crea solo
+	// sistema.panel (trg_mensaje_nace).
+	RESUMEN_DIARIO("Resumen del día", false),
+	ALERTA_PROMOTORIA("Alerta para Promotoría", false);
 
 	private final String etiqueta;
 

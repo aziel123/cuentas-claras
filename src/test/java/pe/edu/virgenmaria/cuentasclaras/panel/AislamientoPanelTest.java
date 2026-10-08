@@ -138,4 +138,32 @@ class AislamientoPanelTest {
 		assertThat(jdbc.queryForObject("SELECT colegio_id FROM evento_auditoria WHERE accion = 'REPORTE_EXPORTADO'",
 				Long.class)).isEqualTo(administracionB.colegioId());
 	}
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.panel.proceso.ResumenDiarioTarea tarea;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.panel.service.ResumenesDiarios resumenes;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository usuarios;
+
+	@Autowired
+	private org.springframework.security.crypto.password.PasswordEncoder codificador;
+
+	/** Tanda 2 (P20): el resumen y la foto del A no los ve el B; su resumen sale solo con las cifras del B. */
+	@Test
+	void elColegioBNoVeLosResumenesDelA() throws Exception {
+		UsuariosDePrueba.guardar(usuarios, codificador, 1L, "promotora.a", UsuariosDePrueba.CLAVE, false, Rol.PROMOTOR);
+		reloj.fijar(java.time.LocalDate.of(2027, 4, 15).atTime(19, 30).atZone(reloj.getZone()).toInstant());
+		assertThat(tarea.enColegio(1L, java.time.LocalDate.of(2027, 4, 15))).isPresent();
+		UsuariosDePrueba.iniciarSesion(promotorB);
+		assertThat(resumenes.recientes()).isEmpty();
+		assertThat(resumenes.deFecha(java.time.LocalDate.of(2027, 4, 15))).isEmpty();
+		SecurityContextHolder.clearContext();
+		mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/panel/resumenes")
+				.with(UsuariosDePrueba.como(promotorB))).andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+						.string(org.hamcrest.Matchers.containsString("Todavía no hay resúmenes")));
+	}
 }

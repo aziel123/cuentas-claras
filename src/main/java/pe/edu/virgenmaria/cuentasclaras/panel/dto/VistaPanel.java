@@ -9,7 +9,14 @@ import java.util.List;
  * («S/ 1,250.00», «72 %», «—» si no hubo pagos) y salen de los libros al consultar: ninguna se guarda.
  */
 public record VistaPanel(String fecha, List<AlertaRevision> alertas, long criticas, int porAprobar, Hoy hoy, Mes mes,
-		Deuda deuda, Rebajas rebajas) {
+		Deuda deuda, Rebajas rebajas, Resumen resumen) {
+
+	/**
+	 * Tanda 2: el resumen de hoy. {@code estado}: «Enviado 19:30 · Entregado», «Aún no sale» o «Hoy no corresponde».
+	 * {@code cambio}: si las cifras de algún día ya informado cambiaron sin explicación (P4).
+	 */
+	public record Resumen(String estado, boolean salioATodos, long cambiosSinExplicar) {
+	}
 
 	public record Hoy(String cobrado, long pagos, String digital, String digitalMonto, String efectivo,
 			long pagosEfectivo, long cajasAbiertas, long cajasCerradas, long cierresConDiferencia) {

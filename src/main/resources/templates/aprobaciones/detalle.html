@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Solicitud', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="aprobaciones-detalle">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Aprobaciones</p>
+			<h1 th:text="${s.tipoEtiqueta}">Anulación de pago</h1>
+		</div>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Volver', @{/aprobaciones(vista='movil')}, 'secundario')}"></a>
+		</div>
+	</div>
+
+	<section class="tarjeta panel-bloque" th:data-solicitud="${s.id}" th:data-tipo="${s.tipo}" aria-labelledby="titulo-solicitud">
+		<p class="fila entre">
+			<strong id="titulo-solicitud" th:text="${s.resumen}">Boleta B001-00000012 · S/ 350.00</strong>
+			<span th:replace="~{fragments/componentes :: badge(${s.estadoEtiqueta}, ${s.estadoVariante})}"></span>
+		</p>
+		<th:block th:if="${s.advertencia != null}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', ${s.advertencia})}"></div>
+		</th:block>
+		<ul class="detalle-solicitud" th:unless="${#lists.isEmpty(s.detalle)}">
+			<li th:each="linea : ${s.detalle}" th:text="${linea}">Efectivo · cobró Lucía Ramos</li>
+		</ul>
+		<p class="texto-largo" th:text="|Motivo: ${s.motivo}|">Motivo</p>
+		<p class="secundario" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM/yyyy HH:mm')}|">Pedida por caja</p>
+		<p class="secundario" th:if="${s.resueltoPor != null}"
+			th:text="|Resuelta por ${s.resueltoPor} · ${#temporals.format(s.resueltoEn, 'dd/MM/yyyy HH:mm')}|">Resuelta por director</p>
+
+		<th:block th:if="${s.puedeResolver}">
+			<button type="button" class="btn btn-primario btn-bloque" th:popovertarget="|aprobar-${s.id}|">Aprobar</button>
+			<div class="modal" th:id="|aprobar-${s.id}|" popover role="dialog" aria-modal="true" th:aria-labelledby="|aprobar-${s.id}-titulo|">
+				<form method="post" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}" class="modal-cuerpo">
+					<input type="hidden" name="volver" value="movil">
+					<h2 th:id="|aprobar-${s.id}-titulo|" th:text="|¿Aprobar: ${s.tipoEtiqueta}?|">¿Aprobar la anulación?</h2>
+					<p th:text="|${s.resumen}. No se puede deshacer y queda en la bitácora con tu nombre.|">No se puede deshacer.</p>
+					<div class="campo" th:if="${s.pideComentario}">
+						<label th:for="|aprobar-${s.id}-comentario|">Comentario (obligatorio)</label>
+						<textarea class="input" th:id="|aprobar-${s.id}-comentario|" name="comentario" required minlength="10"
+							maxlength="500"></textarea>
+					</div>
+					<th:block th:unless="${#lists.isEmpty(s.llamadas)}">
+						<p>Sale dinero ya cobrado: antes, llama a la familia a un celular registrado.</p>
+						<div class="campo" th:each="familia, i : ${s.llamadas}">
+							<label th:for="|aprobar-${s.id}-tel-${i.index}|" th:text="|Número al que llamaste (${familia})|">Número al que llamaste</label>
+							<input class="input" type="tel" th:id="|aprobar-${s.id}-tel-${i.index}|" name="telefonos" required
+								inputmode="tel" autocomplete="off" maxlength="20" placeholder="987 654 321">
+						</div>
+						<label class="opcion">
+							<input type="checkbox" name="hablo" value="true" required>
+							<span th:text="${#lists.size(s.llamadas) == 1} ? 'Hablé con el apoderado' : 'Hablé con ambas familias'">Hablé con el apoderado</span>
+						</label>
+					</th:block>
+					<div class="acciones">
+						<button type="button" class="btn btn-secundario" th:popovertarget="|aprobar-${s.id}|"
+							popovertargetaction="hide">Cancelar</button>
+						<button type="submit" class="btn btn-primario">Sí, aprobar</button>
+					</div>
+				</form>
+			</div>
+
+			<button type="button" class="btn btn-secundario btn-bloque" th:popovertarget="|rechazar-${s.id}|"
+				th:text="${s.accionRechazo}">Rechazar</button>
+			<div class="modal" th:id="|rechazar-${s.id}|" popover role="dialog" aria-modal="true" th:aria-labelledby="|rechazar-${s.id}-titulo|">
+				<form method="post" th:action="@{/aprobaciones/{id}/rechazar(id=${s.id})}" class="modal-cuerpo">
+					<input type="hidden" name="volver" value="movil">
+					<h2 th:id="|rechazar-${s.id}-titulo|" th:text="|¿${s.accionRechazo} la solicitud?|">¿Rechazar la solicitud?</h2>
+					<p>No se cambia nada. Quien la pidió verá tu motivo en la bitácora.</p>
+					<div class="campo">
+						<label th:for="|rechazar-${s.id}-motivo|">Motivo (obligatorio)</label>
+						<textarea class="input" th:id="|rechazar-${s.id}-motivo|" name="motivo" required minlength="10" maxlength="500"></textarea>
+					</div>
+					<div class="acciones">
+						<button type="button" class="btn btn-secundario" th:popovertarget="|rechazar-${s.id}|"
+							popovertargetaction="hide">Cancelar</button>
+						<button type="submit" class="btn btn-peligro" th:text="${s.accionRechazo}">Rechazar</button>
+					</div>
+				</form>
+			</div>
+		</th:block>
+		<p class="secundario" th:if="${!s.puedeResolver and s.estado == 'PENDIENTE'}" data-no-resuelve>La pediste tú o
+			participaste (cobraste ese pago, es tu caja o preparaste esa cuenta): la resuelve otra persona.</p>
+	</section>
+</main>
+</body>
+</html>

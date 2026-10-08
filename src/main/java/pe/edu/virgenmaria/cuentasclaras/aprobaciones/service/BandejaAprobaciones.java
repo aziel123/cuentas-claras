@@ -73,6 +73,22 @@ public class BandejaAprobaciones {
 						.map(s -> vista(s, usuario, false)).toList());
 	}
 
+	/**
+	 * Sprint 6, tanda 2 (decisión 72): una solicitud para la vista del celular, con su detalle y si quien está en sesión
+	 * puede resolverla (la misma regla que la bandeja: quien la pidió o participó, no). La de otro colegio no existe (404).
+	 */
+	public SolicitudVista detalle(Long id) {
+		SolicitudCambio solicitud = solicitudes.findById(id)
+				.orElseThrow(() -> new RecursoNoEncontradoException("Solicitud no encontrada"));
+		return vista(solicitud, usuario(), solicitud.estaPendiente());
+	}
+
+	/** Sprint 6, tanda 2: cuántas solicitudes esperan aprobación (el resumen diario las informa; lo lee sistema.panel). */
+	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR','SISTEMA_PANEL')")
+	public long contarPendientes() {
+		return solicitudes.countByEstado(EstadoSolicitud.PENDIENTE);
+	}
+
 	/** Aprueba una solicitud que no pide llamadas. */
 	@Transactional(noRollbackFor = AutoaprobacionSolicitudException.class)
 	public void aprobar(Long id, String comentario) {

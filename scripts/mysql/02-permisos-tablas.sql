@@ -161,6 +161,15 @@ GRANT INSERT, UPDATE (estado, intentos, abonos_ciego, cargos_ciego, saldo_ciego,
 --   ('mensajeria_simulada', 'PERMITIDA')  -> solo en las bases de dev, test (MySQL) y piloto. NUNCA en prod.
 --   ('huella_correo_externo', '<correo del contador>') -> opcional, en prod (decisión 49).
 
+-- Sprint 6 · tanda 1: sin cambios (panel, reportes y Excel solo leen con el SELECT general).
+-- Sprint 6 · tanda 2 (V21): foto del resumen diario, SOLO inserción (1142): ni sistema.panel puede corregirla. mensaje
+-- no cambia su GRANT (los tipos nuevos usan las mismas columnas). usuario mantiene su UPDATE por tabla: el celular, el
+-- correo y contacto_solicitud_id del personal los vigila trg_usuario_contacto (mismo criterio que apoderado y
+-- trg_apoderado_facturacion).
+GRANT INSERT ON cuentasclaras.resumen_diario TO 'cc_app'@'%';                     -- solo inserción
+-- configuracion_bd sigue SIN GRANT. Fila nueva que solo escribe el DBA (opcional, en prod; decisión 69):
+--   ('resumen_correo_externo', '<correo del contador>') -> el resumen diario también le llega por correo.
+
 -- M2: cc_app no lee information_schema.TRIGGERS (necesitaría el privilegio TRIGGER, que no debe tener). Esta función
 -- (SQL SECURITY DEFINER: corre con los permisos de quien la crea) devuelve solo los nombres de los triggers del esquema,
 -- separados por comas; al arrancar en prod, VerificadorPermisosBaseDatos los compara con la lista de 03-triggers.sql.

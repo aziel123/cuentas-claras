@@ -13,6 +13,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.service.CifrasCaja;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.CifrasCobranza;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante;
 import pe.edu.virgenmaria.cuentasclaras.comun.excel.EscritorXlsxSeguro;
+import pe.edu.virgenmaria.cuentasclaras.panel.config.PropiedadesPanel;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.ArchivoExportado;
 
 import java.math.BigDecimal;
@@ -47,10 +48,14 @@ class ExportacionContadorTest {
 
 	private ExportacionContador exportacion;
 
+	/** Los valores por defecto de cuentasclaras.panel (decisión 73). */
+	static final PropiedadesPanel PROPIEDADES = new PropiedadesPanel(10, 35, java.time.LocalTime.of(21, 0), 12, 20, 20000,
+			5);
+
 	@BeforeEach
 	void preparar() {
 		Clock reloj = Clock.fixed(Instant.parse("2027-04-15T15:00:00Z"), ZoneId.of("America/Lima"));
-		exportacion = new ExportacionContador(caja, cobranza, new EscritorXlsxSeguro(), auditoria, reloj);
+		exportacion = new ExportacionContador(caja, cobranza, new EscritorXlsxSeguro(), auditoria, reloj, PROPIEDADES);
 		PagoExportable pago = new PagoExportable(DIA, "B001-1", TipoComprobante.BOLETA, MedioPago.EFECTIVO,
 				CanalCaja.VENTANILLA, null, new BigDecimal("350.00"), EstadoPago.VIGENTE, null, null, "Matrícula 2027", 7L,
 				"caja", null);
@@ -89,7 +94,7 @@ class ExportacionContadorTest {
 	@Test
 	void topeDiarioDe20() {
 		when(auditoria.contarDesdeDelUsuarioActual(eq(AccionAuditoria.REPORTE_EXPORTADO), any()))
-				.thenReturn((long) ExportacionContador.MAX_DIARIAS);
+				.thenReturn((long) PROPIEDADES.exportacionMaxDiarias());
 		assertThatThrownBy(() -> exportacion.exportarIngresos(DIA, DIA)).isInstanceOf(ExportacionRechazadaException.class)
 				.hasMessageContaining("20");
 		verify(auditoria).registrar(eq(AccionAuditoria.EXPORTACION_RECHAZADA), eq("reporte"), eq("INGRESOS"), isNull(),
@@ -97,9 +102,23 @@ class ExportacionContadorTest {
 		verify(caja, never()).pagosParaContador(any(), any());
 	}
 
+	/** Desviación 5 de la tanda 1: el tope diario y el rango salen de cuentasclaras.panel.exportacion-*. */
+	@Test
+	void elTopeDiarioYElRangoSonConfigurables() {
+		ExportacionContador conTres = new ExportacionContador(caja, cobranza, new EscritorXlsxSeguro(), auditoria,
+				Clock.fixed(Instant.parse("2027-04-15T15:00:00Z"), ZoneId.of("America/Lima")),
+				new PropiedadesPanel(10, 35, java.time.LocalTime.of(21, 0), 3, 3, 20000, 5));
+		assertThatThrownBy(() -> conTres.exportarIngresos(LocalDate.of(2027, 1, 1), LocalDate.of(2027, 4, 15)))
+				.as("rango de 3 meses como máximo").isInstanceOf(ExportacionRechazadaException.class)
+				.hasMessageContaining("3 meses");
+		when(auditoria.contarDesdeDelUsuarioActual(eq(AccionAuditoria.REPORTE_EXPORTADO), any())).thenReturn(3L);
+		assertThatThrownBy(() -> conTres.exportarIngresos(DIA, DIA)).isInstanceOf(ExportacionRechazadaException.class)
+				.hasMessageContaining("3 reportes");
+	}
+
 	@Test
 	void masDe20000FilasSeRechaza() {
-		when(caja.pagosEnRango(DIA, DIA)).thenReturn(EscritorXlsxSeguro.MAX_FILAS + 1L);
+		when(caja.pagosEnRango(DIA, DIA)).thenReturn(PROPIEDADES.exportacionMaxFilas() + 1L);
 		assertThatThrownBy(() -> exportacion.exportarIngresos(DIA, DIA)).isInstanceOf(ExportacionRechazadaException.class);
 		verify(caja, never()).pagosParaContador(any(), any());
 	}

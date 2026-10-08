@@ -35,6 +35,9 @@ import java.util.stream.Collectors;
  *       sus triggers;</li>
  *   <li>sprint 5: que los mensajes, el enlace con su mensaje y la huella diaria tienen sus GRANT, sus triggers y que en
  *       prod la base no admite la mensajería simulada;</li>
+ *   <li>sprint 6, tanda 2: que la foto del resumen diario es de solo inserción y su trigger la compara con los libros, que
+ *       el resumen y las alertas los crea solo sistema.panel, y que está trg_usuario_contacto (BEFORE UPDATE: se comprueba
+ *       por su presencia en {@link #TRIGGERS_ESPERADOS});</li>
  *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes).</li>
  * </ul>
  * Si algo falla, la aplicación NO arranca. No hay interruptor para saltarse esta comprobación.
@@ -287,7 +290,24 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					"trg_apoderado_nace"),
 			trigger("INSERT INTO feriado (colegio_id, fecha, descripcion, vigente, pendiente, aprobado_por, aprobado_en, "
 					+ "creado_en, creado_por, actualizado_en) VALUES (0, '2999-01-04', 'verificador', TRUE, FALSE, 'b', NOW(6), "
-					+ "NOW(6), 'verificador', NOW(6))", "trg_feriado_registro"));
+					+ "NOW(6), 'verificador', NOW(6))", "trg_feriado_registro"),
+			// Sprint 6, tanda 2 (V21): la foto del resumen diario no se borra ni se edita (ni sistema.panel la corrige);
+			// una foto con cifras que no son las de los libros (colegio 0: no tiene pagos) falla en su trigger; y el
+			// resumen y las alertas solo los crea sistema.panel: con un destinatario imposible, la versión de
+			// trg_mensaje_nace del sprint 6 responde 1644 antes que el CHECK (la anterior dejaría pasar al CHECK: 3819).
+			sinBorrado("resumen_diario"), soloInsercion("resumen_diario"),
+			trigger(VerificadorPermisosBaseDatos.RESUMEN_IMPOSIBLE, "trg_resumen_diario_registro"),
+			trigger("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, destino, plantilla, parametros, "
+					+ "estado, creado_en, creado_por, actualizado_en) VALUES (0, 'verificador-panel', 'ALERTA_PROMOTORIA', "
+					+ "'CORREO', 'X', 'x@y.pe', 'verificador', '', 'PENDIENTE', NOW(6), 'verificador', NOW(6))",
+						"trg_mensaje_nace (versión del sprint 6)"));
+
+	/** Sprint 6, tanda 2: una foto del colegio 0 que dice S/ 1.00 cobrados (no tiene pagos): trg_resumen_diario_registro. */
+	static final String RESUMEN_IMPOSIBLE = "INSERT INTO resumen_diario (colegio_id, fecha, cortado_en, cobrado_total, "
+			+ "pagos_cantidad, cobrado_efectivo, pagos_efectivo, cobrado_mes, deuda_vencida, familias_morosas, cajas_sin_cerrar, "
+			+ "cierres_con_diferencia, solicitudes_pendientes, alertas_criticas, avisos_familias, avisos_entregados, creado_en, "
+			+ "creado_por, actualizado_en) VALUES (0, '2000-01-01', '2000-01-01 19:30:00', 1.00, 1, 0, 0, 1.00, 0, 0, 0, 0, "
+			+ "0, 0, 0, 0, NOW(6), 'sistema.panel', NOW(6))";
 
 	/** Sprint 5: la mensajería simulada solo existe en una base habilitada por el DBA (nunca en prod). */
 	static final String SQL_MENSAJERIA_SIMULADA =
@@ -328,7 +348,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_renovacion_matricula_estado", "trg_matricula_nace", "trg_matricula_estado", "trg_aviso_familia_estado",
 			"trg_feriado_registro", "trg_feriado_anulacion", "trg_cierre_mensual_banco_nace",
 			"trg_cierre_mensual_banco_estado", "trg_verificacion_contacto_nace", "trg_verificacion_contacto_uso",
-			"trg_huella_hora_registro");
+			"trg_huella_hora_registro", "trg_resumen_diario_registro", "trg_usuario_contacto");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -447,6 +467,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		LOG.info("Permisos y triggers de feriados, semilla del muestreo y cierre bancario mensual verificados.");
 		LOG.info("Permisos y triggers de la verificación de contactos, la huella por hora y los feriados aprobados por "
 				+ "otra persona verificados.");
+		LOG.info("Permisos y triggers del panel (resumen diario, alertas a Promotoría y contacto del personal) verificados.");
 		return escribe;
 	}
 

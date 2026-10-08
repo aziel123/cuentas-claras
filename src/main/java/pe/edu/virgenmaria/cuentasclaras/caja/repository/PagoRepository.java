@@ -147,4 +147,20 @@ public interface PagoRepository extends Repository<Pago, Long> {
 			+ "model.DocumentoReceptor.RUC then c.receptorNumeroDocumento else null end "
 			+ "from Pago p join p.comprobante c join p.caja k where p.fecha between :desde and :hasta order by p.fecha, p.id")
 	List<Object[]> paraContador(@Param("desde") java.time.LocalDate desde, @Param("hasta") java.time.LocalDate hasta);
+
+	// --- Sprint 6, tanda 2: foto del resumen diario y su recálculo ---
+
+	/** Pagos VIGENTES de un rango de días de caja por día y medio: fecha, medio, cantidad, suma. */
+	@Query("select p.fecha, p.medio, count(p), sum(p.total) from Pago p "
+			+ "where p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE "
+			+ "and p.fecha between :desde and :hasta group by p.fecha, p.medio")
+	List<Object[]> vigentesPorDiaYMedio(@Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta);
+
+	/** Pagos VIGENTES de un rango de días de caja registrados DESPUÉS de un momento: fecha, medio, total, registro. */
+	@Query("select p.fecha, p.medio, p.total, p.creadoEn from Pago p "
+			+ "where p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE "
+			+ "and p.fecha between :desde and :hasta and p.creadoEn > :despues")
+	List<Object[]> vigentesRegistradosDespuesDe(@Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta, @Param("despues") java.time.LocalDateTime despues);
 }

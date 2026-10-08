@@ -17,6 +17,8 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Sprint 6, tanda 2 (V21): la foto del resumen diario (sus mensajes se borran con los demás, más abajo).
+		jdbc.update("DELETE FROM resumen_diario");
 		// Correcciones del sprint 5 (V20): la verificación apunta a su mensaje y al apoderado; la huella de la hora.
 		jdbc.update("DELETE FROM verificacion_contacto");
 		jdbc.update("DELETE FROM huella_hora");
@@ -82,6 +84,9 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("UPDATE apoderado SET ruc = NULL, razon_social = NULL, facturacion_solicitud_id = NULL "
 				+ "WHERE facturacion_solicitud_id IS NOT NULL");
 		jdbc.update("UPDATE apoderado SET contacto_solicitud_id = NULL WHERE contacto_solicitud_id IS NOT NULL");
+		// Sprint 6, tanda 2: el contacto del personal enlaza su solicitud aprobada (FK compuesta). En H2 no hay
+		// trg_usuario_contacto; en MySQL no se limpia (PermisosMySqlTest usa nombres únicos).
+		jdbc.update("UPDATE usuario SET contacto_solicitud_id = NULL WHERE contacto_solicitud_id IS NOT NULL");
 		jdbc.update("DELETE FROM solicitud_cambio");
 		jdbc.update("DELETE FROM cuota");
 		jdbc.update("DELETE FROM linea_saldo_inicial");

@@ -36,7 +36,7 @@ import java.util.Set;
  * </ul>
  */
 @Service
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 public class AlertasPagosEnLinea implements AlertasRevision {
 
 	static final String MODULO = "Pagos en línea";

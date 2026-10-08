@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.CanalMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.EstadoMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.Mensaje;
+import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.PlantillaMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ProveedorMensajeria;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.TipoMensaje;
 
@@ -96,6 +97,18 @@ public interface MensajeRepository extends Repository<Mensaje, Long> {
 			+ "where o.tipo = m.tipo and o.entidad = m.entidad and o.entidadId = m.entidadId and o.estado in :salieron)")
 	List<Mensaje> fallidosEnTodosSusCanales(@Param("tipos") Collection<TipoMensaje> tipos,
 			@Param("desde") LocalDateTime desde, @Param("salieron") Collection<EstadoMensaje> salieron);
+
+	/** Sprint 6, tanda 2: avisos de esos tipos creados en un rango (los avisos financieros del día en el resumen). */
+	long countByTipoInAndCreadoEnGreaterThanEqualAndCreadoEnLessThan(Collection<TipoMensaje> tipos, LocalDateTime desde,
+			LocalDateTime hasta);
+
+	/** Sprint 6, tanda 2: de esos, los que ya salieron (ENVIADO, ENTREGADO o LEIDO) al corte del resumen. */
+	long countByTipoInAndCreadoEnGreaterThanEqualAndCreadoEnLessThanAndEstadoIn(Collection<TipoMensaje> tipos,
+			LocalDateTime desde, LocalDateTime hasta, Collection<EstadoMensaje> estados);
+
+	/** Sprint 6, tanda 2 (tope diario): mensajes de una plantilla a una persona desde un momento, sin los respaldos. */
+	long countByTipoAndPlantillaAndUsuarioIdAndRespaldoDeIdIsNullAndCreadoEnGreaterThanEqual(TipoMensaje tipo,
+			PlantillaMensaje plantilla, Long usuarioId, LocalDateTime desde);
 
 	/**
 	 * Sprint 6 (lista de familias morosas): el último aviso ENTREGADO de esos tipos a cada familia, como familia, tipo y

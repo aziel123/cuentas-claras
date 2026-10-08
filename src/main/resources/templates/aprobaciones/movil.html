@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Para aprobar', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="aprobaciones-movil" th:with="b=${bandeja}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Aprobaciones</p>
+			<h1 th:text="|Para aprobar: ${#lists.size(b.pendientes)}|">Para aprobar: 3</h1>
+			<p class="secundario">Toca una solicitud para ver el detalle y resolverla. Quien la pidió (o cobró ese pago) no la
+				aprueba, desde ningún dispositivo.</p>
+		</div>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Ver la bandeja completa', @{/aprobaciones}, 'secundario')}"></a>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${#lists.isEmpty(b.pendientes)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('No hay solicitudes pendientes', 'Cuando alguien pida un cambio, aparecerá aquí.')}"></div>
+	</th:block>
+	<ul class="lista-tarjetas" th:unless="${#lists.isEmpty(b.pendientes)}">
+		<li th:each="s : ${b.pendientes}" class="tarjeta panel-bloque" th:data-solicitud="${s.id}" th:data-tipo="${s.tipo}">
+			<p class="fila entre">
+				<strong th:text="${s.tipoEtiqueta}">Anulación de pago</strong>
+				<th:block th:unless="${s.puedeResolver}"><span th:replace="~{fragments/componentes :: badge('La resuelve otra persona', 'info')}"></span></th:block>
+			</p>
+			<p class="texto-largo" th:text="${s.resumen}">Boleta B001-00000012 · S/ 350.00</p>
+			<p class="secundario" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM HH:mm')}|">Pedida por caja</p>
+			<p class="secundario texto-largo" th:text="|Motivo: ${s.motivo}|">Motivo</p>
+			<a class="btn btn-primario btn-bloque" th:href="@{/aprobaciones/{id}(id=${s.id})}"
+				th:text="${s.puedeResolver} ? 'Ver y resolver' : 'Ver detalle'">Ver y resolver</a>
+		</li>
+	</ul>
+</main>
+</body>
+</html>

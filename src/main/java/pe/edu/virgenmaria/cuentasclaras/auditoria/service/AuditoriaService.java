@@ -100,6 +100,45 @@ public class AuditoriaService {
 	}
 
 	/**
+	 * Sprint 6: si en el colegio actual ya hay un evento de esa acción, entidad y valor nuevo (solo lectura). Así un
+	 * proceso diario no deja el mismo hallazgo cada mañana.
+	 */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public boolean existe(AccionAuditoria accion, String entidad, String entidadId, String valorNuevo) {
+		Long colegio = ContextoColegio.actual();
+		if (colegio == null || colegio <= 0) {
+			return false;
+		}
+		return eventos.existsByColegioIdAndAccionAndEntidadAndEntidadIdAndValorNuevo(colegio, accion, entidad, entidadId,
+				valorNuevo);
+	}
+
+	/** Sprint 6: la secuencia del último evento de esa acción en el colegio actual desde un momento (solo lectura). */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public java.util.Optional<Long> ultimaSecuenciaDesde(AccionAuditoria accion, LocalDateTime desde) {
+		Long colegio = ContextoColegio.actual();
+		if (colegio == null || colegio <= 0) {
+			return java.util.Optional.empty();
+		}
+		return eventos.findFirstByColegioIdAndAccionAndOcurridoEnGreaterThanEqualOrderBySecuenciaDesc(colegio, accion,
+				desde).map(EventoAuditoria::getSecuencia);
+	}
+
+	/** Sprint 6: cuántos eventos de esa acción hizo cada persona en el colegio actual desde un momento (solo lectura). */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public java.util.Map<String, Long> contarPorUsuarioDesde(AccionAuditoria accion, LocalDateTime desde) {
+		Long colegio = ContextoColegio.actual();
+		java.util.Map<String, Long> conteo = new java.util.TreeMap<>();
+		if (colegio == null || colegio <= 0) {
+			return conteo;
+		}
+		for (Object[] fila : eventos.contarPorUsuarioDesde(colegio, accion, desde)) {
+			conteo.put(String.valueOf(fila[0]), ((Number) fila[1]).longValue());
+		}
+		return conteo;
+	}
+
+	/**
 	 * Actor explícito con la IP de la petición actual (si la hay). Para eventos en los que el usuario
 	 * aún no está en el contexto de seguridad, como los intentos de ingreso o el cierre de sesión.
 	 */

@@ -273,6 +273,22 @@ public enum AccionAuditoria {
 	/** Se resalta: una exportación rechazada por el rango, el tope diario o el tamaño. */
 	EXPORTACION_RECHAZADA("Intentó descargar un reporte fuera de los límites", true),
 
+	// Sprint 6 · tanda 2: resumen diario, alertas al celular y contacto del personal
+	/** La foto del resumen quedó guardada (y comprobada contra los libros) y salió a Promotoría. */
+	RESUMEN_DIARIO_GUARDADO("Guardó y envió el resumen diario a Promotoría", false),
+	/** Se resalta (P5): el resumen de un día no se pudo guardar ni enviar. */
+	RESUMEN_DIARIO_NO_SALIO("El resumen diario no salió", true),
+	/** Se resalta (P4): las cifras de un día ya informado cambiaron y no lo explica ninguna anulación ni pago tardío. */
+	RESUMEN_DIARIO_CAMBIO("Cambiaron las cifras de un día ya informado, sin explicación", true),
+	/** Las cifras de un día ya informado cambiaron por anulaciones aprobadas o pagos registrados después del corte. */
+	RESUMEN_DIARIO_CAMBIO_EXPLICADO("Cambiaron las cifras de un día ya informado (explicado)", false),
+	/** Alertas que salieron al celular de Promotoría (y de Dirección) en una pasada, con el conteo. */
+	AVISOS_PROMOTORIA_ENVIADOS("Avisó alertas al celular de Promotoría", false),
+	/** Se resalta (P6): pidió cambiar el celular o el correo de alguien del personal (lo aprueba otra persona). */
+	CONTACTO_PERSONAL_SOLICITADO("Pidió cambiar el celular o el correo de alguien del personal", true),
+	/** Se resalta (P6): se cambió el celular o el correo de alguien del personal y se avisó al contacto anterior. */
+	CONTACTO_PERSONAL_CAMBIADO("Cambió el celular o el correo de alguien del personal", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

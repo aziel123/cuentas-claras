@@ -12,12 +12,12 @@ import java.util.Objects;
 
 /**
  * Las cifras de un día (sprint 6): las usan el panel y, desde la tanda 2, el resumen diario, para que ambos digan lo
- * mismo. Solo combina los puertos de caja y cobranza; no usa repositorios de otros módulos.
- * (En la tanda 2 se agrega el actor {@code SISTEMA_PANEL} a la expresión de permisos.)
+ * mismo. Solo combina los puertos de caja y cobranza; no usa repositorios de otros módulos. La usan Promotoría (el panel)
+ * y el actor {@code sistema.panel} (la foto del resumen diario, tanda 2).
  */
 @Service
 @Transactional(readOnly = true)
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 public class CifrasDelDia {
 
 	private final CifrasCaja caja;

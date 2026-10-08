@@ -24,6 +24,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PropositoEnlace;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ContactoPersonalCambiado;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.EnvioEnlaceSolicitado;
 
 import java.time.format.DateTimeFormatter;
@@ -39,6 +40,7 @@ import java.util.UUID;
  *       lo genera el proceso de envío). Si no hay a dónde enviarlo, el acceso no se da (la excepción revierte todo).</li>
  *   <li>{@link ContactoCambiado}: aviso al contacto ANTERIOR («este celular dejó de recibir los avisos»; G5).</li>
  *   <li>{@link HuellaDelDia}: la huella a cada usuario de Promotoría activo y al correo externo del contador (G13).</li>
+ *   <li>{@link ContactoPersonalCambiado} (sprint 6): aviso al contacto ANTERIOR de alguien del personal (P6).</li>
  * </ul>
  */
 @Component
@@ -183,6 +185,45 @@ public class AvisosCuenta {
 
 	private static String visible(String telefono, String correo) {
 		return telefono != null ? "WhatsApp " + Enmascarar.telefono(telefono) : "correo " + Enmascarar.correo(correo);
+	}
+
+	/**
+	 * Sprint 6 (P6): el celular o el correo de alguien del personal cambió con su solicitud aprobada: se avisa al contacto
+	 * ANTERIOR, por el canal que cambió. Si no se puede avisar a ninguno, el cambio no se guarda.
+	 */
+	@EventListener
+	public void alContactoPersonalCambiado(ContactoPersonalCambiado evento) {
+		Usuario usuario = usuarios.findById(evento.usuarioId())
+				.orElseThrow(() -> new IllegalStateException("El usuario del cambio no existe"));
+		boolean avisado = avisarAnteriorDelPersonal(usuario, CanalMensaje.WHATSAPP, evento.telefonoAnterior(),
+				usuario.getTelefonoWhatsapp(), evento.solicitudId());
+		avisado |= avisarAnteriorDelPersonal(usuario, CanalMensaje.CORREO, evento.correoAnterior(), usuario.getCorreo(),
+				evento.solicitudId());
+		boolean habiaAnterior = noVacio(evento.telefonoAnterior()) || noVacio(evento.correoAnterior());
+		if (habiaAnterior && !avisado) {
+			throw new ReglaNegocioException("No se pudo avisar al contacto anterior: el cambio no se guardó.");
+		}
+	}
+
+	private boolean avisarAnteriorDelPersonal(Usuario usuario, CanalMensaje canal, String anterior, String actual,
+			Long solicitudId) {
+		if (!noVacio(anterior) || anterior.equals(actual)) {
+			return false;
+		}
+		CreadorMensajes.Contenido contenido = new CreadorMensajes.Contenido(TipoMensaje.CONTACTO_CAMBIADO,
+				PlantillaMensaje.CONTACTO_PERSONAL_CAMBIADO, List.of(canal == CanalMensaje.WHATSAPP ? "número" : "correo"),
+				"solicitud_cambio", solicitudId);
+		Optional<Mensaje> mensaje = creador.alContactoAnteriorDeUsuario(usuario, canal, anterior, contenido);
+		mensaje.ifPresent(m -> auditoria.registrar(AccionAuditoria.CONTACTO_CAMBIADO_AVISADO, "mensaje",
+				m.getId().toString(), null, canal.etiqueta() + " " + (canal == CanalMensaje.WHATSAPP
+						? Enmascarar.telefono(anterior) : Enmascarar.correo(anterior)),
+				"Se avisó al contacto anterior de " + usuario.getNombreCompleto() + " (personal) que dejó de recibir los "
+						+ "mensajes de su cuenta (solicitud " + solicitudId + ")."));
+		return mensaje.isPresent();
+	}
+
+	private static boolean noVacio(String texto) {
+		return texto != null && !texto.isBlank();
 	}
 
 	/** S5-M3: un día no laborable propuesto se avisa por mensaje a Promotoría (lo aprueba otra persona). */

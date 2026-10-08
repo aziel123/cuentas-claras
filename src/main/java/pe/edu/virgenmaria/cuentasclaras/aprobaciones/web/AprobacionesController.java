@@ -14,10 +14,16 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 
 import java.util.List;
 
-/** Bandeja de aprobaciones. Sin lógica: delega en {@link BandejaAprobaciones} (que exige el rol). */
+/**
+ * Bandeja de aprobaciones. Sin lógica: delega en {@link BandejaAprobaciones} (que exige el rol). Sprint 6, tanda 2
+ * (decisión 72): la vista para el celular ({@code ?vista=movil}) y el detalle de una solicitud ({@code GET /{id}}) usan la
+ * MISMA bandeja y los mismos POST con CSRF: ningún enlace (GET) aprueba nada.
+ */
 @Controller
 @RequestMapping("/aprobaciones")
 public class AprobacionesController {
+
+	static final String MOVIL = "movil";
 
 	private final BandejaAprobaciones bandeja;
 
@@ -26,26 +32,34 @@ public class AprobacionesController {
 	}
 
 	@GetMapping
-	public String bandeja(Model model) {
+	public String bandeja(@RequestParam(required = false) String vista, Model model) {
 		model.addAttribute("bandeja", bandeja.bandeja());
-		return "aprobaciones/bandeja";
+		return MOVIL.equals(vista) ? "aprobaciones/movil" : "aprobaciones/bandeja";
+	}
+
+	@GetMapping("/{id:\\d+}")
+	public String detalle(@PathVariable Long id, Model model) {
+		model.addAttribute("s", bandeja.detalle(id));
+		return "aprobaciones/detalle";
 	}
 
 	@PostMapping("/{id:\\d+}/aprobar")
 	public String aprobar(@PathVariable Long id, @RequestParam(required = false) String comentario,
 			@RequestParam(defaultValue = "false") boolean hablo, @RequestParam(required = false) List<String> telefonos,
-			RedirectAttributes avisos) {
+			@RequestParam(required = false) String volver, RedirectAttributes avisos) {
 		return resolver(avisos, () -> bandeja.aprobar(id, comentario, hablo, telefonos),
-				"Listo: aprobaste la solicitud y el cambio se aplicó.");
+				"Listo: aprobaste la solicitud y el cambio se aplicó.", volver);
 	}
 
 	@PostMapping("/{id:\\d+}/rechazar")
 	public String rechazar(@PathVariable Long id, @RequestParam(required = false) String motivo,
-			RedirectAttributes avisos) {
-		return resolver(avisos, () -> bandeja.rechazar(id, motivo), "Listo: rechazaste la solicitud. No se cambió nada.");
+			@RequestParam(required = false) String volver, RedirectAttributes avisos) {
+		return resolver(avisos, () -> bandeja.rechazar(id, motivo), "Listo: rechazaste la solicitud. No se cambió nada.",
+				volver);
 	}
 
-	private static String resolver(RedirectAttributes avisos, Runnable accion, String exito) {
+	/** Vuelve a la vista del celular solo si se pidió; cualquier otro valor vuelve a la bandeja (sin redirección abierta). */
+	private static String resolver(RedirectAttributes avisos, Runnable accion, String exito, String volver) {
 		try {
 			accion.run();
 			avisos.addFlashAttribute("exito", exito);
@@ -56,6 +70,6 @@ public class AprobacionesController {
 		catch (OptimisticLockingFailureException e) {
 			avisos.addFlashAttribute("error", "Otra persona cambió esto al mismo tiempo; revísalo de nuevo.");
 		}
-		return "redirect:/aprobaciones";
+		return MOVIL.equals(volver) ? "redirect:/aprobaciones?vista=" + MOVIL : "redirect:/aprobaciones";
 	}
 }

@@ -42,7 +42,7 @@ import java.util.Set;
  */
 @Service
 @Transactional(readOnly = true)
-@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION')")
+@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','SISTEMA_PANEL')")
 public class CifrasCobranza {
 
 	private final CuotaRepository cuotas;

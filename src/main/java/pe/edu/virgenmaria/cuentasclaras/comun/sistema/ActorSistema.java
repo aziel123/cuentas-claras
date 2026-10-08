@@ -16,7 +16,12 @@ public enum ActorSistema {
 	/** Sprint 5: guarda y envía la huella diaria de la bitácora y la vuelve a verificar cada mañana. */
 	AUDITORIA("sistema.auditoria"),
 	/** Sprint 5, tanda 2: reserva la matrícula del año siguiente al confirmarse la renovación y la activa al pagarse. */
-	MATRICULA("sistema.matricula");
+	MATRICULA("sistema.matricula"),
+	/**
+	 * Sprint 6, tanda 2: guarda la foto del resumen diario (y la envía a Promotoría), la recalcula cada mañana y difunde
+	 * las alertas al celular. Solo lee los libros por los puertos de cifras y alertas; nunca registra dinero.
+	 */
+	PANEL("sistema.panel");
 
 	/** Prefijo reservado: ninguna persona puede tener un nombre de usuario que empiece así. */
 	public static final String PREFIJO_RESERVADO = "sistema";

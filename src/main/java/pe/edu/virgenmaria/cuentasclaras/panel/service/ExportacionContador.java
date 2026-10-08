@@ -17,6 +17,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.excel.Celda;
 import pe.edu.virgenmaria.cuentasclaras.comun.excel.EscritorXlsxSeguro;
 import pe.edu.virgenmaria.cuentasclaras.comun.excel.HojaReporte;
+import pe.edu.virgenmaria.cuentasclaras.panel.config.PropiedadesPanel;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.ArchivoExportado;
 
 import java.math.BigDecimal;
@@ -34,7 +35,8 @@ import java.util.UUID;
 /**
  * Excel para el contador (sprint 6, decisiones 73 a 75 y sección 10). Solo Promotoría y Administración.
  * <ol>
- *   <li>valida el rango (12 meses), el tope diario (20 por persona) y el tamaño (20 000 filas); si no, deja
+ *   <li>valida el rango (12 meses), el tope diario (20 por persona) y el tamaño (20 000 filas), configurables en
+ *       {@code cuentasclaras.panel.exportacion-*}; si no, deja
  *       {@code EXPORTACION_RECHAZADA} en la bitácora (la transacción no se revierte por ese rechazo);</li>
  *   <li>arma las filas con los datos mínimos (Ley 29733: familia por código, sin documentos, nombres ni contactos);</li>
  *   <li>escribe el libro con {@link EscritorXlsxSeguro} (sin fórmulas posibles) con un código de exportación impreso en
@@ -47,9 +49,6 @@ import java.util.UUID;
 @PreAuthorize("hasAnyRole('PROMOTOR','ADMINISTRACION')")
 @Transactional(noRollbackFor = ExportacionRechazadaException.class)
 public class ExportacionContador {
-
-	/** Decisión 73: hasta 20 descargas por persona y día. */
-	public static final int MAX_DIARIAS = 20;
 
 	static final String AVISO_USO = "Uso exclusivo para la contabilidad del colegio. Contiene datos de familias: no lo "
 			+ "reenvíe ni lo suba a otros servicios.";
@@ -68,13 +67,17 @@ public class ExportacionContador {
 
 	private final Clock reloj;
 
+	/** Desviación 5 de la tanda 1: rango, tope diario y filas salen de {@code cuentasclaras.panel.*}. */
+	private final PropiedadesPanel propiedades;
+
 	public ExportacionContador(CifrasCaja caja, CifrasCobranza cobranza, EscritorXlsxSeguro escritor,
-			AuditoriaService auditoria, Clock reloj) {
+			AuditoriaService auditoria, Clock reloj, PropiedadesPanel propiedades) {
 		this.caja = caja;
 		this.cobranza = cobranza;
 		this.escritor = escritor;
 		this.auditoria = auditoria;
 		this.reloj = reloj;
+		this.propiedades = propiedades;
 	}
 
 	/** Ingresos de un rango de días de caja: hojas «Ingresos», «Por medio de pago» y «Control». */
@@ -82,16 +85,16 @@ public class ExportacionContador {
 		LocalDateTime ahora = LocalDateTime.now(reloj);
 		RangoReporte rango;
 		try {
-			rango = RangoReporte.de(desde, hasta, ahora.toLocalDate());
+			rango = RangoReporte.de(desde, hasta, ahora.toLocalDate(), propiedades.exportacionMaxMeses());
 		}
 		catch (ReglaNegocioException e) {
 			throw rechazar("INGRESOS", "rango no válido: " + desde + " a " + hasta, e.getMessage());
 		}
 		exigirTopeDiario("INGRESOS", ahora);
 		long filasEsperadas = caja.pagosEnRango(rango.desde(), rango.hasta());
-		if (filasEsperadas > EscritorXlsxSeguro.MAX_FILAS) {
+		if (filasEsperadas > propiedades.exportacionMaxFilas()) {
 			throw rechazar("INGRESOS", "filas=" + filasEsperadas, "El rango tiene más de "
-					+ EscritorXlsxSeguro.MAX_FILAS + " pagos: elige un rango más corto.");
+					+ propiedades.exportacionMaxFilas() + " pagos: elige un rango más corto.");
 		}
 
 		List<PagoExportable> pagos = caja.pagosParaContador(rango.desde(), rango.hasta());
@@ -171,8 +174,9 @@ public class ExportacionContador {
 	private void exigirTopeDiario(String tipo, LocalDateTime ahora) {
 		long hoy = auditoria.contarDesdeDelUsuarioActual(AccionAuditoria.REPORTE_EXPORTADO,
 				ahora.toLocalDate().atStartOfDay());
-		if (hoy >= MAX_DIARIAS) {
-			throw rechazar(tipo, "tope diario de " + MAX_DIARIAS, "Ya descargaste " + MAX_DIARIAS
+		int maximo = propiedades.exportacionMaxDiarias();
+		if (hoy >= maximo) {
+			throw rechazar(tipo, "tope diario de " + maximo, "Ya descargaste " + maximo
 					+ " reportes hoy. Podrás descargar más mañana.");
 		}
 	}

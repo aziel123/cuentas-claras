@@ -32,7 +32,7 @@ import java.util.List;
  * </ul>
  */
 @Service
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 public class AlertasRecaudacion implements AlertasRevision {
 
 	static final String MODULO = "Recaudación bancaria";

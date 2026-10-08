@@ -63,7 +63,7 @@ import java.util.stream.Collectors;
 @Service
 @Order(5)
 @Transactional(readOnly = true)
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 public class AlertasConciliacion implements AlertasRevision {
 
 	static final String MODULO = "Conciliación";

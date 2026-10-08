@@ -7,6 +7,8 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision.Gravedad;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.Aviso;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.TipoAviso;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.config.PropiedadesMensajeria;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.EstadoMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.Mensaje;
@@ -32,7 +34,7 @@ import java.util.Set;
  * </ul>
  */
 @Service
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 @Transactional(readOnly = true)
 public class AlertasComunicacion implements AlertasRevision {
 
@@ -75,12 +77,15 @@ public class AlertasComunicacion implements AlertasRevision {
 		if (!sinAviso.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, sinAviso.size() + " pago(s) sin aviso enviado a su "
 					+ "responsable de pago después de " + propiedades.alertaPagoSinEntregarMinutos() + " minutos: la familia no se "
-					+ "enteró. Revisa la bandeja de envíos.", "/mensajes"));
+					+ "enteró. Revisa la bandeja de envíos.", "/mensajes", new Aviso(TipoAviso.OTRA_CRITICA, "SINAVISO:"
+							+ sinAviso.stream().mapToLong(Long::longValue).max().orElse(0))));
 		}
 		List<Mensaje> fallidos = mensajes.fallidosEnTodosSusCanales(FINANCIEROS, ahora.minusDays(7), SALIERON);
 		if (!fallidos.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, fallidos.size() + " aviso(s) de pago, anulación o "
-					+ "descuento no salieron por ningún canal. Llama a la familia.", "/mensajes"));
+					+ "descuento no salieron por ningún canal. Llama a la familia.", "/mensajes",
+					new Aviso(TipoAviso.OTRA_CRITICA, "FALLIDO:" + fallidos.stream().mapToLong(Mensaje::getId).max()
+							.orElse(0))));
 		}
 		boolean simuladoPermitido = Arrays.stream(entorno.getActiveProfiles()).anyMatch(PERFILES_SIMULADO::contains);
 		if (!simuladoPermitido && mensajes.countByProveedor(ProveedorMensajeria.SIMULADO) > 0) {

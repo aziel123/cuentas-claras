@@ -47,4 +47,16 @@ public interface AnulacionPagoRepository extends Repository<AnulacionPago, Long>
 			+ "from AnulacionPago a join a.notaCredito n join a.pago p where p.fecha between :desde and :hasta")
 	List<Object[]> notasDePagosEntre(@org.springframework.data.repository.query.Param("desde") java.time.LocalDate desde,
 			@org.springframework.data.repository.query.Param("hasta") java.time.LocalDate hasta);
+
+	// --- Sprint 6, tanda 2 ---
+
+	/**
+	 * Recálculo del resumen diario (P4): pagos de un rango de días de caja anulados DESPUÉS de un momento, como fecha del
+	 * pago, medio, total del pago, cuándo se registró el pago y cuándo se aprobó la anulación.
+	 */
+	@org.springframework.data.jpa.repository.Query("select p.fecha, p.medio, p.total, p.creadoEn, a.creadoEn "
+			+ "from AnulacionPago a join a.pago p where p.fecha between :desde and :hasta and a.creadoEn > :despues")
+	List<Object[]> anuladasDespuesDe(@org.springframework.data.repository.query.Param("desde") java.time.LocalDate desde,
+			@org.springframework.data.repository.query.Param("hasta") java.time.LocalDate hasta,
+			@org.springframework.data.repository.query.Param("despues") java.time.LocalDateTime despues);
 }

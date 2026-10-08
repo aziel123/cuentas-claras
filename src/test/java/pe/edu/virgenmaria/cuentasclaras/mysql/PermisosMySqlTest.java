@@ -2489,8 +2489,10 @@ class PermisosMySqlTest {
 		// con los permisos de cc_app, como quedaría después de activarla.
 		Usuario usuario = UsuariosDePrueba.guardar(usuarios, codificador, r.id(), nombre, UsuariosDePrueba.CLAVE, false,
 				Rol.DOCENTE);
-		jdbc.update("UPDATE usuario SET apoderado_id = ?, telefono_whatsapp = NULL WHERE id = ?", apoderado,
-				usuario.getId());
+		// Sprint 6 (trg_usuario_contacto): el contacto del PERSONAL no cambia por SQL; primero la cuenta pasa a ser del
+		// apoderado y después pierde el celular (la regla del apoderado no cambió).
+		jdbc.update("UPDATE usuario SET apoderado_id = ? WHERE id = ?", apoderado, usuario.getId());
+		jdbc.update("UPDATE usuario SET telefono_whatsapp = NULL WHERE id = ?", usuario.getId());
 		jdbc.update("UPDATE usuario_rol SET rol = 'APODERADO' WHERE usuario_id = ?", usuario.getId());
 		return new pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado(usuario.getId(), r.id(), nombre,
 				nombre, null, true, false, false, EnumSet.of(Rol.APODERADO), apoderado);
@@ -2660,6 +2662,16 @@ class PermisosMySqlTest {
 
 	private Usuario guardar(String nombre, Rol rol) {
 		return UsuariosDePrueba.guardar(usuarios, codificador, 1L, nombre, UsuariosDePrueba.CLAVE, false, rol);
+	}
+
+	/** Una persona del personal con correo desde su alta (un INSERT: trg_usuario_contacto vigila los UPDATE). */
+	private Usuario guardarConCorreo(String nombre, Rol rol, String correo) {
+		return pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio.en(1L, () -> {
+			Usuario usuario = Usuario.nuevo(nombre, "Nombre de " + nombre, correo, codificador.encode(UsuariosDePrueba.CLAVE),
+					EnumSet.of(rol));
+			usuario.asignarTelefonoWhatsapp(UsuariosDePrueba.celular(nombre));
+			return usuarios.save(usuario);
+		});
 	}
 
 	private static Integer codigoMySql(Throwable error) {
@@ -2897,8 +2909,9 @@ class PermisosMySqlTest {
 	@Test
 	void aliasDelCorreoDelPersonalFallaCon1644() {
 		String nombre = "lucia.caja" + sufijo.replaceAll("[^a-z0-9]", "");
-		Usuario cajera = guardar("alias." + sufijo, Rol.CAJA);
-		jdbc.update("UPDATE usuario SET correo = ? WHERE id = ?", nombre + "@gmail.com", cajera.getId());
+		// Sprint 6 (trg_usuario_contacto): el correo del personal se registra al crear la cuenta (cambiarlo exige su
+		// solicitud aprobada).
+		guardarConCorreo("alias." + sufijo, Rol.CAJA, nombre + "@gmail.com");
 		String alias = nombre.replace("lucia.", "Lucia.") + "+ramos@googlemail.com";
 		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.ADMINISTRACION));
 		String base = String.format("%07d", Math.floorMod(System.nanoTime() + 13, 10_000_000L));
@@ -3018,5 +3031,336 @@ class PermisosMySqlTest {
 				viejo.get("secuencia"), viejo.get("codigo")))).isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update("DELETE FROM huella_hora WHERE 1 = 0"))).isEqualTo(1142);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE huella_hora SET version = version WHERE 1 = 0"))).isEqualTo(1142);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// Sprint 6, tanda 2 (V21): foto del resumen diario comprobada contra los libros, resumen y alertas solo de
+	// sistema.panel y solo a Promotoría (y Dirección), y contacto del personal con su solicitud aprobada. Además, las
+	// consultas de cifras de la tanda 1 (JPQL agregado) contra MySQL 8 real.
+	// ---------------------------------------------------------------------------------------------------------------
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.panel.proceso.ResumenDiarioTarea resumenDiario;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.panel.service.ResumenesDiarios resumenes;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.panel.proceso.AvisosPromotoria avisosPromotoria;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioContactoPersonal contactoPersonal;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.panel.service.PanelPromotoria panelPromotoria;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.panel.service.ReportesCobranza reportesCobranza;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.panel.service.ExportacionContador exportacionContador;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.cobranza.service.CifrasCobranza cifrasCobranza;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.caja.service.CifrasCaja cifrasCaja;
+
+	/** Un alumno nuevo (su apoderada con un celular sin confirmar) en la sección del escenario de caja, con su familia: [familia, alumno]. */
+	private Long[] alumnoParaElPanel() {
+		FamiliasCaja familias = familiasDeCaja();
+		Long seccion = jdbc.queryForObject("SELECT seccion_id FROM matricula WHERE alumno_id = ?", Long.class,
+				familias.hermano1());
+		int anio = jdbc.queryForObject("SELECT a.anio FROM seccion s JOIN anio_escolar a ON a.id = s.anio_escolar_id "
+				+ "WHERE s.id = ?", Integer.class, seccion);
+		String base = String.format("%07d", Math.floorMod(System.nanoTime() + 601, 10_000_000L));
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		var nuevo = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoNuevo("7" + base, "Salas", "Paz", "Inés", java.time.LocalDate.of(anio - 10, 5, 2), "4" + base,
+						"Paz", "León", "Elena", "95" + base, null, seccion));
+		SecurityContextHolder.clearContext();
+		return new Long[] { nuevo.familiaId(), nuevo.alumnoId() };
+	}
+
+	/** Las cifras de los libros del colegio 1 a una fecha, directo de las tablas (como las suma el trigger de la foto). */
+	private java.util.Map<String, Object> librosAl(java.time.LocalDate dia) {
+		java.util.Map<String, Object> libros = new java.util.HashMap<>(jdbc.queryForMap("SELECT COALESCE(SUM(total), 0) AS "
+				+ "total, COUNT(*) AS cantidad, COALESCE(SUM(CASE WHEN medio = 'EFECTIVO' THEN total ELSE 0 END), 0) AS "
+				+ "efectivo, COALESCE(SUM(CASE WHEN medio = 'EFECTIVO' THEN 1 ELSE 0 END), 0) AS pagos_efectivo FROM pago "
+				+ "WHERE colegio_id = 1 AND estado = 'VIGENTE' AND fecha = ?", dia));
+		libros.put("mes", jdbc.queryForObject("SELECT COALESCE(SUM(total), 0) FROM pago WHERE colegio_id = 1 AND estado = "
+				+ "'VIGENTE' AND fecha BETWEEN ? AND ?", java.math.BigDecimal.class, dia.withDayOfMonth(1), dia));
+		libros.putAll(jdbc.queryForMap("SELECT COALESCE(SUM(c.monto - c.monto_pagado - c.monto_descuento), 0) AS deuda, "
+				+ "COUNT(DISTINCT a.familia_id) AS familias FROM cuota c JOIN alumno a ON a.id = c.alumno_id WHERE "
+				+ "c.colegio_id = 1 AND c.estado IN ('PENDIENTE', 'PARCIAL') AND c.fecha_vencimiento < ?", dia));
+		return libros;
+	}
+
+	/**
+	 * P3 y P18 con los permisos mínimos: cobro → foto (el trigger la compara AL CENTAVO con todo el libro del colegio 1,
+	 * con los pagos, anulaciones, parciales y descuentos que dejaron las demás pruebas) → un mensaje PENDIENTE por cada
+	 * persona de Promotoría activa, creados por sistema.panel. Una segunda corrida no hace nada (uk_resumen_diario).
+	 */
+	@Test
+	void flujoResumenDiarioConPermisosMinimos() {
+		java.time.LocalDate hoy = java.time.LocalDate.now(LIMA);
+		org.junit.jupiter.api.Assumptions.assumeTrue(jdbc.queryForObject("SELECT COUNT(*) FROM resumen_diario WHERE "
+				+ "colegio_id = 1 AND fecha = ?", Long.class, hoy) == 0, "la foto de hoy ya existe (otra corrida)");
+		guardar("promo.resumen." + sufijo, Rol.PROMOTOR);
+		huellaDiaria.horaEnColegio(1L, java.time.LocalDateTime.now(LIMA));
+		Long[] alumno = alumnoParaElPanel();
+		UsuariosDePrueba.iniciarSesion(cajera("caja.resumen"));
+		cobrarEfectivo(alumno[0], java.util.List.of(cuotaDe(alumno[1], 3)), "450.00");
+		SecurityContextHolder.clearContext();
+
+		var foto = resumenDiario.enColegio(1L, hoy);
+
+		assertThat(foto).isPresent();
+		java.util.Map<String, Object> fila = jdbc.queryForMap("SELECT * FROM resumen_diario WHERE id = ?",
+				foto.get().getId());
+		java.util.Map<String, Object> libros = librosAl(hoy);
+		assertThat((java.math.BigDecimal) fila.get("cobrado_total")).isEqualByComparingTo((java.math.BigDecimal) libros
+				.get("total"));
+		assertThat(((Number) fila.get("pagos_cantidad")).longValue()).isEqualTo(((Number) libros.get("cantidad")).longValue());
+		assertThat((java.math.BigDecimal) fila.get("cobrado_efectivo")).isEqualByComparingTo(new java.math.BigDecimal(
+				libros.get("efectivo").toString()));
+		assertThat((java.math.BigDecimal) fila.get("cobrado_mes")).isEqualByComparingTo((java.math.BigDecimal) libros
+				.get("mes"));
+		assertThat((java.math.BigDecimal) fila.get("deuda_vencida")).isEqualByComparingTo(new java.math.BigDecimal(
+				libros.get("deuda").toString()));
+		assertThat(((Number) fila.get("familias_morosas")).longValue()).isEqualTo(((Number) libros.get("familias"))
+				.longValue());
+		assertThat(fila).containsEntry("creado_por", "sistema.panel");
+		long promotores = jdbc.queryForObject("SELECT COUNT(DISTINCT u.id) FROM usuario u JOIN usuario_rol r ON "
+				+ "r.usuario_id = u.id WHERE u.colegio_id = 1 AND u.activo AND r.rol = 'PROMOTOR' AND (u.telefono_whatsapp "
+				+ "IS NOT NULL OR u.correo IS NOT NULL)", Long.class);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE tipo = 'RESUMEN_DIARIO' AND entidad_id = ? AND "
+				+ "estado = 'PENDIENTE' AND creado_por = 'sistema.panel'", Long.class, foto.get().getId())).isEqualTo(promotores);
+		assertThat(resumenDiario.enColegio(1L, hoy)).as("idempotente").isEmpty();
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.PROMOTOR));
+		assertThat(resumenes.deFecha(hoy)).isPresent();
+		assertThat(resumenes.comparar()).filteredOn(c -> c.fecha().equals(hoy)).singleElement()
+				.satisfies(c -> assertThat(c.cambio()).as("recién guardada, coincide con los libros").isFalse());
+	}
+
+	/** Fase 2b: con la mensajería simulada, el resumen de hoy sale (ENVIADO) a Promotoría. */
+	@Test
+	void resumenDiarioSaleConLaMensajeriaSimulada() {
+		org.junit.jupiter.api.Assumptions.assumeTrue(mensajeriaSimuladaHabilitada(), "falta la fila mensajeria_simulada");
+		java.time.LocalDate hoy = java.time.LocalDate.now(LIMA);
+		if (jdbc.queryForObject("SELECT COUNT(*) FROM resumen_diario WHERE colegio_id = 1 AND fecha = ?", Long.class,
+				hoy) == 0) {
+			guardar("promo.resumen2b." + sufijo, Rol.PROMOTOR);
+			Long[] alumno = alumnoParaElPanel();
+			UsuariosDePrueba.iniciarSesion(cajera("caja.resumen2b"));
+			cobrarEfectivo(alumno[0], java.util.List.of(cuotaDe(alumno[1], 3)), "450.00");
+			SecurityContextHolder.clearContext();
+			resumenDiario.enColegio(1L, hoy);
+		}
+		Long foto = jdbc.queryForObject("SELECT id FROM resumen_diario WHERE colegio_id = 1 AND fecha = ?", Long.class, hoy);
+		for (int pasada = 0; pasada < 100 && despacho.despacharColegio(1L) > 0; pasada++) {
+			// de a 20, el más antiguo primero
+		}
+		assertThat(jdbc.queryForList("SELECT estado FROM mensaje WHERE tipo = 'RESUMEN_DIARIO' AND entidad_id = ?",
+				String.class, foto)).isNotEmpty().allMatch("ENVIADO"::equals);
+	}
+
+	/** Una foto válida de un día sin movimientos (todo en cero) de los años 50: [fecha, sentencia]. */
+	private java.time.LocalDate diaSinMovimientos() {
+		return java.time.LocalDate.of(1950, 1, 1).plusDays(Math.floorMod(System.nanoTime(), 3000));
+	}
+
+	private static final String INSERTAR_FOTO = "INSERT INTO resumen_diario (colegio_id, fecha, cortado_en, cobrado_total, "
+			+ "pagos_cantidad, cobrado_efectivo, pagos_efectivo, cobrado_mes, deuda_vencida, familias_morosas, "
+			+ "cajas_sin_cerrar, cierres_con_diferencia, solicitudes_pendientes, alertas_criticas, avisos_familias, "
+			+ "avisos_entregados, huella_secuencia, huella_codigo, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, ?, "
+			+ "0, 0, 0, ?, 0, 0, 0, 0, 0, 0, 0, 0, ?, ?, NOW(6), ?, NOW(6))";
+
+	private int foto(java.time.LocalDate dia, java.time.LocalDateTime corte, String cobrado, Long huella, String codigo,
+			String actor) {
+		return jdbc.update(INSERTAR_FOTO, dia, corte, new java.math.BigDecimal(cobrado), new java.math.BigDecimal(cobrado),
+				huella, codigo, actor);
+	}
+
+	/**
+	 * P3, P5, P18 y P21: la base solo acepta una foto con las cifras de los libros, de su día, de sistema.panel y con una
+	 * huella guardada; y nadie la edita ni la borra (1142).
+	 */
+	@Test
+	void laFotoDelResumenSoloSeAceptaConLasCifrasDeLosLibros() {
+		java.time.LocalDate dia = diaSinMovimientos();
+		java.time.LocalDateTime corte = dia.atTime(19, 30);
+		assertThat(codigoAl(() -> foto(dia, corte, "1.00", null, null, "sistema.panel"))).as("cifras inventadas")
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> foto(dia, corte, "0.00", null, null, "caja"))).as("otro actor").isEqualTo(1644);
+		assertThat(codigoAl(() -> foto(dia, dia.plusDays(1).atTime(7, 0), "0.00", null, null, "sistema.panel")))
+				.as("corte de otro día").isEqualTo(1644);
+		assertThat(codigoAl(() -> foto(dia, corte, "0.00", 999_999_999L, "0123456789abcdef", "sistema.panel")))
+				.as("huella inventada").isEqualTo(1644);
+		assertThat(foto(dia, corte, "0.00", null, null, "sistema.panel")).isEqualTo(1);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE resumen_diario SET cobrado_total = 1 WHERE fecha = ?", dia)))
+				.isEqualTo(1142);
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM resumen_diario WHERE fecha = ?", dia))).isEqualTo(1142);
+	}
+
+	/** P7 y P21: el resumen y las alertas los crea solo sistema.panel y van solo a Promotoría (y Dirección, las alertas). */
+	@Test
+	void elResumenYLasAlertasSoloVanAPromotoria() {
+		java.time.LocalDate dia = diaSinMovimientos();
+		foto(dia, dia.atTime(19, 30), "0.00", null, null, "sistema.panel");
+		Long foto = jdbc.queryForObject("SELECT id FROM resumen_diario WHERE colegio_id = 1 AND fecha = ?", Long.class, dia);
+		Usuario cajera = guardar("caja.p7." + sufijo, Rol.CAJA);
+		Usuario promotora = guardar("promo.p7." + sufijo, Rol.PROMOTOR);
+		Usuario directora = guardar("dir.p7." + sufijo, Rol.DIRECTOR);
+		String insertar = "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, usuario_id, destino, "
+				+ "plantilla, parametros, entidad, entidad_id, estado, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, "
+				+ "'WHATSAPP', 'USUARIO', ?, ?, ?, 'x', ?, ?, 'PENDIENTE', NOW(6), ?, NOW(6))";
+		assertThat(codigoAl(() -> jdbc.update(insertar, "p7a-" + sufijo, "RESUMEN_DIARIO", cajera.getId(),
+				cajera.getTelefonoWhatsapp(), "RESUMEN_DIARIO", "resumen_diario", foto, "sistema.panel")))
+				.as("resumen a una cajera").isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(insertar, "p7b-" + sufijo, "ALERTA_PROMOTORIA", cajera.getId(),
+				cajera.getTelefonoWhatsapp(), "ALERTA_PROMOTORIA", "aviso", null, "sistema.panel")))
+				.as("alerta a una cajera").isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(insertar, "p7c-" + sufijo, "ALERTA_PROMOTORIA", promotora.getId(),
+				promotora.getTelefonoWhatsapp(), "ALERTA_PROMOTORIA", "aviso", null, "caja")))
+				.as("alerta que no crea sistema.panel").isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(insertar, "p7d-" + sufijo, "RESUMEN_DIARIO", promotora.getId(),
+				promotora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", "resumen_diario", 0L, "sistema.panel")))
+				.as("resumen sin su foto").isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(insertar, "p7e-" + sufijo, "RESUMEN_DIARIO", directora.getId(),
+				directora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", "resumen_diario", foto, "sistema.panel")))
+				.as("resumen a Dirección").isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, "
+				+ "destino, plantilla, parametros, entidad, entidad_id, estado, creado_en, creado_por, actualizado_en) VALUES "
+				+ "(1, ?, 'RESUMEN_DIARIO', 'CORREO', 'EXTERNO', 'otro@contador.pe', 'RESUMEN_DIARIO', 'x', 'resumen_diario', "
+				+ "?, 'PENDIENTE', NOW(6), 'sistema.panel', NOW(6))", "p7f-" + sufijo, foto)))
+				.as("correo externo sin la fila del DBA").isEqualTo(1644);
+		// Lo que sí: sistema.panel a Promotoría (el resumen y la alerta) y a Dirección (la alerta).
+		assertThat(jdbc.update(insertar, "p7g-" + sufijo, "RESUMEN_DIARIO", promotora.getId(),
+				promotora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", "resumen_diario", foto, "sistema.panel")).isEqualTo(1);
+		assertThat(jdbc.update(insertar, "p7h-" + sufijo, "ALERTA_PROMOTORIA", directora.getId(),
+				directora.getTelefonoWhatsapp(), "ALERTA_PROMOTORIA", "aviso", null, "sistema.panel")).isEqualTo(1);
+	}
+
+	/**
+	 * Decisiones 70 y 71 con los permisos mínimos: sistema.panel recorre las alertas de todos los módulos del colegio 1
+	 * (con lo que dejaron las demás pruebas) y avisa la anulación por aprobar a Promotoría y Dirección, una sola vez.
+	 */
+	@Test
+	void flujoAvisosPromotoriaConPermisosMinimos() {
+		Usuario promotora = guardar("promo.avisos." + sufijo, Rol.PROMOTOR);
+		Usuario directora = guardar("dir.avisos." + sufijo, Rol.DIRECTOR);
+		Long[] alumno = alumnoParaElPanel();
+		UsuariosDePrueba.iniciarSesion(cajera("caja.avisos"));
+		Long pago = cobrarEfectivo(alumno[0], java.util.List.of(cuotaDe(alumno[1], 4)), "450.00");
+		anulacionesPago.solicitarDevolucion(pago, "Se cobró dos veces la misma pensión en ventanilla");
+		SecurityContextHolder.clearContext();
+		Long solicitud = jdbc.queryForObject("SELECT MAX(id) FROM solicitud_cambio WHERE colegio_id = 1 AND tipo = "
+				+ "'ANULACION_PAGO' AND estado = 'PENDIENTE'", Long.class);
+		// Un lunes: los avisos no salen en domingo ni feriado.
+		java.time.LocalDate lunes = java.time.LocalDate.now(LIMA).with(java.time.temporal.TemporalAdjusters.next(
+				java.time.DayOfWeek.MONDAY));
+		while (pe.edu.virgenmaria.cuentasclaras.comun.fecha.FeriadosNacionales.es(lunes)) {
+			lunes = lunes.plusWeeks(1);
+		}
+		avisosPromotoria.enColegio(1L, lunes);
+		avisosPromotoria.enColegio(1L, lunes);
+
+		String clave = "ALERTA:ANULACION_PAGO_PENDIENTE:S:" + solicitud + ":U%";
+		assertThat(jdbc.queryForList("SELECT usuario_id FROM mensaje WHERE clave LIKE ? AND creado_por = 'sistema.panel'",
+				Long.class, clave)).contains(promotora.getId(), directora.getId()).doesNotHaveDuplicates();
+	}
+
+	/** P6: el celular o el correo de alguien del personal no cambian por SQL sin SU solicitud aprobada. */
+	@Test
+	void cambiarElCelularDeLaPromotoraSinSolicitudFallaCon1644() {
+		Usuario promotora = guardar("promo.p6." + sufijo, Rol.PROMOTOR);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET telefono_whatsapp = '+51900000001' WHERE id = ?",
+				promotora.getId()))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET correo = 'otro@correo.pe' WHERE id = ?",
+				promotora.getId()))).isEqualTo(1644);
+		Long otraAprobada = jdbc.queryForObject("SELECT MIN(id) FROM solicitud_cambio WHERE colegio_id = 1 AND estado = "
+				+ "'APROBADA'", Long.class);
+		if (otraAprobada != null) {
+			assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET telefono_whatsapp = '+51900000001', "
+					+ "contacto_solicitud_id = ? WHERE id = ?", otraAprobada, promotora.getId())))
+					.as("una solicitud aprobada que no es la suya").isEqualTo(1644);
+		}
+		// Lo demás de la cuenta (el ingreso, el bloqueo) sí cambia.
+		assertThat(jdbc.update("UPDATE usuario SET intentos_fallidos = 0 WHERE id = ?", promotora.getId())).isEqualTo(1);
+	}
+
+	/**
+	 * P6 con los permisos mínimos: el titular pide, OTRA persona aprueba, el cambio pasa el trigger con su solicitud y el
+	 * aviso al contacto ANTERIOR pasa trg_mensaje_nace (solo a ese contacto). La solicitud no se reusa.
+	 */
+	@Test
+	void flujoCambioContactoPersonalConPermisosMinimos() {
+		Usuario lucia = guardar("lucia.p6." + sufijo, Rol.CAJA);
+		Usuario directora = guardar("dir.p6." + sufijo, Rol.DIRECTOR);
+		Usuario otra = guardar("otra.p6." + sufijo, Rol.CAJA);
+		String anterior = lucia.getTelefonoWhatsapp();
+		String nuevo = "9" + String.format("%08d", Math.floorMod(System.nanoTime(), 100_000_000L));
+		UsuariosDePrueba.iniciarSesion(lucia);
+		Long solicitud = contactoPersonal.solicitar(lucia.getId(), nuevo, null, "Cambié de número de celular este mes");
+		UsuariosDePrueba.iniciarSesion(directora);
+		bandeja.aprobar(solicitud, null);
+		SecurityContextHolder.clearContext();
+
+		assertThat(jdbc.queryForMap("SELECT telefono_whatsapp, contacto_solicitud_id FROM usuario WHERE id = ?",
+				lucia.getId())).containsEntry("telefono_whatsapp", "+51" + nuevo)
+				.containsEntry("contacto_solicitud_id", solicitud);
+		assertThat(jdbc.queryForMap("SELECT destino, plantilla, estado FROM mensaje WHERE tipo = 'CONTACTO_CAMBIADO' AND "
+				+ "usuario_id = ?", lucia.getId())).containsEntry("destino", anterior)
+				.containsEntry("plantilla", "CONTACTO_PERSONAL_CAMBIADO").containsEntry("estado", "PENDIENTE");
+		// La misma solicitud no sirve para otro cambio ni para otra persona.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET correo = 'lucia@otro.pe' WHERE id = ?", lucia.getId())))
+				.isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET telefono_whatsapp = '+51911111111', "
+				+ "contacto_solicitud_id = ? WHERE id = ?", solicitud, otra.getId()))).isEqualTo(1644);
+		// El «aviso al contacto anterior» no sirve para escribir a otro número.
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, "
+				+ "usuario_id, destino, plantilla, parametros, entidad, entidad_id, estado, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (1, ?, 'CONTACTO_CAMBIADO', 'WHATSAPP', 'USUARIO', ?, '+51922222222', "
+				+ "'CONTACTO_PERSONAL_CAMBIADO', 'x', 'solicitud_cambio', ?, 'PENDIENTE', NOW(6), 'x', NOW(6))",
+				"p6c-" + sufijo, lucia.getId(), solicitud))).isEqualTo(1644);
+	}
+
+	/**
+	 * Tanda 1 en MySQL 8 real (no se había probado): las cifras del panel, los reportes en pantalla y los dos Excel con
+	 * JPQL agregado, comparadas con las sumas directas del libro del colegio 1.
+	 */
+	@Test
+	void lasCifrasYLosReportesDeLaTanda1FuncionanEnMySql() {
+		java.time.LocalDate hoy = java.time.LocalDate.now(LIMA);
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(1L, 4101L, "promo.cifras." + sufijo, "Promotora",
+				false, EnumSet.of(Rol.PROMOTOR)));
+		var panel = panelPromotoria.ver();
+		java.util.Map<String, Object> libros = librosAl(hoy);
+		assertThat(panel.hoy().cobrado()).isEqualTo(pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero.formatear(
+				(java.math.BigDecimal) libros.get("total")));
+		assertThat(panel.hoy().pagos()).isEqualTo(((Number) libros.get("cantidad")).longValue());
+		assertThat(cifrasCobranza.deudaVencida(hoy).monto()).isEqualByComparingTo(new java.math.BigDecimal(
+				libros.get("deuda").toString()));
+		assertThat(cifrasCobranza.deudaVencida(hoy).familias()).isEqualTo(((Number) libros.get("familias")).longValue());
+		assertThat(cifrasCaja.cobrado(hoy.withDayOfMonth(1), hoy).total()).isEqualByComparingTo((java.math.BigDecimal)
+				libros.get("mes"));
+		assertThat(cifrasCaja.cobradoPorDia(hoy.withDayOfMonth(1), hoy).values().stream()
+				.map(pe.edu.virgenmaria.cuentasclaras.caja.dto.CobradoDia::total)
+				.reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add))
+				.isEqualByComparingTo((java.math.BigDecimal) libros.get("mes"));
+		assertThat(cifrasCaja.cambiosPosteriores(hoy.withDayOfMonth(1), hoy, hoy.atStartOfDay()).registrados())
+				.isNotNull();
+		assertThat(reportesCobranza.familiasMorosas()).hasSize(((Number) libros.get("familias")).intValue());
+		assertThat(reportesCobranza.ingresosPorMedio(null, null).total()).isEqualTo(pe.edu.virgenmaria.cuentasclaras.comun
+				.dinero.Dinero.formatear((java.math.BigDecimal) libros.get("mes")));
+		var morosidad = reportesCobranza.morosidadPorGrado(null);
+		assertThat(morosidad.filas()).isNotNull();
+		var ingresos = exportacionContador.exportarIngresos(hoy.withDayOfMonth(1), hoy);
+		assertThat(ingresos.contenido()).isNotEmpty();
+		var excelMorosidad = exportacionContador.exportarMorosidad(null);
+		assertThat(excelMorosidad.contenido()).isNotEmpty();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'REPORTE_EXPORTADO' AND "
+				+ "nombre_usuario = ?", Long.class, "promo.cifras." + sufijo)).isEqualTo(2);
 	}
 }

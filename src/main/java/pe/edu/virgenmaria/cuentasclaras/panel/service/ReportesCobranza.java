@@ -13,6 +13,7 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.service.CifrasCobranza;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.dto.UltimoAviso;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.service.ConsultaMensajes;
+import pe.edu.virgenmaria.cuentasclaras.panel.config.PropiedadesPanel;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.FamiliaMorosaVista;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.ReporteIngresos;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.ReporteMorosidad;
@@ -44,11 +45,15 @@ public class ReportesCobranza {
 
 	private final Clock reloj;
 
-	public ReportesCobranza(CifrasCaja caja, CifrasCobranza cobranza, ConsultaMensajes mensajes, Clock reloj) {
+	private final PropiedadesPanel propiedades;
+
+	public ReportesCobranza(CifrasCaja caja, CifrasCobranza cobranza, ConsultaMensajes mensajes, Clock reloj,
+			PropiedadesPanel propiedades) {
 		this.caja = caja;
 		this.cobranza = cobranza;
 		this.mensajes = mensajes;
 		this.reloj = reloj;
+		this.propiedades = propiedades;
 	}
 
 	/** Morosidad por grado del año pedido (por defecto, el año en curso) al día de hoy. */
@@ -69,9 +74,9 @@ public class ReportesCobranza {
 				filas.stream().mapToLong(MorosidadGrado::matriculados).sum(), puedeExportar);
 	}
 
-	/** Ingresos por medio y por origen en un rango (por defecto, el mes en curso hasta hoy; 12 meses como máximo). */
+	/** Ingresos por medio y por origen en un rango (por defecto, el mes en curso hasta hoy; 12 meses como máximo, configurable). */
 	public ReporteIngresos ingresosPorMedio(LocalDate desde, LocalDate hasta) {
-		RangoReporte rango = RangoReporte.de(desde, hasta, LocalDate.now(reloj));
+		RangoReporte rango = RangoReporte.de(desde, hasta, LocalDate.now(reloj), propiedades.exportacionMaxMeses());
 		CobradoPeriodo cobrado = caja.cobrado(rango.desde(), rango.hasta());
 		AnuladoPeriodo anulado = caja.anulado(rango.desde(), rango.hasta());
 		return new ReporteIngresos(rango.desde(), rango.hasta(), Dinero.formatear(cobrado.total()), cobrado.cantidad(),

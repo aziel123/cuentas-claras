@@ -20,6 +20,9 @@ public class ConfiguracionBd {
 
 	public static final String HUELLA_CORREO_EXTERNO = "huella_correo_externo";
 
+	/** Sprint 6, tanda 2 (decisión 69): el correo del contador que también recibe el resumen diario (lo escribe el DBA). */
+	public static final String RESUMEN_CORREO_EXTERNO = "resumen_correo_externo";
+
 	public static final String MENSAJERIA_SIMULADA = "mensajeria_simulada";
 
 	@Id

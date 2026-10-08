@@ -75,7 +75,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V20): Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V21): Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Permisos por tabla de cc_app
@@ -101,7 +101,7 @@ jobs:
         run: |
           $MYSQL_ADMIN cuentasclaras -e "INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('mensajeria_simulada', 'PERMITIDA', NOW(6))"
           ./mvnw -B test -Dsurefire.failIfNoSpecifiedTests=false \
-            -Dtest='PermisosMySqlTest#flujoMensajeDePagoConPermisosMinimos+flujoActivacionDirectaConPermisosMinimos+reescribirElUsoDelEnlaceFallaCon1644+flujoVerificacionDeContactoConPermisosMinimos+flujoRenovacionYMatriculaConPermisosMinimos+avisoAtendidoNoCambiaFallaCon1644'
+            -Dtest='PermisosMySqlTest#flujoMensajeDePagoConPermisosMinimos+flujoActivacionDirectaConPermisosMinimos+reescribirElUsoDelEnlaceFallaCon1644+flujoVerificacionDeContactoConPermisosMinimos+flujoRenovacionYMatriculaConPermisosMinimos+avisoAtendidoNoCambiaFallaCon1644+resumenDiarioSaleConLaMensajeriaSimulada'
           # La base vuelve a ser como la de producción (sin mensajería simulada).
           $MYSQL_ADMIN cuentasclaras -e "DELETE FROM configuracion_bd WHERE clave = 'mensajeria_simulada'"
 
@@ -296,6 +296,16 @@ jobs:
           comprobar 1644 "INSERT INTO huella_hora (colegio_id, momento, secuencia, codigo, creado_en, creado_por, actualizado_en) VALUES (0, NOW(6), 1, REPEAT('0', 16), NOW(6), 'sistema.auditoria', NOW(6))"
           comprobar 1644 "INSERT INTO apoderado (colegio_id, familia_id, tipo_documento, numero_documento, apellido_paterno, nombres, parentesco, nombre_busqueda, activo, telefono_whatsapp, telefono_verificado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'DNI', '00000000', 'x', 'x', 'MADRE', 'x', TRUE, '+51999999999', '+51999999999', NOW(6), 'x', NOW(6))"
           comprobar 1644 "INSERT INTO feriado (colegio_id, fecha, descripcion, vigente, pendiente, aprobado_por, aprobado_en, creado_en, creado_por, actualizado_en) VALUES (0, '2999-01-04', 'verificador', TRUE, FALSE, 'b', NOW(6), NOW(6), 'verificador', NOW(6))"
+          # Sprint 6, tanda 2 (V21): la foto del resumen diario es de solo inserción (ni sistema.panel la corrige); una foto
+          # con cifras que no son las de los libros (el colegio 0 no tiene pagos) falla en su trigger; el resumen y las
+          # alertas solo los crea sistema.panel (con un destinatario imposible, la versión de trg_mensaje_nace del sprint 6
+          # responde 1644 antes que el CHECK); y el celular del personal no cambia sin su solicitud aprobada.
+          comprobar 1142 "DELETE FROM resumen_diario WHERE 1 = 0"
+          comprobar 1142 "UPDATE resumen_diario SET version = version WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO resumen_diario (colegio_id, fecha, cortado_en, cobrado_total, pagos_cantidad, cobrado_efectivo, pagos_efectivo, cobrado_mes, deuda_vencida, familias_morosas, cajas_sin_cerrar, cierres_con_diferencia, solicitudes_pendientes, alertas_criticas, avisos_familias, avisos_entregados, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-01', '2000-01-01 19:30:00', 1.00, 1, 0, 0, 1.00, 0, 0, 0, 0, 0, 0, 0, 0, NOW(6), 'sistema.panel', NOW(6))"
+          comprobar 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'verificador-panel', 'ALERTA_PROMOTORIA', 'CORREO', 'X', 'x@y.pe', 'verificador', '', 'PENDIENTE', NOW(6), 'verificador', NOW(6))"
+          personal=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT MIN(id) FROM usuario WHERE apoderado_id IS NULL AND telefono_whatsapp IS NOT NULL")
+          comprobar 1644 "UPDATE usuario SET telefono_whatsapp = '+51900000009' WHERE id = ${personal}"
           # G10 y G11: sin la fila 'mensajeria_simulada' (como en prod), la base no acepta un mensaje simulado. El
           # mensaje PENDIENTE lo dejó PermisosMySqlTest.simuladoSinPermisoDeLaBaseFallaCon1644.
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'mensajeria_simulada'")
@@ -338,6 +348,7 @@ jobs:
           grep -q "Permisos y triggers de la renovación de matrícula, la matrícula reservada y los avisos de las familias" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de feriados, semilla del muestreo y cierre bancario mensual verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de la verificación de contactos, la huella por hora y los feriados aprobados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Permisos y triggers del panel (resumen diario, alertas a Promotoría y contacto del personal) verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Triggers verificados: están los" prod.log || { cat prod.log; exit 1; }
           kill "$PID_APP"
           if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \
