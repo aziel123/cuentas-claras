@@ -1,6 +1,6 @@
 # Estado del proyecto · Cuentas Claras
 
-> Última actualización: 6 de octubre de 2026.
+> Última actualización: 8 de octubre de 2026.
 > Resumen para retomar el trabajo: qué está hecho, cómo probarlo y qué hay que decidir con el colegio.
 
 ## Avance
@@ -12,6 +12,7 @@
 | 2 · Datos del colegio (alumnos, Excel, pensiones, saldo inicial) | ✅ Terminado, auditado y corregido | `claude/sprint-2-datos-colegio` | 713 |
 | 3 · Caja (pagos, comprobantes, anulaciones, descuentos, cierre ciego, conciliación) | ✅ Terminado, auditado y corregido | `claude/sprint-3-correcciones` | 967 |
 | 4 · Cero digitación (pago en línea, comprobante automático, recaudación bancaria, conciliación automática) | ✅ Terminado, auditado y corregido | `claude/sprint-4-cero-digitacion` | 1429 |
+| 5 · Familias y matrícula 2027 (avisos por WhatsApp, acceso directo al titular, huella diaria, portal, renovación 2027, feriados, cierre mensual) | ✅ Terminado, auditado y corregido | `claude/sprint-5-familias` | 1694 (más las de MySQL real, que corren en el CI) |
 
 El sprint 4 se implementó en 3 tandas verificadas, cada una con su migración y probada también contra MySQL 8 real, y luego se corrigió todo lo que encontraron la auditoría antifraude y QA:
 
@@ -22,7 +23,7 @@ El sprint 4 se implementó en 3 tandas verificadas, cada una con su migración y
 | 3 | Extracto bancario encadenado y conciliación automática | V15 | 1175 (44 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL`) |
 | Correcciones | Los 11 hallazgos de la auditoría y los 6 de QA (`docs/arquitectura/sprint-4-correcciones.md`) | V16 | 1429 (46 de MySQL real) |
 
-Las ramas están **apiladas**: cada una parte de la anterior y contiene todo su trabajo. La más completa es `claude/sprint-4-cero-digitacion`. Ninguna está unida a `main` todavía. El CI de GitHub solo corre en `main` y en los PR, así que se ejecutará por primera vez cuando se abra el PR. Todas las pruebas, incluidas las de MySQL 8 real, se corrieron localmente durante el desarrollo.
+Las ramas están **apiladas**: cada una parte de la anterior y contiene todo su trabajo. La más completa es `claude/sprint-5-familias`. Los sprints 1 a 4 están en revisión en el PR #1 hacia `main` (CI en verde, también el job de MySQL 8). El sprint 5 pasó el CI completo en un PR en borrador que se cerró sin merge; se propone a `main` cuando se una el PR #1.
 
 Cada sprint siguió el mismo flujo:
 1. `arquitecto-software` diseña.
@@ -77,12 +78,24 @@ Todo lo que entra lo registra un actor de sistema (`sistema.pasarela`, `sistema.
 - **Contracargo:** se anula el pago SIN reembolso (el banco ya devolvió el dinero); la devolución de un pago en línea solo sale por la API de la pasarela.
 - 41 triggers en MySQL (13 nuevos en el sprint). Si falta alguno, la aplicación no arranca.
 
+### Familias y matrícula 2027 (sprint 5)
+Diseño en `docs/arquitectura/sprint-5-familias.md` y correcciones en `sprint-5-correcciones.md` (migraciones V17 a V20, 58 triggers en MySQL).
+- **El padre se entera al instante:** cada pago, anulación y descuento crea su mensaje por WhatsApp, con correo de respaldo, en la misma transacción del dinero. Sin mensaje no hay pago. Lo envía `sistema.mensajeria`, con monto, concepto, comprobante y quién lo registró. Conectores simulados en dev, test y piloto; en producción la aplicación no arranca sin un canal real.
+- **Contacto verificado:** todo celular o correo nuevo o cambiado queda pendiente hasta que su dueño lo confirma con un enlace de un solo uso y su DNI. Los contactos se comparan normalizados y no se escribe a un contacto del personal sin aprobación (hallazgo S5-A1).
+- **Acceso directo al titular:** al crear o restablecer una cuenta del personal o de un apoderado, el enlace llega al celular o correo del titular. Nadie más lo ve (cierra A2 y S4-M2).
+- **Huella de la bitácora:** cada día a Promotoría (y cada hora en horario de caja), con la huella anterior. Si la secuencia retrocede o falta un día, es alerta crítica.
+- **Portal de familias para celular:** estado de cuenta, boletas, pago en línea, historial de mensajes y «¿Algo no cuadra?», que solo ven Promotoría y Dirección. Quien intervino en lo reclamado no cierra el aviso.
+- **Matrícula 2027:** la familia confirma la renovación; la matrícula queda RESERVADA con su cuota y se activa sola al pagarla, generando las 10 pensiones. Sin confirmación no hay deuda.
+- **Recordatorios:** 3 días antes y el día hábil siguiente, de lunes a sábado de 08:00 a 20:00, sin mencionar lo académico. El apoderado los puede apagar; los avisos de pago no.
+- **Feriados:** los 16 nacionales en el código; los días no laborables extra los propone un rol y los aprueba otro, con tope.
+- **Muestra de caja con semilla secreta** y **cierre bancario mensual a ciegas** contra el estado de cuenta oficial.
+
 ## Cómo probarlo en tu computadora
 Requisito: Java 21.
 ```bash
 git clone https://github.com/aziel123/cuentas-claras
 cd cuentas-claras
-git checkout claude/sprint-4-cero-digitacion
+git checkout claude/sprint-5-familias
 ./mvnw spring-boot:run
 ```
 Abre http://localhost:8080. Usuarios de demostración, todos con la clave `demo-cuentas-claras-2026`:
