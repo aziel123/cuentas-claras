@@ -55,4 +55,19 @@ class PlantillasMensajeTest {
 			assertThat(plantilla.texto()).as(plantilla.name()).contains("avísenos desde el portal");
 		}
 	}
+
+	/**
+	 * Sprint 6, tanda 2 (P9 y sección 10.5): el resumen y las alertas al personal no llevan botón ni enlace (nada se
+	 * aprueba desde un mensaje: el enlace sería un token) y su texto lo arma el sistema con cifras y tipos fijos.
+	 */
+	@Test
+	void lasAlertasYElResumenNoLlevanTokensNiEnlaces() {
+		for (PlantillaMensaje plantilla : List.of(PlantillaMensaje.RESUMEN_DIARIO, PlantillaMensaje.ALERTA_PROMOTORIA,
+				PlantillaMensaje.ALERTA_MAS, PlantillaMensaje.CONTACTO_PERSONAL_CAMBIADO)) {
+			assertThat(plantilla.botonPortal()).as(plantilla.name()).isFalse();
+			assertThat(plantilla.texto()).as(plantilla.name()).doesNotContain("http", "/activar", "/verificar", "enlace");
+		}
+		// Correcciones del sprint 6: 12 (los resultados de las llamadas de control, S6-M2).
+		assertThat(PlantillaMensaje.RESUMEN_DIARIO.parametros()).isEqualTo(12);
+	}
 }

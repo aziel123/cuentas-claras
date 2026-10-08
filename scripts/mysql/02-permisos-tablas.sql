@@ -161,6 +161,29 @@ GRANT INSERT, UPDATE (estado, intentos, abonos_ciego, cargos_ciego, saldo_ciego,
 --   ('mensajeria_simulada', 'PERMITIDA')  -> solo en las bases de dev, test (MySQL) y piloto. NUNCA en prod.
 --   ('huella_correo_externo', '<correo del contador>') -> opcional, en prod (decisión 49).
 
+-- Sprint 6 · tanda 1: sin cambios (panel, reportes y Excel solo leen con el SELECT general).
+-- Sprint 6 · tanda 2 (V21): foto del resumen diario, SOLO inserción (1142): ni sistema.panel puede corregirla. mensaje
+-- no cambia su GRANT (los tipos nuevos usan las mismas columnas). usuario mantiene su UPDATE por tabla: el celular, el
+-- correo y contacto_solicitud_id del personal los vigila trg_usuario_contacto (mismo criterio que apoderado y
+-- trg_apoderado_facturacion).
+GRANT INSERT ON cuentasclaras.resumen_diario TO 'cc_app'@'%';                     -- solo inserción
+-- configuracion_bd sigue SIN GRANT. Fila nueva que solo escribe el DBA (opcional, en prod; decisión 69):
+--   ('resumen_correo_externo', '<correo del contador>') -> el resumen diario también le llega por correo.
+-- Sprint 6 · tanda 3 (V22): llamada de control, SOLO inserción (1142): el resultado de una llamada no se corrige ni se
+-- borra. semilla_muestreo no cambia su GRANT (el ámbito nuevo LLAMADA_CONTROL usa las mismas columnas). Quién la
+-- registra, la semana y el pago en efectivo de la familia los vigila trg_llamada_control_registro.
+GRANT INSERT ON cuentasclaras.llamada_control TO 'cc_app'@'%';                    -- solo inserción
+-- Correcciones del sprint 6 (V23): la muestra congelada de la llamada de control (S6-B3) y la delegación de la semana a
+-- Dirección (S6-M2), SOLO inserción (1142): ni la muestra ni la delegación se corrigen ni se borran. Sus triggers
+-- (trg_muestra_llamada_registro y trg_delegacion_llamada_registro) exigen la semana en curso, la familia candidata y quién
+-- las crea. llamada_control mantiene su GRANT (intento y por_delegacion se escriben al insertar).
+GRANT INSERT ON cuentasclaras.muestra_llamada TO 'cc_app'@'%';                    -- solo inserción
+GRANT INSERT ON cuentasclaras.delegacion_llamada TO 'cc_app'@'%';                 -- solo inserción
+-- QA-S6-6: configuracion_colegio (por colegio) sigue la regla de configuracion_bd: SIN GRANT de escritura (1142). Fila
+-- que solo escribe el DBA (opcional, en prod; decisión 69), reemplaza a ('resumen_correo_externo') de configuracion_bd:
+--   INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en)
+--   VALUES (<id del colegio>, 'resumen_correo_externo', '<correo del contador de ese colegio>', NOW(6));
+
 -- M2: cc_app no lee information_schema.TRIGGERS (necesitaría el privilegio TRIGGER, que no debe tener). Esta función
 -- (SQL SECURITY DEFINER: corre con los permisos de quien la crea) devuelve solo los nombres de los triggers del esquema,
 -- separados por comas; al arrancar en prod, VerificadorPermisosBaseDatos los compara con la lista de 03-triggers.sql.

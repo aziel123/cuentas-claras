@@ -15,4 +15,7 @@ public interface HuellaHoraRepository extends Repository<HuellaHora, Long> {
 	Optional<HuellaHora> findFirstByOrderBySecuenciaDesc();
 
 	List<HuellaHora> findByMomentoGreaterThanEqualOrderByMomentoAsc(LocalDateTime desde);
+
+	/** Sprint 6: la última huella por hora hasta un momento (la de las 19:00 para el resumen diario). */
+	Optional<HuellaHora> findFirstByMomentoLessThanEqualOrderByMomentoDesc(LocalDateTime hasta);
 }

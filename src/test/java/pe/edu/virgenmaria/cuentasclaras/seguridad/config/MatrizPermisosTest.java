@@ -72,6 +72,11 @@ class MatrizPermisosTest {
 			if (rol == Rol.APODERADO && modulo == ModuloApp.FAMILIA) {
 				esperado = 404;
 			}
+			// Sprint 6, tanda 2: el usuario de prueba en sesión no tiene cuenta en la base: su contacto no existe (404, sin
+			// pistas). Con su cuenta lo prueba ContactoPersonalWebTest.
+			if (modulo == ModuloApp.MI_CONTACTO && modulo.permite(rol)) {
+				esperado = 404;
+			}
 			if (estado != esperado) {
 				errores.add(rol + " en " + modulo.ruta() + ": esperaba " + esperado + " y recibió " + estado);
 			}
@@ -375,7 +380,7 @@ class MatrizPermisosTest {
 	@Test
 	void elMenuSaleDeLaMismaMatriz() {
 		assertThat(ModuloApp.para(UsuariosDePrueba.autenticado(Rol.CAJA).getAuthorities()))
-				.containsExactly(ModuloApp.INICIO, ModuloApp.CAJA_COBRO, ModuloApp.FERIADOS);
+				.containsExactly(ModuloApp.INICIO, ModuloApp.CAJA_COBRO, ModuloApp.FERIADOS, ModuloApp.MI_CONTACTO);
 		assertThat(ModuloApp.para(UsuariosDePrueba.autenticado(Rol.DIRECTOR, Rol.DOCENTE).getAuthorities()))
 				.contains(ModuloApp.USUARIOS, ModuloApp.ACADEMICO)
 				.doesNotContain(ModuloApp.CAJA_COBRO, ModuloApp.FAMILIA);

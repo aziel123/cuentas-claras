@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Familias con deuda vencida', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="panel-morosos">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Reportes</p>
+			<h1>Familias con deuda vencida</h1>
+			<p class="secundario">De la que más debe a la que menos. Esta lista no se descarga. Para llamar a una familia, entra a su ficha.</p>
+		</div>
+	</div>
+	<nav th:replace="~{panel/ingresos :: navegacion}"></nav>
+
+	<th:block th:if="${#lists.isEmpty(familias)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Ninguna familia con deuda vencida', 'Cuando una cuota pase su fecha de vencimiento sin pagarse, la familia aparecerá aquí.')}"></div>
+	</th:block>
+	<ul class="lista-panel lista-tarjetas" th:unless="${#lists.isEmpty(familias)}" data-morosos>
+		<li th:each="f : ${familias}" th:data-familia="${f.familiaId}">
+			<div class="cuota-cabecera">
+				<strong class="texto-largo" th:text="${f.familia}">Familia Quispe Huamán</strong>
+				<strong class="num" th:text="${f.monto}">S/ 900.00</strong>
+			</div>
+			<span class="secundario" th:text="|${f.alumnos} hijo(s) con deuda · la cuota más antigua venció hace ${f.dias} día(s)|">2 hijos · 35 días</span>
+			<span class="secundario" th:text="${f.ultimoAviso}">Recordatorio de vencimiento entregado el 03/10</span>
+			<a class="btn btn-texto btn-chico" th:href="@{/alumnos/familias/{id}(id=${f.familiaId})}">Ver ficha de la familia</a>
+		</li>
+	</ul>
+</main>
+</body>
+</html>

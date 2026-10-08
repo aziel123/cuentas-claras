@@ -42,4 +42,14 @@ public interface AplicacionPagoRepository extends Repository<AplicacionPago, Lon
 	/** Los pagos que tocaron cuotas de un alumno (aplicaciones y reversiones). */
 	@Query("select distinct a.pago.id from AplicacionPago a where a.cuota.alumno.id = :alumno")
 	List<Long> pagosDeAlumno(@Param("alumno") Long alumnoId);
+
+	/**
+	 * Sprint 6: conceptos de los pagos de un rango de días de caja (solo las aplicaciones, no las reversiones): id del
+	 * pago, tipo de cuota y descripción que generó el sistema, en orden de vencimiento.
+	 */
+	@Query("select a.pago.id, c.tipo, c.descripcion from AplicacionPago a join a.cuota c join a.pago p "
+			+ "where a.tipo = pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAplicacion.APLICACION "
+			+ "and p.fecha between :desde and :hasta order by a.pago.id, c.fechaVencimiento, c.id")
+	List<Object[]> conceptosDePagosEntre(@org.springframework.data.repository.query.Param("desde") java.time.LocalDate desde,
+			@org.springframework.data.repository.query.Param("hasta") java.time.LocalDate hasta);
 }

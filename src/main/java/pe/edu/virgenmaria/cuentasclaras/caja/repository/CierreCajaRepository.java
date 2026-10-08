@@ -32,4 +32,13 @@ public interface CierreCajaRepository extends Repository<CierreCaja, Long> {
 	Optional<CierreCaja> findFirstByCajaIdOrderByNumeroDesc(Long cajaId);
 
 	List<CierreCaja> findByCajaIdInOrderByNumeroAsc(Collection<Long> cajas);
+
+	/**
+	 * Correcciones del sprint 6 (S6-M3): los cierres de caja con diferencia creados en [desde, hasta): cuántos y la suma
+	 * de sus diferencias (para el resumen diario: «desde el resumen anterior»).
+	 */
+	@Query("select count(c), sum(c.diferencia) from CierreCaja c where c.diferencia <> 0 and c.creadoEn >= :desde "
+			+ "and c.creadoEn < :hasta")
+	List<Object[]> cierresConDiferenciaEntre(@Param("desde") java.time.LocalDateTime desde,
+			@Param("hasta") java.time.LocalDateTime hasta);
 }

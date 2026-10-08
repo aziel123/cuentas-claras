@@ -93,6 +93,14 @@ public class Usuario extends BaseEntity {
 	@Column(name = "apoderado_id", updatable = false)
 	private Long apoderadoId;
 
+	/**
+	 * Sprint 6, tanda 2 (P6): la solicitud CAMBIO_CONTACTO_PERSONAL aprobada que fijó el celular o el correo actuales del
+	 * personal. En MySQL, trg_usuario_contacto rechaza cualquier cambio de contacto sin una solicitud aprobada nueva
+	 * (y uk_usuario_contacto_solicitud, reusar una). Solo lo cambia {@link #cambiarContactoAprobado}.
+	 */
+	@Column(name = "contacto_solicitud_id")
+	private Long contactoSolicitudId;
+
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "usuario_rol", joinColumns = @JoinColumn(name = "usuario_id"))
 	@Enumerated(EnumType.STRING)
@@ -150,6 +158,23 @@ public class Usuario extends BaseEntity {
 			throw new ReglaNegocioException("El celular no es válido: escribe 9 dígitos que empiecen con 9.");
 		}
 		telefonoWhatsapp = telefono;
+	}
+
+	/**
+	 * Sprint 6, tanda 2 (P6): el celular y el correo del personal aprobados por OTRA persona en la solicitud
+	 * {@code solicitudId} (la usa solo el manejador de esa solicitud). Debe quedar al menos uno.
+	 */
+	public void cambiarContactoAprobado(String telefono, String correo, Long solicitudId) {
+		if (apoderadoId != null) {
+			throw new IllegalStateException("El contacto de una cuenta de apoderado cambia con su ficha");
+		}
+		String nuevoCorreo = correo == null || correo.isBlank() ? null : correo.strip();
+		if (telefono == null && nuevoCorreo == null) {
+			throw new ReglaNegocioException("La cuenta debe quedar con un celular o un correo.");
+		}
+		asignarTelefonoWhatsapp(telefono);
+		this.correo = nuevoCorreo;
+		this.contactoSolicitudId = Objects.requireNonNull(solicitudId, "solicitudId");
 	}
 
 	/** {@code true} si el contacto (celular o correo) es uno de los de esta cuenta. */
@@ -332,6 +357,10 @@ public class Usuario extends BaseEntity {
 
 	public Long getApoderadoId() {
 		return apoderadoId;
+	}
+
+	public Long getContactoSolicitudId() {
+		return contactoSolicitudId;
 	}
 
 	public Set<Rol> getRoles() {

@@ -22,7 +22,7 @@ import java.util.List;
  * Promotoría lo confirma con el apoderado y, si no fue él, restablece su acceso. Solo lectura.
  */
 @Service
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 public class AlertasActivacion implements AlertasRevision {
 
 	static final String MODULO = "Accesos";

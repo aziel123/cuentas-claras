@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Mi celular y correo', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="mi-contacto" th:with="c=${contacto}">
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-contacto">
+		<div>
+			<h1 id="titulo-contacto">Mi celular y correo</h1>
+			<p class="secundario">Aquí te llegan los avisos de tu cuenta (y, si eres de Promotoría, la huella de la bitácora,
+				el resumen del día y las alertas). Tu nuevo celular o correo lo aprueba otra persona de Promotoría o Dirección.
+				Te avisaremos al número actual.</p>
+		</div>
+
+		<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+		<dl class="datos">
+			<div><dt>Celular (WhatsApp)</dt><dd data-celular th:text="${c.celular()} ?: 'Sin celular'">+51 9** *** 321</dd></div>
+			<div><dt>Correo</dt><dd data-correo th:text="${c.correo()} ?: 'Sin correo'">l***@gmail.com</dd></div>
+		</dl>
+
+		<th:block th:if="${c.pendiente()}">
+			<div th:replace="~{fragments/componentes :: alerta('info', 'Ya pediste un cambio: espera a que otra persona lo apruebe.')}"></div>
+		</th:block>
+
+		<form class="formulario" th:unless="${c.pendiente()}" th:action="@{/cuenta/contacto}" th:object="${solicitud}" method="post">
+			<div class="campo">
+				<label for="telefono">Celular nuevo (WhatsApp)</label>
+				<input type="tel" class="input" id="telefono" name="telefono" th:value="*{telefono}" inputmode="tel"
+					autocomplete="tel" maxlength="20" placeholder="987 654 321" aria-describedby="telefono-ayuda">
+				<p class="ayuda" id="telefono-ayuda">Escribe cómo debe quedar: si lo dejas vacío, tu cuenta queda sin celular.</p>
+			</div>
+			<div class="campo">
+				<label for="correo">Correo nuevo</label>
+				<input type="email" class="input" id="correo" name="correo" th:value="*{correo}" autocomplete="email"
+					maxlength="150" aria-describedby="correo-ayuda">
+				<p class="ayuda" id="correo-ayuda">Si lo dejas vacío, tu cuenta queda sin correo. Debe quedar al menos uno.</p>
+			</div>
+			<div class="campo">
+				<label for="motivo">Motivo (obligatorio)</label>
+				<textarea class="input" id="motivo" name="motivo" th:text="*{motivo}" required minlength="10" maxlength="500"
+					th:classappend="${#fields.hasErrors('motivo')} ? 'input-con-error'"></textarea>
+				<p class="error" th:if="${#fields.hasErrors('motivo')}" th:errors="*{motivo}">Error</p>
+			</div>
+			<button th:replace="~{fragments/componentes :: boton('Pedir el cambio', 'primario')}"></button>
+		</form>
+	</section>
+</main>
+</body>
+</html>

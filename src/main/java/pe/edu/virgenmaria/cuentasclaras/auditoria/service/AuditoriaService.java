@@ -85,6 +85,73 @@ public class AuditoriaService {
 	}
 
 	/**
+	 * Cuántos eventos de esa acción hizo la persona en sesión en el colegio actual desde un momento (solo lectura; tope
+	 * diario de exportaciones del sprint 6). Sin persona en sesión, 0.
+	 */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public long contarDesdeDelUsuarioActual(AccionAuditoria accion, LocalDateTime desde) {
+		Long colegio = ContextoColegio.actual();
+		Authentication autenticacion = SecurityContextHolder.getContext().getAuthentication();
+		if (colegio == null || colegio <= 0 || autenticacion == null || !autenticacion.isAuthenticated()) {
+			return 0;
+		}
+		return eventos.countByColegioIdAndAccionAndNombreUsuarioAndOcurridoEnGreaterThanEqual(colegio, accion,
+				autenticacion.getName(), desde);
+	}
+
+	/**
+	 * Sprint 6: si en el colegio actual ya hay un evento de esa acción, entidad y valor nuevo (solo lectura). Así un
+	 * proceso diario no deja el mismo hallazgo cada mañana.
+	 */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public boolean existe(AccionAuditoria accion, String entidad, String entidadId, String valorNuevo) {
+		Long colegio = ContextoColegio.actual();
+		if (colegio == null || colegio <= 0) {
+			return false;
+		}
+		return eventos.existsByColegioIdAndAccionAndEntidadAndEntidadIdAndValorNuevo(colegio, accion, entidad, entidadId,
+				valorNuevo);
+	}
+
+	/**
+	 * Correcciones del sprint 6 (S6-M1): si en el colegio actual hay un evento de esa acción sobre ese registro (solo
+	 * lectura). La foto del resumen que guardó sistema.panel tiene su RESUMEN_DIARIO_GUARDADO; una plantada por SQL, no.
+	 */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public boolean existeSobre(AccionAuditoria accion, String entidad, String entidadId) {
+		Long colegio = ContextoColegio.actual();
+		if (colegio == null || colegio <= 0) {
+			return false;
+		}
+		return eventos.existsByColegioIdAndAccionAndEntidadAndEntidadId(colegio, accion, entidad, entidadId);
+	}
+
+	/** Sprint 6: la secuencia del último evento de esa acción en el colegio actual desde un momento (solo lectura). */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public java.util.Optional<Long> ultimaSecuenciaDesde(AccionAuditoria accion, LocalDateTime desde) {
+		Long colegio = ContextoColegio.actual();
+		if (colegio == null || colegio <= 0) {
+			return java.util.Optional.empty();
+		}
+		return eventos.findFirstByColegioIdAndAccionAndOcurridoEnGreaterThanEqualOrderBySecuenciaDesc(colegio, accion,
+				desde).map(EventoAuditoria::getSecuencia);
+	}
+
+	/** Sprint 6: cuántos eventos de esa acción hizo cada persona en el colegio actual desde un momento (solo lectura). */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public java.util.Map<String, Long> contarPorUsuarioDesde(AccionAuditoria accion, LocalDateTime desde) {
+		Long colegio = ContextoColegio.actual();
+		java.util.Map<String, Long> conteo = new java.util.TreeMap<>();
+		if (colegio == null || colegio <= 0) {
+			return conteo;
+		}
+		for (Object[] fila : eventos.contarPorUsuarioDesde(colegio, accion, desde)) {
+			conteo.put(String.valueOf(fila[0]), ((Number) fila[1]).longValue());
+		}
+		return conteo;
+	}
+
+	/**
 	 * Actor explícito con la IP de la petición actual (si la hay). Para eventos en los que el usuario
 	 * aún no está en el contexto de seguridad, como los intentos de ingreso o el cierre de sesión.
 	 */

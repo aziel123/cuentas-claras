@@ -9,6 +9,8 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.HuellaGuardadaRepos
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision.Gravedad;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.Aviso;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.TipoAviso;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -22,7 +24,7 @@ import java.util.List;
  * coincide con la bitácora (recorte o alteración) en los últimos 7 días, o si a las 07:00 no se generó la de ayer.
  */
 @Service
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 @Transactional(readOnly = true)
 public class AlertasHuella implements AlertasRevision {
 
@@ -48,20 +50,19 @@ public class AlertasHuella implements AlertasRevision {
 	public List<AlertaRevision> alertas() {
 		LocalDateTime ahora = LocalDateTime.now(reloj);
 		List<AlertaRevision> alertas = new ArrayList<>();
-		if (auditoria.contarDesde(AccionAuditoria.HUELLA_NO_COINCIDE, ahora.minusDays(7)) > 0) {
+		// Sprint 6: al celular, una vez por evento (la referencia es la secuencia del último evento de esa acción).
+		auditoria.ultimaSecuenciaDesde(AccionAuditoria.HUELLA_NO_COINCIDE, ahora.minusDays(7)).ifPresent(n ->
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La bitácora no coincide con una huella guardada: "
 					+ "alguien la recortó o la alteró. Compárala con la huella que recibiste en tu celular.",
-					"/auditoria?accion=HUELLA_NO_COINCIDE"));
-		}
-		if (auditoria.contarDesde(AccionAuditoria.HUELLA_RETROCEDIO, ahora.minusDays(7)) > 0) {
+					"/auditoria?accion=HUELLA_NO_COINCIDE", new Aviso(TipoAviso.HUELLA, "NC:" + n))));
+		auditoria.ultimaSecuenciaDesde(AccionAuditoria.HUELLA_RETROCEDIO, ahora.minusDays(7)).ifPresent(n ->
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La bitácora retrocedió: su último evento es anterior "
 					+ "a una huella que ya se guardó o que recibiste. Alguien la recortó. Compárala con tus mensajes.",
-					"/auditoria?accion=HUELLA_RETROCEDIO"));
-		}
-		if (auditoria.contarDesde(AccionAuditoria.HUELLA_FALTAN_DIAS, ahora.minusDays(7)) > 0) {
+					"/auditoria?accion=HUELLA_RETROCEDIO", new Aviso(TipoAviso.HUELLA, "RT:" + n))));
+		auditoria.ultimaSecuenciaDesde(AccionAuditoria.HUELLA_FALTAN_DIAS, ahora.minusDays(7)).ifPresent(n ->
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Faltan huellas diarias de la bitácora de uno o más "
-					+ "días. Compara con los mensajes que recibiste.", "/auditoria?accion=HUELLA_FALTAN_DIAS"));
-		}
+					+ "días. Compara con los mensajes que recibiste.", "/auditoria?accion=HUELLA_FALTAN_DIAS",
+					new Aviso(TipoAviso.HUELLA, "FD:" + n))));
 		LocalDate ayer = ahora.toLocalDate().minusDays(1);
 		EnviosHuella enviadas = envios.getIfAvailable();
 		boolean huboHuellas = auditoria.contarDesde(AccionAuditoria.HUELLA_ENVIADA, ahora.minusDays(30)) > 0
@@ -69,13 +70,14 @@ public class AlertasHuella implements AlertasRevision {
 		var deAyer = huellas.findByFecha(ayer);
 		if (ahora.toLocalTime().isAfter(LocalTime.of(7, 0)) && deAyer.isEmpty() && huboHuellas) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La huella de la bitácora de ayer no se generó a las "
-					+ "07:00. Avisa al responsable técnico.", "/auditoria"));
+					+ "07:00. Avisa al responsable técnico.", "/auditoria", new Aviso(TipoAviso.HUELLA, "SIN:" + ayer)));
 		}
 		// S5-B3: guardarla no basta; lo que protege es la copia en el celular de Promotoría.
 		if (ahora.toLocalTime().isAfter(LocalTime.of(7, 0)) && deAyer.isPresent() && enviadas != null
 				&& !enviadas.salio(deAyer.get().getId())) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La huella de la bitácora de ayer se guardó pero su "
-					+ "mensaje no salió a Promotoría. Revisa la bandeja de envíos.", "/mensajes"));
+					+ "mensaje no salió a Promotoría. Revisa la bandeja de envíos.", "/mensajes",
+					new Aviso(TipoAviso.HUELLA, "NOSALIO:" + ayer)));
 		}
 		return alertas;
 	}

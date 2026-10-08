@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @Transactional(readOnly = true)
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 public class AlertasCobranza implements AlertasRevision {
 
 	private static final int MAX_NOMBRES = 5;

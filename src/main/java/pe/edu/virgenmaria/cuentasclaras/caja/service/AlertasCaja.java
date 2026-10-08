@@ -33,6 +33,8 @@ import pe.edu.virgenmaria.cuentasclaras.comprobantes.repository.SerieComprobante
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision.Gravedad;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.Aviso;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.TipoAviso;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillaMuestreo;
@@ -61,7 +63,7 @@ import java.util.List;
 @Service
 @Order(1)
 @Transactional(readOnly = true)
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 public class AlertasCaja implements AlertasRevision {
 
 	/** Hasta cuántos días atrás se muestran las alertas que ya no dependen de una acción pendiente. */
@@ -141,7 +143,7 @@ public class AlertasCaja implements AlertasRevision {
 		devolucionesSinReembolso(alertas);
 		sinVerificar(alertas, ahora);
 		sinDepositar(alertas, hoy);
-		anulacionesPendientes(alertas);
+		anulacionesPendientes(alertas, hoy);
 		devolucionesEnEfectivoDeHoy(alertas, hoy);
 		verificacionesQueNoCoincidieron(alertas, hoy);
 		oseNoReconoce(alertas, hoy);
@@ -159,7 +161,8 @@ public class AlertasCaja implements AlertasRevision {
 						c.getDiferencia())) + " en la caja de " + nombres.de(caja.getCajero()) + " del "
 						+ Calendario.formatear(caja.getFecha()) + " (esperado " + Dinero.formatear(c.getEsperado())
 						+ ", contado " + Dinero.formatear(c.getContado()) + "). Explicación: «" + c.getExplicacion()
-						+ "». Por aprobar.", "/aprobaciones"));
+						+ "». Por aprobar.", "/aprobaciones",
+						new Aviso(TipoAviso.CIERRE_CON_DIFERENCIA, "C:" + c.getId(), Dinero.formatear(c.getDiferencia()))));
 			}
 		}
 		for (CierreCaja c : porRevisar) {
@@ -181,7 +184,8 @@ public class AlertasCaja implements AlertasRevision {
 				pe.edu.virgenmaria.cuentasclaras.caja.model.CanalCaja.VENTANILLA, EstadoCaja.ABIERTA, hoy)) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La caja de " + nombres.de(caja.getCajero())
 					+ " del " + Calendario.formatear(caja.getFecha()) + " sigue abierta: no hizo su cierre. Hasta que la "
-					+ "cierre con su conteo no puede cobrar.", "/aprobaciones/cajas?fecha=" + caja.getFecha()));
+					+ "cierre con su conteo no puede cobrar.", "/aprobaciones/cajas?fecha=" + caja.getFecha(),
+					new Aviso(TipoAviso.CAJA_SIN_CERRAR, "K:" + caja.getId(), Calendario.formatear(caja.getFecha()))));
 		}
 		if (!hora.isBefore(propiedades.horaLimiteCierre())) {
 			for (CajaDiaria caja : cajas.findByCanalAndFechaOrderByCajeroAsc(
@@ -189,7 +193,9 @@ public class AlertasCaja implements AlertasRevision {
 				if (caja.getEstado() == EstadoCaja.ABIERTA) {
 					alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, "Pasó la hora límite ("
 							+ propiedades.horaLimiteCierre() + ") y la caja de " + nombres.de(caja.getCajero())
-							+ " de hoy sigue sin cerrar.", "/aprobaciones/cajas"));
+							+ " de hoy sigue sin cerrar.", "/aprobaciones/cajas",
+							new Aviso(TipoAviso.CIERRE_NO_REALIZADO, "K:" + caja.getId(),
+									propiedades.horaLimiteCierre().toString())));
 				}
 			}
 		}
@@ -214,7 +220,9 @@ public class AlertasCaja implements AlertasRevision {
 						+ Calendario.formatear(d.getCaja().getFecha()) + " NO aparece en el banco. Nota: «" + v.getNota()
 						+ "».";
 			}
-			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, texto, "/conciliacion"));
+			BigDecimal monto = v.getPago() != null ? v.getPago().getTotal() : v.getDeposito().getMonto();
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, texto, "/conciliacion",
+					new Aviso(TipoAviso.NO_APARECE_EN_BANCO, "V:" + v.getId(), Dinero.formatear(monto))));
 		}
 	}
 
@@ -226,7 +234,8 @@ public class AlertasCaja implements AlertasRevision {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Depósito distinto de lo contado: la caja de "
 					+ nombres.de(d.getCaja().getCajero()) + " del " + Calendario.formatear(d.getCaja().getFecha())
 					+ " depositó " + Dinero.formatear(d.getMonto()) + " de " + Dinero.formatear(d.getEsperado())
-					+ ". Explicación: «" + d.getExplicacion() + "».", "/aprobaciones/cajas/" + d.getCaja().getId()));
+					+ ". Explicación: «" + d.getExplicacion() + "».", "/aprobaciones/cajas/" + d.getCaja().getId(),
+					new Aviso(TipoAviso.DEPOSITO_DISTINTO, "D:" + d.getId(), Dinero.formatear(d.getMonto()))));
 		}
 	}
 
@@ -238,13 +247,14 @@ public class AlertasCaja implements AlertasRevision {
 				alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Existe la serie " + serie.getSerie() + " con "
 						+ serie.getUltimoNumero() + " comprobante(s), que no es ninguna de las configuradas ("
 						+ String.join(", ", new java.util.TreeSet<>(configuradas)) + "): alguien emitió fuera del sistema. "
-						+ "Revísalo con soporte.", null));
+						+ "Revísalo con soporte.", null, new Aviso(TipoAviso.OTRA_CRITICA, "SERIE:" + serie.getId())));
 			}
 			long emitidos = comprobantes.countBySerie(serie.getSerie());
 			if (emitidos != serie.getUltimoNumero()) {
 				alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La serie " + serie.getSerie() + " va en el "
 						+ serie.getUltimoNumero() + " pero tiene " + emitidos + " comprobante(s): hay un hueco o un "
-						+ "número repetido. Revísalo con soporte.", null));
+						+ "número repetido. Revísalo con soporte.", null,
+						new Aviso(TipoAviso.OTRA_CRITICA, "HUECO:" + serie.getId() + ":" + serie.getUltimoNumero())));
 			}
 		}
 	}
@@ -263,7 +273,8 @@ public class AlertasCaja implements AlertasRevision {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, criticos.size() + " pago(s) digital(es) por "
 					+ Dinero.formatear(Dinero.sumar(criticos.stream().map(Pago::getTotal).toList())) + " siguen sin "
 					+ "verificarse en el banco pasado el día hábil siguiente al cobro (el más antiguo, del "
-					+ Calendario.formatear(criticos.getFirst().getFecha()) + ").", "/conciliacion"));
+					+ Calendario.formatear(criticos.getFirst().getFecha()) + ").", "/conciliacion",
+					new Aviso(TipoAviso.OTRA_CRITICA, "SINVERIF:" + criticos.stream().mapToLong(Pago::getId).max().orElse(0))));
 		}
 		if (dias <= 0) {
 			return;
@@ -297,18 +308,31 @@ public class AlertasCaja implements AlertasRevision {
 				alertas.add(new AlertaRevision(critico ? Gravedad.CRITICA : Gravedad.ATENCION, MODULO, "El efectivo de la "
 						+ "caja de " + nombres.de(caja.getCajero()) + " del " + Calendario.formatear(caja.getFecha()) + " ("
 						+ Dinero.formatear(aDepositar) + ") aún no se deposita" + (critico ? ", y ya pasó un día hábil." : ".")
-						, "/aprobaciones/cajas/" + caja.getId()));
+						, "/aprobaciones/cajas/" + caja.getId(),
+						critico ? new Aviso(TipoAviso.OTRA_CRITICA, "SD:" + caja.getId(), Dinero.formatear(aDepositar)) : null));
 			}
 		}
 	}
 
-	private void anulacionesPendientes(List<AlertaRevision> alertas) {
-		List<Long> ids = solicitudes.findByEstadoOrderByIdAsc(EstadoSolicitud.PENDIENTE).stream()
-				.filter(s -> s.getTipo() == TipoSolicitud.ANULACION_PAGO).map(SolicitudCambio::getEntidadId).toList();
+	/**
+	 * Sprint 6 (decisión 71): sale también al celular de Dirección, sin avisar a quien la pidió ni a la cajera del pago.
+	 * Correcciones del sprint 6 (S6-B2, QA-S6-7): UN solo aviso por día con todas las pendientes (referencia
+	 * {@code S:<fecha>}): antes cada solicitud nueva era otro aviso y la cajera podía agotar el tope diario pidiendo
+	 * anulaciones.
+	 */
+	private void anulacionesPendientes(List<AlertaRevision> alertas, LocalDate hoy) {
+		List<SolicitudCambio> pendientes = solicitudes.findByEstadoOrderByIdAsc(EstadoSolicitud.PENDIENTE).stream()
+				.filter(s -> s.getTipo() == TipoSolicitud.ANULACION_PAGO).toList();
+		List<Long> ids = pendientes.stream().map(SolicitudCambio::getEntidadId).toList();
 		if (!ids.isEmpty()) {
-			BigDecimal monto = Dinero.sumar(pagos.findByIdIn(ids).stream().map(Pago::getTotal).toList());
+			List<Pago> delPago = pagos.findByIdIn(ids);
+			BigDecimal monto = Dinero.sumar(delPago.stream().map(Pago::getTotal).toList());
+			java.util.Set<String> excluidos = new java.util.HashSet<>();
+			pendientes.forEach(s -> excluidos.add(s.getSolicitadoPor()));
+			delPago.forEach(p -> excluidos.add(p.getCajero()));
 			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, ids.size() + " anulación(es) de pago por "
-					+ Dinero.formatear(monto) + " esperan aprobación.", "/aprobaciones"));
+					+ Dinero.formatear(monto) + " esperan aprobación.", "/aprobaciones",
+					new Aviso(TipoAviso.ANULACION_PAGO_PENDIENTE, "S:" + hoy, Dinero.formatear(monto), excluidos)));
 		}
 	}
 
@@ -319,7 +343,8 @@ public class AlertasCaja implements AlertasRevision {
 					+ a.getPago().getComprobante().numeroCompleto() + " (" + a.getPago().getMedio().etiqueta() + ", "
 					+ Dinero.formatear(a.getMonto()) + ", " + a.getPago().getFamilia().getNombre() + ")"
 					+ (a.isPosteriorAlCierre() ? ", anulado después del cierre de su caja" : "")
-					+ ". Administración debe registrar a quién y cómo se devolvió.", "/conciliacion"));
+					+ ". Administración debe registrar a quién y cómo se devolvió.", "/conciliacion",
+					new Aviso(TipoAviso.OTRA_CRITICA, "DEV:" + a.getId(), Dinero.formatear(a.getMonto()))));
 		}
 	}
 
@@ -345,13 +370,15 @@ public class AlertasCaja implements AlertasRevision {
 		if (!sinPago.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, sinPago.size() + " boleta(s) o factura(s) sin su pago "
 					+ "en el libro: " + sinPago.stream().limit(5).map(c -> c.numeroCompleto())
-							.collect(java.util.stream.Collectors.joining(", ")) + ". Revísalo con soporte.", null));
+							.collect(java.util.stream.Collectors.joining(", ")) + ". Revísalo con soporte.", null,
+					new Aviso(TipoAviso.OTRA_CRITICA, "SINPAGO:" + sinPago.stream().mapToLong(c -> c.getId()).max().orElse(0))));
 		}
 		var notas = pagos.notasSinAnulacion();
 		if (!notas.isEmpty()) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, notas.size() + " nota(s) de crédito sin su anulación "
 					+ "aprobada: " + notas.stream().limit(5).map(c -> c.numeroCompleto())
-							.collect(java.util.stream.Collectors.joining(", ")) + ". Revísalo con soporte.", null));
+							.collect(java.util.stream.Collectors.joining(", ")) + ". Revísalo con soporte.", null,
+					new Aviso(TipoAviso.OTRA_CRITICA, "NOTA:" + notas.stream().mapToLong(c -> c.getId()).max().orElse(0))));
 		}
 	}
 
@@ -379,7 +406,7 @@ public class AlertasCaja implements AlertasRevision {
 						+ nombres.de(d.getCaja().getCajero()) + " del " + Calendario.formatear(d.getCaja().getFecha())
 						+ " llegó al banco el " + Calendario.formatear(banco != null ? banco : d.getFechaDeposito())
 						+ ", más de un día hábil después (posible uso del efectivo de un día para cubrir otro).",
-						"/aprobaciones/cajas/" + d.getCaja().getId()));
+						"/aprobaciones/cajas/" + d.getCaja().getId(), new Aviso(TipoAviso.OTRA_CRITICA, "DT:" + d.getId())));
 			}
 		}
 	}
@@ -394,7 +421,10 @@ public class AlertasCaja implements AlertasRevision {
 		if (casos > 0) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, "Comprobantes", casos + " comprobante(s) que el sistema tiene "
 					+ "como aceptados no coinciden con lo que dice el OSE al volver a consultarlos. Revisa la bitácora y la "
-					+ "configuración del OSE.", "/auditoria?soloRevisar=true"));
+					+ "configuración del OSE.", "/auditoria?soloRevisar=true",
+					auditoria.ultimaSecuenciaDesde(pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria
+							.COMPROBANTE_NO_COINCIDE_OSE, hoy.minusDays(7).atStartOfDay())
+							.map(n -> new Aviso(TipoAviso.OTRA_CRITICA, "OSE:" + n)).orElse(null)));
 		}
 	}
 

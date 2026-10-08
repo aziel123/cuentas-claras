@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Morosidad por grado', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="panel-morosidad" th:with="r=${reporte}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Reportes</p>
+			<h1>Morosidad por grado</h1>
+			<p class="secundario">Cuotas vencidas y sin pagar, agrupadas por grado. Nunca por sección ni con nombres de alumnos.</p>
+		</div>
+	</div>
+	<nav th:replace="~{panel/ingresos :: navegacion}"></nav>
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${r.anio == null}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Aún no hay años escolares', 'Cuando el colegio registre su año escolar y sus cuotas, verás aquí la morosidad por grado.')}"></div>
+	</th:block>
+
+	<th:block th:if="${r.anio != null}">
+		<form class="tarjeta formulario" method="get" th:action="@{/panel/reportes/morosidad}">
+			<div class="campo">
+				<label for="anio">Año escolar de las cuotas</label>
+				<select class="input" id="anio" name="anio">
+					<option th:each="a : ${r.anios}" th:value="${a.id}" th:text="|${a.anio} · ${a.estadoEtiqueta}|"
+						th:selected="${a.id == r.anio.id}">2027 · Planificado</option>
+				</select>
+			</div>
+			<button type="submit" class="btn btn-secundario">Ver morosidad</button>
+		</form>
+
+		<section class="tarjeta panel-bloque" aria-labelledby="titulo-total" data-seccion="total">
+			<h2 id="titulo-total" class="etiqueta" th:text="|Cuotas ${r.anio.anio} vencidas al ${#temporals.format(r.al, 'dd/MM/yyyy')}|">Cuotas 2027 vencidas al 08/10/2026</h2>
+			<p class="cifra-grande num" data-total th:text="${r.totalMonto}">S/ 12,400.00</p>
+			<p th:text="|${r.totalConDeuda} alumno(s) con deuda vencida de ${r.totalMatriculados} matriculado(s)|">23 de 300</p>
+		</section>
+
+		<p th:if="${#lists.isEmpty(r.filas)}" class="secundario">No hay matrículas ni cuotas vencidas en este año.</p>
+		<ul class="lista-panel lista-tarjetas" th:unless="${#lists.isEmpty(r.filas)}" data-grados>
+			<li th:each="f : ${r.filas}" th:data-grado="${f.grado}">
+				<div class="cuota-cabecera">
+					<strong th:text="${f.grado}">6.° Primaria</strong>
+					<strong class="num" th:text="${f.monto}">S/ 900.00</strong>
+				</div>
+				<span class="secundario" th:text="|${f.conDeuda} con deuda vencida de ${f.matriculados} matriculado(s)|">2 de 25</span>
+				<span class="secundario" th:text="|1 a 30 días: ${f.hasta30} · 31 a 60: ${f.hasta60} · 61 a 90: ${f.hasta90} · más de 90: ${f.masDe90}|">1 a 30 días: 2</span>
+			</li>
+		</ul>
+
+		<form class="tarjeta formulario" method="post" th:if="${r.puedeExportar}" th:action="@{/panel/reportes/morosidad.xlsx}" data-exportar>
+			<input type="hidden" name="anio" th:value="${r.anio.id}">
+			<div th:replace="~{fragments/componentes :: alerta('info', 'La descarga queda registrada en la bitácora con tu nombre y un código impreso en el archivo.')}"></div>
+			<button type="submit" class="btn btn-primario btn-bloque">Descargar Excel para el contador</button>
+		</form>
+	</th:block>
+</main>
+</body>
+</html>

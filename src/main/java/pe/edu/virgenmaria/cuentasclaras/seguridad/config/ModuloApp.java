@@ -80,10 +80,26 @@ public enum ModuloApp {
 			+ "salen recordatorios. Solo Promotoría y Dirección registran días nuevos.", "Sprint 5", true, "/feriados",
 			new String[] { "/feriados", "/feriados/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION, CAJA)),
 
-	PANEL("Panel del colegio", "Cuánto entró hoy, la morosidad y las alertas de caja, desde tu celular.", "Sprint 5",
-			false, "/panel", new String[] { "/panel", "/panel/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
-	REPORTES("Reportes", "Reportes de cobranza y exportación a Excel.", "Sprint 5", false, "/reportes",
-			new String[] { "/reportes", "/reportes/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+	// Sprint 6 (decisión 64). REPORTES va ANTES que PANEL: las reglas de URL se aplican en el orden de la matriz y la
+	// primera que coincide gana. Morosidad e ingresos en pantalla: Promotoría, Dirección y Administración (el Excel, solo
+	// Promotoría y Administración: lo exige ExportacionContador). El panel /panel: solo Promotoría.
+	REPORTES("Reportes", "Morosidad por grado, ingresos por medio de pago y familias morosas; Excel para el contador.",
+			"Sprint 6", true, "/panel/reportes",
+			new String[] { "/panel/morosos", "/panel/reportes", "/panel/reportes/**" },
+			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+	// Sprint 6, tanda 3 (decisión 77): la llamada de control la hacen Promotoría o Dirección. Va ANTES que PANEL (la
+	// primera regla que coincide gana: /panel/** es solo de Promotoría).
+	LLAMADAS_CONTROL("Llamadas de control", "Cada semana, llama a las familias que el sistema eligió al azar entre las que "
+			+ "pagaron en efectivo o tienen deuda vencida, y compara lo que te dicen con lo registrado.", "Sprint 6", true, "/panel/llamadas",
+			new String[] { "/panel/llamadas", "/panel/llamadas/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
+	PANEL("Panel del colegio", "Cuánto entró hoy y en el mes, la deuda vencida y las alertas, desde tu celular.",
+			"Sprint 6", true, "/panel", new String[] { "/panel", "/panel/**" }, EnumSet.of(PROMOTOR)),
+
+	// Sprint 6, tanda 2 (P6, decisión 78): cada persona del personal pide el cambio de SU celular o correo (lo aprueba otra
+	// persona). Promotoría lo pide para otra desde /usuarios/{id}/contacto (cubierto por USUARIOS).
+	MI_CONTACTO("Mi celular y correo", "Pide cambiar el celular o el correo donde te llegan los avisos de tu cuenta: lo "
+			+ "aprueba otra persona.", "Sprint 6", true, ModuloApp.RUTA_MI_CONTACTO,
+			new String[] { ModuloApp.RUTA_MI_CONTACTO }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION, CAJA, DOCENTE)),
 
 	CONCILIACION("Conciliación bancaria", "Sube el extracto del banco cada día: el sistema empareja solo los Yape, "
 			+ "depósitos, pagos en línea y recaudación, y te muestra solo las diferencias.",
@@ -108,6 +124,9 @@ public enum ModuloApp {
 
 	/** Sprint 5: avisos de estado de WhatsApp (POST firmado) y su verificación (GET con hub.challenge). */
 	public static final String RUTA_WEBHOOK_WHATSAPP = "/webhooks/whatsapp/*";
+
+	/** Sprint 6, tanda 2: pedir el cambio del propio celular o correo (personal). */
+	public static final String RUTA_MI_CONTACTO = "/cuenta/contacto";
 
 	/** Única ruta para quien inició sesión con una clave temporal (autoridad {@code CLAVE_PENDIENTE}). */
 	public static final String RUTA_CAMBIAR_CLAVE = "/cuenta/cambiar-clave";

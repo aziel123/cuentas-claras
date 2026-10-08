@@ -33,6 +33,9 @@ public interface SolicitudCambioRepository extends Repository<SolicitudCambio, L
 
 	List<SolicitudCambio> findByEstadoOrderByIdAsc(EstadoSolicitud estado);
 
+	/** Sprint 6, tanda 2: cuántas hay en un estado (las pendientes del resumen diario). */
+	long countByEstado(EstadoSolicitud estado);
+
 	List<SolicitudCambio> findTop30ByEstadoNotOrderByResueltoEnDescIdDesc(EstadoSolicitud estado);
 
 	List<SolicitudCambio> findByTipoOrderByIdDesc(TipoSolicitud tipo);

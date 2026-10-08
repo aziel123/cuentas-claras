@@ -122,4 +122,69 @@ public interface PagoRepository extends Repository<Pago, Long> {
 	/** El pago de ese origen con esa operación (canónica), si existe (la línea de una liquidación se ata a su pago). */
 	Optional<Pago> findFirstByNumeroOperacionAndOrigenOrderByIdDesc(String numeroOperacion,
 			pe.edu.virgenmaria.cuentasclaras.caja.model.OrigenPago origen);
+
+	// --- Sprint 6, tanda 1: cifras del panel y del Excel para el contador (JPQL agregado, sin entidades) ---
+
+	/** Pagos VIGENTES de un rango de días de caja, agrupados por medio y canal: medio, canal, cantidad, suma. */
+	@Query("select p.medio, k.canal, count(p), sum(p.total) from Pago p join p.caja k "
+			+ "where p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE "
+			+ "and p.fecha between :desde and :hasta group by p.medio, k.canal")
+	List<Object[]> vigentesPorMedioYCanal(@Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta);
+
+	/** Cuántos pagos (de cualquier estado) tiene un rango: el tope de filas del Excel se revisa antes de cargarlos. */
+	@Query("select count(p) from Pago p where p.fecha between :desde and :hasta")
+	long contarEntre(@Param("desde") java.time.LocalDate desde, @Param("hasta") java.time.LocalDate hasta);
+
+	/**
+	 * Filas del Excel para el contador (datos mínimos, Ley 29733): id, fecha, serie, número, tipo, medio, canal,
+	 * operación, total, estado, código de familia, quién registró y el RUC SOLO si el comprobante es factura (el
+	 * documento de una boleta nunca sale de la base).
+	 */
+	@Query("select p.id, p.fecha, c.serie, c.numero, c.tipo, p.medio, k.canal, p.numeroOperacion, p.total, p.estado, "
+			+ "p.familia.id, p.cajero, case when c.tipo = pe.edu.virgenmaria.cuentasclaras.comprobantes.model."
+			+ "TipoComprobante.FACTURA and c.receptorTipoDocumento = pe.edu.virgenmaria.cuentasclaras.comprobantes."
+			+ "model.DocumentoReceptor.RUC then c.receptorNumeroDocumento else null end "
+			+ "from Pago p join p.comprobante c join p.caja k where p.fecha between :desde and :hasta order by p.fecha, p.id")
+	List<Object[]> paraContador(@Param("desde") java.time.LocalDate desde, @Param("hasta") java.time.LocalDate hasta);
+
+	// --- Sprint 6, tanda 2: foto del resumen diario y su recálculo ---
+
+	/** Pagos VIGENTES de un rango de días de caja por día y medio: fecha, medio, cantidad, suma. */
+	@Query("select p.fecha, p.medio, count(p), sum(p.total) from Pago p "
+			+ "where p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE "
+			+ "and p.fecha between :desde and :hasta group by p.fecha, p.medio")
+	List<Object[]> vigentesPorDiaYMedio(@Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta);
+
+	/** Pagos VIGENTES de un rango de días de caja registrados DESPUÉS de un momento: fecha, medio, total, registro. */
+	@Query("select p.fecha, p.medio, p.total, p.creadoEn from Pago p "
+			+ "where p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoPago.VIGENTE "
+			+ "and p.fecha between :desde and :hasta and p.creadoEn > :despues")
+	List<Object[]> vigentesRegistradosDespuesDe(@Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta, @Param("despues") java.time.LocalDateTime despues);
+
+	// --- Sprint 6, tanda 3: llamada de control (decisión 77) ---
+
+	/**
+	 * Familias con algún pago en EFECTIVO (vigente o anulado: también interesa confirmar un pago anulado) con día de caja
+	 * en el rango, por id (el orden de entrada de la muestra al azar debe ser siempre el mismo).
+	 */
+	@Query("select distinct p.familia.id from Pago p where p.medio = pe.edu.virgenmaria.cuentasclaras.caja.model"
+			+ ".MedioPago.EFECTIVO and p.fecha between :desde and :hasta order by p.familia.id")
+	List<Long> familiasConEfectivoEntre(@Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta);
+
+	/** Correcciones del sprint 6 (S6-A2): las familias con algún pago VIGENTE (cualquier medio) en el rango, por id. */
+	@Query("select distinct p.familia.id from Pago p where p.estado = pe.edu.virgenmaria.cuentasclaras.caja.model"
+			+ ".EstadoPago.VIGENTE and p.fecha between :desde and :hasta order by p.familia.id")
+	List<Long> familiasConPagosEntre(@Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta);
+
+
+	/** Los pagos de una familia en un rango (todos los medios y estados): fecha, medio, total, estado, serie, número, cajero. */
+	@Query("select p.fecha, p.medio, p.total, p.estado, c.serie, c.numero, p.cajero from Pago p join p.comprobante c "
+			+ "where p.familia.id = :familia and p.fecha between :desde and :hasta order by p.fecha, p.id")
+	List<Object[]> deFamiliaEntre(@Param("familia") Long familiaId, @Param("desde") java.time.LocalDate desde,
+			@Param("hasta") java.time.LocalDate hasta);
 }

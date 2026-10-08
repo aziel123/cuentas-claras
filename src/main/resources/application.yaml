@@ -184,6 +184,20 @@ cuentasclaras:
   huella:
     cron: "0 0 6 * * *"                   # 06:00 (Lima): reverifica la bitácora y envía la huella de ayer
     reverificar-dias: 400
+  panel:
+    # Sprint 6 (sección 8). Horas de Lima. Sin secretos: el correo externo del contador para el resumen NO es una
+    # propiedad, es la fila configuracion_bd('resumen_correo_externo') que solo escribe el DBA.
+    resumen-diario: "0 30 19 * * *"       # decisión 68: el proceso decide (lunes a sábado; domingo y feriado solo con cobros)
+    avisos-cada: "0 */15 7-20 * * *"      # 07:00 a 20:45; lo de la noche (y del domingo o feriado) sale a las 07:00
+    avisos-tope-diario: 10                # por persona (decisión 70)
+    recalculo: "0 15 6 * * *"             # compara las fotos de los últimos días con los libros
+    recalculo-dias: 35                    # decisión 81
+    resumen-alerta-hora: "21:00"          # sin resumen a esta hora: CRÍTICA (P5)
+    exportacion-max-meses: 12             # decisión 73
+    exportacion-max-diarias: 20
+    exportacion-max-filas: 20000
+    exportaciones-atencion: 5             # más descargas de una persona en el día: ATENCIÓN en el panel
+    llamadas-por-semana: 3                # decisión 77: familias de la llamada de control de cada semana
   auditoria:
     # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
     # aplicación no arranca. Nunca en el código: va en el gestor de secretos.

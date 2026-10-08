@@ -46,6 +46,9 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 	/** Sprint 4: la cuenta en línea de un apoderado (como máximo una: UNIQUE). */
 	Optional<Usuario> findByApoderadoId(Long apoderadoId);
 
+	/** Sprint 6, tanda 3: las cuentas en línea de varios apoderados (quién usa el portal, para la llamada de control). */
+	List<Usuario> findByApoderadoIdIn(java.util.Collection<Long> apoderadoIds);
+
 	/** Sprint 5: los activos con un rol (sin bloquear), por ejemplo Promotoría para la huella diaria. */
 	@Query("select u from Usuario u where u.activo = true and :rol member of u.roles order by u.id")
 	List<Usuario> activosConRol(@Param("rol") Rol rol);

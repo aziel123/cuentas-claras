@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
  * </ul>
  */
 @Service
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 @Transactional(readOnly = true)
 public class AlertasMatricula implements AlertasRevision {
 

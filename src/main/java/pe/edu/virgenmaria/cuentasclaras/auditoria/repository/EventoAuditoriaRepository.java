@@ -50,6 +50,10 @@ public interface EventoAuditoriaRepository extends Repository<EventoAuditoria, L
 			Collection<AccionAuditoria> acciones, LocalDateTime desde, Limit limite);
 
 	/** Cuántos eventos de una acción hubo en un colegio desde un momento (alertas de Promotoría). */
+	/** Sprint 6: cuántos eventos de esa acción hizo una persona desde un momento (tope diario de exportaciones). */
+	long countByColegioIdAndAccionAndNombreUsuarioAndOcurridoEnGreaterThanEqual(Long colegioId, AccionAuditoria accion,
+			String nombreUsuario, LocalDateTime desde);
+
 	long countByColegioIdAndAccionAndOcurridoEnGreaterThanEqual(Long colegioId, AccionAuditoria accion,
 			LocalDateTime desde);
 
@@ -63,6 +67,24 @@ public interface EventoAuditoriaRepository extends Repository<EventoAuditoria, L
 
 	/** Sprint 5: el evento de una secuencia (para comparar una huella guardada). */
 	java.util.Optional<EventoAuditoria> findBySecuencia(long secuencia);
+
+	/** Sprint 6: si ya hay un evento igual (el recálculo de las fotos no repite el mismo hallazgo cada mañana). */
+	/** Correcciones del sprint 6 (S6-M1): si hay un evento de esa acción sobre ese registro (la foto con su GUARDADO). */
+	boolean existsByColegioIdAndAccionAndEntidadAndEntidadId(Long colegioId, AccionAuditoria accion, String entidad,
+			String entidadId);
+
+	boolean existsByColegioIdAndAccionAndEntidadAndEntidadIdAndValorNuevo(Long colegioId, AccionAuditoria accion,
+			String entidad, String entidadId, String valorNuevo);
+
+	/** Sprint 6: el último evento de una acción desde un momento (referencia estable de un aviso al celular). */
+	java.util.Optional<EventoAuditoria> findFirstByColegioIdAndAccionAndOcurridoEnGreaterThanEqualOrderBySecuenciaDesc(
+			Long colegioId, AccionAuditoria accion, LocalDateTime desde);
+
+	/** Sprint 6: cuántos eventos de una acción hizo cada persona desde un momento (exportaciones de hoy). */
+	@Query("select e.nombreUsuario, count(e) from EventoAuditoria e where e.colegioId = :colegioId "
+			+ "and e.accion = :accion and e.ocurridoEn >= :desde group by e.nombreUsuario")
+	List<Object[]> contarPorUsuarioDesde(@Param("colegioId") Long colegioId, @Param("accion") AccionAuditoria accion,
+			@Param("desde") LocalDateTime desde);
 
 	/** Lote de la cadena en orden, para verificar la integridad. */
 	List<EventoAuditoria> findBySecuenciaGreaterThanOrderBySecuenciaAsc(long secuencia, Limit limite);

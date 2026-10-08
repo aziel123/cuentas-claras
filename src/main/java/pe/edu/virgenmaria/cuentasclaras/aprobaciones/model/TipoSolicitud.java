@@ -26,7 +26,10 @@ public enum TipoSolicitud {
 	DEVOLVER_INGRESO("Devolver un ingreso por revisar"),
 	// Correcciones del sprint 4 (S4-C1): una pareja del extracto elegida a mano (mismo monto) la aprueba otra persona de
 	// Promotoría o Dirección antes de que verifique nada en el banco.
-	PARTIDA_MANUAL("Pareja manual de la conciliación");
+	PARTIDA_MANUAL("Pareja manual de la conciliación"),
+	// Sprint 6, tanda 2 (hallazgo 5, P6): el celular o el correo de alguien del personal (por ahí le llegan la huella, el
+	// resumen y las alertas). Lo pide el titular o Promotoría; lo aprueba otra persona de Promotoría o Dirección.
+	CAMBIO_CONTACTO_PERSONAL("Cambio de celular o correo del personal");
 
 	private final String etiqueta;
 

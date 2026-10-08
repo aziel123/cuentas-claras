@@ -55,6 +55,11 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `linea_recaudacion` | INSERT y UPDATE **solo** de estado, motivo de la excepción y devolución | Monto, fecha, código, alumno, cuota y operación no cambian (1143); entra PENDIENTE a un lote CARGADO y en sus fechas; APLICADA exige su pago; DEVUELTA exige la devolución aprobada por otra persona (trigger) |
 | `reembolso_pasarela` | INSERT | **Solo inserción** (correcciones del sprint 4, V16): la devolución de un pago en línea por la API de la pasarela (al mismo medio de origen), una por anulación aprobada de tipo DEVOLUCION y nunca con contracargo (trigger `trg_reembolso_pasarela_registro`). `reembolso` rechaza los pagos de la pasarela (trigger) |
 | `enlace_activacion` | INSERT y UPDATE **solo** de `usado_en, usado_ip, anulado_en, actualizado_en, version` | Enlace de un solo uso para que el apoderado elija su clave (S4-M2). El hash del token, el usuario, el vencimiento y la IP de quien lo creó no cambian (1143); no se borra (1142) |
+| `resumen_diario` | INSERT | **Solo inserción** (sprint 6, tanda 2): la foto del resumen de las 19:30. La escribe solo `sistema.panel` y cada cifra debe ser la suma de `pago` y `cuota` en ese momento (trigger `trg_resumen_diario_registro`); desde V23, además, es de HOY (Lima), su corte es de ahora, los conteos de cajas, cierres, solicitudes y avisos salen de las tablas y su texto (`parametros`, el que exige cada mensaje RESUMEN_DIARIO) dice esas cifras; nadie la corrige ni la borra (1142) |
+| `llamada_control` | INSERT | **Solo inserción** (sprint 6, tanda 3): el resultado de la llamada de control semanal. Desde V23 la registra una persona activa de Promotoría (Dirección, solo con la semana delegada y marcando `por_delegacion`), para el lunes de la semana en curso (hora de Lima), a una familia de la muestra congelada que no fue reemplazada, y el segundo intento solo tras un «No contesta» (trigger `trg_llamada_control_registro`); no se corrige ni se borra (1142) |
+| `muestra_llamada` | INSERT | **Solo inserción** (correcciones del sprint 6, V23): la muestra congelada de la semana. La fija Promotoría, Dirección o `sistema.panel`, para la semana en curso, con familias que pagaron en efectivo o tienen deuda vencida; un reemplazo solo de quien no contestó dos veces (trigger `trg_muestra_llamada_registro`) |
+| `delegacion_llamada` | INSERT | **Solo inserción** (V23): Promotoría delega a Dirección las llamadas de la semana en curso (trigger `trg_delegacion_llamada_registro`) |
+| `configuracion_colegio` | Ninguno (solo el SELECT general) | La escribe solo el DBA (V23, QA-S6-6): `resumen_correo_externo` por colegio. INSERT, UPDATE y DELETE dan 1142 |
 
 ## Triggers (paso 3, después de los permisos)
 Los aplica `cc_migrador` (no van en Flyway: H2 no los soporta):
@@ -167,6 +172,13 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
   ```sql
   INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('huella_correo_externo', 'contador@estudio.pe', NOW(6));
   ```
+- Opcional en prod (sprint 6, decisión 69): el correo externo del contador que recibe también el resumen diario de las
+  19:30 (sin la fila, el resumen sale solo a Promotoría). Correcciones del sprint 6 (QA-S6-6, V23): la fila es **por
+  colegio**, en `configuracion_colegio` (cc_app tampoco la escribe: 1142); la de `configuracion_bd` ya no se usa:
+  ```sql
+  INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en)
+  VALUES (<id del colegio>, 'resumen_correo_externo', 'contador@estudio.pe', NOW(6));
+  ```
 - Webhook de WhatsApp: `https://<dominio>/webhooks/whatsapp/<colegioId>` (GET para la verificación de Meta, POST firmado
   con `X-Hub-Signature-256`).
 
@@ -265,6 +277,16 @@ verificado), `trg_mensaje_envio`, `trg_huella_bitacora_registro` (no retrocede),
 cierra quien participó) y `trg_feriado_registro|anulacion` (propuesto, aprobado por otra persona, 3 por mes, no 3
 seguidos): 58 triggers en total. `03-triggers.sql` crea además la función `cc_contacto_normal` (necesita
 `log_bin_trust_function_creators = 1`, como `triggers_instalados`).
+Sprint 6, tanda 2 (V21, resumen diario y contacto del personal): `DELETE` y `UPDATE` sobre `resumen_diario` dan 1142;
+una foto con cifras que no son las de los libros, de otro actor, con un corte de otro día o con una huella inventada da
+1644; el resumen y las alertas a Promotoría solo los crea `sistema.panel` y solo a Promotoría (y a Dirección, las
+alertas); el celular o el correo de una persona del personal solo cambian con SU `CAMBIO_CONTACTO_PERSONAL` aprobada
+(1644). Se agregan `trg_resumen_diario_registro` y `trg_usuario_contacto` y cambia `trg_mensaje_nace`: 60 triggers.
+Sprint 6, tanda 3 (V22, llamada de control): `DELETE` y `UPDATE` sobre `llamada_control` dan 1142; una llamada que no
+registra una persona activa de Promotoría o Dirección, que no es del lunes de la semana en curso en Lima
+(`DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR)`) o a una familia sin pagos en efectivo en esas semanas da 1644; dos llamadas a
+la misma familia en la semana dan 1062 y «No confirma» sin nota, 3819. V22 recrea `ck_semilla_muestreo_ambito` con el
+ámbito `LLAMADA_CONTROL`. Se agrega `trg_llamada_control_registro`: **61 triggers en total**.
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

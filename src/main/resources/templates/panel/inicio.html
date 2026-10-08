@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Panel del colegio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="panel" th:with="p=${panel}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Panel del colegio</p>
+			<h1 th:text="|Hoy, ${p.fecha}|">Hoy, 08/10/2026</h1>
+			<p class="secundario">Todas las cifras salen de los pagos y cuotas registrados en este momento. Nadie las escribe a mano.</p>
+		</div>
+	</div>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-alertas" data-seccion="alertas">
+		<h2 id="titulo-alertas" class="etiqueta">Alertas</h2>
+		<p th:if="${p.criticas > 0}" class="texto-peligro" th:text="|${p.criticas} alerta(s) crítica(s): revísalas primero.|">2 alertas críticas</p>
+		<ul class="lista-panel" th:unless="${#lists.isEmpty(p.alertas)}" data-alertas>
+			<li th:each="a : ${p.alertas}" th:classappend="${a.gravedad().name() == 'CRITICA'} ? 'alerta-critica'"
+				th:data-gravedad="${a.gravedad()}">
+				<span th:replace="~{fragments/componentes :: badge(|${a.modulo()} · ${a.gravedad().etiqueta()}|, ${a.gravedad().variante()})}"></span>
+				<span class="texto-largo" th:text="${a.texto()}">Faltante de S/ 50.00 en una caja</span>
+				<a th:if="${a.enlace() != null}" class="btn btn-secundario btn-bloque" th:href="@{${a.enlace()}}">Revisar</a>
+			</li>
+		</ul>
+		<p th:if="${#lists.isEmpty(p.alertas)}" class="secundario">Sin alertas por ahora.</p>
+	</section>
+
+	<a class="btn btn-primario btn-bloque" th:href="@{/aprobaciones(vista='movil')}" data-por-aprobar
+		th:text="|Para aprobar: ${p.porAprobar}|">Para aprobar: 3</a>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-resumen" data-seccion="resumen">
+		<h2 id="titulo-resumen" class="etiqueta">Resumen de hoy</h2>
+		<p data-resumen th:text="${p.resumen.estado}">Enviado 19:30 · Entregado</p>
+		<p class="secundario">Te llega a las 19:30 por WhatsApp (o correo). Si a las 20:00 no te llegó, revísalo aquí.</p>
+		<p th:if="${p.resumen.cambiosSinExplicar > 0}" class="texto-peligro" data-cambios-sin-explicar
+			th:text="|${p.resumen.cambiosSinExplicar} día(s) ya informado(s) cambiaron sin explicación.|">1 día cambió sin explicación.</p>
+		<a class="btn btn-texto btn-chico" th:href="@{/panel/resumenes}">Ver resúmenes enviados</a>
+	</section>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-llamadas" data-seccion="llamadas">
+		<h2 id="titulo-llamadas" class="etiqueta">Llamadas de control</h2>
+		<p data-llamadas th:classappend="${p.llamadas.faltan > 0} ? 'texto-alerta'" th:text="${p.llamadas.texto}">Te faltan 2 de 3 esta semana.</p>
+		<p class="secundario">Cada semana el sistema elige al azar familias que pagaron en efectivo. Llámalas y pregunta primero cuánto y cuándo pagaron.</p>
+		<a class="btn btn-secundario btn-bloque" th:href="@{/panel/llamadas}">Ver a quién llamar</a>
+	</section>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-hoy" data-seccion="hoy">
+		<h2 id="titulo-hoy" class="etiqueta">Hoy</h2>
+		<p class="cifra-grande num" data-cobrado-hoy th:text="${p.hoy.cobrado}">S/ 4,350.00</p>
+		<p th:text="|Cobrado en ${p.hoy.pagos} pago(s) · ${p.hoy.digital} digital (${p.hoy.digitalMonto} del monto)|">Cobrado en 18 pagos · 72 % digital (61 % del monto)</p>
+		<p class="secundario" th:text="|Efectivo: ${p.hoy.efectivo} en ${p.hoy.pagosEfectivo} pago(s)|">Efectivo: S/ 1,700.00 en 5 pagos</p>
+		<p class="secundario" data-cajas
+			th:text="|Cajas: ${p.hoy.cajasCerradas} cerrada(s), ${p.hoy.cajasAbiertas} abierta(s), ${p.hoy.cierresConDiferencia} con diferencia|">Cajas: 2 cerradas, 0 abiertas, 0 con diferencia</p>
+		<a class="btn btn-texto btn-chico" th:href="@{/aprobaciones/cajas}">Ver cajas del día</a>
+	</section>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-mes" data-seccion="mes">
+		<h2 id="titulo-mes" class="etiqueta" th:text="|Este mes (${p.mes.nombre})|">Este mes (octubre)</h2>
+		<p class="cifra-grande num" data-cobrado-mes th:text="${p.mes.cobrado}">S/ 38,900.00</p>
+		<p th:text="|Cobrado en ${p.mes.pagos} pago(s)|">Cobrado en 120 pagos</p>
+		<p class="secundario" th:text="|De lo que vence en ${p.mes.nombre} (${p.mes.vence}) se pagó el ${p.mes.avance}|">De lo que vence en octubre se pagó el 64 %</p>
+		<p class="secundario" data-anulado-mes th:text="|Anulado en el mes: ${p.mes.anulado} (${p.mes.anulados} pago(s))|">Anulado en el mes: S/ 350.00 (1 pago)</p>
+		<a class="btn btn-texto btn-chico" th:href="@{/panel/reportes/ingresos}">Ver ingresos por medio de pago</a>
+	</section>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-deuda" data-seccion="deuda">
+		<h2 id="titulo-deuda" class="etiqueta">Deuda vencida</h2>
+		<p class="cifra-grande num" data-deuda th:text="${p.deuda.monto}">S/ 12,400.00</p>
+		<p th:text="|${p.deuda.familias} familia(s) con al menos una cuota vencida|">23 familias</p>
+		<ul class="tramos" aria-label="Familias por días de atraso">
+			<li><span class="secundario">1 a 30 días</span> <strong th:text="${p.deuda.hasta30}">15</strong></li>
+			<li><span class="secundario">31 a 60</span> <strong th:text="${p.deuda.hasta60}">5</strong></li>
+			<li><span class="secundario">61 a 90</span> <strong th:text="${p.deuda.hasta90}">2</strong></li>
+			<li><span class="secundario">Más de 90</span> <strong th:text="${p.deuda.masDe90}">1</strong></li>
+		</ul>
+		<div class="fila">
+			<a class="btn btn-secundario" th:href="@{/panel/morosos}">Ver familias</a>
+			<a class="btn btn-texto btn-chico" th:href="@{/panel/reportes/morosidad}">Morosidad por grado</a>
+		</div>
+	</section>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-rebajas" data-seccion="rebajas">
+		<h2 id="titulo-rebajas" class="etiqueta">Rebajas del mes</h2>
+		<p data-descuentos th:text="|Descuentos: ${p.rebajas.descuentos} (${p.rebajas.cantidadDescuentos})|">Descuentos: S/ 900.00 (3)</p>
+		<ul class="lista-panel" th:unless="${#lists.isEmpty(p.rebajas.aprobaronDescuentos)}" aria-label="Quién aprobó los descuentos">
+			<li th:each="q : ${p.rebajas.aprobaronDescuentos}" class="secundario" th:text="|Aprobó ${q}|">Aprobó director: 3 por S/ 900.00</li>
+		</ul>
+		<p data-cuotas-anuladas th:text="|Cuotas anuladas: ${p.rebajas.cuotasAnuladas} (${p.rebajas.cantidadCuotasAnuladas})|">Cuotas anuladas: S/ 0.00 (0)</p>
+		<ul class="lista-panel" th:unless="${#lists.isEmpty(p.rebajas.aprobaronAnulaciones)}" aria-label="Quién aprobó las anulaciones de cuotas">
+			<li th:each="q : ${p.rebajas.aprobaronAnulaciones}" class="secundario" th:text="|Aprobó ${q}|">Aprobó director: 1 por S/ 450.00</li>
+		</ul>
+	</section>
+</main>
+</body>
+</html>

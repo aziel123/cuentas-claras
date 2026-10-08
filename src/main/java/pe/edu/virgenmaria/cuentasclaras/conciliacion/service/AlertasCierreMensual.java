@@ -27,7 +27,7 @@ import java.util.List;
  * </ul>
  */
 @Service
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 @Transactional(readOnly = true)
 public class AlertasCierreMensual implements AlertasRevision {
 

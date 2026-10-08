@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Resúmenes enviados', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="panel-resumenes">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Panel del colegio</p>
+			<h1>Resúmenes enviados</h1>
+			<p class="secundario">Lo que te llegó cada día a las 19:30. Cada mañana el sistema vuelve a sumar los pagos de esos
+				días: si algo cambió y no lo explica una anulación aprobada o un pago que llegó tarde, lo verás en rojo.</p>
+		</div>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Volver al panel', @{/panel}, 'secundario')}"></a>
+		</div>
+	</div>
+
+	<th:block th:if="${#lists.isEmpty(resumenes)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay resúmenes', 'El primero sale hoy a las 19:30.')}"></div>
+	</th:block>
+
+	<ul class="lista-tarjetas" th:unless="${#lists.isEmpty(resumenes)}">
+		<li th:each="r : ${resumenes}" class="tarjeta panel-bloque" th:data-resumen="${r.id()}"
+			th:classappend="${r.cambioSinExplicar()} ? 'alerta-critica'">
+			<p class="fila entre">
+				<strong th:text="${r.fecha()}">08/10/2026</strong>
+				<th:block th:if="${r.cambio() == null}"><span th:replace="~{fragments/componentes :: badge('Sin cambios', 'exito')}"></span></th:block>
+				<th:block th:if="${r.cambio() != null and r.cambioSinExplicar()}"><span th:replace="~{fragments/componentes :: badge('Cambió sin explicación', 'peligro')}"></span></th:block>
+				<th:block th:if="${r.cambio() != null and !r.cambioSinExplicar()}"><span th:replace="~{fragments/componentes :: badge('Cambió (explicado)', 'info')}"></span></th:block>
+			</p>
+			<p class="cifra-grande num" th:text="${r.cobrado()}">S/ 4,350.00</p>
+			<p th:text="|${r.pagos()} pago(s) · Efectivo ${r.efectivo()} · Mes ${r.cobradoMes()}|">18 pagos</p>
+			<p class="secundario" th:text="|Deuda vencida: ${r.deuda()} de ${r.familiasMorosas()} familia(s) · Alertas críticas: ${r.alertasCriticas()}|">Deuda vencida</p>
+			<p class="secundario" th:text="|Huella 19:00: ${r.huella()}|">Huella</p>
+			<p class="secundario" data-envio th:text="${r.envio()}">Enviado 19:30 · Entregado</p>
+			<p th:if="${r.cambio() != null}" class="texto-largo" data-cambio
+				th:classappend="${r.cambioSinExplicar()} ? 'texto-peligro'" th:text="${r.cambio()}">Cambio</p>
+		</li>
+	</ul>
+</main>
+</body>
+</html>

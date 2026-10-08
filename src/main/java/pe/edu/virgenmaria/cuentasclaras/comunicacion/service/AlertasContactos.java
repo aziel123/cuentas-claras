@@ -35,7 +35,7 @@ import java.util.Set;
  * </ul>
  */
 @Service
-@PreAuthorize("hasRole('PROMOTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
 @Transactional(readOnly = true)
 public class AlertasContactos implements AlertasRevision {
 

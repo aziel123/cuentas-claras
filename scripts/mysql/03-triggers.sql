@@ -879,6 +879,9 @@ BEGIN
 END$$
 
 -- ===================== Sprint 5 · tanda 1 (V17): mensajes, acceso directo y huella =====================
+-- (trg_mensaje_nace en su versión de las correcciones del sprint 6: nombra resumen_diario (V21) y su columna parametros
+-- y configuracion_colegio (V23). Nunca se instala sobre una base sin V23: el job mysql aplica este archivo siempre
+-- después de migrar.)
 -- El mensaje nace PENDIENTE y va al contacto REGISTRADO de su destinatario. A un apoderado no se le escribe a un contacto
 -- que también es del personal, salvo que ese contacto lo haya aprobado otra persona. La activación del personal no va al
 -- contacto de quien la pidió. EXTERNO: solo el correo que el DBA dejó en configuracion_bd.
@@ -888,6 +891,11 @@ BEGIN
     IF NOT (NEW.estado <=> 'PENDIENTE') OR NOT (NEW.intentos <=> 0) OR NEW.proveedor IS NOT NULL
             OR NEW.proveedor_mensaje_id IS NOT NULL OR NEW.enviado_en IS NOT NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un mensaje nace PENDIENTE y sin envío';
+    END IF;
+    -- Sprint 6 (tanda 2): el resumen y las alertas a Promotoría los crea solo sistema.panel. Va primero: así el INSERT
+    -- imposible del verificador (destinatario 'X') llega aquí y no al CHECK, y prod no arranca con la versión anterior.
+    IF NEW.tipo IN ('RESUMEN_DIARIO', 'ALERTA_PROMOTORIA') AND NOT (NEW.creado_por <=> 'sistema.panel') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el resumen y las alertas los envía sistema.panel';
     END IF;
     IF NEW.destinatario_tipo = 'APODERADO' AND NEW.tipo <> 'CONTACTO_CAMBIADO' AND NOT EXISTS (SELECT 1 FROM apoderado a
             WHERE a.id = NEW.apoderado_id AND a.colegio_id = NEW.colegio_id
@@ -914,12 +922,21 @@ BEGIN
                     OR (NEW.canal = 'CORREO' AND a.correo_verificado <=> NEW.destino))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el contacto del apoderado aún no está verificado';
     END IF;
-    IF NEW.tipo = 'CONTACTO_CAMBIADO' AND NOT (NEW.entidad <=> 'solicitud_cambio' AND EXISTS (SELECT 1
-            FROM solicitud_cambio s WHERE s.id = NEW.entidad_id AND s.tipo = 'CAMBIO_CONTACTO_APODERADO'
-            AND s.entidad = 'apoderado' AND s.entidad_id = NEW.apoderado_id AND s.estado = 'APROBADA')) THEN
+    -- Sprint 6 (tanda 2): también el aviso al contacto ANTERIOR de alguien del personal, con SU CAMBIO_CONTACTO_PERSONAL
+    -- aprobada y SOLO a ese contacto anterior (el que quedó en la solicitud).
+    IF NEW.tipo = 'CONTACTO_CAMBIADO' AND NOT (NEW.entidad <=> 'solicitud_cambio' AND (
+            (NEW.destinatario_tipo = 'APODERADO' AND EXISTS (SELECT 1
+                FROM solicitud_cambio s WHERE s.id = NEW.entidad_id AND s.tipo = 'CAMBIO_CONTACTO_APODERADO'
+                AND s.entidad = 'apoderado' AND s.entidad_id = NEW.apoderado_id AND s.estado = 'APROBADA'))
+            OR (NEW.destinatario_tipo = 'USUARIO' AND EXISTS (SELECT 1
+                FROM solicitud_cambio s WHERE s.id = NEW.entidad_id AND s.colegio_id = NEW.colegio_id
+                AND s.tipo = 'CAMBIO_CONTACTO_PERSONAL' AND s.entidad = 'usuario' AND s.entidad_id = NEW.usuario_id
+                AND s.estado = 'APROBADA'
+                AND ((NEW.canal = 'WHATSAPP' AND JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.telefonoAnterior')) = NEW.destino)
+                    OR (NEW.canal = 'CORREO' AND JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.correoAnterior')) = NEW.destino)))))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el aviso al contacto anterior necesita el cambio aprobado';
     END IF;
-    IF NEW.destinatario_tipo = 'USUARIO' AND NOT EXISTS (SELECT 1 FROM usuario u WHERE u.id = NEW.usuario_id
+    IF NEW.destinatario_tipo = 'USUARIO' AND NEW.tipo <> 'CONTACTO_CAMBIADO' AND NOT EXISTS (SELECT 1 FROM usuario u WHERE u.id = NEW.usuario_id
             AND u.colegio_id = NEW.colegio_id
             AND ((NEW.canal = 'WHATSAPP' AND u.telefono_whatsapp = NEW.destino)
                 OR (NEW.canal = 'CORREO' AND u.correo = NEW.destino))) THEN
@@ -929,8 +946,37 @@ BEGIN
             AND NOT (c.id <=> NEW.usuario_id) AND (c.telefono_whatsapp = NEW.destino OR c.correo = NEW.destino)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el enlace no va al contacto de quien lo pidió';
     END IF;
-    IF NEW.destinatario_tipo = 'EXTERNO' AND NOT EXISTS (SELECT 1 FROM configuracion_bd c
-            WHERE c.clave = 'huella_correo_externo' AND c.valor = NEW.destino) THEN
+    -- El resumen es de una foto de ESTE colegio y va a una persona PROMOTOR activa (o al correo externo del DBA).
+    -- Correcciones del sprint 6 (S6-M1): y lleva EXACTAMENTE el texto guardado en la foto (que su trigger comprobó contra
+    -- las cifras): un resumen con cifras inventadas no nace, aunque apunte a una foto verdadera.
+    IF NEW.tipo = 'RESUMEN_DIARIO' AND (NOT (NEW.entidad <=> 'resumen_diario') OR NOT EXISTS (SELECT 1
+            FROM resumen_diario r WHERE r.id = NEW.entidad_id AND r.colegio_id = NEW.colegio_id
+            AND r.parametros IS NOT NULL AND CAST(r.parametros AS BINARY) = CAST(NEW.parametros AS BINARY))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el resumen apunta a su foto y lleva su texto';
+    END IF;
+    -- S6-A1: a una cuenta del PERSONAL (sin apoderado_id), nunca a una cuenta enlazada a un apoderado.
+    IF NEW.tipo = 'RESUMEN_DIARIO' AND NEW.destinatario_tipo = 'USUARIO' AND NOT EXISTS (SELECT 1
+            FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+            WHERE u.id = NEW.usuario_id AND u.colegio_id = NEW.colegio_id AND u.activo AND u.apoderado_id IS NULL
+            AND r.rol = 'PROMOTOR') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el resumen diario es solo para Promotoría';
+    END IF;
+    -- Las alertas al celular van solo a Promotoría y Dirección activas (nunca a Caja ni al correo externo).
+    IF NEW.tipo = 'ALERTA_PROMOTORIA' AND NOT EXISTS (SELECT 1
+            FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+            WHERE u.id = NEW.usuario_id AND u.colegio_id = NEW.colegio_id AND u.activo AND u.apoderado_id IS NULL
+            AND r.rol IN ('PROMOTOR', 'DIRECTOR')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las alertas son solo para Promotoría y Dirección';
+    END IF;
+    -- (Sprint 6: reemplaza el bloque EXTERNO.) Cada tipo con SU fila del DBA. Correcciones del sprint 6 (QA-S6-6): el
+    -- resumen, con la fila de configuracion_colegio de ESTE colegio (el contador de un colegio no recibe el de otro).
+    IF NEW.destinatario_tipo = 'EXTERNO' AND NEW.tipo = 'RESUMEN_DIARIO' AND NOT EXISTS (SELECT 1
+            FROM configuracion_colegio c WHERE c.colegio_id = NEW.colegio_id AND c.clave = 'resumen_correo_externo'
+              AND c.valor = NEW.destino) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el correo externo del resumen lo configura el DBA para ese colegio';
+    END IF;
+    IF NEW.destinatario_tipo = 'EXTERNO' AND NOT (NEW.tipo <=> 'RESUMEN_DIARIO') AND NOT EXISTS (SELECT 1
+            FROM configuracion_bd c WHERE c.clave = 'huella_correo_externo' AND c.valor = NEW.destino) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el correo externo lo configura el DBA';
     END IF;
     IF NEW.respaldo_de_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM mensaje o WHERE o.id = NEW.respaldo_de_id
@@ -1298,3 +1344,250 @@ END$$
 
 DELIMITER ;
 
+-- ===================== Sprint 6 · tanda 2 (V21): resumen diario y contacto del personal =====================
+DELIMITER $$
+
+-- La foto del resumen la escribe sistema.panel y cada cifra de los libros es EXACTAMENTE la suma de pago y cuota en ese
+-- momento (la aplicación las calcula con JPQL en la misma transacción; con READ COMMITTED, un pago confirmado por otra
+-- transacción entre esa lectura y el INSERT hace fallar la foto y el proceso la reintenta). Definiciones (sección 3.4):
+-- cobrado = pagos VIGENTES por su día de caja; deuda vencida = monto - pagado - descuento de las cuotas PENDIENTE o
+-- PARCIAL con vencimiento ANTERIOR a la fecha (QA-S6-3: de un alumno retirado, solo las que vencen hasta su retiro);
+-- familias morosas = familias distintas de esas cuotas.
+-- Versión de las correcciones del sprint 6 (V23, S6-M1): la foto es de HOY en Lima y su corte, de AHORA (10 minutos de
+-- margen con la hora de la base: nadie planta la foto de otro día ni la de hoy antes de tiempo con cifras de la mañana);
+-- también se recalculan las cajas sin cerrar, los cierres con diferencia, las solicitudes pendientes y los avisos
+-- financieros del día (los tipos financieros de TipoMensaje: PAGO_REGISTRADO, PAGO_ANULADO y DESCUENTO_APROBADO); y el
+-- texto del mensaje (parametros, que trg_mensaje_nace exige en cada RESUMEN_DIARIO) dice la fecha y esas cifras. Las
+-- alertas críticas y los avisos entregados no se pueden recalcular aquí (riesgo residual documentado).
+DROP TRIGGER IF EXISTS trg_resumen_diario_registro$$
+CREATE TRIGGER trg_resumen_diario_registro BEFORE INSERT ON resumen_diario FOR EACH ROW
+BEGIN
+    DECLARE v_ahora DATETIME(6) DEFAULT UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    DECLARE v_total DECIMAL(12,2);
+    DECLARE v_cantidad INT;
+    DECLARE v_efectivo DECIMAL(12,2);
+    DECLARE v_pagos_efectivo INT;
+    DECLARE v_mes DECIMAL(12,2);
+    DECLARE v_deuda DECIMAL(12,2);
+    DECLARE v_familias INT;
+    DECLARE v_sin_cerrar INT;
+    DECLARE v_con_diferencia INT;
+    DECLARE v_pendientes INT;
+    DECLARE v_avisos INT;
+    DECLARE v_texto TEXT DEFAULT COALESCE(NEW.parametros, '');
+    DECLARE v_cajas TEXT;
+    IF NOT (NEW.creado_por <=> 'sistema.panel') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el resumen diario lo genera sistema.panel';
+    END IF;
+    IF NOT (NEW.fecha <=> DATE(v_ahora)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la foto del resumen es de hoy (hora de Lima)';
+    END IF;
+    IF NEW.cortado_en IS NULL OR NEW.cortado_en < v_ahora - INTERVAL 10 MINUTE
+            OR NEW.cortado_en > v_ahora + INTERVAL 10 MINUTE THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el corte del resumen es de ahora';
+    END IF;
+    SELECT COALESCE(SUM(p.total), 0), COUNT(*),
+           COALESCE(SUM(CASE WHEN p.medio = 'EFECTIVO' THEN p.total ELSE 0 END), 0),
+           COALESCE(SUM(CASE WHEN p.medio = 'EFECTIVO' THEN 1 ELSE 0 END), 0)
+      INTO v_total, v_cantidad, v_efectivo, v_pagos_efectivo
+      FROM pago p WHERE p.colegio_id = NEW.colegio_id AND p.fecha = NEW.fecha AND p.estado = 'VIGENTE';
+    SELECT COALESCE(SUM(p.total), 0) INTO v_mes
+      FROM pago p WHERE p.colegio_id = NEW.colegio_id AND p.estado = 'VIGENTE'
+       AND p.fecha BETWEEN NEW.fecha - INTERVAL (DAYOFMONTH(NEW.fecha) - 1) DAY AND NEW.fecha;
+    SELECT COALESCE(SUM(c.monto - c.monto_pagado - c.monto_descuento), 0), COUNT(DISTINCT a.familia_id)
+      INTO v_deuda, v_familias
+      FROM cuota c JOIN alumno a ON a.id = c.alumno_id
+     WHERE c.colegio_id = NEW.colegio_id AND c.estado IN ('PENDIENTE', 'PARCIAL') AND c.fecha_vencimiento < NEW.fecha
+       AND (a.retirado_en IS NULL OR c.fecha_vencimiento <= a.retirado_en);
+    IF NOT (NEW.cobrado_total <=> v_total AND NEW.pagos_cantidad <=> v_cantidad AND NEW.cobrado_efectivo <=> v_efectivo
+            AND NEW.pagos_efectivo <=> v_pagos_efectivo AND NEW.cobrado_mes <=> v_mes AND NEW.deuda_vencida <=> v_deuda
+            AND NEW.familias_morosas <=> v_familias) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las cifras del resumen no son las de los libros';
+    END IF;
+    -- S6-M1: los conteos que salen de las tablas (antes los ponía la aplicación sin control).
+    SELECT COUNT(*) INTO v_sin_cerrar FROM caja_diaria k
+     WHERE k.colegio_id = NEW.colegio_id AND k.canal = 'VENTANILLA' AND k.fecha = NEW.fecha AND k.estado = 'ABIERTA';
+    SELECT COUNT(*) INTO v_con_diferencia FROM cierre_caja ci JOIN caja_diaria k ON k.id = ci.caja_diaria_id
+     WHERE k.colegio_id = NEW.colegio_id AND k.canal = 'VENTANILLA' AND k.fecha = NEW.fecha AND ci.diferencia <> 0;
+    SELECT COUNT(*) INTO v_pendientes FROM solicitud_cambio s
+     WHERE s.colegio_id = NEW.colegio_id AND s.estado = 'PENDIENTE';
+    SELECT COUNT(*) INTO v_avisos FROM mensaje m
+     WHERE m.colegio_id = NEW.colegio_id AND m.tipo IN ('PAGO_REGISTRADO', 'PAGO_ANULADO', 'DESCUENTO_APROBADO')
+       AND m.creado_en >= NEW.fecha AND m.creado_en < NEW.fecha + INTERVAL 1 DAY;
+    IF NOT (NEW.cajas_sin_cerrar <=> v_sin_cerrar AND NEW.cierres_con_diferencia <=> v_con_diferencia
+            AND NEW.solicitudes_pendientes <=> v_pendientes AND NEW.avisos_familias <=> v_avisos) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los conteos del resumen no son los de las tablas';
+    END IF;
+    -- S6-M1: el texto del mensaje (12 parámetros separados por un salto de línea) dice la fecha y las cifras de la foto.
+    -- Sin letras con tilde en las comparaciones (el cliente mysql no siempre envía UTF-8): «código» y «aún» van con %.
+    SET v_cajas = SUBSTRING_INDEX(SUBSTRING_INDEX(v_texto, '\n', 6), '\n', -1);
+    IF NEW.parametros IS NULL OR CHAR_LENGTH(v_texto) - CHAR_LENGTH(REPLACE(v_texto, '\n', '')) <> 11
+            OR NOT (SUBSTRING_INDEX(v_texto, '\n', 1) <=> DATE_FORMAT(NEW.fecha, '%d/%m/%Y'))
+            OR NOT (SUBSTRING_INDEX(SUBSTRING_INDEX(v_texto, '\n', 2), '\n', -1) <=> CONCAT('S/ ', FORMAT(NEW.cobrado_total, 2)))
+            OR NOT (SUBSTRING_INDEX(SUBSTRING_INDEX(v_texto, '\n', 3), '\n', -1) <=> CAST(NEW.pagos_cantidad AS CHAR))
+            OR NOT (SUBSTRING_INDEX(SUBSTRING_INDEX(v_texto, '\n', 5), '\n', -1) <=> CONCAT('S/ ', FORMAT(NEW.cobrado_efectivo, 2)))
+            OR NOT (SUBSTRING_INDEX(v_cajas, ' ', 1) REGEXP '^[0-9]+$')
+            OR NOT (SUBSTRING(v_cajas, LOCATE(' ', v_cajas)) LIKE CONCAT(' cerrada(s), ', NEW.cajas_sin_cerrar, ' sin cerrar, ',
+                NEW.cierres_con_diferencia, ' con diferencia;%'))
+            OR NOT (SUBSTRING_INDEX(SUBSTRING_INDEX(v_texto, '\n', 7), '\n', -1) <=> CONCAT('S/ ', FORMAT(NEW.cobrado_mes, 2)))
+            OR NOT (SUBSTRING_INDEX(SUBSTRING_INDEX(v_texto, '\n', 8), '\n', -1) <=> CONCAT('S/ ', FORMAT(NEW.deuda_vencida, 2),
+                ' de ', NEW.familias_morosas, ' familia(s)'))
+            OR NOT (SUBSTRING_INDEX(SUBSTRING_INDEX(v_texto, '\n', 9), '\n', -1) <=> CAST(NEW.solicitudes_pendientes AS CHAR))
+            OR NOT (SUBSTRING_INDEX(SUBSTRING_INDEX(v_texto, '\n', 10), '\n', -1) <=> CAST(NEW.alertas_criticas AS CHAR))
+            OR NOT (SUBSTRING_INDEX(SUBSTRING_INDEX(v_texto, '\n', 11), '\n', -1) LIKE
+                CASE WHEN NEW.huella_secuencia IS NULL THEN 'a%n no hay huella por hora'
+                     ELSE CONCAT('evento ', NEW.huella_secuencia, ', c%digo ', NEW.huella_codigo, ' (%') END) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el texto del resumen no dice las cifras de la foto';
+    END IF;
+    -- P18: la huella de la tarde (la de las 19:00) es una huella por hora guardada de ESTE colegio.
+    IF NEW.huella_secuencia IS NOT NULL AND NOT EXISTS (SELECT 1 FROM huella_hora h
+            WHERE h.colegio_id = NEW.colegio_id AND h.secuencia = NEW.huella_secuencia AND h.codigo = NEW.huella_codigo) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la huella del resumen no es una huella guardada';
+    END IF;
+END$$
+
+-- Hallazgo 5 (P6). El celular y el correo del PERSONAL cambian solo con SU CAMBIO_CONTACTO_PERSONAL aprobada, enlazada en
+-- contacto_solicitud_id; uk_usuario_contacto_solicitud impide que la usen dos cuentas. Un UPDATE que no toca esas columnas
+-- (el ingreso, la clave) no se frena.
+-- Versión de las correcciones del sprint 6 (V23, S6-A1):
+--   a) una cuenta no «pasa» por apoderado para escapar del control: apoderado_id no vuelve a NULL y una cuenta con roles
+--      del personal no se enlaza a un apoderado; además, se vigila la cuenta si es del personal ANTES o DESPUÉS del
+--      UPDATE, o si tiene algún rol del personal;
+--   b) la solicitud es MÁS NUEVA que la anterior (no se reusa una aprobada antigua) y el celular y el correo nuevos son
+--      EXACTAMENTE los que se aprobaron en ella (datos.telefono y datos.correo; vacío = sin ese canal).
+DROP TRIGGER IF EXISTS trg_usuario_contacto$$
+CREATE TRIGGER trg_usuario_contacto BEFORE UPDATE ON usuario FOR EACH ROW
+BEGIN
+    DECLARE v_roles_personal BOOLEAN;
+    SET v_roles_personal = EXISTS (SELECT 1 FROM usuario_rol r WHERE r.usuario_id = NEW.id AND r.rol <> 'APODERADO');
+    IF OLD.apoderado_id IS NOT NULL AND NEW.apoderado_id IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una cuenta de apoderado no se desenlaza de su apoderado';
+    END IF;
+    IF OLD.apoderado_id IS NULL AND NEW.apoderado_id IS NOT NULL AND v_roles_personal THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una cuenta del personal no se enlaza a un apoderado';
+    END IF;
+    IF (OLD.apoderado_id IS NULL OR NEW.apoderado_id IS NULL OR v_roles_personal)
+            AND (NOT (NEW.telefono_whatsapp <=> OLD.telefono_whatsapp) OR NOT (NEW.correo <=> OLD.correo)
+                OR NOT (NEW.contacto_solicitud_id <=> OLD.contacto_solicitud_id))
+            AND (NEW.contacto_solicitud_id IS NULL OR NEW.contacto_solicitud_id <= COALESCE(OLD.contacto_solicitud_id, 0)
+                OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.contacto_solicitud_id
+                    AND s.colegio_id = NEW.colegio_id AND s.tipo = 'CAMBIO_CONTACTO_PERSONAL' AND s.entidad = 'usuario'
+                    AND s.entidad_id = NEW.id AND s.estado = 'APROBADA'
+                    AND NEW.telefono_whatsapp <=> NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.telefono')), '')
+                    AND NEW.correo <=> NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.correo')), ''))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el contacto del personal solo cambia con su solicitud aprobada';
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- ===================== Sprint 6 · tanda 3 (V22): llamada de control =====================
+DELIMITER $$
+
+-- Decisión 77 (P17). La llamada de control es de la semana EN CURSO en la hora de Lima (UTC-5, sin horario de verano;
+-- nadie «rellena» semanas pasadas ni adelanta las futuras). Versión de las correcciones del sprint 6 (V23):
+--   S6-M2: la registra una persona ACTIVA de Promotoría de ESE colegio; Dirección, solo la semana que Promotoría le delegó
+--          (delegacion_llamada), y entonces por_delegacion es TRUE (Promotoría recibe el aviso). El segundo intento solo
+--          después de un «No contesta» en el primero (la UNIQUE impide repetir un intento).
+--   S6-A2 y S6-B3: la familia es de la muestra CONGELADA de esa semana (muestra_llamada) y no fue reemplazada.
+DROP TRIGGER IF EXISTS trg_llamada_control_registro$$
+CREATE TRIGGER trg_llamada_control_registro BEFORE INSERT ON llamada_control FOR EACH ROW
+BEGIN
+    DECLARE v_hoy DATE DEFAULT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR);
+    DECLARE v_promotoria BOOLEAN;
+    DECLARE v_direccion BOOLEAN;
+    SET v_promotoria = EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+        WHERE u.nombre_usuario = NEW.creado_por AND u.colegio_id = NEW.colegio_id AND u.activo AND u.apoderado_id IS NULL
+          AND r.rol = 'PROMOTOR');
+    SET v_direccion = EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+        WHERE u.nombre_usuario = NEW.creado_por AND u.colegio_id = NEW.colegio_id AND u.activo AND u.apoderado_id IS NULL
+          AND r.rol = 'DIRECTOR');
+    IF NOT v_promotoria AND NOT v_direccion THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la llamada de control la hace Promotoría o Dirección';
+    END IF;
+    IF NEW.semana IS NULL OR NOT (NEW.semana <=> v_hoy - INTERVAL WEEKDAY(v_hoy) DAY) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la llamada de control es de la semana en curso (su lunes)';
+    END IF;
+    IF NOT v_promotoria AND NOT EXISTS (SELECT 1 FROM delegacion_llamada d WHERE d.colegio_id = NEW.colegio_id
+            AND d.semana = NEW.semana) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: Dirección registra la llamada solo la semana que Promotoría le delega';
+    END IF;
+    IF NOT (NEW.por_delegacion <=> (NOT v_promotoria)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: por_delegacion dice si la registró Dirección';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM muestra_llamada m WHERE m.colegio_id = NEW.colegio_id AND m.semana = NEW.semana
+            AND m.familia_id = NEW.familia_id)
+            OR EXISTS (SELECT 1 FROM muestra_llamada m WHERE m.colegio_id = NEW.colegio_id AND m.semana = NEW.semana
+            AND m.reemplaza_familia_id = NEW.familia_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la llamada es a una familia de la muestra de la semana';
+    END IF;
+    IF NOT (NEW.intento <=> 1) AND NOT (NEW.intento <=> 2 AND EXISTS (SELECT 1 FROM llamada_control l
+            WHERE l.colegio_id = NEW.colegio_id AND l.semana = NEW.semana AND l.familia_id = NEW.familia_id
+              AND l.intento = 1 AND l.resultado = 'NO_CONTESTA')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el segundo intento es solo tras un No contesta';
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- ===================== Correcciones del sprint 6 (V23): muestra congelada y delegación de las llamadas =====================
+DELIMITER $$
+
+-- S6-A2 y S6-B3. La muestra de la llamada de control se congela en la semana EN CURSO (Lima); la fija una persona activa
+-- de Promotoría o Dirección (la primera que la consulta) o sistema.panel. Cada familia es candidata: EFECTIVO, con un pago
+-- en efectivo (vigente o anulado) desde 35 días antes del lunes hasta el domingo; DEUDA, con deuda vencida al lunes (de un
+-- retirado, solo hasta su retiro); REEMPLAZO, cualquiera de las dos, y solo de una familia de la muestra que no contestó en
+-- sus dos intentos. Como máximo 10 elegidas por semana (la aplicación elige 3 con la semilla secreta; la base no la
+-- recalcula: riesgo residual documentado).
+DROP TRIGGER IF EXISTS trg_muestra_llamada_registro$$
+CREATE TRIGGER trg_muestra_llamada_registro BEFORE INSERT ON muestra_llamada FOR EACH ROW
+BEGIN
+    DECLARE v_hoy DATE DEFAULT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR);
+    DECLARE v_efectivo BOOLEAN;
+    DECLARE v_deuda BOOLEAN;
+    SET v_efectivo = EXISTS (SELECT 1 FROM pago p WHERE p.colegio_id = NEW.colegio_id
+        AND p.familia_id = NEW.familia_id AND p.medio = 'EFECTIVO'
+        AND p.fecha BETWEEN NEW.semana - INTERVAL 35 DAY AND NEW.semana + INTERVAL 6 DAY);
+    SET v_deuda = EXISTS (SELECT 1 FROM cuota c JOIN alumno a ON a.id = c.alumno_id
+        WHERE c.colegio_id = NEW.colegio_id AND a.familia_id = NEW.familia_id AND c.estado IN ('PENDIENTE', 'PARCIAL')
+          AND c.fecha_vencimiento < NEW.semana AND (a.retirado_en IS NULL OR c.fecha_vencimiento <= a.retirado_en));
+    IF NOT (NEW.creado_por <=> 'sistema.panel') AND NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r
+            ON r.usuario_id = u.id WHERE u.nombre_usuario = NEW.creado_por AND u.colegio_id = NEW.colegio_id AND u.activo
+            AND u.apoderado_id IS NULL AND r.rol IN ('PROMOTOR', 'DIRECTOR')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la muestra la fija Promotoria, Direccion o sistema.panel';
+    END IF;
+    IF NEW.semana IS NULL OR NOT (NEW.semana <=> v_hoy - INTERVAL WEEKDAY(v_hoy) DAY) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la muestra es de la semana en curso (su lunes)';
+    END IF;
+    IF NOT ((NEW.motivo <=> 'EFECTIVO' AND v_efectivo) OR (NEW.motivo <=> 'DEUDA' AND v_deuda)
+            OR (NEW.motivo <=> 'REEMPLAZO' AND (v_efectivo OR v_deuda))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la muestra es de familias que pagaron en efectivo o tienen deuda vencida';
+    END IF;
+    IF NEW.motivo <=> 'REEMPLAZO' AND (NOT EXISTS (SELECT 1 FROM muestra_llamada m WHERE m.colegio_id = NEW.colegio_id
+            AND m.semana = NEW.semana AND m.familia_id = NEW.reemplaza_familia_id)
+            OR (SELECT COUNT(*) FROM llamada_control l WHERE l.colegio_id = NEW.colegio_id AND l.semana = NEW.semana
+                AND l.familia_id = NEW.reemplaza_familia_id AND l.resultado = 'NO_CONTESTA') < 2) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: se reemplaza solo a una familia de la muestra que no contesto dos veces';
+    END IF;
+    IF NOT (NEW.motivo <=> 'REEMPLAZO') AND (SELECT COUNT(*) FROM muestra_llamada m WHERE m.colegio_id = NEW.colegio_id
+            AND m.semana = NEW.semana AND m.motivo <> 'REEMPLAZO') >= 10 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la muestra de la semana tiene 10 familias como maximo';
+    END IF;
+END$$
+
+-- S6-M2. Las llamadas de la semana EN CURSO las delega a Dirección una persona activa de Promotoría de ese colegio.
+DROP TRIGGER IF EXISTS trg_delegacion_llamada_registro$$
+CREATE TRIGGER trg_delegacion_llamada_registro BEFORE INSERT ON delegacion_llamada FOR EACH ROW
+BEGIN
+    DECLARE v_hoy DATE DEFAULT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR);
+    IF NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+            WHERE u.nombre_usuario = NEW.creado_por AND u.colegio_id = NEW.colegio_id AND u.activo
+              AND u.apoderado_id IS NULL AND r.rol = 'PROMOTOR') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las llamadas las delega Promotoria';
+    END IF;
+    IF NEW.semana IS NULL OR NOT (NEW.semana <=> v_hoy - INTERVAL WEEKDAY(v_hoy) DAY) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la delegacion es de la semana en curso (su lunes)';
+    END IF;
+END$$
+
+DELIMITER ;
