@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Importación terminada', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" th:with="r=${resultado.resumen}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/alumnos/importar}">Importar alumnos</a></p>
+			<h1>Importación terminada</h1>
+			<p class="secundario" th:text="|Paso 3 de 3 · «${resultado.archivoNombre}» · año ${resultado.anio}|">Paso 3 de 3</p>
+		</div>
+	</div>
+
+	<ol class="pasos" aria-label="Pasos de la importación">
+		<li class="paso-hecho">Subir</li>
+		<li class="paso-hecho">Revisar</li>
+		<li class="paso-actual" aria-current="step">Confirmar</li>
+	</ol>
+
+	<div th:replace="~{fragments/componentes :: alerta('exito', 'Listo: los alumnos quedaron registrados y matriculados. La importación quedó en la bitácora.')}"></div>
+
+	<section class="tarjeta" aria-labelledby="titulo-resultado">
+		<h2 id="titulo-resultado">Resultado</h2>
+		<ul class="conteos">
+			<li><strong class="num" th:text="${r.alumnosNuevos}">8</strong><span>alumnos nuevos</span></li>
+			<li><strong class="num" th:text="${r.alumnosActualizados}">0</strong><span>con cambios</span></li>
+			<li><strong class="num" th:text="${r.alumnosSinCambios}">0</strong><span>sin cambios</span></li>
+			<li><strong class="num" th:text="${r.apoderadosNuevos}">6</strong><span>apoderados nuevos</span></li>
+			<li><strong class="num" th:text="${r.familiasNuevas}">6</strong><span>familias nuevas</span></li>
+			<li><strong class="num" th:text="${r.matriculasNuevas}">8</strong><span>matrículas nuevas</span></li>
+		</ul>
+		<div class="fila">
+			<a class="btn btn-primario" th:href="@{/alumnos}">Ver alumnos</a>
+			<a class="btn btn-secundario" th:href="@{/alumnos/importaciones}">Ver importaciones</a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

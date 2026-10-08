@@ -1,0 +1,7 @@
+# Los scripts que corren dentro de Linux/Docker deben tener saltos de línea LF también en Windows.
+mvnw text eol=lf
+*.sh text eol=lf
+*.sql text eol=lf
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+*.xlsx binary

@@ -9,16 +9,17 @@ description: Sistema de diseño UI del proyecto (tokens de color, tipografía, e
 **Confiable, claro y cercano.** Es un sistema que maneja el dinero de las familias y la información de sus hijos, así que debe transmitir orden y transparencia. Nada recargado.
 
 ## Marca: Colegio Virgen María
-Paleta institucional **azul y celeste**. Contraste validado con WCAG 2.1 AA.
+Paleta institucional **blanco, azul y celeste, con el blanco predominante** (pedido del colegio). Fondo y tarjetas son blancos; el azul y el celeste solo marcan acciones y acentos. No hay modo oscuro: la plataforma se ve igual aunque el equipo esté en modo oscuro. Contraste validado con WCAG 2.1 AA.
 
-| Rol | Claro | Oscuro | Uso | Contraste |
-|---|---|---|---|---|
-| Azul (primario) | `#1b4f9c` | `#2a64c4` | Botón principal, enlaces, pestaña activa, barras de gráficos | Blanco sobre azul: 7.9:1 (claro), 5.6:1 (oscuro) |
-| Azul hover | `#153f7e` | `#1f55ad` | Estado hover del primario | 10.3:1 |
-| Azul profundo | `#0f2c55` | `#0a1d3a` | Cabeceras de la app, zonas de marca | Blanco: más de 12:1 |
-| Celeste (acento) | `#38aee6` | `#38aee6` | **Solo decorativo**: franjas, bordes superiores, monograma, ilustraciones | 2.5:1 sobre blanco, **nunca para texto** |
-| Celeste texto | `#0a6ea8` | `#8fd0f5` | Texto o íconos en celeste | 5.5:1 sobre blanco; 10.8:1 sobre el fondo oscuro |
-| Celeste suave | `#e6f4fc` | `#12304a` | Fondos de selección y filas activas | Texto celeste encima: 4.9:1 |
+| Rol | Color | Uso | Contraste |
+|---|---|---|---|
+| Blanco (predominante) | `#ffffff` | Fondo de la página, tarjetas, barra superior | — |
+| Azul (primario) | `#1b4f9c` | Botón principal, enlaces, pestaña activa, barras de gráficos | Blanco sobre azul: 7.9:1 |
+| Azul hover | `#153f7e` | Estado hover del primario | 10.3:1 |
+| Azul profundo | `#0f2c55` | Zonas de marca puntuales | Blanco: más de 12:1 |
+| Celeste (acento) | `#38aee6` | **Solo decorativo**: franjas, bordes superiores, monograma, ilustraciones | 2.5:1 sobre blanco, **nunca para texto** |
+| Celeste texto | `#0a6ea8` | Texto o íconos en celeste | 5.5:1 sobre blanco |
+| Celeste suave | `#eaf6fd` | Fondos de selección y filas activas | Texto celeste encima: más de 4.5:1 |
 
 Reglas de marca:
 - El **azul** lleva la acción. El **celeste** acompaña y nunca compite con el botón principal.
@@ -36,13 +37,13 @@ Defínelos una sola vez en `static/css/tokens.css` y úsalos siempre.
   --color-azul-profundo: #0f2c55;
   --color-celeste: #38aee6;        /* solo decorativo */
   --color-celeste-texto: #0a6ea8;
-  --color-celeste-suave: #e6f4fc;
+  --color-celeste-suave: #eaf6fd;
 
-  /* Neutros con leve tinte azul */
-  --color-fondo: #f4f8fc;
+  /* Blanco predominante (pedido del colegio): azul y celeste solo como acentos */
+  --color-fondo: #ffffff;
   --color-superficie: #ffffff;
-  --color-superficie-2: #eaf2fa;
-  --color-borde: #d8e3ef;
+  --color-superficie-2: #f3f8fd;
+  --color-borde: #dce7f2;
   --color-texto: #0f172a;
   --color-texto-secundario: #475569;
 
@@ -62,21 +63,10 @@ Defínelos una sola vez en `static/css/tokens.css` y úsalos siempre.
   --esp-6: 24px; --esp-8: 32px; --esp-12: 48px;
 
   --radio: 8px;
-  --sombra: 0 1px 3px rgb(15 23 42 / 0.08);
+  --sombra: 0 1px 3px rgb(27 79 156 / 0.08);
+  color-scheme: light; /* sin modo oscuro: la plataforma siempre se ve blanca */
 }
 
-/* Modo oscuro: mismos nombres, valores propios */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-primario: #2a64c4; --color-primario-hover: #1f55ad; --color-primario-texto: #8fd0f5;
-    --color-azul-profundo: #0a1d3a; --color-celeste-texto: #8fd0f5; --color-celeste-suave: #12304a;
-    --color-fondo: #0b1626; --color-superficie: #111e33; --color-superficie-2: #172840; --color-borde: #233a5a;
-    --color-texto: #e6ecf5; --color-texto-secundario: #a9b6ca;
-    --color-exito: #4ade80; --color-exito-suave: #0f2e1d; --color-alerta: #fbbf24; --color-alerta-suave: #33250a;
-    --color-peligro: #f87171; --color-peligro-suave: #3a1515; --color-info: #38bdf8; --color-info-suave: #0c2a3e;
-    color-scheme: dark;
-  }
-}
 ```
 Los textos de estado sobre fondos suaves cumplen el contraste AA. Valida cualquier color nuevo con una herramienta de contraste.
 

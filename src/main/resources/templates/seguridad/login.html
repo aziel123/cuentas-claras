@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: publica('Ingresar', ~{::main})}">
+<body>
+<main id="contenido" class="contenido-publico">
+	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-login">
+		<div>
+			<h1 id="titulo-login">Ingresa a Cuentas Claras</h1>
+			<p class="secundario">Usa el usuario y la clave que te entregó el colegio.</p>
+		</div>
+
+		<th:block th:if="${mensaje != null}">
+			<div th:replace="~{fragments/componentes :: alerta(${mensaje.tipo}, ${mensaje.texto})}"></div>
+		</th:block>
+
+		<form class="formulario" th:action="@{/login}" method="post">
+			<div class="campo">
+				<label for="usuario">Usuario</label>
+				<input type="text" class="input" id="usuario" name="usuario" autocomplete="username"
+					autocapitalize="none" spellcheck="false" maxlength="60" required autofocus>
+			</div>
+			<div class="campo">
+				<label for="clave">Clave</label>
+				<input type="password" class="input" id="clave" name="clave" autocomplete="current-password" required>
+			</div>
+			<button type="submit" class="btn btn-primario btn-bloque">Ingresar</button>
+		</form>
+
+		<p class="ayuda">¿Olvidaste tu clave? Pide a Promotoría o Dirección que te la restablezcan.</p>
+	</section>
+</main>
+</body>
+</html>

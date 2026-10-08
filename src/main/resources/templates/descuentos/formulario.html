@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Pedir un descuento', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="descuento-formulario" th:with="s=${solicitud}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/descuentos}">Descuentos y becas</a></p>
+			<h1 th:text="|Descuento para ${s.alumno}|">Descuento para Valeria Quispe Huamán</h1>
+			<p class="secundario" th:text="|${s.documento} · ${s.familia}|">DNI · Familia</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<form method="post" th:action="@{/descuentos/revisar}" class="formulario">
+		<input type="hidden" name="alumnoId" th:value="${s.alumnoId}">
+		<input type="hidden" name="dni" th:value="${dni}">
+		<section class="tarjeta" aria-labelledby="titulo-tipo">
+			<h2 id="titulo-tipo">Tipo y valor</h2>
+			<p class="secundario">Hermanos con matrícula activa: <strong th:text="${#lists.size(s.hermanosMatriculados)}">2</strong>
+				<span th:unless="${#lists.isEmpty(s.hermanosMatriculados)}" th:text="|(${#strings.listJoin(s.hermanosMatriculados, ', ')})|">(Mateo, Valeria)</span></p>
+			<fieldset class="grupo-opciones">
+				<legend>Tipo</legend>
+				<div class="medios">
+					<label class="opcion" th:each="t : ${tipos}">
+						<input type="radio" name="tipo" th:value="${t}" required>
+						<span th:text="${t.etiqueta()}">Descuento por hermanos</span>
+					</label>
+				</div>
+			</fieldset>
+			<fieldset class="grupo-opciones">
+				<legend>¿Cómo se descuenta?</legend>
+				<div class="medios">
+					<label class="opcion" th:each="m : ${modalidades}">
+						<input type="radio" name="modalidad" th:value="${m}" required th:checked="${m.name() == 'PORCENTAJE'}">
+						<span th:text="${m.etiqueta()}">Porcentaje</span>
+					</label>
+				</div>
+			</fieldset>
+			<div class="campo">
+				<label for="valor">Valor (porcentaje o soles por cuota)</label>
+				<input class="input num" type="number" id="valor" name="valor" required min="0.01" max="99999.99" step="0.01"
+					inputmode="decimal" autocomplete="off" aria-describedby="valor-ayuda">
+				<p class="ayuda" id="valor-ayuda">Un 100 % deja la cuota exonerada (beca completa). Lo que se paga queda en
+					múltiplos de S/ 0.10, redondeando a favor de la familia.</p>
+			</div>
+		</section>
+
+		<section class="tarjeta" aria-labelledby="titulo-cuotas">
+			<h2 id="titulo-cuotas">Cuotas</h2>
+			<th:block th:if="${#lists.isEmpty(s.cuotas)}">
+				<div th:replace="~{fragments/componentes :: estadoVacio('No tiene cuotas pendientes', 'Solo se descuentan cuotas pendientes o parciales.')}"></div>
+			</th:block>
+			<div class="lista-cuotas">
+				<label class="cuota-opcion" th:each="q : ${s.cuotas}" th:data-cuota="${q.id}">
+					<input type="checkbox" name="cuotaIds" th:value="${q.id}">
+					<span class="cuota-datos">
+						<strong th:text="${q.descripcion}">Pensión diciembre 2026</strong>
+						<span class="secundario" th:text="|Vence ${#temporals.format(q.vencimiento, 'dd/MM/yyyy')}|">Vence</span>
+						<span th:replace="~{fragments/componentes :: badge(${q.estadoEtiqueta}, ${q.estadoVariante})}"></span>
+					</span>
+					<span class="cuota-saldo"><span th:replace="~{fragments/componentes :: monto(${q.saldo})}"></span></span>
+				</label>
+			</div>
+		</section>
+
+		<section class="tarjeta" aria-labelledby="titulo-sustento">
+			<h2 id="titulo-sustento">Motivo y sustento</h2>
+			<div class="campo">
+				<label for="motivo">Motivo (obligatorio)</label>
+				<textarea class="input" id="motivo" name="motivo" required minlength="10" maxlength="500"></textarea>
+			</div>
+			<div class="campo">
+				<label for="sustento">Sustento (obligatorio)</label>
+				<input class="input" type="text" id="sustento" name="sustento" required minlength="5" maxlength="200"
+					autocomplete="off" aria-describedby="sustento-ayuda">
+				<p class="ayuda" id="sustento-ayuda">Por ejemplo: «Reglamento de pensiones, art. 12» o «Acta de Dirección N.° 3-2026».</p>
+			</div>
+			<div class="acciones acciones-izquierda">
+				<button th:replace="~{fragments/componentes :: boton('Revisar descuento', 'primario')}"></button>
+			</div>
+		</section>
+	</form>
+</main>
+</body>
+</html>

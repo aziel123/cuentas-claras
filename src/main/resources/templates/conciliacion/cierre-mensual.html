@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cierre bancario del mes', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="cierre-mensual">
+	<div class="cabecera">
+		<div>
+			<h1 th:text="|Cierre de ${cierre.periodo}|">Cierre de noviembre de 2026</h1>
+			<p class="secundario" th:text="${cierre.cuenta}">BCP · cuenta corriente</p>
+		</div>
+		<span th:replace="~{fragments/componentes :: badge(${cierre.estado}, ${cierre.variante})}"></span>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" th:if="${cierre.abierto and cierre.puedeRegistrar}">
+		<h2>Escribe los números del estado de cuenta oficial</h2>
+		<p class="secundario" th:text="|Con el estado de cuenta oficial de ${cierre.periodo} que te envió el banco, escribe el total de abonos, el total de cargos y el saldo final. Te quedan ${cierre.intentosRestantes} intento(s).|">Te quedan 2 intentos.</p>
+		<form method="post" class="formulario" th:action="@{/conciliacion/cierres-mensuales/{id}(id=${cierre.id})}" autocomplete="off">
+			<input type="hidden" name="version" th:value="${cierre.version}">
+			<div class="campo">
+				<label for="abonos">Total de abonos (S/)</label>
+				<input class="input num" id="abonos" name="abonos" type="number" step="0.01" min="0" inputmode="decimal" required>
+			</div>
+			<div class="campo">
+				<label for="cargos">Total de cargos (S/)</label>
+				<input class="input num" id="cargos" name="cargos" type="number" step="0.01" min="0" inputmode="decimal" required>
+			</div>
+			<div class="campo">
+				<label for="saldo">Saldo final (S/)</label>
+				<input class="input num" id="saldo" name="saldo" type="number" step="0.01" inputmode="decimal" required>
+			</div>
+			<div class="acciones acciones-izquierda">
+				<button type="submit" class="btn btn-primario">Comprobar el cierre</button>
+			</div>
+		</form>
+	</section>
+
+	<th:block th:if="${cierre.abierto and !cierre.puedeRegistrar}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${cierre.motivoNoPuede})}"></div>
+	</th:block>
+
+	<section class="tarjeta" th:unless="${cierre.abierto}">
+		<h2>Resultado</h2>
+		<p>Total de abonos: <span th:replace="~{fragments/componentes :: monto(${cierre.totalAbonos})}"></span></p>
+		<p>Total de cargos: <span th:replace="~{fragments/componentes :: monto(${cierre.totalCargos})}"></span></p>
+		<p>Saldo final: <span th:replace="~{fragments/componentes :: monto(${cierre.saldoFinal})}"></span></p>
+		<p class="secundario" th:if="${cierre.registradoPor != null}" th:text="|Lo escribió ${cierre.registradoPor}.|">Lo escribió director.</p>
+	</section>
+</main>
+</body>
+</html>

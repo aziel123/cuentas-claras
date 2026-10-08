@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Estado de cuenta', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-estado-de-cuenta" th:with="e=${estado}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta" th:text="${e.familia}">Familia Quispe Huamán</p>
+			<h1>Estado de cuenta</h1>
+			<p class="secundario">Todas las cuotas de tus hijos, con sus pagos, anulaciones y descuentos. Si ves algo que no reconoces, avísanos.</p>
+		</div>
+	</div>
+
+	<ul class="conteos" aria-label="Resumen">
+		<li><span class="monto num" th:text="|S/ ${#numbers.formatDecimal(e.totalPendiente, 1, 'COMMA', 2, 'POINT')}|">S/ 760.00</span><span>Por pagar</span></li>
+		<li th:classappend="${e.totalVencido.signum() > 0} ? 'conteo-peligro'"><span class="monto num" th:text="|S/ ${#numbers.formatDecimal(e.totalVencido, 1, 'COMMA', 2, 'POINT')}|">S/ 0.00</span><span>Vencido</span></li>
+	</ul>
+
+	<th:block th:if="${#lists.isEmpty(e.hijos)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay cuotas', 'Cuando el colegio genere las cuotas de tus hijos, las verás aquí.')}"></div>
+	</th:block>
+
+	<div class="pestanas-hijos">
+		<section class="tarjeta" th:each="h : ${e.hijos}" th:aria-label="${h.nombre}" th:data-hijo="${h.alumnoId}">
+			<h2 th:text="${h.nombre}">Ana Quispe</h2>
+			<details th:each="a, it : ${h.anios}" th:open="${it.first}">
+				<summary th:text="|${a.anio} · por pagar S/ ${#numbers.formatDecimal(a.saldo, 1, 'COMMA', 2, 'POINT')}|">2026 · por pagar S/ 380.00</summary>
+				<ul class="cuotas-familia">
+					<li th:each="c : ${a.cuotas}" th:data-cuota="${c.id}">
+						<div class="cuota-cabecera">
+							<strong th:text="${c.descripcion}">Pensión marzo 2026</strong>
+							<span th:replace="~{fragments/componentes :: monto(${c.monto})}"></span>
+						</div>
+						<div class="fila">
+							<span th:replace="~{fragments/componentes :: badge(${c.estado}, ${c.variante})}"></span>
+							<span class="secundario" th:text="|Vence ${#temporals.format(c.vencimiento, 'dd/MM/yyyy')}|">Vence 31/03/2026</span>
+						</div>
+						<p class="secundario" th:if="${c.descuento.signum() > 0}" th:text="|Descuento: S/ ${#numbers.formatDecimal(c.descuento, 1, 'COMMA', 2, 'POINT')}|">Descuento: S/ 50.00</p>
+						<p class="secundario" th:if="${c.saldo.signum() > 0}" th:text="|Falta pagar: S/ ${#numbers.formatDecimal(c.saldo, 1, 'COMMA', 2, 'POINT')}|">Falta pagar</p>
+						<p class="secundario texto-largo" th:each="p : ${c.pagadaCon}" th:text="${p}">B001-00000231 · 05/10/2026 · Yape · en caja</p>
+						<p class="texto-largo" th:if="${c.anulacion != null}" th:text="${c.anulacion}" data-anulacion>Anulada. Motivo: ... Aprobó: Dirección</p>
+					</li>
+				</ul>
+			</details>
+		</section>
+	</div>
+
+	<section class="tarjeta" aria-labelledby="titulo-pagos">
+		<h2 id="titulo-pagos">Pagos</h2>
+		<th:block th:if="${#lists.isEmpty(e.pagos)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay pagos', 'Cuando pagues, aquí verás cada pago con su boleta.')}"></div>
+		</th:block>
+		<ul class="cuotas-familia" th:unless="${#lists.isEmpty(e.pagos)}">
+			<li th:each="p : ${e.pagos}">
+				<div class="cuota-cabecera">
+					<a th:href="@{/familia/comprobantes/{id}(id=${p.comprobanteId})}" th:text="${p.comprobante}">B001-00000231</a>
+					<span th:replace="~{fragments/componentes :: monto(${p.total})}"></span>
+				</div>
+				<span class="secundario" th:text="|${#temporals.format(p.fecha, 'dd/MM/yyyy')} · ${p.medio} · ${p.registradoPor}|">05/10/2026 · Yape · en caja</span>
+				<p class="texto-largo" th:if="${p.anulacion != null}" th:text="${p.anulacion}" data-anulacion>Anulado. Motivo: ... Aprobó: Dirección</p>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-descuentos" th:unless="${#lists.isEmpty(e.descuentos)}">
+		<h2 id="titulo-descuentos">Descuentos y becas</h2>
+		<ul class="cuotas-familia">
+			<li th:each="d : ${e.descuentos}" data-descuento>
+				<div class="cuota-cabecera">
+					<strong th:text="|${d.tipo} · ${d.alumno}|">Hermanos · Ana</strong>
+					<span th:replace="~{fragments/componentes :: monto(${d.total})}"></span>
+				</div>
+				<span class="secundario" th:text="|${d.valor} · aprobó: ${d.aprobo}|">10 % · aprobó: Dirección</span>
+			</li>
+		</ul>
+	</section>
+
+	<p class="fila">
+		<a class="btn btn-secundario" th:href="@{/familia/algo-no-cuadra}">¿Algo no cuadra? Avísanos</a>
+		<a class="btn btn-texto" th:href="@{/familia}">Volver</a>
+	</p>
+</main>
+</body>
+</html>

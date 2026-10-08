@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cronogramas', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" th:with="p=${pendientes}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/pensiones}">Pensiones</a></p>
+			<h1>Cronogramas pendientes</h1>
+			<p class="secundario">Los cronogramas se generan solos al aprobar un plan y al matricular. Este botón es una red de
+				seguridad: puedes usarlo las veces que quieras, nunca duplica cuotas.</p>
+		</div>
+		<form class="filtros" method="get" th:action="@{/pensiones/cronogramas}" th:if="${p.anio != null}">
+			<div class="campo">
+				<label for="anio">Año escolar</label>
+				<select class="input" id="anio" name="anio">
+					<option th:each="a : ${p.anios}" th:value="${a.id}" th:selected="${a.id == p.anio.id}" th:text="${a.anio}">2027</option>
+				</select>
+			</div>
+			<button type="submit" class="btn btn-secundario">Ver</button>
+		</form>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${p.anio == null}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay años escolares', 'Primero crea el año en «Colegio».')}"></div>
+	</th:block>
+
+	<section class="tarjeta" th:if="${p.anio != null}" aria-labelledby="titulo-pendientes">
+		<h2 id="titulo-pendientes" th:text="|Matrículas activas ${p.anio.anio} sin cronograma: ${p.total}|">Matrículas sin cronograma: 0</h2>
+		<table class="tabla">
+			<thead><tr><th scope="col">Nivel</th><th scope="col">Plan vigente</th><th scope="col" class="num">Sin cronograma</th></tr></thead>
+			<tbody>
+				<tr th:each="n : ${p.niveles}" th:data-nivel="${n.nivel}">
+					<td data-etiqueta="Nivel" th:text="${n.etiqueta}">Primaria</td>
+					<td data-etiqueta="Plan vigente">
+						<span th:if="${n.planVigente != null}" th:text="${n.planVigente}">Plan Primaria 2027 v1</span>
+						<span th:if="${n.planVigente == null}" class="badge badge-alerta">Sin plan aprobado</span>
+					</td>
+					<td data-etiqueta="Sin cronograma" class="num" th:text="${n.matriculas}">0</td>
+				</tr>
+			</tbody>
+		</table>
+		<p class="secundario" th:if="${p.total > p.generables}">Las matrículas de un nivel sin plan aprobado se generan cuando
+			se apruebe su plan.</p>
+		<form method="post" th:if="${p.puedeGenerar}" th:action="@{/pensiones/cronogramas/generar(anio=${p.anio.id})}" class="acciones acciones-izquierda">
+			<button th:replace="~{fragments/componentes :: boton('Generar pendientes', 'primario')}"></button>
+		</form>
+	</section>
+</main>
+</body>
+</html>

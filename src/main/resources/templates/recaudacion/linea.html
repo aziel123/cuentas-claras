@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Pago por banco', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="recaudacion-linea" th:with="l=${l}" th:attr="data-estado=${l.estado}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/recaudacion/lotes/{id}(id=${l.loteId})}" th:text="|Lote N.° ${l.loteId}|">Lote</a></p>
+			<h1 th:text="|Pago por banco · línea ${l.numero}|">Pago por banco</h1>
+			<p class="secundario" th:text="|Pagado el ${#temporals.format(l.fecha, 'dd/MM/yyyy')} con el código ${l.codigo}${l.alumno != null ? ' (' + l.alumno + ')' : ''}|">Pagado</p>
+		</div>
+		<span th:replace="~{fragments/componentes :: badge(${l.etiqueta}, ${l.critica} ? 'peligro' : ${l.variante})}"></span>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-motivo" th:if="${l.motivo != null}">
+		<h2 id="titulo-motivo">Por qué no se aplicó solo</h2>
+		<div th:replace="~{fragments/componentes :: alerta(${l.critica} ? 'error' : 'advertencia', ${l.motivo})}"></div>
+		<p class="secundario" th:if="${l.detalle != null}" th:text="${l.detalle}">Detalle</p>
+		<p th:if="${l.contacto != null}">Antes de decidir, llama a la familia: <strong th:text="${l.contacto}">999 999 999</strong></p>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-datos">
+		<h2 id="titulo-datos">Lo que dice el banco</h2>
+		<dl class="datos">
+			<dt>Monto</dt><dd th:text="${l.moneda == 'PEN'} ? ${'S/ ' + #numbers.formatDecimal(l.monto, 1, 'COMMA', 2, 'POINT')} : ${l.moneda + ' ' + l.monto}">S/ 450.00</dd>
+			<dt>N.° de operación</dt><dd th:text="${l.operacion}">123456</dd>
+			<dt>Código de pago</dt><dd class="num" th:text="${l.codigo}">1000 0016</dd>
+			<dt>Familia del código</dt><dd th:text="${l.familia} ?: 'El código no corresponde a ningún alumno'">Familia</dd>
+			<dt th:if="${l.comprobante != null}">Boleta</dt><dd th:if="${l.comprobante != null}" th:text="${l.comprobante}">B001-1</dd>
+			<dt th:if="${l.devolucion != null}">Devolución</dt><dd th:if="${l.devolucion != null}" th:text="${l.devolucion}">—</dd>
+		</dl>
+		<th:block th:unless="${#lists.isEmpty(l.solicitudes)}">
+			<h3>Solicitudes pendientes</h3>
+			<ul class="lista-simple">
+				<li th:each="s : ${l.solicitudes}" th:text="${s}">Aplicar ingreso (pedida por admin)</li>
+			</ul>
+		</th:block>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-otro" th:if="${l.puedePedir and l.puedeAplicar}">
+		<h2 id="titulo-otro">¿El código estaba errado?</h2>
+		<p class="secundario">Si al llamar a la familia te dicen el código correcto de su hijo, escríbelo para ver las cuotas de esa familia.</p>
+		<form method="get" th:action="@{/recaudacion/lineas/{id}(id=${l.id})}" class="formulario formulario-angosto">
+			<div class="campo">
+				<label for="codigo">Código de pago correcto (8 dígitos)</label>
+				<input class="input num" type="text" inputmode="numeric" id="codigo" name="codigo" th:value="${l.codigoDestino}" maxlength="12" autocomplete="off">
+			</div>
+			<button th:replace="~{fragments/componentes :: boton('Ver cuotas de esa familia', 'secundario')}"></button>
+		</form>
+	</section>
+
+	<form method="post" th:action="@{/recaudacion/lineas/{id}/aplicar(id=${l.id})}" class="formulario"
+		th:if="${l.puedePedir and l.puedeAplicar and l.familiaDestinoId != null}" data-formulario="aplicar">
+		<input type="hidden" name="familiaId" th:value="${l.familiaDestinoId}">
+		<section class="tarjeta" aria-labelledby="titulo-aplicar">
+			<h2 id="titulo-aplicar" th:text="|Pedir aplicar el pago a cuotas de ${l.familiaDestino}|">Pedir aplicar el pago</h2>
+			<p class="secundario">Promotoría o Dirección lo aprueban; el pago lo registra el sistema, no tú.</p>
+			<th:block th:if="${#lists.isEmpty(l.cuotasDestino)}">
+				<div th:replace="~{fragments/componentes :: estadoVacio('La familia no tiene cuotas por pagar', 'Si no corresponde aplicarlo, pide la devolución.')}"></div>
+			</th:block>
+			<div class="lista-cuotas">
+				<label class="cuota-opcion" th:each="q : ${l.cuotasDestino}" th:data-cuota="${q.id}">
+					<input type="checkbox" name="cuotaIds" th:value="${q.id}">
+					<span class="cuota-datos">
+						<strong th:text="${q.descripcion}">Pensión octubre 2026</strong>
+						<span class="secundario" th:text="|${q.alumno} · vence ${#temporals.format(q.vencimiento, 'dd/MM/yyyy')}|">Mateo</span>
+					</span>
+					<span class="cuota-saldo"><span th:replace="~{fragments/componentes :: monto(${q.saldo})}"></span></span>
+				</label>
+			</div>
+			<div class="campo">
+				<label for="motivo-aplicar">Motivo (obligatorio)</label>
+				<textarea class="input" id="motivo-aplicar" name="motivo" required minlength="10" maxlength="500" aria-describedby="motivo-aplicar-ayuda"></textarea>
+				<p class="ayuda" id="motivo-aplicar-ayuda">Por ejemplo: «Llamé a la Sra. Rosa; se equivocó en un dígito del código». Quedará en la auditoría.</p>
+			</div>
+			<div class="acciones acciones-izquierda">
+				<button th:replace="~{fragments/componentes :: boton('Pedir aplicación', 'primario')}"></button>
+			</div>
+		</section>
+	</form>
+
+	<section class="tarjeta" aria-labelledby="titulo-devolver" th:if="${l.puedePedir}">
+		<h2 id="titulo-devolver">Pedir la devolución</h2>
+		<p class="secundario">Si el pago no corresponde a ninguna deuda, se devuelve por transferencia a quien lo hizo. Escribe la cuenta de quien pagó (la confirma la familia): quien aprueba la ve, y la transferencia la hace otra persona de Administración (no tú), que registra su número. La conciliación espera ver ese cargo en el banco.</p>
+		<form method="post" th:action="@{/recaudacion/lineas/{id}/devolver(id=${l.id})}" class="formulario" data-formulario="pedir-devolucion">
+			<div class="campo">
+				<label for="devolver-banco">Banco de destino</label>
+				<input class="input" type="text" id="devolver-banco" name="banco" required maxlength="20" autocomplete="off">
+			</div>
+			<div class="campo">
+				<label for="devolver-cuenta">Cuenta o CCI de destino</label>
+				<input class="input" type="text" id="devolver-cuenta" name="cuenta" required maxlength="30" inputmode="numeric" autocomplete="off">
+			</div>
+			<div class="campo">
+				<label for="devolver-titular">Titular de la cuenta (quien pagó)</label>
+				<input class="input" type="text" id="devolver-titular" name="titular" required minlength="5" maxlength="120" autocomplete="off">
+			</div>
+			<div class="campo">
+				<label for="devolver-motivo">Motivo (obligatorio)</label>
+				<textarea class="input" id="devolver-motivo" name="motivo" required minlength="10" maxlength="500"></textarea>
+			</div>
+			<button th:replace="~{fragments/componentes :: boton('Pedir devolución', 'secundario')}"></button>
+		</form>
+	</section>
+
+	<form method="post" th:action="@{/recaudacion/lineas/{id}/devolucion(id=${l.id})}" class="formulario formulario-angosto tarjeta"
+		th:if="${l.devolucionPorEjecutar}" data-formulario="devolucion">
+		<h2>Registrar la devolución aprobada</h2>
+		<p class="secundario" th:text="${l.devolucionDestino != null} ? |Transfiere a ${l.devolucionDestino}. La registra una persona de Administración distinta de quien la pidió y de quien la aprobó.| : 'La registra una persona de Administración distinta de quien la pidió y de quien la aprobó.'">La registra otra persona.</p>
+		<div class="campo">
+			<label for="numeroOperacion">N.° de operación de la transferencia</label>
+			<input class="input" type="text" id="numeroOperacion" name="numeroOperacion" required maxlength="40" autocomplete="off">
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Registrar devolución', 'primario')}"></button>
+	</form>
+</main>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Mensajes', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-mensajes">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Mi familia</p>
+			<h1>Mensajes del colegio</h1>
+			<p class="secundario">Cada pago, anulación o descuento te llega por WhatsApp o correo. Si pagaste y no recibiste tu mensaje en 1 hora, o ves algo que no reconoces, avisa al colegio.</p>
+		</div>
+	</div>
+
+	<th:block th:if="${#lists.isEmpty(mensajes)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay mensajes', 'Cuando el colegio registre un pago, aquí verás el aviso que te llegó.')}"></div>
+	</th:block>
+	<ul class="lista-simple" th:unless="${#lists.isEmpty(mensajes)}">
+		<li th:each="m : ${mensajes}" th:data-mensaje="${m.id}">
+			<span class="secundario" th:text="|${#temporals.format(m.creadoEn, 'dd/MM/yyyy HH:mm')} · ${m.tipo} · ${m.canal}|">05/10/2026 10:40 · Pago registrado · WhatsApp</span>
+			<span th:text="${m.texto}">Registramos su pago</span>
+			<span th:replace="~{fragments/componentes :: badge(${m.estado}, ${m.variante})}"></span>
+		</li>
+	</ul>
+	<p><a class="btn btn-secundario" th:href="@{/familia}">Volver</a></p>
+</main>
+</body>
+</html>

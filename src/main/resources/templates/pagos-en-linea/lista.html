@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Pagos en línea', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="pagos-en-linea" th:with="p=${pagos}">
+	<div class="cabecera">
+		<div>
+			<h1>Pagos en línea</h1>
+			<p class="secundario">Lo que las familias pagaron desde su celular. Nadie los digita: los registra el sistema cuando la pasarela confirma.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<th:block th:if="${p.simulada}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', 'La pasarela es SIMULADA: estos pagos no son dinero real.')}"></div>
+	</th:block>
+	<th:block th:unless="${p.pasarelaActiva}">
+		<div th:replace="~{fragments/componentes :: alerta('info', 'El pago en línea no está activado para las familias.')}"></div>
+	</th:block>
+
+	<ul class="conteos conteos-montos" aria-label="Resumen de hoy">
+		<li><strong><span th:replace="~{fragments/componentes :: monto(${p.totalHoy})}"></span></strong><span>Entró hoy en línea</span></li>
+		<li><strong th:text="${#lists.size(p.porRevisar)}">0</strong><span>Por revisar</span></li>
+		<li><strong th:text="${#lists.size(p.enCurso)}">0</strong><span>En curso</span></li>
+	</ul>
+
+	<section class="tarjeta" aria-labelledby="titulo-revisar" data-seccion="por-revisar">
+		<h2 id="titulo-revisar">Por revisar</h2>
+		<p class="secundario">El dinero entró pero no se pudo aplicar solo. Llama a la familia antes de pedir aplicarlo o devolverlo.</p>
+		<th:block th:if="${#lists.isEmpty(p.porRevisar)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Nada por revisar', 'Todos los pagos en línea se aplicaron solos.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(p.porRevisar)}">
+			<thead><tr><th scope="col">Referencia</th><th scope="col">Familia</th><th scope="col" class="num">Monto</th>
+				<th scope="col">Motivo</th><th scope="col">Solicitud</th></tr></thead>
+			<tbody>
+				<tr th:each="f : ${p.porRevisar}" th:data-orden="${f.id}">
+					<td data-etiqueta="Referencia"><a th:href="@{/pagos-en-linea/{id}(id=${f.id})}" th:text="${f.referencia}">OP-1</a>
+						<span th:if="${f.simulada}" class="badge badge-neutro">Simulado</span></td>
+					<td data-etiqueta="Familia" th:text="${f.familia}">Familia</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${f.monto})}"></span></td>
+					<td data-etiqueta="Motivo"><span th:replace="~{fragments/componentes :: badge(${f.motivo}, ${f.critica} ? 'peligro' : 'alerta')}"></span></td>
+					<td data-etiqueta="Solicitud" th:text="${f.solicitudPendiente != null} ? ${f.solicitudPendiente} : '—'">—</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-hoy">
+		<h2 id="titulo-hoy" th:text="|Pagados hoy (${#temporals.format(p.hoy, 'dd/MM/yyyy')})|">Pagados hoy</h2>
+		<th:block th:if="${#lists.isEmpty(p.hoyPagadas)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay pagos en línea hoy', 'Aparecen aquí apenas la pasarela los confirma.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(p.hoyPagadas)}">
+			<thead><tr><th scope="col">Referencia</th><th scope="col">Familia</th><th scope="col" class="num">Monto</th>
+				<th scope="col">Medio</th><th scope="col">Operación</th><th scope="col">Comprobante</th></tr></thead>
+			<tbody>
+				<tr th:each="f : ${p.hoyPagadas}" th:data-orden="${f.id}">
+					<td data-etiqueta="Referencia"><a th:href="@{/pagos-en-linea/{id}(id=${f.id})}" th:text="${f.referencia}">OP-1</a>
+						<span th:if="${f.simulada}" class="badge badge-neutro">Simulado</span></td>
+					<td data-etiqueta="Familia" th:text="${f.familia}">Familia</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${f.monto})}"></span></td>
+					<td data-etiqueta="Medio" th:text="${f.medio}">Yape</td>
+					<td data-etiqueta="Operación" th:text="${f.operacion}">123</td>
+					<td data-etiqueta="Comprobante" th:text="${f.comprobante != null} ? ${f.comprobante} : '—'">B001-1</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-curso" th:unless="${#lists.isEmpty(p.enCurso) and #lists.isEmpty(p.vencidas)}">
+		<h2 id="titulo-curso">En curso y vencidas</h2>
+		<table class="tabla">
+			<thead><tr><th scope="col">Referencia</th><th scope="col">Familia</th><th scope="col" class="num">Monto</th>
+				<th scope="col">Estado</th><th scope="col">Creada</th></tr></thead>
+			<tbody>
+				<tr th:each="f : ${p.enCurso}" th:data-orden="${f.id}">
+					<td data-etiqueta="Referencia"><a th:href="@{/pagos-en-linea/{id}(id=${f.id})}" th:text="${f.referencia}">OP-1</a></td>
+					<td data-etiqueta="Familia" th:text="${f.familia}">Familia</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${f.monto})}"></span></td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${f.etiqueta}, ${f.variante})}"></span></td>
+					<td data-etiqueta="Creada" th:text="${#temporals.format(f.creadaEn, 'dd/MM HH:mm')}">06/10 10:00</td>
+				</tr>
+				<tr th:each="f : ${p.vencidas}" th:data-orden="${f.id}">
+					<td data-etiqueta="Referencia"><a th:href="@{/pagos-en-linea/{id}(id=${f.id})}" th:text="${f.referencia}">OP-1</a></td>
+					<td data-etiqueta="Familia" th:text="${f.familia}">Familia</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${f.monto})}"></span></td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${f.etiqueta}, ${f.variante})}"></span></td>
+					<td data-etiqueta="Creada" th:text="${#temporals.format(f.creadaEn, 'dd/MM HH:mm')}">06/10 10:00</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

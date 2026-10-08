@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: publica('Confirma tu contacto', ~{::main})}">
+<body>
+<main id="contenido" class="contenido-publico">
+	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-verificar">
+		<th:block th:if="${verificado != null}">
+			<h1 id="titulo-verificar">Contacto confirmado</h1>
+			<div th:replace="~{fragments/componentes :: alerta('exito', 'Listo: desde ahora recibirás aquí los avisos de pagos del colegio.')}"></div>
+		</th:block>
+		<th:block th:if="${verificado == null and vista == null}">
+			<h1 id="titulo-verificar">Este enlace ya no sirve</h1>
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', 'El enlace se usó, venció o se reemplazó por otro. Si no fuiste tú quien lo usó, avisa al colegio.')}"></div>
+		</th:block>
+		<th:block th:if="${verificado == null and vista != null}">
+			<div>
+				<h1 id="titulo-verificar">Confirma tu contacto</h1>
+				<p class="secundario" th:text="|Hola, ${vista.nombre}. Confirma que ${vista.contacto} es tuyo para recibir los avisos de pagos del colegio.|">Hola</p>
+			</div>
+			<th:block th:if="${error != null}">
+				<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+			</th:block>
+			<form class="formulario" method="post" th:action="@{/verificar/{c}/{t}(c=${colegio},t=${token})}">
+				<div class="campo">
+					<label for="documento">Tu número de documento</label>
+					<input type="text" class="input" id="documento" name="documento" inputmode="numeric" maxlength="20"
+						required autofocus>
+				</div>
+				<button type="submit" class="btn btn-primario btn-bloque">Confirmar que es mío</button>
+			</form>
+			<p class="ayuda">Si no reconoces este mensaje, no uses el enlace y avisa al colegio.</p>
+		</th:block>
+	</section>
+</main>
+</body>
+</html>

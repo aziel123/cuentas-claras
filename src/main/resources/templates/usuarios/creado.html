@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Enlace enviado', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="usuario-enlace-enviado">
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-creado">
+		<div>
+			<p class="etiqueta">Usuarios y roles</p>
+			<h1 id="titulo-creado" th:text="${restablecida} ? 'Acceso restablecido' : 'Usuario creado'">Usuario creado</h1>
+			<p class="secundario" th:text="|${creado.nombreCompleto} · usuario ${creado.nombreUsuario}|">Lucía Ramos · usuario lucia.ramos</p>
+		</div>
+
+		<div th:replace="~{fragments/componentes :: alerta('exito', ${creado.enviadoA()})}"></div>
+
+		<p class="secundario" th:text="|El enlace sirve una sola vez y vence el ${#temporals.format(creado.venceEn, 'dd/MM')} a las ${#temporals.format(creado.venceEn, 'HH:mm')}. Con él, la persona elige su propia clave: nadie más la conoce, tampoco tú.|">Vence</p>
+
+		<div class="acciones">
+			<a class="btn btn-secundario" th:href="@{/usuarios/{id}(id=${creado.id})}">Ver usuario</a>
+			<a class="btn btn-primario" th:href="@{/usuarios}">Listo</a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

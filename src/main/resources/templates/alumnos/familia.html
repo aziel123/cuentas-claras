@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Familia', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/alumnos}">Alumnos</a></p>
+			<h1 th:text="${familia.nombre}">Familia Quispe Huamán</h1>
+			<p class="secundario">Los hermanos comparten familia. Cada alumno tiene un responsable de pago de su familia.</p>
+		</div>
+		<th:block th:if="${puedeEditar}">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Registrar hermano', @{/alumnos/nuevo(familia=${familia.id})}, 'primario')}"></a>
+		</th:block>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-solicitudes" th:unless="${#lists.isEmpty(familia.solicitudesPendientes)}" data-solicitudes-pendientes>
+		<h2 id="titulo-solicitudes">Esperando aprobación</h2>
+		<p class="secundario">Estos cambios los aprueba otra persona de Promotoría o Dirección en Aprobaciones. Hasta entonces no se aplican.</p>
+		<ul class="lista-simple">
+			<li th:each="s : ${familia.solicitudesPendientes}" th:text="${s}">Retiro de alumno: Retirar a Mateo desde el 01/10/2026</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-alumnos">
+		<h2 id="titulo-alumnos">Alumnos</h2>
+		<p class="secundario" th:if="${#lists.isEmpty(familia.alumnos)}">Esta familia ya no tiene alumnos.</p>
+		<table class="tabla" th:unless="${#lists.isEmpty(familia.alumnos)}">
+			<thead>
+				<tr><th scope="col">Alumno</th><th scope="col">Sección</th><th scope="col">Responsable de pago</th><th scope="col">Estado</th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="h : ${familia.alumnos}">
+					<td data-etiqueta="Alumno"><a th:href="@{/alumnos/{id}(id=${h.id})}" th:text="${h.nombreCompleto}">Mateo</a></td>
+					<td data-etiqueta="Sección" th:text="${h.seccion} ?: 'Sin matrícula este año'">5.° Primaria A · 2026</td>
+					<td data-etiqueta="Responsable de pago" th:text="${h.responsablePago}">Rosa Huamán Ccori</td>
+					<td data-etiqueta="Estado"><span class="badge" th:classappend="${h.estado.name() == 'ACTIVO'} ? 'badge-exito' : 'badge-neutro'" th:text="${h.estadoEtiqueta}">Activo</span></td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-apoderados">
+		<h2 id="titulo-apoderados">Apoderados</h2>
+		<ul class="lista-tarjetas">
+			<li class="persona" th:each="a : ${familia.apoderados}" th:classappend="${!a.activo} ? 'persona-inactiva'" th:data-apoderado="${a.id}">
+				<div class="fila entre">
+					<p><strong th:text="${a.nombreCompleto}">Rosa Huamán Ccori</strong>
+						<span class="secundario" th:text="|· ${a.parentescoEtiqueta}|">· Madre</span></p>
+					<span class="fila">
+						<span class="badge badge-info" th:if="${a.esResponsable()}">Responsable de pago</span>
+						<span class="badge badge-neutro" th:unless="${a.activo}">Desactivado</span>
+					</span>
+				</div>
+				<p class="secundario num" th:text="${a.documento}">DNI 45678912</p>
+				<p class="fila">
+					<span th:if="${a.telefonoWhatsapp != null}" th:text="|WhatsApp ${a.telefonoWhatsapp}|">WhatsApp +51987654321</span>
+					<span th:if="${a.correo != null}" th:text="${a.correo}">rosa@gmail.com</span>
+				</p>
+				<p class="secundario" th:if="${a.esResponsable()}" th:text="|Paga por: ${#strings.listJoin(a.responsableDe, ', ')}|">Paga por: Mateo</p>
+				<p class="secundario num" th:if="${a.ruc != null}" th:text="|Factura con RUC ${a.ruc} · ${a.razonSocial}|">Factura con RUC 20131312955</p>
+				<p class="secundario" th:if="${a.contactoPendiente}">Contacto sin confirmar: no recibe avisos hasta que abra el enlace que le enviamos.</p>
+				<form class="fila" th:if="${puedeEditar and a.contactoPendiente}" method="post"
+					th:action="@{/alumnos/apoderados/{id}/verificacion(id=${a.id}, familiaId=${familia.id})}">
+					<button type="submit" class="btn btn-secundario btn-chico"
+						th:aria-label="|Reenviar el enlace de confirmación a ${a.nombreCompleto}|">Reenviar confirmación</button>
+				</form>
+				<form class="fila" th:if="${puedeRestablecerAcceso and conCuentaEnLinea.contains(a.id)}" method="post"
+					th:action="@{/alumnos/apoderados/{id}/acceso/restablecer(id=${a.id}, familiaId=${familia.id})}">
+					<button type="submit" class="btn btn-secundario btn-chico"
+						th:aria-label="|Restablecer el acceso en línea de ${a.nombreCompleto}|">Restablecer acceso en línea</button>
+				</form>
+				<div class="fila" th:if="${puedeEditar and a.activo}">
+					<a class="btn btn-secundario btn-chico" th:href="@{/alumnos/apoderados/{id}(id=${a.id})}"
+						th:aria-label="|Corregir datos de ${a.nombreCompleto}|">Corregir datos</a>
+					<button type="button" class="btn btn-texto btn-chico" th:popovertarget="|modal-ruc-${a.id}|"
+						th:text="${a.ruc == null} ? 'Registrar RUC' : 'Cambiar RUC'">Registrar RUC</button>
+					<div class="modal" th:id="|modal-ruc-${a.id}|" popover role="dialog" aria-modal="true"
+						th:aria-labelledby="|modal-ruc-${a.id}-titulo|">
+						<form method="post" th:action="@{/alumnos/apoderados/{id}/facturacion(id=${a.id})}" class="modal-cuerpo">
+							<h2 th:id="|modal-ruc-${a.id}-titulo|" th:text="|RUC para facturas de ${a.nombreCompleto}|">RUC</h2>
+							<p>Queda pendiente hasta que otra persona de Promotoría o Dirección lo apruebe. Solo con un RUC
+								aprobado se emite factura en caja.</p>
+							<div class="campo">
+								<label th:for="|modal-ruc-${a.id}-ruc|">RUC</label>
+								<input class="input num" type="text" th:id="|modal-ruc-${a.id}-ruc|" name="ruc" required
+									inputmode="numeric" pattern="\d{11}" maxlength="11" autocomplete="off">
+							</div>
+							<div class="campo">
+								<label th:for="|modal-ruc-${a.id}-razon|">Razón social (como figura en SUNAT)</label>
+								<input class="input" type="text" th:id="|modal-ruc-${a.id}-razon|" name="razonSocial" required
+									minlength="3" maxlength="150" autocomplete="off">
+							</div>
+							<div class="campo">
+								<label th:for="|modal-ruc-${a.id}-motivo|">Motivo (obligatorio)</label>
+								<textarea class="input" th:id="|modal-ruc-${a.id}-motivo|" name="motivo" required minlength="10"
+									maxlength="500"></textarea>
+							</div>
+							<div class="acciones">
+								<button type="button" class="btn btn-secundario" th:popovertarget="|modal-ruc-${a.id}|"
+									popovertargetaction="hide">Cancelar</button>
+								<button type="submit" class="btn btn-primario">Pedir aprobación</button>
+							</div>
+						</form>
+					</div>
+					<th:block th:unless="${a.esResponsable()}">
+						<th:block th:replace="~{fragments/componentes :: modalMotivo(${'modal-desactivar-' + a.id},
+							|¿Desactivar a ${a.nombreCompleto}?|, 'Ya no podrá ser responsable de pago. Sus datos se conservan.',
+							@{/alumnos/apoderados/{id}/desactivar(id=${a.id}, familiaId=${familia.id})}, 'Desactivar', 'texto', 'Desactivar apoderado')}"></th:block>
+					</th:block>
+				</div>
+			</li>
+		</ul>
+
+		<details class="desplegable" th:if="${puedeEditar}" th:open="${formularioAbierto}">
+			<summary>Agregar apoderado</summary>
+			<form class="formulario" th:action="@{/alumnos/familias/{id}/apoderados(id=${familia.id})}" th:object="${nuevoApoderado}" method="post">
+				<div th:replace="~{alumnos/campos-apoderado :: campos}"></div>
+				<div class="acciones">
+					<button th:replace="~{fragments/componentes :: boton('Agregar apoderado', 'primario')}"></button>
+				</div>
+			</form>
+		</details>
+	</section>
+
+	<section class="tarjeta" th:if="${puedeEditar}" aria-labelledby="titulo-nombre">
+		<h2 id="titulo-nombre">Nombre de la familia</h2>
+		<form class="filtros" method="post" th:action="@{/alumnos/familias/{id}/nombre(id=${familia.id})}">
+			<div class="campo campo-ancho">
+				<label for="nombre-familia">Nombre</label>
+				<input class="input" type="text" id="nombre-familia" name="nombre" th:value="${familia.nombre}" maxlength="120" required>
+			</div>
+			<button type="submit" class="btn btn-secundario">Cambiar nombre</button>
+		</form>
+	</section>
+</main>
+</body>
+</html>

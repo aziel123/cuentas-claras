@@ -6,3 +6,35 @@ spring:
     password: ""
   thymeleaf:
     cache: false
+
+# En local se usa http: la cookie de sesión no puede exigir https.
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false
+
+cuentasclaras:
+  mensajeria:
+    # Sprint 5: mensajes SIMULADOS (nadie los recibe; en dev el enlace de activación sale en el log).
+    whatsapp:
+      proveedor: SIMULADO
+    correo:
+      proveedor: SIMULADO
+  auditoria:
+    # Clave fija SOLO para desarrollo local. Producción usa AUDITORIA_CLAVE_HMAC.
+    clave-hmac: clave-hmac-de-desarrollo-no-usar-en-produccion-01
+  demo:
+    # Clave de los usuarios de demostración (solo dev con H2 en memoria). Se puede cambiar con CC_DEMO_CLAVE.
+    clave: ${CC_DEMO_CLAVE:demo-cuentas-claras-2026}
+    # Años 2026 y 2027, secciones y familias de ejemplo (DatosDemoColegioDev). Con false se empieza sin datos
+    # del colegio, por ejemplo para probar desde cero la creación de años y el registro de alumnos.
+    datos-colegio: ${CC_DEMO_DATOS_COLEGIO:true}
+  pasarela:
+    # Pago en línea SIMULADO (sin dinero real) para probar el flujo completo con el usuario «apoderado».
+    proveedor: SIMULADA
+    simulada:
+      secreto-aviso: secreto-pasarela-simulada-de-desarrollo-no-usar-en-produccion
+  conciliacion:
+    # El extracto de ejemplo abona la recaudación con la glosa «ABONO RECAUD ...»: se empareja sola (EXACTA por glosa).
+    patron-abono-recaudacion: RECAUD

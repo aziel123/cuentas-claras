@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Inicio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-inicio="promotor">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Promotoría</p>
+			<h1 th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</h1>
+			<p class="secundario">Desde aquí vas a ver cuánto entra cada día, la morosidad y las alertas de caja, sin esperar al fin de mes.</p>
+		</div>
+	</div>
+
+	<th:block th:if="${avisoClave != null}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
+	</th:block>
+
+	<section class="tarjeta" th:each="ind, i : ${indicadores}" th:aria-labelledby="|titulo-indicadores-${i.index}|" data-indicadores>
+		<div class="fila entre">
+			<h2 th:id="|titulo-indicadores-${i.index}|" th:text="${ind.titulo()}">Hoy en caja · 02/10/2026</h2>
+			<a th:if="${ind.enlace() != null}" class="btn btn-texto btn-chico" th:href="@{${ind.enlace()}}" th:text="${ind.textoEnlace()}">Ver cajas del día</a>
+		</div>
+		<ul class="indicadores">
+			<li th:each="x : ${ind.indicadores()}">
+				<span class="secundario" th:text="${x.etiqueta()}">Cobrado hoy</span>
+				<strong class="num" th:text="${x.valor()}">S/ 1,250.00</strong>
+				<small class="secundario" th:text="${x.detalle()}">5 pagos</small>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta revisar" aria-labelledby="titulo-revisar">
+		<div>
+			<h2 id="titulo-revisar">Para revisar</h2>
+			<p class="secundario">Primero lo crítico (faltantes de caja, cajas sin cerrar, pagos que no aparecen en el banco
+				confirmado, abonos que nadie registró).
+				Después, claves restablecidas, usuarios creados y cambios de roles de los últimos 7 días: si algo no lo
+				reconoces, revísalo con quien lo hizo.</p>
+		</div>
+		<ul class="lista-simple alertas-revision" th:unless="${#lists.isEmpty(alertasRevision)}" data-alertas-revision>
+			<li th:each="a : ${alertasRevision}" th:classappend="${a.gravedad().name() == 'CRITICA'} ? 'alerta-critica'"
+				th:data-gravedad="${a.gravedad()}">
+				<span th:replace="~{fragments/componentes :: badge(|${a.modulo()} · ${a.gravedad().etiqueta()}|, ${a.gravedad().variante()})}"></span>
+				<span th:text="${a.texto()}">Faltante de S/ 50.00 en la caja de Lucía Ramos</span>
+				<a th:if="${a.enlace() != null}" class="btn btn-texto btn-chico" th:href="@{${a.enlace()}}">Revisar</a>
+			</li>
+		</ul>
+		<th:block th:if="${#lists.isEmpty(paraRevisar)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Nada para revisar', 'No hubo cambios de claves ni de usuarios en los últimos 7 días.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(paraRevisar)}">
+			<caption class="solo-lectores">Cambios de claves y usuarios de los últimos 7 días</caption>
+			<thead><tr><th scope="col">Cuándo</th><th scope="col">Quién</th><th scope="col">Qué hizo</th><th scope="col">A quién</th></tr></thead>
+			<tbody>
+				<tr th:each="r : ${paraRevisar}">
+					<td data-etiqueta="Cuándo" class="num" th:text="${#temporals.format(r.cuando, 'dd/MM HH:mm')}">02/10 08:15</td>
+					<td data-etiqueta="Quién" th:text="${r.quien}">director</td>
+					<td data-etiqueta="Qué hizo">
+						<span th:text="${r.accion}">Restableció la clave de un usuario</span>
+						<small class="bloque secundario" th:if="${r.cambio != null}" th:text="${r.cambio}">Roles: Caja</small>
+					</td>
+					<td data-etiqueta="A quién" th:text="${r.aQuien}">Lucía Ramos (lucia.ramos)</td>
+				</tr>
+			</tbody>
+		</table>
+		<a class="btn btn-texto btn-chico" th:href="@{/auditoria(soloRevisar=true)}">Ver todo lo marcado «Revisar» en la bitácora</a>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-modulos">
+		<h2 id="titulo-modulos">Lo que podrás hacer aquí</h2>
+		<p class="secundario">Estamos construyendo la plataforma por etapas. Cada módulo se activa cuando está listo.</p>
+		<div th:replace="~{fragments/componentes :: modulos(${menu})}"></div>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-controles">
+		<h2 id="titulo-controles">Cómo te cuida el sistema</h2>
+		<ul class="lista-controles">
+			<li>Cada sol cobrado queda registrado con su boleta y el apoderado recibe un aviso.</li>
+			<li>Nadie puede borrar un pago: solo anularlo con motivo y aprobación de Dirección.</li>
+			<li>La bitácora de auditoría guarda quién hizo qué, y puedes comprobar que nadie la alteró.</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-cuenta">
+		<h2 id="titulo-cuenta">Tu cuenta</h2>
+		<p class="secundario">Tu sesión se cierra sola tras 30 minutos sin actividad. Si ingresas desde otro equipo, se cierra la sesión anterior.</p>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Cambiar mi clave', @{/cuenta/cambiar-clave}, 'secundario')}"></a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

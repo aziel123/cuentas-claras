@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Acceso en línea', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="acceso-apoderado-creado">
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-creado">
+		<div>
+			<p class="etiqueta">Acceso en línea del apoderado</p>
+			<h1 id="titulo-creado" th:text="${restablecido} ? 'Acceso restablecido' : 'Cuenta creada'">Cuenta creada</h1>
+			<p class="secundario" th:text="|${creado.nombreCompleto} · usuario ${creado.nombreUsuario}|">Rosa Huamán · usuario 45678912</p>
+		</div>
+
+		<div th:replace="~{fragments/componentes :: alerta('exito', ${creado.enviadoA()})}"></div>
+
+		<p class="secundario" th:text="|El enlace sirve una sola vez y vence el ${#temporals.format(creado.venceEn, 'dd/MM')} a las ${#temporals.format(creado.venceEn, 'HH:mm')}. Llegó directo al contacto registrado del apoderado: nadie del colegio lo ve. Si no le llega, Promotoría restablece el acceso.|">Vence</p>
+
+		<div class="acciones">
+			<a class="btn btn-primario" th:href="@{${volverA}}">Listo</a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

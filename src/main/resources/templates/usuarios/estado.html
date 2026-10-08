@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<!--/* Estado de un usuario: siempre con texto. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<body>
+<th:block th:fragment="estado(valor)" th:switch="${valor}">
+	<span th:case="'ACTIVO'" class="badge badge-exito">Activo</span>
+	<span th:case="'CLAVE_PENDIENTE'" class="badge badge-info">Debe cambiar su clave</span>
+	<span th:case="'BLOQUEADO'" class="badge badge-alerta">Bloqueado</span>
+	<span th:case="*" class="badge badge-neutro">Desactivado</span>
+</th:block>
+</body>
+</html>

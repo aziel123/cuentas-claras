@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Corregir un pago', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="correccion" th:with="k=${correccion}, u=${base + '/' + correccion.pagoId + '/correccion'}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{${volverUrl}}" th:text="${volverTexto}">Pagos de hoy</a></p>
+			<h1 th:text="|Corregir el pago ${k.comprobante}|">Corregir el pago B001-00000001</h1>
+			<p class="secundario">El mismo dinero pasa a otras cuotas. Al aprobarse, se emite una nota de crédito y una boleta
+				nueva. Nadie borra ni edita el pago.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-pago">
+		<h2 id="titulo-pago">El pago</h2>
+		<ul class="conteos conteos-montos">
+			<li><strong><span th:replace="~{fragments/componentes :: monto(${k.total})}"></span></strong>
+				<span th:text="|${k.medio} · ${#temporals.format(k.fecha, 'dd/MM/yyyy')}|">Efectivo · 02/10/2026</span></li>
+			<li><strong th:text="${k.familiaOrigen}">Familia Quispe Huamán</strong><span>Familia que pagó</span></li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-destino">
+		<h2 id="titulo-destino">¿A qué familia pasa?</h2>
+		<p class="fila">
+			<a class="btn btn-secundario btn-chico" th:href="@{${u}(familia=${k.familiaOrigenId})}"
+				th:text="|A la misma familia (${k.familiaOrigen})|">A la misma familia</a>
+		</p>
+		<form class="buscador" method="get" th:action="@{${u}}" role="search">
+			<div class="campo">
+				<label for="q">Buscar otra familia por nombre o DNI</label>
+				<input class="input" type="search" id="q" name="q" th:value="${k.texto}" autocomplete="off" minlength="2" maxlength="80">
+			</div>
+			<button type="submit" class="btn btn-secundario">Buscar</button>
+		</form>
+		<ul class="lista-tarjetas" th:unless="${#lists.isEmpty(k.resultados)}">
+			<li th:each="r : ${k.resultados}">
+				<a class="tarjeta-enlace" th:href="@{${u}(familia=${r.familiaId})}">
+					<strong th:text="${r.alumno}">Sebastián Flores Rojas</strong>
+					<span class="secundario" th:text="${r.familia}">Familia Flores Rojas</span>
+				</a>
+			</li>
+		</ul>
+	</section>
+
+	<form method="post" th:action="@{${u}}" class="formulario" th:if="${k.familiaDestinoId != null}">
+		<input type="hidden" name="familiaId" th:value="${k.familiaDestinoId}">
+		<section class="tarjeta" aria-labelledby="titulo-cuotas">
+			<h2 id="titulo-cuotas" th:text="|Cuotas de ${k.familiaDestino}|">Cuotas</h2>
+			<th:block th:if="${k.otraFamilia()}">
+				<div th:replace="~{fragments/componentes :: alerta('advertencia',
+					'El dinero pasa a OTRA familia: quien apruebe lo verá resaltado y debería confirmarlo con ambas familias.')}"></div>
+			</th:block>
+			<p class="secundario" th:text="|Elige cuotas que sumen exactamente ${#numbers.formatDecimal(k.total, 1, 'COMMA', 2, 'POINT')} soles.|">Elige cuotas que sumen el pago.</p>
+			<th:block th:if="${#lists.isEmpty(k.cuotas)}">
+				<div th:replace="~{fragments/componentes :: estadoVacio('No tiene cuotas por pagar', 'Elige otra familia.')}"></div>
+			</th:block>
+			<div class="lista-cuotas">
+				<label class="cuota-opcion" th:each="q : ${k.cuotas}" th:data-cuota="${q.id}">
+					<input type="checkbox" name="cuotaIds" th:value="${q.id}">
+					<span class="cuota-datos">
+						<strong th:text="${q.descripcion}">Pensión diciembre 2026</strong>
+						<span class="secundario" th:text="|${q.alumno} · vence ${#temporals.format(q.vencimiento, 'dd/MM/yyyy')}|">Mateo</span>
+						<span class="badge badge-info" th:if="${q.deEstePago}">La cubre este pago</span>
+					</span>
+					<span class="cuota-saldo"><span th:replace="~{fragments/componentes :: monto(${q.saldo})}"></span></span>
+				</label>
+			</div>
+			<div class="campo">
+				<label for="motivo">Motivo (obligatorio)</label>
+				<textarea class="input" id="motivo" name="motivo" required minlength="10" maxlength="500" aria-describedby="motivo-ayuda"></textarea>
+				<p class="ayuda" id="motivo-ayuda">Por ejemplo: «Se aplicó a la pensión de Mateo y era la de Valeria». Quedará en la auditoría.</p>
+			</div>
+			<div class="acciones acciones-izquierda">
+				<button th:replace="~{fragments/componentes :: boton('Pedir corrección', 'primario')}"></button>
+			</div>
+		</section>
+	</form>
+</main>
+</body>
+</html>

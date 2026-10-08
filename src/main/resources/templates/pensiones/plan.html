@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Plan de pensiones', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" th:with="p=${plan}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/pensiones(anio=${p.anioId})}" th:text="|Pensiones ${p.anio}|">Pensiones 2027</a></p>
+			<h1 th:text="${p.nombre}">Plan Primaria 2027 v1</h1>
+			<p class="fila">
+				<span th:replace="~{fragments/componentes :: badge(${p.estadoEtiqueta}, ${p.estadoVariante})}"></span>
+				<span class="secundario" th:text="|Propuesto por ${p.creadoPor} · editado por ${p.editadoPor}|">Propuesto por administracion</span>
+			</p>
+		</div>
+		<a class="btn btn-secundario" th:if="${p.puedeEditar}" th:href="@{/pensiones/planes/{id}/editar(id=${p.id})}">Editar borrador</a>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<th:block th:if="${p.avisoAutor != null}">
+		<div th:replace="~{fragments/componentes :: alerta('info', ${p.avisoAutor})}"></div>
+	</th:block>
+	<th:block th:if="${p.motivoDevolucion != null and p.estado == 'BORRADOR'}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', |Devuelto por ${p.devueltoPor}: ${p.motivoDevolucion}|)}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-montos">
+		<h2 id="titulo-montos">Montos y fechas</h2>
+		<dl class="datos">
+			<div><dt>Pensión mensual</dt><dd><span th:replace="~{fragments/componentes :: monto(${p.montoPension})}"></span></dd></div>
+			<div><dt>Matrícula</dt><dd><span th:replace="~{fragments/componentes :: monto(${p.montoMatricula})}"></span>
+				<span class="secundario" th:text="|vence ${#temporals.format(p.vencimientoMatricula, 'dd/MM/yyyy')}|">vence 28/02/2027</span></dd></div>
+			<div th:if="${p.cobroDesde != null}"><dt>Cobra desde</dt>
+				<dd th:text="${#temporals.format(p.cobroDesde, 'dd/MM/yyyy')}">01/12/2026</dd></div>
+			<div th:if="${p.aprobadoPor != null}"><dt>Aprobado por</dt>
+				<dd th:text="|${p.aprobadoPor} · ${#temporals.format(p.aprobadoEn, 'dd/MM/yyyy HH:mm')}|">director</dd></div>
+			<div th:if="${p.motivoCambio != null}"><dt>Motivo del cambio</dt><dd th:text="${p.motivoCambio}">Reajuste</dd></div>
+			<div th:if="${p.enviadoPor != null}"><dt>Enviado por</dt>
+				<dd th:text="|${p.enviadoPor} · ${#temporals.format(p.enviadoEn, 'dd/MM/yyyy HH:mm')}|">administracion</dd></div>
+			<div><dt>Participaron (no aprueban)</dt><dd th:text="${p.editores}">administracion</dd></div>
+		</dl>
+		<h3 th:text="|${#lists.size(p.vencimientos)} pensiones|">10 pensiones</h3>
+		<table class="tabla">
+			<thead><tr><th scope="col">Mes</th><th scope="col">Vence</th><th scope="col" class="num">Monto</th></tr></thead>
+			<tbody>
+				<tr th:each="v : ${p.vencimientos}">
+					<td data-etiqueta="Mes" th:text="${v.mes}">setiembre</td>
+					<td data-etiqueta="Vence" th:text="${#temporals.format(v.fecha, 'dd/MM/yyyy')}">30/09/2027</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${p.montoPension})}"></span></td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" th:if="${p.puedeAprobar or p.puedeDevolver or p.puedeEnviar or p.puedeDescartar or p.puedeNuevaVersion}"
+		aria-labelledby="titulo-acciones">
+		<h2 id="titulo-acciones">Acciones</h2>
+		<form method="post" th:if="${p.puedeEnviar}" th:action="@{/pensiones/planes/{id}/enviar(id=${p.id})}" class="fila">
+			<p class="secundario">Al enviarlo queda bloqueado: nadie lo edita mientras otra persona de Promotoría o Dirección lo
+				revisa. Si hay que corregirlo, te lo devolverán.</p>
+			<button th:replace="~{fragments/componentes :: boton('Enviar para aprobación', 'primario')}"></button>
+		</form>
+		<form method="post" th:if="${p.puedeAprobar}" th:action="@{/pensiones/planes/{id}/aprobar(id=${p.id})}" class="fila">
+			<input type="hidden" name="version" th:value="${p.version}">
+			<p class="secundario">Al aprobar, este plan reemplaza a la versión vigente (sus cuotas ya generadas no cambian) y se
+				generan los cronogramas de las matrículas de este nivel que aún no lo tienen. Se aprueba exactamente lo que
+				ves: si alguien lo cambió mientras tanto, se te pedirá revisarlo de nuevo.</p>
+			<button th:replace="~{fragments/componentes :: boton('Aprobar plan', 'primario')}"></button>
+		</form>
+		<div class="fila">
+			<th:block th:if="${p.puedeDevolver}">
+				<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-devolver', '¿Devolver el plan?',
+					'Vuelve a Administración para que lo corrija. No se aprueba ni se genera ninguna cuota.',
+					@{/pensiones/planes/{id}/devolver(id=${p.id},version=${p.version})}, 'Devolver', 'secundario', 'Devolver plan')}"></th:block>
+			</th:block>
+			<th:block th:if="${p.puedeNuevaVersion}">
+				<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-version', 'Cambiar montos',
+					'Se crea una versión nueva en borrador con estos valores. El plan actual sigue vigente hasta que otra persona apruebe la nueva; las cuotas ya generadas no cambian.',
+					@{/pensiones/planes/{id}/nueva-version(id=${p.id})}, 'Cambiar montos', 'secundario', 'Crear versión nueva')}"></th:block>
+			</th:block>
+			<th:block th:if="${p.puedeDescartar}">
+				<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-descartar', '¿Descartar este borrador?',
+					'El borrador queda descartado en el historial (no se borra).',
+					@{/pensiones/planes/{id}/descartar(id=${p.id})}, 'Descartar', 'peligro', 'Descartar borrador')}"></th:block>
+			</th:block>
+		</div>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-historial">
+		<h2 id="titulo-historial">Versiones</h2>
+		<table class="tabla">
+			<thead><tr><th scope="col">Versión</th><th scope="col">Estado</th><th scope="col" class="num">Pensión</th>
+				<th scope="col" class="num">Matrícula</th><th scope="col">Aprobado por</th></tr></thead>
+			<tbody>
+				<tr th:each="h : ${p.historial}">
+					<td data-etiqueta="Versión"><a th:href="@{/pensiones/planes/{id}(id=${h.id})}" th:text="|v${h.numeroVersion}|">v1</a></td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${h.estadoEtiqueta}, ${h.estadoVariante})}"></span></td>
+					<td data-etiqueta="Pensión" class="num"><span th:replace="~{fragments/componentes :: monto(${h.montoPension})}"></span></td>
+					<td data-etiqueta="Matrícula" class="num"><span th:replace="~{fragments/componentes :: monto(${h.montoMatricula})}"></span></td>
+					<td data-etiqueta="Aprobado por" th:text="${h.aprobadoPor != null} ? ${h.aprobadoPor} : '—'">director</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cronograma del alumno', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" th:with="c=${cronograma.alumno}, k=${cronograma}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/alumnos}">Alumnos</a></p>
+			<h1 th:text="${c.nombreCompleto}">Mateo Quispe Huamán</h1>
+			<p class="fila">
+				<span class="secundario num" th:text="${c.documento}">DNI 78451236</span>
+				<span class="badge" th:classappend="${c.activo()} ? 'badge-exito' : 'badge-neutro'" th:text="${c.estadoEtiqueta}">Activo</span>
+				<span class="badge badge-info" th:if="${c.seccionActual != null}" th:text="${c.seccionActual}">5.° Primaria A · 2026</span>
+			</p>
+		</div>
+	</div>
+
+	<nav class="pestanas" aria-label="Ficha del alumno">
+		<a th:href="@{/alumnos/{id}(id=${c.id})}">Datos</a>
+		<a th:href="@{/alumnos/{id}/cronograma(id=${c.id})}" aria-current="page">Cronograma</a>
+		<a th:href="@{/alumnos/{id}/estado-cuenta(id=${c.id})}">Estado de cuenta</a>
+	</nav>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<th:block th:if="${!c.activo() and k.saldo.signum() > 0}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia',
+			'El alumno está retirado y aún tiene cuotas por cobrar. Si no corresponden, su anulación se solicita con motivo y la aprueba otra persona.')}"></div>
+	</th:block>
+
+	<ul class="conteos" aria-label="Resumen del cronograma">
+		<li><strong><span th:replace="~{fragments/componentes :: monto(${k.total})}"></span></strong><span>Total</span></li>
+		<li><strong><span th:replace="~{fragments/componentes :: monto(${k.pagado})}"></span></strong><span>Pagado</span></li>
+		<li><strong><span th:replace="~{fragments/componentes :: monto(${k.saldo})}"></span></strong><span>Saldo</span></li>
+		<li th:classappend="${k.vencido.signum() > 0} ? 'conteo-peligro'" data-resumen="vencido">
+			<strong><span th:replace="~{fragments/componentes :: monto(${k.vencido})}"></span></strong>
+			<span th:text="|Vencido al ${#temporals.format(k.hoy, 'dd/MM/yyyy')}|">Vencido</span></li>
+	</ul>
+
+	<section class="tarjeta" aria-labelledby="titulo-cuotas">
+		<h2 id="titulo-cuotas">Cuotas</h2>
+		<th:block th:if="${#lists.isEmpty(k.cuotas)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no tiene cuotas',
+				'Se generan solas cuando su nivel tiene un plan de pensiones aprobado.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(k.cuotas)}">
+			<thead><tr><th scope="col">Cuota</th><th scope="col">Vence</th><th scope="col" class="num">Monto</th>
+				<th scope="col" class="num">Descuento</th><th scope="col" class="num">Pagado</th><th scope="col" class="num">Saldo</th><th scope="col">Estado</th>
+				<th scope="col">Origen</th></tr></thead>
+			<tbody>
+				<tr th:each="q : ${k.cuotas}" th:data-cuota="${q.id}" th:data-estado="${q.estado}">
+					<td data-etiqueta="Cuota" th:text="${q.descripcion}">Pensión setiembre 2027</td>
+					<td data-etiqueta="Vence" th:text="${#temporals.format(q.vencimiento, 'dd/MM/yyyy')}">30/09/2027</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${q.monto})}"></span></td>
+					<td data-etiqueta="Descuento" class="num"><span th:replace="~{fragments/componentes :: monto(${q.descuento})}"></span></td>
+					<td data-etiqueta="Pagado" class="num"><span th:replace="~{fragments/componentes :: monto(${q.pagado})}"></span></td>
+					<td data-etiqueta="Saldo" class="num"><span th:replace="~{fragments/componentes :: monto(${q.saldo})}"></span></td>
+					<td data-etiqueta="Estado">
+						<span th:replace="~{fragments/componentes :: badge(${q.estadoEtiqueta()}, ${q.estadoVariante()})}"></span>
+						<span th:if="${q.anulacionPendiente}" class="badge badge-alerta">Anulación por aprobar</span>
+					</td>
+					<td data-etiqueta="Origen" class="secundario" th:text="${q.origen}">Plan Primaria 2027 v1</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

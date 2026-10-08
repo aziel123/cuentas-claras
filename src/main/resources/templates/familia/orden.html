@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Tu pago en línea', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-orden" th:with="o=${orden}" th:attr="data-estado=${o.estado}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/familia}">Mi familia</a></p>
+			<h1>Tu pago en línea</h1>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<p class="marca-simulado" th:if="${o.simulada}">PAGO SIMULADO · NO ES DINERO REAL</p>
+
+	<section class="tarjeta total-cobro" aria-labelledby="titulo-estado">
+		<h2 id="titulo-estado" class="etiqueta">
+			<span th:replace="~{fragments/componentes :: badge(${o.etiqueta}, ${o.variante})}"></span>
+		</h2>
+		<p class="total-cobro-monto" th:text="|S/ ${#numbers.formatDecimal(o.monto, 1, 'COMMA', 2, 'POINT')}|">S/ 900.00</p>
+		<p role="status" data-mensaje th:text="${o.mensaje}">Te llevaremos a la página segura de la pasarela.</p>
+		<ul class="lista-simple">
+			<li th:each="c : ${o.cuotas}" th:text="${c}">Pensión octubre 2026 · Mateo · S/ 450.00</li>
+		</ul>
+		<div class="acciones acciones-izquierda">
+			<!--/* Un ENLACE (GET) a la pasarela: después de un POST la CSP no deja redirigir a otro dominio. */-->
+			<a th:if="${o.puedePagar()}" class="btn btn-primario btn-grande" th:href="${o.enlacePago}" data-continuar-pago>Continuar al pago</a>
+			<a th:if="${o.comprobanteId != null}" class="btn btn-primario"
+				th:href="@{/familia/comprobantes/{id}(id=${o.comprobanteId})}" th:text="|Ver mi boleta ${o.comprobante}|">Ver mi boleta</a>
+			<a class="btn btn-secundario" th:href="@{/familia}">Volver a mi familia</a>
+		</div>
+		<p class="ayuda" th:if="${o.enCurso}">Esta página se actualiza sola. Solo decimos «pagado» cuando la pasarela nos lo confirma.</p>
+	</section>
+</main>
+</body>
+</html>

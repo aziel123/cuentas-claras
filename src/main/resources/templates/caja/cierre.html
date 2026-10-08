@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cierre de caja', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="caja-cierre" th:with="k=${cierre}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/caja}">Caja</a></p>
+			<h1>Cierre de caja</h1>
+			<p class="secundario" th:text="|${k.cajera} · ${#temporals.format(k.hoy, 'dd/MM/yyyy')}|">Lucía Ramos · 02/10/2026</p>
+		</div>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Pagos de hoy', @{/caja/hoy}, 'secundario')}"></a>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<!--/* Paso 1 y 2: conteo a ciegas. Aquí NUNCA se muestra lo registrado (el esperado). */-->
+	<th:block th:if="${k.porCerrar != null}" th:with="c=${k.porCerrar}">
+		<th:block th:if="${c.anterior}">
+			<div th:replace="~{fragments/componentes :: alerta('error',
+				|Tu caja del ${#temporals.format(c.fecha, 'dd/MM/yyyy')} quedó abierta. Ciérrala ahora con tu conteo: hasta entonces no puedes cobrar hoy.|)}"></div>
+		</th:block>
+
+		<section class="tarjeta" aria-labelledby="titulo-conteo" th:unless="${c.reconteo}" data-paso="conteo">
+			<h2 id="titulo-conteo" th:text="|Cuenta el efectivo de tu caja del ${#temporals.format(c.fecha, 'dd/MM')}|">Cuenta el efectivo</h2>
+			<p class="secundario">
+				Cuenta todo el efectivo, incluido el fondo fijo de <span th:replace="~{fragments/componentes :: monto(${c.fondo})}"></span>.
+				Verás lo registrado recién después de registrar tu conteo: así el cierre es a ciegas y nadie puede acomodarlo.
+			</p>
+			<form method="post" th:action="@{/caja/cierre/conteo}" class="formulario">
+				<div class="campo">
+					<label for="contado">Total contado (S/)</label>
+					<input class="input input-grande num" type="number" id="contado" name="contado" min="0" max="9999999.90"
+						step="0.10" inputmode="decimal" autocomplete="off" aria-describedby="contado-ayuda">
+					<p class="ayuda" id="contado-ayuda">Escribe el total o llena los billetes y monedas (abajo): el sistema suma.</p>
+				</div>
+				<details class="denominaciones-detalle">
+					<summary>Contar por billetes y monedas (opcional)</summary>
+					<div class="denominaciones">
+						<div class="campo" th:each="d : ${k.denominaciones}">
+							<label th:for="|conteo-${d}|" th:text="${d.etiqueta()}">Billetes de S/ 200</label>
+							<input class="input num" type="number" th:id="|conteo-${d}|" th:name="|denominaciones[${d}]|" min="0"
+								max="10000" step="1" inputmode="numeric" autocomplete="off">
+						</div>
+					</div>
+				</details>
+				<div class="acciones acciones-izquierda">
+					<button th:replace="~{fragments/componentes :: boton('Registrar conteo', 'primario')}"></button>
+				</div>
+			</form>
+		</section>
+
+		<section class="tarjeta" aria-labelledby="titulo-reconteo" th:if="${c.reconteo}" data-paso="reconteo">
+			<h2 id="titulo-reconteo">Vuelve a contar</h2>
+			<div th:replace="~{fragments/componentes :: alerta('advertencia',
+				'No coincide con lo registrado. Vuelve a contar con calma, billete por billete. Este reconteo cierra la caja: explica qué pasó.')}"></div>
+			<form method="post" th:action="@{/caja/cierre/reconteo}" class="formulario">
+				<div class="campo">
+					<label for="recontado">Total contado (S/)</label>
+					<input class="input input-grande num" type="number" id="recontado" name="contado" min="0" max="9999999.90"
+						step="0.10" inputmode="decimal" autocomplete="off">
+				</div>
+				<details class="denominaciones-detalle">
+					<summary>Contar por billetes y monedas (opcional)</summary>
+					<div class="denominaciones">
+						<div class="campo" th:each="d : ${k.denominaciones}">
+							<label th:for="|reconteo-${d}|" th:text="${d.etiqueta()}">Billetes de S/ 200</label>
+							<input class="input num" type="number" th:id="|reconteo-${d}|" th:name="|denominaciones[${d}]|" min="0"
+								max="10000" step="1" inputmode="numeric" autocomplete="off">
+						</div>
+					</div>
+				</details>
+				<div class="campo">
+					<label for="explicacion">¿Qué pasó? (obligatorio)</label>
+					<textarea class="input" id="explicacion" name="explicacion" required minlength="10" maxlength="500"
+						aria-describedby="explicacion-ayuda"></textarea>
+					<p class="ayuda" id="explicacion-ayuda">Por ejemplo: «Conté mal los billetes de S/ 20» o «Di vuelto de más a
+						una familia». Lo verá quien apruebe el cierre.</p>
+				</div>
+				<div class="acciones acciones-izquierda">
+					<button th:replace="~{fragments/componentes :: boton('Registrar reconteo y cerrar', 'primario')}"></button>
+				</div>
+			</form>
+		</section>
+	</th:block>
+
+	<!--/* Resultado: solo cuando ya no hay caja por cerrar. */-->
+	<section class="tarjeta" aria-labelledby="titulo-resultado" th:if="${k.porCerrar == null and k.ultimoCierre != null}"
+		th:with="u=${k.ultimoCierre}" data-paso="resultado">
+		<div class="fila entre">
+			<h2 id="titulo-resultado" th:text="|Cierre de tu caja del ${#temporals.format(u.fecha, 'dd/MM/yyyy')}|">Cierre</h2>
+			<span th:replace="~{fragments/componentes :: badge(${u.estado}, ${u.estadoVariante})}"></span>
+		</div>
+		<ul class="conteos conteos-montos" aria-label="Resultado del cierre">
+			<li><strong><span th:replace="~{fragments/componentes :: monto(${u.esperado})}"></span></strong><span>Registrado (esperado)</span></li>
+			<li><strong><span th:replace="~{fragments/componentes :: monto(${u.contado})}"></span></strong><span th:text="${u.reconteo} ? 'Contado al reconteo' : 'Contado'">Contado</span></li>
+			<li data-diferencia><strong><span th:replace="~{fragments/componentes :: badge(${u.diferenciaTexto}, ${u.diferenciaVariante})}"></span></strong><span>Diferencia</span></li>
+		</ul>
+		<p class="secundario" th:if="${u.reconteo}" th:text="|Tu primer conteo fue S/ ${#numbers.formatDecimal(u.primerConteo, 1, 'COMMA', 2, 'POINT')}.|">Primer conteo</p>
+		<p th:if="${u.explicacion != null}" th:text="|Tu explicación: ${u.explicacion}|">Explicación</p>
+		<th:block th:if="${u.diferencia.signum() == 0}">
+			<div th:replace="~{fragments/componentes :: alerta('exito', 'Tu caja cuadró. Promotoría o Dirección aprobarán el cierre.')}"></div>
+		</th:block>
+		<th:block th:unless="${u.diferencia.signum() == 0}">
+			<div th:replace="~{fragments/componentes :: alerta('error', 'Hubo una diferencia: se avisó a Promotoría y Dirección, que revisarán tu cierre contigo.')}"></div>
+		</th:block>
+		<p class="secundario" th:if="${u.revisadoPor != null}"
+			th:text="|Revisado por ${u.revisadoPor}${u.comentario != null ? ': ' + u.comentario : ''}|">Revisado por director</p>
+		<p class="secundario" th:if="${u.deposito != null}" th:text="${u.deposito}">Depositado</p>
+		<th:block th:if="${u.fecha.equals(k.hoy)}">
+			<div th:replace="~{fragments/componentes :: alerta('info', 'La caja de hoy ya se cerró: solo se aceptan pagos digitales hasta mañana.')}"></div>
+		</th:block>
+		<div class="fila" th:if="${k.reapertura.puedePedir}">
+			<th:block th:replace="~{fragments/componentes :: modalMotivo('modal-reabrir', '¿Pedir reabrir tu caja?',
+				'Promotoría o Dirección deben aprobarlo. Solo el mismo día y antes de depositar. Tu cierre queda registrado tal cual y volverás a contar a ciegas.',
+				@{/caja/cierre/reapertura}, 'Pedir reabrir mi caja', 'secundario', 'Pedir reapertura')}"></th:block>
+		</div>
+		<p class="secundario" th:if="${k.reapertura.pendiente}">Pediste reabrir tu caja: espera la aprobación.</p>
+	</section>
+
+	<section class="tarjeta" th:if="${k.porCerrar == null and k.ultimoCierre == null}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('No tienes una caja por cerrar', 'Tu caja del día se abre con tu primer cobro.')}"></div>
+	</section>
+
+	<!--/* Depósito del efectivo de las cajas cerradas. */-->
+	<section class="tarjeta" aria-labelledby="titulo-deposito" th:unless="${#lists.isEmpty(k.porDepositar)}" data-paso="deposito">
+		<h2 id="titulo-deposito">Registrar depósito</h2>
+		<p class="secundario">Deposita en el banco lo contado menos el fondo fijo (el sencillo se queda en caja) y registra el
+			número de operación del voucher. Administración lo verificará con el estado de cuenta.</p>
+		<form method="post" th:action="@{/caja/cierre/deposito}" class="formulario" th:each="p : ${k.porDepositar}"
+			th:data-caja="${p.cajaId}">
+			<input type="hidden" name="cajaId" th:value="${p.cajaId}">
+			<p><strong th:text="|Caja del ${#temporals.format(p.fecha, 'dd/MM/yyyy')}: depositar |">Caja del 02/10/2026: depositar</strong>
+				<span th:replace="~{fragments/componentes :: monto(${p.esperado})}"></span></p>
+			<div class="campo">
+				<label th:for="|cuenta-${p.cajaId}|">Cuenta del colegio</label>
+				<select class="input" th:id="|cuenta-${p.cajaId}|" name="cuenta" required>
+					<option th:each="c : ${k.cuentas}" th:value="${c}" th:text="${c}">BCP Soles</option>
+				</select>
+			</div>
+			<div class="campo">
+				<label th:for="|operacion-${p.cajaId}|">N.° de operación del voucher</label>
+				<input class="input" type="text" th:id="|operacion-${p.cajaId}|" name="numeroOperacion" required minlength="4"
+					maxlength="30" autocomplete="off">
+			</div>
+			<div class="campo">
+				<label th:for="|fecha-${p.cajaId}|">Fecha del depósito</label>
+				<input class="input" type="date" th:id="|fecha-${p.cajaId}|" name="fecha" required th:value="${k.hoy}"
+					th:max="${k.hoy}">
+			</div>
+			<div class="campo">
+				<label th:for="|monto-${p.cajaId}|">Monto depositado (S/)</label>
+				<input class="input num" type="number" th:id="|monto-${p.cajaId}|" name="monto" required min="0.10" step="0.10"
+					inputmode="decimal" autocomplete="off" th:value="${p.esperado}">
+			</div>
+			<div class="campo">
+				<label th:for="|explicacion-${p.cajaId}|">Explicación (solo si depositas otro monto)</label>
+				<textarea class="input" th:id="|explicacion-${p.cajaId}|" name="explicacion" maxlength="500"></textarea>
+			</div>
+			<div class="acciones acciones-izquierda">
+				<button th:replace="~{fragments/componentes :: boton('Registrar depósito', 'primario')}"></button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

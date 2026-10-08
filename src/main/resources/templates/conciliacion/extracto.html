@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Extracto del banco', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="conciliacion-extracto" th:with="e=${e}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/conciliacion/extractos}">Extractos del banco</a></p>
+			<h1 th:text="|Extracto N.° ${e.secuencia} · ${#temporals.format(e.desde, 'dd/MM')} al ${#temporals.format(e.hasta, 'dd/MM/yyyy')}|">Extracto N.° 1</h1>
+			<p class="secundario" th:text="|${e.cuenta} · subido por ${e.subidoPor} el ${#temporals.format(e.subidoEn, 'dd/MM/yyyy HH:mm')} · huella ${#strings.substring(e.sha256, 0, 12)}|">BCP</p>
+		</div>
+		<span th:replace="~{fragments/componentes :: badge(${e.estado}, ${e.variante})}"></span>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${e.motivoRechazo != null}">
+		<div th:replace="~{fragments/componentes :: alerta('error', ${e.motivoRechazo})}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-saldos">
+		<h2 id="titulo-saldos">Saldos</h2>
+		<th:block th:unless="${e.confirmado}">
+			<p class="secundario">Los saldos y los totales se muestran cuando otra persona confirme el extracto escribiendo a ciegas el saldo de su app del banco.</p>
+		</th:block>
+		<ul class="conteos conteos-montos" th:if="${e.confirmado}">
+			<li><span>Saldo inicial</span><strong><span th:replace="~{fragments/componentes :: monto(${e.saldoInicial})}"></span></strong></li>
+			<li><span>Abonos</span><strong><span th:replace="~{fragments/componentes :: monto(${e.totalAbonos})}"></span></strong></li>
+			<li><span>Cargos</span><strong><span th:replace="~{fragments/componentes :: monto(${e.totalCargos})}"></span></strong></li>
+			<li><span>Saldo final</span><strong><span th:replace="~{fragments/componentes :: monto(${e.saldoFinal})}"></span></strong></li>
+		</ul>
+		<p class="secundario" th:if="${e.confirmado}" th:text="|Confirmado a ciegas por ${e.confirmadoPor} el ${#temporals.format(e.confirmadoEn, 'dd/MM/yyyy HH:mm')}.|">Confirmado</p>
+		<div class="acciones acciones-izquierda" th:if="${e.puedeDescartar}">
+			<th:block th:replace="~{fragments/componentes :: modalMotivo('descartar-extracto', '¿Descartar este extracto?',
+				'No se concilia nada con él y se liberan sus parejas propuestas. Queda en la bitácora con tu motivo.',
+				@{/conciliacion/extractos/{id}/descartar(id=${e.id})}, 'Descartar extracto', 'peligro', 'Descartar')}"></th:block>
+		</div>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-movimientos">
+		<h2 id="titulo-movimientos" th:text="|Movimientos (${#lists.size(e.movimientos)})|">Movimientos</h2>
+		<th:block th:if="${e.montosOcultos}">
+			<div th:replace="~{fragments/componentes :: alerta('info', 'Mientras este extracto (u otro de estos días) esté por confirmar, no ves el monto, el tipo ni la pareja de cada movimiento: el saldo se confirma mirando tu app del banco, no esta pantalla.')}"></div>
+		</th:block>
+		<th:block th:if="${#lists.isEmpty(e.movimientos)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Sin movimientos', 'Este extracto no trae movimientos en sus días.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(e.movimientos)}">
+			<thead><tr><th scope="col">N.°</th><th scope="col">Fecha</th><th scope="col">Descripción</th><th scope="col">Operación</th><th scope="col" class="num">Monto</th><th scope="col" class="num" th:if="${e.confirmado}">Saldo</th><th scope="col">Pareja</th></tr></thead>
+			<tbody>
+				<tr th:each="m : ${e.movimientos}">
+					<td data-etiqueta="N.°" class="num" th:text="${m.numero}">1</td>
+					<td data-etiqueta="Fecha" th:text="${#temporals.format(m.fecha, 'dd/MM/yyyy')}">05/10/2026</td>
+					<td data-etiqueta="Descripción" th:text="${m.tipo != null} ? |${m.tipo} · ${m.descripcion}| : ${m.descripcion}">Abono · YAPE</td>
+					<td data-etiqueta="Operación" th:text="${m.operacion} ?: '—'">123</td>
+					<td data-etiqueta="Monto" class="num"><th:block th:if="${m.monto != null}"><span th:replace="~{fragments/componentes :: monto(${m.monto})}"></span></th:block><span th:if="${m.monto == null}" class="secundario">Oculto</span></td>
+					<td data-etiqueta="Saldo" class="num" th:if="${e.confirmado}"><span th:replace="~{fragments/componentes :: monto(${m.saldo})}"></span></td>
+					<td data-etiqueta="Pareja"><span th:replace="~{fragments/componentes :: badge(${m.pareja}, ${m.variante})}"></span></td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

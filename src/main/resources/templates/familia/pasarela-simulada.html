@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Pasarela simulada', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="pasarela-simulada" th:with="o=${orden}">
+	<p class="marca-simulado">SIMULADOR · NO ES DINERO REAL</p>
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Pasarela de pagos (simulada)</p>
+			<h1 th:text="|Pagar S/ ${#numbers.formatDecimal(o.monto, 1, 'COMMA', 2, 'POINT')}|">Pagar S/ 900.00</h1>
+			<p class="secundario">Esta página hace el papel de la pasarela real. Ninguna opción mueve dinero: solo prueba el flujo completo.</p>
+		</div>
+	</div>
+
+	<section class="tarjeta" aria-labelledby="titulo-opciones" th:if="${o.puedePagar()}">
+		<h2 id="titulo-opciones">¿Cómo quieres pagar?</h2>
+		<div class="acciones acciones-izquierda">
+			<form method="post" th:action="@{/familia/pasarela-simulada/{r}/YAPE(r=${o.referencia})}">
+				<button th:replace="~{fragments/componentes :: boton('Pagar con Yape (simulado)', 'primario')}"></button>
+			</form>
+			<form method="post" th:action="@{/familia/pasarela-simulada/{r}/TARJETA(r=${o.referencia})}">
+				<button th:replace="~{fragments/componentes :: boton('Pagar con tarjeta (simulado)', 'secundario')}"></button>
+			</form>
+		</div>
+		<h3>Pruebas de control</h3>
+		<div class="acciones acciones-izquierda">
+			<form method="post" th:action="@{/familia/pasarela-simulada/{r}/RECHAZAR(r=${o.referencia})}">
+				<button th:replace="~{fragments/componentes :: boton('Rechazar el pago', 'texto')}"></button>
+			</form>
+			<form method="post" th:action="@{/familia/pasarela-simulada/{r}/MONTO_MENOR(r=${o.referencia})}">
+				<button th:replace="~{fragments/componentes :: boton('Pagar S/ 1.00 menos (prueba de monto distinto)', 'texto')}"></button>
+			</form>
+		</div>
+	</section>
+	<th:block th:unless="${o.puedePagar()}">
+		<div th:replace="~{fragments/componentes :: alerta('info', ${o.mensaje})}"></div>
+	</th:block>
+	<div class="acciones acciones-izquierda">
+		<a class="btn btn-secundario" th:href="@{/familia/pagos/{r}(r=${o.referencia})}">Volver al colegio</a>
+	</div>
+</main>
+</body>
+</html>

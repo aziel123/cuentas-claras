@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Ficha del alumno', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" th:with="c=${ficha.cabecera}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/alumnos}">Alumnos</a></p>
+			<h1 th:text="${c.nombreCompleto}">Mateo Quispe Huamán</h1>
+			<p class="fila">
+				<span class="secundario num" th:text="${c.documento}">DNI 78451236</span>
+				<span class="badge" th:classappend="${c.activo()} ? 'badge-exito' : 'badge-neutro'" th:text="${c.estadoEtiqueta}">Activo</span>
+				<span class="badge badge-info" th:if="${c.seccionActual != null}" th:text="${c.seccionActual}">5.° Primaria A · 2026</span>
+			</p>
+		</div>
+		<a class="btn btn-secundario" th:if="${puedeEditar and c.activo()}" th:href="@{/alumnos/{id}/editar(id=${c.id})}">Corregir datos</a>
+	</div>
+
+	<nav class="pestanas" aria-label="Ficha del alumno">
+		<a th:href="@{/alumnos/{id}(id=${c.id})}" aria-current="page">Datos</a>
+		<a th:href="@{/alumnos/{id}/cronograma(id=${c.id})}">Cronograma</a>
+		<a th:href="@{/alumnos/{id}/estado-cuenta(id=${c.id})}">Estado de cuenta</a>
+	</nav>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:unless="${c.activo()}">
+		<div th:replace="~{fragments/componentes :: alerta('info',
+			|Retirado el ${#temporals.format(ficha.retiradoEn, 'dd/MM/yyyy')} por ${ficha.retiradoPor}. Motivo: ${ficha.motivoRetiro}|)}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-solicitudes" th:unless="${#lists.isEmpty(ficha.solicitudesPendientes)}" data-solicitudes-pendientes>
+		<h2 id="titulo-solicitudes">Esperando aprobación</h2>
+		<p class="secundario">Estos cambios los aprueba otra persona de Promotoría o Dirección en Aprobaciones. Hasta entonces no se aplican.</p>
+		<ul class="lista-simple">
+			<li th:each="s : ${ficha.solicitudesPendientes}" th:text="${s}">Retiro de alumno: Retirar a Mateo desde el 01/10/2026</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-datos">
+		<h2 id="titulo-datos">Datos</h2>
+		<dl class="datos">
+			<div><dt>Documento</dt><dd th:text="|${ficha.tipoDocumento} ${ficha.numeroDocumento}|">DNI 78451236</dd></div>
+			<div><dt>Fecha de nacimiento</dt>
+				<dd th:text="|${#temporals.format(ficha.fechaNacimiento, 'dd/MM/yyyy')} · ${ficha.edad} años|">05/03/2015 · 11 años</dd></div>
+			<div><dt>Familia</dt>
+				<dd><a th:href="@{/alumnos/familias/{id}(id=${c.familiaId})}" th:text="${c.familia}">Familia Quispe Huamán</a></dd></div>
+		</dl>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-responsable">
+		<div class="fila entre">
+			<h2 id="titulo-responsable">Responsable de pago</h2>
+			<span class="badge badge-info">A quien se le cobra</span>
+		</div>
+		<div class="persona" th:with="r=${ficha.responsable}">
+			<p><strong th:text="${r.nombreCompleto}">Rosa Huamán Ccori</strong>
+				<span class="secundario" th:text="|· ${r.parentescoEtiqueta} · ${r.documento}|">· Madre · DNI 45678912</span></p>
+			<p class="fila">
+				<span th:if="${r.telefonoWhatsapp != null}" th:text="|WhatsApp ${r.telefonoWhatsapp}|">WhatsApp +51987654321</span>
+				<span th:if="${r.correo != null}" th:text="${r.correo}">rosa@gmail.com</span>
+			</p>
+		</div>
+
+		<div class="fila" th:if="${puedeEditar and c.activo()}">
+			<button type="button" class="btn btn-secundario" popovertarget="modal-responsable">Cambiar responsable de pago</button>
+			<div class="modal" id="modal-responsable" popover role="dialog" aria-modal="true" aria-labelledby="modal-responsable-titulo">
+				<form method="post" th:action="@{/alumnos/{id}/responsable(id=${c.id})}" class="modal-cuerpo">
+					<h2 id="modal-responsable-titulo">Cambiar responsable de pago</h2>
+					<p>Cambia a quién se le cobra y quién recibe los avisos de pago, así que lo aprueba otra persona de Promotoría o Dirección. Hasta entonces se cobra al responsable actual.</p>
+					<div class="campo" th:unless="${#lists.isEmpty(ficha.otrosApoderados)}">
+						<label for="apoderadoId">Otro apoderado de la familia</label>
+						<select class="input" id="apoderadoId" name="apoderadoId">
+							<option value="">Ninguno (uso el documento de abajo)</option>
+							<option th:each="a : ${ficha.otrosApoderados}" th:value="${a.id}" th:text="|${a.nombreCompleto} · ${a.parentescoEtiqueta}|">Juan Quispe · Padre</option>
+						</select>
+					</div>
+					<div class="campo">
+						<label for="documentoApoderado">O el documento de un apoderado ya registrado</label>
+						<input class="input" type="text" id="documentoApoderado" name="documentoApoderado" maxlength="20" autocomplete="off"
+							aria-describedby="documentoApoderado-ayuda">
+						<p class="ayuda" id="documentoApoderado-ayuda">Si es de otra familia, el alumno pasa a esa familia.</p>
+					</div>
+					<div class="campo">
+						<label for="modal-responsable-motivo">Motivo (obligatorio)</label>
+						<textarea class="input" id="modal-responsable-motivo" name="motivo" required minlength="10" maxlength="500"></textarea>
+						<p class="ayuda">Explica por qué, en al menos 10 caracteres. Quedará en la auditoría.</p>
+					</div>
+					<div class="acciones">
+						<button type="button" class="btn btn-secundario" popovertarget="modal-responsable" popovertargetaction="hide">Cancelar</button>
+						<button type="submit" class="btn btn-primario">Pedir el cambio</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-matriculas">
+		<h2 id="titulo-matriculas">Matrículas</h2>
+		<th:block th:if="${#lists.isEmpty(ficha.matriculas)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no está matriculado', 'Cuando lo matricules en una sección, aparecerá aquí.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(ficha.matriculas)}">
+			<thead>
+				<tr><th scope="col">Año</th><th scope="col">Sección</th><th scope="col">Desde</th><th scope="col">Estado</th><th scope="col"><span class="solo-lectores">Acciones</span></th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="m : ${ficha.matriculas}">
+					<td data-etiqueta="Año" th:text="${m.anio}">2026</td>
+					<td data-etiqueta="Sección" th:text="${m.seccion}">5.° Primaria A</td>
+					<td data-etiqueta="Desde" th:text="${#temporals.format(m.fechaMatricula, 'dd/MM/yyyy')}">02/03/2026</td>
+					<td data-etiqueta="Estado">
+						<span class="badge" th:classappend="${m.activa()} ? 'badge-exito' : 'badge-neutro'"
+							th:text="${m.activa()} ? ${m.estadoEtiqueta} : |${m.estadoEtiqueta} el ${#temporals.format(m.retiradaEn, 'dd/MM/yyyy')}|">Activa</span>
+					</td>
+					<td>
+						<th:block th:if="${puedeEditar and m.activa() and !#lists.isEmpty(m.otrasSecciones)}">
+							<button type="button" class="btn btn-texto btn-chico" th:popovertarget="${'modal-seccion-' + m.id}"
+								th:aria-label="|Cambiar de sección en ${m.anio}|">Cambiar sección</button>
+							<div class="modal" th:id="${'modal-seccion-' + m.id}" popover role="dialog" aria-modal="true"
+								th:aria-labelledby="${'modal-seccion-' + m.id + '-titulo'}">
+								<form method="post" th:action="@{/alumnos/matriculas/{id}/seccion(id=${m.id}, alumnoId=${c.id})}" class="modal-cuerpo">
+									<h2 th:id="${'modal-seccion-' + m.id + '-titulo'}" th:text="|Cambiar de sección en ${m.anio}|">Cambiar de sección</h2>
+									<p th:text="|Ahora está en ${m.seccion}.|">Ahora está en 5.° Primaria A.</p>
+									<div class="campo">
+										<label th:for="${'seccion-' + m.id}">Nueva sección</label>
+										<select class="input" th:id="${'seccion-' + m.id}" name="seccionId" required>
+											<option th:each="s : ${m.otrasSecciones}" th:value="${s.id}" th:text="${s.etiqueta}">5.° Primaria B</option>
+										</select>
+									</div>
+									<div class="campo">
+										<label th:for="${'motivo-seccion-' + m.id}">Motivo (obligatorio)</label>
+										<textarea class="input" th:id="${'motivo-seccion-' + m.id}" name="motivo" required minlength="10" maxlength="500"></textarea>
+										<p class="ayuda">Explica por qué, en al menos 10 caracteres. Quedará en la auditoría.</p>
+									</div>
+									<div class="acciones">
+										<button type="button" class="btn btn-secundario" th:popovertarget="${'modal-seccion-' + m.id}" popovertargetaction="hide">Cancelar</button>
+										<button type="submit" class="btn btn-primario">Cambiar sección</button>
+									</div>
+								</form>
+							</div>
+						</th:block>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+
+		<form class="formulario borde-superior" th:if="${puedeEditar and !#lists.isEmpty(ficha.seccionesParaMatricular)}"
+			method="post" th:action="@{/alumnos/{id}/matricula(id=${c.id})}" aria-labelledby="titulo-matricular">
+			<h3 id="titulo-matricular">Matricular</h3>
+			<div class="formulario-doble">
+				<div class="campo">
+					<label for="seccionId">Sección</label>
+					<select class="input" id="seccionId" name="seccionId" required>
+						<option value="">Elige la sección</option>
+						<option th:each="s : ${ficha.seccionesParaMatricular}" th:value="${s.id}" th:text="${s.etiquetaConAnio()}">2027 · 6.° Primaria A</option>
+					</select>
+				</div>
+				<div class="campo">
+					<label for="fecha">Fecha de matrícula (opcional)</label>
+					<input class="input" type="date" id="fecha" name="fecha" aria-describedby="fecha-ayuda">
+					<p class="ayuda" id="fecha-ayuda">Si la dejas vacía: hoy, o el inicio de clases si ya pasó.</p>
+				</div>
+			</div>
+			<div class="acciones">
+				<button type="submit" class="btn btn-primario">Matricular</button>
+			</div>
+		</form>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-hermanos">
+		<div class="fila entre">
+			<h2 id="titulo-hermanos">Hermanos en el colegio</h2>
+			<a class="btn btn-texto btn-chico" th:href="@{/alumnos/familias/{id}(id=${c.familiaId})}">Ver familia</a>
+		</div>
+		<p class="secundario" th:if="${#lists.isEmpty(ficha.hermanos)}">No tiene hermanos registrados.</p>
+		<ul class="lista-simple" th:unless="${#lists.isEmpty(ficha.hermanos)}">
+			<li th:each="h : ${ficha.hermanos}">
+				<a th:href="@{/alumnos/{id}(id=${h.id})}" th:text="${h.nombreCompleto}">Valeria Quispe Huamán</a>
+				<span class="secundario" th:text="${h.seccion} ?: 'Sin matrícula este año'">2.° Primaria B · 2026</span>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta zona-sensible" th:if="${puedeEditar and c.activo()}" aria-labelledby="titulo-retiro">
+		<div>
+			<h2 id="titulo-retiro">Retiro</h2>
+			<p class="secundario">Si el alumno deja el colegio, pide su retiro: lo aprueba otra persona de Promotoría o Dirección.
+				No se borra nada y sus matrículas quedan retiradas.</p>
+		</div>
+		<div class="fila">
+			<button type="button" class="btn btn-peligro" popovertarget="modal-retirar">Pedir retiro</button>
+			<div class="modal" id="modal-retirar" popover role="dialog" aria-modal="true" aria-labelledby="modal-retirar-titulo">
+				<form method="post" th:action="@{/alumnos/{id}/retirar(id=${c.id})}" class="modal-cuerpo">
+					<h2 id="modal-retirar-titulo" th:text="|¿Pedir el retiro de ${c.nombreCompleto}?|">¿Pedir el retiro?</h2>
+					<p>Cuando otra persona lo apruebe, sus matrículas activas quedarán retiradas. La fecha no puede ser anterior a su matrícula. Quedará resaltado en la bitácora.</p>
+					<div class="campo">
+						<label for="fecha-retiro">Fecha de retiro</label>
+						<input class="input" type="date" id="fecha-retiro" name="fecha" required>
+					</div>
+					<div class="campo">
+						<label for="modal-retirar-motivo">Motivo (obligatorio)</label>
+						<textarea class="input" id="modal-retirar-motivo" name="motivo" required minlength="10" maxlength="500"></textarea>
+						<p class="ayuda">Explica por qué, en al menos 10 caracteres. Quedará en la auditoría.</p>
+					</div>
+					<div class="acciones">
+						<button type="button" class="btn btn-secundario" popovertarget="modal-retirar" popovertargetaction="hide">Cancelar</button>
+						<button type="submit" class="btn btn-peligro">Pedir retiro</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</section>
+</main>
+</body>
+</html>

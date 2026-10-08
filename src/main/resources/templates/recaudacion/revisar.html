@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Revisar archivo del banco', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="recaudacion-revisar" th:with="p=${previa}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/recaudacion}">Recaudación bancaria</a></p>
+			<h1>Revisa antes de registrar</h1>
+			<p class="secundario" th:text="|Paso 2 de 3 · «${p.archivoNombre}» · ${p.banco} · huella ${p.shaCorto()}. Todavía no se guardó nada.|">Paso 2 de 3</p>
+		</div>
+	</div>
+
+	<ol class="pasos" aria-label="Pasos para subir el archivo">
+		<li class="paso-hecho">Subir</li>
+		<li class="paso-actual" aria-current="step">Revisar</li>
+		<li>Registrar</li>
+	</ol>
+
+	<th:block th:if="${p.yaCargado != null}">
+		<div th:replace="~{fragments/componentes :: alerta('error', ${p.yaCargado})}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-resumen">
+		<h2 id="titulo-resumen" th:text="|${p.lineas} ${p.lineas == 1 ? 'pago' : 'pagos'} del ${#temporals.format(p.desde, 'dd/MM/yyyy')} al ${#temporals.format(p.hasta, 'dd/MM/yyyy')}|">23 pagos</h2>
+		<ul class="conteos">
+			<li th:classappend="${p.conErrores()} ? 'conteo-peligro'"><strong class="num" th:text="${#lists.size(p.errores)}">0</strong><span>con errores</span></li>
+			<li><strong class="num" th:text="${p.aplicaran}">20</strong><span>se aplicarán</span></li>
+			<li><strong class="num" th:text="${p.excepciones}">2</strong><span>por revisar</span></li>
+			<li th:classappend="${p.yaRegistradas > 0} ? 'conteo-peligro'"><strong class="num" th:text="${p.yaRegistradas}">1</strong><span>ya registradas</span></li>
+		</ul>
+		<p class="secundario">El total no se muestra aquí a propósito: lo escribirá a ciegas quien confirme, mirando el portal del banco.</p>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-errores" th:if="${p.conErrores()}">
+		<h2 id="titulo-errores">Errores del archivo</h2>
+		<div th:replace="~{fragments/componentes :: alerta('error',
+			'El archivo tiene datos que no se pueden leer: no se registra nada mientras los tenga. No lo corrijas a mano: descárgalo otra vez del portal del banco.')}"></div>
+		<table class="tabla">
+			<caption class="solo-lectores">Errores encontrados, por línea</caption>
+			<thead><tr><th scope="col">Línea</th><th scope="col">Qué pasa</th></tr></thead>
+			<tbody>
+				<tr th:each="e : ${p.errores}" class="fila-atencion">
+					<td data-etiqueta="Línea" th:text="${e.linea}">3</td>
+					<td data-etiqueta="Qué pasa" th:text="${e.mensaje}">El monto debe llevar punto decimal.</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-detalle" th:unless="${#lists.isEmpty(p.detalle)}">
+		<h2 id="titulo-detalle">Cómo quedaría cada pago</h2>
+		<p class="secundario">Así se aplicaría hoy. Si algo cambia antes de que se confirme (por ejemplo, la familia paga en caja), el sistema lo deja por revisar: nunca cobra dos veces.</p>
+		<table class="tabla">
+			<thead><tr><th scope="col">N.°</th><th scope="col">Fecha</th><th scope="col">Código</th><th scope="col">Alumno</th><th scope="col" class="num">Monto</th><th scope="col">Operación</th><th scope="col">Resultado</th></tr></thead>
+			<tbody>
+				<tr th:each="l : ${p.detalle}" th:data-resultado="${l.resultado}" th:classappend="${l.resultado != 'APLICAR'} ? 'fila-atencion'">
+					<td data-etiqueta="N.°" class="num" th:text="${l.numero}">1</td>
+					<td data-etiqueta="Fecha" th:text="${#temporals.format(l.fecha, 'dd/MM/yyyy')}">05/10/2026</td>
+					<td data-etiqueta="Código" class="num" th:text="${l.codigo}">1000 0016</td>
+					<td data-etiqueta="Alumno" th:text="${l.alumno} ?: 'Ningún alumno'">Mateo</td>
+					<td data-etiqueta="Monto" class="num" th:text="${l.moneda == 'PEN'} ? ${'S/ ' + #numbers.formatDecimal(l.monto, 1, 'COMMA', 2, 'POINT')} : ${l.moneda + ' ' + l.monto}">S/ 450.00</td>
+					<td data-etiqueta="Operación" th:text="${l.operacion}">123456</td>
+					<td data-etiqueta="Resultado">
+						<span th:replace="~{fragments/componentes :: badge(${l.etiqueta()}, ${l.variante()})}"></span>
+						<span class="secundario" th:text="${l.texto}">Se aplicará a Pensión marzo.</span>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-decision">
+		<h2 id="titulo-decision">¿Qué quieres hacer?</h2>
+		<p class="secundario" th:if="${p.registrable()}">Al registrarlo, el archivo queda guardado tal cual (con su huella) y espera la confirmación a ciegas de otra persona de Promotoría o Dirección. Recién entonces el sistema registra los pagos.</p>
+		<div class="acciones acciones-izquierda">
+			<form method="post" th:action="@{/recaudacion/cancelar}" class="form-en-linea">
+				<button type="submit" class="btn btn-secundario" th:text="${p.registrable()} ? 'Cancelar' : 'Volver a subir'">Cancelar</button>
+			</form>
+			<form method="post" th:action="@{/recaudacion/lotes}" class="form-en-linea" th:if="${p.registrable()}">
+				<input type="hidden" name="token" th:value="${p.token}">
+				<button type="submit" class="btn btn-primario">Registrar archivo</button>
+			</form>
+		</div>
+	</section>
+</main>
+</body>
+</html>

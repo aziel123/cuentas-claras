@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Colegio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Colegio</p>
+			<h1>Años escolares</h1>
+			<p class="secundario">Cada año tiene sus secciones. Los grados son los del Ministerio de Educación: inicial
+				(3, 4 y 5 años), primaria (1.° a 6.°) y secundaria (1.° a 5.°).</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-anios">
+		<h2 id="titulo-anios">Años</h2>
+		<th:block th:if="${#lists.isEmpty(anios)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay años escolares',
+				${puedeEditar} ? 'Crea el año en curso con el formulario «Nuevo año escolar».' : 'Dirección o Administración los crean.')}"></div>
+		</th:block>
+		<ul class="lista-tarjetas" th:unless="${#lists.isEmpty(anios)}">
+			<li th:each="a : ${anios}">
+				<a class="tarjeta-enlace" th:href="@{/colegio/anios/{id}(id=${a.id})}" th:data-anio="${a.anio}">
+					<span class="fila entre">
+						<strong class="anio-numero num" th:text="${a.anio}">2026</strong>
+						<span class="badge" th:classappend="${a.enCurso()} ? 'badge-exito' : (${a.cerrado()} ? 'badge-neutro' : 'badge-info')"
+							th:text="${a.estadoEtiqueta}">En curso</span>
+					</span>
+					<span class="secundario" th:text="|Clases del ${#temporals.format(a.inicioClases, 'dd/MM/yyyy')} al ${#temporals.format(a.finClases, 'dd/MM/yyyy')}|">Clases</span>
+					<span class="secundario num" th:text="|${a.secciones} ${a.secciones == 1 ? 'sección' : 'secciones'} · ${a.matriculados} ${a.matriculados == 1 ? 'alumno matriculado' : 'alumnos matriculados'}|">14 secciones</span>
+				</a>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta formulario-angosto" th:if="${puedeEditar}" aria-labelledby="titulo-nuevo">
+		<div>
+			<h2 id="titulo-nuevo">Nuevo año escolar</h2>
+			<p class="secundario">Después le agregas sus secciones. Puedes crear el año siguiente para matricular por adelantado.</p>
+		</div>
+		<form class="formulario" th:action="@{/colegio/anios}" th:object="${solicitud}" method="post">
+			<div th:replace="~{fragments/componentes :: campoDe('anio', 'Año', null, 'number', true)}"></div>
+			<div class="formulario-doble">
+				<div th:replace="~{fragments/componentes :: campoDe('inicioClases', 'Inicio de clases', null, 'date', true)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('finClases', 'Fin de clases', null, 'date', true)}"></div>
+			</div>
+			<label class="opcion" th:classappend="${hayEnCurso} ? 'opcion-deshabilitada'">
+				<input type="checkbox" th:field="*{enCurso}" th:disabled="${hayEnCurso}">
+				<span>Es el año en curso</span>
+			</label>
+			<p class="ayuda" th:if="${hayEnCurso}">Ya hay un año en curso: este se crea como planificado.</p>
+			<p class="ayuda" th:unless="${hayEnCurso}">Solo puede haber un año en curso. Los demás quedan como planificados o cerrados.</p>
+			<div class="acciones">
+				<button th:replace="~{fragments/componentes :: boton('Crear año', 'primario')}"></button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

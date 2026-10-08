@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Pago registrado', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="caja-confirmacion" th:with="p=${pago}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/caja}">Caja</a></p>
+			<h1 data-comprobante th:text="|Pago registrado · ${p.comprobante}|">Pago registrado · B001-00000001</h1>
+			<p class="secundario" th:text="|${p.tipoComprobante} a nombre de ${p.receptor} · ${p.familia}|">Boleta</p>
+		</div>
+	</div>
+
+	<section class="tarjeta" aria-labelledby="titulo-resumen">
+		<h2 id="titulo-resumen" class="solo-lectores">Resumen del pago</h2>
+		<ul class="conteos conteos-montos">
+			<li><strong th:text="|S/ ${#numbers.formatDecimal(p.total, 1, 'COMMA', 2, 'POINT')}|">S/ 900.00</strong><span th:text="|Total · ${p.medio}|">Total · Efectivo</span></li>
+			<li th:if="${p.efectivo}"><strong th:text="|S/ ${#numbers.formatDecimal(p.recibido, 1, 'COMMA', 2, 'POINT')}|">S/ 1,000.00</strong><span>Recibido</span></li>
+			<li th:unless="${p.efectivo}"><strong class="num" th:text="${p.numeroOperacion}">123456</strong><span>N.° de operación</span></li>
+		</ul>
+		<p th:if="${p.efectivo}" class="vuelto" data-vuelto th:text="|Entrega S/ ${#numbers.formatDecimal(p.vuelto, 1, 'COMMA', 2, 'POINT')} de vuelto|">Entrega S/ 100.00 de vuelto</p>
+		<th:block th:if="${p.aCuenta}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', 'Pago a cuenta: la última cuota queda con saldo. Promotoría lo verá resaltado.')}"></div>
+		</th:block>
+		<ul class="lista-imputacion">
+			<li th:each="l : ${p.lineas}"><span th:text="${l.descripcion}">Pensión diciembre 2026 · Mateo</span>
+				<span th:replace="~{fragments/componentes :: monto(${l.monto})}"></span></li>
+		</ul>
+	</section>
+
+	<th:block th:if="${p.simulado}">
+		<div th:replace="~{fragments/componentes :: alerta('info', 'Comprobante simulado: aún sin envío a SUNAT.')}"></div>
+	</th:block>
+	<div th:replace="~{fragments/componentes :: alerta('info',
+		'Aviso al apoderado: se activa en diciembre (WhatsApp o correo). Por ahora, entrega la boleta impresa.')}"></div>
+
+	<div class="acciones acciones-izquierda">
+		<a class="btn btn-primario" data-imprimir-boleta th:href="@{/caja/pagos/{id}/comprobante(id=${p.id},imprimir=true)}">Imprimir boleta</a>
+		<a class="btn btn-secundario" th:href="@{/caja}">Nuevo cobro</a>
+	</div>
+</main>
+</body>
+</html>

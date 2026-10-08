@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Saldo inicial', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/pensiones}">Pensiones</a></p>
+			<h1>Saldo inicial</h1>
+			<p class="secundario">Las deudas de antes del sistema, según el informe del contador. Administración arma el lote
+				y lo envía solo si la suma cuadra con el total declarado; otra persona de Promotoría o Dirección lo confirma.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-lotes">
+		<h2 id="titulo-lotes">Lotes</h2>
+		<th:block th:if="${#lists.isEmpty(lotes)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay lotes de saldo inicial',
+				${puedeCrear} ? 'Crea uno con el formulario «Nuevo lote».' : 'Administración los arma.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(lotes)}">
+			<thead><tr><th scope="col">Lote</th><th scope="col">Corte</th><th scope="col">Informe</th>
+				<th scope="col" class="num">Declarado</th><th scope="col" class="num">Suma de líneas</th>
+				<th scope="col">Estado</th></tr></thead>
+			<tbody>
+				<tr th:each="l : ${lotes}" th:data-lote="${l.id}">
+					<td data-etiqueta="Lote"><a th:href="@{/pensiones/saldo-inicial/{id}(id=${l.id})}" th:text="|Lote ${l.id} · ${l.anio}|">Lote 1</a></td>
+					<td data-etiqueta="Corte" th:text="${#temporals.format(l.fechaCorte, 'dd/MM/yyyy')}">30/09/2026</td>
+					<td data-etiqueta="Informe" th:text="${l.documentoReferencia}">Informe</td>
+					<td data-etiqueta="Declarado" class="num"><span th:replace="~{fragments/componentes :: monto(${l.totalDeclarado})}"></span></td>
+					<td data-etiqueta="Suma de líneas" class="num">
+						<span th:replace="~{fragments/componentes :: monto(${l.totalLineas})}"></span>
+						<span th:replace="~{fragments/componentes :: badge(${l.cuadra} ? 'Cuadra' : 'No cuadra', ${l.cuadra} ? 'exito' : 'peligro')}"></span>
+					</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${l.estadoEtiqueta}, ${l.estadoVariante})}"></span></td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta formulario-angosto" th:if="${puedeCrear}" aria-labelledby="titulo-nuevo">
+		<div>
+			<h2 id="titulo-nuevo">Nuevo lote</h2>
+			<p class="secundario">Copia el total del informe del contador: el lote no se podrá enviar hasta que la suma de las
+				deudas sea exactamente ese total.</p>
+		</div>
+		<form class="formulario" th:action="@{/pensiones/saldo-inicial}" th:object="${solicitud}" method="post">
+			<div class="campo">
+				<label for="anioId">Año escolar</label>
+				<select class="input" th:field="*{anioId}" required>
+					<option th:each="a : ${anios}" th:value="${a.id}" th:text="${a.anio}">2026</option>
+				</select>
+				<p class="error" th:if="${#fields.hasErrors('anioId')}" th:errors="*{anioId}">Error</p>
+			</div>
+			<div th:replace="~{fragments/componentes :: campoDe('fechaCorte', 'Fecha de corte', 'Las deudas hasta esta fecha. No puede ser futura.', 'date', true)}"></div>
+			<div th:replace="~{fragments/componentes :: campoDe('documentoReferencia', 'Referencia al informe del contador', 'Por ejemplo: Informe CPC Ramos N.° 014-2026 del 30/09/2026', 'text', true)}"></div>
+			<div class="campo">
+				<label for="totalDeclarado">Total declarado (S/)</label>
+				<input type="text" inputmode="decimal" class="input num" th:field="*{totalDeclarado}" th:errorclass="input-con-error"
+					required autocomplete="off" aria-describedby="totalDeclarado-ayuda">
+				<p class="ayuda" id="totalDeclarado-ayuda">Con punto decimal, sin comas: 12500.00</p>
+				<p class="error" th:if="${#fields.hasErrors('totalDeclarado')}" th:errors="*{totalDeclarado}">Error</p>
+			</div>
+			<div class="acciones">
+				<button th:replace="~{fragments/componentes :: boton('Crear lote', 'primario')}"></button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

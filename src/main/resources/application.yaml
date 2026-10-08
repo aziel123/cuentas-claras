@@ -1,8 +1,12 @@
 spring:
   application:
     name: cuentas-claras
-  profiles:
-    default: dev
+  datasource:
+    hikari:
+      # READ COMMITTED también en MySQL (allí el defecto es REPEATABLE READ): después de bloquear el año escolar con
+      # SELECT ... FOR UPDATE, cada consulta ve lo que otra transacción acaba de confirmar (planes aprobados,
+      # matrículas nuevas). Con REPEATABLE READ una matrícula podía «no ver» el plan aprobado en paralelo.
+      transaction-isolation: TRANSACTION_READ_COMMITTED
   jpa:
     open-in-view: false
     hibernate:
@@ -12,17 +16,54 @@ spring:
       hibernate:
         jdbc:
           time_zone: America/Lima
+        # Los LocalDateTime (hora de Lima, del reloj de la aplicación) se guardan TAL CUAL en las columnas
+        # DATETIME, sin convertir según la zona horaria de la JVM. Sin esto, con la JVM en UTC se guardaban
+        # 5 horas corridas y la cadena HMAC de auditoría dependía de la zona del servidor.
+        type:
+          java_time_use_direct_jdbc: true
+        # Multi-colegio (@TenantId). Se registra por NOMBRE DE CLASE para que Hibernate lo
+        # use también en @DataJpaTest; registrado como bean de Spring no se aplica ahí.
+        tenant_identifier_resolver: pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ResolutorColegioActual
   thymeleaf:
     cache: true
+  servlet:
+    multipart:
+      # Límite del contenedor, holgado: el de 2 MB (cuentasclaras.excel.max-bytes) lo valida la aplicación con un
+      # mensaje claro. Por encima de esto el contenedor no lee el archivo (ver ManejadorAccesoDenegado).
+      max-file-size: 5MB
+      max-request-size: 6MB
+  mvc:
+    format:
+      # Fechas de los formularios (input type="date") en ISO: 2026-03-02. Sin esto, al volver a mostrar un formulario
+      # con errores se formatearían con el estilo corto del idioma (12/1/26) y el navegador las descartaría.
+      date: iso
   jackson:
     time-zone: America/Lima
 
 server:
+  tomcat:
+    # Descarta (sin procesar) hasta 20 MB de un envío rechazado, para que el navegador reciba la respuesta con el
+    # mensaje en vez de un corte de conexión.
+    max-swallow-size: 20MB
   error:
     include-stacktrace: never
     include-message: never
+  servlet:
+    session:
+      timeout: 30m
+      tracking-modes: cookie
+      cookie:
+        name: CCSESION
+        http-only: true
+        same-site: lax
+        secure: true
 
 management:
+  health:
+    # El correo de respaldo (SMTP) no decide si la aplicación está viva: sin esto, un servidor de correo caído pondría
+    # la salud en DOWN.
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -30,3 +71,120 @@ management:
   endpoint:
     health:
       show-details: never
+
+cuentasclaras:
+  seguridad:
+    # Intentos fallidos seguidos antes de bloquear la cuenta, y cuánto dura el bloqueo.
+    intentos-maximos: 5
+    duracion-bloqueo: 15m
+    # Una clave temporal (alta o restablecimiento) deja de servir pasado este tiempo.
+    vigencia-clave-temporal: 48h
+  excel:
+    max-bytes: 2MB            # archivo subido
+    max-filas: 2000           # filas de datos
+    max-descomprimido: 20MB   # suma de todas las entradas del zip
+    max-entradas-zip: 200
+    max-textos-compartidos: 20000   # textos distintos dentro del archivo (contra archivos inflados)
+  saldo-inicial:
+    # Únicos «otros conceptos» del reglamento que se cargan como saldo inicial (nunca pensiones ni matrículas).
+    conceptos-otros: Taller de verano, Uniforme escolar, Materiales educativos, Excursión
+  caja:
+    fondo-fijo: 0.00                 # sencillo que Administración entrega a cada cajero (se copia a caja_diaria)
+    hora-limite-cierre: "19:00"      # después, «Caja sin cerrar» en Para revisar (tanda 3)
+    permitir-pago-a-cuenta: false    # pagos parciales: desactivados en el piloto
+    pago-a-cuenta-minimo: 50.00
+    cuentas-deposito: BCP Soles 191-XXXXXXX-0-XX
+    dias-sin-verificar: 1            # pagos digitales o depósitos sin verificar: alerta (tanda 3)
+  comprobantes:
+    # SIMULADO (sin valor tributario) o NUBEFACT. Nubefact solo con su RUTA y TOKEN (variables de entorno) y, fuera de
+    # producción, con permitir-real-fuera-de-prod: true (cuenta DEMO). Sin ellos la aplicación no arranca.
+    proveedor: ${COMPROBANTES_PROVEEDOR:SIMULADO}
+    permitir-real-fuera-de-prod: false
+    nubefact:
+      ruta: ${NUBEFACT_RUTA:}
+      token: ${NUBEFACT_TOKEN:}
+      dominios-permitidos: api.nubefact.com
+    # Outbox del OSE (sprint 4): se envía tras emitir; si falla, reintenta con espera creciente.
+    plazo-envio-dias: 3              # plazo legal para que SUNAT acepte la boleta
+    alerta-horas-sin-aceptar: 4
+    reintento-inicial: 1m
+    reintento-maximo: 60m
+    consulta-cada: 5m
+    afectacion-igv: INAFECTO         # TUO Ley IGV art. 2; confirmar con el contador
+    serie-boleta: B001
+    serie-factura: F001
+    serie-nota-boleta: BC01
+    serie-nota-factura: FC01
+  pasarela:
+    # NINGUNA: sin pago en línea. SIMULADA solo existe en dev, test y piloto (nunca en producción). CULQI necesita
+    # su adaptador (todavía no integrado) y sus llaves por variable de entorno.
+    proveedor: ${PASARELA_PROVEEDOR:NINGUNA}
+    minutos-vigencia-orden: 30
+    monto-maximo: 5000.00
+    medios: YAPE, PLIN, TARJETA
+    culqi:
+      llave-publica: ${PASARELA_LLAVE_PUBLICA:}
+      llave-secreta: ${PASARELA_LLAVE_SECRETA:}
+      webhook-usuario: ${PASARELA_WEBHOOK_USUARIO:}
+      webhook-clave: ${PASARELA_WEBHOOK_CLAVE:}
+    simulada:
+      secreto-aviso: ${PASARELA_SIMULADA_SECRETO:}
+  recaudacion:
+    # Archivo del banco con los pagos hechos con el código del alumno (sprint 4, tanda 2). GENERICO: el formato CSV o
+    # XLSX del colegio, hasta tener el adaptador del banco (se construye con un archivo de ejemplo anonimizado).
+    banco: GENERICO
+    modalidad: CON_BASE_DE_DEUDAS    # CON_BASE_DE_DEUDAS (cuota exacta) | SIN_BASE (de la cuota más antigua a la nueva)
+    intentos-confirmacion: 2         # totales a ciegas distintos antes de RECHAZAR el lote
+    aceptar-parciales: true          # el dinero ya está en el banco: se aplica a cuenta y se resalta
+    lineas-por-transaccion: 50
+    maximo-lineas: 2000
+    muestreo: 3                      # líneas al azar que quien confirma busca en el portal del banco
+  conciliacion:
+    # Extracto bancario y conciliación automática (sprint 4, tanda 3). Las parejas exactas (misma operación y monto) se
+    # confirman solas; las sugeridas las confirma alguien que no cobró ni depositó; lo demás se alerta.
+    dias-tolerancia-fecha: 2         # días hábiles de diferencia para una pareja SUGERIDA
+    tolerancia-monto-liquidacion: 0.00
+    hora-limite-extracto: "12:00"    # del día hábil siguiente; después, «extracto no subido»
+    intentos-confirmacion: 2         # saldos a ciegas distintos antes de RECHAZAR el extracto
+    muestreo-diario: 3               # movimientos al azar (semilla = fecha) para comparar con la app del banco
+    muestreo-confirmacion: 3         # movimientos al azar que ve quien confirma
+    patron-abono-recaudacion: ""     # p. ej. "RECAUD" si el banco abona el lote con esa glosa (EXACTA por glosa)
+    abono-recaudacion: POR_LOTE      # POR_LOTE (un abono por día) | POR_PAGO (el banco abona pago por pago)
+    maximo-lineas: 3000
+  mensajeria:
+    # Sprint 5: avisos a las familias (WhatsApp con correo de respaldo) y enlaces de activación al titular. Los
+    # conectores reales están APAGADOS (NINGUNO). SIMULADO solo existe en dev, test y piloto; en prod la aplicación no
+    # arranca sin al menos un canal real (decisión 40). Secretos solo por variable de entorno.
+    whatsapp:
+      proveedor: ${MENSAJERIA_WHATSAPP_PROVEEDOR:NINGUNO}   # NINGUNO | SIMULADO (dev, test, piloto) | WHATSAPP_CLOUD
+      api: https://graph.facebook.com
+      version-api: v21.0                  # confirmar la vigente con Meta al activar
+      numero-id: ${WHATSAPP_NUMERO_ID:}
+      token: ${WHATSAPP_TOKEN:}
+      secreto-app: ${WHATSAPP_SECRETO_APP:}               # firma X-Hub-Signature-256 de los avisos
+      token-verificacion: ${WHATSAPP_TOKEN_VERIFICACION:}
+      dominios-permitidos: graph.facebook.com
+      permitir-real-fuera-de-prod: false
+      numeros-de-prueba: ""               # fuera de prod, el real SOLO escribe a estos números
+      idioma-plantillas: es
+    correo:
+      proveedor: ${MENSAJERIA_CORREO_PROVEEDOR:NINGUNO}     # NINGUNO | SIMULADO (dev, test, piloto) | SMTP
+      remitente: ${CORREO_REMITENTE:}
+      permitir-real-fuera-de-prod: false
+      correos-de-prueba: ""
+    url-publica: ${CC_URL_PUBLICA:http://localhost:8080}   # base de los enlaces de los mensajes
+    vigencia-enlace: 48h
+    envio-cada: 30s
+    reintento-inicial: 1m
+    reintento-maximo: 60m
+    intentos-maximos: 8
+    alerta-pendiente-minutos: 15
+    alerta-pago-sin-entregar-minutos: 60
+    historial-familia-meses: 12
+  huella:
+    cron: "0 0 6 * * *"                   # 06:00 (Lima): reverifica la bitácora y envía la huella de ayer
+    reverificar-dias: 400
+  auditoria:
+    # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
+    # aplicación no arranca. Nunca en el código: va en el gestor de secretos.
+    clave-hmac: ${AUDITORIA_CLAVE_HMAC}

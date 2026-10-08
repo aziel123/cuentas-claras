@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Pagos de hoy', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="caja-hoy" th:with="d=${dia}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/caja}">Caja</a></p>
+			<h1 th:text="|Pagos de hoy · ${#temporals.format(d.fecha, 'dd/MM/yyyy')}|">Pagos de hoy</h1>
+			<p class="secundario" th:text="|Caja de ${d.cajera}: los pagos que registraste hoy.|">Caja de Lucía Ramos</p>
+		</div>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Nuevo cobro', @{/caja}, 'primario')}"></a>
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Cerrar caja', @{/caja/cierre}, 'secundario')}"></a>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<div th:replace="~{fragments/componentes :: alerta('info',
+		'Caja no puede borrar ni anular pagos: solo pedirlo. Si te equivocaste, pide la anulación o la corrección: la aprueba Promotoría o Dirección.')}"></div>
+
+	<section class="tarjeta" aria-labelledby="titulo-pagos">
+		<h2 id="titulo-pagos" th:text="${#lists.size(d.pagos) == 1} ? '1 pago' : |${#lists.size(d.pagos)} pagos|">2 pagos</h2>
+		<th:block th:if="${#lists.isEmpty(d.pagos)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay pagos hoy', 'Cuando cobres, aparecerán aquí con su comprobante.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(d.pagos)}">
+			<thead><tr><th scope="col">Hora</th><th scope="col">Comprobante</th><th scope="col">Alumnos</th>
+				<th scope="col">Conceptos</th><th scope="col">Medio</th><th scope="col" class="num">Monto</th><th scope="col">Estado</th>
+				<th scope="col">Acciones</th></tr></thead>
+			<tbody>
+				<tr th:each="p : ${d.pagos}" th:classappend="${p.anulado} ? 'fila-quitada'" th:data-pago="${p.id}">
+					<td data-etiqueta="Hora" class="num" th:text="${#temporals.format(p.hora, 'HH:mm')}">09:15</td>
+					<td data-etiqueta="Comprobante"><a class="num" th:href="@{/caja/pagos/{id}(id=${p.id})}" th:text="${p.comprobante}">B001-00000001</a></td>
+					<td data-etiqueta="Alumnos" th:text="${p.alumnos}">Mateo Quispe Huamán</td>
+					<td data-etiqueta="Conceptos" th:text="${p.conceptos}">Pensión diciembre 2026</td>
+					<td data-etiqueta="Medio" th:text="${p.medio}">Efectivo</td>
+					<td data-etiqueta="Monto" class="num"><th:block th:if="${p.total != null}"><span th:replace="~{fragments/componentes :: monto(${p.total})}"></span></th:block>
+						<span class="secundario" th:if="${p.total == null}" data-monto-oculto>Se ve al cerrar</span></td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${p.estado}, ${p.estadoVariante})}"></span>
+						<small class="bloque secundario" th:if="${p.notaCredito != null}" th:text="|Nota de crédito ${p.notaCredito}|">Nota de crédito BC01-00000001</small>
+						<small class="bloque secundario" th:if="${p.reemplazaA != null}" th:text="|Reemplaza a ${p.reemplazaA}|">Reemplaza a B001-00000001</small></td>
+					<td data-etiqueta="Acciones">
+						<div class="fila" th:if="${p.puedeSolicitar}">
+							<th:block th:replace="~{fragments/componentes :: modalDevolucion(|modal-anular-${p.id}|, |¿Pedir la anulación de ${p.comprobante}?|,
+								'El pago sigue vigente hasta que Promotoría o Dirección lo aprueben. Al aprobarse se emite una nota de crédito y las cuotas vuelven a deberse.',
+								@{/caja/pagos/{id}/devolucion(id=${p.id})})}"></th:block>
+							<a class="btn btn-texto btn-chico" th:href="@{/caja/pagos/{id}/correccion(id=${p.id})}">Corregir</a>
+						</div>
+						<span class="secundario" th:unless="${p.puedeSolicitar}">—</span>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

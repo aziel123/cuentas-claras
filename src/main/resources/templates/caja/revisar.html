@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Revisar el cobro', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="caja-revisar" th:with="r=${revision}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/caja/familias/{id}(id=${r.familiaId})}" th:text="${r.familia}">Familia Quispe Huamán</a></p>
+			<h1>Revisa el cobro</h1>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<th:block th:each="aviso : ${r.avisos}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${aviso})}"></div>
+	</th:block>
+
+	<form method="post" th:action="@{/caja/pagos}" class="formulario">
+		<input type="hidden" name="clave" th:value="${r.clave}">
+		<input type="hidden" name="familiaId" th:value="${r.familiaId}">
+		<input type="hidden" name="medio" th:value="${r.medio}">
+		<input type="hidden" name="totalVisto" th:value="${r.total}">
+		<input type="hidden" name="cuotaIds" th:each="id : ${r.cuotaIds}" th:value="${id}">
+
+		<section class="tarjeta total-cobro" aria-labelledby="titulo-total">
+			<h2 id="titulo-total" class="etiqueta">Total a cobrar · <span th:text="${r.medio.etiqueta()}">Efectivo</span></h2>
+			<p class="total-cobro-monto" data-total th:text="|S/ ${#numbers.formatDecimal(r.total, 1, 'COMMA', 2, 'POINT')}|">S/ 900.00</p>
+			<ul class="lista-imputacion">
+				<li th:each="l : ${r.lineas}">
+					<span><strong th:text="${l.descripcion}">Pensión diciembre 2026</strong>
+						<span class="secundario bloque" th:text="|${l.alumno} · vence ${#temporals.format(l.vencimiento, 'dd/MM/yyyy')}|">Mateo · vence 31/12/2026</span></span>
+					<span th:replace="~{fragments/componentes :: monto(${l.monto})}"></span>
+				</li>
+			</ul>
+			<p class="ayuda">Caja no decide montos: la deuda la generó el sistema. Al registrar, se emite el comprobante.</p>
+		</section>
+
+		<section class="tarjeta" aria-labelledby="titulo-pago">
+			<h2 id="titulo-pago" th:text="${r.efectivo()} ? 'Efectivo recibido' : 'Datos del pago'">Efectivo recibido</h2>
+			<div class="campo" th:if="${r.efectivo()}">
+				<label for="recibido">Recibido (S/)</label>
+				<input class="input input-grande num" type="number" id="recibido" name="recibido" required
+					inputmode="decimal" step="0.10" min="0" max="99999.90" autocomplete="off" aria-describedby="recibido-ayuda"
+					th:value="${datos != null} ? ${datos.recibido}">
+				<p class="ayuda" id="recibido-ayuda">Lo que te entregó el apoderado. El vuelto se muestra al registrar el pago.</p>
+			</div>
+			<div class="campo" th:unless="${r.efectivo()}">
+				<label for="numeroOperacion">N.° de operación (obligatorio)</label>
+				<input class="input input-grande" type="text" id="numeroOperacion" name="numeroOperacion" required
+					minlength="4" maxlength="30" autocomplete="off" aria-describedby="operacion-ayuda"
+					th:value="${datos != null} ? ${datos.numeroOperacion}">
+				<p class="ayuda" id="operacion-ayuda">Cópialo de la constancia del Yape, Plin, transferencia o voucher. Administración lo verificará con el banco.</p>
+			</div>
+			<div class="campo" th:if="${r.pagoACuentaPermitido}">
+				<label for="montoACuenta">Pago a cuenta (opcional)</label>
+				<input class="input num" type="number" id="montoACuenta" name="montoACuenta" inputmode="decimal" step="0.10"
+					th:min="${r.pagoACuentaMinimo}" autocomplete="off" aria-describedby="acuenta-ayuda"
+					th:value="${datos != null} ? ${datos.montoACuenta}">
+				<p class="ayuda" id="acuenta-ayuda" th:text="|Solo si paga una parte (mínimo S/ ${#numbers.formatDecimal(r.pagoACuentaMinimo, 1, 'COMMA', 2, 'POINT')}). Queda resaltado para Promotoría.|">Solo si paga una parte.</p>
+			</div>
+		</section>
+
+		<section class="tarjeta" aria-labelledby="titulo-comprobante">
+			<h2 id="titulo-comprobante">Comprobante</h2>
+			<fieldset class="grupo-opciones">
+				<legend>Boleta a nombre de</legend>
+				<div class="lista-cuotas">
+					<label class="opcion" th:each="o : ${r.receptores}">
+						<input type="radio" name="receptorApoderadoId" th:value="${o.apoderadoId}"
+							th:checked="${datos != null and datos.receptorApoderadoId != null} ? ${datos.receptorApoderadoId == o.apoderadoId} : ${o.apoderadoId == r.receptorPorDefecto}">
+						<span><span th:text="${o.nombre}">Rosa Huamán Ccori</span>
+							<span class="secundario" th:text="| · ${o.documento}|"> · DNI ****8912</span>
+							<span class="secundario" th:if="${o.responsable}"> · responsable de pago</span></span>
+					</label>
+				</div>
+			</fieldset>
+			<div class="fila">
+				<label class="opcion">
+					<input type="radio" name="comprobante" value="BOLETA"
+						th:checked="${datos == null or datos.comprobante == null or datos.comprobante.name() == 'BOLETA'}">
+					<span>Boleta</span>
+				</label>
+				<label class="opcion" th:unless="${#lists.isEmpty(r.facturables)}">
+					<input type="radio" name="comprobante" value="FACTURA"
+						th:checked="${datos != null and datos.comprobante != null and datos.comprobante.name() == 'FACTURA'}">
+					<span>Factura (con RUC)</span>
+				</label>
+			</div>
+			<p class="secundario" th:if="${#lists.isEmpty(r.facturables)}" data-sin-ruc>Esta familia no tiene RUC registrado:
+				solo boleta. Para factura, Administración registra el RUC del apoderado y lo aprueba otra persona.</p>
+			<details class="desplegable" th:unless="${#lists.isEmpty(r.facturables)}"
+				th:open="${datos != null and datos.comprobante != null and datos.comprobante.name() == 'FACTURA'}">
+				<summary>Datos para la factura</summary>
+				<div class="formulario">
+					<div class="campo">
+						<label for="ruc">RUC registrado de la familia</label>
+						<select class="input" id="ruc" name="ruc" aria-describedby="ruc-ayuda">
+							<option th:each="o : ${r.facturables}" th:value="${o.ruc}" th:text="|${o.ruc} · ${o.razonSocial}|"
+								th:selected="${datos != null and datos.ruc == o.ruc}">20131312955 · Comercial Quispe S.A.C.</option>
+						</select>
+						<p class="ayuda" id="ruc-ayuda">Solo los RUC aprobados de los apoderados de esta familia.</p>
+					</div>
+				</div>
+			</details>
+		</section>
+
+		<div class="acciones acciones-izquierda">
+			<button type="submit" class="btn btn-primario btn-grande" data-cobrar th:text="|Cobrar S/ ${#numbers.formatDecimal(r.total, 1, 'COMMA', 2, 'POINT')}|">Cobrar S/ 900.00</button>
+			<a class="btn btn-secundario" th:href="@{/caja/familias/{id}(id=${r.familiaId})}">Cambiar cuotas</a>
+		</div>
+	</form>
+</main>
+</body>
+</html>

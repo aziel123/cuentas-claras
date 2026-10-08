@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Recaudación bancaria', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="recaudacion">
+	<div class="cabecera">
+		<div>
+			<h1>Recaudación bancaria</h1>
+			<p class="secundario">Pagos que las familias hacen en el banco con el código del alumno. Nadie los digita: Administración sube el archivo del banco, otra persona lo confirma mirando el banco y el sistema registra los pagos con su boleta.</p>
+		</div>
+		<a class="btn btn-secundario" th:if="${puedeSubir}" th:href="@{/recaudacion/base-deudas}" download>Exportar base de deudas</a>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-confirmar" data-seccion="por-confirmar">
+		<h2 id="titulo-confirmar">Por confirmar</h2>
+		<p class="secundario">Quien confirma entra al portal del banco y escribe el total recaudado que ve ahí. Nunca lo confirma quien subió el archivo.</p>
+		<th:block th:if="${#lists.isEmpty(r.porConfirmar)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Nada por confirmar', 'Cuando Administración suba el archivo del banco, aparecerá aquí.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(r.porConfirmar)}">
+			<thead><tr><th scope="col">Lote</th><th scope="col">Pagos del</th><th scope="col">Pagos</th><th scope="col">Subido por</th><th scope="col">Acción</th></tr></thead>
+			<tbody>
+				<tr th:each="l : ${r.porConfirmar}" th:data-lote="${l.id}">
+					<td data-etiqueta="Lote"><a th:href="@{/recaudacion/lotes/{id}(id=${l.id})}" th:text="|N.° ${l.id}|">N.° 1</a></td>
+					<td data-etiqueta="Pagos del" th:text="|${#temporals.format(l.desde, 'dd/MM')} al ${#temporals.format(l.hasta, 'dd/MM/yyyy')}|">05/10 al 05/10/2026</td>
+					<td data-etiqueta="Pagos" class="num" th:text="${l.lineas}">23</td>
+					<td data-etiqueta="Subido por" th:text="|${l.cargadoPor} · ${#temporals.format(l.cargadoEn, 'dd/MM HH:mm')}|">administracion</td>
+					<td data-etiqueta="Acción">
+						<a th:if="${puedeConfirmar}" class="btn btn-chico btn-primario" th:href="@{/recaudacion/lotes/{id}/confirmar(id=${l.id})}">Confirmar a ciegas</a>
+						<span th:unless="${puedeConfirmar}" class="secundario">Lo confirma Promotoría o Dirección</span>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-excepciones" data-seccion="por-revisar">
+		<h2 id="titulo-excepciones">Pagos por revisar</h2>
+		<p class="secundario">El dinero está en el banco pero no se pudo aplicar solo. Llama a la familia antes de pedir aplicarlo o devolverlo.</p>
+		<th:block th:if="${#lists.isEmpty(r.excepciones)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Nada por revisar', 'Todos los pagos por banco se aplicaron solos.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(r.excepciones)}">
+			<thead><tr><th scope="col">Pago</th><th scope="col">Código</th><th scope="col">Alumno</th><th scope="col" class="num">Monto</th><th scope="col">Motivo</th><th scope="col">Solicitud</th></tr></thead>
+			<tbody>
+				<tr th:each="e : ${r.excepciones}" th:data-linea="${e.id}">
+					<td data-etiqueta="Pago"><a th:href="@{/recaudacion/lineas/{id}(id=${e.id})}" th:text="|Lote ${e.loteId} · línea ${e.numero}|">Lote 1 · línea 3</a></td>
+					<td data-etiqueta="Código" class="num" th:text="${e.codigo}">1000 0016</td>
+					<td data-etiqueta="Alumno" th:text="${e.alumno} ?: 'Sin alumno'">Mateo</td>
+					<td data-etiqueta="Monto" class="num" th:text="${e.moneda == 'PEN'} ? ${'S/ ' + #numbers.formatDecimal(e.monto, 1, 'COMMA', 2, 'POINT')} : ${e.moneda + ' ' + e.monto}">S/ 450.00</td>
+					<td data-etiqueta="Motivo"><span th:replace="~{fragments/componentes :: badge(${e.motivo}, ${e.critica} ? 'peligro' : 'alerta')}"></span></td>
+					<td data-etiqueta="Solicitud" th:text="${e.solicitudPendiente} ?: '—'">—</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-subir" th:if="${puedeSubir}" data-seccion="subir">
+		<h2 id="titulo-subir">Subir el archivo del banco</h2>
+		<ol class="pasos" aria-label="Pasos para subir el archivo">
+			<li class="paso-actual" aria-current="step">Subir</li>
+			<li>Revisar</li>
+			<li>Registrar</li>
+		</ol>
+		<p class="secundario" th:text="|Banco: ${r.banco} · ${r.modalidad}. Descarga el archivo del día en el portal del banco y súbelo sin abrirlo ni cambiarlo: se guarda tal cual, con su huella.|">Banco</p>
+		<form class="formulario" method="post" th:action="@{/recaudacion/vista-previa}" enctype="multipart/form-data">
+			<div class="campo">
+				<label for="archivo">Archivo del banco (.csv, .txt o .xlsx)</label>
+				<input class="input" type="file" id="archivo" name="archivo" required accept=".csv,.txt,.xlsx,text/csv" aria-describedby="archivo-ayuda">
+				<p class="ayuda" id="archivo-ayuda">Hasta 2 MB. Columnas: fecha_pago, codigo_alumno, referencia_deuda, monto, moneda, numero_operacion y, al final, el pie TOTAL;monto;cantidad.</p>
+			</div>
+			<div class="acciones">
+				<button type="submit" class="btn btn-primario">Subir y revisar</button>
+			</div>
+		</form>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-lotes">
+		<h2 id="titulo-lotes">Archivos recientes</h2>
+		<th:block th:if="${#lists.isEmpty(r.lotes)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay archivos confirmados', 'Aquí verás cada archivo del banco con sus pagos aplicados y por revisar.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(r.lotes)}">
+			<thead><tr><th scope="col">Lote</th><th scope="col">Pagos del</th><th scope="col">Estado</th><th scope="col" class="num">Total</th><th scope="col">Aplicados</th><th scope="col">Por revisar</th></tr></thead>
+			<tbody>
+				<tr th:each="l : ${r.lotes}" th:data-lote="${l.id}">
+					<td data-etiqueta="Lote"><a th:href="@{/recaudacion/lotes/{id}(id=${l.id})}" th:text="|N.° ${l.id}|">N.° 1</a></td>
+					<td data-etiqueta="Pagos del" th:text="|${#temporals.format(l.desde, 'dd/MM')} al ${#temporals.format(l.hasta, 'dd/MM/yyyy')}|">05/10</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${l.etiqueta}, ${l.variante})}"></span></td>
+					<td data-etiqueta="Total" class="num"><th:block th:if="${l.total != null}"><span th:replace="~{fragments/componentes :: monto(${l.total})}"></span></th:block><span th:if="${l.total == null}">—</span></td>
+					<td data-etiqueta="Aplicados" class="num" th:text="${l.aplicadas}">20</td>
+					<td data-etiqueta="Por revisar" class="num" th:text="${l.excepciones}">3</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

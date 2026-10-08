@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Confirmar extracto', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="conciliacion-confirmar" th:with="c=${c}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/conciliacion}">Conciliación bancaria</a></p>
+			<h1>Confirma el extracto mirando tu app del banco</h1>
+			<p class="secundario" th:text="${c.cuenta}">BCP · 191-2345678-0-12</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:unless="${c.porConfirmar()}">
+		<div th:replace="~{fragments/componentes :: alerta('info', 'No hay extractos por confirmar en esta cuenta.')}"></div>
+		<p><a class="btn btn-secundario" th:href="@{/conciliacion}">Ver las diferencias</a></p>
+	</th:block>
+
+	<th:block th:if="${c.porConfirmar() and c.participaste}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', 'Tú subiste el extracto que toca confirmar (o preparaste la cuenta de quien lo subió): debe confirmarlo otra persona de Promotoría o Dirección.')}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-pendientes" th:if="${c.porConfirmar()}">
+		<h2 id="titulo-pendientes">Extractos por confirmar</h2>
+		<p class="secundario">Se confirman de uno en uno, del más antiguo al más nuevo, cada uno con el saldo de su último día.</p>
+		<table class="tabla">
+			<thead><tr><th scope="col">N.°</th><th scope="col">Días</th><th scope="col">Movimientos</th><th scope="col">Subido por</th></tr></thead>
+			<tbody>
+				<tr th:each="p : ${c.pendientes}">
+					<td data-etiqueta="N.°" class="num" th:text="${p.secuencia}">3</td>
+					<td data-etiqueta="Días" th:text="|${#temporals.format(p.desde, 'dd/MM')} al ${#temporals.format(p.hasta, 'dd/MM/yyyy')}|">05/10</td>
+					<td data-etiqueta="Movimientos" class="num" th:text="${p.movimientos}">41</td>
+					<td data-etiqueta="Subido por" th:text="|${p.subidoPor} · ${#temporals.format(p.subidoEn, 'dd/MM HH:mm')}|">administracion</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-muestra" th:if="${c.porConfirmar() and !c.participaste and !#lists.isEmpty(c.muestra)}">
+		<h2 id="titulo-muestra">1. ¿Ves estos movimientos en tu app?</h2>
+		<p class="secundario">Elegidos al azar cuando se subió el extracto. El monto no se muestra a propósito: míralo en tu app. Si alguno no está en tu app del banco, no confirmes: puede ser un extracto alterado. Avisa a Dirección.</p>
+		<table class="tabla" data-seccion="muestra">
+			<thead><tr><th scope="col">Fecha</th><th scope="col">Descripción</th><th scope="col">Operación</th></tr></thead>
+			<tbody>
+				<tr th:each="m : ${c.muestra}">
+					<td data-etiqueta="Fecha" th:text="${#temporals.format(m.fecha, 'dd/MM/yyyy')}">05/10/2026</td>
+					<td data-etiqueta="Descripción" th:text="${m.descripcion}">YAPE</td>
+					<td data-etiqueta="Operación" th:text="${m.operacion} ?: '—'">123456</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<form method="post" class="formulario formulario-angosto tarjeta" th:action="@{/conciliacion/cuentas/{id}/confirmar(id=${c.cuentaId})}"
+		th:if="${c.porConfirmar() and !c.participaste}" data-formulario="confirmar">
+		<h2 th:text="|2. Escribe el saldo que muestra tu app del banco al cierre del ${#temporals.format(c.cierreDel, 'dd/MM/yyyy')}|">2. Escribe el saldo</h2>
+		<p class="secundario" th:text="|Extracto del ${#temporals.format(c.desdeDel, 'dd/MM/yyyy')} al ${#temporals.format(c.cierreDel, 'dd/MM/yyyy')}.|">Extracto del 05/10/2026</p>
+		<input type="hidden" name="extracto" th:value="${c.extractoId}">
+		<input type="hidden" name="version" th:value="${c.version}">
+		<div class="campo">
+			<label for="saldoVisto">Saldo al cierre según tu app (S/)</label>
+			<input type="text" inputmode="decimal" class="input num" id="saldoVisto" name="saldoVisto" required
+				autocomplete="off" aria-describedby="saldoVisto-ayuda">
+			<p class="ayuda" id="saldoVisto-ayuda" th:text="|Cópialo de tu app del banco (no se muestra aquí a propósito). Con punto decimal, sin comas: 15230.50. Te ${c.intentosRestantes == 1 ? 'queda 1 intento' : 'quedan ' + c.intentosRestantes + ' intentos'}.|">Cópialo de tu app.</p>
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Confirmar y conciliar', 'primario')}"></button>
+	</form>
+</main>
+</body>
+</html>

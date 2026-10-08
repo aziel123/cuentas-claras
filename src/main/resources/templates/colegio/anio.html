@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Año escolar', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" th:with="anio=${detalle.anio}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/colegio}">Años escolares</a></p>
+			<h1 th:text="|Año escolar ${anio.anio}|">Año escolar 2026</h1>
+			<p class="fila">
+				<span class="badge" th:classappend="${anio.enCurso()} ? 'badge-exito' : (${anio.cerrado()} ? 'badge-neutro' : 'badge-info')"
+					th:text="${anio.estadoEtiqueta}">En curso</span>
+				<span class="secundario" th:text="|Clases del ${#temporals.format(anio.inicioClases, 'dd/MM/yyyy')} al ${#temporals.format(anio.finClases, 'dd/MM/yyyy')}|">Clases</span>
+			</p>
+		</div>
+		<a class="btn btn-secundario" th:href="@{/alumnos(anio=${anio.id})}">Ver sus alumnos</a>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-secciones">
+		<div class="fila entre">
+			<h2 id="titulo-secciones">Secciones</h2>
+			<span class="secundario num" th:text="|${anio.secciones} ${anio.secciones == 1 ? 'sección' : 'secciones'} · ${anio.matriculados} matriculados|">0 secciones</span>
+		</div>
+		<th:block th:if="${detalle.sinSecciones()}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Este año todavía no tiene secciones',
+				${puedeEditar} ? 'Agrégalas con el formulario «Agregar sección»: por ejemplo, 1.° Primaria A.' : 'Dirección o Administración las agregan.')}"></div>
+		</th:block>
+		<div class="nivel" th:each="n : ${detalle.niveles}">
+			<h3 th:text="${n.etiqueta}">Primaria</h3>
+			<ul class="grados">
+				<li class="grado" th:each="g : ${n.grados}">
+					<span class="grado-nombre" th:text="${g.etiqueta}">5.° Primaria</span>
+					<ul class="secciones">
+						<li class="seccion" th:each="s : ${g.secciones}" th:classappend="${!s.activa} ? 'seccion-inactiva'"
+							th:data-seccion="${s.etiqueta}">
+							<a class="seccion-enlace" th:href="@{/alumnos(anio=${anio.id}, seccion=${s.id})}"
+								th:aria-label="|Ver alumnos de ${s.etiqueta}|">
+								<strong th:text="${s.nombre}">A</strong>
+								<span class="secundario num" th:text="|${s.matriculados} ${s.matriculados == 1 ? 'alumno' : 'alumnos'}|">12 alumnos</span>
+							</a>
+							<span th:unless="${s.activa}" class="badge badge-neutro">Desactivada</span>
+							<th:block th:if="${puedeEditar and s.activa and !anio.cerrado()}">
+								<th:block th:replace="~{fragments/componentes :: modalMotivo(${'modal-desactivar-' + s.id},
+									|¿Desactivar ${s.etiqueta}?|,
+									'Ya no se ofrecerá para matricular. Los alumnos que ya tiene conservan su matrícula.',
+									@{/colegio/secciones/{id}/desactivar(id=${s.id}, anioId=${anio.id})},
+									'Desactivar', 'texto', 'Desactivar sección')}"></th:block>
+							</th:block>
+						</li>
+					</ul>
+				</li>
+			</ul>
+		</div>
+	</section>
+
+	<section class="tarjeta formulario-angosto" th:if="${puedeEditar and !anio.cerrado()}" aria-labelledby="titulo-nueva">
+		<h2 id="titulo-nueva">Agregar sección</h2>
+		<form class="formulario" th:action="@{/colegio/anios/{id}/secciones(id=${anio.id})}" th:object="${nuevaSeccion}" method="post">
+			<div class="formulario-doble">
+				<div class="campo">
+					<label for="grado">Grado</label>
+					<select class="input" th:field="*{grado}" required th:errorclass="input-con-error">
+						<option value="">Elige el grado</option>
+						<optgroup th:each="nivel : ${niveles}" th:label="${nivel.etiqueta()}">
+							<option th:each="g : ${grados}" th:if="${g.nivel() == nivel}" th:value="${g}" th:text="${g.etiqueta()}">1.° Primaria</option>
+						</optgroup>
+					</select>
+					<p class="error" th:if="${#fields.hasErrors('grado')}" th:errors="*{grado}">Error</p>
+				</div>
+				<div th:replace="~{fragments/componentes :: campoDe('nombre', 'Nombre de la sección', 'Por ejemplo A, B o Celeste.', 'text', true)}"></div>
+			</div>
+			<div class="acciones">
+				<button th:replace="~{fragments/componentes :: boton('Agregar sección', 'primario')}"></button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

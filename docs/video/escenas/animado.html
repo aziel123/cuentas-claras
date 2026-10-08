@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Cuentas Claras · video animado</title>
+<style>
+@font-face { font-family: "Inter"; font-weight: 100 900; src: url(fuentes/inter-400.woff2) format("woff2"); }
+:root {
+  --azul: #1b4f9c; --azul-profundo: #0f2c55; --celeste: #38aee6; --celeste-texto: #0a6ea8; --celeste-suave: #eaf6fd;
+  --texto: #0f172a; --texto-2: #475569; --borde: #dce7f2; --fondo-2: #f3f8fd;
+  --exito: #15803d; --exito-suave: #dcfce7; --alerta: #a14a06; --alerta-suave: #fef3c7; --peligro: #b91c1c; --peligro-suave: #fee2e2;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+body { font-family: "Inter", "DejaVu Sans", sans-serif; color: var(--texto); -webkit-font-smoothing: antialiased; }
+.escena { display: none; position: absolute; inset: 0; background: #fff; overflow: hidden; }
+.escena.activa { display: block; }
+[data-a] { will-change: transform, opacity; }
+
+/* Capa ambiental: dos manchas muy suaves que se desplazan lento (el blanco sigue mandando) */
+.ambiente { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+.ambiente i { position: absolute; border-radius: 50%; filter: blur(10px); }
+.ambiente .m1 { width: 1100px; height: 1100px; right: -380px; top: -420px; background: radial-gradient(closest-side, rgb(56 174 230 / .10), rgb(56 174 230 / 0)); }
+.ambiente .m2 { width: 900px; height: 900px; left: -360px; bottom: -460px; background: radial-gradient(closest-side, rgb(27 79 156 / .07), rgb(27 79 156 / 0)); }
+.capa { position: absolute; inset: 0; z-index: 1; }
+
+.franja { position: fixed; top: 0; left: 0; right: 0; height: 10px; background: linear-gradient(90deg, var(--azul), var(--celeste)); z-index: 10; }
+.pie-marca { position: absolute; left: 96px; bottom: 44px; display: flex; align-items: center; gap: 14px; color: var(--texto-2); font-size: 22px; font-weight: 500; }
+.mono { width: 44px; height: 44px; border-radius: 11px; background: var(--azul); border-bottom: 4px solid var(--celeste); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 18px; }
+.mono.grande { width: 150px; height: 150px; border-radius: 36px; font-size: 62px; border-bottom-width: 12px; }
+
+.lado { position: absolute; inset: 10px 0 0 0; display: grid; grid-template-columns: 540px 1fr; align-items: center; gap: 56px; padding: 0 72px 30px 96px; }
+.texto { display: grid; gap: 26px; align-content: center; }
+.etiqueta { display: inline-flex; align-items: center; gap: 10px; width: fit-content; padding: 8px 18px; border-radius: 99px; font-size: 21px; font-weight: 700; letter-spacing: .02em; }
+.ya { background: var(--exito-suave); color: var(--exito); }
+.pronto { background: var(--celeste-suave); color: var(--celeste-texto); }
+.punto { width: 11px; height: 11px; border-radius: 50%; background: currentColor; }
+.seccion { font-size: 22px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--celeste-texto); }
+h1, h2 { margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
+h2 { font-size: 58px; line-height: 1.08; font-weight: 800; color: var(--azul-profundo); }
+.texto p { margin: 0; font-size: 29px; line-height: 1.45; color: var(--texto-2); text-wrap: pretty; }
+.texto p strong { color: var(--texto); }
+
+/* Sombra con seguimiento: --so la anima el motor, llega después del objeto */
+.navegador { border-radius: 18px; overflow: hidden; background: #fff; border: 1px solid var(--borde);
+  box-shadow: 0 30px 70px rgb(15 44 85 / calc(.16 * var(--so, 1))), 0 6px 16px rgb(15 44 85 / calc(.08 * var(--so, 1))); }
+.navegador .barra-nav { height: 46px; background: var(--fondo-2); border-bottom: 1px solid var(--borde); display: flex; align-items: center; gap: 10px; padding: 0 18px; position: relative; z-index: 2; }
+.barra-nav i { width: 13px; height: 13px; border-radius: 50%; background: #d3deea; display: block; }
+.barra-nav .url { margin-left: 18px; flex: 1; height: 28px; border-radius: 8px; background: #fff; border: 1px solid var(--borde); font-size: 16px; color: var(--texto-2); display: flex; align-items: center; padding: 0 14px; }
+.vista { position: relative; overflow: hidden; }
+.camara { position: relative; transform-origin: 50% 50%; }
+.camara img { display: block; width: 100%; }
+.foco { position: absolute; border: 4px solid var(--celeste); border-radius: 14px; box-shadow: 0 0 0 calc(var(--anillo, 0) * 14px) rgb(56 174 230 / calc(.28 * (1 - var(--anillo, 0)))); }
+
+.telefono { width: 410px; height: 850px; border-radius: 58px; background: #0f172a; padding: 14px; position: relative; flex: none;
+  box-shadow: 0 30px 70px rgb(15 44 85 / calc(.22 * var(--so, 1))); }
+.telefono .pantalla { width: 100%; height: 100%; border-radius: 46px; overflow: hidden; background: #fff; position: relative; display: flex; flex-direction: column; }
+.telefono .isla { position: absolute; top: 26px; left: 50%; transform: translateX(-50%); width: 120px; height: 32px; border-radius: 20px; background: #0f172a; z-index: 5; }
+
+.tarjeta { border: 1px solid var(--borde); border-radius: 18px; background: #fff; padding: 22px 24px; box-shadow: 0 2px 6px rgb(27 79 156 / calc(.06 * var(--so, 1))); }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 99px; font-size: 15px; font-weight: 700; }
+.chip.ok { background: var(--exito-suave); color: var(--exito); } .chip.warn { background: var(--alerta-suave); color: var(--alerta); }
+.chip.info { background: var(--celeste-suave); color: var(--celeste-texto); } .chip.mal { background: var(--peligro-suave); color: var(--peligro); }
+.monto { font-variant-numeric: tabular-nums; font-weight: 800; }
+.btn { display: flex; align-items: center; justify-content: center; height: 54px; border-radius: 14px; background: var(--azul); color: #fff; font-weight: 700; font-size: 19px; }
+
+.centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+.centro .bloque { display: grid; justify-items: center; gap: 30px; }
+.titulo-portada { font-size: 110px; font-weight: 800; color: var(--azul-profundo); letter-spacing: -0.035em; line-height: 1.05; padding: 0 10px; }
+.titulo-portada span { color: var(--celeste); }
+.sub-portada { font-size: 38px; color: var(--texto-2); font-weight: 500; }
+.colegio { font-size: 28px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--celeste-texto); }
+.subraya { width: 220px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--azul), var(--celeste)); transform-origin: 50% 50%; }
+
+.encabezado { position: absolute; top: 120px; left: 96px; right: 96px; display: grid; gap: 18px; }
+.tres { position: absolute; left: 96px; right: 96px; top: 400px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; }
+.tres .tarjeta { padding: 40px 38px; display: grid; gap: 18px; align-content: start; min-height: 420px; }
+.tres h3 { margin: 0; font-size: 36px; color: var(--azul-profundo); letter-spacing: -0.01em; }
+.tres p { margin: 0; font-size: 26px; line-height: 1.45; color: var(--texto-2); }
+.icono { width: 84px; height: 84px; border-radius: 22px; display: grid; place-items: center; background: var(--celeste-suave); color: var(--azul); }
+.icono svg { width: 46px; height: 46px; }
+.icono.gris { background: #f1f5f9; color: #64748b; }
+.tres .tarjeta.antes h3 { color: #334155; }
+.tres .tarjeta.borde-celeste { border-top: 6px solid var(--celeste); }
+
+.principios { position: absolute; left: 96px; right: 96px; top: 380px; display: grid; gap: 30px; }
+.principio { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 34px; padding: 30px 40px; border-radius: 22px; border: 1px solid var(--borde); background: #fff; box-shadow: 0 2px 6px rgb(27 79 156 / .06); }
+.principio .num { width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; background: var(--azul); color: #fff; font-size: 44px; font-weight: 800; }
+.principio h3 { margin: 0 0 6px; font-size: 44px; color: var(--azul-profundo); }
+.principio p { margin: 0; font-size: 26px; color: var(--texto-2); }
+
+.separador { position: absolute; inset: 0; display: grid; place-items: center; }
+.separador .bloque { text-align: center; display: grid; gap: 24px; justify-items: center; }
+.separador h1 { font-size: 104px; color: var(--azul-profundo); font-weight: 800; letter-spacing: -0.03em; padding: 0 10px; }
+.separador p { margin: 0; font-size: 36px; color: var(--texto-2); }
+
+.collage { position: relative; height: 880px; }
+.collage .navegador { position: absolute; width: 760px; }
+.collage .n1 { left: 0; top: 30px; z-index: 1; } .collage .n2 { left: 200px; top: 160px; z-index: 2; } .collage .n3 { left: 396px; top: 300px; z-index: 3; }
+
+.chat-cab { background: #f0f2f5; padding: 70px 18px 14px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #e2e8f0; }
+.chat-cab .mono { width: 46px; height: 46px; border-radius: 50%; font-size: 17px; }
+.chat-cab b { display: block; font-size: 19px; } .chat-cab small { color: #64748b; font-size: 15px; }
+.chat-cuerpo { flex: 1; background: #efe7dd; padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; }
+.burbuja { max-width: 92%; background: #fff; border-radius: 4px 16px 16px 16px; padding: 12px 14px 8px; font-size: 17px; line-height: 1.4; box-shadow: 0 1px 1px rgb(0 0 0 / .1); transform-origin: 0 100%; }
+.burbuja .hora { display: block; text-align: right; color: #94a3b8; font-size: 13px; margin-top: 4px; }
+.escribiendo { width: 78px; height: 40px; border-radius: 4px 16px 16px 16px; background: #fff; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 1px 1px rgb(0 0 0 / .1); }
+.escribiendo b { width: 9px; height: 9px; border-radius: 50%; background: #94a3b8; }
+.adjunto { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-top: 8px; border-radius: 10px; background: #f3f8fd; border: 1px solid var(--borde); }
+.adjunto .pdf { width: 40px; height: 48px; border-radius: 6px; background: var(--peligro); color: #fff; font-size: 12px; font-weight: 800; display: grid; place-items: center; }
+.adjunto b { font-size: 15px; display: block; } .adjunto small { font-size: 13px; color: #64748b; }
+.dia { align-self: center; background: #fff; border-radius: 8px; padding: 4px 12px; font-size: 13px; color: #64748b; }
+
+.app-cab { padding: 74px 24px 18px; background: #fff; border-bottom: 1px solid var(--borde); display: flex; align-items: center; gap: 12px; }
+.app-cab .mono { width: 40px; height: 40px; border-radius: 10px; font-size: 15px; }
+.app-cab b { font-size: 18px; display: block; } .app-cab small { font-size: 14px; color: var(--texto-2); }
+.app-cuerpo { padding: 20px 20px; display: grid; gap: 16px; align-content: start; flex: 1; background: #fff; }
+.app-cuerpo h4 { margin: 0; font-size: 24px; color: var(--azul-profundo); }
+.hijo { border: 1px solid var(--borde); border-radius: 16px; padding: 16px 18px; display: grid; gap: 8px; background: #fff; }
+.hijo b { font-size: 19px; } .hijo small { color: var(--texto-2); font-size: 15px; }
+.fila { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.mini-lista { display: grid; gap: 10px; font-size: 16px; }
+.mini-lista div { display: flex; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid var(--borde); }
+.opcion-pago { border: 2px solid var(--borde); border-radius: 14px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: 600; background: #fff; }
+.opcion-pago.sel { border-color: var(--azul); background: var(--celeste-suave); }
+.check-grande { width: 120px; height: 120px; border-radius: 50%; background: var(--exito-suave); color: var(--exito); display: grid; place-items: center; margin: 30px auto 6px; }
+.check-grande svg { width: 64px; height: 64px; overflow: visible; }
+
+.app-escritorio { display: grid; grid-template-columns: 250px 1fr; min-height: 690px; background: #fff; }
+.app-escritorio .menu { border-right: 1px solid var(--borde); padding: 22px 16px; display: grid; gap: 6px; align-content: start; font-size: 17px; }
+.app-escritorio .menu div { padding: 12px 14px; border-radius: 10px; color: var(--texto); }
+.app-escritorio .menu .act { background: var(--celeste-suave); color: var(--celeste-texto); font-weight: 700; box-shadow: inset 4px 0 0 var(--celeste); }
+.app-escritorio .contenido { padding: 30px 36px; display: grid; gap: 22px; align-content: start; }
+.app-escritorio h3 { margin: 0; font-size: 32px; color: var(--texto); }
+.cifras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.cifra { border: 1px solid var(--borde); border-radius: 14px; padding: 18px 20px; display: grid; gap: 6px; background: #fff; }
+.cifra b { font-size: 38px; font-variant-numeric: tabular-nums; }
+.cifra span { font-size: 17px; color: var(--texto-2); }
+.cifra.ok b { color: var(--exito); } .cifra.warn b { color: var(--alerta); }
+table.t { width: 100%; border-collapse: collapse; font-size: 17px; }
+table.t th { text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--texto-2); padding: 10px 8px; border-bottom: 1px solid var(--borde); }
+table.t td { padding: 14px 8px; border-bottom: 1px solid var(--borde); }
+.subida { display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-radius: 14px; background: var(--exito-suave); color: var(--exito); font-size: 19px; font-weight: 600; }
+.barra-carga { height: 8px; border-radius: 4px; background: var(--borde); overflow: hidden; }
+.barra-carga i { display: block; height: 100%; background: linear-gradient(90deg, var(--azul), var(--celeste)); transform-origin: 0 50%; }
+
+.boleta { width: 760px; padding: 44px 50px; display: grid; gap: 24px; border-radius: 18px; border: 1px solid var(--borde); background: #fff;
+  box-shadow: 0 30px 70px rgb(15 44 85 / calc(.14 * var(--so, 1))); }
+.boleta .cab { display: flex; justify-content: space-between; gap: 30px; }
+.boleta .numero { border: 2px solid var(--texto); border-radius: 12px; padding: 14px 22px; text-align: center; font-size: 18px; display: grid; gap: 4px; }
+.boleta .numero b { font-size: 22px; }
+.qr { width: 150px; height: 150px; display: grid; grid-template-columns: repeat(15, 1fr); border: 8px solid #fff; outline: 1px solid var(--borde); flex: none; }
+.qr i { display: block; aspect-ratio: 1; } .qr i.n { background: #0f172a; }
+.sello-sunat { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-radius: 14px; background: var(--exito-suave); color: var(--exito); font-weight: 700; font-size: 22px; }
+.sello-sunat svg { overflow: visible; }
+
+.asistencia .al { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--borde); font-size: 17px; }
+.seg { display: flex; gap: 6px; }
+.seg span { padding: 6px 10px; border-radius: 8px; font-size: 14px; font-weight: 700; border: 1px solid var(--borde); color: var(--texto-2); display: inline-block; }
+.seg .p { background: var(--exito-suave); color: var(--exito); border-color: transparent; }
+.seg .f { background: var(--peligro-suave); color: var(--peligro); border-color: transparent; }
+.seg .t { background: var(--alerta-suave); color: var(--alerta); border-color: transparent; }
+.libreta { width: 640px; display: grid; gap: 16px; }
+.libreta table.t td:last-child, .libreta table.t th:last-child { text-align: center; }
+.nota { display: inline-grid; place-items: center; width: 50px; height: 36px; border-radius: 8px; font-weight: 800; }
+.nota.ad { background: var(--exito-suave); color: var(--exito); } .nota.a { background: var(--celeste-suave); color: var(--celeste-texto); } .nota.b { background: var(--alerta-suave); color: var(--alerta); }
+.integraciones { display: flex; gap: 14px; flex-wrap: wrap; }
+.integraciones span { padding: 12px 20px; border-radius: 12px; border: 1px solid var(--borde); font-size: 19px; font-weight: 600; color: var(--azul-profundo); background: #fff; display: inline-block; }
+
+.ruta { position: absolute; left: 96px; right: 96px; top: 380px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px; }
+.ruta .linea { transform-origin: 0 50%; position: absolute; left: 30px; right: 30px; top: 30px; height: 6px; border-radius: 3px; background: var(--borde); }
+.ruta .avance { position: absolute; left: 30px; top: 30px; height: 6px; border-radius: 3px; background: var(--exito); width: calc((100% - 60px) * .18); transform-origin: 0 50%; }
+.hito { position: relative; display: grid; gap: 18px; align-content: start; }
+.hito .bola { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 24px; background: #fff; border: 6px solid var(--borde); color: var(--texto-2); }
+.hito.hecho .bola { background: var(--exito); border-color: var(--exito); color: #fff; }
+.hito.siguiente .bola { border-color: var(--azul); color: var(--azul); }
+.hito .cuando { font-size: 22px; font-weight: 700; color: var(--celeste-texto); text-transform: uppercase; letter-spacing: .08em; }
+.hito h3 { margin: 0; font-size: 34px; color: var(--azul-profundo); }
+.hito ul { margin: 0; padding-left: 26px; display: grid; gap: 10px; font-size: 22px; color: var(--texto-2); }
+</style>
+</head>
+<body>
+<div class="franja"></div>
+
+<!-- Convenciones del motor:
+     data-a: up | right | left | scale | pop | fade | mask | grow | draw | count
+     data-t: inicio en ms (o data-tf: fracción de la escena)   data-d: duración en ms
+     data-fin: ms (o fracción con data-ff) en que el elemento sale antes del final
+     data-press / data-pressf: pulsación de botón      .flota: flotación ambiental
+     .camara[data-zoom="ox oy escala" data-zt data-zd]   .foco[data-caja] -->
+
+<section class="escena" id="portada" data-dur="6500">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa"><div class="centro"><div class="bloque">
+    <div class="mono grande" data-a="scale" data-t="150" data-d="900">VM</div>
+    <div class="colegio" data-a="up" data-t="550">Colegio Virgen María</div>
+    <div class="titulo-portada" data-a="mask" data-t="750" data-d="1000">Cuentas <span>Claras</span></div>
+    <div class="subraya" data-a="grow" data-t="1400" data-d="700"></div>
+    <div class="sub-portada" data-a="up" data-t="1500">La nueva forma de gestionar el colegio: ordenada, transparente y sin papeles.</div>
+  </div></div></div>
+</section>
+
+<section class="escena" id="hoy" data-dur="10200">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa">
+  <div class="encabezado"><div class="seccion" data-a="up" data-t="150">Cómo se trabaja hoy</div><h2 data-a="up" data-t="250" data-d="800">Hoy el control depende de la memoria y la buena fe</h2></div>
+  <div class="tres">
+    <div class="tarjeta antes" data-a="up" data-tf=".10"><div class="icono gris" data-a="pop" data-tf=".10" data-dl="150"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M8 7h8M8 11h6"/></svg></div><h3>Cobros en cuaderno</h3><p>Recibos a mano, sin numeración controlada ni respaldo.</p></div>
+    <div class="tarjeta antes" data-a="up" data-tf=".34"><div class="icono gris" data-a="pop" data-tf=".34" data-dl="150"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div><h3>Una sola persona</h3><p>Quien cobra también anota, cuadra y reporta. Nadie más verifica.</p></div>
+    <div class="tarjeta antes" data-a="up" data-tf=".60"><div class="icono gris" data-a="pop" data-tf=".60" data-dl="150"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><h3>Se sabe tarde</h3><p>La dirección se entera de los problemas a fin de mes, o nunca.</p></div>
+  </div>
+  <div class="pie-marca" data-a="fade" data-t="600"><div class="mono">VM</div>Cuentas Claras</div></div>
+</section>
+
+<section class="escena" id="propuesta" data-dur="11400">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa">
+  <div class="encabezado"><div class="seccion" data-a="up" data-t="150">La propuesta</div><h2 data-a="up" data-t="250" data-d="800">Una sola plataforma, en la computadora y en el celular</h2></div>
+  <div class="tres">
+    <div class="tarjeta borde-celeste" data-a="up" data-tf=".30"><div class="icono" data-a="pop" data-tf=".30" data-dl="150"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.5"/><path d="M6 6V4h12v2"/></svg></div><h3>Cobranza con control</h3><p>Cada pago con boleta, aprobaciones y cierre de caja diario.</p></div>
+    <div class="tarjeta borde-celeste" data-a="up" data-tf=".48"><div class="icono" data-a="pop" data-tf=".48" data-dl="150"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><h3>Familias informadas</h3><p>Avisos por WhatsApp, portal de padres y pagos desde el celular.</p></div>
+    <div class="tarjeta borde-celeste" data-a="up" data-tf=".66"><div class="icono" data-a="pop" data-tf=".66" data-dl="150"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/></svg></div><h3>Gestión académica</h3><p>Asistencia, notas por competencias, libretas y SIAGIE.</p></div>
+  </div>
+  <div class="pie-marca" data-a="fade" data-t="600"><div class="mono">VM</div>Cuentas Claras</div></div>
+</section>
+
+<section class="escena" id="principios" data-dur="7800">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa">
+  <div class="encabezado"><div class="seccion" data-a="up" data-t="150">Tres reglas que no se negocian</div><h2 data-a="up" data-t="250" data-d="800">Así se protege cada sol del colegio</h2></div>
+  <div class="principios">
+    <div class="principio" data-a="left" data-tf=".14"><div class="num" data-a="pop" data-tf=".14" data-dl="150">1</div><div><h3>Cada sol queda registrado</h3><p>Todo pago tiene su boleta numerada y su responsable.</p></div></div>
+    <div class="principio" data-a="left" data-tf=".40"><div class="num" data-a="pop" data-tf=".40" data-dl="150">2</div><div><h3>Quien cobra no aprueba</h3><p>Anular, descontar o corregir lo autoriza siempre otra persona.</p></div></div>
+    <div class="principio" data-a="left" data-tf=".64"><div class="num" data-a="pop" data-tf=".64" data-dl="150">3</div><div><h3>Nada se borra</h3><p>Los errores se corrigen con motivo, y la historia completa queda guardada.</p></div></div>
+  </div></div>
+</section>
+
+<!-- Pantallas reales: plantilla común (texto en cascada → pantalla → foco → cámara) -->
+<template id="t-real">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa"><div class="lado"><div class="texto">
+    <span class="etiqueta ya" data-a="up" data-t="150"><span class="punto"></span>Ya funciona</span>
+    <div class="seccion" data-a="up" data-t="240">{seccion}</div>
+    <h2 data-a="up" data-t="330" data-d="800">{titulo}</h2>
+    <p data-a="up" data-t="450">{texto}</p></div>
+    <div class="navegador" data-a="right" data-t="300" data-d="900"><div class="barra-nav"><i></i><i></i><i></i><div class="url">{url}</div></div>
+      <div class="vista"><div class="camara" data-zoom="{zoom}" data-zt="{zt}" data-zd="1800"><img src="../pantallas/{img}.png"><div class="foco" data-a="foco" data-t="{ft}" data-caja="{caja}"></div></div></div></div>
+  </div></div>
+</template>
+<div id="reales"
+  data-escenas='[
+  {"id":"caja-buscar","dur":10200,"seccion":"Caja","titulo":"Cobrar toma segundos","texto":"La cajera busca a la familia por <strong>apellido o DNI</strong>. El sistema ya sabe cuánto debe cada alumno.","url":"cuentasclaras · Caja","img":"caja-resultados","caja":"caja-resultados"},
+  {"id":"caja-familia","dur":9000,"seccion":"Caja","titulo":"Nadie escribe montos a mano","texto":"La cajera <strong>marca las cuotas</strong> que paga el padre y elige el medio de pago. El monto lo pone el sistema.","url":"cuentasclaras · Familia Quispe Huamán","img":"caja-familia","caja":"caja-familia"},
+  {"id":"caja-confirmacion","dur":9400,"seccion":"Caja","titulo":"Vuelto calculado y boleta al instante","texto":"El sistema calcula el vuelto y emite la <strong>boleta numerada, sin saltos</strong>. Un número perdido se nota de inmediato.","url":"cuentasclaras · Pago registrado","img":"caja-confirmacion","caja":"caja-confirmacion"},
+  {"id":"caja-boleta","dur":7800,"seccion":"Caja","titulo":"Un libro de pagos que no se puede borrar","texto":"Cada pago queda guardado con su boleta. <strong>Ni la aplicación ni la base de datos</strong> permiten borrarlo o cambiar su monto.","url":"cuentasclaras · Boleta","img":"caja-boleta","caja":"caja-boleta"},
+  {"id":"caja-cierre","dur":11000,"seccion":"Cierre de caja","titulo":"Cierre a ciegas, todos los días","texto":"La cajera cuenta el efectivo <strong>sin ver cuánto debería haber</strong>. Si falta dinero, la promotora lo sabe ese mismo día.","url":"cuentasclaras · Cierre de caja","img":"caja-cierre","caja":"caja-cierre"},
+  {"id":"aprobaciones","dur":8200,"seccion":"Aprobaciones","titulo":"Quien pide no aprueba","texto":"Anulaciones, descuentos, becas y cierres con diferencia van a una bandeja que revisa <strong>otra persona</strong>.","url":"cuentasclaras · Aprobaciones","img":"aprobaciones","caja":"aprobaciones"},
+  {"id":"promotora","dur":9400,"seccion":"Promotoría","titulo":"La dueña lo ve todo, al día","texto":"Lo cobrado hoy, el efectivo y lo digital, y las <strong>alertas críticas primero</strong>. Sin pedir reportes a nadie.","url":"cuentasclaras · Inicio","img":"promotora-inicio","caja":"promotora-inicio"},
+  {"id":"bitacora","dur":9800,"seccion":"Auditoría","titulo":"Una bitácora sellada","texto":"Quién hizo qué, cuándo y desde dónde. Está sellada: <strong>si alguien la altera, el sistema lo detecta</strong>.","url":"cuentasclaras · Bitácora de auditoría","img":"bitacora","caja":"bitacora"}
+  ]'></div>
+<div id="hueco-reales"></div>
+
+<section class="escena" id="datos" data-dur="11000">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa"><div class="lado"><div class="texto">
+    <span class="etiqueta ya" data-a="up" data-t="150"><span class="punto"></span>Ya funciona</span><div class="seccion" data-a="up" data-t="240">Datos del colegio</div>
+    <h2 data-a="up" data-t="330" data-d="800">Alumnos y pensiones en orden</h2><p data-a="up" data-t="450">Alumnos y familias se cargan <strong>desde Excel</strong>. Las pensiones se aprueban entre dos y el cronograma de cuotas lo genera el sistema.</p></div>
+  <div class="collage">
+    <div class="navegador n1" data-a="right" data-t="300" data-d="900"><div class="barra-nav"><i></i><i></i><i></i><div class="url">Alumnos</div></div><img src="../pantallas/alumnos.png" style="display:block;width:100%"></div>
+    <div class="navegador n2" data-a="right" data-tf=".24" data-d="900"><div class="barra-nav"><i></i><i></i><i></i><div class="url">Importar desde Excel</div></div><img src="../pantallas/importar.png" style="display:block;width:100%"></div>
+    <div class="navegador n3" data-a="right" data-tf=".50" data-d="900"><div class="barra-nav"><i></i><i></i><i></i><div class="url">Pensiones 2026</div></div><img src="../pantallas/pensiones.png" style="display:block;width:100%"></div>
+  </div></div></div>
+</section>
+
+<section class="escena" id="lo-que-viene" data-dur="5000">
+  <div class="ambiente"><i class="m1" style="background: radial-gradient(closest-side, rgb(56 174 230 / .16), rgb(56 174 230 / 0))"></i><i class="m2"></i></div>
+  <div class="capa"><div class="separador"><div class="bloque">
+    <span class="etiqueta pronto" data-a="scale" data-t="150"><span class="punto"></span>Próximamente</span>
+    <h1 data-a="mask" data-t="350" data-d="900">Lo que viene</h1>
+    <p data-a="up" data-t="800">Menos trabajo manual para el colegio y más tranquilidad para las familias.</p></div></div></div>
+</section>
+
+<section class="escena" id="pagos-digitales" data-dur="11000">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa"><div class="lado" style="grid-template-columns: 640px 1fr;"><div class="texto">
+    <span class="etiqueta pronto" data-a="up" data-t="150"><span class="punto"></span>Vista previa · próximamente</span><div class="seccion" data-a="up" data-t="240">Pagos digitales</div>
+    <h2 data-a="up" data-t="330" data-d="800">El padre paga desde su celular</h2><p data-a="up" data-t="450">Yape, Plin, tarjeta o en el banco con el código del alumno. <strong>El pago entra solo</strong>: nadie lo digita.</p></div>
+  <div style="display:flex; gap:70px; justify-content:center; align-items:center;">
+    <div class="flota"><div class="telefono" data-a="up" data-t="300" data-d="900"><div class="isla"></div><div class="pantalla">
+      <div class="app-cab"><div class="mono">VM</div><div><b>Pagar pensión</b><small>Fernanda · 3.° Primaria A</small></div></div>
+      <div class="app-cuerpo">
+        <div class="hijo" data-a="up" data-t="900"><div class="fila"><b>Pensión octubre</b><span class="monto" style="font-size:22px">S/ 450.00</span></div><small>Vence el 31/10/2026</small></div>
+        <h4 style="font-size:19px" data-a="up" data-t="980">¿Cómo quieres pagar?</h4>
+        <div class="opcion-pago sel" data-a="up" data-t="1060">Yape o Plin <span class="chip info">QR</span></div>
+        <div class="opcion-pago" data-a="up" data-t="1120">Tarjeta de débito o crédito</div>
+        <div class="opcion-pago" data-a="up" data-t="1180">En el banco · código 79876543</div>
+        <div class="btn" data-a="up" data-t="1240" data-pressf=".40">Pagar S/ 450.00</div>
+      </div></div></div></div>
+    <div class="flota" style="--fase:.35"><div class="telefono" data-a="right" data-tf=".44" data-d="900"><div class="isla"></div><div class="pantalla">
+      <div class="app-cab"><div class="mono">VM</div><div><b>Pago recibido</b><small>Colegio Virgen María</small></div></div>
+      <div class="app-cuerpo" style="text-align:center">
+        <div class="check-grande" data-a="pop" data-tf=".44" data-dl="350"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" pathLength="1" data-a="draw" data-tf=".44" data-dl="550" data-d="500"/></svg></div>
+        <h4 style="font-size:28px" data-a="up" data-tf=".44" data-dl="700">¡Listo, gracias!</h4>
+        <div class="monto" style="font-size:40px; color:var(--azul-profundo)" data-a="up" data-tf=".44" data-dl="780">S/ 450.00</div>
+        <small style="font-size:16px; color:var(--texto-2)" data-a="up" data-tf=".44" data-dl="860">Boleta B001-00000123 enviada a tu WhatsApp</small>
+        <div class="mini-lista" style="text-align:left; margin-top:10px" data-a="up" data-tf=".44" data-dl="940"><div><span>Medio</span><b>Yape</b></div><div><span>Operación</span><b>48211907</b></div><div><span>Fecha</span><b>05/10/2026 · 19:42</b></div></div>
+      </div></div></div></div>
+  </div></div></div>
+</section>
+
+<section class="escena" id="whatsapp" data-dur="11800">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa"><div class="lado" style="grid-template-columns: 700px 1fr;"><div class="texto">
+    <span class="etiqueta pronto" data-a="up" data-t="150"><span class="punto"></span>Vista previa · próximamente</span><div class="seccion" data-a="up" data-t="240">Avisos por WhatsApp</div>
+    <h2 data-a="up" data-t="330" data-d="800">Cada pago llega al celular del padre</h2><p data-a="up" data-t="450">Con su boleta adjunta. <strong>Aunque nadie se la entregue, el padre sabe que pagó</strong>. Y antes de cada vencimiento recibe un recordatorio amable.</p></div>
+  <div style="display:flex; justify-content:center;">
+    <div class="flota"><div class="telefono" data-a="up" data-t="300" data-d="900"><div class="isla"></div><div class="pantalla">
+      <div class="chat-cab"><div class="mono">VM</div><div><b>Colegio Virgen María</b><small>Cuenta de empresa</small></div></div>
+      <div class="chat-cuerpo">
+        <span class="dia">HOY</span>
+        <div class="escribiendo" data-a="scale" data-t="900" data-d="250" data-fin="1700"><b class="pulso"></b><b class="pulso" style="--p:.2"></b><b class="pulso" style="--p:.4"></b></div>
+        <div class="burbuja" data-a="scale" data-t="1750" data-d="450">Hola, Rosa. Recibimos su pago de <b>S/ 855.00</b> por las pensiones de Mateo y Valeria. ¡Gracias!
+          <div class="adjunto" data-a="up" data-t="1950"><div class="pdf">PDF</div><div><b>Boleta B001-00000005</b><small>1 página · 84 KB</small></div></div>
+          <span class="hora">10:02</span></div>
+        <span class="dia" data-a="fade" data-tf=".55">28 DE OCTUBRE</span>
+        <div class="burbuja" data-a="scale" data-tf=".55" data-dl="200" data-d="450">Recordatorio: la pensión de noviembre de Mateo (<b>S/ 450.00</b>) vence el 30/11. Puede pagar con Yape desde el portal.<span class="hora">09:00</span></div>
+      </div></div></div></div>
+  </div></div></div>
+</section>
+
+<section class="escena" id="portal" data-dur="10200">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa"><div class="lado" style="grid-template-columns: 700px 1fr;"><div class="texto">
+    <span class="etiqueta pronto" data-a="up" data-t="150"><span class="punto"></span>Vista previa · próximamente</span><div class="seccion" data-a="up" data-t="240">Portal de padres</div>
+    <h2 data-a="up" data-t="330" data-d="800">Todo lo de sus hijos, en un solo lugar</h2><p data-a="up" data-t="450">Estado de cuenta, boletas para descargar y pago en línea. <strong>Menos llamadas y menos colas</strong> en el colegio.</p></div>
+  <div style="display:flex; justify-content:center;">
+    <div class="flota"><div class="telefono" data-a="up" data-t="300" data-d="900"><div class="isla"></div><div class="pantalla">
+      <div class="app-cab"><div class="mono">VM</div><div><b>Hola, Martín</b><small>Familia Castillo Vargas</small></div></div>
+      <div class="app-cuerpo">
+        <div class="hijo" data-a="up" data-t="1000"><div class="fila"><b>Diego</b><span class="chip ok" data-a="pop" data-t="1250">Al día</span></div><small>1.° Secundaria B</small></div>
+        <div class="hijo" data-a="up" data-t="1100"><div class="fila"><b>Fernanda</b><span class="chip warn" data-a="pop" data-t="1350">Por vencer</span></div><small>3.° Primaria A</small>
+          <div class="fila" style="margin-top:4px"><span style="font-size:16px">Pensión octubre · vence 31/10</span><span class="monto" style="font-size:19px">S/ 450.00</span></div>
+          <div class="btn" style="height:46px; font-size:17px; margin-top:6px" data-a="fade" data-t="1100" data-pressf=".52">Pagar ahora</div></div>
+        <h4 style="font-size:19px" data-a="up" data-tf=".62">Últimas boletas</h4>
+        <div class="mini-lista">
+          <div data-a="up" data-tf=".62" data-dl="80"><span>Setiembre · Diego</span><b style="color:var(--azul)">Descargar</b></div>
+          <div data-a="up" data-tf=".62" data-dl="160"><span>Setiembre · Fernanda</span><b style="color:var(--azul)">Descargar</b></div>
+          <div data-a="up" data-tf=".62" data-dl="240"><span>Agosto · Diego</span><b style="color:var(--azul)">Descargar</b></div>
+        </div>
+      </div></div></div></div>
+  </div></div></div>
+</section>
+
+<section class="escena" id="conciliacion" data-dur="10200">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa"><div class="lado"><div class="texto">
+    <span class="etiqueta pronto" data-a="up" data-t="150"><span class="punto"></span>Vista previa · próximamente</span><div class="seccion" data-a="up" data-t="240">Banco</div>
+    <h2 data-a="up" data-t="330" data-d="800">El banco y el sistema se cuadran solos</h2><p data-a="up" data-t="450">Administración sube el archivo del banco una vez al día. El sistema concilia todo y <strong>solo muestra las diferencias</strong>.</p></div>
+  <div class="navegador" data-a="right" data-t="300" data-d="900"><div class="barra-nav"><i></i><i></i><i></i><div class="url">cuentasclaras · Conciliación bancaria</div></div>
+    <div class="app-escritorio"><div class="menu"><div>Inicio</div><div>Alumnos</div><div>Pensiones</div><div class="act">Conciliación bancaria</div><div>Reportes</div></div>
+      <div class="contenido">
+        <h3>Conciliación del 05/10/2026</h3>
+        <div class="barra-carga" data-a="fade" data-t="1000" data-d="200" data-fin="2500"><i data-a="grow" data-t="1100" data-d="1300"></i></div>
+        <div class="subida" data-a="up" data-t="2500"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="overflow:visible"><path d="M20 6 9 17l-5-5" pathLength="1" data-a="draw" data-t="2700" data-d="400"/></svg>Archivo del banco cargado: extracto-05-10-2026.xlsx</div>
+        <div class="cifras"><div class="cifra" data-a="up" data-tf=".34"><b data-a="count" data-tf=".34" data-d="1100" data-n="128">0</b><span>movimientos del banco</span></div><div class="cifra ok" data-a="up" data-tf=".34" data-dl="100"><b data-a="count" data-tf=".34" data-dl="100" data-d="1100" data-n="126">0</b><span>conciliados automáticamente</span></div><div class="cifra warn" data-a="up" data-tf=".34" data-dl="200"><b data-a="count" data-tf=".34" data-dl="200" data-d="1100" data-n="2">0</b><span>por revisar</span></div></div>
+        <table class="t"><thead data-a="fade" data-tf=".55"><tr><th>Operación</th><th>Banco</th><th>Sistema</th><th>Estado</th></tr></thead>
+          <tbody><tr data-a="up" data-tf=".55" data-dl="80"><td>Yape 48211907</td><td class="monto">S/ 450.00</td><td class="monto">S/ 405.00</td><td><span class="chip warn">Monto distinto</span></td></tr>
+          <tr data-a="up" data-tf=".55" data-dl="180"><td>Depósito 001-2210</td><td class="monto">S/ 1,330.00</td><td class="monto">—</td><td><span class="chip mal">No registrado</span></td></tr></tbody></table>
+      </div></div></div></div></div>
+</section>
+
+<section class="escena" id="sunat" data-dur="7000">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa"><div class="lado"><div class="texto">
+    <span class="etiqueta pronto" data-a="up" data-t="150"><span class="punto"></span>Vista previa · próximamente</span><div class="seccion" data-a="up" data-t="240">Comprobante electrónico</div>
+    <h2 data-a="up" data-t="330" data-d="800">Boleta electrónica válida ante SUNAT</h2><p data-a="up" data-t="450">Se emite y se envía <strong>automáticamente</strong> con cada pago, a través de un operador autorizado. Sin doble digitación.</p></div>
+  <div style="display:flex; justify-content:center;"><div class="boleta" data-a="scale" data-t="300" data-d="900">
+    <div class="cab"><div><div style="display:flex; gap:14px; align-items:center"><div class="mono">VM</div><div><b style="font-size:22px">Colegio Virgen María</b><br><span style="color:var(--texto-2); font-size:17px">Servicios educativos</span></div></div></div>
+      <div class="numero" data-a="up" data-t="800"><span>Boleta de venta electrónica</span><b>B001-00000123</b></div></div>
+    <table class="t" data-a="up" data-t="950"><thead><tr><th>Descripción</th><th style="text-align:right">Importe</th></tr></thead>
+      <tbody><tr><td>Pensión octubre · Fernanda Castillo Vargas</td><td class="monto" style="text-align:right">S/ 450.00</td></tr>
+      <tr><td><b>Total</b></td><td class="monto" style="text-align:right">S/ 450.00</td></tr></tbody></table>
+    <div style="display:flex; gap:28px; align-items:center" data-a="up" data-t="1100"><div class="qr" id="qr"></div><div style="display:grid; gap:10px; font-size:17px; color:var(--texto-2)"><span>Operación inafecta al IGV</span><span>Pagado con Yape · 05/10/2026</span><span>Consulte su validez en sunat.gob.pe</span></div></div>
+    <div class="sello-sunat" data-a="pop" data-tf=".45"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" pathLength="1" data-a="draw" data-tf=".45" data-dl="200" data-d="450"/></svg>Aceptada por SUNAT · 05/10/2026 19:42</div>
+  </div></div></div></div>
+</section>
+
+<section class="escena" id="panel" data-dur="10200">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa"><div class="lado" style="grid-template-columns: 700px 1fr;"><div class="texto">
+    <span class="etiqueta pronto" data-a="up" data-t="150"><span class="punto"></span>Vista previa · próximamente</span><div class="seccion" data-a="up" data-t="240">Panel de la promotora</div>
+    <h2 data-a="up" data-t="330" data-d="800">El colegio en el bolsillo de la dueña</h2><p data-a="up" data-t="450">Cobrado del mes, morosidad y pagos digitales. Un <strong>resumen diario</strong> llega solo, y los recordatorios de deuda salen automáticamente.</p></div>
+  <div style="display:flex; justify-content:center;">
+    <div class="flota"><div class="telefono" data-a="up" data-t="300" data-d="900"><div class="isla"></div><div class="pantalla">
+      <div class="app-cab"><div class="mono">VM</div><div><b>Panel del colegio</b><small>Octubre 2026</small></div></div>
+      <div class="app-cuerpo">
+        <div class="hijo" data-a="up" data-t="900"><small>Cobrado en el mes</small><b class="monto" style="font-size:34px; color:var(--azul-profundo)" data-a="count" data-t="1000" data-d="1500" data-n="48320" data-fmt="soles">S/ 0.00</b><small>87 % de lo esperado</small></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+          <div class="hijo" data-a="up" data-t="1000"><small>Morosidad</small><b class="monto" style="font-size:28px; color:var(--alerta)" data-a="count" data-t="1200" data-d="1300" data-n="6.2" data-fmt="pct">0.0 %</b></div>
+          <div class="hijo" data-a="up" data-t="1100"><small>Pagos digitales</small><b class="monto" style="font-size:28px; color:var(--exito)" data-a="count" data-t="1300" data-d="1300" data-n="64" data-fmt="pct0">0 %</b></div>
+        </div>
+        <div class="hijo" data-a="up" data-tf=".50" style="border-color:#bbf7d0; background:#f0fdf4"><div class="fila"><b style="font-size:17px">Resumen del día</b><span class="chip ok" data-a="pop" data-tf=".50" data-dl="250">Sin alertas</span></div><small>3 cajas cerradas sin diferencias · S/ 2,140.00 cobrados · todo conciliado con el banco</small></div>
+        <div class="hijo" data-a="up" data-tf=".50" data-dl="120"><div class="fila"><b style="font-size:17px">Recordatorios enviados</b><span class="chip info" data-a="pop" data-tf=".50" data-dl="370">Automático</span></div><small>42 familias recibieron el aviso de la pensión de noviembre</small></div>
+      </div></div></div></div>
+  </div></div></div>
+</section>
+
+<section class="escena" id="academico" data-dur="8600">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa"><div class="lado" style="grid-template-columns: 560px 1fr;"><div class="texto">
+    <span class="etiqueta pronto" data-a="up" data-t="150"><span class="punto"></span>Vista previa · 2027</span><div class="seccion" data-a="up" data-t="240">Módulo académico</div>
+    <h2 data-a="up" data-t="330" data-d="800">Asistencia, notas y libretas</h2><p data-a="up" data-t="450">El docente toma asistencia desde su celular y <strong>los padres reciben el aviso</strong>. Notas por competencias, libretas en PDF y exportación a SIAGIE.</p>
+    <div class="integraciones"><span data-a="up" data-t="600">Google Classroom</span><span data-a="up" data-t="680">Microsoft Teams</span><span data-a="up" data-t="760">SIAGIE</span></div></div>
+  <div style="display:flex; gap:48px; justify-content:center; align-items:center;">
+    <div class="flota"><div class="telefono" data-a="up" data-t="300" data-d="900" style="width:386px;height:800px"><div class="isla"></div><div class="pantalla">
+      <div class="app-cab"><div class="mono">VM</div><div><b>Asistencia · 3.° A</b><small>Lunes 15/03/2027 · 8:00</small></div></div>
+      <div class="app-cuerpo asistencia">
+        <div class="al" data-a="up" data-t="900"><span>Ariana Gutiérrez</span><div class="seg"><span class="p" data-a="pop" data-t="1500">P</span><span>T</span><span>F</span></div></div>
+        <div class="al" data-a="up" data-t="960"><span>Camila Mendoza</span><div class="seg"><span class="p" data-a="pop" data-t="1600">P</span><span>T</span><span>F</span></div></div>
+        <div class="al" data-a="up" data-t="1020"><span>Fernanda Castillo</span><div class="seg"><span>P</span><span class="t" data-a="pop" data-t="1700">T</span><span>F</span></div></div>
+        <div class="al" data-a="up" data-t="1080"><span>Lucía Flores</span><div class="seg"><span class="p" data-a="pop" data-t="1800">P</span><span>T</span><span>F</span></div></div>
+        <div class="al" data-a="up" data-t="1140"><span>Sebastián Flores</span><div class="seg"><span>P</span><span>T</span><span class="f" data-a="pop" data-t="1900">F</span></div></div>
+        <div class="al" data-a="up" data-t="1200"><span>Luciana Chávez</span><div class="seg"><span class="p" data-a="pop" data-t="2000">P</span><span>T</span><span>F</span></div></div>
+        <div class="btn" style="margin-top:8px" data-a="up" data-t="1260" data-pressf=".36">Guardar y avisar a los padres</div>
+      </div></div></div></div>
+    <div class="tarjeta libreta" data-a="right" data-tf=".46" data-d="900"><div class="fila"><b style="font-size:24px; color:var(--azul-profundo)">Libreta · I bimestre</b><span class="chip info">PDF</span></div>
+      <span style="color:var(--texto-2); font-size:18px">Fernanda Castillo Vargas · 3.° Primaria A</span>
+      <table class="t"><thead><tr><th>Área · competencia</th><th>Logro</th></tr></thead><tbody>
+        <tr><td>Matemática · Resuelve problemas de cantidad</td><td><span class="nota ad" data-a="pop" data-tf=".46" data-dl="500">AD</span></td></tr>
+        <tr><td>Comunicación · Lee diversos tipos de textos</td><td><span class="nota a" data-a="pop" data-tf=".46" data-dl="580">A</span></td></tr>
+        <tr><td>Ciencia y Tecnología · Indaga con métodos científicos</td><td><span class="nota a" data-a="pop" data-tf=".46" data-dl="660">A</span></td></tr>
+        <tr><td>Personal Social · Construye su identidad</td><td><span class="nota b" data-a="pop" data-tf=".46" data-dl="740">B</span></td></tr></tbody></table></div>
+  </div></div></div>
+</section>
+
+<section class="escena" id="ruta" data-dur="7400">
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa">
+  <div class="encabezado"><div class="seccion" data-a="up" data-t="150">Hoja de ruta</div><h2 data-a="up" data-t="250" data-d="800">Lo esencial ya está construido</h2></div>
+  <div class="ruta"><div class="linea" data-a="grow" data-t="500" data-d="1000"></div><div class="avance" data-a="grow" data-t="1300" data-d="700"></div>
+    <div class="hito hecho" data-a="up" data-t="700"><div class="bola" data-a="pop" data-t="1700">✓</div><div class="cuando">Listo hoy</div><h3>Caja controlada</h3><ul><li>Cobro con boleta</li><li>Cierre a ciegas</li><li>Aprobaciones y bitácora</li></ul></div>
+    <div class="hito siguiente" data-a="up" data-t="820"><div class="bola">2</div><div class="cuando">Noviembre 2026</div><h3>Cero digitación</h3><ul><li>Pagos digitales</li><li>Banco conciliado solo</li><li>Boleta SUNAT</li></ul></div>
+    <div class="hito" data-a="up" data-t="940"><div class="bola">3</div><div class="cuando">Diciembre 2026</div><h3>Familias conectadas</h3><ul><li>WhatsApp y portal</li><li>Matrícula 2027</li><li>Panel en el celular</li></ul></div>
+    <div class="hito" data-a="up" data-t="1060"><div class="bola">4</div><div class="cuando">Marzo – abril 2027</div><h3>Académico</h3><ul><li>Asistencia y notas</li><li>Libretas y SIAGIE</li><li>Aula virtual</li></ul></div>
+  </div>
+  <div class="pie-marca" data-a="fade" data-t="600"><div class="mono">VM</div>Cuentas Claras</div></div>
+</section>
+
+<section class="escena" id="cierre" data-dur="6500" data-sin-salida>
+  <div class="ambiente"><i class="m1"></i><i class="m2"></i></div>
+  <div class="capa"><div class="centro"><div class="bloque">
+    <div class="mono grande" data-a="scale" data-t="150" data-d="900">VM</div>
+    <div class="titulo-portada" style="font-size:96px" data-a="mask" data-t="550" data-d="1000">Cada sol, <span>trazable</span>.</div>
+    <div class="subraya" data-a="grow" data-t="1200" data-d="700"></div>
+    <div class="sub-portada" data-a="up" data-t="1350">Cuentas Claras · Colegio Virgen María</div>
+  </div></div></div>
+</section>
+
+<script>
+/* ---------- Escenas de pantallas reales desde la plantilla ---------- */
+const CAJAS = window.CAJAS || {};
+(function () {
+  const tpl = document.getElementById('t-real').innerHTML;
+  const datos = JSON.parse(document.getElementById('reales').dataset.escenas);
+  const hueco = document.getElementById('hueco-reales');
+  for (const d of datos) {
+    const c = CAJAS[d.caja] || { x: 30, y: 30, w: 40, h: 30 };
+    const ox = c.x + c.w / 2, oy = c.y + c.h / 2;
+    // Acercamiento proporcional: más zoom cuando el foco es pequeño (máx. 1.22)
+    const esc = Math.min(1.22, Math.max(1.08, 1 + 0.16 * (40 / Math.max(c.w, c.h * 1.6))));
+    const sec = document.createElement('section'); sec.className = 'escena'; sec.id = d.id; sec.dataset.dur = d.dur;
+    const ft = Math.round(d.dur * 0.30), zt = ft + 350;
+    sec.innerHTML = tpl.replace('{seccion}', d.seccion).replace('{titulo}', d.titulo).replace('{texto}', d.texto).replace('{url}', d.url)
+      .replace('{img}', d.img).replace('{zoom}', `${ox} ${oy} ${esc.toFixed(3)}`).replace('{zt}', zt).replace('{ft}', ft)
+      .replace('{caja}', `${c.x} ${c.y} ${c.w} ${c.h}`);
+    hueco.before(sec);
+  }
+  // El orden del DOM debe seguir el del video: las reales van antes de "datos"
+})();
+
+/* ---------- QR decorativo ---------- */
+(function () { const qr = document.getElementById('qr'); let s = 7;
+  for (let i = 0; i < 225; i++) { s = (s * 9301 + 49297) % 233280; const x = i % 15, y = Math.floor(i / 15);
+    const esq = (x < 4 && y < 4) || (x > 10 && y < 4) || (x < 4 && y > 10);
+    const marco = esq && ((x % 11 === 0 || x % 11 === 3 || y % 11 === 0 || y % 11 === 3) || ((x % 11 === 1 || x % 11 === 2) && (y % 11 === 1 || y % 11 === 2)));
+    const c = document.createElement('i'); if (esq ? marco : (s / 233280) > 0.52) c.className = 'n'; qr.appendChild(c); } })();
+
+/* ---------- Curvas (Motion Design Skill: personalidad corporativa-premium) ---------- */
+function bezier(p1x, p1y, p2x, p2y) {
+  const cx = 3 * p1x, bx = 3 * (p2x - p1x) - cx, ax = 1 - cx - bx, cy = 3 * p1y, by = 3 * (p2y - p1y) - cy, ay = 1 - cy - by;
+  const sx = t => ((ax * t + bx) * t + cx) * t, sy = t => ((ay * t + by) * t + cy) * t, dx = t => (3 * ax * t + 2 * bx) * t + cx;
+  return x => { if (x <= 0) return 0; if (x >= 1) return 1; let t = x;
+    for (let i = 0; i < 8; i++) { const e = sx(t) - x; if (Math.abs(e) < 1e-5) break; const d = dx(t); if (Math.abs(d) < 1e-6) break; t -= e / d; }
+    return sy(t); };
+}
+const EASE = {
+  entrada: bezier(0.05, 0.7, 0.1, 1),   // MD3 emphasized: entradas
+  estandar: bezier(0.2, 0, 0, 1),       // en pantalla
+  salida: bezier(0.3, 0, 1, 1),         // MD3 accelerate: salidas
+  suave: bezier(0.4, 0, 0.2, 1),        // cámara y ambiente
+  rebote: bezier(0.175, 0.885, 0.32, 1.275), // solo estados de éxito (pop)
+};
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const fmt = { int: n => Math.round(n).toLocaleString('en-US'), soles: n => 'S/ ' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+  pct: n => n.toFixed(1) + ' %', pct0: n => Math.round(n) + ' %' };
+
+function inicio(el, D) {
+  let t = el.dataset.t !== undefined ? +el.dataset.t : (el.dataset.tf !== undefined ? +el.dataset.tf * D : 0);
+  return t + (+el.dataset.dl || 0);
+}
+
+/* ---------- Render determinista: escena + tiempo local (ms) ---------- */
+window.render = function (id, t) {
+  document.querySelectorAll('.escena').forEach(e => e.classList.toggle('activa', e.id === id));
+  const sc = document.getElementById(id); const D = +sc.dataset.dur;
+  const conSalida = !sc.hasAttribute('data-sin-salida');
+  const ts = D - 480, ds = 340; // salida: 340 ms con aceleración, luego ~140 ms en blanco
+  const ps = conSalida ? EASE.salida(clamp((t - ts) / ds)) : 0;
+
+  // Ambiente: manchas que respiran (ciclos de 14 s y 17 s, ≤ 20 % de la energía)
+  sc.querySelectorAll('.ambiente .m1').forEach(m => { const a = t / 14000 * 2 * Math.PI; m.style.transform = `translate(${Math.sin(a) * 40}px, ${Math.cos(a) * 26}px)`; });
+  sc.querySelectorAll('.ambiente .m2').forEach(m => { const a = t / 17000 * 2 * Math.PI + 1; m.style.transform = `translate(${Math.cos(a) * 34}px, ${Math.sin(a) * 22}px)`; });
+
+  sc.querySelectorAll('[data-a]').forEach(el => {
+    const tipo = el.dataset.a, t0 = inicio(el, D), dur = +el.dataset.d || (tipo === 'pop' ? 520 : tipo === 'fade' ? 500 : 650);
+    let p = clamp((t - t0) / dur);
+    let o = 1, tx = 0, ty = 0, s = 1, sxx = null;
+    const e = EASE.entrada(p);
+    switch (tipo) {
+      case 'up': o = clamp(p * 1.6); ty = (1 - e) * 28; break;
+      case 'left': o = clamp(p * 1.6); tx = (1 - e) * -40; break;
+      case 'right': o = clamp(p * 1.6); tx = (1 - e) * 64; s = 0.985 + 0.015 * e; break;
+      case 'scale': o = clamp(p * 1.6); s = 0.92 + 0.08 * e; break;
+      case 'pop': { const r = EASE.rebote(p); o = clamp(p * 2.2); s = 0.6 + 0.4 * r; break; }
+      case 'fade': o = EASE.estandar(p); break;
+      case 'mask': { const m = EASE.estandar(p); el.style.clipPath = `inset(-20% ${(1 - m) * 100}% -20% 0)`; ty = (1 - e) * 10; break; }
+      case 'grow': sxx = EASE.estandar(p); break;
+      case 'draw': el.style.strokeDasharray = '1'; el.style.strokeDashoffset = String(1 - EASE.estandar(p)); break;
+      case 'count': { const n = +el.dataset.n; const v = n * EASE.estandar(p); el.textContent = (fmt[el.dataset.fmt] || fmt.int)(v); o = 1; break; }
+      case 'foco': {
+        o = clamp(p * 1.5); s = 1.06 - 0.06 * e;
+        const [x, y, w, h] = el.dataset.caja.split(' ').map(Number); const pad = 0.8;
+        Object.assign(el.style, { left: (x - pad) + '%', top: (y - pad * 1.6) + '%', width: (w + pad * 2) + '%', height: (h + pad * 3.2) + '%' });
+        const ciclo = ((t - t0 - dur) / 2200) % 1; el.style.setProperty('--anillo', t > t0 + dur ? EASE.suave(clamp(ciclo)).toFixed(3) : 0);
+        break; }
+    }
+    // Salida anticipada (p. ej. "escribiendo…")
+    const fin = el.dataset.fin !== undefined ? +el.dataset.fin : (el.dataset.ff !== undefined ? +el.dataset.ff * D : null);
+    if (fin !== null && t > fin) { const q = EASE.salida(clamp((t - fin) / 200)); o *= 1 - q; s *= 1 - 0.08 * q; }
+    // Pulsación de botón: anticipación (0.96) y asentamiento
+    const pr = el.dataset.press !== undefined ? +el.dataset.press : (el.dataset.pressf !== undefined ? +el.dataset.pressf * D : null);
+    if (pr !== null && t > pr) { const k = t - pr; s *= k < 120 ? 1 - 0.04 * EASE.estandar(k / 120) : 0.96 + 0.04 * EASE.estandar(clamp((k - 120) / 260)); }
+    // Salida de escena: todo sube un poco y se disuelve (sin escalonar, 340 ms)
+    if (ps > 0 && tipo !== 'draw' && tipo !== 'count') { o *= 1 - ps; ty -= 16 * ps; }
+    if (tipo !== 'draw' && tipo !== 'count') {
+      el.style.opacity = o.toFixed(3);
+      el.style.transform = (sxx !== null ? `scaleX(${sxx.toFixed(4)}) ` : '') + `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${s.toFixed(4)})`;
+    }
+    // Sombra con seguimiento: llega 120 ms después del objeto
+    if (el.matches('.navegador, .telefono, .boleta, .tarjeta')) el.style.setProperty('--so', EASE.estandar(clamp((t - t0 - 120) / dur)).toFixed(3));
+  });
+
+  // Flotación ambiental de teléfonos (±7 px, ciclo 4.8 s, fases distintas)
+  sc.querySelectorAll('.flota').forEach((f, i) => { const fase = +(getComputedStyle(f).getPropertyValue('--fase') || 0) + i * 0.3;
+    f.style.transform = `translateY(${(Math.sin((t / 4800 + fase) * 2 * Math.PI) * 7).toFixed(2)}px)`; });
+  // Puntos de "escribiendo…"
+  sc.querySelectorAll('.pulso').forEach(b => { const ph = +(b.style.getPropertyValue('--p') || 0); const v = (Math.sin((t / 900 - ph) * 2 * Math.PI) + 1) / 2; b.style.transform = `translateY(${(-4 * v).toFixed(2)}px)`; b.style.opacity = (0.45 + 0.55 * v).toFixed(2); });
+  // Cámara: acercamiento suave hacia el foco (en pantalla: ease-in-out)
+  sc.querySelectorAll('.camara').forEach(c => { const [ox, oy, esc] = c.dataset.zoom.split(' ').map(Number);
+    const z = EASE.suave(clamp((t - +c.dataset.zt) / +c.dataset.zd)); c.style.transformOrigin = `${ox}% ${oy}%`; c.style.transform = `scale(${(1 + (esc - 1) * z).toFixed(4)})`; });
+};
+window.escenas = () => [...document.querySelectorAll('.escena')].map(e => ({ id: e.id, dur: +e.dataset.dur }));
+const q = new URLSearchParams(location.search); if (q.get('e')) render(q.get('e'), +(q.get('t') || 0));
+</script>
+</body>
+</html>

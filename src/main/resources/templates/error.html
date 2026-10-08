@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: publica('Algo salió mal', ~{::main})}">
+<body>
+<main id="contenido" class="contenido-publico">
+	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-error">
+		<h1 id="titulo-error">No pudimos mostrar esta página</h1>
+		<p class="secundario">Intenta de nuevo en unos minutos. Si el problema continúa, avisa a Administración.</p>
+		<div class="fila">
+			<a class="btn btn-primario" th:href="@{/inicio}">Volver al inicio</a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

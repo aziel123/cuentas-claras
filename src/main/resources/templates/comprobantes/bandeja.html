@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Comprobantes', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="comprobantes-bandeja" th:with="b=${bandeja}">
+	<div class="cabecera">
+		<div>
+			<h1>Comprobantes y envío a SUNAT</h1>
+			<p class="secundario" th:text="|Cada boleta se envía sola al OSE. Hay ${b.plazoDias} días para que SUNAT la acepte.|">Cada boleta se envía sola al OSE.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<th:block th:if="${b.simulado}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', 'El envío es SIMULADO: los comprobantes no tienen valor tributario.')}"></div>
+	</th:block>
+
+	<ul class="conteos" aria-label="Resumen">
+		<li><strong th:text="${b.totalPorAtender()}">0</strong><span>Por atender</span></li>
+		<li><strong th:text="${#lists.size(b.pendientes) + #lists.size(b.enviados)}">0</strong><span>En camino</span></li>
+		<li><strong th:text="${#lists.size(b.aceptadosHoy)}">0</strong><span>Aceptados hoy</span></li>
+	</ul>
+
+	<section class="tarjeta" aria-labelledby="titulo-atender" data-seccion="por-atender">
+		<h2 id="titulo-atender">Por atender</h2>
+		<th:block th:if="${b.totalPorAtender() == 0}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Nada por atender', 'Ningún comprobante rechazado ni por vencer el plazo.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${b.totalPorAtender() == 0}">
+			<thead><tr><th scope="col">Comprobante</th><th scope="col">Receptor</th><th scope="col" class="num">Total</th>
+				<th scope="col">Estado</th><th scope="col">Qué dijo el OSE</th><th scope="col">Acción</th></tr></thead>
+			<tbody>
+				<tr th:each="f : ${b.rechazados}" th:data-comprobante="${f.id}">
+					<td data-etiqueta="Comprobante"><a th:href="@{/comprobantes/{id}(id=${f.id})}" th:text="${f.numero}">B001-1</a></td>
+					<td data-etiqueta="Receptor" th:text="${f.receptor}">Rosa</td>
+					<td data-etiqueta="Total" class="num"><span th:replace="~{fragments/componentes :: monto(${f.total})}"></span></td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${f.estadoEtiqueta}, ${f.variante})}"></span></td>
+					<td data-etiqueta="Qué dijo el OSE" th:text="${f.respuesta != null} ? ${f.respuesta} : '—'">—</td>
+					<td data-etiqueta="Acción">
+						<th:block th:if="${f.puedeReemitir}">
+							<th:block th:replace="~{fragments/componentes :: modalMotivo(${'modal-reemitir-' + f.id}, '¿Reemitir con un número nuevo?',
+								'Se emite otro comprobante con los mismos datos y un número nuevo. El rechazado queda como está.',
+								@{/comprobantes/{id}/reemitir(id=${f.id})}, 'Reemitir', 'secundario', 'Reemitir')}"></th:block>
+						</th:block>
+						<span th:if="${f.reemitidoComo != null}" th:text="|Reemitido como ${f.reemitidoComo}|">Reemitido</span>
+					</td>
+				</tr>
+				<tr th:each="f : ${b.porVencer}" th:data-comprobante="${f.id}">
+					<td data-etiqueta="Comprobante"><a th:href="@{/comprobantes/{id}(id=${f.id})}" th:text="${f.numero}">B001-1</a></td>
+					<td data-etiqueta="Receptor" th:text="${f.receptor}">Rosa</td>
+					<td data-etiqueta="Total" class="num"><span th:replace="~{fragments/componentes :: monto(${f.total})}"></span></td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(|Vence el ${#temporals.format(f.fechaLimite, 'dd/MM')}|, 'peligro')}"></span></td>
+					<td data-etiqueta="Qué dijo el OSE" th:text="${f.ultimoError != null} ? ${f.ultimoError} : '—'">—</td>
+					<td data-etiqueta="Acción">
+						<form th:if="${f.puedeReintentar}" method="post" th:action="@{/comprobantes/{id}/reintentar(id=${f.id})}">
+							<button type="submit" class="btn btn-chico btn-secundario">Reintentar ahora</button>
+						</form>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-camino">
+		<h2 id="titulo-camino">En camino</h2>
+		<th:block th:if="${#lists.isEmpty(b.pendientes) and #lists.isEmpty(b.enviados)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Nada en camino', 'Todos los comprobantes tienen respuesta del OSE.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(b.pendientes) and #lists.isEmpty(b.enviados)}">
+			<thead><tr><th scope="col">Comprobante</th><th scope="col">Emitido</th><th scope="col">Estado</th>
+				<th scope="col" class="num">Intentos</th><th scope="col">Próximo intento</th><th scope="col">Último error</th></tr></thead>
+			<tbody>
+				<tr th:each="f : ${b.pendientes}" th:data-comprobante="${f.id}">
+					<td data-etiqueta="Comprobante"><a th:href="@{/comprobantes/{id}(id=${f.id})}" th:text="${f.numero}">B001-1</a></td>
+					<td data-etiqueta="Emitido" th:text="${#temporals.format(f.fechaEmision, 'dd/MM/yyyy')}">06/10/2026</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${f.estadoEtiqueta}, ${f.variante})}"></span></td>
+					<td data-etiqueta="Intentos" class="num" th:text="${f.intentos}">0</td>
+					<td data-etiqueta="Próximo intento" th:text="${f.proximoIntento == null} ? '—' : ${#temporals.format(f.proximoIntento, 'dd/MM HH:mm')}">—</td>
+					<td data-etiqueta="Último error" th:text="${f.ultimoError != null} ? ${f.ultimoError} : '—'">—</td>
+				</tr>
+				<tr th:each="f : ${b.enviados}" th:data-comprobante="${f.id}">
+					<td data-etiqueta="Comprobante"><a th:href="@{/comprobantes/{id}(id=${f.id})}" th:text="${f.numero}">B001-1</a></td>
+					<td data-etiqueta="Emitido" th:text="${#temporals.format(f.fechaEmision, 'dd/MM/yyyy')}">06/10/2026</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${f.estadoEtiqueta}, ${f.variante})}"></span></td>
+					<td data-etiqueta="Intentos" class="num" th:text="${f.intentos}">0</td>
+					<td data-etiqueta="Próximo intento" th:text="${f.proximoIntento == null} ? '—' : ${#temporals.format(f.proximoIntento, 'dd/MM HH:mm')}">—</td>
+					<td data-etiqueta="Último error" th:text="${f.ultimoError != null} ? ${f.ultimoError} : '—'">—</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-aceptados">
+		<h2 id="titulo-aceptados">Aceptados hoy</h2>
+		<th:block th:if="${#lists.isEmpty(b.aceptadosHoy)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay aceptados hoy', 'Aparecen aquí cuando SUNAT los acepta.')}"></div>
+		</th:block>
+		<ul class="lista-simple" th:unless="${#lists.isEmpty(b.aceptadosHoy)}">
+			<li th:each="f : ${b.aceptadosHoy}" th:data-comprobante="${f.id}" th:text="|${f.numero} · ${f.receptor} · ${f.estadoEtiqueta}|">B001-1</li>
+		</ul>
+	</section>
+</main>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Revisar extracto', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="conciliacion-revisar" th:with="p=${previa}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/conciliacion/extractos}">Extractos del banco</a></p>
+			<h1>Revisa antes de registrar</h1>
+			<p class="secundario" th:text="|Paso 2 de 3 · «${p.archivoNombre}» · ${p.cuenta} · huella ${p.shaCorto()}. Todavía no se guardó nada.|">Paso 2 de 3</p>
+		</div>
+	</div>
+
+	<ol class="pasos" aria-label="Pasos para subir el extracto">
+		<li class="paso-hecho">Subir</li>
+		<li class="paso-actual" aria-current="step">Revisar</li>
+		<li>Registrar</li>
+	</ol>
+
+	<th:block th:if="${p.problema != null}">
+		<div th:replace="~{fragments/componentes :: alerta('error', ${p.problema})}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-resumen" th:unless="${p.conErrores()}">
+		<h2 id="titulo-resumen" th:if="${p.desde != null and p.hasta != null}" th:text="|${p.movimientos} movimiento(s) nuevos del ${#temporals.format(p.desde, 'dd/MM/yyyy')} al ${#temporals.format(p.hasta, 'dd/MM/yyyy')}|">41 movimientos</h2>
+		<h2 th:if="${p.desde == null or p.hasta == null}">Sin movimientos nuevos</h2>
+		<p th:if="${p.continuidad != null}"><span th:replace="~{fragments/componentes :: badge(${p.problema == null} ? 'Continuidad correcta' : 'No continúa', ${p.problema == null} ? 'exito' : 'peligro')}"></span> <span th:text="${p.continuidad}">Continúa al extracto del 04/10</span></p>
+		<ul class="conteos">
+			<li><strong class="num" th:text="${p.abonos}">30</strong><span>abonos</span></li>
+			<li><strong class="num" th:text="${p.cargos}">11</strong><span>cargos</span></li>
+			<li><strong class="num" th:text="${p.exactas}">28</strong><span>se emparejan solas</span></li>
+			<li><strong class="num" th:text="${p.sugeridas}">2</strong><span>sugeridas</span></li>
+			<li th:classappend="${p.sinPareja > 0} ? 'conteo-peligro'"><strong class="num" th:text="${p.sinPareja}">1</strong><span>abonos sin pareja</span></li>
+			<li><strong class="num" th:text="${p.repetidas}">0</strong><span>de días ya cargados (idénticos, se omiten)</span></li>
+		</ul>
+		<p class="secundario">El saldo final no se muestra aquí a propósito: lo escribirá a ciegas quien confirme, mirando su app del banco.</p>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-errores" th:if="${p.conErrores()}">
+		<h2 id="titulo-errores">Errores del extracto</h2>
+		<div th:replace="~{fragments/componentes :: alerta('error',
+			'El extracto tiene datos que no se pueden leer o un saldo que no cuadra: no se registra nada mientras los tenga. No lo corrijas a mano: descárgalo otra vez del banco.')}"></div>
+		<table class="tabla">
+			<caption class="solo-lectores">Errores encontrados, por línea</caption>
+			<thead><tr><th scope="col">Línea</th><th scope="col">Qué pasa</th></tr></thead>
+			<tbody>
+				<tr th:each="e : ${p.errores}" class="fila-atencion">
+					<td data-etiqueta="Línea" th:text="${e.linea}">3</td>
+					<td data-etiqueta="Qué pasa" th:text="${e.mensaje}">El saldo no cuadra.</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-propuestas" th:unless="${#lists.isEmpty(p.propuestas)}">
+		<h2 id="titulo-propuestas">Parejas que saldrían</h2>
+		<p class="secundario">Las exactas (misma operación y monto) las confirma el sistema cuando se confirme el extracto; las sugeridas las revisa Administración.</p>
+		<table class="tabla">
+			<thead><tr><th scope="col">Fecha</th><th scope="col">En el banco</th><th scope="col" class="num">Monto</th><th scope="col">Registrado</th><th scope="col">Regla</th></tr></thead>
+			<tbody>
+				<tr th:each="x : ${p.propuestas}" th:classappend="${x.enRojo} ? 'fila-peligro'">
+					<td data-etiqueta="Fecha" th:text="${#temporals.format(x.fecha, 'dd/MM/yyyy')}">05/10/2026</td>
+					<td data-etiqueta="En el banco" th:text="${x.movimiento}">ABONO YAPE</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${x.monto})}"></span></td>
+					<td data-etiqueta="Registrado" th:text="${x.objeto}">Yape B001-00000012</td>
+					<td data-etiqueta="Regla">
+						<span th:replace="~{fragments/componentes :: badge(${x.regla}, ${x.variante})}"></span>
+						<span class="secundario" th:each="a : ${x.avisos}" th:text="| ${a}|">Operación distinta</span>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-decision">
+		<h2 id="titulo-decision">¿Qué quieres hacer?</h2>
+		<p class="secundario" th:if="${p.registrable()}">Al registrarlo, el archivo queda guardado tal cual (con su huella) y espera la confirmación a ciegas de otra persona de Promotoría o Dirección. Recién entonces se concilia.</p>
+		<div class="acciones acciones-izquierda">
+			<form method="post" th:action="@{/conciliacion/extractos/cancelar}" class="form-en-linea">
+				<button type="submit" class="btn btn-secundario" th:text="${p.registrable()} ? 'Cancelar' : 'Volver a subir'">Cancelar</button>
+			</form>
+			<form method="post" th:action="@{/conciliacion/extractos}" class="form-en-linea" th:if="${p.registrable()}">
+				<input type="hidden" name="token" th:value="${p.token}">
+				<button type="submit" class="btn btn-primario">Registrar extracto</button>
+			</form>
+		</div>
+	</section>
+</main>
+</body>
+</html>

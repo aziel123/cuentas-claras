@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Inicio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-inicio="administracion">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Administración</p>
+			<h1 th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</h1>
+			<p class="secundario">Aquí vas a configurar pensiones, cargar alumnos y familias, conciliar el banco y sacar reportes.</p>
+		</div>
+	</div>
+
+	<th:block th:if="${avisoClave != null}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-modulos">
+		<h2 id="titulo-modulos">Lo que podrás hacer aquí</h2>
+		<p class="secundario">Estamos construyendo la plataforma por etapas. Cada módulo se activa cuando está listo.</p>
+		<div th:replace="~{fragments/componentes :: modulos(${menu})}"></div>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-controles">
+		<h2 id="titulo-controles">Cómo te cuida el sistema</h2>
+		<ul class="lista-controles">
+			<li>La deuda de cada alumno la genera el sistema desde las pensiones: nadie decide montos a mano.</li>
+			<li>Los descuentos y becas que registres los aprueba Dirección.</li>
+			<li>La conciliación cruza cada pago registrado con el movimiento del banco.</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-cuenta">
+		<h2 id="titulo-cuenta">Tu cuenta</h2>
+		<p class="secundario">Tu sesión se cierra sola tras 30 minutos sin actividad. Si ingresas desde otro equipo, se cierra la sesión anterior.</p>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Cambiar mi clave', @{/cuenta/cambiar-clave}, 'secundario')}"></a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

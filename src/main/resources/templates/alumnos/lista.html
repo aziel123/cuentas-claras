@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Alumnos', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Alumnos y apoderados</p>
+			<h1>Alumnos</h1>
+			<p class="secundario">Busca por nombre o por DNI. Abre la ficha para ver su familia, su responsable de pago y sus matrículas.</p>
+		</div>
+		<div class="fila" th:if="${puedeEditar}">
+			<a class="btn btn-secundario" th:href="@{/alumnos/importar}">Importar desde Excel</a>
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Registrar alumno', @{/alumnos/nuevo}, 'primario')}"></a>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-busqueda">
+		<h2 id="titulo-busqueda" class="solo-lectores">Buscar alumnos</h2>
+		<form class="filtros" method="get" th:action="@{/alumnos}" role="search">
+			<div class="campo campo-ancho">
+				<label for="q">Nombre o DNI</label>
+				<input class="input" type="search" id="q" name="q" th:value="${busqueda.texto}" autocomplete="off"
+					aria-describedby="q-ayuda" maxlength="80">
+				<p class="ayuda" id="q-ayuda">Por ejemplo: «quispe mateo» o «7845».</p>
+			</div>
+			<div class="campo">
+				<label for="anio">Año</label>
+				<select class="input" id="anio" name="anio">
+					<option value="">Todos</option>
+					<option th:each="a : ${anios}" th:value="${a.id}" th:text="${a.anio}" th:selected="${busqueda.anioId == a.id}">2026</option>
+				</select>
+			</div>
+			<div class="campo">
+				<label for="seccion">Sección</label>
+				<select class="input" id="seccion" name="seccion">
+					<option value="">Todas</option>
+					<option th:each="s : ${secciones}" th:value="${s.id}" th:text="${s.etiquetaConAnio()}"
+						th:selected="${busqueda.seccionId == s.id}">2026 · 5.° Primaria A</option>
+				</select>
+			</div>
+			<div class="campo">
+				<label for="estado">Estado</label>
+				<select class="input" id="estado" name="estado">
+					<option value="">Todos</option>
+					<option th:each="e : ${estados}" th:value="${e}" th:text="${e.etiqueta()}" th:selected="${busqueda.estado == e}">Activo</option>
+				</select>
+			</div>
+			<div class="acciones">
+				<a class="btn btn-texto" th:if="${busqueda.conFiltros()}" th:href="@{/alumnos}">Limpiar</a>
+				<button type="submit" class="btn btn-secundario">Buscar</button>
+			</div>
+		</form>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-resultados">
+		<h2 id="titulo-resultados" th:text="${alumnos.totalElements == 1} ? '1 alumno' : |${alumnos.totalElements} alumnos|">0 alumnos</h2>
+		<th:block th:if="${alumnos.empty}">
+			<th:block th:if="${busqueda.conFiltros()}">
+				<div th:replace="~{fragments/componentes :: estadoVacio('No encontramos alumnos', 'Revisa lo que escribiste o quita algún filtro.')}"></div>
+			</th:block>
+			<th:block th:unless="${busqueda.conFiltros()}">
+				<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay alumnos',
+					${puedeEditar} ? 'Impórtalos con «Importar desde Excel» o registra el primero con «Registrar alumno».' : 'Dirección o Administración los registran.')}"></div>
+			</th:block>
+		</th:block>
+
+		<table class="tabla" th:unless="${alumnos.empty}">
+			<caption class="solo-lectores">Alumnos ordenados por apellidos</caption>
+			<thead>
+				<tr>
+					<th scope="col">Alumno</th>
+					<th scope="col">Documento</th>
+					<th scope="col" th:text="${alumnos.content[0].anio != null} ? |Sección ${alumnos.content[0].anio}| : 'Sección'">Sección</th>
+					<th scope="col">Estado</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr th:each="a : ${alumnos.content}">
+					<td data-etiqueta="Alumno"><a th:href="@{/alumnos/{id}(id=${a.id})}" th:text="${a.nombreCompleto}">Mateo Quispe Huamán</a></td>
+					<td data-etiqueta="Documento" th:text="${a.documento}">DNI 78451236</td>
+					<td data-etiqueta="Sección" th:text="${a.seccion} ?: 'Sin matrícula'">5.° Primaria A</td>
+					<td data-etiqueta="Estado">
+						<span class="badge" th:classappend="${a.estado.name() == 'ACTIVO'} ? 'badge-exito' : 'badge-neutro'" th:text="${a.estadoEtiqueta}">Activo</span>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+
+		<nav class="paginacion fila entre" aria-label="Páginas" th:if="${alumnos.totalPages > 1}">
+			<a class="btn btn-secundario btn-chico" th:if="${alumnos.hasPrevious()}"
+				th:href="@{/alumnos(q=${busqueda.texto}, anio=${busqueda.anioId}, seccion=${busqueda.seccionId}, estado=${busqueda.estado}, pagina=${alumnos.number - 1})}">Anteriores</a>
+			<span class="secundario" th:text="|Página ${alumnos.number + 1} de ${alumnos.totalPages}|">Página 1 de 3</span>
+			<a class="btn btn-secundario btn-chico" th:if="${alumnos.hasNext()}"
+				th:href="@{/alumnos(q=${busqueda.texto}, anio=${busqueda.anioId}, seccion=${busqueda.seccionId}, estado=${busqueda.estado}, pagina=${alumnos.number + 1})}">Siguientes</a>
+		</nav>
+	</section>
+</main>
+</body>
+</html>

@@ -1,0 +1,10 @@
+clips2/
+node_modules/
+package*.json
+*.mp4
+*.wav
+*.f32
+*.m4a
+escenas2.json
+eventos.json
+prueba-*.png

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Revisar el descuento', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="descuento-revisar" th:with="r=${revision}, p=${revision.pedido}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/descuentos}">Descuentos y becas</a></p>
+			<h1 th:text="|${r.tipo} de ${r.valor} para ${r.alumno}|">Descuento por hermanos de 10 %</h1>
+			<p class="secundario">Revisa el antes y el después. Al enviar, queda por aprobar: lo aprueba otra persona de
+				Promotoría o Dirección.</p>
+		</div>
+	</div>
+
+	<section class="tarjeta total-cobro" aria-labelledby="titulo-total">
+		<h2 id="titulo-total" class="etiqueta">Se dejará de cobrar</h2>
+		<p class="total-cobro-monto" data-total th:text="|S/ ${#numbers.formatDecimal(r.total, 1, 'COMMA', 2, 'POINT')}|">S/ 45.00</p>
+		<table class="tabla">
+			<thead><tr><th scope="col">Cuota</th><th scope="col" class="num">Debe hoy</th><th scope="col" class="num">Descuento</th>
+				<th scope="col" class="num">Deberá</th></tr></thead>
+			<tbody>
+				<tr th:each="l : ${r.lineas}">
+					<td data-etiqueta="Cuota"><span th:text="${l.descripcion}">Pensión diciembre 2026</span>
+						<span class="badge badge-exito" th:if="${l.exonera}">Queda exonerada</span></td>
+					<td data-etiqueta="Debe hoy" class="num"><span th:replace="~{fragments/componentes :: monto(${l.saldoAntes})}"></span></td>
+					<td data-etiqueta="Descuento" class="num"><span th:replace="~{fragments/componentes :: monto(${l.ajuste})}"></span></td>
+					<td data-etiqueta="Deberá" class="num"><span th:replace="~{fragments/componentes :: monto(${l.saldoDespues})}"></span></td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<form method="post" th:action="@{/descuentos}" class="formulario">
+		<input type="hidden" name="alumnoId" th:value="${p.alumnoId}">
+		<input type="hidden" name="dni" th:value="${dni}">
+		<input type="hidden" name="tipo" th:value="${p.tipo}">
+		<input type="hidden" name="modalidad" th:value="${p.modalidad}">
+		<input type="hidden" name="valor" th:value="${p.valor}">
+		<input type="hidden" name="cuotaIds" th:each="id : ${p.cuotaIds}" th:value="${id}">
+		<input type="hidden" name="motivo" th:value="${p.motivo}">
+		<input type="hidden" name="sustento" th:value="${p.sustento}">
+		<div class="acciones acciones-izquierda">
+			<button th:replace="~{fragments/componentes :: boton('Enviar a aprobación', 'primario')}"></button>
+			<a class="btn btn-secundario" th:href="@{/descuentos/nuevo(dni=${dni})}">Cambiar</a>
+		</div>
+	</form>
+</main>
+</body>
+</html>

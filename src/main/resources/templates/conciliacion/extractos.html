@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Extractos del banco', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="conciliacion-extractos" th:with="x=${x}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/conciliacion}">Conciliación bancaria</a></p>
+			<h1>Extractos del banco</h1>
+			<p class="secundario">Cada día se sube el extracto del día anterior. Es una cadena: cada extracto empieza con el saldo final del anterior y el día siguiente. Lo confirma otra persona escribiendo a ciegas el saldo que ve en su app del banco.</p>
+		</div>
+		<a class="btn btn-secundario" th:href="@{/conciliacion/cuentas}">Cuentas del colegio</a>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-cuentas" data-seccion="cuentas">
+		<h2 id="titulo-cuentas">Cuentas</h2>
+		<th:block th:if="${#lists.isEmpty(x.cuentas)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay cuentas', 'Promotoría registra la cuenta del colegio cuyo extracto se concilia.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(x.cuentas)}">
+			<thead><tr><th scope="col">Cuenta</th><th scope="col">Cargado hasta</th><th scope="col">Confirmado hasta</th><th scope="col">Por confirmar</th><th scope="col">Acción</th></tr></thead>
+			<tbody>
+				<tr th:each="c : ${x.cuentas}" th:classappend="${!c.activa} ? 'fila-quitada'">
+					<td data-etiqueta="Cuenta" th:text="|${c.banco} · ${c.numero} · ${c.alias}${c.activa ? '' : ' (desactivada)'}|">BCP</td>
+					<td data-etiqueta="Cargado hasta" th:text="${c.cargadoHasta != null} ? ${#temporals.format(c.cargadoHasta, 'dd/MM/yyyy')} : '—'">05/10/2026</td>
+					<td data-etiqueta="Confirmado hasta" th:text="${c.confirmadoHasta != null} ? ${#temporals.format(c.confirmadoHasta, 'dd/MM/yyyy')} : '—'">04/10/2026</td>
+					<td data-etiqueta="Por confirmar" class="num" th:text="${c.porConfirmar}">1</td>
+					<td data-etiqueta="Acción">
+						<a th:if="${x.puedeConfirmar and c.porConfirmar > 0}" class="btn btn-chico btn-primario" th:href="@{/conciliacion/cuentas/{id}/confirmar(id=${c.id})}">Confirmar a ciegas</a>
+						<span th:if="${!x.puedeConfirmar and c.porConfirmar > 0}" class="secundario">Lo confirma Promotoría o Dirección</span>
+						<span th:if="${c.porConfirmar == 0}" class="secundario">—</span>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-subir" th:if="${x.puedeSubir}" data-seccion="subir">
+		<h2 id="titulo-subir">Subir el extracto del banco</h2>
+		<ol class="pasos" aria-label="Pasos para subir el extracto">
+			<li class="paso-actual" aria-current="step">Subir</li>
+			<li>Revisar</li>
+			<li>Registrar</li>
+		</ol>
+		<p class="secundario">Descarga el extracto de días completos (hasta ayer) de la banca por internet y súbelo sin abrirlo ni cambiarlo: se guarda tal cual, con su huella. Si trae días ya cargados, deben ser idénticos.</p>
+		<form class="formulario" method="post" th:action="@{/conciliacion/extractos/vista-previa}" enctype="multipart/form-data">
+			<div class="campo">
+				<label for="archivo">Extracto del banco (.csv, .txt o .xlsx)</label>
+				<input class="input" type="file" id="archivo" name="archivo" required accept=".csv,.txt,.xlsx,text/csv" aria-describedby="archivo-ayuda">
+				<p class="ayuda" id="archivo-ayuda">Hasta 2 MB. La línea «cuenta;número» y las columnas fecha, descripcion, numero_operacion, referencia, cargo, abono y saldo (obligatorio).</p>
+			</div>
+			<div class="acciones">
+				<button type="submit" class="btn btn-primario">Subir y revisar</button>
+			</div>
+		</form>
+		<p class="secundario" th:if="${ejemploDev}">Desarrollo: <a th:href="@{/conciliacion/extractos/ejemplo.csv}" download>descarga el extracto de ejemplo de ayer</a> (con los pagos de la demostración).</p>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-extractos">
+		<h2 id="titulo-extractos">Extractos recientes</h2>
+		<th:block th:if="${#lists.isEmpty(x.extractos)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay extractos', 'Cuando Administración suba el primero, aparecerá aquí.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(x.extractos)}">
+			<thead><tr><th scope="col">Extracto</th><th scope="col">Días</th><th scope="col">Movimientos</th><th scope="col">Estado</th><th scope="col" class="num">Saldo final</th><th scope="col">Subido por</th></tr></thead>
+			<tbody>
+				<tr th:each="e : ${x.extractos}" th:data-extracto="${e.id}">
+					<td data-etiqueta="Extracto"><a th:href="@{/conciliacion/extractos/{id}(id=${e.id})}" th:text="|${e.cuenta} · N.° ${e.secuencia}|">BCP · N.° 1</a></td>
+					<td data-etiqueta="Días" th:text="|${#temporals.format(e.desde, 'dd/MM')} al ${#temporals.format(e.hasta, 'dd/MM/yyyy')}|">05/10</td>
+					<td data-etiqueta="Movimientos" class="num" th:text="${e.movimientos}">41</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${e.estado}, ${e.variante})}"></span></td>
+					<td data-etiqueta="Saldo final" class="num"><th:block th:if="${e.saldoFinal != null}"><span th:replace="~{fragments/componentes :: monto(${e.saldoFinal})}"></span></th:block><span th:if="${e.saldoFinal == null}">—</span></td>
+					<td data-etiqueta="Subido por" th:text="|${e.subidoPor} · ${#temporals.format(e.subidoEn, 'dd/MM HH:mm')}|">administracion</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

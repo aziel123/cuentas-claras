@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Plan de pensiones', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/pensiones}">Pensiones</a></p>
+			<h1 th:if="${planId == null}" th:text="|Proponer plan de ${nivel.etiqueta()} ${anio.anio}|">Proponer plan de Primaria 2027</h1>
+			<h1 th:if="${planId != null}" th:text="|Editar ${plan.nombre}|">Editar Plan Primaria 2027 v2</h1>
+			<p class="secundario">Queda en borrador hasta que otra persona de Promotoría o Dirección lo apruebe. Quien lo
+				propone o lo edita no puede aprobarlo.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<th:block th:if="${planId != null and plan.motivoCambio != null}">
+		<div th:replace="~{fragments/componentes :: alerta('info', |Motivo del cambio: ${plan.motivoCambio}|)}"></div>
+	</th:block>
+
+	<form class="formulario tarjeta" method="post" th:object="${solicitud}"
+		th:action="${planId == null} ? @{/pensiones/planes/nuevo(anio=${anio.id},nivel=${nivel})} : @{/pensiones/planes/{id}(id=${planId})}">
+		<div class="alerta alerta-error" role="alert" th:if="${#fields.hasErrors('*')}">
+			<p>Revisa los datos marcados.</p>
+		</div>
+
+		<fieldset class="grupo-formulario">
+			<legend>Montos</legend>
+			<div class="formulario-doble">
+				<div class="campo">
+					<label for="montoPension">Pensión mensual (S/)</label>
+					<input type="text" inputmode="decimal" class="input num" th:field="*{montoPension}" th:errorclass="input-con-error"
+						required autocomplete="off" aria-describedby="montoPension-ayuda"
+						th:aria-invalid="${#fields.hasErrors('montoPension')} ? 'true'">
+					<p class="ayuda" id="montoPension-ayuda">Con punto decimal, sin comas: 450.00</p>
+					<p class="error" th:if="${#fields.hasErrors('montoPension')}" th:errors="*{montoPension}">Error</p>
+				</div>
+				<div class="campo">
+					<label for="montoMatricula">Matrícula (S/)</label>
+					<input type="text" inputmode="decimal" class="input num" th:field="*{montoMatricula}" th:errorclass="input-con-error"
+						required autocomplete="off" aria-describedby="montoMatricula-ayuda"
+						th:aria-invalid="${#fields.hasErrors('montoMatricula')} ? 'true'">
+					<p class="ayuda" id="montoMatricula-ayuda">No puede ser mayor que una pensión (DS 005-2021-MINEDU). Con 0 no se cobra.</p>
+					<p class="error" th:if="${#fields.hasErrors('montoMatricula')}" th:errors="*{montoMatricula}">Error</p>
+				</div>
+			</div>
+		</fieldset>
+
+		<fieldset class="grupo-formulario">
+			<legend>Fechas</legend>
+			<div class="formulario-doble">
+				<div th:replace="~{fragments/componentes :: campoDe('vencimientoMatricula', 'Vencimiento de la matrícula', null, 'date', true)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('cobroDesde', 'Cobrar desde (opcional)',
+					'Día 1 de un mes. Lo anterior se carga como saldo inicial. Déjalo vacío para cobrar todo el año.', 'date', false)}"></div>
+			</div>
+			<p class="ayuda">Vencimiento de cada pensión: una por mes, en orden. Las casillas vacías no se usan.</p>
+			<div class="formulario-doble">
+				<!--/* Si el formulario volvió con un monto ilegible, no hay objeto: se repite lo que escribió. */-->
+				<div class="campo" th:each="i : ${#numbers.sequence(0, 11)}">
+					<label th:for="|vencimientos${i}|" th:text="|Pensión ${i + 1}|">Pensión 1</label>
+					<input type="date" class="input" th:id="|vencimientos${i}|" th:name="|vencimientos[${i}]|"
+						th:value="${solicitud != null} ? ${solicitud.casilla(i)} : (${param['vencimientos[' + i + ']'] != null} ? ${param['vencimientos[' + i + ']'][0]} : '')" autocomplete="off">
+				</div>
+			</div>
+			<p class="error" th:if="${#fields.hasErrors('vencimientos')}" th:errors="*{vencimientos}">Error</p>
+		</fieldset>
+
+		<div class="acciones">
+			<a class="btn btn-secundario" th:href="${planId == null} ? @{/pensiones(anio=${anio.id})} : @{/pensiones/planes/{id}(id=${planId})}">Cancelar</a>
+			<button th:replace="~{fragments/componentes :: boton(${planId == null} ? 'Proponer plan' : 'Guardar borrador', 'primario')}"></button>
+		</div>
+	</form>
+</main>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Revisar importación', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" th:with="r=${previa.resumen()}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/alumnos/importar}">Importar alumnos</a></p>
+			<h1>Revisa antes de importar</h1>
+			<p class="secundario" th:text="|Paso 2 de 3 · «${previa.archivoNombre}» · año ${previa.anio}. Todavía no se guardó nada.|">Paso 2 de 3</p>
+		</div>
+	</div>
+
+	<ol class="pasos" aria-label="Pasos de la importación">
+		<li class="paso-hecho">Subir</li>
+		<li class="paso-actual" aria-current="step">Revisar</li>
+		<li>Confirmar</li>
+	</ol>
+
+	<th:block th:if="${previa.importadoAntesEn != null}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia',
+			|Este mismo archivo ya se importó el ${#temporals.format(previa.importadoAntesEn, 'dd/MM/yyyy')} a las ${#temporals.format(previa.importadoAntesEn, 'HH:mm')}. Lo que ya está registrado aparece como «sin cambios».|)}"></div>
+	</th:block>
+	<th:block th:each="aviso : ${previa.avisos}">
+		<div th:replace="~{fragments/componentes :: alerta('info', ${aviso})}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-resumen">
+		<h2 id="titulo-resumen" th:text="|${r.filas} ${r.filas == 1 ? 'fila' : 'filas'} leídas|">10 filas leídas</h2>
+		<ul class="conteos">
+			<li th:classappend="${r.filasConErrores > 0} ? 'conteo-peligro'"><strong class="num" th:text="${r.filasConErrores}">2</strong><span>con errores</span></li>
+			<li><strong class="num" th:text="${r.alumnosNuevos}">8</strong><span>alumnos nuevos</span></li>
+			<li><strong class="num" th:text="${r.alumnosActualizados}">0</strong><span>con cambios</span></li>
+			<li><strong class="num" th:text="${r.alumnosSinCambios}">0</strong><span>sin cambios</span></li>
+			<li><strong class="num" th:text="${r.familiasNuevas}">6</strong><span>familias nuevas</span></li>
+			<li><strong class="num" th:text="${r.matriculasNuevas}">8</strong><span>matrículas nuevas</span></li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-errores" th:if="${r.conErrores()}">
+		<h2 id="titulo-errores">Errores por corregir</h2>
+		<div th:replace="~{fragments/componentes :: alerta('error',
+			'Corrige estas filas en tu archivo y vuelve a subirlo. No se importa nada mientras haya errores.')}"></div>
+		<table class="tabla">
+			<caption class="solo-lectores">Errores encontrados, por fila y columna</caption>
+			<thead><tr><th scope="col">Fila</th><th scope="col">Columna</th><th scope="col">Dato</th><th scope="col">Qué corregir</th></tr></thead>
+			<tbody>
+				<tr th:each="e : ${previa.errores()}" class="fila-atencion">
+					<td data-etiqueta="Fila" th:text="${e.fila}">12</td>
+					<td data-etiqueta="Columna" th:text="${e.columna} ?: '—'">B</td>
+					<td data-etiqueta="Dato" th:text="${e.campo} ?: '—'">N.° de documento del alumno</td>
+					<td data-etiqueta="Qué corregir" th:text="${e.mensaje}">El DNI debe tener 8 dígitos.</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-cambios" th:unless="${#lists.isEmpty(previa.conCambios())}">
+		<h2 id="titulo-cambios">Cambios sobre lo ya registrado</h2>
+		<p class="secundario">Documento, celular y correo se muestran ocultos en parte. Cada cambio quedará en la bitácora.</p>
+		<th:block th:if="${previa.conCambiosPorSolicitar()}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia',
+				'La importación no cambia el celular, el correo ni el responsable de pago de lo ya registrado. Pídelos desde la ficha: los aprueba otra persona de Promotoría o Dirección.')}"></div>
+		</th:block>
+		<table class="tabla">
+			<thead><tr><th scope="col">Fila</th><th scope="col">Qué cambia</th><th scope="col">Antes</th><th scope="col">Después</th><th scope="col">Se aplica</th></tr></thead>
+			<tbody>
+				<th:block th:each="p : ${previa.conCambios()}">
+					<tr th:each="c : ${p.cambios}">
+						<td data-etiqueta="Fila" th:text="${p.fila.fila}">3</td>
+						<td data-etiqueta="Qué cambia" th:text="${c.campo}">Celular</td>
+						<td data-etiqueta="Antes" th:text="${c.antes}">+51 *** *** 321</td>
+						<td data-etiqueta="Después" th:text="${c.despues}">+51 *** *** 777</td>
+						<td data-etiqueta="Se aplica" th:data-requiere-solicitud="${c.requiereSolicitud}">
+							<th:block th:if="${c.requiereSolicitud}"><span th:replace="~{fragments/componentes :: badge('Requiere solicitud', 'alerta')}"></span></th:block>
+							<span th:unless="${c.requiereSolicitud}">Sí</span>
+						</td>
+					</tr>
+				</th:block>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-advertencias" th:unless="${#lists.isEmpty(previa.conAdvertencias())}">
+		<h2 id="titulo-advertencias">Para revisar (no impiden importar)</h2>
+		<ul class="lista-simple">
+			<th:block th:each="f : ${previa.conAdvertencias()}">
+				<li th:each="a : ${f.advertencias}"><strong th:text="|Fila ${f.fila} · ${f.nombreAlumno()}|">Fila 4</strong><span th:text="${a}">Edad</span></li>
+			</th:block>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-nuevos" th:unless="${#lists.isEmpty(previa.nuevos())}">
+		<h2 id="titulo-nuevos">Alumnos nuevos</h2>
+		<table class="tabla">
+			<thead><tr><th scope="col">Fila</th><th scope="col">Alumno</th><th scope="col">Sección</th><th scope="col">Responsable de pago</th></tr></thead>
+			<tbody>
+				<tr th:each="p : ${previa.nuevos()}">
+					<td data-etiqueta="Fila" th:text="${p.fila.fila}">2</td>
+					<td data-etiqueta="Alumno" th:text="${p.fila.nombreAlumno()}">Lucía Ramos</td>
+					<td data-etiqueta="Sección" th:text="|${p.fila.grado.etiqueta()} ${p.fila.seccion}|">5.° Primaria A</td>
+					<td data-etiqueta="Responsable de pago" th:text="|${p.fila.apoderado.nombres} ${p.fila.apoderado.apellidoPaterno}|">Carmen Torres</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-decision">
+		<h2 id="titulo-decision">¿Qué quieres hacer?</h2>
+		<th:block th:if="${r.sinCambios()}">
+			<div th:replace="~{fragments/componentes :: alerta('exito', 'Todo el archivo ya está registrado igual: no hay nada que importar.')}"></div>
+		</th:block>
+		<div class="acciones acciones-izquierda">
+			<form method="post" th:action="@{/alumnos/importar/cancelar}" class="form-en-linea">
+				<button type="submit" class="btn btn-secundario" th:text="${r.conErrores() or r.sinCambios()} ? 'Volver a subir' : 'Cancelar'">Cancelar</button>
+			</form>
+			<form method="post" th:action="@{/alumnos/importar/confirmar}" class="form-en-linea"
+				th:unless="${r.conErrores() or r.sinCambios()}">
+				<input type="hidden" name="token" th:value="${previa.token}">
+				<button type="submit" class="btn btn-primario">Confirmar e importar</button>
+			</form>
+		</div>
+		<p class="ayuda" th:unless="${r.conErrores() or r.sinCambios()}">Se importa todo o nada. Si alguien cambió algo
+			mientras revisabas, te pediremos revisar otra vez.</p>
+	</section>
+</main>
+</body>
+</html>

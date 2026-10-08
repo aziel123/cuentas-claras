@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Descuentos y becas', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="descuentos">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Descuentos y becas</p>
+			<h1>Descuentos y becas</h1>
+			<p class="secundario">Pide descuentos por hermanos, becas u otros descuentos. Los aprueba Promotoría o Dirección;
+				hasta entonces se sigue cobrando el monto completo.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-nuevo">
+		<h2 id="titulo-nuevo">Pedir un descuento</h2>
+		<form class="buscador" method="get" th:action="@{/descuentos/nuevo}">
+			<div class="campo">
+				<label for="dni">DNI del alumno</label>
+				<input class="input" type="text" id="dni" name="dni" required minlength="6" maxlength="12" autocomplete="off"
+					inputmode="numeric" aria-describedby="dni-ayuda">
+				<p class="ayuda" id="dni-ayuda">También sirve el carné de extranjería o el pasaporte.</p>
+			</div>
+			<button type="submit" class="btn btn-primario">Continuar</button>
+		</form>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-lista">
+		<h2 id="titulo-lista">Pedidos recientes</h2>
+		<th:block th:if="${#lists.isEmpty(descuentos)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay descuentos', 'Cuando pidas uno, aparecerá aquí con su estado.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(descuentos)}">
+			<thead><tr><th scope="col">Alumno</th><th scope="col">Tipo</th><th scope="col">Valor</th><th scope="col">Cuotas</th>
+				<th scope="col" class="num">Se deja de cobrar</th><th scope="col">Estado</th><th scope="col">Pedido por</th></tr></thead>
+			<tbody>
+				<tr th:each="d : ${descuentos}" th:data-descuento="${d.id}">
+					<td data-etiqueta="Alumno" th:text="${d.alumno}">Valeria Quispe Huamán</td>
+					<td data-etiqueta="Tipo" th:text="${d.tipo}">Descuento por hermanos</td>
+					<td data-etiqueta="Valor" th:text="${d.valor}">10 %</td>
+					<td data-etiqueta="Cuotas" class="num" th:text="${d.cuotas}">1</td>
+					<td data-etiqueta="Se deja de cobrar" class="num"><span th:replace="~{fragments/componentes :: monto(${d.total})}"></span></td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${d.estado}, ${d.estadoVariante})}"></span></td>
+					<td data-etiqueta="Pedido por" th:text="|${d.solicitadoPor} · ${#temporals.format(d.solicitadoEn, 'dd/MM/yyyy')}|">administracion</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

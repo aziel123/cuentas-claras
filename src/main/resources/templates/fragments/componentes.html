@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<!--/* Componentes base del sistema de diseño (skill sistema-diseno). Sin estilos ni scripts en línea. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<!--/* Botón de formulario. variante: primario (uno por pantalla), secundario, peligro o texto. */-->
+<button th:fragment="boton(texto, variante)" type="submit" class="btn"
+	th:classappend="'btn-' + ${variante}" th:text="${texto}">Guardar</button>
+
+<!--/* Enlace con aspecto de botón. href ya resuelto por quien llama, p. ej. @{/inicio}. */-->
+<a th:fragment="enlaceBoton(texto, href, variante)" class="btn" th:classappend="'btn-' + ${variante}"
+	th:href="${href}" th:text="${texto}">Ir</a>
+
+<!--/* Campo de texto dentro de un formulario con th:object. La etiqueta siempre visible; ayuda y error debajo. */-->
+<div th:fragment="campo(nombre, etiqueta, ayuda, autocompletar)" class="campo">
+	<label th:for="${nombre}" th:text="${etiqueta}">Etiqueta</label>
+	<input type="text" class="input" th:field="*{__${nombre}__}" th:errorclass="input-con-error"
+		th:autocomplete="${autocompletar}" th:aria-describedby="${ayuda != null} ? ${nombre + '-ayuda'}"
+		th:aria-invalid="${#fields.hasErrors(nombre)} ? 'true'" required>
+	<p class="ayuda" th:if="${ayuda != null}" th:id="${nombre + '-ayuda'}" th:text="${ayuda}">Ayuda</p>
+	<p class="error" th:if="${#fields.hasErrors(nombre)}" th:errors="*{__${nombre}__}">Error</p>
+</div>
+
+<!--/* Campo de clave: nunca se vuelve a mostrar lo escrito. */-->
+<div th:fragment="campoClave(nombre, etiqueta, ayuda, autocompletar)" class="campo">
+	<label th:for="${nombre}" th:text="${etiqueta}">Clave</label>
+	<input type="password" class="input" th:id="${nombre}" th:name="${nombre}"
+		th:classappend="${#fields.hasErrors(nombre)} ? 'input-con-error'"
+		th:autocomplete="${autocompletar}" th:aria-describedby="${ayuda != null} ? ${nombre + '-ayuda'}"
+		th:aria-invalid="${#fields.hasErrors(nombre)} ? 'true'" required>
+	<p class="ayuda" th:if="${ayuda != null}" th:id="${nombre + '-ayuda'}" th:text="${ayuda}">Ayuda</p>
+	<p class="error" th:if="${#fields.hasErrors(nombre)}" th:errors="*{__${nombre}__}">Error</p>
+</div>
+
+<!--/* Campo de cualquier tipo (text, date, number, email, tel, search) dentro de un formulario con th:object.
+     requerido: true o false. La etiqueta siempre visible; ayuda y error debajo. */-->
+<div th:fragment="campoDe(nombre, etiqueta, ayuda, tipo, requerido)" class="campo">
+	<label th:for="${nombre}" th:text="${etiqueta}">Etiqueta</label>
+	<input th:type="${tipo}" class="input" th:field="*{__${nombre}__}" th:errorclass="input-con-error"
+		autocomplete="off" th:aria-describedby="${ayuda != null} ? ${nombre + '-ayuda'}"
+		th:aria-invalid="${#fields.hasErrors(nombre)} ? 'true'" th:required="${requerido}">
+	<p class="ayuda" th:if="${ayuda != null}" th:id="${nombre + '-ayuda'}" th:text="${ayuda}">Ayuda</p>
+	<p class="error" th:if="${#fields.hasErrors(nombre)}" th:errors="*{__${nombre}__}">Error</p>
+</div>
+
+<!--/* Acción sensible con motivo obligatorio, sin JavaScript (popover). A diferencia de modalConfirmacion, el botón
+     que abre el modal puede ser discreto. textoAbrir: texto del botón que abre; variante: secundario, texto o peligro. */-->
+<th:block th:fragment="modalMotivo(id, titulo, consecuencia, accion, textoAbrir, variante, textoBoton)">
+	<button type="button" class="btn btn-chico" th:classappend="'btn-' + ${variante}" th:popovertarget="${id}"
+		th:text="${textoAbrir}">Desactivar</button>
+	<div class="modal" th:id="${id}" popover role="dialog" aria-modal="true" th:aria-labelledby="${id + '-titulo'}">
+		<form method="post" th:action="${accion}" class="modal-cuerpo">
+			<h2 th:id="${id + '-titulo'}" th:text="${titulo}">¿Confirmas?</h2>
+			<p th:text="${consecuencia}">Esta acción queda registrada.</p>
+			<div class="campo">
+				<label th:for="${id + '-motivo'}">Motivo (obligatorio)</label>
+				<textarea class="input" th:id="${id + '-motivo'}" name="motivo" required minlength="10" maxlength="500"
+					th:aria-describedby="${id + '-motivo-ayuda'}"></textarea>
+				<p class="ayuda" th:id="${id + '-motivo-ayuda'}">Explica por qué, en al menos 10 caracteres. Quedará en la auditoría.</p>
+			</div>
+			<div class="acciones">
+				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
+				<button type="submit" class="btn btn-peligro" th:text="${textoBoton}">Desactivar</button>
+			</div>
+		</form>
+	</div>
+</th:block>
+
+<!--/* Pedir la devolución de un pago (A2): la causa y el motivo son obligatorios. Si la causa es «pago duplicado», el
+     sistema exige que exista otro pago vigente de esas cuotas. */-->
+<th:block th:fragment="modalDevolucion(id, titulo, consecuencia, accion)">
+	<button type="button" class="btn btn-chico btn-secundario" th:popovertarget="${id}">Solicitar anulación</button>
+	<div class="modal" th:id="${id}" popover role="dialog" aria-modal="true" th:aria-labelledby="${id + '-titulo'}">
+		<form method="post" th:action="${accion}" class="modal-cuerpo">
+			<h2 th:id="${id + '-titulo'}" th:text="${titulo}">¿Pedir la anulación?</h2>
+			<p th:text="${consecuencia}">El pago sigue vigente hasta que se apruebe.</p>
+			<div class="campo">
+				<label th:for="${id + '-causa'}">Causa (obligatoria)</label>
+				<select class="input" th:id="${id + '-causa'}" name="causa" required>
+					<option value="">Elige la causa</option>
+					<option value="PAGO_DUPLICADO">Pago duplicado (la familia pagó dos veces)</option>
+					<option value="COBRO_EQUIVOCADO">Se cobró por error</option>
+					<option value="RETIRO">Retiro del alumno</option>
+					<option value="OTRA">Otra causa</option>
+				</select>
+			</div>
+			<div class="campo">
+				<label th:for="${id + '-motivo'}">Motivo (obligatorio)</label>
+				<textarea class="input" th:id="${id + '-motivo'}" name="motivo" required minlength="10" maxlength="500"
+					th:aria-describedby="${id + '-motivo-ayuda'}"></textarea>
+				<p class="ayuda" th:id="${id + '-motivo-ayuda'}">Explica qué pasó, en al menos 10 caracteres. Quedará en la auditoría.</p>
+			</div>
+			<div class="acciones">
+				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
+				<button type="submit" class="btn btn-peligro">Pedir anulación</button>
+			</div>
+		</form>
+	</div>
+</th:block>
+
+<!--/* Verificación bancaria A CIEGAS (C1): quien verifica escribe la operación, la fecha y el monto que ve en el banco;
+     no ve lo registrado. El sistema compara y, si no coincide, no dice qué campo falló. */-->
+<th:block th:fragment="modalBanco(id, titulo, accion)">
+	<button type="button" class="btn btn-chico btn-secundario" th:popovertarget="${id}">Encontrado</button>
+	<div class="modal" th:id="${id}" popover role="dialog" aria-modal="true" th:aria-labelledby="${id + '-titulo'}">
+		<form method="post" th:action="${accion}" class="modal-cuerpo">
+			<input type="hidden" name="resultado" value="ENCONTRADO">
+			<h2 th:id="${id + '-titulo'}" th:text="${titulo}">¿Lo encontraste en el banco?</h2>
+			<p>Escribe lo que ves en el estado de cuenta del banco. El sistema lo compara con lo registrado.</p>
+			<div class="campo">
+				<label th:for="${id + '-operacion'}">N.° de operación en el banco</label>
+				<input class="input" type="text" th:id="${id + '-operacion'}" name="operacion" required maxlength="40"
+					autocomplete="off" inputmode="text">
+			</div>
+			<div class="campo">
+				<label th:for="${id + '-fecha'}">Fecha en el banco</label>
+				<input class="input" type="date" th:id="${id + '-fecha'}" name="fecha" required>
+			</div>
+			<div class="campo">
+				<label th:for="${id + '-monto'}">Monto en el banco (S/)</label>
+				<input class="input num" type="text" th:id="${id + '-monto'}" name="monto" required inputmode="decimal"
+					pattern="[0-9]{1,7}([.][0-9]{1,2})?" maxlength="10" autocomplete="off">
+			</div>
+			<div class="acciones">
+				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
+				<button type="submit" class="btn btn-primario">Comparar y verificar</button>
+			</div>
+		</form>
+	</div>
+</th:block>
+
+<!--/* Verificación bancaria: «No aparece» con nota obligatoria (qué se revisó en el banco). */-->
+<th:block th:fragment="modalNota(id, titulo, accion)">
+	<button type="button" class="btn btn-chico btn-peligro" th:popovertarget="${id}">No aparece</button>
+	<div class="modal" th:id="${id}" popover role="dialog" aria-modal="true" th:aria-labelledby="${id + '-titulo'}">
+		<form method="post" th:action="${accion}" class="modal-cuerpo">
+			<input type="hidden" name="resultado" value="NO_ENCONTRADO">
+			<h2 th:id="${id + '-titulo'}" th:text="${titulo}">¿No aparece en el banco?</h2>
+			<p>Promotoría lo verá como alerta crítica. Anota qué revisaste (fecha, cuenta, monto) para que se pueda seguir.</p>
+			<div class="campo">
+				<label th:for="${id + '-nota'}">Nota (obligatoria)</label>
+				<textarea class="input" th:id="${id + '-nota'}" name="nota" required minlength="10" maxlength="500"></textarea>
+			</div>
+			<div class="acciones">
+				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
+				<button type="submit" class="btn btn-peligro">Marcar «No aparece»</button>
+			</div>
+		</form>
+	</div>
+</th:block>
+
+<!--/* Avisos de la petición anterior (redirect) o de esta: éxito, advertencia y error. */-->
+<th:block th:fragment="avisos">
+	<th:block th:if="${exito != null}">
+		<div th:replace="~{fragments/componentes :: alerta('exito', ${exito})}"></div>
+	</th:block>
+	<th:block th:if="${advertencia != null}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${advertencia})}"></div>
+	</th:block>
+	<th:block th:if="${error != null}">
+		<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+	</th:block>
+</th:block>
+
+<!--/* Etiqueta de estado: siempre con texto, nunca solo color. variante: exito, alerta, peligro, info o neutro. */-->
+<span th:fragment="badge(texto, variante)" class="badge" th:classappend="'badge-' + ${variante}"
+	th:text="${texto}">Pagado</span>
+
+<!--/* Monto en soles: «S/ 1,250.00» (coma de miles, punto decimal, siempre 2 decimales). Nunca pasa por double. */-->
+<span th:fragment="monto(valor)" class="monto num"
+	th:text="${valor == null} ? '' : ('S/ ' + ${#numbers.formatDecimal(valor, 1, 'COMMA', 2, 'POINT')})">S/ 1,250.00</span>
+
+<!--/* Alerta con ícono y texto. tipo: exito, info, advertencia o error. Los errores usan role="alert". */-->
+<div th:fragment="alerta(tipo, mensaje)" class="alerta" th:classappend="'alerta-' + ${tipo}"
+	th:attr="role=${tipo == 'error'} ? 'alert' : 'status'">
+	<svg class="alerta-icono" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+		stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path th:if="${tipo == 'exito'}" d="M20 6 9 17l-5-5"/>
+		<th:block th:if="${tipo == 'info'}"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></th:block>
+		<th:block th:if="${tipo == 'advertencia' or tipo == 'error'}"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></th:block>
+	</svg>
+	<p th:text="${mensaje}">Mensaje</p>
+</div>
+
+<!--/* Lista vacía: explica qué pasa y cuál es el siguiente paso. */-->
+<div th:fragment="estadoVacio(titulo, texto)" class="estado-vacio">
+	<h3 th:text="${titulo}">Todavía no hay datos</h3>
+	<p th:text="${texto}">Cuando los haya, aparecerán aquí.</p>
+</div>
+
+<!--/* Confirmación de una acción sensible, sin JavaScript (atributo popover).
+     accion: URL ya resuelta del POST. conMotivo: exige un motivo de 10 a 500 caracteres (también se valida en el servidor). */-->
+<th:block th:fragment="modalConfirmacion(id, titulo, consecuencia, accion, textoBoton, conMotivo)">
+	<button type="button" class="btn btn-peligro" th:popovertarget="${id}" th:text="${textoBoton}">Anular</button>
+	<div class="modal" th:id="${id}" popover role="dialog" aria-modal="true" th:aria-labelledby="${id + '-titulo'}">
+		<form method="post" th:action="${accion}" class="modal-cuerpo">
+			<h2 th:id="${id + '-titulo'}" th:text="${titulo}">¿Confirmas?</h2>
+			<p th:text="${consecuencia}">Esta acción queda registrada.</p>
+			<div class="campo" th:if="${conMotivo}">
+				<label th:for="${id + '-motivo'}">Motivo (obligatorio)</label>
+				<textarea class="input" th:id="${id + '-motivo'}" name="motivo" required minlength="10" maxlength="500"
+					th:aria-describedby="${id + '-motivo-ayuda'}"></textarea>
+				<p class="ayuda" th:id="${id + '-motivo-ayuda'}">Explica por qué, en al menos 10 caracteres. Quedará en la auditoría.</p>
+			</div>
+			<div class="acciones">
+				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
+				<button type="submit" class="btn btn-peligro" th:text="${textoBoton}">Anular</button>
+			</div>
+		</form>
+	</div>
+</th:block>
+
+<!--/* Tarjetas de los módulos del rol en el inicio. Los que aún no existen muestran "Próximamente". */-->
+<div th:fragment="modulos(elementos)" class="modulos">
+	<article class="tarjeta modulo" th:each="m : ${elementos}" th:unless="${m.codigo == 'INICIO'}"
+		th:data-modulo="${m.codigo}" th:classappend="${m.disponible} ? 'modulo-disponible'">
+		<div class="fila entre">
+			<h3 th:text="${m.etiqueta}">Módulo</h3>
+			<span th:if="${m.disponible}" class="badge badge-exito">Disponible</span>
+			<span th:unless="${m.disponible}" class="badge badge-neutro" th:text="|Próximamente · ${m.etapa}|">Próximamente</span>
+		</div>
+		<p class="secundario" th:text="${m.descripcion}">Descripción</p>
+		<a th:if="${m.disponible}" class="btn btn-secundario btn-chico" th:href="@{${m.ruta}}">Abrir</a>
+	</article>
+</div>
+
+</body>
+</html>

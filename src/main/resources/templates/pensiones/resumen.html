@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Pensiones', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" th:with="r=${resumen}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Pensiones</p>
+			<h1 th:text="${r.anio != null} ? |Pensiones ${r.anio.anio}| : 'Pensiones'">Pensiones 2027</h1>
+			<p class="secundario">Un plan por nivel. Lo propone Administración y lo aprueba otra persona de Promotoría o
+				Dirección. Un plan aprobado no cambia: para cambiar montos se crea una versión nueva.</p>
+		</div>
+		<form class="filtros" method="get" th:action="@{/pensiones}" th:if="${r.anio != null}">
+			<div class="campo">
+				<label for="anio">Año escolar</label>
+				<select class="input" id="anio" name="anio">
+					<option th:each="a : ${r.anios}" th:value="${a.id}" th:selected="${a.id == r.anio.id}"
+						th:text="|${a.anio} · ${a.estadoEtiqueta}|">2027</option>
+				</select>
+			</div>
+			<button type="submit" class="btn btn-secundario">Ver</button>
+		</form>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${r.anio == null}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay años escolares',
+			'Primero crea el año escolar en «Colegio»; después configuras sus pensiones.')}"></div>
+	</th:block>
+
+	<th:block th:if="${r.anio != null}">
+		<ul class="conteos" aria-label="Resumen del año">
+			<li><strong class="num" th:text="${r.cuotasGeneradas}">120</strong><span>cuotas en los cronogramas</span></li>
+			<li th:classappend="${r.matriculasSinCronograma > 0} ? 'conteo-peligro'">
+				<strong class="num" th:text="${r.matriculasSinCronograma}">0</strong><span>matrículas sin cronograma</span></li>
+		</ul>
+
+		<p class="fila">
+			<a class="btn btn-secundario" th:href="@{/pensiones/cronogramas(anio=${r.anio.id})}">Cronogramas pendientes</a>
+			<a class="btn btn-secundario" th:href="@{/pensiones/saldo-inicial}">Saldo inicial</a>
+		</p>
+
+		<div class="lista-tarjetas">
+			<section class="tarjeta" th:each="n : ${r.niveles}" th:data-nivel="${n.nivel}"
+				th:aria-labelledby="|titulo-${n.nivel}|">
+				<div class="fila entre">
+					<h2 th:id="|titulo-${n.nivel}|" th:text="${n.etiqueta}">Primaria</h2>
+					<span th:if="${n.vigente != null}" class="badge badge-exito" th:text="|Vigente · v${n.vigente.numeroVersion}|">Vigente · v1</span>
+					<span th:if="${n.vigente == null}" class="badge badge-alerta">Sin plan aprobado</span>
+				</div>
+
+				<dl class="datos" th:if="${n.vigente != null}" th:with="v=${n.vigente}">
+					<div><dt>Pensión</dt><dd>
+						<span th:replace="~{fragments/componentes :: monto(${v.montoPension})}"></span>
+						<span class="secundario" th:text="|× ${v.pensiones}|">× 10</span></dd></div>
+					<div><dt>Matrícula</dt><dd><span th:replace="~{fragments/componentes :: monto(${v.montoMatricula})}"></span></dd></div>
+					<div><dt>Vencimientos</dt>
+						<dd th:text="|${#temporals.format(v.primerVencimiento, 'dd/MM/yyyy')} al ${#temporals.format(v.ultimoVencimiento, 'dd/MM/yyyy')}|">31/03 al 31/12</dd></div>
+					<div th:if="${!#strings.isEmpty(v.cobroDesde)}"><dt>Cobra desde</dt><dd th:text="${v.cobroDesde}">diciembre 2026</dd></div>
+					<div><dt>Aprobado por</dt>
+						<dd th:text="|${v.aprobadoPor} · ${#temporals.format(v.aprobadoEn, 'dd/MM/yyyy')}|">director · 01/10/2026</dd></div>
+				</dl>
+				<p><a th:if="${n.vigente != null}" th:href="@{/pensiones/planes/{id}(id=${n.vigente.id})}">Ver el plan vigente</a></p>
+
+				<div th:each="b : ${n.borradores}" class="persona">
+					<p class="fila entre">
+						<strong th:text="${b.nombre}">Plan Primaria 2027 v2</strong>
+						<span class="badge badge-alerta">Por aprobar</span>
+					</p>
+					<p class="secundario">Pensión <span th:replace="~{fragments/componentes :: monto(${b.montoPension})}"></span>
+						· propuesto por <span th:text="${b.editadoPor}">administracion</span></p>
+					<a class="btn btn-secundario btn-chico" th:href="@{/pensiones/planes/{id}(id=${b.id})}">Revisar</a>
+				</div>
+
+				<p class="secundario" th:if="${n.sinCronograma > 0}"
+					th:text="|${n.sinCronograma} ${n.sinCronograma == 1 ? 'matrícula' : 'matrículas'} de ${n.etiqueta} sin cronograma.|">2 matrículas sin cronograma.</p>
+
+				<a th:if="${n.puedeProponer and n.vigente == null}" class="btn btn-secundario"
+					th:href="@{/pensiones/planes/nuevo(anio=${r.anio.id},nivel=${n.nivel})}"
+					th:text="|Proponer plan de ${n.etiqueta}|">Proponer plan</a>
+			</section>
+		</div>
+	</th:block>
+</main>
+</body>
+</html>

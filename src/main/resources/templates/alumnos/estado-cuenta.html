@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Estado de cuenta', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="estado-cuenta" th:with="e=${estado}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/alumnos}">Alumnos</a></p>
+			<h1 th:text="${e.alumno}">Mateo Quispe Huamán</h1>
+			<p class="fila">
+				<span class="secundario num" th:text="${e.documento}">DNI 78451236</span>
+				<span class="secundario" th:text="${e.familia}">Familia Quispe Huamán</span>
+				<span class="badge badge-info" th:if="${e.grado != null}" th:text="${e.grado}">5.° Primaria A · 2026</span>
+			</p>
+		</div>
+	</div>
+
+	<nav class="pestanas" aria-label="Ficha del alumno">
+		<a th:href="@{/alumnos/{id}(id=${e.alumnoId})}">Datos</a>
+		<a th:href="@{/alumnos/{id}/cronograma(id=${e.alumnoId})}">Cronograma</a>
+		<a th:href="@{/alumnos/{id}/estado-cuenta(id=${e.alumnoId})}" aria-current="page">Estado de cuenta</a>
+	</nav>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<ul class="conteos conteos-montos" aria-label="Resumen de la cuenta">
+		<li><strong><span th:replace="~{fragments/componentes :: monto(${e.totalMonto})}"></span></strong><span>Total de cuotas</span></li>
+		<li><strong><span th:replace="~{fragments/componentes :: monto(${e.totalDescuento})}"></span></strong><span>Descuentos</span></li>
+		<li><strong><span th:replace="~{fragments/componentes :: monto(${e.totalPagado})}"></span></strong><span>Pagado</span></li>
+		<li data-resumen="saldo"><strong><span th:replace="~{fragments/componentes :: monto(${e.totalSaldo})}"></span></strong><span>Saldo</span></li>
+	</ul>
+
+	<section class="tarjeta" aria-labelledby="titulo-cuotas">
+		<h2 id="titulo-cuotas">Cuotas</h2>
+		<th:block th:if="${#lists.isEmpty(e.cuotas)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no tiene cuotas', 'Se generan cuando su nivel tiene un plan de pensiones aprobado.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(e.cuotas)}">
+			<thead><tr><th scope="col">Cuota</th><th scope="col">Vence</th><th scope="col" class="num">Monto</th>
+				<th scope="col" class="num">Descuento</th><th scope="col" class="num">Pagado</th><th scope="col" class="num">Saldo</th>
+				<th scope="col">Estado</th></tr></thead>
+			<tbody>
+				<tr th:each="q : ${e.cuotas}" th:data-cuota="${q.id}">
+					<td data-etiqueta="Cuota" th:text="${q.descripcion}">Pensión diciembre 2026</td>
+					<td data-etiqueta="Vence" th:text="${#temporals.format(q.vencimiento, 'dd/MM/yyyy')}">31/12/2026</td>
+					<td data-etiqueta="Monto" class="num"><span th:replace="~{fragments/componentes :: monto(${q.monto})}"></span></td>
+					<td data-etiqueta="Descuento" class="num"><span th:replace="~{fragments/componentes :: monto(${q.descuento})}"></span></td>
+					<td data-etiqueta="Pagado" class="num"><span th:replace="~{fragments/componentes :: monto(${q.pagado})}"></span></td>
+					<td data-etiqueta="Saldo" class="num"><span th:replace="~{fragments/componentes :: monto(${q.saldo})}"></span></td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${q.estadoEtiqueta}, ${q.estadoVariante})}"></span></td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-pagos">
+		<h2 id="titulo-pagos">Pagos y comprobantes</h2>
+		<p class="secundario" th:if="${#lists.isEmpty(e.pagos)}">Todavía no hay pagos de este alumno en el sistema.</p>
+		<table class="tabla" th:unless="${#lists.isEmpty(e.pagos)}">
+			<thead><tr><th scope="col">Fecha</th><th scope="col">Comprobante</th><th scope="col">Medio</th>
+				<th scope="col" class="num">Total</th><th scope="col">Cajera</th><th scope="col">Estado</th>
+				<th scope="col" th:if="${e.puedeSolicitar}">Acciones</th></tr></thead>
+			<tbody>
+				<tr th:each="p : ${e.pagos}" th:classappend="${p.anulado} ? 'fila-quitada'" th:data-pago="${p.id}">
+					<td data-etiqueta="Fecha" th:text="${#temporals.format(p.fecha, 'dd/MM/yyyy')}">02/10/2026</td>
+					<td data-etiqueta="Comprobante"><a class="num" th:href="@{/alumnos/comprobantes/{id}(id=${p.comprobanteId},alumno=${e.alumnoId})}"
+						th:text="${p.comprobante}">B001-00000001</a>
+						<small class="bloque secundario" th:if="${p.reemplazaA != null}" th:text="|Reemplaza a ${p.reemplazaA}|">Reemplaza</small></td>
+					<td data-etiqueta="Medio" th:text="${p.medio}">Efectivo</td>
+					<td data-etiqueta="Total" class="num"><span th:replace="~{fragments/componentes :: monto(${p.total})}"></span></td>
+					<td data-etiqueta="Cajera" th:text="${p.cajera}">Lucía Ramos</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${p.estado}, ${p.estadoVariante})}"></span>
+						<a class="bloque" th:if="${p.notaCreditoId != null}" th:href="@{/alumnos/comprobantes/{id}(id=${p.notaCreditoId},alumno=${e.alumnoId})}"
+							th:text="|Nota de crédito ${p.notaCredito}|">Nota de crédito BC01-00000001</a></td>
+					<td data-etiqueta="Acciones" th:if="${e.puedeSolicitar}">
+						<div class="fila" th:if="${p.puedeSolicitar}">
+							<th:block th:replace="~{fragments/componentes :: modalDevolucion(|modal-anular-${p.id}|, |¿Pedir la anulación de ${p.comprobante}?|,
+								'El pago sigue vigente hasta que Promotoría o Dirección lo aprueben. Al aprobarse se emite una nota de crédito.',
+								@{/alumnos/pagos/{id}/devolucion(id=${p.id},alumno=${e.alumnoId})})}"></th:block>
+							<a class="btn btn-texto btn-chico" th:href="@{/alumnos/pagos/{id}/correccion(id=${p.id})}">Corregir</a>
+						</div>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-descuentos">
+		<h2 id="titulo-descuentos">Descuentos y becas</h2>
+		<p class="secundario" th:if="${#lists.isEmpty(e.descuentos)}">No tiene descuentos ni becas.</p>
+		<table class="tabla" th:unless="${#lists.isEmpty(e.descuentos)}">
+			<thead><tr><th scope="col">Tipo</th><th scope="col">Valor</th><th scope="col" class="num">Total</th><th scope="col">Estado</th>
+				<th scope="col">Pedido por</th><th scope="col">Resuelto por</th></tr></thead>
+			<tbody>
+				<tr th:each="d : ${e.descuentos}">
+					<td data-etiqueta="Tipo" th:text="${d.tipo}">Descuento por hermanos</td>
+					<td data-etiqueta="Valor" th:text="${d.valor}">10 %</td>
+					<td data-etiqueta="Total" class="num"><span th:replace="~{fragments/componentes :: monto(${d.total})}"></span></td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${d.estado}, ${d.estadoVariante})}"></span></td>
+					<td data-etiqueta="Pedido por" th:text="${d.pedidoPor}">administracion</td>
+					<td data-etiqueta="Resuelto por" th:text="${d.resueltoPor} ?: '—'">promotor</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Mi familia', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-inicio" th:with="k=${cuenta}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta" th:text="${k.familia}">Familia Quispe Huamán</p>
+			<h1 th:text="|Hola, ${k.apoderado}|">Hola, Rosa</h1>
+			<p class="secundario">Aquí ves todo lo que debe tu familia y lo pagas desde el celular. Si ves un cobro que no reconoces, avisa al colegio.</p>
+			<nav class="fila" aria-label="Mi familia">
+				<a class="btn btn-secundario" th:href="@{/familia/estado-de-cuenta}">Estado de cuenta</a>
+				<a class="btn btn-secundario" th:href="@{/familia/comprobantes}">Mis boletas</a>
+				<a class="btn btn-secundario" th:href="@{/familia/mensajes}">Mensajes del colegio</a>
+			</nav>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<p class="marca-simulado" th:if="${k.simulada}">PAGO SIMULADO · NO ES DINERO REAL</p>
+
+	<th:block th:if="${inicio != null}">
+		<section class="tarjeta" aria-labelledby="titulo-resumen" data-seccion="resumen">
+			<h2 id="titulo-resumen" class="etiqueta">Tu resumen</h2>
+			<p th:if="${inicio.conDeudaVencida()}" class="texto-peligro" data-deuda-vencida>
+				<strong th:text="|Deuda vencida: S/ ${#numbers.formatDecimal(inicio.deudaVencida, 1, 'COMMA', 2, 'POINT')}|">Deuda vencida: S/ 380.00</strong>
+			</p>
+			<p th:unless="${inicio.conDeudaVencida()}">No tienes deuda vencida.</p>
+			<p th:if="${inicio.proximo != null}" class="secundario"
+				th:text="|Próximo vencimiento: ${inicio.proximo.descripcion} de ${inicio.proximo.alumno}, ${#temporals.format(inicio.proximo.vencimiento, 'dd/MM')}|">Próximo vencimiento: Pensión de marzo de Ana, 31/03</p>
+		</section>
+
+		<section class="tarjeta tarjeta-acento" th:each="r : ${inicio.renovaciones}" th:data-renovacion="${r.id}"
+			th:aria-label="|Matrícula ${r.anio} de ${r.alumno}|">
+			<h2 th:text="|Matrícula ${r.anio} de ${r.alumno}|">Matrícula 2027 de Ana</h2>
+			<p th:if="${r.porResponder}" th:text="|Confírmala antes del ${#temporals.format(r.respondeHasta, 'dd/MM/yyyy')}.|">Confírmala antes del 31/01/2027.</p>
+			<p th:unless="${r.porResponder}">Confirmada. Paga la matrícula en «Lo que debes» y quedará activa.</p>
+			<a class="btn btn-primario" th:if="${r.porResponder}" th:href="@{/familia/matricula/{id}(id=${r.id})}">Responder</a>
+		</section>
+	</th:block>
+
+	<section class="tarjeta total-cobro" aria-labelledby="titulo-total">
+		<h2 id="titulo-total" class="etiqueta">Total por pagar</h2>
+		<p class="total-cobro-monto" data-total-por-pagar
+			th:text="|S/ ${#numbers.formatDecimal(k.totalPorPagar, 1, 'COMMA', 2, 'POINT')}|">S/ 900.00</p>
+		<p class="ayuda" th:unless="${k.pagoEnLineaDisponible}">El pago en línea todavía no está disponible. Puedes pagar en caja o en el banco con el código de pago de tu hijo.</p>
+	</section>
+
+	<form method="post" th:action="@{/familia/pagar/revisar}" class="formulario">
+		<section class="tarjeta" aria-labelledby="titulo-cuotas">
+			<h2 id="titulo-cuotas">Lo que debes</h2>
+			<th:block th:if="${k.sinDeuda()}">
+				<div th:replace="~{fragments/componentes :: estadoVacio('Estás al día',
+					'No tienes cuotas por pagar. Tus comprobantes están más abajo.')}"></div>
+			</th:block>
+			<fieldset class="grupo-opciones" th:each="h : ${k.hijos}" th:unless="${#lists.isEmpty(h.cuotas)}">
+				<legend><span th:text="${h.nombre}">Mateo Quispe Huamán</span></legend>
+				<div class="lista-cuotas">
+					<label class="cuota-opcion" th:each="q : ${h.cuotas}" th:classappend="${!q.pagable} ? 'opcion-deshabilitada'"
+						th:data-cuota="${q.id}">
+						<input type="checkbox" name="cuotaIds" th:value="${q.id}" th:disabled="${!q.pagable or !k.pagoEnLineaDisponible}">
+						<span class="cuota-datos">
+							<strong th:text="${q.descripcion}">Pensión octubre 2026</strong>
+							<span class="secundario" th:text="|Vence ${#temporals.format(q.vencimiento, 'dd/MM/yyyy')}|">Vence 31/10/2026</span>
+							<span class="fila">
+								<span th:replace="~{fragments/componentes :: badge(${q.estado}, ${q.variante})}"></span>
+								<span th:if="${q.aviso != null}" class="badge badge-alerta" th:text="${q.aviso}">Pago en curso</span>
+							</span>
+						</span>
+						<span class="cuota-saldo"><span th:replace="~{fragments/componentes :: monto(${q.saldo})}"></span></span>
+					</label>
+				</div>
+			</fieldset>
+			<div class="acciones acciones-izquierda" th:if="${k.pagoEnLineaDisponible and !k.sinDeuda()}">
+				<button th:replace="~{fragments/componentes :: boton('Pagar en línea', 'primario')}"></button>
+			</div>
+			<p class="ayuda" th:if="${k.pagoEnLineaDisponible and !k.sinDeuda()}"
+				th:text="|Marca las cuotas y revisa el total antes de pagar con Yape, Plin o tarjeta. Hasta S/ ${#numbers.formatDecimal(k.montoMaximo, 1, 'COMMA', 2, 'POINT')} por pago.|">Marca las cuotas.</p>
+		</section>
+	</form>
+
+	<section class="tarjeta" aria-labelledby="titulo-banco">
+		<h2 id="titulo-banco">Pagar en el banco</h2>
+		<p class="secundario">En la ventanilla, agente o app de tu banco, paga con el código de pago de tu hijo. El pago aparece aquí al día hábil siguiente.</p>
+		<ul class="lista-simple">
+			<li th:each="h : ${k.hijos}"><span th:text="|Código de pago de ${h.nombre}:|">Código de pago de Mateo:</span>
+				<strong class="num" th:text="${h.codigoPago}">1000 0016</strong></li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-ordenes" th:unless="${#lists.isEmpty(k.ordenes)}">
+		<h2 id="titulo-ordenes">Tus pagos en línea</h2>
+		<ul class="lista-simple">
+			<li th:each="o : ${k.ordenes}">
+				<a th:href="@{/familia/pagos/{r}(r=${o.referencia})}" th:text="${#temporals.format(o.creadaEn, 'dd/MM/yyyy HH:mm')}">02/10/2026 10:12</a>
+				<span th:replace="~{fragments/componentes :: monto(${o.monto})}"></span>
+				<span th:replace="~{fragments/componentes :: badge(${o.estado}, ${o.variante})}"></span>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-pagos">
+		<h2 id="titulo-pagos">Tus comprobantes</h2>
+		<th:block th:if="${#lists.isEmpty(k.pagos)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay pagos',
+				'Cuando pagues, aquí verás tu boleta para descargarla.')}"></div>
+		</th:block>
+		<ul class="lista-simple" th:unless="${#lists.isEmpty(k.pagos)}">
+			<li th:each="p : ${k.pagos}">
+				<a th:href="@{/familia/comprobantes/{id}(id=${p.comprobanteId})}" th:text="${p.comprobante}">B001-00000231</a>
+				<span class="secundario" th:text="|${#temporals.format(p.fecha, 'dd/MM/yyyy')} · ${p.medio} · ${p.estado}|">02/10/2026 · Yape</span>
+				<span th:replace="~{fragments/componentes :: monto(${p.total})}"></span>
+			</li>
+		</ul>
+	</section>
+	<section class="tarjeta" aria-labelledby="titulo-algo">
+		<h2 id="titulo-algo">¿Algo no cuadra?</h2>
+		<p class="secundario">¿Pagaste y no lo ves, o ves algo que no reconoces? Avísanos: va directo a Promotoría.</p>
+		<a class="btn btn-secundario" th:href="@{/familia/algo-no-cuadra}">Avisar a Promotoría</a>
+	</section>
+	<section class="tarjeta" aria-labelledby="titulo-recordatorios">
+		<h2 id="titulo-recordatorios">Recordatorios de vencimiento</h2>
+		<p class="secundario" th:text="${recordatoriosActivos} ? 'Te escribimos 3 días antes de cada vencimiento y el día hábil siguiente si sigue pendiente, de lunes a sábado de 8:00 a 20:00.' : 'Tienes los recordatorios apagados.'">Te escribimos 3 días antes.</p>
+		<p class="secundario">Los avisos de tus pagos, anulaciones y descuentos siempre llegan: así compruebas que todo cuadra.</p>
+		<form method="post" th:action="@{/familia/preferencias}">
+			<input type="hidden" name="recordatorios" th:value="${!recordatoriosActivos}">
+			<button type="submit" class="btn btn-secundario" data-accion="recordatorios"
+				th:text="${recordatoriosActivos} ? 'Apagar recordatorios' : 'Encender recordatorios'">Apagar recordatorios</button>
+		</form>
+	</section>
+</main>
+</body>
+</html>

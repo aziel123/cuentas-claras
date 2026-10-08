@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Nuevo usuario', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Usuarios y roles</p>
+			<h1>Nuevo usuario</h1>
+			<p class="secundario">El sistema le dará una clave temporal que deberá cambiar al ingresar por primera vez.</p>
+		</div>
+	</div>
+
+	<section class="tarjeta formulario-angosto" aria-label="Datos del usuario">
+		<th:block th:if="${error != null}">
+			<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+		</th:block>
+
+		<form class="formulario" th:action="@{/usuarios}" th:object="${solicitud}" method="post">
+			<div th:replace="~{fragments/componentes :: campo('nombreCompleto', 'Nombre completo', null, 'off')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('nombreUsuario', 'Usuario',
+				'Con el que ingresará. Minúsculas, sin espacios ni tildes. Por ejemplo: lucia.ramos', 'off')}"></div>
+			<div class="campo">
+				<label for="telefonoWhatsapp">Celular con WhatsApp</label>
+				<input type="tel" class="input" th:field="*{telefonoWhatsapp}" autocomplete="off" inputmode="tel"
+					aria-describedby="telefono-ayuda" th:classappend="${#fields.hasErrors('telefonoWhatsapp')} ? 'input-con-error'">
+				<p class="ayuda" id="telefono-ayuda">Ahí le llega el enlace para activar su cuenta. Si no tiene WhatsApp, escribe su correo. Nadie más ve el enlace.</p>
+				<p class="error" th:if="${#fields.hasErrors('telefonoWhatsapp')}" th:errors="*{telefonoWhatsapp}">Error</p>
+			</div>
+			<div class="campo">
+				<label for="correo">Correo</label>
+				<input type="email" class="input" th:field="*{correo}" autocomplete="off"
+					th:classappend="${#fields.hasErrors('correo')} ? 'input-con-error'">
+				<p class="error" th:if="${#fields.hasErrors('correo')}" th:errors="*{correo}">Error</p>
+			</div>
+
+			<fieldset class="campo grupo-opciones" aria-describedby="roles-ayuda">
+				<legend>Roles</legend>
+				<label class="opcion" th:each="rol : ${rolesAsignables}">
+					<input type="checkbox" th:field="*{roles}" th:value="${rol}">
+					<span th:text="${rol.etiqueta()}">Caja</span>
+				</label>
+				<p class="ayuda" id="roles-ayuda">Caja no se combina con Promotoría, Dirección ni Administración: quien cobra no aprueba.
+					Apoderado no se combina con roles del personal.</p>
+				<p class="error" th:if="${#fields.hasErrors('roles')}" th:errors="*{roles}">Error</p>
+			</fieldset>
+
+			<div class="acciones">
+				<a class="btn btn-secundario" th:href="@{/usuarios}">Cancelar</a>
+				<button th:replace="~{fragments/componentes :: boton('Crear usuario', 'primario')}"></button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Conciliación bancaria', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="conciliacion-diferencias" th:with="d=${d}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Conciliación bancaria</p>
+			<h1>Diferencias con el banco</h1>
+			<p class="secundario" th:if="${d.cubiertoHasta != null}" th:text="|El sistema ya emparejó solo lo que cuadra. Aquí ves solo lo que falta revisar. Banco confirmado hasta el ${#temporals.format(d.cubiertoHasta, 'dd/MM/yyyy')}.|">Banco confirmado hasta</p>
+			<p class="secundario" th:if="${d.cubiertoHasta == null}">Todavía no hay extractos confirmados. Administración sube el extracto del banco y Promotoría o Dirección lo confirman escribiendo a ciegas el saldo de su app.</p>
+		</div>
+		<div class="fila">
+			<a class="btn btn-secundario" th:href="@{/conciliacion/extractos}">Extractos</a>
+			<a class="btn btn-secundario" th:href="@{/conciliacion/cierres-mensuales}">Cierres del mes</a>
+			<a class="btn btn-texto" th:href="@{/conciliacion/verificacion}">Verificación manual (excepciones)</a>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-confirmar" th:unless="${#lists.isEmpty(d.porConfirmar)}" data-seccion="por-confirmar">
+		<h2 id="titulo-confirmar">Extractos por confirmar</h2>
+		<p class="secundario">Mientras no se confirmen a ciegas, el sistema no da por buena ninguna pareja.</p>
+		<ul class="lista-simple">
+			<li th:each="c : ${d.porConfirmar}" class="fila entre">
+				<span th:text="|${c.cuenta} · ${c.extractos} extracto(s) hasta el ${#temporals.format(c.hasta, 'dd/MM/yyyy')}|">BCP · 1 extracto</span>
+				<a th:if="${d.puedeConfirmar}" class="btn btn-chico btn-primario" th:href="@{/conciliacion/cuentas/{id}/confirmar(id=${c.cuentaId})}">Confirmar a ciegas</a>
+				<span th:unless="${d.puedeConfirmar}" class="secundario">Lo confirma Promotoría o Dirección</span>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-resumen" th:if="${d.resumen != null}" data-seccion="resumen">
+		<h2 id="titulo-resumen" th:text="|Movimientos del ${#temporals.format(d.resumen.desde, 'dd/MM')} al ${#temporals.format(d.resumen.hasta, 'dd/MM/yyyy')} (${d.resumen.estado})|">Movimientos del 05/10</h2>
+		<ul class="conteos">
+			<li><strong class="num" th:text="${d.resumen.movimientos}">41</strong><span>movimientos</span></li>
+			<li><strong class="num" th:text="${d.resumen.emparejados}">38</strong><span th:text="|emparejados (${d.resumen.porcentaje()} %)|">emparejados</span></li>
+			<li><strong class="num" th:text="${d.resumen.sugeridos}">2</strong><span>sugeridos</span></li>
+			<li th:classappend="${d.resumen.sinPareja > 0} ? 'conteo-peligro'"><strong class="num" th:text="${d.resumen.sinPareja}">1</strong><span>sin pareja</span></li>
+		</ul>
+	</section>
+
+	<th:block th:if="${d.sinDiferencias() and d.cubiertoHasta != null}">
+		<div th:replace="~{fragments/componentes :: alerta('exito', 'Todo cuadra con el banco: no hay diferencias que revisar.')}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-faltantes" th:unless="${#lists.isEmpty(d.faltantes)}" data-seccion="faltantes">
+		<h2 id="titulo-faltantes" class="texto-peligro" th:text="|Debía estar en el banco y no está (${#lists.size(d.faltantes)})|">Debía estar en el banco y no está</h2>
+		<p class="secundario">El extracto confirmado ya cubre su día y no aparece. Un Yape o una transferencia que no está en el banco puede ser un pago inventado para tapar efectivo: revísalo hoy con quien lo registró.</p>
+		<ul class="lista-diferencias">
+			<li th:each="f : ${d.faltantes}" class="alerta-critica" data-faltante>
+				<p class="fila entre">
+					<strong th:text="${f.tipo}">Pago digital</strong>
+					<span th:replace="~{fragments/componentes :: monto(${f.monto})}"></span>
+				</p>
+				<p th:text="${f.detalle}">Yape B001-00000012 · cobró Lucía Ramos</p>
+				<p class="secundario" th:text="|Del ${#temporals.format(f.fecha, 'dd/MM/yyyy')}${f.operacion != null ? ' · operación ' + f.operacion : ''}|">Del 05/10</p>
+				<span th:replace="~{fragments/componentes :: badge('No aparece en el banco', 'peligro')}"></span>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-sugeridas" th:unless="${#lists.isEmpty(d.sugeridas)}" data-seccion="sugeridas">
+		<h2 id="titulo-sugeridas" th:text="|Parejas sugeridas (${#lists.size(d.sugeridas)})|">Parejas sugeridas</h2>
+		<p class="secundario">Mismo monto y fecha cercana, pero no la misma operación. Confírmalas solo si estás seguro: quien cobró o depositó no puede hacerlo.</p>
+		<ul class="lista-diferencias">
+			<li th:each="s : ${d.sugeridas}" th:classappend="${s.enRojo} ? 'alerta-critica'" th:data-partida="${s.partidaId}">
+				<div class="pareja">
+					<div th:classappend="${s.enRojo} ? 'pareja-roja'">
+						<span class="etiqueta">En el banco</span>
+						<strong th:text="${s.descripcionBanco}">ABONO YAPE</strong>
+						<span th:text="|${#temporals.format(s.fechaBanco, 'dd/MM/yyyy')} · operación ${s.operacionBanco ?: 'sin número'}|">05/10</span>
+						<span th:replace="~{fragments/componentes :: monto(${s.montoBanco})}"></span>
+					</div>
+					<div th:classappend="${s.enRojo} ? 'pareja-roja'">
+						<span class="etiqueta">Registrado</span>
+						<strong th:text="${s.objeto}">Yape B001-00000012</strong>
+						<span th:text="|${s.fechaObjeto != null ? #temporals.format(s.fechaObjeto, 'dd/MM/yyyy') : ''} · operación ${s.operacionObjeto ?: 'sin número'}|">05/10</span>
+						<span th:replace="~{fragments/componentes :: monto(${s.montoObjeto})}"></span>
+					</div>
+				</div>
+				<p th:unless="${#lists.isEmpty(s.avisos)}">
+					<th:block th:each="a : ${s.avisos}"><span th:replace="~{fragments/componentes :: badge(${a}, ${s.enRojo} ? 'peligro' : 'alerta')}"></span> </th:block>
+				</p>
+				<p class="secundario" th:unless="${s.confirmable}">El extracto todavía no está confirmado a ciegas: se revisa después.</p>
+				<div class="acciones acciones-izquierda" th:if="${d.puedeRevisar and s.confirmable}">
+					<form method="post" th:action="@{/conciliacion/partidas/{id}/confirmar(id=${s.partidaId})}" class="form-en-linea">
+						<button type="submit" class="btn btn-chico btn-primario">Confirmar</button>
+					</form>
+					<th:block th:replace="~{fragments/componentes :: modalMotivo(|no-es-${s.partidaId}|, '¿No es esta pareja?',
+						'El movimiento y lo registrado quedan sin pareja y esta pareja no se vuelve a proponer. Queda en la bitácora.',
+						@{/conciliacion/partidas/{id}/descartar(id=${s.partidaId})}, 'No es', 'secundario', 'Marcar «No es»')}"></th:block>
+				</div>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-sin-pareja" th:unless="${#lists.isEmpty(d.sinPareja)}" data-seccion="sin-pareja">
+		<h2 id="titulo-sin-pareja" th:text="|Abonos en el banco sin pareja (${#lists.size(d.sinPareja)})|">Abonos sin pareja</h2>
+		<p class="secundario">Dinero que entró al banco y nadie registró. Emparéjalo con lo que corresponde o explica qué es (intereses, transferencia propia...).</p>
+		<ul class="lista-diferencias">
+			<li th:each="m : ${d.sinPareja}" th:classappend="${m.critico} ? 'alerta-critica'" th:data-movimiento="${m.movimientoId}">
+				<p class="fila entre">
+					<strong th:text="${m.descripcion}">ABONO TRANSF</strong>
+					<span th:replace="~{fragments/componentes :: monto(${m.monto})}"></span>
+				</p>
+				<p class="secundario" th:text="|${#temporals.format(m.fecha, 'dd/MM/yyyy')} · operación ${m.operacion ?: 'sin número'}|">05/10</p>
+				<p th:if="${m.critico}"><span th:replace="~{fragments/componentes :: badge('Más de 2 días hábiles sin pareja', 'peligro')}"></span></p>
+				<p class="secundario" th:unless="${m.confirmado}">El extracto todavía no está confirmado a ciegas: se revisa después.</p>
+				<div class="acciones acciones-izquierda" th:if="${d.puedeRevisar and m.confirmado}">
+					<button type="button" class="btn btn-chico btn-secundario" th:popovertarget="|emparejar-${m.movimientoId}|" th:disabled="${#lists.isEmpty(m.posibles)}">Emparejar</button>
+					<div class="modal" th:id="|emparejar-${m.movimientoId}|" popover role="dialog" aria-modal="true" th:aria-labelledby="|emparejar-${m.movimientoId}-titulo|">
+						<form method="post" th:action="@{/conciliacion/movimientos/{id}/emparejar(id=${m.movimientoId})}" class="modal-cuerpo">
+							<h2 th:id="|emparejar-${m.movimientoId}-titulo|">Emparejar a mano</h2>
+							<p>Elige lo registrado que corresponde a este abono (solo aparece lo del mismo monto). Queda en Aprobaciones hasta que Promotoría o Dirección lo apruebe mirando su app del banco.</p>
+							<div class="campo">
+								<label th:for="|emparejar-${m.movimientoId}-objeto|">Lo registrado</label>
+								<select class="input" th:id="|emparejar-${m.movimientoId}-objeto|" name="objeto" required>
+									<option value="">Elige</option>
+									<option th:each="o : ${m.posibles}" th:value="${o.valor}" th:text="${o.texto}">Yape</option>
+								</select>
+							</div>
+							<div class="campo">
+								<label th:for="|emparejar-${m.movimientoId}-nota|">Nota (obligatoria)</label>
+								<textarea class="input" th:id="|emparejar-${m.movimientoId}-nota|" name="nota" required minlength="10" maxlength="500"></textarea>
+							</div>
+							<div class="acciones">
+								<button type="button" class="btn btn-secundario" th:popovertarget="|emparejar-${m.movimientoId}|" popovertargetaction="hide">Cancelar</button>
+								<button type="submit" class="btn btn-primario">Emparejar</button>
+							</div>
+						</form>
+					</div>
+					<button type="button" class="btn btn-chico btn-secundario" th:popovertarget="|explicar-${m.movimientoId}|">Explicar</button>
+					<div class="modal" th:id="|explicar-${m.movimientoId}|" popover role="dialog" aria-modal="true" th:aria-labelledby="|explicar-${m.movimientoId}-titulo|">
+						<form method="post" th:action="@{/conciliacion/movimientos/{id}/explicar(id=${m.movimientoId})}" class="modal-cuerpo">
+							<h2 th:id="|explicar-${m.movimientoId}-titulo|">¿Qué es este abono?</h2>
+							<p>Si no es de la cobranza, explica qué es. Queda resaltado para Promotoría.</p>
+							<div class="campo">
+								<label th:for="|explicar-${m.movimientoId}-categoria|">Qué es</label>
+								<select class="input" th:id="|explicar-${m.movimientoId}-categoria|" name="categoria" required>
+									<option value="">Elige</option>
+									<option th:each="c : ${m.abono ? d.categoriasAbono : d.categoriasCargo}" th:value="${c.valor}" th:text="${c.texto}">Intereses</option>
+								</select>
+							</div>
+							<div class="campo">
+								<label th:for="|explicar-${m.movimientoId}-nota|">Nota (obligatoria)</label>
+								<textarea class="input" th:id="|explicar-${m.movimientoId}-nota|" name="nota" required minlength="10" maxlength="500"></textarea>
+							</div>
+							<div class="acciones">
+								<button type="button" class="btn btn-secundario" th:popovertarget="|explicar-${m.movimientoId}|" popovertargetaction="hide">Cancelar</button>
+								<button type="submit" class="btn btn-primario">Explicar</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-cargos" th:unless="${#lists.isEmpty(d.cargosSinExplicar)}" data-seccion="cargos-sin-explicar">
+		<h2 id="titulo-cargos" th:text="|Cargos en el banco sin explicar (${#lists.size(d.cargosSinExplicar)})|">Cargos sin explicar</h2>
+		<p class="secundario">Dinero que salió del banco. Búscalo en tu app del banco y explica qué es. Lo explica alguien que no subió el extracto; si no está en el banco, el extracto fue alterado: avisa a Dirección.</p>
+		<ul class="lista-diferencias">
+			<li th:each="m : ${d.cargosSinExplicar}" th:classappend="${m.critico} ? 'alerta-critica'" th:data-movimiento="${m.movimientoId}">
+				<p class="fila entre">
+					<strong th:text="${m.descripcion}">COMISION</strong>
+					<span th:replace="~{fragments/componentes :: monto(${m.monto})}"></span>
+				</p>
+				<p class="secundario" th:text="|${#temporals.format(m.fecha, 'dd/MM/yyyy')} · operación ${m.operacion ?: 'sin número'}|">05/10</p>
+				<p th:if="${m.critico}"><span th:replace="~{fragments/componentes :: badge('Más de 2 días hábiles sin explicar', 'peligro')}"></span></p>
+				<div class="acciones acciones-izquierda" th:if="${d.puedeRevisar or d.puedeConfirmar}">
+					<button type="button" class="btn btn-chico btn-secundario" th:popovertarget="|explicar-${m.movimientoId}|">Explicar</button>
+					<div class="modal" th:id="|explicar-${m.movimientoId}|" popover role="dialog" aria-modal="true" th:aria-labelledby="|explicar-${m.movimientoId}-titulo|">
+						<form method="post" th:action="@{/conciliacion/movimientos/{id}/explicar(id=${m.movimientoId})}" class="modal-cuerpo">
+							<h2 th:id="|explicar-${m.movimientoId}-titulo|">¿Qué es este cargo?</h2>
+							<p>Explica qué es después de verlo en tu app del banco. Queda resaltado para Promotoría.</p>
+							<div class="campo">
+								<label th:for="|explicar-${m.movimientoId}-categoria|">Qué es</label>
+								<select class="input" th:id="|explicar-${m.movimientoId}-categoria|" name="categoria" required>
+									<option value="">Elige</option>
+									<option th:each="c : ${d.categoriasCargo}" th:value="${c.valor}" th:text="${c.texto}">Comisión</option>
+								</select>
+							</div>
+							<div class="campo">
+								<label th:for="|explicar-${m.movimientoId}-nota|">Nota (obligatoria)</label>
+								<textarea class="input" th:id="|explicar-${m.movimientoId}-nota|" name="nota" required minlength="10" maxlength="500"></textarea>
+							</div>
+							<div class="acciones">
+								<button type="button" class="btn btn-secundario" th:popovertarget="|explicar-${m.movimientoId}|" popovertargetaction="hide">Cancelar</button>
+								<button type="submit" class="btn btn-primario">Explicar</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			</li>
+		</ul>
+	</section>
+
+	<p class="secundario">¿Algo que la conciliación no puede ver (por ejemplo, un Yape que llegó a otra cuenta)? Usa la <a th:href="@{/conciliacion/verificacion}">verificación manual (excepciones)</a>.</p>
+</main>
+</body>
+</html>
