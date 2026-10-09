@@ -1591,3 +1591,44 @@ BEGIN
 END$$
 
 DELIMITER ;
+
+-- ===================== Sprint 7 · tanda 1 (V24): registro de respaldos =====================
+DELIMITER $$
+
+-- El registro de cada respaldo lo escribe SOLO cc_respaldo (SESSION_USER es el usuario de la conexión, no el definidor),
+-- al terminar (10 minutos de margen con la hora de Lima de la base), y sus anclas son eventos reales de la bitácora (la
+-- secuencia «después» no pasa del eslabón). El destino «simulado» (una carpeta local) solo con la fila
+-- ('respaldo_simulado', 'PERMITIDA') que escribe el DBA en dev, CI y piloto: nunca en prod. Si el ancla del respaldo
+-- anterior ya no está en la bitácora (recorte o alteración entre dos respaldos), el registro debe decir FALTAN_FILAS.
+DROP TRIGGER IF EXISTS trg_respaldo_registro$$
+CREATE TRIGGER trg_respaldo_registro BEFORE INSERT ON respaldo FOR EACH ROW
+BEGIN
+    DECLARE v_ahora DATETIME(6) DEFAULT UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    IF NOT (SUBSTRING_INDEX(SESSION_USER(), '@', 1) <=> 'cc_respaldo') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el respaldo lo registra solo cc_respaldo';
+    END IF;
+    IF NEW.fin IS NULL OR ABS(TIMESTAMPDIFF(MINUTE, NEW.fin, v_ahora)) > 10 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el respaldo se registra al terminar';
+    END IF;
+    IF NEW.destino <=> 'simulado' AND NOT EXISTS (SELECT 1 FROM configuracion_bd b
+            WHERE b.clave = 'respaldo_simulado' AND b.valor = 'PERMITIDA') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: esta base no admite el destino simulado de respaldos';
+    END IF;
+    IF NEW.secuencia_despues > COALESCE((SELECT c.ultima_secuencia FROM auditoria_cadena c WHERE c.id = 1), -1)
+            OR (NEW.secuencia_despues > 0 AND NOT EXISTS (SELECT 1 FROM evento_auditoria e
+                WHERE e.secuencia = NEW.secuencia_despues AND e.hash = NEW.hash_despues))
+            OR (NEW.secuencia_antes > 0 AND NOT EXISTS (SELECT 1 FROM evento_auditoria e
+                WHERE e.secuencia = NEW.secuencia_antes AND e.hash = NEW.hash_antes))
+            OR (NEW.secuencia_antes = 0 AND NOT (NEW.hash_antes <=> REPEAT('0', 64)))
+            OR (NEW.secuencia_despues = 0 AND NOT (NEW.hash_despues <=> REPEAT('0', 64))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las anclas del respaldo no son eventos de la bitacora';
+    END IF;
+    IF NOT (NEW.comparacion <=> 'FALTAN_FILAS') AND EXISTS (SELECT 1 FROM respaldo r
+            WHERE r.id = (SELECT MAX(x.id) FROM respaldo x) AND r.secuencia_despues > 0
+              AND NOT EXISTS (SELECT 1 FROM evento_auditoria e
+                  WHERE e.secuencia = r.secuencia_despues AND e.hash = r.hash_despues)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el ancla del respaldo anterior ya no esta: el registro debe decir FALTAN_FILAS';
+    END IF;
+END$$
+
+DELIMITER ;

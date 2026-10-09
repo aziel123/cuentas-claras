@@ -43,10 +43,18 @@ public class SelladorAuditoria {
 
 	/** Hash hexadecimal (64 caracteres) del evento encadenado con {@code hashAnterior}. */
 	public String sellar(String hashAnterior, EventoAuditoria evento) {
+		return sellar(hashAnterior, CamposSellados.de(evento));
+	}
+
+	/**
+	 * Lo mismo, desde los campos leídos de la base sin JPA. Sprint 7: el modo {@code verificar-respaldo} recorre con JDBC
+	 * la cadena de una copia restaurada, sin levantar la aplicación. Misma forma canónica.
+	 */
+	public String sellar(String hashAnterior, CamposSellados campos) {
 		try {
 			Mac mac = Mac.getInstance(ALGORITMO);
 			mac.init(clave);
-			byte[] firma = mac.doFinal(formaCanonica(hashAnterior, evento).getBytes(StandardCharsets.UTF_8));
+			byte[] firma = mac.doFinal(formaCanonica(hashAnterior, campos).getBytes(StandardCharsets.UTF_8));
 			return HexFormat.of().formatHex(firma);
 		}
 		catch (GeneralSecurityException e) {
@@ -80,21 +88,25 @@ public class SelladorAuditoria {
 	}
 
 	static String formaCanonica(String hashAnterior, EventoAuditoria e) {
+		return formaCanonica(hashAnterior, CamposSellados.de(e));
+	}
+
+	static String formaCanonica(String hashAnterior, CamposSellados e) {
 		StringBuilder texto = new StringBuilder(256);
 		campo(texto, hashAnterior);
-		campo(texto, Long.toString(e.getSecuencia()));
-		campo(texto, e.getColegioId() == null ? null : e.getColegioId().toString());
-		campo(texto, e.getOcurridoEn() == null ? null : FORMATO_FECHA.format(e.getOcurridoEn()));
-		campo(texto, e.getUsuarioId() == null ? null : e.getUsuarioId().toString());
-		campo(texto, e.getNombreUsuario());
-		campo(texto, e.getRoles());
-		campo(texto, e.getAccion() == null ? null : e.getAccion().name());
-		campo(texto, e.getEntidad());
-		campo(texto, e.getEntidadId());
-		campo(texto, e.getValorAnterior());
-		campo(texto, e.getValorNuevo());
-		campo(texto, e.getDetalle());
-		campo(texto, e.getIp());
+		campo(texto, Long.toString(e.secuencia()));
+		campo(texto, e.colegioId() == null ? null : e.colegioId().toString());
+		campo(texto, e.ocurridoEn() == null ? null : FORMATO_FECHA.format(e.ocurridoEn()));
+		campo(texto, e.usuarioId() == null ? null : e.usuarioId().toString());
+		campo(texto, e.nombreUsuario());
+		campo(texto, e.roles());
+		campo(texto, e.accion());
+		campo(texto, e.entidad());
+		campo(texto, e.entidadId());
+		campo(texto, e.valorAnterior());
+		campo(texto, e.valorNuevo());
+		campo(texto, e.detalle());
+		campo(texto, e.ip());
 		return texto.toString();
 	}
 

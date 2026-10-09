@@ -49,6 +49,7 @@ jobs:
       CC_MYSQL_URL: "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false"
       CC_MYSQL_CLAVE_MIGRADOR: "migrador-solo-ci-1"
       CC_MYSQL_CLAVE_APP: "app-solo-ci-1"
+      CC_MYSQL_CLAVE_RESPALDO: "respaldo-solo-ci-1"
       MYSQL_ADMIN: "mysql --protocol=TCP -h 127.0.0.1 -P 3306 -uroot -proot-ci"
     steps:
       - uses: actions/checkout@v4
@@ -62,10 +63,11 @@ jobs:
       - name: Empaquetar la aplicación
         run: ./mvnw -B -q -DskipTests package
 
-      - name: Crear la base y los usuarios cc_migrador y cc_app
+      - name: Crear la base y los usuarios cc_migrador, cc_app y cc_respaldo
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" \
               -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
+              -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" \
               scripts/mysql/01-usuarios.sql | $MYSQL_ADMIN
 
       - name: Migrar con cc_migrador (modo migrar, sin servidor web)
@@ -75,10 +77,10 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V23): Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V24): Hibernate valida el esquema con cc_app y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
-      - name: Permisos por tabla de cc_app
+      - name: Permisos por tabla de cc_app y cc_respaldo
         run: $MYSQL_ADMIN < scripts/mysql/02-permisos-tablas.sql
 
       - name: Triggers con cc_migrador (03-triggers.sql)
@@ -330,6 +332,28 @@ jobs:
           comprobar 1644 "INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-03', 0, 'EFECTIVO', NOW(6), 'verificador', NOW(6))"
           comprobar 1644 "INSERT INTO delegacion_llamada (colegio_id, semana, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-03', NOW(6), 'verificador', NOW(6))"
           comprobar 1644 "UPDATE usuario SET apoderado_id = (SELECT MIN(id) FROM apoderado) WHERE id = ${personal}"
+          # Sprint 7, tanda 1 (V24): el registro de respaldos lo escribe SOLO cc_respaldo. cc_app no lo inserta, edita ni
+          # borra (1142); con cc_respaldo, unas anclas que no son eventos de la bitácora y el destino simulado sin la fila
+          # del DBA fallan en trg_respaldo_registro (1644), y cc_respaldo no edita ni borra nada (1142).
+          respaldo_ci="INSERT INTO respaldo (inicio, fin, archivo, sha256, bytes, version_esquema, secuencia_antes, hash_antes, secuencia_despues, hash_despues, conteos, destino, comparacion, creado_en, creado_por) VALUES (UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 1 MINUTE, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, 'cc-20000101-000000.sql.gz.age', REPEAT('a', 64), 1, '24', 0, REPEAT('0', 64)"
+          comprobar 1142 "${respaldo_ci}, 0, REPEAT('0', 64), '{}', 'remoto', 'PRIMERO', NOW(6), 'cc_respaldo')"
+          comprobar 1142 "UPDATE respaldo SET bytes = bytes WHERE 1 = 0"
+          comprobar 1142 "DELETE FROM respaldo WHERE 1 = 0"
+          comprobar_respaldo() {
+            codigo="$1"; sql="$2"
+            if salida=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_respaldo -p"${CC_MYSQL_CLAVE_RESPALDO}" cuentasclaras -e "$sql" 2>&1); then
+              echo "ERROR: cc_respaldo pudo ejecutar: $sql"
+              exit 1
+            fi
+            echo "$salida" | grep -q "ERROR $codigo" || { echo "Error inesperado: $salida"; exit 1; }
+            echo "OK cc_respaldo ($codigo): $sql"
+          }
+          comprobar_respaldo 1644 "${respaldo_ci}, 999999999, REPEAT('b', 64), '{}', 'remoto', 'PRIMERO', NOW(6), 'cc_respaldo')"
+          comprobar_respaldo 1644 "${respaldo_ci}, 0, REPEAT('0', 64), '{}', 'simulado', 'PRIMERO', NOW(6), 'cc_respaldo')"
+          comprobar_respaldo 1142 "UPDATE respaldo SET bytes = bytes WHERE 1 = 0"
+          comprobar_respaldo 1142 "DELETE FROM respaldo WHERE 1 = 0"
+          comprobar_respaldo 1142 "UPDATE pago SET version = version WHERE 1 = 0"
+          comprobar_respaldo 1142 "INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('respaldo_simulado', 'PERMITIDA', NOW(6))"
           # G10 y G11: sin la fila 'mensajeria_simulada' (como en prod), la base no acepta un mensaje simulado. El
           # mensaje PENDIENTE lo dejó PermisosMySqlTest.simuladoSinPermisoDeLaBaseFallaCon1644.
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'mensajeria_simulada'")
@@ -374,7 +398,15 @@ jobs:
           grep -q "Permisos y triggers de la verificación de contactos, la huella por hora y los feriados aprobados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers del panel (resumen diario, alertas a Promotoría, contacto del personal y llamadas de control) verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos y triggers de las correcciones del sprint 6 (muestra congelada, delegación de las llamadas, texto del resumen y correo externo por colegio) verificados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Permisos del respaldo verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Triggers verificados: están los" prod.log || { cat prod.log; exit 1; }
+          # Sprint 7: en prod el log es JSON (ECS) y las sondas de vida y de disponibilidad son públicas.
+          grep -q '^{"@timestamp".*Triggers verificados' prod.log || { echo "ERROR: el log de prod no es JSON"; head -n 5 prod.log; exit 1; }
+
+          curl -sf http://127.0.0.1:18080/actuator/health/liveness | grep -q UP || { cat prod.log; exit 1; }
+          curl -sf http://127.0.0.1:18080/actuator/health/readiness | grep -q UP || { cat prod.log; exit 1; }
+          curl -sf http://127.0.0.1:18080/salud/respaldo | grep -qx "ATRASADO\|OK" || { echo "ERROR: /salud/respaldo"; exit 1; }
+
           kill "$PID_APP"
           if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \
                java -jar target/cuentas-claras-*.jar --server.port=18081 > prod-migrador.log 2>&1; then
@@ -402,3 +434,128 @@ jobs:
           mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras \
             < scripts/mysql/03-triggers.sql
           echo "OK: sin el trigger BEFORE UPDATE, prod no arranca; restaurado con 03-triggers.sql"
+
+  respaldo:
+    name: Respaldo cifrado, restauración real y ataques E29 a E32
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root-ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot-ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+      # Segundo MySQL, VACÍO: ahí se restaura (como la máquina del simulacro semanal).
+      restauracion:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root-restauracion-ci
+        ports:
+          - 3308:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot-restauracion-ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    env:
+      # Claves SOLO para las bases desechables de este job.
+      CC_PRUEBA_MYSQL: "true"
+      CC_MYSQL_URL: "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false"
+      CC_MYSQL_CLAVE_MIGRADOR: "migrador-solo-ci-2"
+      CC_MYSQL_CLAVE_APP: "app-solo-ci-2"
+      CC_MYSQL_CLAVE_RESPALDO: "respaldo-solo-ci-2"
+      MYSQL_ADMIN: "mysql --protocol=TCP -h 127.0.0.1 -P 3306 -uroot -proot-ci"
+      # El respaldo (scripts/respaldo/respaldar.sh) como en el servidor: cc_respaldo y dos destinatarios age.
+      RESPALDO_DB_HOST: "127.0.0.1"
+      RESPALDO_DB_PUERTO: "3306"
+      RESPALDO_DB_USUARIO: "cc_respaldo"
+      RESPALDO_DB_CLAVE: "respaldo-solo-ci-2"
+      # Destino «real» del CI: un remoto de rclone cuyas credenciales llegan SOLO por variables (aquí, un alias a una
+      # carpeta del runner en lugar del almacenamiento de objetos con bloqueo).
+      RESPALDO_DESTINO: "cirespaldos"
+      RCLONE_CONFIG_CIRESPALDOS_TYPE: "alias"
+      RCLONE_CONFIG_CIRESPALDOS_REMOTE: "/tmp/cc-respaldos-ci"
+      RCLONE_CONFIG_CIFORJADO_TYPE: "alias"
+      RCLONE_CONFIG_CIFORJADO_REMOTE: "/tmp/cc-respaldos-forjados"
+      # La restauración, en el segundo MySQL.
+      RESTAURAR_DB_HOST: "127.0.0.1"
+      RESTAURAR_DB_PUERTO: "3308"
+      RESTAURAR_DB_ADMIN: "root"
+      RESTAURAR_DB_ADMIN_CLAVE: "root-restauracion-ci"
+      MYSQL_RESTAURACION: "mysql --protocol=TCP -h 127.0.0.1 -P 3308 -uroot -proot-restauracion-ci"
+      # La clave HMAC con la que las pruebas sellaron la bitácora (perfil test): la verificación recalcula toda la cadena.
+      CLAVE_HMAC_PRUEBAS: "clave-hmac-de-pruebas-no-usar-en-produccion-0001"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Empaquetar la aplicación
+        run: ./mvnw -B -q -DskipTests package
+
+      - name: "age y rclone de los paquetes de Ubuntu (sin binarios de otras fuentes)"
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q age rclone
+          age --version
+          rclone version | head -n 1
+
+      - name: Base de origen como la del job mysql (V1–V24, permisos y triggers)
+        run: |
+          sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
+              -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" scripts/mysql/01-usuarios.sql | $MYSQL_ADMIN
+          DB_URL="$CC_MYSQL_URL" DB_MIGRADOR_USUARIO=cc_migrador DB_MIGRADOR_CLAVE="$CC_MYSQL_CLAVE_MIGRADOR" \
+            java -jar target/cuentas-claras-*.jar migrar
+          $MYSQL_ADMIN < scripts/mysql/02-permisos-tablas.sql
+          $MYSQL_ADMIN -e "SET PERSIST log_bin_trust_function_creators = 1"
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras \
+            < scripts/mysql/03-triggers.sql
+          $MYSQL_ADMIN cuentasclaras -e "INSERT INTO colegio (nombre) VALUES ('Colegio de renovacion CI')"
+
+      - name: "Datos de todas las pruebas de MySQL (fase 2: cobros, anulaciones, mensajes, bitácora...)"
+        run: ./mvnw -B test -Dtest=PermisosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: Claves age desechables (Promotoría y responsable técnico)
+        run: |
+          mkdir -p /tmp/cc-claves && chmod 700 /tmp/cc-claves
+          age-keygen -o /tmp/cc-claves/promotoria.txt 2>/dev/null
+          age-keygen -o /tmp/cc-claves/responsable.txt 2>/dev/null
+          echo "RESPALDO_AGE_DESTINATARIOS=$(age-keygen -y /tmp/cc-claves/promotoria.txt) $(age-keygen -y /tmp/cc-claves/responsable.txt)" >> "$GITHUB_ENV"
+          echo "RESTAURAR_AGE_IDENTIDAD=/tmp/cc-claves/responsable.txt" >> "$GITHUB_ENV"
+
+      - name: "Sin credenciales del destino o con un solo destinatario, el respaldo no empieza"
+        run: sh scripts/respaldo/pruebas-ci.sh sin-credenciales
+
+      - name: "Respaldo 1: volcado cifrado al destino, manifiesto y registro como cc_respaldo"
+        run: sh scripts/respaldo/pruebas-ci.sh primer-respaldo
+
+      - name: "E29: el respaldo robado no se puede leer (ningún DNI ni apellido de la base en el .age)"
+        run: sh scripts/respaldo/pruebas-ci.sh e29
+
+      - name: "Restauración real en el segundo MySQL: verifica la cadena HMAC, los libros y arranca prod sobre la copia"
+        run: sh scripts/respaldo/pruebas-ci.sh restauracion
+
+      - name: "E31: un respaldo alterado (un evento cambiado y vuelto a cifrar, con su manifiesto) no verifica"
+        run: sh scripts/respaldo/pruebas-ci.sh e31
+
+      - name: "E30: un DBA borra un pago después del respaldo: el respaldo siguiente avisa «faltan filas»"
+        run: sh scripts/respaldo/pruebas-ci.sh e30
+
+      - name: "E32: un DBA recorta el final de la bitácora (y el eslabón): el respaldo siguiente avisa por el ancla"
+        run: sh scripts/respaldo/pruebas-ci.sh e32
+
+      - name: "Simulacro semanal (sin la clave HMAC) del último respaldo: detecta el recorte y el pago borrado"
+        run: sh scripts/respaldo/pruebas-ci.sh restauracion-sin-clave
+
+      - name: "Destino simulado: solo con la fila del DBA (nunca en prod); sin ella, la base no lo registra (1644)"
+        run: sh scripts/respaldo/pruebas-ci.sh simulado

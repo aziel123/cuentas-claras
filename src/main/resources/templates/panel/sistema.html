@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Estado técnico', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="panel-sistema">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Panel del colegio</p>
+			<h1>Estado técnico</h1>
+			<p class="secundario">El respaldo de cada noche, los procesos automáticos y los errores de hoy. Si algo está en
+				rojo, avisa al responsable técnico: no tienes que arreglarlo tú.</p>
+		</div>
+		<div class="fila">
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Volver al panel', @{/panel}, 'secundario')}"></a>
+		</div>
+	</div>
+
+	<th:block th:unless="${sistema.alertasEncendidas()}">
+		<div data-alertas-apagadas th:replace="~{fragments/componentes :: alerta('error', 'Alertas técnicas apagadas: el responsable técnico no recibe correos si algo falla. Pídele que configure CC_OPERADOR_CORREO y el correo de salida.')}"></div>
+	</th:block>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-respaldo" data-seccion="respaldo"
+		th:classappend="${sistema.faltanFilas() or (sistema.respaldoExigido() and !sistema.respaldoAlDia())} ? 'alerta-critica'">
+		<h2 id="titulo-respaldo" class="etiqueta">Respaldo diario</h2>
+		<p class="fila entre">
+			<strong data-respaldo th:text="${sistema.respaldo()}">Último respaldo: hoy 02:30, verificado en el destino</strong>
+			<th:block th:if="${sistema.faltanFilas()}"><span th:replace="~{fragments/componentes :: badge('Faltan filas', 'peligro')}"></span></th:block>
+			<th:block th:if="${!sistema.faltanFilas() and sistema.respaldoAlDia()}"><span th:replace="~{fragments/componentes :: badge('Al día', 'exito')}"></span></th:block>
+			<th:block th:if="${!sistema.faltanFilas() and !sistema.respaldoAlDia()}"><span th:replace="~{fragments/componentes :: badge('Atrasado', 'peligro')}"></span></th:block>
+		</p>
+		<p class="secundario" data-respaldo-detalle th:text="${sistema.respaldoDetalle()}">Están todas las filas del respaldo anterior.</p>
+		<p class="secundario">Cifrado con dos llaves (la tuya y la del responsable técnico) y guardado fuera del servidor. Cada
+			mes se restaura uno contigo, con tu clave de la bitácora.</p>
+	</section>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-procesos" data-seccion="procesos">
+		<h2 id="titulo-procesos" class="etiqueta">Procesos automáticos</h2>
+		<th:block th:unless="${sistema.tareasActivas()}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Los procesos automáticos están apagados', 'En este entorno no corren tareas programadas.')}"></div>
+		</th:block>
+		<table class="tabla" th:if="${sistema.tareasActivas()}">
+			<thead>
+			<tr><th scope="col">Proceso</th><th scope="col">Cada cuánto</th><th scope="col">Último éxito</th><th scope="col">Estado</th></tr>
+			</thead>
+			<tbody>
+			<tr th:each="p : ${sistema.procesos()}" th:data-proceso="${p.nombre()}">
+				<td data-etiqueta="Proceso" th:text="${p.nombre()}">Envío de mensajes a las familias</td>
+				<td data-etiqueta="Cada cuánto" th:text="${p.programacion()}">Cada 30 s</td>
+				<td data-etiqueta="Último éxito" th:text="${p.ultimoExito()}">hoy 10:41</td>
+				<td data-etiqueta="Estado">
+					<th:block th:if="${p.atrasado()}"><span th:replace="~{fragments/componentes :: badge(${p.critico()} ? 'Atrasado (crítico)' : 'Atrasado', 'peligro')}"></span></th:block>
+					<th:block th:unless="${p.atrasado()}"><span th:replace="~{fragments/componentes :: badge('Al día', 'exito')}"></span></th:block>
+				</td>
+			</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-errores" data-seccion="errores">
+		<h2 id="titulo-errores" class="etiqueta">Errores de hoy</h2>
+		<p class="secundario">Agrupados por su huella (el tipo de error y dónde ocurrió), sin el mensaje: puede llevar datos
+			personales. El código de petición es el que ve la persona en la página de error.</p>
+		<th:block th:if="${#lists.isEmpty(sistema.errores())}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Sin errores hoy', 'Si aparece alguno, el responsable técnico recibe un correo.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(sistema.errores())}">
+			<thead>
+			<tr><th scope="col">Huella</th><th scope="col" class="num">Veces</th><th scope="col">Último</th><th scope="col">Código</th></tr>
+			</thead>
+			<tbody>
+			<tr th:each="e : ${sistema.errores()}" data-error>
+				<td data-etiqueta="Huella" th:text="${e.huella()}">IllegalStateException en ServicioCaja.cobrar</td>
+				<td data-etiqueta="Veces" class="num" th:text="${e.cantidad()}">2</td>
+				<td data-etiqueta="Último" th:text="${e.ultimo()}">hoy 10:41</td>
+				<td data-etiqueta="Código" th:text="${e.idPeticion()}">a1b2c3d4e5f6</td>
+			</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-servidor" data-seccion="servidor">
+		<h2 id="titulo-servidor" class="etiqueta">Servidor</h2>
+		<ul class="lista-simple">
+			<li data-bitacora th:text="${sistema.bitacoraAlDia()} ? 'Bitácora: el último evento está encadenado.' : 'Bitácora: el eslabón no apunta al último evento. Avisa al responsable técnico.'"
+				th:classappend="${!sistema.bitacoraAlDia()} ? 'texto-peligro'">Bitácora</li>
+			<li data-base th:text="${sistema.baseResponde()} ? (${sistema.poolAgotado()} ? 'Base de datos: responde, pero hay peticiones esperando conexión.' : 'Base de datos: responde.') : 'Base de datos: NO responde.'"
+				th:classappend="${!sistema.baseResponde() or sistema.poolAgotado()} ? 'texto-peligro'">Base</li>
+			<li data-disco th:text="|Disco: ${sistema.disco()}|" th:classappend="${sistema.discoBajo()} ? 'texto-peligro'">Disco</li>
+			<li data-version th:text="|Versión: ${sistema.version()}|">Versión</li>
+		</ul>
+	</section>
+</main>
+</body>
+</html>

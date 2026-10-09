@@ -30,7 +30,8 @@ import java.util.function.Function;
  *       «OSE» a un servidor propio que responda ACEPTADO) o, fuera de {@code prod}, sin la marca explícita;</li>
  *   <li>sprint 5 (sección 8.3): con la mensajería SIMULADA en {@code prod} o fuera de dev, test o piloto; en {@code prod}
  *       sin ningún canal real (WhatsApp o correo: sin aviso al padre no existe el control 4, decisión 40); con un canal
- *       real sin sus credenciales o, fuera de {@code prod}, sin la marca y la lista de números o correos de prueba.</li>
+ *       real sin sus credenciales o, fuera de {@code prod}, sin la marca y la lista de números o correos de prueba;</li>
+ *   <li>sprint 7, tanda 1: en {@code prod}, aceptando el respaldo simulado o sin exigir el respaldo.</li>
  * </ul>
  */
 @Component
@@ -105,6 +106,10 @@ public class VerificadorConfiguracion implements InitializingBean {
 
 	static final String SMTP_HOST = "spring.mail.host";
 
+	static final String RESPALDO_SIMULADO = "cuentasclaras.monitoreo.aceptar-respaldo-simulado";
+
+	static final String RESPALDO_EXIGIDO = "cuentasclaras.monitoreo.respaldo-exigido";
+
 	/** Donde puede existir la mensajería simulada (los beans tienen el mismo {@code @Profile}). */
 	static final Set<String> PERFILES_MENSAJERIA_SIMULADA = Set.of("dev", "test", "piloto");
 
@@ -174,6 +179,26 @@ public class VerificadorConfiguracion implements InitializingBean {
 		verificarPasarela(activos, prod, propiedad);
 		verificarComprobantes(prod, propiedad);
 		verificarMensajeria(activos, prod, propiedad);
+		verificarRespaldos(prod, propiedad);
+	}
+
+	/**
+	 * Sprint 7, tanda 1: en prod el destino simulado de los respaldos (una carpeta en el mismo servidor) no cuenta como
+	 * respaldo y la falta de respaldo siempre es alerta. (La base de prod tampoco admite registrarlo:
+	 * trg_respaldo_registro y VerificadorPermisosBaseDatos.)
+	 */
+	private static void verificarRespaldos(boolean prod, Function<String, String> propiedad) {
+		if (!prod) {
+			return;
+		}
+		if ("true".equalsIgnoreCase(String.valueOf(propiedad.apply(RESPALDO_SIMULADO)).strip())) {
+			throw new IllegalStateException("En producción el respaldo al destino simulado no cuenta: quita "
+					+ "cuentasclaras.monitoreo.aceptar-respaldo-simulado (el respaldo va a un almacenamiento externo).");
+		}
+		if ("false".equalsIgnoreCase(String.valueOf(propiedad.apply(RESPALDO_EXIGIDO)).strip())) {
+			throw new IllegalStateException("En producción la falta de respaldo siempre es alerta: quita "
+					+ "cuentasclaras.monitoreo.respaldo-exigido: false.");
+		}
 	}
 
 	/** Sprint 5, sección 8.3: la mensajería simulada nunca en prod, y prod nunca sin un canal real. */

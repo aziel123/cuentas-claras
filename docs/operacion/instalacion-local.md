@@ -33,9 +33,10 @@ Abre `.env` con un editor (por ejemplo, el Bloc de notas) y **cambia todas las c
 docker compose up --build
 ```
 La primera vez tarda varios minutos: descarga MySQL y Java, compila la aplicación e inicializa la base. Verás estos pasos en orden:
-1. `mysql`: crea la base `cuentasclaras` y los usuarios `cc_migrador` y `cc_app`.
+1. `mysql`: crea la base `cuentasclaras` y los usuarios `cc_migrador`, `cc_app` y `cc_respaldo`.
 2. `migrar`: aplica las migraciones (`Migración terminada: 12 migraciones aplicadas`).
-3. `preparar-bd`: permisos por tabla y triggers (`base de datos lista`).
+3. `preparar-bd`: el usuario de respaldos (si tu base es anterior al sprint 7), permisos por tabla y triggers (`base de datos lista`).
+
 4. `app`: la aplicación verifica los permisos y los 28 triggers, y arranca (`Started CuentasClarasApplication`).
 
 Abre **http://localhost:8080**.
@@ -85,7 +86,9 @@ Con `cc_app` puedes leer, pero no editar la bitácora ni borrar pagos: lo impide
 - **«./mvnw: not found»** al compilar: el `mvnw` quedó con saltos de línea de Windows. Actualiza el código (`git pull`): el `Dockerfile` ya lo corrige.
 - **`mysql` tarda o aparece como *unhealthy*** la primera vez: espera y vuelve a ejecutar `docker compose up -d`. La inicialización solo ocurre una vez.
 - **La aplicación no arranca y dice que faltan permisos o triggers**: revisa `docker compose logs preparar-bd`. Si cambiaste las claves después de la primera vez, ejecuta `docker compose down -v` y empieza de cero (las claves de MySQL se fijan al crear la base).
-- **No puedo iniciar sesión desde el celular por la IP de la PC**: es esperable. Esta configuración es solo para `localhost`. Para usarla en red o internet hace falta https; eso se hace al elegir el hosting (decisión D3 del plan).
+- **«Define CC_CLAVE_RESPALDO en .env»** al actualizar (sprint 7): agrega la línea `CC_CLAVE_RESPALDO=...` (ver `.env.ejemplo`) y vuelve a levantar; `preparar-bd` crea el usuario de respaldos en tu base existente. Después, el panel muestra «No hay un respaldo de las últimas 26 horas» hasta que hagas el primero (ver [respaldos.md](respaldos.md)).
+- **No puedo iniciar sesión desde el celular por la IP de la PC**:
+ es esperable. Esta configuración es solo para `localhost`. Para usarla en red o internet hace falta https; eso se hace al elegir el hosting (decisión D3 del plan).
 
 ## 10. Importante
 - Esta instalación es para **probar en tu PC**. Para que el colegio la use de verdad hace falta un servidor con https, respaldos diarios y claves en un gestor de secretos (`docs/operacion/`).

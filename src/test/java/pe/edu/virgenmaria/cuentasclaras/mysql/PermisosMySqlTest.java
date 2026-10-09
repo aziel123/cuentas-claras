@@ -3692,4 +3692,69 @@ class PermisosMySqlTest {
 				.LlamadaRequest(pe.edu.virgenmaria.cuentasclaras.panel.model.ResultadoLlamada.NO_CONTESTA, null)))
 				.isInstanceOf(pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException.class);
 	}
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.operacion.salud.EstadoTecnico estadoTecnico;
+
+	/**
+	 * Sprint 7, tanda 1 (V24): el registro de respaldos lo escribe SOLO cc_respaldo (scripts/respaldo/respaldar.sh). cc_app
+	 * no lo inserta, edita ni borra (1142). Con cc_respaldo: anclas que no son eventos de la bitácora, el destino simulado sin
+	 * la fila del DBA y un respaldo que no se registra al terminar fallan con 1644 (trg_respaldo_registro); cc_respaldo
+	 * tampoco edita ni borra (1142). Uno con anclas reales queda, y la aplicación lo lee con cc_app (Hibernate valida V24).
+	 */
+	@Test
+	void elRespaldoLoRegistraSoloCcRespaldoConAnclasReales() {
+		String claveRespaldo = System.getenv("CC_MYSQL_CLAVE_RESPALDO");
+		org.junit.jupiter.api.Assumptions.assumeTrue(claveRespaldo != null && !claveRespaldo.isBlank(),
+				"Falta CC_MYSQL_CLAVE_RESPALDO");
+		JdbcTemplate respaldo = new JdbcTemplate(new org.springframework.jdbc.datasource.DriverManagerDataSource(
+				System.getenv().getOrDefault("CC_MYSQL_URL",
+						"jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false"),
+				"cc_respaldo", claveRespaldo));
+		java.util.Map<String, Object> cadena = jdbc.queryForMap(
+				"SELECT ultima_secuencia, ultimo_hash FROM auditoria_cadena WHERE id = 1");
+		long secuencia = ((Number) cadena.get("ultima_secuencia")).longValue();
+		String hash = (String) cadena.get("ultimo_hash");
+		String sello = respaldo.queryForObject("SELECT DATE_FORMAT(UTC_TIMESTAMP() - INTERVAL 5 HOUR, '%Y%m%d-%H%i%s')",
+				String.class);
+		String archivo = "cc-" + sello + ".sql.gz.age";
+
+		for (String sentencia : new String[] { registroRespaldo("cc-20000101-000000.sql.gz.age", "UTC_TIMESTAMP(6) - "
+				+ "INTERVAL 5 HOUR", secuencia, hash, "verificacion-ci"), "UPDATE respaldo SET bytes = bytes WHERE 1 = 0",
+				"DELETE FROM respaldo WHERE 1 = 0" }) {
+			assertThatThrownBy(() -> jdbc.update(sentencia)).as(sentencia)
+					.satisfies(e -> assertThat(codigoMySql(e)).isEqualTo(1142));
+		}
+		assertThatThrownBy(() -> respaldo.update(registroRespaldo(archivo, "UTC_TIMESTAMP(6) - INTERVAL 5 HOUR",
+				secuencia + 1000, hash, "verificacion-ci"))).as("anclas que no son de la bitácora")
+				.satisfies(e -> assertThat(codigoMySql(e)).isEqualTo(1644));
+		assertThatThrownBy(() -> respaldo.update(registroRespaldo(archivo, "'2000-01-01 00:00:00'", secuencia, hash,
+				"verificacion-ci"))).as("no se registró al terminar").satisfies(e -> assertThat(codigoMySql(e)).isEqualTo(1644));
+		if (jdbc.queryForObject("SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'respaldo_simulado'", Long.class) == 0) {
+			assertThatThrownBy(() -> respaldo.update(registroRespaldo(archivo, "UTC_TIMESTAMP(6) - INTERVAL 5 HOUR",
+					secuencia, hash, "simulado"))).as("destino simulado sin la fila del DBA")
+					.satisfies(e -> assertThat(codigoMySql(e)).isEqualTo(1644));
+		}
+		for (String sentencia : new String[] { "UPDATE respaldo SET bytes = bytes WHERE 1 = 0",
+				"DELETE FROM respaldo WHERE 1 = 0", "UPDATE pago SET version = version WHERE 1 = 0" }) {
+			assertThatThrownBy(() -> respaldo.update(sentencia)).as("cc_respaldo: " + sentencia)
+					.satisfies(e -> assertThat(codigoMySql(e)).isEqualTo(1142));
+		}
+
+		respaldo.update(registroRespaldo(archivo, "UTC_TIMESTAMP(6) - INTERVAL 5 HOUR", secuencia, hash,
+				"verificacion-ci"));
+
+		var estado = estadoTecnico.respaldo();
+		assertThat(estado.existe()).isTrue();
+		assertThat(estado.alDia()).isTrue();
+		assertThat(estado.archivo()).isEqualTo(archivo);
+	}
+
+	private static String registroRespaldo(String archivo, String fin, long secuencia, String hash, String destino) {
+		return "INSERT INTO respaldo (inicio, fin, archivo, sha256, bytes, version_esquema, secuencia_antes, hash_antes, "
+				+ "secuencia_despues, hash_despues, conteos, destino, comparacion, creado_en, creado_por) VALUES ("
+				+ fin + " - INTERVAL 1 SECOND, " + fin + ", '" + archivo + "', REPEAT('a', 64), 1024, '24', " + secuencia + ", '"
+				+ hash + "', " + secuencia + ", '" + hash + "', '{}', '" + destino + "', 'PRIMERO', UTC_TIMESTAMP(6) - "
+				+ "INTERVAL 5 HOUR, 'cc_respaldo')";
+	}
 }

@@ -34,6 +34,7 @@
 		<p th:if="${p.resumen.cambiosSinExplicar > 0}" class="texto-peligro" data-cambios-sin-explicar
 			th:text="|${p.resumen.cambiosSinExplicar} día(s) ya informado(s) cambiaron sin explicación.|">1 día cambió sin explicación.</p>
 		<a class="btn btn-texto btn-chico" th:href="@{/panel/resumenes}">Ver resúmenes enviados</a>
+		<a class="btn btn-texto btn-chico" th:href="@{/panel/sistema}" data-enlace-sistema>Estado técnico y respaldos</a>
 	</section>
 
 	<section class="tarjeta panel-bloque" aria-labelledby="titulo-llamadas" data-seccion="llamadas">

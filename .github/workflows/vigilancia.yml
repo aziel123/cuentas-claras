@@ -1,0 +1,52 @@
+name: Vigilancia
+
+# Sprint 7, tanda 1 (sección 10.5, decisión 94): vigilante externo gratuito. Cada 15 minutos consulta la salud de la
+# aplicación, el último respaldo (/salud/respaldo: OK o ATRASADO, sin datos) y el certificado TLS. Si algo falla, el
+# workflow falla y GitHub avisa por correo al dueño del repositorio.
+# Configuración: la variable del repositorio CC_URL_PUBLICA (Settings → Secrets and variables → Actions → Variables),
+# por ejemplo https://cuentasclaras.colegio.pe. Sin ella no vigila nada (los forks no fallan).
+# Límites: la cron de GitHub puede atrasarse varios minutos, y GitHub APAGA los workflows programados de un repositorio
+# público tras 60 días sin actividad: el paso «actividad» falla una semana antes (docs/operacion/monitoreo.md).
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "URL a vigilar (por defecto, la variable CC_URL_PUBLICA). Para probar el aviso: una URL que responde 503."
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vigilancia
+  cancel-in-progress: false
+
+jobs:
+  vigilar:
+    name: Salud, respaldo y certificado
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Salud, respaldo y certificado TLS
+        env:
+          VIGILANCIA_URL: ${{ github.event.inputs.url || vars.CC_URL_PUBLICA }}
+        run: |
+          if [ -z "$VIGILANCIA_URL" ]; then
+            echo "::notice::Sin la variable CC_URL_PUBLICA no hay nada que vigilar."
+            exit 0
+          fi
+          sh scripts/vigilancia/vigilar.sh
+
+      - name: "Actividad: GitHub apaga los workflows programados tras 60 días sin actividad"
+        run: |
+          ultimo=$(git log -1 --format=%ct)
+          dias=$(( ($(date +%s) - ultimo) / 86400 ))
+          echo "Último commit hace $dias días."
+          if [ "$dias" -ge 53 ]; then
+            echo "::error::El repositorio lleva $dias días sin actividad: en $((60 - dias)) días GitHub apagará este vigilante. Haz un commit (por ejemplo, el acta del simulacro mensual)."
+            exit 1
+          fi

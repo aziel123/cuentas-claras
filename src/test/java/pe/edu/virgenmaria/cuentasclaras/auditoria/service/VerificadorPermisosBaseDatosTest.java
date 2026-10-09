@@ -140,7 +140,7 @@ class VerificadorPermisosBaseDatosTest {
 			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
 					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado|movimiento_bancario|"
 					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora|semilla_muestreo|huella_hora|"
-					+ "resumen_diario|llamada_control|muestra_llamada|delegacion_llamada|configuracion_colegio) ");
+					+ "resumen_diario|llamada_control|muestra_llamada|delegacion_llamada|configuracion_colegio|respaldo) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -259,7 +259,8 @@ class VerificadorPermisosBaseDatosTest {
 		JdbcTemplate mysql = mock(JdbcTemplate.class);
 		when(mysql.update(anyString())).thenAnswer(invocacion -> {
 			String sql = invocacion.getArgument(0);
-			if (sql.startsWith("INSERT INTO configuracion_bd") || sql.startsWith("INSERT INTO configuracion_colegio")) {
+			if (sql.startsWith("INSERT INTO configuracion_bd") || sql.startsWith("INSERT INTO configuracion_colegio")
+					|| sql.startsWith("INSERT INTO respaldo")) {
 				throw denegado(1142);
 			}
 			if (sql.startsWith("INSERT")) {
@@ -371,7 +372,8 @@ class VerificadorPermisosBaseDatosTest {
 		// correcciones (V20): 58 con los de la verificación de contactos y la huella por hora; sprint 6, tanda 2 (V21): 60
 		// con la foto del resumen diario y el contacto del personal; tanda 3 (V22): 61 con la llamada de control;
 		// correcciones del sprint 6 (V23): 63 con la muestra congelada y la delegación de las llamadas.
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(63);
+		// Sprint 7, tanda 1 (V24): 64 con el registro de respaldos.
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(64);
 	}
 
 	/**
@@ -649,6 +651,51 @@ class VerificadorPermisosBaseDatosTest {
 
 	private static UncategorizedSQLException denegado(int codigo) {
 		return new UncategorizedSQLException("verificar", "SQL", new SQLException("command denied", "42000", codigo));
+	}
+
+	/**
+	 * Sprint 7, tanda 1 (V24): si la aplicación puede registrar, editar o borrar respaldos (o el INSERT llega al trigger:
+	 * tiene el GRANT que no debe tener), o si falta trg_respaldo_registro, prod no arranca.
+	 */
+	@Test
+	void sinLosPermisosNiElTriggerDelRespaldoNoArranca() {
+		for (String[] caso : new String[][] { { "DELETE FROM respaldo WHERE 1 = 0", "respaldo se podrían borrar" },
+				{ "UPDATE respaldo SET version = version WHERE 1 = 0", "respaldo se podrían editar" },
+				{ VerificadorPermisosBaseDatos.RESPALDO_IMPOSIBLE, "registrar un respaldo que no existe" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+		JdbcTemplate conInsert = mysqlQueDeniega();
+		doThrow(denegado(1644)).when(conInsert).update(VerificadorPermisosBaseDatos.RESPALDO_IMPOSIBLE);
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(conInsert, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("1644");
+
+		JdbcTemplate sinTrigger = mysqlQueDeniega();
+		when(sinTrigger.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
+				.thenReturn(String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream()
+						.filter(t -> !t.equals("trg_respaldo_registro")).toList()));
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(sinTrigger, fuenteDatos).verificarTriggers())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("trg_respaldo_registro");
+	}
+
+	/** Sprint 7, tanda 1: en prod la base no admite el destino simulado de los respaldos; en el piloto sí. */
+	@Test
+	void enProduccionLaBaseNoAdmiteElRespaldoSimulado() {
+		JdbcTemplate conFila = mysqlQueDeniega();
+		when(conFila.queryForObject(VerificadorPermisosBaseDatos.SQL_RESPALDO_SIMULADO, Integer.class)).thenReturn(1);
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(conFila, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("PRODUCCIÓN")
+				.hasMessageContaining("respaldo_simulado");
+
+		JdbcTemplate piloto = mysqlQueDeniega();
+		when(piloto.queryForObject(VerificadorPermisosBaseDatos.SQL_PASARELA_SIMULADA, Integer.class)).thenReturn(1);
+		when(piloto.queryForObject(VerificadorPermisosBaseDatos.SQL_MENSAJERIA_SIMULADA, Integer.class)).thenReturn(1);
+		when(piloto.queryForObject(VerificadorPermisosBaseDatos.SQL_RESPALDO_SIMULADO, Integer.class)).thenReturn(1);
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(piloto, fuenteDatos, false).verificarPermisos())
+				.doesNotThrowAnyException();
 	}
 
 	@Test

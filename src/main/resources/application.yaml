@@ -71,6 +71,13 @@ management:
   endpoint:
     health:
       show-details: never
+      # Sprint 7: sondas /actuator/health/liveness y /readiness (públicas, solo el estado). Readiness incluye la base; el
+      # verificador de permisos corre al arrancar (sin él la aplicación no llega a aceptar peticiones).
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState, db
 
 cuentasclaras:
   seguridad:
@@ -198,6 +205,20 @@ cuentasclaras:
     exportacion-max-filas: 20000
     exportaciones-atencion: 5             # más descargas de una persona en el día: ATENCIÓN en el panel
     llamadas-por-semana: 3                # decisión 77: familias de la llamada de control de cada semana
+  monitoreo:
+    # Sprint 7, tanda 1 (sección 10): alertas técnicas por correo directo (SMTP de spring.mail y remitente
+    # CORREO_REMITENTE) al responsable técnico. Sin CC_OPERADOR_CORREO quedan apagadas y /panel/sistema lo dice en rojo.
+    operador-correo: ${CC_OPERADOR_CORREO:}
+    cada: "0 */5 * * * *"                 # revisión técnica (Lima)
+    resumen-tecnico: "0 0 7 * * *"        # resumen técnico diario por correo
+    respaldo-exigido: false               # prod y piloto: true («Sin respaldo» es CRÍTICA)
+    aceptar-respaldo-simulado: true       # prod: false (el destino simulado no cuenta)
+    respaldo-max-horas: 26                # decisión 88: diario a las 02:30 (RPO 24 h) y 2 h de margen
+    errores-umbral: 5                     # ERROR de una misma huella en la ventana
+    errores-ventana: 15m
+    disco-minimo-porcentaje: 15
+    gracia: 10m                           # tras un arranque, antes de dar un proceso por atrasado
+    repetir-cada: 1h                      # una misma alerta sale como máximo una vez por hora
   auditoria:
     # Clave de la cadena HMAC-SHA256 de la bitácora (mínimo 32 caracteres). Sin ella la
     # aplicación no arranca. Nunca en el código: va en el gestor de secretos.

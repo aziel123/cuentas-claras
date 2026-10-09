@@ -64,7 +64,33 @@ class VerificadorConfiguracionTest {
 		return mapa;
 	}
 
+	/** Sprint 7, tanda 1: en prod el respaldo simulado no cuenta y la falta de respaldo siempre es alerta. */
+	@Test
+	void enProduccionElRespaldoSimuladoNoCuentaYElRespaldoSeExige() {
+		java.util.Map<String, String> prod = new java.util.HashMap<>(sinCorreo());
+		prod.putAll(CORREO_REAL);
+		prod.remove(VerificadorConfiguracion.CORREO_REAL_FUERA_DE_PROD);
+		prod.remove(VerificadorConfiguracion.CORREO_PRUEBA);
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, prod)).doesNotThrowAnyException();
+
+		java.util.Map<String, String> simulado = new java.util.HashMap<>(prod);
+		simulado.put(VerificadorConfiguracion.RESPALDO_SIMULADO, "true");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, simulado))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("aceptar-respaldo-simulado");
+
+		java.util.Map<String, String> sinExigir = new java.util.HashMap<>(prod);
+		sinExigir.put(VerificadorConfiguracion.RESPALDO_EXIGIDO, "false");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, sinExigir))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("respaldo-exigido");
+
+		java.util.Map<String, String> piloto = sinCorreo(VerificadorConfiguracion.WHATSAPP, "SIMULADO",
+				VerificadorConfiguracion.CORREO, "SIMULADO", VerificadorConfiguracion.RESPALDO_SIMULADO, "true");
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" }, piloto))
+				.doesNotThrowAnyException();
+	}
+
 	// Sprint 5, sección 8.3: la mensajería simulada nunca en prod; prod sin canal real no arranca.
+
 
 	@Test
 	void mensajeriaSimuladaNuncaArrancaEnProduccion() {

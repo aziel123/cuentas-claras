@@ -1,23 +1,31 @@
 # MySQL en producción: usuarios y permisos
 
-La aplicación usa **dos usuarios de MySQL**:
+La plataforma usa **tres usuarios de MySQL**:
 
 | Usuario | Lo usa | Permisos |
 |---|---|---|
 | `cc_migrador` | Flyway, al arrancar (`spring.flyway.user`) | Todo sobre la base `cuentasclaras`: crea y cambia tablas |
 | `cc_app` | La aplicación (`spring.datasource.username`) | Lectura de todo y escritura **solo** donde hace falta. Sobre `evento_auditoria` solo puede **insertar**: ni UPDATE ni DELETE |
+| `cc_respaldo` | El respaldo diario (`scripts/respaldo/respaldar.sh`, sprint 7) | `SELECT` y `SHOW VIEW` del esquema e `INSERT` en `respaldo`. Nada más: ni escribe tablas de negocio, ni edita ni borra el registro de respaldos (ver [respaldos.md](respaldos.md)) |
 
 Así, aunque alguien robe la clave de la aplicación o encuentre una falla en el código, no puede editar ni borrar la bitácora de auditoría. Y si alguien la toca con otro usuario, la cadena HMAC lo detecta (pantalla Bitácora → «Verificar integridad»).
 
 ## Instalación (una sola vez)
 Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` del CI.
 
-1. **Usuarios y base**, como administrador. Reemplaza `__CLAVE_MIGRADOR__` y `__CLAVE_APP__` por claves del gestor de secretos y **no guardes el archivo modificado**:
+1. **Usuarios y base**, como administrador. Reemplaza `__CLAVE_MIGRADOR__`, `__CLAVE_APP__` y `__CLAVE_RESPALDO__` por claves del gestor de secretos y **no guardes el archivo modificado**:
    ```bash
    sed -e 's/__CLAVE_MIGRADOR__/<clave-migrador>/' -e 's/__CLAVE_APP__/<clave-app>/' \
-       scripts/mysql/01-usuarios.sql | mysql -h <host> -u root -p
+       -e 's/__CLAVE_RESPALDO__/<clave-respaldo>/' scripts/mysql/01-usuarios.sql | mysql -h <host> -u root -p
    ```
-   Crea la base `cuentasclaras` (utf8mb4), `cc_migrador` con todos los permisos sobre ella y `cc_app` solo con SELECT.
+   Crea la base `cuentasclaras` (utf8mb4), `cc_migrador` con todos los permisos sobre ella, `cc_app` solo con SELECT y
+   `cc_respaldo` sin permisos (sus GRANT van en el paso 3).
+
+   **Base creada antes del sprint 7:** aplica una vez `scripts/mysql/04-una-vez-sprint-7.sql` (crea `cc_respaldo`; es
+   idempotente) antes de volver a aplicar `02` y `03`:
+   ```bash
+   sed -e 's/__CLAVE_RESPALDO__/<clave-respaldo>/' scripts/mysql/04-una-vez-sprint-7.sql | mysql -h <host> -u root -p
+   ```
 2. **Primera migración** (ver «Despliegue»): crea las tablas con `cc_migrador`.
 3. **Permisos por tabla**, después de esa primera migración. MySQL no acepta un GRANT sobre una tabla que todavía no existe:
    ```bash
@@ -129,7 +137,21 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
 2. **Arrancar** la aplicación con `SPRING_PROFILES_ACTIVE=prod` y **solo** `DB_USUARIO=cc_app` / `DB_CLAVE`. Antes de aceptar peticiones comprueba que no falten migraciones, que `cc_app` no pueda editar ni borrar la bitácora ni borrar cuotas (error 1142) y que no pueda cambiar el monto de una cuota ni las columnas inmutables de planes, lotes, líneas y solicitudes (error
 1143, o 1142 si no tiene ningún UPDATE sobre la tabla), además de los triggers del paso 3. Si algo falla, **no arranca**.
 
+**Sprint 7 (orden nuevo del despliegue):** respaldo → detener la aplicación → `migrar` → `04` (solo la primera vez) →
+`02` → `03` → arrancar → verificador. Detalle y desastre en [respaldos.md](respaldos.md).
+
+## Respaldos (sprint 7, tanda 1)
+- La tabla `respaldo` (V24) la escribe **solo** `cc_respaldo` (GRANT de INSERT y `trg_respaldo_registro`, que exige
+  `SESSION_USER()` = `cc_respaldo`, que se registre al terminar y que las anclas sean eventos reales de la bitácora).
+  `cc_app` solo la lee: 1142 al insertar, editar o borrar. `cc_respaldo` tampoco edita ni borra (1142).
+- Fila de `configuracion_bd` que solo escribe el DBA, **nunca en prod**: `('respaldo_simulado', 'PERMITIDA')` admite el
+  destino «simulado» (una carpeta local) en dev, CI y piloto. Sin ella, `trg_respaldo_registro` rechaza el respaldo
+  simulado (1644), y en prod la aplicación no arranca si la fila existe.
+- `cc_respaldo` vuelca con `mysqldump --single-transaction --no-tablespaces --skip-triggers`: no necesita `LOCK TABLES`,
+  `PROCESS`, `RELOAD` ni `TRIGGER` (comprobado en MySQL 8.4.11).
+
 ## Cada migración nueva
+
 - Si crea una tabla, agrega su GRANT en `scripts/mysql/02-permisos-tablas.sql` y aplícalo después de migrar.
 - **Tablas financieras** (pago, cuota, comprobante, cierre de caja): INSERT y UPDATE (para anular con estado), **nunca DELETE**.
 - El CI (job `mysql`) corre las migraciones y las pruebas con estos mismos permisos: si falta un GRANT, falla.

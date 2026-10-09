@@ -15,7 +15,18 @@ server:
     remoteip:
       internal-proxies: ${CC_PROXIES_INTERNOS:10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|127\.\d+\.\d+\.\d+|0:0:0:0:0:0:0:1|::1}
 
+# Sprint 7, tanda 1: logs JSON enmascarados, como en prod (el piloto puede tener datos reales).
+logging:
+  structured:
+    format:
+      console: ecs
+    json:
+      customizer: pe.edu.virgenmaria.cuentasclaras.operacion.log.EnmascaradoLogs
+
 cuentasclaras:
+  # Sprint 7, tanda 1: el piloto también exige su respaldo diario (puede usar el destino simulado si el DBA lo admite).
+  monitoreo:
+    respaldo-exigido: true
   # Sprint 5: mensajería SIMULADA (la base debe tener la fila 'mensajeria_simulada' del DBA). Para probar con
   # WhatsApp o correo reales: proveedor real, permitir-real-fuera-de-prod y la lista de números o correos de prueba.
   mensajeria:

@@ -108,7 +108,8 @@ class ReglasArquitecturaTest {
 			.that().areAnnotatedWith(Entity.class)
 			.and().doNotBelongToAnyOf(Colegio.class, EventoAuditoria.class, EslabonCadena.class,
 					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionBd.class,
-					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionColegio.class)
+					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionColegio.class,
+					pe.edu.virgenmaria.cuentasclaras.operacion.model.Respaldo.class)
 			.should().beAssignableTo(BaseEntity.class)
 			.because("BaseEntity aporta colegioId (@TenantId), autoría y versión");
 

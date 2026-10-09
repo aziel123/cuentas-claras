@@ -318,7 +318,22 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "'resumen_correo_externo', 'x@y.pe', NOW(6))", Set.of(MYSQL_COMANDO_DENEGADO),
 					"la aplicación podría poner el correo externo que recibe el resumen de un colegio."),
 			new SentenciaProhibida("UPDATE configuracion_colegio SET valor = valor WHERE 1 = 0",
-					Set.of(MYSQL_COMANDO_DENEGADO), "la aplicación podría cambiar el correo externo de un colegio."));
+					Set.of(MYSQL_COMANDO_DENEGADO), "la aplicación podría cambiar el correo externo de un colegio."),
+			// Sprint 7, tanda 1 (V24): el registro de respaldos lo escribe SOLO cc_respaldo. La aplicación no registra un
+			// respaldo falso (1142 al insertar; trg_respaldo_registro, que exige cc_respaldo, se comprueba por su presencia
+			// en TRIGGERS_ESPERADOS) ni edita ni borra los que hay.
+			new SentenciaProhibida(VerificadorPermisosBaseDatos.RESPALDO_IMPOSIBLE, Set.of(MYSQL_COMANDO_DENEGADO),
+					"la aplicación podría registrar un respaldo que no existe (el registro lo escribe solo cc_respaldo)."),
+			sinBorrado("respaldo"), soloInsercion("respaldo"));
+
+	/** Sprint 7, tanda 1: un respaldo del año 2000 registrado por la aplicación (cc_app no tiene INSERT: 1142). */
+	static final String RESPALDO_IMPOSIBLE = "INSERT INTO respaldo (inicio, fin, archivo, sha256, bytes, version_esquema, "
+			+ "secuencia_antes, hash_antes, secuencia_despues, hash_despues, conteos, destino, comparacion, creado_en, "
+			+ "creado_por) VALUES ('2000-01-01', '2000-01-01', 'cc-20000101-000000.sql.gz.age', REPEAT('0', 64), 1, '0', 0, "
+			+ "REPEAT('0', 64), 0, REPEAT('0', 64), '{}', 'verificador', 'PRIMERO', NOW(6), 'cc_respaldo')";
+
+	/** Sprint 7, tanda 1: el destino simulado de los respaldos solo existe en una base habilitada por el DBA. */
+	static final String SQL_RESPALDO_SIMULADO = "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'respaldo_simulado'";
 
 	/** Correcciones del sprint 6 (V23): una familia en la muestra del colegio 0 fijada por quien no es del personal. */
 	static final String MUESTRA_IMPOSIBLE = "INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, creado_en, "
@@ -383,7 +398,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_feriado_registro", "trg_feriado_anulacion", "trg_cierre_mensual_banco_nace",
 			"trg_cierre_mensual_banco_estado", "trg_verificacion_contacto_nace", "trg_verificacion_contacto_uso",
 			"trg_huella_hora_registro", "trg_resumen_diario_registro", "trg_usuario_contacto",
-			"trg_llamada_control_registro", "trg_muestra_llamada_registro", "trg_delegacion_llamada_registro");
+			"trg_llamada_control_registro", "trg_muestra_llamada_registro", "trg_delegacion_llamada_registro",
+			"trg_respaldo_registro");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -506,6 +522,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 				+ "control) verificados.");
 		LOG.info("Permisos y triggers de las correcciones del sprint 6 (muestra congelada, delegación de las llamadas, texto "
 				+ "del resumen y correo externo por colegio) verificados.");
+		verificarRespaldoSimulado();
+		LOG.info("Permisos del respaldo verificados: la aplicación no registra, edita ni borra respaldos.");
 		return escribe;
 	}
 
@@ -561,6 +579,27 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		if (!produccion && !habilitada && escribe) {
 			throw new IllegalStateException("En el piloto la base no tiene habilitada la mensajería simulada (falta la fila "
 					+ "'mensajeria_simulada' en configuracion_bd, la registra el DBA). Revisa docs/operacion/mysql-usuarios.md.");
+		}
+	}
+
+	/**
+	 * Sprint 7, tanda 1: en prod la base NO admite el destino simulado de los respaldos (una carpeta en el mismo servidor
+	 * no protege nada). Sin la fila 'respaldo_simulado', trg_respaldo_registro rechaza registrar un respaldo simulado y
+	 * el monitoreo lo da por atrasado.
+	 */
+	private void verificarRespaldoSimulado() {
+		Integer filas;
+		try {
+			filas = jdbc.queryForObject(SQL_RESPALDO_SIMULADO, Integer.class);
+		}
+		catch (DataAccessException e) {
+			throw new IllegalStateException("No se pudo leer configuracion_bd (código " + codigoMySql(e) + "). Revisa "
+					+ "docs/operacion/mysql-usuarios.md.", e);
+		}
+		if (produccion && filas != null && filas > 0) {
+			throw new IllegalStateException("La base de PRODUCCIÓN admite el destino simulado de los respaldos (fila "
+					+ "'respaldo_simulado' en configuracion_bd): los respaldos quedarían en el mismo servidor. El DBA debe "
+					+ "borrarla. Revisa docs/operacion/respaldos.md.");
 		}
 	}
 

@@ -17,6 +17,8 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Sprint 7, tanda 1 (V24): el registro de respaldos (técnico, sin colegio; en MySQL solo lo escribe cc_respaldo).
+		jdbc.update("DELETE FROM respaldo");
 		// Sprint 6, tanda 3 (V22): la llamada de control apunta a la familia.
 		jdbc.update("DELETE FROM llamada_control");
 		jdbc.update("DELETE FROM muestra_llamada");

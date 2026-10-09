@@ -1347,3 +1347,120 @@ Rutas relativas a `C:/Users/amedina/cuentas-claras/cuentas-claras/`:
   - `caja/service/AlertasCaja` (muestreo);
   - `panel/service/LlamadasControl` (muestra congelada);
   - `comprobantes/proceso/EnvioTrasEmision`.
+
+## Tanda 1 · Implementación
+
+> Agente `backend-spring`, 8 de octubre de 2026, sobre el diseño del commit 53d5b9c. V24 y **64 triggers**. Lo marcado
+> como «NO probado» en la cabecera se comprobó primero en un MySQL 8.4.11 desechable (abajo).
+
+### Comprobaciones previas en MySQL 8.4.11 (lo que el diseño marcó como no verificado)
+| Comportamiento | Resultado |
+|---|---|
+| `SESSION_USER()` dentro de un trigger y de una función `SQL SECURITY DEFINER` | **Devuelve el usuario de la conexión** (`cc_app@…`); `CURRENT_USER()` devuelve el definidor. `trg_respaldo_registro` (tanda 1) y `cc_es_sistema()` (tanda 2) se apoyan en esto |
+| Un `BEFORE INSERT` lee su propia tabla | Sí (1644 de la regla que leía `usuario_rol` dentro de su trigger) |
+| `REVOKE IF EXISTS ALL PRIVILEGES, GRANT OPTION FROM … IGNORE UNKNOWN USER` | Existe y no falla con un usuario desconocido. **Hallazgo para la tanda 2:** `ALL PRIVILEGES` **no quita la concesión del rol** (`GRANT cc_negocio TO cc_app` sigue): `02` debe agregar `REVOKE IF EXISTS 'cc_negocio' FROM …` para ser la fuente única |
+| `SET DEFAULT ROLE 'cc_negocio'` activa el rol al conectar | Sí (`CURRENT_ROLE()` = `cc_negocio` y el INSERT por el rol pasa) |
+| `ACTION_STATEMENT` cuando el cliente quita los comentarios | Depende del cliente: el `mysql` 8.4 **conserva** los `--` del cuerpo; el 8.0.46 de Ubuntu (el del runner del CI) los **quita** y deja la línea en blanco. La normalización de la sección 3.7 (quitar `--…` y colapsar espacios) es necesaria y alcanza |
+| V24 sobre V1–V23 | Aplica en H2 2.4.240 (MODE=MySQL) y en MySQL 8.4.11; Hibernate la valida con `cc_app` |
+| `mysqldump` con solo `SELECT, SHOW VIEW` | Basta con `--single-transaction --no-tablespaces --skip-triggers --set-gtid-purged=OFF` (sin `LOCK TABLES`, `PROCESS`, `RELOAD` ni `TRIGGER`) |
+| Nombre de la columna del eslabón | `auditoria_cadena.ultima_secuencia` y `ultimo_hash` (confirmado) |
+
+### Qué se construyó
+- **Base:** `V24__registro_de_respaldos.sql`; `01` crea `cc_respaldo`; `04-una-vez-sprint-7.sql` (solo `cc_respaldo` en
+  la tanda 1); `02` con `SELECT, SHOW VIEW` del esquema e `INSERT` en `respaldo` para `cc_respaldo` (cc_app, nada);
+  `03` con `trg_respaldo_registro` (64 triggers). Docker local: `01-crear-usuarios.sh`, `preparar-bd.sh` (aplica `04`),
+  `docker-compose.yml` y `.env.ejemplo` con `CC_CLAVE_RESPALDO` y `CC_OPERADOR_CORREO`.
+- **Verificador de prod:** `TRIGGERS_ESPERADOS` = 64; cc_app no inserta, edita ni borra `respaldo` (1142); en prod no
+  arranca con la fila `respaldo_simulado`; línea nueva «Permisos del respaldo verificados». `VerificadorConfiguracion`
+  rechaza en prod `aceptar-respaldo-simulado: true` y `respaldo-exigido: false`.
+- **Respaldo y restauración:** `scripts/respaldo/respaldar.sh`, `restaurar-y-verificar.sh`, `comprobaciones.sql`,
+  `tablas-vigiladas.txt` y `pruebas-ci.sh` (los casos del job). `MigradorBaseDatos` acepta `DB_MIGRAR_HASTA`. Modo
+  nuevo `java -jar … verificar-respaldo` (`operacion.respaldo.VerificadorRespaldo`).
+- **Monitoreo:** paquete `operacion` (`Respaldo` `@Immutable`, `RespaldoRepository` de solo lectura,
+  `EstadoTecnico`, `AlertasTecnicas`, `AlertasRespaldo` para «Para revisar», `/panel/sistema`, `/salud/respaldo`,
+  `FiltroIdPeticion`, `ContextoPeticionLog`, `EnmascaradoLogs`, `ContadorErrores` y el código de error en las páginas de
+  error); `comun.sistema.Latidos` y `ObservadorLatidos`; `Enmascarar.enTexto`; sondas `liveness` y `readiness`; logs ECS
+  enmascarados en prod y piloto; `BuzonSimulado` sin el destino.
+- **CI:** el job `mysql` crea `cc_respaldo`, migra V1–V24, comprueba los 1142 y 1644 nuevos (como cc_app y como
+  cc_respaldo), exige «Permisos del respaldo verificados», un log JSON y las sondas. **Job nuevo `respaldo`**: respalda
+  la base que dejan las pruebas de MySQL, restaura en un segundo MySQL, verifica con la clave HMAC de pruebas, arranca
+  prod sobre la copia y corre E29 a E32. **`vigilancia.yml`** + `scripts/vigilancia/vigilar.sh`.
+- **Documentos:** `docs/operacion/respaldos.md`, `monitoreo.md`, `acta-simulacro-restauracion.md`; cambios en
+  `mysql-usuarios.md` e `instalacion-local.md`.
+
+### Desviaciones del diseño (y por qué)
+1. **`age` sí, de los paquetes de Ubuntu.** `age` 1.1.1 y `rclone` 1.60.1 se instalan con `apt-get` desde el archivo de
+   Ubuntu (fuente confiable) en el CI; en local, en un contenedor `ubuntu:24.04` con los mismos paquetes. No hizo falta
+   la alternativa con la JDK u openssl, ni se descargó ningún binario de otra fuente.
+2. **Destino «simulado» por defecto** (una carpeta) y el real con `rclone`, con credenciales **solo** en
+   `RCLONE_CONFIG_<NOMBRE>_*` (el script exporta `RCLONE_CONFIG=/dev/null`: ningún `rclone.conf`). El simulado no se puede
+   usar en prod por tres capas: `trg_respaldo_registro` lo rechaza sin la fila `respaldo_simulado` del DBA (1644), el
+   verificador no arranca en prod con esa fila, y en prod el estado técnico no cuenta un respaldo simulado
+   (`aceptar-respaldo-simulado: false`, exigido por `VerificadorConfiguracion`).
+3. **V24 lleva dos columnas más, `comparacion` y `diferencias`** (con su CHECK): la aplicación debe saber que el último
+   respaldo encontró filas faltantes («Faltan filas» al operador y a Promotoría) sin credenciales del almacenamiento.
+   Además, CHECK del nombre del archivo, de los hashes y del destino; `VARCHAR(64)` en lugar de `CHAR(64)` (convención del
+   proyecto y validación de Hibernate); el archivo lleva segundos (`cc-AAAAMMDD-HHMMSS`) para que dos respaldos seguidos
+   no choquen.
+4. **`trg_respaldo_registro` hace más que el boceto:** compara con `<=>`, exige el hash inicial cuando la secuencia es
+   0, rechaza el destino simulado sin la fila del DBA y, si el ancla del respaldo anterior ya no está en la bitácora,
+   exige que el registro diga `FALTAN_FILAS` (cc_respaldo no puede «olvidar» un recorte).
+5. **`verificar-respaldo` con JDBC y `SelladorAuditoria`, no con `VerificadorIntegridadAuditoria`** (que necesita la
+   aplicación con JPA y una persona o un actor de sistema). Para no duplicar la forma canónica del HMAC,
+   `SelladorAuditoria` sella también desde `CamposSellados` (mismo formato, sin cambios en la cadena). Vive en
+   `operacion.respaldo` y no en `comun.migracion`, porque depende de `auditoria`.
+6. **`comprobaciones.sql` va dentro del jar** (recurso de Maven desde `scripts/respaldo/`): una sola fuente para el
+   operador y el modo `verificar-respaldo`.
+7. **La restauración** borra las filas que sembraron las migraciones (colegio 1, eslabón) antes de cargar, se niega a
+   usar un MySQL que ya tenga la base, y arranca prod sobre la copia con una clave HMAC desechable y las tareas
+   programadas apagadas (nunca sale un mensaje a una familia desde una copia). La lectura de `information_schema` como
+   administrador para comparar huellas queda para la tanda 2 (las huellas llegan con ella).
+8. **Indicadores internos sin `HealthIndicator`:** `EstadoTecnico` los calcula aparte para que no cambien el estado
+   público de `/actuator/health`. Readiness = `readinessState` + `db`.
+9. **Latidos sin tocar los 17 procesos:** `ConfiguracionTareas` pone un `ObservationRegistry` propio en el registro de
+   tareas y `ObservadorLatidos` registra el latido cuando una tarea `@Scheduled` termina **sin error**. Las ventanas salen
+   del cron o del intervalo real de cada tarea (`ScheduledTaskHolder`): intervalo × 4 (2 minutos como mínimo) o la hora
+   del cron más 15 minutos; 10 minutos de gracia tras arrancar.
+10. **`/salud/respaldo` tiene un tercer valor, `REVISAR`** (el último respaldo encontró filas faltantes), además de `OK` y
+    `ATRASADO`; el vigilante falla con cualquiera que no sea `OK`.
+11. **Alertas técnicas:** «Mensajes atascados» no se duplica (la alerta de negocio ya existe y el latido del despacho
+    cubre el despacho detenido); «Certificado» lo revisa el vigilante externo; el pool agotado se detecta con hilos
+    esperando en dos revisiones seguidas (cada 5 minutos). Se agregó `BITACORA` (el eslabón no apunta al último evento).
+12. **`BuzonSimulado` en dev sigue escribiendo el enlace de activación** (sin el destino): `/mensajes` no muestra
+    enlaces y en dev es la única forma de activar una cuenta de prueba. En piloto y prod nunca se escribía.
+13. **El manifiesto es JSON con una clave por línea**, para que `respaldar.sh` compare con el anterior usando `sed` y
+    `awk` (sin `jq` en el servidor). La aplicación lo lee con Jackson.
+14. **Tablas vigiladas:** la lista del diseño más `cuota`, `delegacion_llamada`, `semilla_muestreo`,
+    `liquidacion_pasarela`, `liquidacion_linea` e `importacion_alumnos`; `firma_operacion` y `acceso_dato_personal` se
+    saltan hasta que existan (tandas 2 y 3).
+15. **Docker local:** `CC_CLAVE_RESPALDO` es obligatoria en `.env` (sin ella `02` no puede dar los GRANT a
+    `cc_respaldo`); `preparar-bd` aplica `04` en cada arranque (idempotente). Una instalación local en `prod` verá «Sin
+    respaldo» en el panel hasta hacer su primer respaldo.
+16. **Prueba en H2:** H2 2.4.240 responde «Check constraint invalid … database has been closed» si la base la crea Flyway
+    con su `DriverDataSource` y otra conexión inserta después; `VerificadorRespaldoTest` migra con una sola conexión.
+
+### Escenarios cubiertos
+E29, E30, E31 y E32 (job `respaldo` y `VerificadorRespaldoTest`), E34 y E35 (`AlertasTecnicasTest`,
+`EstadoTecnicoTest`), E36 (`LogsSinDatosPersonalesTest`, `EnmascaradoLogsTest`), E37 (`vigilar.sh` probado en local
+contra un servidor que responde 503, uno con el respaldo atrasado y uno sano; en GitHub, con «Run workflow» y una URL
+que responde 503).
+
+### Resultados (8 de octubre de 2026)
+- `./mvnw -B verify`: **1920 pruebas**, 0 fallas, 93 omitidas (las de MySQL real); también en verde con
+  `-DargLine=-Duser.timezone=America/Los_Angeles`.
+- **Job `mysql` reproducido completo** en contenedores desechables `mysql:8` (8.4.11): V1–V24, 64 triggers vistos por
+  cc_app, los 1142 y 1644 nuevos (como cc_app y como cc_respaldo), arranque real en prod con log JSON y sondas, y M2.
+  **93 pruebas de MySQL real** (2 de migración, 81 + 7 de permisos y 3 de la auditoría del sprint 6), 0 fallas.
+- **Job `respaldo` reproducido completo**: respaldo cifrado (age 1.1.1 y rclone 1.60.1 de Ubuntu), E29, restauración en
+  el segundo MySQL con la cadena HMAC completa (16 comprobaciones) y arranque de prod sobre la copia, E31 («la cadena no
+  verifica en la secuencia 406»), E30 (código 3, `pago (faltan 1)`), E32 (ancla y `evento_auditoria (faltan 3)`), el
+  simulacro sin clave del último respaldo (anclas anteriores y `aplicaciones_con_pago_y_cuota`) y el destino simulado
+  (1644 sin la fila del DBA). El modo `RESTAURAR_DOCKER=si` también se probó (crea y borra su `mysql:8.4`).
+
+### Riesgos residuales nuevos
+
+- Un remoto de rclone de tipo `local` o `alias` en prod se trataría como real: lo impide la configuración del servidor y
+  el manual, no el script.
+- Las alertas y los latidos viven en memoria (una instancia), como dice la sección 17.
+- La comparación de conteos detecta filas borradas con id menor o igual al máximo anterior; una fila insertada y borrada
+  entre dos respaldos no deja rastro en los conteos (sí en la bitácora, si era financiera).

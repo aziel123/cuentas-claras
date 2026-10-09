@@ -11,6 +11,8 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Define MYSQL_ROOT_PASSWORD en .env}
       CC_CLAVE_MIGRADOR: ${CC_CLAVE_MIGRADOR:?Define CC_CLAVE_MIGRADOR en .env}
       CC_CLAVE_APP: ${CC_CLAVE_APP:?Define CC_CLAVE_APP en .env}
+      # Sprint 7: usuario de los respaldos (scripts/respaldo/respaldar.sh).
+      CC_CLAVE_RESPALDO: ${CC_CLAVE_RESPALDO:?Define CC_CLAVE_RESPALDO en .env (sprint 7, respaldos)}
       TZ: America/Lima
     # cc_migrador crea triggers con el binlog activo (docs/operacion/mysql-usuarios.md).
     command: ["--log-bin-trust-function-creators=1"]
@@ -50,6 +52,7 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       CC_CLAVE_MIGRADOR: ${CC_CLAVE_MIGRADOR}
+      CC_CLAVE_RESPALDO: ${CC_CLAVE_RESPALDO:?Define CC_CLAVE_RESPALDO en .env (sprint 7, respaldos)}
     volumes:
       - ./scripts/mysql:/scripts:ro
       - ./docker/preparar-bd.sh:/preparar-bd.sh:ro
@@ -71,6 +74,9 @@ services:
       CC_PROMOTOR_USUARIO: ${CC_PROMOTOR_USUARIO:-}
       CC_PROMOTOR_NOMBRE: ${CC_PROMOTOR_NOMBRE:-}
       CC_PROMOTOR_CLAVE: ${CC_PROMOTOR_CLAVE:-}
+      # Sprint 7: alertas técnicas por correo al responsable técnico (necesitan también el correo de salida SMTP).
+      CC_OPERADOR_CORREO: ${CC_OPERADOR_CORREO:-}
+
       # Solo para probar en tu PC por http (sin https): permite la cookie de sesión sin "Secure".
       # En un servidor real con https, quita esta línea.
       SERVER_SERVLET_SESSION_COOKIE_SECURE: "false"

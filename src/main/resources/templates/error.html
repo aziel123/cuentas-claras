@@ -5,6 +5,7 @@
 	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-error">
 		<h1 id="titulo-error">No pudimos mostrar esta página</h1>
 		<p class="secundario">Intenta de nuevo en unos minutos. Si el problema continúa, avisa a Administración.</p>
+		<p class="secundario" th:if="${codigoError}">Código de error: <strong th:text="${codigoError}">a1b2c3d4e5f6</strong>. Si avisas del problema, dalo: así encontramos lo que pasó.</p>
 		<div class="fila">
 			<a class="btn btn-primario" th:href="@{/inicio}">Volver al inicio</a>
 		</div>

@@ -1,4 +1,4 @@
--- Cuentas Claras · permisos por tabla de cc_app (paso 2 de 2). Ejecutar como administrador DESPUÉS de que Flyway
+-- Cuentas Claras · permisos por tabla de cc_app y cc_respaldo (paso 2 de 3). Ejecutar como administrador DESPUÉS de que Flyway
 -- cree las tablas (MySQL no acepta un GRANT por tabla sobre una tabla que no existe).
 -- Cada tabla nueva: agrega aquí su GRANT. Tablas financieras (pago, cuota...): nunca DELETE.
 GRANT INSERT, UPDATE ON cuentasclaras.usuario TO 'cc_app'@'%';
@@ -183,6 +183,16 @@ GRANT INSERT ON cuentasclaras.delegacion_llamada TO 'cc_app'@'%';               
 -- que solo escribe el DBA (opcional, en prod; decisión 69), reemplaza a ('resumen_correo_externo') de configuracion_bd:
 --   INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en)
 --   VALUES (<id del colegio>, 'resumen_correo_externo', '<correo del contador de ese colegio>', NOW(6));
+
+-- Sprint 7 · tanda 1 (V24): respaldos. cc_app NO escribe respaldo (solo lo lee con el SELECT general: 1142 al insertar,
+-- editar o borrar). cc_respaldo (scripts/respaldo/respaldar.sh) solo lee el esquema para el volcado
+-- (mysqldump --single-transaction --no-tablespaces --skip-triggers: no necesita LOCK TABLES, PROCESS, RELOAD ni TRIGGER)
+-- e inserta la fila de su respaldo; trg_respaldo_registro exige que la escriba cc_respaldo, al terminar y con anclas que
+-- son eventos reales de la bitácora. Sin UPDATE ni DELETE: el registro de respaldos es de solo inserción.
+-- configuracion_bd sigue SIN GRANT. Fila nueva que solo escribe el DBA, NUNCA en prod (el verificador no arranca):
+--   ('respaldo_simulado', 'PERMITIDA') -> admite el destino «simulado» (una carpeta local) en dev, CI y piloto.
+GRANT SELECT, SHOW VIEW ON cuentasclaras.* TO 'cc_respaldo'@'%';
+GRANT INSERT ON cuentasclaras.respaldo TO 'cc_respaldo'@'%';
 
 -- M2: cc_app no lee information_schema.TRIGGERS (necesitaría el privilegio TRIGGER, que no debe tener). Esta función
 -- (SQL SECURITY DEFINER: corre con los permisos de quien la crea) devuelve solo los nombres de los triggers del esquema,
