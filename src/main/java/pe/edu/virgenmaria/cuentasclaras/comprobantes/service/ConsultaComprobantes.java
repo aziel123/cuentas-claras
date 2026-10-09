@@ -8,6 +8,7 @@ import pe.edu.virgenmaria.cuentasclaras.comprobantes.dto.BandejaComprobantes;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.Comprobante;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.EstadoEnvio;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.ProveedorComprobantes;
+import pe.edu.virgenmaria.cuentasclaras.comprobantes.proceso.AdelantosEnvio;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.repository.ComprobanteRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
@@ -35,7 +36,11 @@ public class ConsultaComprobantes {
 
 	private final Clock reloj;
 
-	public ConsultaComprobantes(ComprobanteRepository comprobantes, PropiedadesComprobantes propiedades, Clock reloj) {
+	/** Sprint 7, tanda 2: el adelanto lo escribe sistema.ose. */
+	private final AdelantosEnvio adelantos;
+
+	public ConsultaComprobantes(ComprobanteRepository comprobantes, PropiedadesComprobantes propiedades, Clock reloj, AdelantosEnvio adelantos) {
+		this.adelantos = adelantos;
 		this.comprobantes = comprobantes;
 		this.propiedades = propiedades;
 		this.reloj = reloj;
@@ -76,9 +81,12 @@ public class ConsultaComprobantes {
 				porVencer, pendientes, enviados, aceptadosHoy);
 	}
 
-	/** Administración adelanta el próximo envío o consulta de un comprobante sin resolver. */
+	/**
+	 * Administración adelanta el próximo envío o consulta de un comprobante sin resolver. Sprint 7, tanda 2: el cambio lo
+	 * escribe {@code sistema.ose} ({@link AdelantosEnvio}), nunca la conexión de la persona.
+	 */
 	@PreAuthorize("hasRole('ADMINISTRACION')")
-	@Transactional
+	@Transactional(readOnly = true)
 	public String adelantarReintento(Long comprobanteId) {
 		Comprobante c = comprobantes.findById(comprobanteId)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Comprobante no encontrado"));
@@ -86,8 +94,7 @@ public class ConsultaComprobantes {
 			throw new ReglaNegocioException("El comprobante " + c.numeroCompleto() + " ya tiene respuesta definitiva del OSE ("
 					+ c.getEstadoEnvio().etiqueta().toLowerCase(java.util.Locale.ROOT) + ").");
 		}
-		c.adelantarReintento(LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS));
-		return c.numeroCompleto();
+		return adelantos.adelantar(c.getColegioId(), c.getId());
 	}
 
 	private static BandejaComprobantes.Fila fila(Comprobante c, int plazo, String reemitido) {

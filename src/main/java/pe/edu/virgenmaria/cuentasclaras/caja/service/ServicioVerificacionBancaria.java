@@ -1,7 +1,5 @@
 package pe.edu.virgenmaria.cuentasclaras.caja.service;
 
-import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
-import pe.edu.virgenmaria.cuentasclaras.comun.fecha.DiasHabiles;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -13,27 +11,31 @@ import pe.edu.virgenmaria.cuentasclaras.caja.config.PropiedadesCaja;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.ReembolsoRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.VerificacionRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.VistaConciliacion;
-import pe.edu.virgenmaria.cuentasclaras.caja.repository.ReembolsoPasarelaRepository;
-import pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAnulacion;
-import pe.edu.virgenmaria.cuentasclaras.caja.model.ReembolsoPasarela;
-import pe.edu.virgenmaria.cuentasclaras.caja.model.OrigenPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.AnulacionPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.DepositoCaja;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.NumeroOperacion;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.OrigenPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.Pago;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.Reembolso;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.ReembolsoPasarela;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.ResultadoVerificacion;
+import pe.edu.virgenmaria.cuentasclaras.caja.model.TipoAnulacion;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.VerificacionBancaria;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.AnulacionPagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.DepositoCajaRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.PagoRepository;
+import pe.edu.virgenmaria.cuentasclaras.caja.repository.ReembolsoPasarelaRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.ReembolsoRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.VerificacionBancariaRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.DiasHabiles;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -88,10 +90,14 @@ public class ServicioVerificacionBancaria {
 
 	private final CalendarioHabil calendario;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ServicioVerificacionBancaria(PagoRepository pagos, DepositoCajaRepository depositos,
 			VerificacionBancariaRepository verificaciones, AnulacionPagoRepository anulaciones,
 			ReembolsoRepository reembolsos, ReembolsoPasarelaRepository reembolsosPasarela, ReembolsosEnLinea enLinea,
-			AuditoriaService auditoria, NombresUsuarios nombres, PropiedadesCaja propiedades, Clock reloj, CalendarioHabil calendario) {
+			AuditoriaService auditoria, NombresUsuarios nombres, PropiedadesCaja propiedades, Clock reloj, CalendarioHabil calendario, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.calendario = calendario;
 		this.pagos = pagos;
 		this.depositos = depositos;
@@ -169,6 +175,7 @@ public class ServicioVerificacionBancaria {
 						+ ": operación " + pago.getNumeroOperacion() + ", " + Dinero.formatear(pago.getTotal()) + ")", banco);
 			}
 		}
+		firmaSesion.firmar(ClaveFirma.verificacionPago(pago.getId(), verificaciones.countByPagoId(pago.getId()) + 1));
 		VerificacionBancaria v = verificaciones.save(VerificacionBancaria.dePago(pago, pedido.resultado(), pedido.nota(),
 				banco, SesionCaja.usuario()));
 		boolean encontrado = v.getResultado() == ResultadoVerificacion.ENCONTRADO;
@@ -202,6 +209,8 @@ public class ServicioVerificacionBancaria {
 						+ " por " + Dinero.formatear(deposito.getMonto()), banco);
 			}
 		}
+		firmaSesion.firmar(ClaveFirma.verificacionDeposito(deposito.getId(),
+				verificaciones.countByDepositoId(deposito.getId()) + 1));
 		VerificacionBancaria v = verificaciones.save(VerificacionBancaria.deDeposito(deposito, pedido.resultado(),
 				pedido.nota(), banco, SesionCaja.usuario()));
 		boolean encontrado = v.getResultado() == ResultadoVerificacion.ENCONTRADO;

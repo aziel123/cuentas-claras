@@ -189,9 +189,10 @@ fi
 # --- 3. Usuarios con claves de un solo uso, migración hasta la versión del manifiesto ------------------------------------
 clave_migrador=$(azar)
 clave_app=$(azar)
+clave_sistema=$(azar)
 clave_respaldo=$(azar)
 sed -e "s/__CLAVE_MIGRADOR__/$clave_migrador/" -e "s/__CLAVE_APP__/$clave_app/" -e "s/__CLAVE_RESPALDO__/$clave_respaldo/" \
-	"$scripts_mysql/01-usuarios.sql" | admin_sql
+	-e "s/__CLAVE_SISTEMA__/$clave_sistema/" "$scripts_mysql/01-usuarios.sql" | admin_sql
 admin_sql -e "SET PERSIST log_bin_trust_function_creators = 1" < /dev/null
 url="jdbc:mysql://$host:$puerto/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false"
 if DB_URL="$url" DB_MIGRADOR_USUARIO=cc_migrador DB_MIGRADOR_CLAVE="$clave_migrador" DB_MIGRAR_HASTA="$version" \
@@ -232,8 +233,22 @@ else
 	terminar
 fi
 
-# --- 6. Verificación de la copia (cadena, anclas, conteos y libros) -------------------------------------------------------
+# --- 5b. Sprint 7, tanda 2 (H7): huellas de los triggers y funciones leídas como ADMINISTRADOR directamente de
+#         information_schema (sin pasar por huellas_objetos(), que un DBA podría reemplazar). verificar-respaldo las compara
+#         con las del jar. Misma normalización que huellas_objetos() y HuellasObjetosBd.
+admin_sql > "$trabajo/huellas-admin.tsv" <<'SQL'
+SELECT t.TRIGGER_NAME, SHA2(CONCAT_WS('|', t.ACTION_TIMING, t.EVENT_MANIPULATION, t.EVENT_OBJECT_TABLE,
+    TRIM(REGEXP_REPLACE(REGEXP_REPLACE(t.ACTION_STATEMENT, CONCAT('-', '-[^\n]*'), ''), '[[:space:]]+', ' '))), 256)
+  FROM information_schema.TRIGGERS t WHERE t.TRIGGER_SCHEMA = 'cuentasclaras'
+UNION ALL
+SELECT r.ROUTINE_NAME, SHA2(CONCAT_WS('|', r.ROUTINE_TYPE,
+    TRIM(REGEXP_REPLACE(REGEXP_REPLACE(r.ROUTINE_DEFINITION, CONCAT('-', '-[^\n]*'), ''), '[[:space:]]+', ' '))), 256)
+  FROM information_schema.ROUTINES r WHERE r.ROUTINE_SCHEMA = 'cuentasclaras';
+SQL
+
+# --- 6. Verificación de la copia (cadena, anclas, conteos, libros y objetos de la base) ----------------------------------
 if DB_URL="$url" DB_USUARIO=cc_app DB_CLAVE="$clave_app" RESPALDO_MANIFIESTO="$manifiesto" \
+		RESPALDO_HUELLAS_ADMIN="$trabajo/huellas-admin.tsv" \
 		RESPALDO_MANIFIESTOS_ANTERIORES="$trabajo/anteriores" RESPALDO_INFORME="$trabajo/verificacion.json" \
 		java -jar "$jar" verificar-respaldo > "$trabajo/verificar.log" 2>&1; then
 	paso "verificar_respaldo" "OK" "$(grep -c '^.*OK ' "$trabajo/verificar.log" || true) comprobaciones pasaron$( [ -n "${AUDITORIA_CLAVE_HMAC:-}" ] && echo ', con el HMAC de toda la cadena')"
@@ -248,7 +263,9 @@ if [ "$arrancar" = "si" ]; then
 	# Clave HMAC DESECHABLE: el arranque solo comprueba permisos, triggers y readiness, y lo que selle va a una copia que
 	# se borra. Nunca la clave real (en prod no se acepta la de pruebas y la real no debe salir de su custodia).
 	clave_hmac="restauracion-$(azar)$(azar)"
+	# Sprint 7, tanda 2: con sus dos usuarios (cc_app y cc_sistema). La copia está en un MySQL desechable local: sin TLS.
 	SPRING_PROFILES_ACTIVE=prod DB_URL="$url" DB_USUARIO=cc_app DB_CLAVE="$clave_app" AUDITORIA_CLAVE_HMAC="$clave_hmac" \
+		DB_SISTEMA_USUARIO=cc_sistema DB_SISTEMA_CLAVE="$clave_sistema" CC_EXIGIR_TLS_BD=false \
 		MENSAJERIA_CORREO_PROVEEDOR=SMTP CORREO_REMITENTE="restauracion@cuentasclaras.invalid" SPRING_MAIL_HOST=127.0.0.1 \
 		CUENTASCLARAS_TAREAS_ACTIVAS=false java -jar "$jar" --server.port="$puerto_app" > "$trabajo/app.log" 2>&1 &
 	pid_app=$!

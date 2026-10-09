@@ -28,10 +28,11 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.dto.PropuestaVista;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.dto.VistaPreviaExtracto;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.formato.ErrorExtracto;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.formato.FilaExtracto;
-import pe.edu.virgenmaria.cuentasclaras.conciliacion.formato.LecturaExtracto;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.formato.LectoresExtracto;
+import pe.edu.virgenmaria.cuentasclaras.conciliacion.formato.LecturaExtracto;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.CuentaBancaria;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoExtracto;
+import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.EstadoPartida;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.ExtractoBancario;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.MovimientoBancario;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.PartidaConciliacion;
@@ -44,6 +45,8 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.PartidaConciliac
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ReglasEmparejamiento.MovimientoAbierto;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ReglasEmparejamiento.Propuesta;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -110,11 +113,15 @@ public class ServicioExtractos {
 
 	private final Clock reloj;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ServicioExtractos(LectoresExtracto lectores, RegistroArchivos archivos, CuentaBancariaRepository cuentas,
 			ExtractoBancarioRepository extractos, MovimientoBancarioRepository movimientos,
 			PartidaConciliacionRepository partidas, ObjetosConciliables objetos, Emparejador emparejador,
 			ControlParticipantes participantes, AuditoriaService auditoria, ApplicationEventPublisher eventos,
-			PropiedadesConciliacion propiedades, Clock reloj) {
+			PropiedadesConciliacion propiedades, Clock reloj, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.lectores = lectores;
 		this.archivos = archivos;
 		this.cuentas = cuentas;
@@ -320,6 +327,10 @@ public class ServicioExtractos {
 		LocalDateTime ahora = ahora();
 		if (!Dinero.iguales(escrito, extracto.getSaldoFinal())) {
 			boolean rechazado = extracto.intentoFallido(propiedades.intentosConfirmacion(), usuario, ahora);
+			if (rechazado) {
+				// Sprint 7, tanda 2: el rechazo por el último intento lleva la firma de quien lo escribió.
+				firmaSesion.firmar(ClaveFirma.extracto(extracto.getId(), EstadoExtracto.RECHAZADO));
+			}
 			extractos.saveAndFlush(extracto);
 			int quedan = extracto.intentosRestantes(propiedades.intentosConfirmacion());
 			auditoria.registrar(AccionAuditoria.EXTRACTO_SALDO_NO_COINCIDE, "extracto_bancario",
@@ -343,6 +354,7 @@ public class ServicioExtractos {
 		// El saldo a ciegas va primero (el trigger lo lee al confirmar).
 		extracto.escribirSaldoCiego(escrito);
 		extractos.saveAndFlush(extracto);
+		firmaSesion.firmar(ClaveFirma.extracto(extracto.getId(), EstadoExtracto.CONFIRMADO));
 		extracto.confirmar(usuario, extracto.getId(), ahora);
 		extractos.saveAndFlush(extracto);
 		int quedanPendientes = pendientes.size() - 1;
@@ -362,8 +374,10 @@ public class ServicioExtractos {
 		LocalDateTime ahora = ahora();
 		List<PartidaConciliacion> propuestas = partidas.propuestasDelExtracto(extracto.getId());
 		for (PartidaConciliacion p : propuestas) {
+			// Sprint 7, tanda 2: cada pareja que se descarta lleva la firma de quien descarta o rechaza el extracto.
+			firmaSesion.firmar(ClaveFirma.partida(p.getId(), EstadoPartida.DESCARTADA));
 			p.descartar(por, ahora);
-			partidas.save(p);
+			partidas.saveAndFlush(p);
 		}
 		return propuestas.size();
 	}

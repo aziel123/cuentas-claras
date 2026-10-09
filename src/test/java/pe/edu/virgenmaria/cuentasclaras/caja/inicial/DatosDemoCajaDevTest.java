@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.inicial.DatosDemoColegioDevDePrueba;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioAnulacionPagos;
@@ -16,8 +17,11 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.inicial.DatosDemoPensionesDevDe
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioDescuentos;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.LimpiezaBaseDatos;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PersonasDemoDePrueba;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PruebaIntegracion;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.PersonaDemo;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -56,6 +60,15 @@ class DatosDemoCajaDevTest {
 
 	@Autowired
 	private RelojAjustable reloj;
+
+	@Autowired
+	private PersonaDemo personaDemo;
+
+	@Autowired
+	private UsuarioRepository usuarios;
+
+	@Autowired
+	private PasswordEncoder codificador;
 
 	@Autowired
 	private JdbcTemplate jdbc;
@@ -114,7 +127,7 @@ class DatosDemoCajaDevTest {
 	@Test
 	void noRepiteNiCreaFueraDeH2EnMemoria() {
 		assertThat(demo(false).crearSiCorresponde()).isFalse();
-		assertThat(new DatosDemoCajaDev(descuentos, bandeja, cobro, anulaciones, cierres, reloj,
+		assertThat(new DatosDemoCajaDev(descuentos, bandeja, cobro, anulaciones, cierres, reloj, personaDemo,
 				"jdbc:mysql://localhost/cuentasclaras", true).crearSiCorresponde()).isFalse();
 		assertThat(demo(true).crearSiCorresponde()).isTrue();
 		assertThat(demo(true).crearSiCorresponde()).isFalse();
@@ -122,8 +135,11 @@ class DatosDemoCajaDevTest {
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM pago", Long.class)).isEqualTo(4);
 	}
 
+	/** Sprint 7, tanda 2: con las personas de la demo (actúan con su sesión de la base y firman sus aprobaciones). */
 	private DatosDemoCajaDev demo(boolean habilitado) {
-		return new DatosDemoCajaDev(descuentos, bandeja, cobro, anulaciones, cierres, reloj, "jdbc:h2:mem:demo",
-				habilitado);
+		PersonasDemoDePrueba.asegurar(usuarios, codificador, jdbc, "administracion", "promotor", "director", "caja",
+				"caja2");
+		return new DatosDemoCajaDev(descuentos, bandeja, cobro, anulaciones, cierres, reloj, personaDemo,
+				"jdbc:h2:mem:demo", habilitado);
 	}
 }

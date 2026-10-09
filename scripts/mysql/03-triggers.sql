@@ -8,6 +8,11 @@
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
 
+-- Sprint 7, tanda 2: el texto de los cuerpos se interpreta SIEMPRE como UTF-8, use el cliente el juego de caracteres que
+-- use (el mysql de un contenedor sin locale envía latin1 y las tildes de los mensajes quedaban dobles: la huella de cada
+-- trigger, que compara el verificador de prod con la de este archivo, no coincidiría).
+SET NAMES utf8mb4;
+
 DELIMITER $$
 
 -- Correcciones del sprint 5 (S5-A1 y S5-M5): forma canónica de un celular o un correo para COMPARAR contactos, igual que
@@ -39,6 +44,24 @@ BEGIN
     RETURN digitos;
 END$$
 
+-- Sprint 7, tanda 2 (sección 3.1): ¿la conexión es la de cc_sistema? SESSION_USER() dentro de un trigger o de una función
+-- DEFINER es el usuario de la CONEXIÓN, no el definidor (comprobado en MySQL 8.4.11). Solo cc_sistema firma como
+-- sistema.* y toca la identidad. El nombre del usuario es FIJO.
+DROP FUNCTION IF EXISTS cc_es_sistema$$
+CREATE FUNCTION cc_es_sistema() RETURNS BOOLEAN NOT DETERMINISTIC NO SQL
+    RETURN SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_sistema'$$
+
+-- Sprint 7, tanda 2 (sección 3.4): quien resuelve es sistema.* (y escribe cc_sistema) o una persona con SU firma de hace
+-- 5 minutos o menos (firma_operacion, que trg_firma_operacion_nace validó contra una sesión abierta de esa persona).
+DROP FUNCTION IF EXISTS cc_firma_valida$$
+CREATE FUNCTION cc_firma_valida(p_colegio BIGINT, p_clave VARCHAR(120), p_quien VARCHAR(60)) RETURNS BOOLEAN
+    NOT DETERMINISTIC READS SQL DATA
+    RETURN CASE WHEN p_quien LIKE 'sistema.%' THEN cc_es_sistema()
+        ELSE EXISTS (SELECT 1 FROM firma_operacion f JOIN usuario u ON u.id = f.usuario_id
+            WHERE f.colegio_id = p_colegio AND f.clave = p_clave AND u.colegio_id = p_colegio
+              AND u.nombre_usuario = p_quien
+              AND f.firmada_bd >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE) END$$
+
 -- Un plan nace en BORRADOR (nadie inserta un plan ya aprobado).
 DROP TRIGGER IF EXISTS trg_plan_pension_nace_borrador$$
 CREATE TRIGGER trg_plan_pension_nace_borrador BEFORE INSERT ON plan_pension FOR EACH ROW
@@ -52,6 +75,11 @@ END$$
 DROP TRIGGER IF EXISTS trg_plan_pension_inmutable$$
 CREATE TRIGGER trg_plan_pension_inmutable BEFORE UPDATE ON plan_pension FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: la aprobación lleva la firma de la sesión de quien aprueba.
+    IF NEW.estado = 'APROBADO' AND NOT (OLD.estado <=> 'APROBADO') AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('plan_pension:', NEW.id, ':APROBADO'), NEW.aprobado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
     IF OLD.estado <> 'BORRADOR' AND (NEW.monto_matricula <> OLD.monto_matricula
             OR NEW.monto_pension <> OLD.monto_pension
             OR NEW.vencimiento_matricula <> OLD.vencimiento_matricula
@@ -81,6 +109,16 @@ END$$
 DROP TRIGGER IF EXISTS trg_lote_saldo_inicial_cerrado$$
 CREATE TRIGGER trg_lote_saldo_inicial_cerrado BEFORE UPDATE ON lote_saldo_inicial FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: confirmar y devolver (una devolución por momento) llevan la firma de quien lo hace.
+    IF NEW.estado = 'CONFIRMADO' AND NOT (OLD.estado <=> 'CONFIRMADO') AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('lote_saldo_inicial:', NEW.id, ':CONFIRMADO'), NEW.confirmado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
+    IF NOT (NEW.devuelto_en <=> OLD.devuelto_en) AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('lote_saldo_inicial:', NEW.id, ':DEVUELTO:', DATE_FORMAT(NEW.devuelto_en, '%Y%m%d%H%i%s%f')),
+            NEW.devuelto_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
     IF OLD.estado IN ('CONFIRMADO', 'DESCARTADO') AND NEW.estado <> OLD.estado THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un lote confirmado o descartado no cambia';
     END IF;
@@ -245,6 +283,10 @@ END$$
 DROP TRIGGER IF EXISTS trg_pago_registro$$
 CREATE TRIGGER trg_pago_registro BEFORE INSERT ON pago FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2 (E1): con la clave de cc_app nadie registra un pago como sistema.*.
+    IF NEW.creado_por LIKE 'sistema.%' AND NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo cc_sistema firma como sistema';
+    END IF;
     IF NOT (NEW.estado <=> 'VIGENTE') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un pago nace VIGENTE';
     END IF;
@@ -364,6 +406,11 @@ END$$
 DROP TRIGGER IF EXISTS trg_descuento_resuelto$$
 CREATE TRIGGER trg_descuento_resuelto BEFORE UPDATE ON descuento FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: aprobar o rechazar lleva la firma de la sesión de quien resuelve.
+    IF OLD.estado = 'SOLICITADO' AND NOT (NEW.estado <=> 'SOLICITADO') AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('descuento:', NEW.id, ':', NEW.estado), NEW.resuelto_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
     IF OLD.estado <> 'SOLICITADO' AND (NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.resuelto_por <=> OLD.resuelto_por)
             OR NOT (NEW.resuelto_en <=> OLD.resuelto_en)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un descuento resuelto no cambia';
@@ -393,6 +440,11 @@ END$$
 DROP TRIGGER IF EXISTS trg_cierre_caja_revisado$$
 CREATE TRIGGER trg_cierre_caja_revisado BEFORE UPDATE ON cierre_caja FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: la revisión lleva la firma de la sesión de quien revisa.
+    IF OLD.estado = 'POR_REVISAR' AND NOT (NEW.estado <=> 'POR_REVISAR') AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('cierre_caja:', NEW.id, ':', NEW.estado), NEW.revisado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
     IF OLD.estado <> 'POR_REVISAR' AND (NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.revisado_por <=> OLD.revisado_por)
             OR NOT (NEW.revisado_en <=> OLD.revisado_en)
             OR NOT (NEW.comentario_revision <=> OLD.comentario_revision)) THEN
@@ -408,6 +460,19 @@ END$$
 DROP TRIGGER IF EXISTS trg_verificacion_bancaria_registro$$
 CREATE TRIGGER trg_verificacion_bancaria_registro BEFORE INSERT ON verificacion_bancaria FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: la AUTOMATICA la inserta solo cc_sistema; la MANUAL lleva la firma de la sesión de quien verifica
+    -- (clave: el pago o el depósito y el número de su verificación).
+    IF NEW.origen = 'AUTOMATICA' AND NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo cc_sistema firma como sistema';
+    END IF;
+    IF NOT (NEW.origen <=> 'AUTOMATICA') AND NOT cc_firma_valida(NEW.colegio_id,
+            CASE WHEN NEW.pago_id IS NOT NULL
+                THEN CONCAT('verificacion_bancaria:PAGO:', NEW.pago_id, ':', 1 + (SELECT COUNT(*)
+                    FROM verificacion_bancaria v WHERE v.pago_id = NEW.pago_id))
+                ELSE CONCAT('verificacion_bancaria:DEPOSITO:', NEW.deposito_id, ':', 1 + (SELECT COUNT(*)
+                    FROM verificacion_bancaria v WHERE v.deposito_id = NEW.deposito_id)) END, NEW.creado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
     IF NEW.pago_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pago p WHERE p.id = NEW.pago_id
             AND p.medio <> 'EFECTIVO' AND p.estado = 'VIGENTE' AND p.cajero <> NEW.creado_por
             AND p.creado_por <> NEW.creado_por) THEN
@@ -468,6 +533,12 @@ END$$
 DROP TRIGGER IF EXISTS trg_solicitud_cambio_resuelta$$
 CREATE TRIGGER trg_solicitud_cambio_resuelta BEFORE UPDATE ON solicitud_cambio FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2 (E2): aprobar o rechazar lleva la firma de la sesión de quien resuelve. Con la clave de cc_app no
+    -- se aprueba a nombre de otra persona.
+    IF OLD.estado = 'PENDIENTE' AND NOT (NEW.estado <=> 'PENDIENTE') AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('solicitud_cambio:', NEW.id, ':', NEW.estado), NEW.resuelto_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
     IF OLD.estado <> 'PENDIENTE' AND (NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.resuelto_por <=> OLD.resuelto_por)
             OR NOT (NEW.resuelto_en <=> OLD.resuelto_en) OR NOT (NEW.comentario <=> OLD.comentario)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una solicitud resuelta no cambia';
@@ -592,6 +663,12 @@ END$$
 DROP TRIGGER IF EXISTS trg_orden_pago_estado$$
 CREATE TRIGGER trg_orden_pago_estado BEFORE UPDATE ON orden_pago FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: la confirmación de la pasarela y los estados que decide el proceso (pagada, por revisar,
+    -- vencida, rechazada, aplicada) los escribe solo cc_sistema (sistema.pasarela).
+    IF ((OLD.cargo_id IS NULL AND NEW.cargo_id IS NOT NULL) OR (NOT (NEW.estado <=> OLD.estado)
+            AND NEW.estado IN ('PAGADA', 'POR_REVISAR', 'VENCIDA', 'RECHAZADA', 'APLICADA'))) AND NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la confirmacion de la orden la registra solo cc_sistema';
+    END IF;
     IF NOT (NEW.proveedor_orden_id <=> OLD.proveedor_orden_id) AND (OLD.proveedor_orden_id IS NOT NULL
             OR NOT (NEW.estado <=> 'CREADA') OR NOT (NEW.monto <=> (SELECT COALESCE(SUM(x.monto), 0.00)
                 FROM orden_pago_cuota x WHERE x.orden_pago_id = NEW.id))) THEN
@@ -649,6 +726,19 @@ END$$
 DROP TRIGGER IF EXISTS trg_lote_recaudacion_estado$$
 CREATE TRIGGER trg_lote_recaudacion_estado BEFORE UPDATE ON lote_recaudacion FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: confirmar a ciegas (o el rechazo por el último intento) lleva la firma de quien lo hizo; la
+    -- aplicación de sus líneas (APLICADO) la hace solo cc_sistema (sistema.recaudacion).
+    IF NEW.estado = 'CONFIRMADO' AND NOT (OLD.estado <=> 'CONFIRMADO') AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('lote_recaudacion:', NEW.id, ':CONFIRMADO'), NEW.confirmado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
+    IF NEW.estado = 'RECHAZADO' AND NOT (OLD.estado <=> 'RECHAZADO') AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('lote_recaudacion:', NEW.id, ':RECHAZADO'), NEW.rechazado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
+    IF NEW.estado = 'APLICADO' AND NOT (OLD.estado <=> 'APLICADO') AND NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo cc_sistema firma como sistema';
+    END IF;
     IF NOT (NEW.estado <=> OLD.estado) AND NOT ((OLD.estado = 'CARGADO'
             AND NEW.estado IN ('CONFIRMADO', 'RECHAZADO', 'DESCARTADO'))
             OR (OLD.estado = 'CONFIRMADO' AND NEW.estado = 'APLICADO')) THEN
@@ -686,6 +776,11 @@ END$$
 DROP TRIGGER IF EXISTS trg_linea_recaudacion_estado$$
 CREATE TRIGGER trg_linea_recaudacion_estado BEFORE UPDATE ON linea_recaudacion FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: aplicar una línea (o dejarla en excepción) lo hace solo cc_sistema (sistema.recaudacion).
+    IF NOT (NEW.estado <=> OLD.estado) AND NEW.estado IN ('APLICADA', 'APLICADA_REVISION', 'EXCEPCION')
+            AND NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo cc_sistema firma como sistema';
+    END IF;
     IF NOT (NEW.estado <=> OLD.estado) AND NOT ((OLD.estado = 'PENDIENTE' AND NEW.estado IN ('APLICADA', 'EXCEPCION'))
             OR (OLD.estado = 'EXCEPCION' AND NEW.estado IN ('APLICADA_REVISION', 'DEVUELTA'))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: cambio de estado de la línea no permitido';
@@ -738,6 +833,15 @@ END$$
 DROP TRIGGER IF EXISTS trg_extracto_bancario_estado$$
 CREATE TRIGGER trg_extracto_bancario_estado BEFORE UPDATE ON extracto_bancario FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: confirmar a ciegas (o el rechazo por el último intento) lleva la firma de quien lo hizo.
+    IF NEW.estado = 'CONFIRMADO' AND NOT (OLD.estado <=> 'CONFIRMADO') AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('extracto_bancario:', NEW.id, ':CONFIRMADO'), NEW.confirmado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
+    IF NEW.estado = 'RECHAZADO' AND NOT (OLD.estado <=> 'RECHAZADO') AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('extracto_bancario:', NEW.id, ':RECHAZADO'), NEW.rechazado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
     IF NOT (NEW.estado <=> OLD.estado) AND NOT (OLD.estado = 'CARGADO'
             AND NEW.estado IN ('CONFIRMADO', 'RECHAZADO', 'DESCARTADO')) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: cambio de estado del extracto no permitido';
@@ -786,6 +890,10 @@ BEGIN
     DECLARE tipo_mov VARCHAR(10) DEFAULT (SELECT m.tipo FROM movimiento_bancario m JOIN extracto_bancario e
         ON e.id = m.extracto_id WHERE m.id = NEW.movimiento_id AND e.estado IN ('CARGADO', 'CONFIRMADO')
         AND m.monto = NEW.monto_movimiento);
+    -- Sprint 7, tanda 2 (E1): con la clave de cc_app nadie propone una partida como sistema.*.
+    IF NEW.creado_por LIKE 'sistema.%' AND NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo cc_sistema firma como sistema';
+    END IF;
     IF NOT (NEW.estado <=> 'PROPUESTA') OR tipo_mov IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la partida nace PROPUESTA sobre un movimiento vigente';
     END IF;
@@ -826,6 +934,11 @@ END$$
 DROP TRIGGER IF EXISTS trg_partida_conciliacion_estado$$
 CREATE TRIGGER trg_partida_conciliacion_estado BEFORE UPDATE ON partida_conciliacion FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: la resuelve una persona con SU firma, o sistema.conciliacion con la conexión de cc_sistema.
+    IF OLD.estado = 'PROPUESTA' AND NOT (NEW.estado <=> 'PROPUESTA') AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('partida_conciliacion:', NEW.id, ':', NEW.estado), NEW.resuelto_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
     IF OLD.estado <> 'PROPUESTA' AND (NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.resuelto_por <=> OLD.resuelto_por)
             OR NOT (NEW.resuelto_en <=> OLD.resuelto_en) OR NOT (NEW.nota <=> OLD.nota)
             OR NOT (NEW.categoria <=> OLD.categoria) OR NOT (NEW.movimiento_vigente <=> OLD.movimiento_vigente)
@@ -896,6 +1009,10 @@ BEGIN
     -- imposible del verificador (destinatario 'X') llega aquí y no al CHECK, y prod no arranca con la versión anterior.
     IF NEW.tipo IN ('RESUMEN_DIARIO', 'ALERTA_PROMOTORIA') AND NOT (NEW.creado_por <=> 'sistema.panel') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el resumen y las alertas los envía sistema.panel';
+    END IF;
+    -- Sprint 7, tanda 2 (E1): un mensaje de un proceso (sistema.*) lo crea solo cc_sistema.
+    IF NEW.creado_por LIKE 'sistema.%' AND NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo cc_sistema firma como sistema';
     END IF;
     IF NEW.destinatario_tipo = 'APODERADO' AND NEW.tipo <> 'CONTACTO_CAMBIADO' AND NOT EXISTS (SELECT 1 FROM apoderado a
             WHERE a.id = NEW.apoderado_id AND a.colegio_id = NEW.colegio_id
@@ -975,9 +1092,12 @@ BEGIN
               AND c.valor = NEW.destino) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el correo externo del resumen lo configura el DBA para ese colegio';
     END IF;
+    -- Sprint 7, tanda 2 (H5, residual S6): la huella, con la fila de configuracion_colegio de ESTE colegio (ya no la de
+    -- configuracion_bd, que era de toda la base: el contador de un colegio recibía la huella de otro).
     IF NEW.destinatario_tipo = 'EXTERNO' AND NOT (NEW.tipo <=> 'RESUMEN_DIARIO') AND NOT EXISTS (SELECT 1
-            FROM configuracion_bd c WHERE c.clave = 'huella_correo_externo' AND c.valor = NEW.destino) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el correo externo lo configura el DBA';
+            FROM configuracion_colegio c WHERE c.colegio_id = NEW.colegio_id AND c.clave = 'huella_correo_externo'
+              AND c.valor = NEW.destino) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el correo externo de la huella lo configura el DBA para ese colegio';
     END IF;
     IF NEW.respaldo_de_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM mensaje o WHERE o.id = NEW.respaldo_de_id
             AND o.canal = 'WHATSAPP' AND o.estado = 'FALLIDO' AND o.tipo = NEW.tipo
@@ -1057,6 +1177,10 @@ END$$
 DROP TRIGGER IF EXISTS trg_huella_bitacora_registro$$
 CREATE TRIGGER trg_huella_bitacora_registro BEFORE INSERT ON huella_bitacora FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: la huella la guarda sistema.auditoria con la conexión de cc_sistema.
+    IF NEW.creado_por LIKE 'sistema.%' AND NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo cc_sistema firma como sistema';
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM evento_auditoria e WHERE e.secuencia = NEW.secuencia
             AND e.colegio_id = NEW.colegio_id AND LEFT(e.hash, 16) = NEW.codigo) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la huella no coincide con la bitácora';
@@ -1093,6 +1217,12 @@ END$$
 DROP TRIGGER IF EXISTS trg_renovacion_matricula_estado$$
 CREATE TRIGGER trg_renovacion_matricula_estado BEFORE UPDATE ON renovacion_matricula FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: la respuesta (crea deuda) lleva la firma de la sesión de quien responde (la familia en el portal o
+    -- el personal en persona).
+    IF OLD.respondido_por IS NULL AND NEW.respondido_por IS NOT NULL AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('renovacion_matricula:', NEW.id, ':', NEW.estado), NEW.respondido_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
     IF NOT (NEW.estado <=> OLD.estado) AND NOT (
             (OLD.estado = 'PROPUESTA' AND NEW.estado IN ('CONFIRMADA', 'NO_CONTINUA', 'VENCIDA'))
             OR (OLD.estado = 'CONFIRMADA' AND NEW.estado = 'MATRICULADA')) THEN
@@ -1167,6 +1297,10 @@ BEGIN
     IF OLD.estado = 'RESERVADA' AND NEW.estado = 'ACTIVA' AND NOT (NEW.activada_por <=> 'sistema.matricula') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la matrícula la activa el sistema';
     END IF;
+    -- Sprint 7, tanda 2: y con la conexión de cc_sistema (con cc_app nadie firma como sistema.matricula).
+    IF OLD.estado = 'RESERVADA' AND NEW.estado = 'ACTIVA' AND NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo cc_sistema firma como sistema';
+    END IF;
     IF OLD.estado = 'RESERVADA' AND NEW.estado = 'RETIRADA' AND EXISTS (SELECT 1 FROM cuota c
             WHERE c.matricula_id = NEW.id AND c.tipo = 'MATRICULA' AND c.estado IN ('PAGADA', 'PARCIAL')) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: primero se anula el pago de la matrícula';
@@ -1177,6 +1311,11 @@ END$$
 DROP TRIGGER IF EXISTS trg_aviso_familia_estado$$
 CREATE TRIGGER trg_aviso_familia_estado BEFORE UPDATE ON aviso_familia FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: atenderlo lleva la firma de la sesión de quien lo atiende.
+    IF OLD.estado = 'ABIERTO' AND NEW.estado = 'ATENDIDO' AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('aviso_familia:', NEW.id, ':ATENDIDO'), NEW.atendido_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
     IF OLD.estado = 'ATENDIDO' AND (NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.respuesta <=> OLD.respuesta)
             OR NOT (NEW.atendido_por <=> OLD.atendido_por) OR NOT (NEW.atendido_en <=> OLD.atendido_en)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un aviso atendido no cambia';
@@ -1227,6 +1366,11 @@ END$$
 DROP TRIGGER IF EXISTS trg_feriado_anulacion$$
 CREATE TRIGGER trg_feriado_anulacion BEFORE UPDATE ON feriado FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: la aprobación lleva la firma de la sesión de quien aprueba.
+    IF OLD.pendiente = TRUE AND NEW.pendiente = FALSE AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('feriado:', NEW.id, ':APROBADO'), NEW.aprobado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
     IF OLD.vigente IS NULL OR (NEW.vigente IS NULL AND NOT (OLD.fecha > DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un feriado se anula una vez y antes de su fecha';
     END IF;
@@ -1279,6 +1423,11 @@ END$$
 DROP TRIGGER IF EXISTS trg_cierre_mensual_banco_estado$$
 CREATE TRIGGER trg_cierre_mensual_banco_estado BEFORE UPDATE ON cierre_mensual_banco FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: cada intento a ciegas lleva la firma de la sesión de quien lo registra.
+    IF NOT (NEW.intentos <=> OLD.intentos) AND NOT cc_firma_valida(NEW.colegio_id,
+            CONCAT('cierre_mensual_banco:', NEW.id, ':', NEW.intentos), NEW.registrado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
     IF NOT (OLD.estado <=> 'ABIERTO') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un cierre mensual resuelto no cambia';
     END IF;
@@ -1332,6 +1481,10 @@ END$$
 DROP TRIGGER IF EXISTS trg_huella_hora_registro$$
 CREATE TRIGGER trg_huella_hora_registro BEFORE INSERT ON huella_hora FOR EACH ROW
 BEGIN
+    -- Sprint 7, tanda 2: la huella la guarda sistema.auditoria con la conexión de cc_sistema.
+    IF NEW.creado_por LIKE 'sistema.%' AND NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo cc_sistema firma como sistema';
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM evento_auditoria e WHERE e.secuencia = NEW.secuencia
             AND e.colegio_id = NEW.colegio_id AND LEFT(e.hash, 16) = NEW.codigo) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la huella de la hora no coincide con la bitácora';
@@ -1376,7 +1529,8 @@ BEGIN
     DECLARE v_avisos INT;
     DECLARE v_texto TEXT DEFAULT COALESCE(NEW.parametros, '');
     DECLARE v_cajas TEXT;
-    IF NOT (NEW.creado_por <=> 'sistema.panel') THEN
+    -- Sprint 7, tanda 2 (residual «foto plantada hoy»): además, con la conexión de cc_sistema.
+    IF NOT (NEW.creado_por <=> 'sistema.panel') OR NOT cc_es_sistema() THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el resumen diario lo genera sistema.panel';
     END IF;
     IF NOT (NEW.fecha <=> DATE(v_ahora)) THEN
@@ -1493,6 +1647,7 @@ DELIMITER $$
 DROP TRIGGER IF EXISTS trg_llamada_control_registro$$
 CREATE TRIGGER trg_llamada_control_registro BEFORE INSERT ON llamada_control FOR EACH ROW
 BEGIN
+    DECLARE v_ahora DATETIME(6) DEFAULT UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
     DECLARE v_hoy DATE DEFAULT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR);
     DECLARE v_promotoria BOOLEAN;
     DECLARE v_direccion BOOLEAN;
@@ -1521,11 +1676,21 @@ BEGIN
             AND m.reemplaza_familia_id = NEW.familia_id) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la llamada es a una familia de la muestra de la semana';
     END IF;
+    -- Sprint 7, tanda 2 (residual S6): «una hora después» con la hora de la BASE. El primer intento guarda la hora en que
+    -- se registró (registrada_bd, la pone este trigger: la aplicación no la escribe); el segundo exige un «No contesta» de
+    -- hace una hora o más (con creado_en si el primero es anterior a V25).
     IF NOT (NEW.intento <=> 1) AND NOT (NEW.intento <=> 2 AND EXISTS (SELECT 1 FROM llamada_control l
             WHERE l.colegio_id = NEW.colegio_id AND l.semana = NEW.semana AND l.familia_id = NEW.familia_id
-              AND l.intento = 1 AND l.resultado = 'NO_CONTESTA')) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el segundo intento es solo tras un No contesta';
+              AND l.intento = 1 AND l.resultado = 'NO_CONTESTA'
+              AND COALESCE(l.registrada_bd, l.creado_en) <= v_ahora - INTERVAL 1 HOUR)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el segundo intento es solo tras un No contesta de hace una hora';
     END IF;
+    -- Sprint 7, tanda 2: la llamada lleva la firma de la sesión de quien la registra.
+    IF NOT cc_firma_valida(NEW.colegio_id, CONCAT('llamada_control:', NEW.semana, ':', NEW.familia_id, ':', NEW.intento),
+            NEW.creado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
+    SET NEW.registrada_bd = v_ahora;
 END$$
 
 DELIMITER ;
@@ -1551,10 +1716,10 @@ BEGIN
     SET v_deuda = EXISTS (SELECT 1 FROM cuota c JOIN alumno a ON a.id = c.alumno_id
         WHERE c.colegio_id = NEW.colegio_id AND a.familia_id = NEW.familia_id AND c.estado IN ('PENDIENTE', 'PARCIAL')
           AND c.fecha_vencimiento < NEW.semana AND (a.retirado_en IS NULL OR c.fecha_vencimiento <= a.retirado_en));
-    IF NOT (NEW.creado_por <=> 'sistema.panel') AND NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r
-            ON r.usuario_id = u.id WHERE u.nombre_usuario = NEW.creado_por AND u.colegio_id = NEW.colegio_id AND u.activo
-            AND u.apoderado_id IS NULL AND r.rol IN ('PROMOTOR', 'DIRECTOR')) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la muestra la fija Promotoria, Direccion o sistema.panel';
+    -- Sprint 7, tanda 2 (residual S6, E10): la muestra la fija SOLO sistema.panel con la conexión de cc_sistema (el lunes a
+    -- las 00:10, o en la primera consulta de la semana si esa tarea no corrió). Promotoría ya no la fija a mano.
+    IF NOT (NEW.creado_por <=> 'sistema.panel') OR NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la muestra la fija sistema.panel';
     END IF;
     IF NEW.semana IS NULL OR NOT (NEW.semana <=> v_hoy - INTERVAL WEEKDAY(v_hoy) DAY) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la muestra es de la semana en curso (su lunes)';
@@ -1587,6 +1752,10 @@ BEGIN
     END IF;
     IF NEW.semana IS NULL OR NOT (NEW.semana <=> v_hoy - INTERVAL WEEKDAY(v_hoy) DAY) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la delegacion es de la semana en curso (su lunes)';
+    END IF;
+    -- Sprint 7, tanda 2: la delegación lleva la firma de la sesión de quien delega.
+    IF NOT cc_firma_valida(NEW.colegio_id, CONCAT('delegacion_llamada:', NEW.semana), NEW.creado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
     END IF;
 END$$
 
@@ -1628,6 +1797,188 @@ BEGIN
               AND NOT EXISTS (SELECT 1 FROM evento_auditoria e
                   WHERE e.secuencia = r.secuencia_despues AND e.hash = r.hash_despues)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el ancla del respaldo anterior ya no esta: el registro debe decir FALTAN_FILAS';
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- ===================== Sprint 7 · tanda 2 (V25): identidad, sesiones, firmas y muestreo =====================
+-- (Las funciones cc_es_sistema y cc_firma_valida están al principio de este archivo. Las versiones nuevas de los
+-- triggers con firma o con cc_es_sistema() quedaron en su lugar, marcadas con «Sprint 7, tanda 2».) Los comentarios dentro
+-- de los cuerpos no cuentan para la huella (VerificadorPermisosBaseDatos los quita); ningún literal contiene dos guiones.
+DELIMITER $$
+
+-- La firma: el secreto es el de una sesión ABIERTA y vigente de ESA persona (activa) en ESE colegio. El secreto nunca
+-- queda guardado (el trigger lo deja en NULL) y la hora es la de la base.
+DROP TRIGGER IF EXISTS trg_firma_operacion_nace$$
+CREATE TRIGGER trg_firma_operacion_nace BEFORE INSERT ON firma_operacion FOR EACH ROW
+BEGIN
+    IF NEW.token IS NULL OR NOT EXISTS (SELECT 1 FROM sesion_usuario s JOIN usuario u ON u.id = s.usuario_id
+            WHERE s.id = NEW.sesion_id AND s.colegio_id = NEW.colegio_id AND s.usuario_id = NEW.usuario_id
+              AND u.colegio_id = NEW.colegio_id AND s.hash_token = SHA2(NEW.token, 256) AND s.cerrada_en IS NULL
+              AND s.vence_en > UTC_TIMESTAMP(6) - INTERVAL 5 HOUR AND u.activo) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la firma no es de una sesion abierta de esa persona';
+    END IF;
+    SET NEW.token = NULL;
+    SET NEW.firmada_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+END$$
+
+-- La sesión la abre solo cc_sistema (al ingresar): nace abierta, ahora (5 minutos de margen con la hora de la base), con
+-- 12 horas como máximo y de una cuenta activa de ese colegio.
+DROP TRIGGER IF EXISTS trg_sesion_usuario_nace$$
+CREATE TRIGGER trg_sesion_usuario_nace BEFORE INSERT ON sesion_usuario FOR EACH ROW
+BEGIN
+    IF NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las sesiones las abre solo cc_sistema';
+    END IF;
+    IF NEW.cerrada_en IS NOT NULL OR NEW.motivo_cierre IS NOT NULL OR NEW.abierta_en IS NULL
+            OR NEW.vence_en > NEW.abierta_en + INTERVAL 12 HOUR
+            OR ABS(TIMESTAMPDIFF(SECOND, NEW.abierta_en, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR)) > 300
+            OR NOT EXISTS (SELECT 1 FROM usuario u WHERE u.id = NEW.usuario_id AND u.colegio_id = NEW.colegio_id
+                AND u.activo) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la sesion nace abierta, ahora y de una cuenta activa';
+    END IF;
+END$$
+
+-- Una sesión se cierra una sola vez y solo la cierra cc_sistema (salir, expirar, otro ingreso, cuenta cambiada, arranque).
+DROP TRIGGER IF EXISTS trg_sesion_usuario_cierre$$
+CREATE TRIGGER trg_sesion_usuario_cierre BEFORE UPDATE ON sesion_usuario FOR EACH ROW
+BEGIN
+    IF NOT cc_es_sistema() OR OLD.cerrada_en IS NOT NULL OR NEW.cerrada_en IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una sesion se cierra una sola vez, por cc_sistema';
+    END IF;
+END$$
+
+-- E1: un evento de un actor de sistema lo inserta solo cc_sistema (con cc_app no se firma como sistema).
+DROP TRIGGER IF EXISTS trg_evento_auditoria_actor$$
+CREATE TRIGGER trg_evento_auditoria_actor BEFORE INSERT ON evento_auditoria FOR EACH ROW
+BEGIN
+    IF NEW.nombre_usuario LIKE 'sistema.%' AND NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo cc_sistema registra eventos de sistema';
+    END IF;
+END$$
+
+-- H4 (E11): la semilla del muestreo la crea solo sistema.muestreo con cc_sistema, para HOY (CAJA) o para el lunes de esta
+-- semana (LLAMADA_CONTROL), en hora de Lima: no se plantan semillas futuras. La semilla efectiva además se deriva con la
+-- clave HMAC del servidor (comun.cripto.DerivadorSecreto): leer la guardada no reproduce la muestra.
+DROP TRIGGER IF EXISTS trg_semilla_muestreo_registro$$
+CREATE TRIGGER trg_semilla_muestreo_registro BEFORE INSERT ON semilla_muestreo FOR EACH ROW
+BEGIN
+    DECLARE v_hoy DATE DEFAULT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR);
+    IF NOT cc_es_sistema() OR NOT (NEW.creado_por <=> 'sistema.muestreo')
+            OR NOT ((NEW.ambito <=> 'CAJA' AND NEW.fecha <=> v_hoy)
+                OR (NEW.ambito <=> 'LLAMADA_CONTROL' AND NEW.fecha <=> v_hoy - INTERVAL WEEKDAY(v_hoy) DAY)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la semilla la crea sistema.muestreo y es de hoy';
+    END IF;
+END$$
+
+-- H1 (E4): una cuenta la crea solo cc_sistema: activa, sin intentos ni bloqueo, sin solicitud de roles ni de contacto, y
+-- con la clave por cambiar (la del apoderado, con su enlace).
+DROP TRIGGER IF EXISTS trg_usuario_nace$$
+CREATE TRIGGER trg_usuario_nace BEFORE INSERT ON usuario FOR EACH ROW
+BEGIN
+    IF NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las cuentas las crea solo cc_sistema';
+    END IF;
+    IF NOT (NEW.activo <=> TRUE) OR NOT (NEW.intentos_fallidos <=> 0) OR NEW.bloqueado_hasta IS NOT NULL
+            OR NEW.roles_solicitud_id IS NOT NULL OR NEW.contacto_solicitud_id IS NOT NULL
+            OR (NEW.apoderado_id IS NULL AND NOT (NEW.debe_cambiar_clave <=> TRUE)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una cuenta nace activa, sin bloqueo y con la clave por cambiar';
+    END IF;
+END$$
+
+-- H1 (E4 y E6): credenciales, estado y roles: solo cc_sistema. El nombre y el colegio no cambian. El colegio no se queda
+-- sin Promotoría activa. roles_solicitud_id solo avanza a una CAMBIO_ROLES más nueva, aprobada y de esta cuenta.
+DROP TRIGGER IF EXISTS trg_usuario_identidad$$
+CREATE TRIGGER trg_usuario_identidad BEFORE UPDATE ON usuario FOR EACH ROW FOLLOWS trg_usuario_contacto
+BEGIN
+    IF NOT (NEW.nombre_usuario <=> OLD.nombre_usuario) OR NOT (NEW.colegio_id <=> OLD.colegio_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el nombre de usuario y el colegio no cambian';
+    END IF;
+    IF NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las cuentas las cambia solo cc_sistema';
+    END IF;
+    IF OLD.activo AND NOT (NEW.activo <=> TRUE)
+            AND EXISTS (SELECT 1 FROM usuario_rol r WHERE r.usuario_id = OLD.id AND r.rol = 'PROMOTOR')
+            AND NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE u.colegio_id = OLD.colegio_id AND u.id <> OLD.id AND u.activo AND r.rol = 'PROMOTOR') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio no se queda sin Promotoria activa';
+    END IF;
+    IF NOT (NEW.roles_solicitud_id <=> OLD.roles_solicitud_id) AND (NEW.roles_solicitud_id IS NULL
+            OR NEW.roles_solicitud_id <= COALESCE(OLD.roles_solicitud_id, 0)
+            OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.roles_solicitud_id
+                AND s.colegio_id = NEW.colegio_id AND s.tipo = 'CAMBIO_ROLES' AND s.entidad = 'usuario'
+                AND s.entidad_id = NEW.id AND s.estado = 'APROBADA')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los roles cambian con su solicitud aprobada';
+    END IF;
+END$$
+
+-- Residual del sprint 6 (E6): cc_app daba o quitaba PROMOTOR. Ahora los roles los escribe solo cc_sistema; APODERADO solo
+-- en cuentas de apoderado y los del personal solo en cuentas del personal; sin combinaciones prohibidas (quien cobra no
+-- aprueba); PROMOTOR y DIRECTOR solo con SU CAMBIO_ROLES aprobada y firmada por quien la aprobó (datos.roles, separados
+-- por comas, es el conjunto final). Excepciones de arranque (sin otra persona que pueda aprobar): el primer PROMOTOR de
+-- un colegio sin Promotoría activa y el primer DIRECTOR de un colegio sin Dirección activa y con una sola Promotoría.
+DROP TRIGGER IF EXISTS trg_usuario_rol_alta$$
+CREATE TRIGGER trg_usuario_rol_alta BEFORE INSERT ON usuario_rol FOR EACH ROW
+BEGIN
+    DECLARE v_colegio BIGINT;
+    DECLARE v_apoderado BIGINT;
+    DECLARE v_solicitud BIGINT;
+    IF NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los roles los cambia solo cc_sistema';
+    END IF;
+    SELECT u.colegio_id, u.apoderado_id, u.roles_solicitud_id INTO v_colegio, v_apoderado, v_solicitud
+      FROM usuario u WHERE u.id = NEW.usuario_id;
+    IF v_colegio IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la cuenta del rol no existe';
+    END IF;
+    IF NOT ((NEW.rol <=> 'APODERADO') <=> (v_apoderado IS NOT NULL)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: APODERADO solo en cuentas de apoderado';
+    END IF;
+    IF EXISTS (SELECT 1 FROM usuario_rol r WHERE r.usuario_id = NEW.usuario_id AND (
+            (NEW.rol = 'CAJA' AND r.rol IN ('PROMOTOR', 'DIRECTOR', 'ADMINISTRACION'))
+            OR (r.rol = 'CAJA' AND NEW.rol IN ('PROMOTOR', 'DIRECTOR', 'ADMINISTRACION'))
+            OR (NEW.rol = 'DIRECTOR' AND r.rol = 'ADMINISTRACION')
+            OR (NEW.rol = 'ADMINISTRACION' AND r.rol = 'DIRECTOR'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: combinacion de roles prohibida (quien cobra no aprueba)';
+    END IF;
+    IF NEW.rol IN ('PROMOTOR', 'DIRECTOR')
+            AND NOT (NEW.rol = 'PROMOTOR' AND NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r
+                ON r.usuario_id = u.id WHERE u.colegio_id = v_colegio AND u.activo AND r.rol = 'PROMOTOR'))
+            AND NOT (NEW.rol = 'DIRECTOR' AND NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r
+                ON r.usuario_id = u.id WHERE u.colegio_id = v_colegio AND u.activo AND r.rol = 'DIRECTOR')
+                AND (SELECT COUNT(*) FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                    WHERE u.colegio_id = v_colegio AND u.activo AND r.rol = 'PROMOTOR') <= 1)
+            AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = v_solicitud AND s.colegio_id = v_colegio
+                AND s.tipo = 'CAMBIO_ROLES' AND s.entidad = 'usuario' AND s.entidad_id = NEW.usuario_id
+                AND s.estado = 'APROBADA'
+                AND FIND_IN_SET(NEW.rol, JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.roles'))) > 0
+                AND cc_firma_valida(v_colegio, CONCAT('solicitud_cambio:', s.id, ':APROBADA'), s.resuelto_por)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: Promotoria y Direccion se dan con una solicitud aprobada';
+    END IF;
+END$$
+
+-- E6: quitar PROMOTOR o DIRECTOR exige SU CAMBIO_ROLES aprobada y firmada que ya no lo incluye; el colegio nunca se queda
+-- sin Promotoría activa. Los demás roles (ADMINISTRACION, CAJA, DOCENTE) los sigue cambiando Promotoría (decisión 84).
+DROP TRIGGER IF EXISTS trg_usuario_rol_baja$$
+CREATE TRIGGER trg_usuario_rol_baja BEFORE DELETE ON usuario_rol FOR EACH ROW
+BEGIN
+    DECLARE v_colegio BIGINT;
+    DECLARE v_solicitud BIGINT;
+    IF NOT cc_es_sistema() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los roles los cambia solo cc_sistema';
+    END IF;
+    SELECT u.colegio_id, u.roles_solicitud_id INTO v_colegio, v_solicitud FROM usuario u WHERE u.id = OLD.usuario_id;
+    IF OLD.rol IN ('PROMOTOR', 'DIRECTOR') AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s
+            WHERE s.id = v_solicitud AND s.colegio_id = v_colegio AND s.tipo = 'CAMBIO_ROLES' AND s.entidad = 'usuario'
+              AND s.entidad_id = OLD.usuario_id AND s.estado = 'APROBADA'
+              AND FIND_IN_SET(OLD.rol, JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.roles'))) = 0
+              AND cc_firma_valida(v_colegio, CONCAT('solicitud_cambio:', s.id, ':APROBADA'), s.resuelto_por)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: Promotoria y Direccion se quitan con una solicitud aprobada';
+    END IF;
+    IF OLD.rol = 'PROMOTOR' AND NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+            WHERE u.colegio_id = v_colegio AND u.id <> OLD.usuario_id AND u.activo AND r.rol = 'PROMOTOR') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio no se queda sin Promotoria activa';
     END IF;
 END$$
 

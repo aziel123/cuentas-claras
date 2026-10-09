@@ -58,6 +58,7 @@ class VerificadorConfiguracionTest {
 	private static java.util.Map<String, String> sinCorreo(String... pares) {
 		java.util.Map<String, String> mapa = new java.util.HashMap<>();
 		mapa.put(VerificadorConfiguracion.CLAVE_HMAC, CLAVE_REAL);
+		mapa.putAll(DOS_USUARIOS);
 		for (int i = 0; i < pares.length; i += 2) {
 			mapa.put(pares[i], pares[i + 1]);
 		}
@@ -169,15 +170,39 @@ class VerificadorConfiguracionTest {
 				VerificadorConfiguracion.WHATSAPP_VERIFICACION, "verifica");
 	}
 
+	/** Sprint 7, tanda 2: prod y piloto usan dos usuarios de base (cc_app y cc_sistema). */
+	private static final java.util.Map<String, String> DOS_USUARIOS = java.util.Map.of(VerificadorConfiguracion.DB_USUARIO,
+			"cc_app", VerificadorConfiguracion.DB_SISTEMA_USUARIO, "cc_sistema");
+
 	private static java.util.Map<String, String> config(String... pares) {
 		java.util.Map<String, String> mapa = new java.util.HashMap<>();
 		mapa.put(VerificadorConfiguracion.CLAVE_HMAC, CLAVE_REAL);
+		mapa.putAll(DOS_USUARIOS);
 		// Sprint 5: prod no arranca sin un canal real para avisar a las familias (decisión 40).
 		mapa.putAll(CORREO_REAL);
 		for (int i = 0; i < pares.length; i += 2) {
 			mapa.put(pares[i], pares[i + 1]);
 		}
 		return mapa;
+	}
+
+	/**
+	 * Sprint 7, tanda 2 (sección 3.2): en prod y piloto, sin el usuario de los procesos y la identidad (cc_sistema) o con el
+	 * mismo usuario para las personas y para el sistema, no arranca. En dev y test (H2) no hace falta.
+	 */
+	@Test
+	void enProdYPilotoExigeDosUsuariosDeBaseDistintos() {
+		for (String perfil : new String[] { "prod", "piloto" }) {
+			java.util.Map<String, String> sinSistema = new java.util.HashMap<>(config(VerificadorConfiguracion.ENTORNO, "PILOTO"));
+			sinSistema.remove(VerificadorConfiguracion.DB_SISTEMA_USUARIO);
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { perfil }, sinSistema)).as(perfil)
+					.isInstanceOf(IllegalStateException.class).hasMessageContaining("DB_SISTEMA_USUARIO");
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { perfil },
+					config(VerificadorConfiguracion.ENTORNO, "PILOTO", VerificadorConfiguracion.DB_SISTEMA_USUARIO, "CC_APP")))
+					.as(perfil).isInstanceOf(IllegalStateException.class).hasMessageContaining("no pueden ser el mismo usuario");
+		}
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "test", "mysql" }, CLAVE_DEV))
+				.doesNotThrowAnyException();
 	}
 
 	@Test

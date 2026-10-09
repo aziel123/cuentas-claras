@@ -3,10 +3,11 @@ package pe.edu.virgenmaria.cuentasclaras.operacion.respaldo;
 import ch.qos.logback.classic.Level;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import pe.edu.virgenmaria.cuentasclaras.auditoria.service.CamposSellados;
-import pe.edu.virgenmaria.cuentasclaras.auditoria.service.SelladorAuditoria;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import pe.edu.virgenmaria.cuentasclaras.auditoria.service.CamposSellados;
+import pe.edu.virgenmaria.cuentasclaras.auditoria.service.HuellasObjetosBd;
+import pe.edu.virgenmaria.cuentasclaras.auditoria.service.SelladorAuditoria;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -105,6 +106,10 @@ public final class VerificadorRespaldo {
 			return 2;
 		}
 		VerificadorRespaldo verificador = new VerificadorRespaldo();
+		String huellasAdmin = entorno.get("RESPALDO_HUELLAS_ADMIN");
+		if (huellasAdmin != null && !huellasAdmin.isBlank()) {
+			verificador.verificarObjetos(Path.of(huellasAdmin));
+		}
 		try (Connection conexion = DriverManager.getConnection(entorno.get("DB_URL"), entorno.get("DB_USUARIO"),
 				entorno.get("DB_CLAVE"))) {
 			conexion.setReadOnly(true);
@@ -299,6 +304,38 @@ public final class VerificadorRespaldo {
 		registrar("conteos", faltan.isEmpty(), faltan.isEmpty()
 				? "Las " + conteos.size() + " tablas de solo inserción tienen todas las filas del manifiesto."
 				: "Faltan filas que el manifiesto contó: " + String.join(", ", faltan) + ".");
+	}
+
+	/**
+	 * Sprint 7, tanda 2 (H7, residual de {@code huellas_objetos()}): las huellas de los triggers y funciones leídas como
+	 * ADMINISTRADOR directamente de {@code information_schema} (sin pasar por la función, que un DBA podría reemplazar) son
+	 * las del jar. El archivo tiene una línea {@code nombre<TAB>huella} por objeto (restaurar-y-verificar.sh).
+	 */
+	void verificarObjetos(Path archivo) {
+		Map<String, String> instaladas = new LinkedHashMap<>();
+		try {
+			for (String linea : Files.readAllLines(archivo, StandardCharsets.UTF_8)) {
+				String[] partes = linea.strip().split("\\s+");
+				if (partes.length == 2) {
+					instaladas.put(partes[0].toLowerCase(java.util.Locale.ROOT), partes[1]);
+				}
+			}
+		}
+		catch (IOException e) {
+			registrar("objetos_bd", false, "No se pudo leer el archivo de huellas leído como administrador.");
+			return;
+		}
+		Map<String, String> esperadas = HuellasObjetosBd.esperadas();
+		List<String> distintos = new ArrayList<>();
+		esperadas.forEach((nombre, huella) -> {
+			if (!huella.equals(instaladas.get(nombre))) {
+				distintos.add(nombre);
+			}
+		});
+		instaladas.keySet().stream().filter(n -> !esperadas.containsKey(n)).forEach(distintos::add);
+		registrar("objetos_bd", distintos.isEmpty(), distintos.isEmpty()
+				? "Los " + esperadas.size() + " triggers y funciones (leídos como administrador) son los de esta versión."
+				: "Triggers o funciones que faltan, sobran o cambiaron: " + String.join(", ", distintos) + ".");
 	}
 
 	private void verificarHuellas(Connection conexion) throws SQLException {

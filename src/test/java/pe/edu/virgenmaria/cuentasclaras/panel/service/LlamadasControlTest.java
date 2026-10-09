@@ -168,8 +168,12 @@ class LlamadasControlTest {
 				.containsExactlyInAnyOrder(datos.f().quispe(), datos.f().flores());
 		assertThat(semana.esperadas()).isEqualTo(2);
 		assertThat(semana.faltan()).isEqualTo(2);
+		// Sprint 7, tanda 2 (H8): la semilla la planta sistema.muestreo y la muestra la fija sistema.panel (cc_sistema),
+		// aunque la primera en mirar sea Promotoría: quien mira no elige.
 		assertThat(jdbc.queryForMap("SELECT fecha, creado_por FROM semilla_muestreo WHERE ambito = 'LLAMADA_CONTROL'"))
-				.containsEntry("fecha", java.sql.Date.valueOf(LUNES));
+				.containsEntry("fecha", java.sql.Date.valueOf(LUNES)).containsEntry("creado_por", "sistema.muestreo");
+		assertThat(jdbc.queryForList("SELECT DISTINCT creado_por FROM muestra_llamada", String.class))
+				.containsExactly("sistema.panel");
 		LlamadasSemana.Familia quispe = semana.familias().stream()
 				.filter(f -> f.familiaId().equals(datos.f().quispe())).findFirst().orElseThrow();
 		// El celular REGISTRADO de la responsable, y sus pagos de esas semanas (también el anulado y el de Yape) para

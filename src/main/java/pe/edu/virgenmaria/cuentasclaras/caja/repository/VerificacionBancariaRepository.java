@@ -16,6 +16,12 @@ public interface VerificacionBancariaRepository extends Repository<VerificacionB
 
 	boolean existsByDepositoId(Long depositoId);
 
+	/** Sprint 7, tanda 2: cuántas verificaciones tiene el pago (la clave de la firma de la siguiente). */
+	long countByPagoId(Long pagoId);
+
+	/** Sprint 7, tanda 2: cuántas verificaciones tiene el depósito (la clave de la firma de la siguiente). */
+	long countByDepositoId(Long depositoId);
+
 	List<VerificacionBancaria> findByPagoIdIn(Collection<Long> pagos);
 
 	List<VerificacionBancaria> findByDepositoIdIn(Collection<Long> depositos);

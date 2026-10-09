@@ -48,7 +48,7 @@ class InmutabilidadMatriculaTest {
 	void nadaSeBorraYLaMatriculaMantieneSuGrantPorTabla() throws IOException {
 		assertThat(permisos())
 				.doesNotContainPattern("GRANT [^;]*DELETE[^;]*ON cuentasclaras\\.(renovacion_matricula|aviso_familia|matricula)")
-				.contains("GRANT INSERT, UPDATE ON cuentasclaras.matricula TO 'cc_app'@'%';");
+				.contains("GRANT INSERT, UPDATE ON cuentasclaras.matricula TO 'cc_negocio';");
 		// El alumno y el año de la matrícula no se cambian desde la entidad (y en MySQL, trg_matricula_estado).
 		assertThat(ColumnasActualizables.de(Matricula.class)).doesNotContain("alumno_id", "anio_escolar_id");
 	}

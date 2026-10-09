@@ -68,7 +68,7 @@ class InmutabilidadPanelTest {
 	@Test
 	void enMySqlCcAppSoloInsertaFotos() throws IOException {
 		String script = Files.readString(Path.of("scripts/mysql/02-permisos-tablas.sql"));
-		assertThat(script).contains("GRANT INSERT ON cuentasclaras.resumen_diario TO 'cc_app'@'%';")
+		assertThat(script).contains("GRANT INSERT ON cuentasclaras.resumen_diario TO 'cc_sistema'@'%';")
 				.doesNotContainPattern("(?m)^GRANT[^;]*(UPDATE|DELETE)[^;]*ON cuentasclaras\\.resumen_diario ");
 	}
 
@@ -102,7 +102,7 @@ class InmutabilidadPanelTest {
 	@Test
 	void enMySqlCcAppSoloInsertaLlamadas() throws IOException {
 		String script = Files.readString(Path.of("scripts/mysql/02-permisos-tablas.sql"));
-		assertThat(script).contains("GRANT INSERT ON cuentasclaras.llamada_control TO 'cc_app'@'%';")
+		assertThat(script).contains("GRANT INSERT ON cuentasclaras.llamada_control TO 'cc_negocio';")
 				.doesNotContainPattern("(?m)^GRANT[^;]*(UPDATE|DELETE)[^;]*ON cuentasclaras\\.llamada_control ");
 	}
 }

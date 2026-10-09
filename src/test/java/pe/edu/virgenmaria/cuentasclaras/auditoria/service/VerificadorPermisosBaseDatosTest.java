@@ -9,10 +9,11 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PruebaJpa;
 
-import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import javax.sql.DataSource;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,7 +48,7 @@ class VerificadorPermisosBaseDatosTest {
 
 	@Test
 	void arrancaSiMysqlDeniegaComoDebe() {
-		assertThatCode(() -> new VerificadorPermisosBaseDatos(mysqlQueDeniega(), fuenteDatos).afterPropertiesSet())
+		assertThatCode(() -> completo(mysqlQueDeniega()).afterPropertiesSet())
 				.doesNotThrowAnyException();
 	}
 
@@ -140,7 +141,8 @@ class VerificadorPermisosBaseDatosTest {
 			.compile("^UPDATE (comprobante_linea|aplicacion_pago|anulacion_pago|ajuste_cuota|deposito_caja|"
 					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado|movimiento_bancario|"
 					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora|semilla_muestreo|huella_hora|"
-					+ "resumen_diario|llamada_control|muestra_llamada|delegacion_llamada|configuracion_colegio|respaldo) ");
+					+ "resumen_diario|llamada_control|muestra_llamada|delegacion_llamada|configuracion_colegio|respaldo|"
+					+ "firma_operacion) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -255,12 +257,16 @@ class VerificadorPermisosBaseDatosTest {
 	}
 
 	/** Un MySQL bien configurado: DELETE → 1142, UPDATE de columnas inmutables → 1143, INSERT imposible → 1644. */
+	/** Sprint 7, tanda 2: lo que solo escribe cc_sistema (a cc_app le falta el GRANT: 1142). */
+	private static final java.util.regex.Pattern SOLO_SISTEMA = java.util.regex.Pattern.compile(
+			"^INSERT INTO (usuario|usuario_rol|sesion_usuario|semilla_muestreo|muestra_llamada|resumen_diario) ");
+
 	private static JdbcTemplate mysqlQueDeniega() {
 		JdbcTemplate mysql = mock(JdbcTemplate.class);
 		when(mysql.update(anyString())).thenAnswer(invocacion -> {
 			String sql = invocacion.getArgument(0);
 			if (sql.startsWith("INSERT INTO configuracion_bd") || sql.startsWith("INSERT INTO configuracion_colegio")
-					|| sql.startsWith("INSERT INTO respaldo")) {
+					|| sql.startsWith("INSERT INTO respaldo") || SOLO_SISTEMA.matcher(sql).find()) {
 				throw denegado(1142);
 			}
 			if (sql.startsWith("INSERT")) {
@@ -275,7 +281,186 @@ class VerificadorPermisosBaseDatosTest {
 				.thenReturn(String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS));
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_PASARELA_SIMULADA, Integer.class)).thenReturn(0);
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_MENSAJERIA_SIMULADA, Integer.class)).thenReturn(0);
+		// Sprint 7, tanda 2: el usuario, las huellas del jar y solo los privilegios de 02.
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_USUARIO_ACTUAL, String.class)).thenReturn("cc_app@%");
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_HUELLAS, String.class)).thenReturn(huellasJson(Map.of()));
+		when(mysql.queryForList(VerificadorPermisosBaseDatos.SQL_PRIVILEGIOS, String.class)).thenReturn(List.of(
+				"GRANT USAGE ON *.* TO `cc_app`@`%`", "GRANT SELECT ON `cuentasclaras`.* TO `cc_app`@`%`",
+				"GRANT INSERT, UPDATE (`actualizado_en`, `estado`, `monto_pagado`, `version`) ON `cuentasclaras`.`cuota` TO `cc_app`@`%`",
+				"GRANT `cc_negocio`@`%` TO `cc_app`@`%`"));
 		return mysql;
+	}
+
+	/**
+	 * Sprint 7, tanda 2: la conexión de cc_sistema bien configurada: la bitácora y los libros denegados (1142), los
+	 * triggers nuevos rechazan sus inserciones imposibles (1644) y solo los privilegios de 02.
+	 */
+	private static JdbcTemplate sistemaQueDeniega() {
+		JdbcTemplate sistema = mock(JdbcTemplate.class);
+		when(sistema.update(anyString())).thenAnswer(invocacion -> {
+			String sql = invocacion.getArgument(0);
+			if (sql.startsWith("INSERT")) {
+				throw denegado(1644);
+			}
+			if (sql.startsWith("UPDATE") && (sql.contains("cuota SET monto") || sql.contains("sesion_usuario SET hash"))) {
+				throw denegado(1143);
+			}
+			throw denegado(1142);
+		});
+		when(sistema.queryForObject(VerificadorPermisosBaseDatos.SQL_USUARIO_ACTUAL, String.class)).thenReturn("cc_sistema@%");
+		when(sistema.queryForList(VerificadorPermisosBaseDatos.SQL_PRIVILEGIOS, String.class)).thenReturn(List.of(
+				"GRANT USAGE ON *.* TO `cc_sistema`@`%`", "GRANT SELECT ON `cuentasclaras`.* TO `cc_sistema`@`%`",
+				"GRANT INSERT, UPDATE ON `cuentasclaras`.`usuario` TO `cc_sistema`@`%`",
+				"GRANT INSERT, DELETE ON `cuentasclaras`.`usuario_rol` TO `cc_sistema`@`%`",
+				"GRANT EXECUTE ON FUNCTION `cuentasclaras`.`huellas_objetos` TO `cc_sistema`@`%`",
+				"GRANT `cc_negocio`@`%` TO `cc_sistema`@`%`"));
+		return sistema;
+	}
+
+	/** El verificador de prod con las dos conexiones (cc_app y cc_sistema), sin exigir TLS. */
+	private VerificadorPermisosBaseDatos completo(JdbcTemplate app) {
+		return new VerificadorPermisosBaseDatos(app, sistemaQueDeniega(), fuenteDatos, true, false);
+	}
+
+	/** Las huellas del jar, con algunos cambios (null = sin ese objeto). */
+	private static String huellasJson(Map<String, String> cambios) {
+		Map<String, String> huellas = new java.util.LinkedHashMap<>(HuellasObjetosBd.esperadas());
+		cambios.forEach((nombre, huella) -> {
+			if (huella == null) {
+				huellas.remove(nombre);
+			}
+			else {
+				huellas.put(nombre, huella);
+			}
+		});
+		return tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(huellas);
+	}
+
+	// ------------------------------------------------------------- sprint 7, tanda 2 (sección 6.5)
+
+	/** E7: un trigger debilitado que conserva su nombre (por ejemplo, el 03 de un sprint anterior) no deja arrancar. */
+	@Test
+	void unaHuellaDistintaNoArranca() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_HUELLAS, String.class))
+				.thenReturn(huellasJson(Map.of("trg_usuario_rol_alta", "0".repeat(64))));
+
+		assertThatThrownBy(() -> completo(mysql).afterPropertiesSet()).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("huella distinta: trg_usuario_rol_alta");
+	}
+
+	/** E8: una función reemplazada (cc_es_sistema que siempre dice TRUE) o un trigger de más no dejan arrancar. */
+	@Test
+	void unaFuncionReemplazadaOUnTriggerDeMasNoArrancan() {
+		JdbcTemplate funcion = mysqlQueDeniega();
+		when(funcion.queryForObject(VerificadorPermisosBaseDatos.SQL_HUELLAS, String.class))
+				.thenReturn(huellasJson(Map.of("cc_es_sistema", "a".repeat(64))));
+		assertThatThrownBy(() -> completo(funcion).afterPropertiesSet()).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("huella distinta: cc_es_sistema");
+
+		JdbcTemplate deMas = mysqlQueDeniega();
+		when(deMas.queryForObject(VerificadorPermisosBaseDatos.SQL_HUELLAS, String.class))
+				.thenReturn(huellasJson(Map.of("trg_de_mas", "b".repeat(64))));
+		assertThatThrownBy(() -> completo(deMas).afterPropertiesSet()).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("Sobran").hasMessageContaining("trg_de_mas");
+
+		JdbcTemplate falta = mysqlQueDeniega();
+		java.util.Map<String, String> sinUno = new java.util.HashMap<>();
+		sinUno.put("trg_firma_operacion_nace", null);
+		when(falta.queryForObject(VerificadorPermisosBaseDatos.SQL_HUELLAS, String.class)).thenReturn(huellasJson(sinUno));
+		assertThatThrownBy(() -> completo(falta).afterPropertiesSet()).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("Faltan: trg_firma_operacion_nace");
+	}
+
+	/** E9: un privilegio que 02 no da (TRIGGER sobre el esquema, DELETE de un pago o un rol de más) no deja arrancar. */
+	@Test
+	void unPrivilegioDeMasNoArranca() {
+		for (String deMas : List.of("GRANT TRIGGER ON `cuentasclaras`.* TO `cc_app`@`%`",
+				"GRANT DELETE ON `cuentasclaras`.`pago` TO `cc_app`@`%`",
+				"GRANT UPDATE (`monto`) ON `cuentasclaras`.`cuota` TO `cc_app`@`%`",
+				"GRANT INSERT ON `cuentasclaras`.`usuario` TO `cc_app`@`%`",
+				"GRANT SUPER ON *.* TO `cc_app`@`%`", "GRANT `dba`@`%` TO `cc_app`@`%`",
+				"GRANT EXECUTE ON FUNCTION `cuentasclaras`.`cc_es_sistema` TO `cc_app`@`%`")) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			when(mysql.queryForList(VerificadorPermisosBaseDatos.SQL_PRIVILEGIOS, String.class)).thenReturn(List.of(
+					"GRANT USAGE ON *.* TO `cc_app`@`%`", deMas, "GRANT `cc_negocio`@`%` TO `cc_app`@`%`"));
+
+			assertThatThrownBy(() -> completo(mysql).afterPropertiesSet()).as(deMas).isInstanceOf(IllegalStateException.class)
+					.hasMessageContaining("privilegios que 02-permisos-tablas.sql no da").hasMessageContaining(deMas);
+		}
+	}
+
+	/** E9: el mismo usuario en los dos pools, sin la conexión de cc_sistema o con otro nombre, no arranca. */
+	@Test
+	void sinDosUsuariosDistintosNoArranca() {
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysqlQueDeniega(), fuenteDatos).afterPropertiesSet())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("Falta la conexión de cc_sistema");
+
+		JdbcTemplate mismo = sistemaQueDeniega();
+		when(mismo.queryForObject(VerificadorPermisosBaseDatos.SQL_USUARIO_ACTUAL, String.class)).thenReturn("cc_app@%");
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysqlQueDeniega(), mismo, fuenteDatos, true, false)
+				.afterPropertiesSet()).isInstanceOf(IllegalStateException.class).hasMessageContaining("MISMO usuario");
+
+		JdbcTemplate otroNombre = sistemaQueDeniega();
+		when(otroNombre.queryForObject(VerificadorPermisosBaseDatos.SQL_USUARIO_ACTUAL, String.class)).thenReturn("procesos@%");
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysqlQueDeniega(), otroNombre, fuenteDatos, true, false)
+				.afterPropertiesSet()).isInstanceOf(IllegalStateException.class).hasMessageContaining("debe ser cc_sistema");
+	}
+
+	/** cc_sistema tampoco edita la bitácora, y sin los triggers de identidad, sesiones y firmas no arranca. */
+	@Test
+	void ccSistemaNoEditaLaBitacoraYTieneSusTriggers() {
+		JdbcTemplate edita = sistemaQueDeniega();
+		doReturn(0).when(edita).update("UPDATE evento_auditoria SET ip = ip WHERE 1 = 0");
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysqlQueDeniega(), edita, fuenteDatos, true, false)
+				.afterPropertiesSet()).isInstanceOf(IllegalStateException.class).hasMessageContaining("cc_sistema")
+				.hasMessageContaining("editar la bitácora");
+
+		for (String[] caso : new String[][] { { VerificadorPermisosBaseDatos.FIRMA_IMPOSIBLE, "trg_firma_operacion_nace" },
+				{ VerificadorPermisosBaseDatos.SESION_IMPOSIBLE, "trg_sesion_usuario_nace" },
+				{ VerificadorPermisosBaseDatos.SEMILLA_IMPOSIBLE, "trg_semilla_muestreo_registro" } }) {
+			JdbcTemplate sinTrigger = sistemaQueDeniega();
+			doThrow(denegado(1452)).when(sinTrigger).update(caso[0]);
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysqlQueDeniega(), sinTrigger, fuenteDatos, true,
+					false).afterPropertiesSet()).as(caso[1]).isInstanceOf(IllegalStateException.class)
+					.hasMessageContaining(caso[1]);
+		}
+	}
+
+	/** E1, E4: cc_app que puede crear cuentas, darse roles, abrir sesiones o firmar como sistema no arranca. */
+	@Test
+	void ccAppQueEscribeLaIdentidadOFirmaComoSistemaNoArranca() {
+		for (String sql : List.of("UPDATE usuario SET clave_hash = clave_hash WHERE 1 = 0",
+				"INSERT INTO usuario_rol (usuario_id, rol) VALUES (0, 'PROMOTOR')",
+				VerificadorPermisosBaseDatos.SESION_IMPOSIBLE, VerificadorPermisosBaseDatos.SEMILLA_IMPOSIBLE,
+				"UPDATE comprobante SET estado_envio = estado_envio WHERE 1 = 0",
+				"UPDATE mensaje SET estado = estado WHERE 1 = 0")) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(sql);
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos()).as(sql)
+					.isInstanceOf(IllegalStateException.class).hasMessageContaining("exclusiva de cc_sistema");
+		}
+		JdbcTemplate sinTrigger = mysqlQueDeniega();
+		doThrow(denegado(1048)).when(sinTrigger).update(VerificadorPermisosBaseDatos.EVENTO_SISTEMA_IMPOSIBLE);
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(sinTrigger, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("trg_evento_auditoria_actor");
+	}
+
+	/** H11: en prod, una conexión sin TLS no arranca (salvo que se apague a propósito para la instalación local). */
+	@Test
+	void enProdSinTlsNoArranca() {
+		JdbcTemplate app = mysqlQueDeniega();
+		JdbcTemplate sistema = sistemaQueDeniega();
+		when(app.queryForList(VerificadorPermisosBaseDatos.SQL_TLS, String.class)).thenReturn(List.of(""));
+		when(sistema.queryForList(VerificadorPermisosBaseDatos.SQL_TLS, String.class)).thenReturn(List.of("TLS_AES_256_GCM_SHA384"));
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(app, sistema, fuenteDatos, true, true).afterPropertiesSet())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("no va cifrada");
+
+		when(app.queryForList(VerificadorPermisosBaseDatos.SQL_TLS, String.class)).thenReturn(List.of("TLS_AES_256_GCM_SHA384"));
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(app, sistema, fuenteDatos, true, true).afterPropertiesSet())
+				.doesNotThrowAnyException();
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(mysqlQueDeniega(), sistemaQueDeniega(), fuenteDatos, true,
+				false).afterPropertiesSet()).doesNotThrowAnyException();
 	}
 
 	/** Sprint 4, tanda 1: órdenes, cuotas de orden y avisos sin borrado; columnas inmutables; configuracion_bd del DBA. */
@@ -372,8 +557,8 @@ class VerificadorPermisosBaseDatosTest {
 		// correcciones (V20): 58 con los de la verificación de contactos y la huella por hora; sprint 6, tanda 2 (V21): 60
 		// con la foto del resumen diario y el contacto del personal; tanda 3 (V22): 61 con la llamada de control;
 		// correcciones del sprint 6 (V23): 63 con la muestra congelada y la delegación de las llamadas.
-		// Sprint 7, tanda 1 (V24): 64 con el registro de respaldos.
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(64);
+		// Sprint 7, tanda 1 (V24): 64 con el registro de respaldos; tanda 2 (V25): 73 con identidad, sesiones y firmas.
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(73);
 	}
 
 	/**
@@ -524,7 +709,7 @@ class VerificadorPermisosBaseDatosTest {
 			when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class)).thenReturn(
 					String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream().filter(t -> !t.equals(borrado))
 							.toList()));
-			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
+			assertThatThrownBy(() -> completo(mysql).afterPropertiesSet())
 					.as(borrado).isInstanceOf(IllegalStateException.class).hasMessageContaining(borrado);
 		}
 	}
@@ -555,7 +740,7 @@ class VerificadorPermisosBaseDatosTest {
 			when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class)).thenReturn(
 					String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream().filter(t -> !t.equals(borrado))
 							.toList()));
-			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
+			assertThatThrownBy(() -> completo(mysql).afterPropertiesSet())
 					.as(borrado).isInstanceOf(IllegalStateException.class).hasMessageContaining(borrado);
 		}
 	}
@@ -582,7 +767,7 @@ class VerificadorPermisosBaseDatosTest {
 		when(sinTrigger.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class)).thenReturn(
 				String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream()
 						.filter(t -> !t.equals("trg_llamada_control_registro")).toList()));
-		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(sinTrigger, fuenteDatos).afterPropertiesSet())
+		assertThatThrownBy(() -> completo(sinTrigger).afterPropertiesSet())
 				.isInstanceOf(IllegalStateException.class).hasMessageContaining("trg_llamada_control_registro");
 	}
 
@@ -601,21 +786,26 @@ class VerificadorPermisosBaseDatosTest {
 					String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS.stream().filter(t -> !t.equals(borrado))
 							.toList()));
 
-			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
+			assertThatThrownBy(() -> completo(mysql).afterPropertiesSet())
 					.as(borrado).isInstanceOf(IllegalStateException.class).hasMessageContaining("Faltan triggers")
 					.hasMessageContaining(borrado);
 		}
 	}
 
-	/** Fase 1 (cc_app solo lee, antes de 02 y 03): no hay vista ni triggers y no hace falta: arranca. */
+	/** Fase 1 (cc_app y cc_sistema solo leen, antes de 02 y 03): no hay funciones ni triggers y no hace falta: arranca. */
 	@Test
 	void enLaFase1SinFuncionNiTriggersArranca() {
 		JdbcTemplate mysql = org.mockito.Mockito.mock(JdbcTemplate.class);
 		doThrow(denegado(1142)).when(mysql).update(anyString());
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
 				.thenThrow(denegado(1305));
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_HUELLAS, String.class)).thenThrow(denegado(1305));
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_USUARIO_ACTUAL, String.class)).thenReturn("cc_app@%");
+		JdbcTemplate sistema = org.mockito.Mockito.mock(JdbcTemplate.class);
+		doThrow(denegado(1142)).when(sistema).update(anyString());
+		when(sistema.queryForObject(VerificadorPermisosBaseDatos.SQL_USUARIO_ACTUAL, String.class)).thenReturn("cc_sistema@%");
 
-		assertThatCode(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(mysql, sistema, fuenteDatos, true, false).afterPropertiesSet())
 				.doesNotThrowAnyException();
 	}
 
@@ -625,7 +815,7 @@ class VerificadorPermisosBaseDatosTest {
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_TRIGGERS_INSTALADOS, String.class))
 				.thenThrow(denegado(1305));
 
-		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).afterPropertiesSet())
+		assertThatThrownBy(() -> completo(mysql).afterPropertiesSet())
 				.isInstanceOf(IllegalStateException.class).hasMessageContaining("triggers_instalados")
 				.hasMessageContaining("1305");
 	}

@@ -22,6 +22,12 @@ public class ConfiguracionColegio {
 	/** El correo del contador del colegio que también recibe el resumen diario (decisión 69). */
 	public static final String RESUMEN_CORREO_EXTERNO = "resumen_correo_externo";
 
+	/**
+	 * Sprint 7, tanda 2 (H5): el correo del contador de ESE colegio que también recibe la huella diaria de la bitácora
+	 * (antes era una fila de {@code configuracion_bd}, de toda la base). V25 la copió solo si había un único colegio.
+	 */
+	public static final String HUELLA_CORREO_EXTERNO = "huella_correo_externo";
+
 	@Id
 	private Long id;
 

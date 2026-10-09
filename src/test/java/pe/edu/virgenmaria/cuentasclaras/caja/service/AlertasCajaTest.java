@@ -16,13 +16,13 @@ import pe.edu.virgenmaria.cuentasclaras.caja.dto.ReconteoRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
-import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision.Gravedad;
+import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.IndicadoresInicio;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioAprobaciones;
-import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.Familias;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.LimpiezaBaseDatos;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PruebaIntegracion;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable;
@@ -89,6 +89,9 @@ class AlertasCajaTest {
 
 	@Autowired
 	private JdbcTemplate jdbc;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comun.cripto.DerivadorSecreto derivador;
 
 	@Autowired
 	private ServicioVerificacionBancaria verificacion;
@@ -241,15 +244,17 @@ class AlertasCajaTest {
 		List<java.util.Map<String, Object>> filas = jdbc.queryForList("SELECT ambito, fecha, semilla, creado_por "
 				+ "FROM semilla_muestreo");
 		assertThat(filas).singleElement().satisfies(fila -> {
-			assertThat(fila).containsEntry("ambito", "CAJA").containsEntry("creado_por", "promotor");
+			// Sprint 7, tanda 2 (H8): la planta el actor de sistema del muestreo (cc_sistema), no quien mira el panel.
+			assertThat(fila).containsEntry("ambito", "CAJA").containsEntry("creado_por", "sistema.muestreo");
 			assertThat(fila.get("fecha")).hasToString("2026-10-05");
 			assertThat((Long) fila.get("semilla")).isNotEqualTo(java.time.LocalDate.of(2026, 10, 5).toEpochDay());
 		});
-		// Con la semilla de la base, la muestra es reproducible para quien audita (y solo para él).
-		long semilla = (Long) filas.getFirst().get("semilla");
-		assertThat(pe.edu.virgenmaria.cuentasclaras.comun.texto.MuestraAlAzar.delDia(semilla, List.of(1, 2, 3, 4, 5), 3))
-				.isEqualTo(pe.edu.virgenmaria.cuentasclaras.comun.texto.MuestraAlAzar.delDia(semilla, List.of(1, 2, 3, 4, 5),
-						3));
+		// Con la semilla de la base Y la clave HMAC, la muestra es reproducible para quien audita (y solo para él).
+		long guardada = (Long) filas.getFirst().get("semilla");
+		long efectiva = derivador.semilla("CAJA", java.time.LocalDate.of(2026, 10, 5), guardada);
+		assertThat(efectiva).isNotEqualTo(guardada);
+		assertThat(semillas.de(pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillaMuestreo.Ambito.CAJA,
+				java.time.LocalDate.of(2026, 10, 5))).isEqualTo(efectiva);
 	}
 
 	@Test
@@ -264,7 +269,11 @@ class AlertasCajaTest {
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM semilla_muestreo", Long.class)).isEqualTo(1);
 		long guardada = jdbc.queryForObject("SELECT semilla FROM semilla_muestreo", Long.class);
 		assertThat(pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillaMuestreo.Ambito.CAJA).isNotNull();
-		assertThat(semillas.de(pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillaMuestreo.Ambito.CAJA,
-				java.time.LocalDate.of(2026, 10, 5))).isEqualTo(guardada);
+		// Sprint 7, tanda 2 (H8): la semilla efectiva se deriva de la guardada con la clave HMAC: la guardada sola (la que
+		// lee cualquiera con SELECT) no reproduce la muestra.
+		long efectiva = semillas.de(pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillaMuestreo.Ambito.CAJA,
+				java.time.LocalDate.of(2026, 10, 5));
+		assertThat(efectiva).isNotEqualTo(guardada).isEqualTo(semillas.de(
+				pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillaMuestreo.Ambito.CAJA, java.time.LocalDate.of(2026, 10, 5)));
 	}
 }

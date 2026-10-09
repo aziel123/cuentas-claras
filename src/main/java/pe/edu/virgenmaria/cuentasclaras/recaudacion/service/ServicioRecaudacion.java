@@ -47,6 +47,8 @@ import pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LoteRecaudacionRe
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.service.ReglasRecaudacion.Deuda;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.service.ReglasRecaudacion.Resolucion;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.math.BigDecimal;
 import java.security.SecureRandom;
@@ -115,10 +117,14 @@ public class ServicioRecaudacion {
 
 	private final Clock reloj;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ServicioRecaudacion(LectoresRecaudacion lectores, RegistroArchivos archivos, LoteRecaudacionRepository lotes,
 			LineaRecaudacionRepository lineas, AlumnoRepository alumnos, CuotaRepository cuotas, PagoRepository pagos,
 			List<ExportadorBaseDeudas> exportadores, ControlParticipantes participantes, AuditoriaService auditoria,
-			ApplicationEventPublisher eventos, PropiedadesRecaudacion propiedades, Clock reloj) {
+			ApplicationEventPublisher eventos, PropiedadesRecaudacion propiedades, Clock reloj, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.lectores = lectores;
 		this.archivos = archivos;
 		this.lotes = lotes;
@@ -295,6 +301,10 @@ public class ServicioRecaudacion {
 		LocalDateTime ahora = ahora();
 		if (!Dinero.iguales(escrito, lote.getTotal())) {
 			boolean rechazado = lote.intentoFallido(propiedades.intentosConfirmacion(), usuario, ahora);
+			if (rechazado) {
+				// Sprint 7, tanda 2: el rechazo por el último intento lleva la firma de quien lo escribió.
+				firmaSesion.firmar(ClaveFirma.loteRecaudacion(lote.getId(), EstadoLote.RECHAZADO));
+			}
 			int quedan = lote.intentosRestantes(propiedades.intentosConfirmacion());
 			auditoria.registrar(AccionAuditoria.RECAUDACION_TOTAL_NO_COINCIDE, "lote_recaudacion", loteId.toString(), null,
 					"Total escrito a ciegas: " + Dinero.formatear(escrito), "El total que escribió " + usuario
@@ -310,6 +320,7 @@ public class ServicioRecaudacion {
 			throw new TotalNoCoincideException("No coincide. Revisa el total en el portal del banco. Te queda" + (quedan == 1
 					? " 1 intento." : "n " + quedan + " intentos."));
 		}
+		firmaSesion.firmar(ClaveFirma.loteRecaudacion(lote.getId(), EstadoLote.CONFIRMADO));
 		lote.confirmar(usuario, escrito, ahora);
 		lotes.saveAndFlush(lote);
 		auditoria.registrar(AccionAuditoria.RECAUDACION_CONFIRMADA, "lote_recaudacion", loteId.toString(),

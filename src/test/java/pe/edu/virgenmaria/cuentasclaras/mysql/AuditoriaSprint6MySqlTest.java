@@ -11,6 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.RutaConexion;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba;
 import pe.edu.virgenmaria.cuentasclaras.panel.proceso.ResumenDiarioTarea;
@@ -56,6 +57,9 @@ class AuditoriaSprint6MySqlTest {
 	private JdbcTemplate jdbc;
 
 	@Autowired
+	private javax.sql.DataSource fuenteDatos;
+
+	@Autowired
 	private ResumenDiarioTarea resumenDiario;
 
 	@Autowired
@@ -83,36 +87,41 @@ class AuditoriaSprint6MySqlTest {
 		Usuario promotora = guardar("promo.a1." + sufijo, Rol.PROMOTOR);
 		Long apoderado = apoderadoSinCuenta();
 		String atacante = celular();
-		Integer directo = codigoAl(() -> jdbc.update("UPDATE usuario SET telefono_whatsapp = ? WHERE id = ?", atacante, promotora.getId()));
+		// Sprint 7, tanda 2 (H1): con la clave de cc_app la cuenta ni se toca (sin GRANT: 1142). Los triggers siguen
+		// frenando lo mismo con la de cc_sistema (los procesos y la identidad).
+		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET telefono_whatsapp = ? WHERE id = ?", atacante,
+				promotora.getId()))).as("sprint 7: cc_app no escribe usuario").isEqualTo(1142);
+		Integer directo = codigoAl(() -> sistema().update("UPDATE usuario SET telefono_whatsapp = ? WHERE id = ?", atacante, promotora.getId()));
 		assertThat(directo).as("el camino directo sí lo frena el trigger").isEqualTo(1644);
 
-		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET apoderado_id = ? WHERE id = ?", apoderado, promotora.getId())))
+		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET apoderado_id = ? WHERE id = ?", apoderado, promotora.getId())))
 				.as("CORREGIDO: una cuenta del personal no se enlaza a un apoderado").isEqualTo(1644);
-		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET apoderado_id = ?, telefono_whatsapp = ? WHERE id = ?",
+		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET apoderado_id = ?, telefono_whatsapp = ? WHERE id = ?",
 				apoderado, atacante, promotora.getId()))).as("ni en el mismo UPDATE").isEqualTo(1644);
 		Map<String, Object> fila = jdbc.queryForMap("SELECT telefono_whatsapp, apoderado_id FROM usuario WHERE id = ?", promotora.getId());
 		assertThat(fila).containsEntry("telefono_whatsapp", promotora.getTelefonoWhatsapp()).containsEntry("apoderado_id", null);
 
-		// Una cuenta de apoderado (nace enlazada, como la crea su ficha) no vuelve a ser «del personal».
+		// Una cuenta de apoderado (nace enlazada, como la crea su ficha, por la ruta de identidad) no vuelve a ser «del
+		// personal».
 		Long otroApoderado = apoderadoSinCuenta();
 		String dni = jdbc.queryForObject("SELECT numero_documento FROM apoderado WHERE id = ?", String.class, otroApoderado);
-		Usuario cuentaApoderado = ContextoColegio.en(1L, () -> usuarios.save(Usuario.deApoderado(dni, "Apoderado " + dni,
-				null, codificador.encode(UsuariosDePrueba.CLAVE), otroApoderado)));
-		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET apoderado_id = NULL WHERE id = ?", cuentaApoderado.getId())))
+		Usuario cuentaApoderado = RutaConexion.identidad(() -> ContextoColegio.en(1L, () -> usuarios.saveAndFlush(
+				Usuario.deApoderado(dni, "Apoderado " + dni, null, codificador.encode(UsuariosDePrueba.CLAVE), otroApoderado))));
+		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET apoderado_id = NULL WHERE id = ?", cuentaApoderado.getId())))
 				.as("CORREGIDO: no se desenlaza").isEqualTo(1644);
 
-		// Variante con los roles: la cuenta queda enlazada y con el celular del atacante, pero no recibe nada.
+		// Variante con los roles (sprint 6: pasaba por usuario_rol, sin trigger). Sprint 7, tanda 2: nadie cambia un rol
+		// con UPDATE (ni cc_app ni cc_sistema tienen ese GRANT: 1142); se quita y se da con DELETE e INSERT, que vigilan
+		// trg_usuario_rol_baja y trg_usuario_rol_alta (APODERADO solo en cuentas de apoderado).
 		Usuario victima = guardar("promo.a1r." + sufijo, Rol.PROMOTOR);
-		Long tercero = apoderadoSinCuenta();
-		jdbc.update("UPDATE usuario_rol SET rol = 'APODERADO' WHERE usuario_id = ?", victima.getId());
-		jdbc.update("UPDATE usuario SET apoderado_id = ? WHERE id = ?", tercero, victima.getId());
-		jdbc.update("UPDATE usuario SET telefono_whatsapp = ? WHERE id = ?", atacante, victima.getId());
-		jdbc.update("UPDATE usuario_rol SET rol = 'PROMOTOR' WHERE usuario_id = ?", victima.getId());
-		assertThat(codigoAl(() -> jdbc.update(INSERTAR_MENSAJE, "s6a1-" + sufijo, "ALERTA_PROMOTORIA", "WHATSAPP", "USUARIO",
-				victima.getId(), atacante, "ALERTA_PROMOTORIA", "Cierre de caja con diferencia", "aviso", null, "PENDIENTE",
-				"sistema.panel"))).as("CORREGIDO: la alerta no sale a una cuenta enlazada a un apoderado").isEqualTo(1644);
-		// La cuenta rara no queda activa para las demás pruebas (desactivar no toca el contacto: el trigger lo deja).
-		assertThat(jdbc.update("UPDATE usuario SET activo = FALSE WHERE id = ?", victima.getId())).isEqualTo(1);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario_rol SET rol = 'APODERADO' WHERE usuario_id = ?", victima.getId())))
+				.isEqualTo(1142);
+		assertThat(codigoAl(() -> sistema().update("UPDATE usuario_rol SET rol = 'APODERADO' WHERE usuario_id = ?",
+				victima.getId()))).isEqualTo(1142);
+		assertThat(codigoAl(() -> sistema().update("INSERT INTO usuario_rol (usuario_id, rol) VALUES (?, 'APODERADO')",
+				victima.getId()))).as("APODERADO en una cuenta del personal").isEqualTo(1644);
+		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ?", String.class, victima.getId()))
+				.containsExactly("PROMOTOR");
 	}
 
 	// S6-A1, segunda variante: una solicitud aprobada ANTIGUA de la misma persona servía otra vez, con otro número.
@@ -139,13 +148,13 @@ class AuditoriaSprint6MySqlTest {
 		String vigente = jdbc.queryForObject("SELECT telefono_whatsapp FROM usuario WHERE id = ?", String.class, promotora.getId());
 
 		String atacante = celular();
-		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET telefono_whatsapp = ?, contacto_solicitud_id = ? WHERE id = ?",
+		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET telefono_whatsapp = ?, contacto_solicitud_id = ? WHERE id = ?",
 				atacante, primera, promotora.getId()))).as("CORREGIDO: la solicitud 1 no se reusa").isEqualTo(1644);
 		String datosPrimera = jdbc.queryForObject("SELECT datos FROM solicitud_cambio WHERE id = ?", String.class, primera);
 		String aprobadoEnLaPrimera = datosPrimera.replaceAll(".*\"telefono\"\\s*:\\s*\"([^\"]*)\".*", "$1");
-		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET telefono_whatsapp = ?, contacto_solicitud_id = ? WHERE id = ?",
+		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET telefono_whatsapp = ?, contacto_solicitud_id = ? WHERE id = ?",
 				aprobadoEnLaPrimera, primera, promotora.getId()))).as("ni con el número que se aprobó en ella").isEqualTo(1644);
-		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET telefono_whatsapp = ? WHERE id = ?", atacante,
+		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET telefono_whatsapp = ? WHERE id = ?", atacante,
 				promotora.getId()))).as("ni la vigente con otro número").isEqualTo(1644);
 		assertThat(jdbc.queryForObject("SELECT telefono_whatsapp FROM usuario WHERE id = ?", String.class, promotora.getId()))
 				.isEqualTo(vigente);
@@ -171,11 +180,14 @@ class AuditoriaSprint6MySqlTest {
 		Long pendientes = jdbc.queryForObject("SELECT COUNT(1) FROM solicitud_cambio WHERE colegio_id = 1 AND estado = ?", Long.class, "PENDIENTE");
 		assertThat(pendientes).isPositive();
 
-		assertThat(codigoAl(() -> jdbc.update(INSERTAR_FOTO, pasado, pasado.atStartOfDay().plusSeconds(1), 0, 0, 0, 0, 0, 0,
+		// Sprint 7, tanda 2 (E14): con cc_app la foto ni se inserta (1142); los triggers frenan lo mismo con cc_sistema.
+		assertThat(codigoAl(() -> jdbc.update(INSERTAR_FOTO, hoy, ahora, 0, 0, pendientes, 0, 0, 0, null, "sistema.panel")))
+				.as("sprint 7: cc_app no planta la foto").isEqualTo(1142);
+		assertThat(codigoAl(() -> sistema().update(INSERTAR_FOTO, pasado, pasado.atStartOfDay().plusSeconds(1), 0, 0, 0, 0, 0, 0,
 				null, "sistema.panel"))).as("CORREGIDO: la foto de otro día").isEqualTo(1644);
-		assertThat(codigoAl(() -> jdbc.update(INSERTAR_FOTO, hoy, ahora.minusHours(3), 0, 0, pendientes, 0, 0, 0, null,
+		assertThat(codigoAl(() -> sistema().update(INSERTAR_FOTO, hoy, ahora.minusHours(3), 0, 0, pendientes, 0, 0, 0, null,
 				"sistema.panel"))).as("CORREGIDO: la foto de hoy con un corte que no es de ahora").isEqualTo(1644);
-		assertThat(codigoAl(() -> jdbc.update(INSERTAR_FOTO, hoy, ahora, 0, 0, 0, 0, 0, 0, null, "sistema.panel")))
+		assertThat(codigoAl(() -> sistema().update(INSERTAR_FOTO, hoy, ahora, 0, 0, 0, 0, 0, 0, null, "sistema.panel")))
 				.as("CORREGIDO: 0 pendientes cuando hay pendientes (y sin texto)").isEqualTo(1644);
 
 		// La foto verdadera de hoy (la genera sistema.panel; si ya existe, la de otra prueba) y un mensaje inventado. En un
@@ -193,11 +205,19 @@ class AuditoriaSprint6MySqlTest {
 				"S/ 99,000.00", "S/ 0.00 de 0 familia(s)", "0", "0", "evento 1", "esta semana no hay a quién llamar");
 		String clave = "RESUMEN_DIARIO:resumen_diario:" + fotoId + ":USUARIO:" + promotora.getId() + ":WHATSAPP:" + sufijo;
 		assertThat(codigoAl(() -> jdbc.update(INSERTAR_MENSAJE, clave, "RESUMEN_DIARIO", "WHATSAPP", "USUARIO",
+				promotora.getId(), promotora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", verdadero, "resumen_diario", fotoId,
+				"PENDIENTE", "sistema.panel"))).as("sprint 7 (E1): cc_app no escribe como sistema.panel").isEqualTo(1644);
+		assertThat(codigoAl(() -> sistema().update(INSERTAR_MENSAJE, clave, "RESUMEN_DIARIO", "WHATSAPP", "USUARIO",
 				promotora.getId(), promotora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", inventado, "resumen_diario", fotoId,
 				"PENDIENTE", "sistema.panel"))).as("CORREGIDO: el resumen con cifras que no son las de la foto").isEqualTo(1644);
-		assertThat(jdbc.update(INSERTAR_MENSAJE, clave, "RESUMEN_DIARIO", "WHATSAPP", "USUARIO", promotora.getId(),
+		assertThat(sistema().update(INSERTAR_MENSAJE, clave, "RESUMEN_DIARIO", "WHATSAPP", "USUARIO", promotora.getId(),
 				promotora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", verdadero, "resumen_diario", fotoId, "PENDIENTE",
 				"sistema.panel")).as("control: con el texto de la foto sí nace").isEqualTo(1);
+	}
+
+	/** Sprint 7, tanda 2: la conexión de cc_sistema (los triggers aplican a las dos conexiones). */
+	private JdbcTemplate sistema() {
+		return new JdbcTemplate(((pe.edu.virgenmaria.cuentasclaras.comun.basedatos.FuenteDatosEnrutada) fuenteDatos).sistema());
 	}
 
 	private Usuario guardar(String nombre, Rol rol) {

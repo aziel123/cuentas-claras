@@ -80,6 +80,19 @@ management:
           include: readinessState, db
 
 cuentasclaras:
+  basedatos:
+    # Sprint 7, tanda 2 (sección 3.2): segundo usuario de base para los procesos sistema.* y la identidad (ingreso,
+    # sesiones, claves, roles y altas). En prod y piloto es obligatorio (VerificadorConfiguracion); en dev y test (H2)
+    # vacío: las dos rutas usan el mismo pool. El nombre del usuario es FIJO: cc_sistema.
+    sistema:
+      usuario: ${DB_SISTEMA_USUARIO:}
+      clave: ${DB_SISTEMA_CLAVE:}
+      pool-maximo: 4
+    # H11: en prod la conexión a MySQL va cifrada (sslMode en DB_URL). Solo la instalación local en Docker lo apaga.
+    exigir-tls: ${CC_EXIGIR_TLS_BD:true}
+  sesion:
+    # Sprint 7, tanda 2 (decisión 83): el secreto con que se firman las aprobaciones sirve 10 h aunque haya actividad.
+    vigencia-maxima: 10h
   seguridad:
     # Intentos fallidos seguidos antes de bloquear la cuenta, y cuánto dura el bloqueo.
     intentos-maximos: 5
@@ -205,6 +218,8 @@ cuentasclaras:
     exportacion-max-filas: 20000
     exportaciones-atencion: 5             # más descargas de una persona en el día: ATENCIÓN en el panel
     llamadas-por-semana: 3                # decisión 77: familias de la llamada de control de cada semana
+    muestra-semanal: "0 10 0 * * MON"     # sprint 7, tanda 2 (decisión 87): la muestra de la semana la fija sistema.panel
+    reemplazos-cada: "0 */15 * * * *"     # reintento del reemplazo tras dos «No contesta» (si el de después del commit falló)
   monitoreo:
     # Sprint 7, tanda 1 (sección 10): alertas técnicas por correo directo (SMTP de spring.mail y remitente
     # CORREO_REMITENTE) al responsable técnico. Sin CC_OPERADOR_CORREO quedan apagadas y /panel/sistema lo dice en rojo.

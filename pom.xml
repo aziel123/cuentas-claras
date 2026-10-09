@@ -122,6 +122,16 @@
 					<include>comprobaciones.sql</include>
 				</includes>
 			</resource>
+			<!-- Sprint 7, tanda 2: el verificador de prod compara la huella de cada trigger y función de la base con la de
+			     estos archivos, empaquetados en el jar (una sola fuente: scripts/mysql/). -->
+			<resource>
+				<directory>scripts/mysql</directory>
+				<targetPath>db/mysql</targetPath>
+				<includes>
+					<include>02-permisos-tablas.sql</include>
+					<include>03-triggers.sql</include>
+				</includes>
+			</resource>
 		</resources>
 		<plugins>
 			<plugin>

@@ -7,3 +7,11 @@ spring:
     password: ${CC_MYSQL_CLAVE_APP:}
   flyway:
     enabled: false
+
+# Sprint 7, tanda 2: los procesos sistema.* y la identidad, con su propio usuario (como en producción).
+cuentasclaras:
+  basedatos:
+    sistema:
+      usuario: cc_sistema
+      clave: ${CC_MYSQL_CLAVE_SISTEMA:}
+      pool-maximo: 10

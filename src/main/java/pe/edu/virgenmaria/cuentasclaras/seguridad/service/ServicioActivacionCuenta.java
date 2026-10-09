@@ -13,6 +13,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PropositoEnlace;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.EnlaceActivacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -49,8 +50,12 @@ public class ServicioActivacionCuenta {
 
 	private final Clock reloj;
 
+	private final EjecucionIdentidad identidad;
+
 	public ServicioActivacionCuenta(EnlaceActivacionRepository enlaces, UsuarioRepository usuarios,
-			PasswordEncoder codificador, AuditoriaService auditoria, PlatformTransactionManager transacciones, Clock reloj) {
+			PasswordEncoder codificador, AuditoriaService auditoria, PlatformTransactionManager transacciones, Clock reloj,
+			EjecucionIdentidad identidad) {
+		this.identidad = identidad;
 		this.enlaces = enlaces;
 		this.usuarios = usuarios;
 		this.codificador = codificador;
@@ -79,7 +84,8 @@ public class ServicioActivacionCuenta {
 		if (!tokenValido(token) || colegioId <= 0) {
 			throw new ReglaNegocioException(ENLACE_NO_SIRVE);
 		}
-		ContextoColegio.en(colegioId, () -> transaccion.executeWithoutResult(t -> {
+		// Sprint 7, tanda 2: la clave se escribe por la ruta de identidad (cc_sistema).
+		ContextoColegio.en(colegioId, () -> identidad.ejecutar(() -> {
 			LocalDateTime ahora = ahora();
 			EnlaceActivacion enlace = enlaces.bloquearPorHash(EnlacesActivacion.hash(token)).filter(e -> e.vigente(ahora))
 					.orElseThrow(() -> new ReglaNegocioException(ENLACE_NO_SIRVE));

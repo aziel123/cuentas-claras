@@ -22,6 +22,7 @@ import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWrite
 import org.springframework.security.web.session.HttpSessionEventPublisher;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ManejadorAccesoDenegado;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ManejadorIngresoExitoso;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioCierreSesion;
 
 import java.util.Map;
 
@@ -39,7 +40,7 @@ import java.util.Map;
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
 @EnableMethodSecurity
-@EnableConfigurationProperties(PropiedadesSeguridad.class)
+@EnableConfigurationProperties({ PropiedadesSeguridad.class, PropiedadesSesion.class })
 public class ConfiguracionSeguridad {
 
 	static final String CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -75,7 +76,8 @@ public class ConfiguracionSeguridad {
 	@Bean
 	@Order(2)
 	public SecurityFilterChain cadenaDeSeguridad(HttpSecurity http, ManejadorIngresoExitoso manejadorIngresoExitoso,
-			ManejadorAccesoDenegado manejadorAccesoDenegado, SessionRegistry registroSesiones) throws Exception {
+			ManejadorAccesoDenegado manejadorAccesoDenegado, SessionRegistry registroSesiones,
+			ServicioCierreSesion cierreSesion) throws Exception {
 		http
 			.authorizeHttpRequests(auth -> {
 				auth.dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.ERROR).permitAll()
@@ -92,7 +94,8 @@ public class ConfiguracionSeguridad {
 				.successHandler(manejadorIngresoExitoso)
 				.failureHandler(manejadorFallo())
 				.permitAll())
-			.logout(l -> l.logoutUrl("/salir").logoutSuccessUrl("/login?salio")
+			// Sprint 7, tanda 2: antes de invalidar la sesión HTTP, se cierra la sesión de la base (su secreto ya no firma).
+			.logout(l -> l.logoutUrl("/salir").logoutSuccessUrl("/login?salio").addLogoutHandler(cierreSesion)
 				.invalidateHttpSession(true).deleteCookies("CCSESION"))
 			.sessionManagement(s -> s
 				.sessionFixation(fx -> fx.changeSessionId())

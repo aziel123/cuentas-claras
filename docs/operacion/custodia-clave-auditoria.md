@@ -17,6 +17,7 @@ La bitácora de auditoría se sella con una cadena HMAC-SHA256. Quien tiene la *
 - La aplicación se niega a arrancar en producción si la clave falta o es la de desarrollo (cualquier clave que contenga `no-usar-en-produccion`).
 - **No hay rotación** por ahora: si la clave cambia, los eventos anteriores ya no se pueden verificar con la nueva. Si se sospecha que se filtró, sigue `incidente-auditoria.md`: preserva la evidencia, verifica la bitácora con la clave anterior y recién después decide con Promotoría.
 - Si se pierde la clave, la bitácora sigue funcionando, pero ya no se puede comprobar que esté íntegra. Por eso la copia de Promotoría es obligatoria.
+- **Sprint 7, tanda 2: la misma clave deriva la semilla del muestreo.** La semilla guardada en `semilla_muestreo` (que cualquier conexión de la base puede leer) no basta para calcular qué verificaciones o qué familias verá Promotoría: la muestra usa `HMAC(clave, ámbito, fecha, semilla guardada)`. Quien audite una muestra pasada necesita la clave, con la misma custodia de arriba.
 
 ## La huella: el control que no depende de la clave
 Al pulsar **Verificar integridad**, la pantalla muestra una huella (número de evento, fecha y código). Promotoría la anota fuera del sistema; desde el sprint 4 le llegará cada día por WhatsApp o correo. En la siguiente verificación la escribe en «Última huella que anotaste». Si ese evento ya no está, o su código cambió, la bitácora fue recortada o alterada, aunque quien lo hizo tuviera la clave.

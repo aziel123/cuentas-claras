@@ -49,6 +49,7 @@ jobs:
       CC_MYSQL_URL: "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false"
       CC_MYSQL_CLAVE_MIGRADOR: "migrador-solo-ci-1"
       CC_MYSQL_CLAVE_APP: "app-solo-ci-1"
+      CC_MYSQL_CLAVE_SISTEMA: "sistema-solo-ci-1"
       CC_MYSQL_CLAVE_RESPALDO: "respaldo-solo-ci-1"
       MYSQL_ADMIN: "mysql --protocol=TCP -h 127.0.0.1 -P 3306 -uroot -proot-ci"
     steps:
@@ -63,10 +64,11 @@ jobs:
       - name: Empaquetar la aplicación
         run: ./mvnw -B -q -DskipTests package
 
-      - name: Crear la base y los usuarios cc_migrador, cc_app y cc_respaldo
+      - name: Crear la base, los usuarios cc_migrador, cc_app, cc_sistema y cc_respaldo y el rol cc_negocio
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" \
               -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
+              -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" \
               scripts/mysql/01-usuarios.sql | $MYSQL_ADMIN
 
@@ -77,11 +79,18 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V24): Hibernate valida el esquema con cc_app y no faltan migraciones"
+      - name: "Fase 1 (V1–V25): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
-      - name: Permisos por tabla de cc_app y cc_respaldo
-        run: $MYSQL_ADMIN < scripts/mysql/02-permisos-tablas.sql
+      - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
+        run: |
+          # Un GRANT dado a mano antes de 02 no sobrevive (H6): 02 lo quita todo y vuelve a dar solo lo suyo.
+          $MYSQL_ADMIN -e "GRANT DELETE ON cuentasclaras.pago TO 'cc_app'@'%'"
+          $MYSQL_ADMIN < scripts/mysql/02-permisos-tablas.sql
+          if $MYSQL_ADMIN -N -e "SHOW GRANTS FOR 'cc_app'@'%'" | grep -q "DELETE ON \`cuentasclaras\`.\`pago\`"; then
+            echo "ERROR: el GRANT dado a mano sobrevivió a 02-permisos-tablas.sql"; exit 1
+          fi
+          echo "OK: 02 quitó el GRANT dado a mano"
 
       - name: Triggers con cc_migrador (03-triggers.sql)
         run: |
@@ -101,6 +110,9 @@ jobs:
 
       - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint6MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 7, tanda 2: con la clave de cc_app no se crea una cuenta, no se firma como sistema ni se aprueba a nombre de otra persona (E1 a E18)"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint7MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Fase 2b (sprint 5): con la mensajería simulada habilitada por el DBA, los mensajes y enlaces salen"
         run: |
@@ -146,8 +158,8 @@ jobs:
           comprobar 1143 "UPDATE pago SET total = total WHERE 1 = 0"
           comprobar 1143 "UPDATE pago SET familia_id = familia_id WHERE 1 = 0"
           comprobar 1143 "UPDATE pago SET comprobante_id = comprobante_id WHERE 1 = 0"
-          comprobar 1143 "UPDATE comprobante SET numero = numero WHERE 1 = 0"
-          comprobar 1143 "UPDATE comprobante SET total = total WHERE 1 = 0"
+          comprobar 1142 "UPDATE comprobante SET numero = numero WHERE 1 = 0"
+          comprobar 1142 "UPDATE comprobante SET total = total WHERE 1 = 0"
           comprobar 1143 "UPDATE serie_comprobante SET serie = serie WHERE 1 = 0"
           comprobar 1143 "UPDATE caja_diaria SET fecha = fecha WHERE 1 = 0"
           comprobar 1143 "UPDATE caja_diaria SET fondo_fijo = fondo_fijo WHERE 1 = 0"
@@ -195,10 +207,10 @@ jobs:
           comprobar 1142 "INSERT INTO configuracion_bd VALUES ('pasarela_simulada', 'PERMITIDA', NOW(6))"
           comprobar 1142 "UPDATE configuracion_bd SET valor = valor WHERE 1 = 0"
           comprobar 1143 "UPDATE orden_pago SET monto = monto WHERE 1 = 0"
-          comprobar 1143 "UPDATE evento_pasarela SET orden_pago_id = orden_pago_id WHERE 1 = 0"
+          comprobar 1142 "UPDATE evento_pasarela SET orden_pago_id = orden_pago_id WHERE 1 = 0"
           comprobar 1143 "UPDATE caja_diaria SET canal = canal WHERE 1 = 0"
           comprobar 1143 "UPDATE pago SET orden_pago_id = orden_pago_id WHERE 1 = 0"
-          comprobar 1143 "UPDATE comprobante SET reemplaza_id = reemplaza_id WHERE 1 = 0"
+          comprobar 1142 "UPDATE comprobante SET reemplaza_id = reemplaza_id WHERE 1 = 0"
           comprobar 1644 "INSERT INTO orden_pago (colegio_id, referencia, familia_id, apoderado_id, proveedor, monto, moneda, comprobante_tipo, clave_idempotencia, vence_en, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'x', 0, 0, 'CULQI', 1, 'PEN', 'BOLETA', 'x', NOW(6), 'PAGADA', NOW(6), 'x', NOW(6))"
           comprobar 1644 "INSERT INTO orden_pago_cuota (colegio_id, orden_pago_id, cuota_id, monto, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 1, NOW(6), 'x', NOW(6))"
           # Sprint 4, tanda 2 (V14): recaudación bancaria. El archivo del banco es de solo inserción.
@@ -248,13 +260,14 @@ jobs:
           done
           comprobar 1142 "UPDATE huella_bitacora SET version = version WHERE 1 = 0"
           for columna in destino parametros apoderado_id usuario_id plantilla tipo clave; do
-            comprobar 1143 "UPDATE mensaje SET $columna = $columna WHERE 1 = 0"
+            comprobar 1142 "UPDATE mensaje SET $columna = $columna WHERE 1 = 0"
           done
           comprobar 1143 "UPDATE enlace_activacion SET mensaje_id = mensaje_id WHERE 1 = 0"
           comprobar 1143 "UPDATE enlace_activacion SET proposito = proposito WHERE 1 = 0"
           comprobar 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, usuario_id, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'verificador', 'HUELLA_BITACORA', 'CORREO', 'USUARIO', 0, 'x@y.pe', 'verificador', '', 'ENVIADO', NOW(6), 'verificador', NOW(6))"
           comprobar 1644 "INSERT INTO enlace_activacion (colegio_id, usuario_id, hash_token, vence_en, mensaje_id, proposito, creado_en, creado_por, actualizado_en) VALUES (0, 0, REPEAT('0', 64), NOW(6) + INTERVAL 1 HOUR, 0, 'PERSONAL', NOW(6), 'verificador', NOW(6))"
-          comprobar 1644 "INSERT INTO huella_bitacora (colegio_id, fecha, secuencia, codigo, eventos_del_dia, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-01', 1, REPEAT('0', 16), 0, NOW(6), 'sistema.auditoria', NOW(6))"
+          # Sprint 7, tanda 2: la huella la escribe solo cc_sistema (1142 para cc_app; con cc_sistema, su trigger: 1644).
+          comprobar 1142 "INSERT INTO huella_bitacora (colegio_id, fecha, secuencia, codigo, eventos_del_dia, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-01', 1, REPEAT('0', 16), 0, NOW(6), 'sistema.auditoria', NOW(6))"
           comprobar 1644 "INSERT INTO apoderado (colegio_id, familia_id, tipo_documento, numero_documento, apellido_paterno, nombres, parentesco, nombre_busqueda, activo, contacto_solicitud_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'DNI', '00000000', 'x', 'x', 'MADRE', 'x', TRUE, 1, NOW(6), 'x', NOW(6))"
           # Sprint 5, tanda 2 (V18): renovación de matrícula, matrícula reservada y avisos de las familias.
           for tabla in renovacion_matricula aviso_familia; do
@@ -298,7 +311,7 @@ jobs:
             comprobar 1143 "UPDATE verificacion_contacto SET $columna = $columna WHERE 1 = 0"
           done
           comprobar 1644 "INSERT INTO verificacion_contacto (colegio_id, apoderado_id, canal, contacto, hash_token, mensaje_id, vence_en, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'CORREO', 'x@y.pe', REPEAT('0', 64), 0, NOW(6) + INTERVAL 1 HOUR, NOW(6), 'sistema.mensajeria', NOW(6))"
-          comprobar 1644 "INSERT INTO huella_hora (colegio_id, momento, secuencia, codigo, creado_en, creado_por, actualizado_en) VALUES (0, NOW(6), 1, REPEAT('0', 16), NOW(6), 'sistema.auditoria', NOW(6))"
+          comprobar 1142 "INSERT INTO huella_hora (colegio_id, momento, secuencia, codigo, creado_en, creado_por, actualizado_en) VALUES (0, NOW(6), 1, REPEAT('0', 16), NOW(6), 'sistema.auditoria', NOW(6))"
           comprobar 1644 "INSERT INTO apoderado (colegio_id, familia_id, tipo_documento, numero_documento, apellido_paterno, nombres, parentesco, nombre_busqueda, activo, telefono_whatsapp, telefono_verificado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'DNI', '00000000', 'x', 'x', 'MADRE', 'x', TRUE, '+51999999999', '+51999999999', NOW(6), 'x', NOW(6))"
           comprobar 1644 "INSERT INTO feriado (colegio_id, fecha, descripcion, vigente, pendiente, aprobado_por, aprobado_en, creado_en, creado_por, actualizado_en) VALUES (0, '2999-01-04', 'verificador', TRUE, FALSE, 'b', NOW(6), NOW(6), 'verificador', NOW(6))"
           # Sprint 6, tanda 2 (V21): la foto del resumen diario es de solo inserción (ni sistema.panel la corrige); una foto
@@ -309,10 +322,11 @@ jobs:
           comprobar 1142 "UPDATE resumen_diario SET version = version WHERE 1 = 0"
           # (Correcciones del sprint 6: la foto en cero de un día pasado; la versión de V23 del trigger la rechaza por la
           # fecha y la anterior la dejaba llegar a la FK del colegio: 1452.)
-          comprobar 1644 "INSERT INTO resumen_diario (colegio_id, fecha, cortado_en, cobrado_total, pagos_cantidad, cobrado_efectivo, pagos_efectivo, cobrado_mes, deuda_vencida, familias_morosas, cajas_sin_cerrar, cierres_con_diferencia, solicitudes_pendientes, alertas_criticas, avisos_familias, avisos_entregados, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-01', '2000-01-01 19:30:00', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NOW(6), 'sistema.panel', NOW(6))"
+          comprobar 1142 "INSERT INTO resumen_diario (colegio_id, fecha, cortado_en, cobrado_total, pagos_cantidad, cobrado_efectivo, pagos_efectivo, cobrado_mes, deuda_vencida, familias_morosas, cajas_sin_cerrar, cierres_con_diferencia, solicitudes_pendientes, alertas_criticas, avisos_familias, avisos_entregados, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-01', '2000-01-01 19:30:00', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NOW(6), 'sistema.panel', NOW(6))"
           comprobar 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'verificador-panel', 'ALERTA_PROMOTORIA', 'CORREO', 'X', 'x@y.pe', 'verificador', '', 'PENDIENTE', NOW(6), 'verificador', NOW(6))"
           personal=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT MIN(id) FROM usuario WHERE apoderado_id IS NULL AND telefono_whatsapp IS NOT NULL")
-          comprobar 1644 "UPDATE usuario SET telefono_whatsapp = '+51900000009' WHERE id = ${personal}"
+          # Sprint 7, tanda 2: cc_app ya no escribe usuario (1142); con cc_sistema, trg_usuario_contacto lo rechaza (abajo).
+          comprobar 1142 "UPDATE usuario SET telefono_whatsapp = '+51900000009' WHERE id = ${personal}"
           # Sprint 6, tanda 3 (V22): la llamada de control es de solo inserción (no se corrige ni se borra) y la registra
           # solo una persona activa de Promotoría o Dirección (el colegio 0 no tiene a nadie: su trigger responde 1644).
           comprobar 1142 "DELETE FROM llamada_control WHERE 1 = 0"
@@ -329,9 +343,9 @@ jobs:
           done
           comprobar 1142 "INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en) VALUES (1, 'resumen_correo_externo', 'x@y.pe', NOW(6))"
           comprobar 1142 "UPDATE configuracion_colegio SET valor = valor WHERE 1 = 0"
-          comprobar 1644 "INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-03', 0, 'EFECTIVO', NOW(6), 'verificador', NOW(6))"
+          comprobar 1142 "INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-03', 0, 'EFECTIVO', NOW(6), 'verificador', NOW(6))"
           comprobar 1644 "INSERT INTO delegacion_llamada (colegio_id, semana, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-03', NOW(6), 'verificador', NOW(6))"
-          comprobar 1644 "UPDATE usuario SET apoderado_id = (SELECT MIN(id) FROM apoderado) WHERE id = ${personal}"
+          comprobar 1142 "UPDATE usuario SET apoderado_id = (SELECT MIN(id) FROM apoderado) WHERE id = ${personal}"
           # Sprint 7, tanda 1 (V24): el registro de respaldos lo escribe SOLO cc_respaldo. cc_app no lo inserta, edita ni
           # borra (1142); con cc_respaldo, unas anclas que no son eventos de la bitácora y el destino simulado sin la fila
           # del DBA fallan en trg_respaldo_registro (1644), y cc_respaldo no edita ni borra nada (1142).
@@ -358,7 +372,8 @@ jobs:
           # mensaje PENDIENTE lo dejó PermisosMySqlTest.simuladoSinPermisoDeLaBaseFallaCon1644.
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'mensajeria_simulada'")
           [ "$filas" = "0" ] || { echo "ERROR: la base tiene la fila mensajeria_simulada"; exit 1; }
-          comprobar 1644 "UPDATE mensaje SET proveedor = 'SIMULADO', proveedor_mensaje_id = CONCAT('SIM-', id), estado = 'ENVIADO', enviado_en = NOW(6), intentos = intentos + 1 WHERE clave LIKE 'pendiente-para-ci-%' AND estado = 'PENDIENTE'"
+          # Sprint 7, tanda 2: el estado del mensaje lo cambia solo cc_sistema (1142); con cc_sistema, el trigger (abajo).
+          comprobar 1142 "UPDATE mensaje SET proveedor = 'SIMULADO', proveedor_mensaje_id = CONCAT('SIM-', id), estado = 'ENVIADO', enviado_en = NOW(6), intentos = intentos + 1 WHERE clave LIKE 'pendiente-para-ci-%' AND estado = 'PENDIENTE'"
           # La base de producción no admite la pasarela simulada (sin la fila 'pasarela_simulada' del DBA).
           filas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'pasarela_simulada'")
           [ "$filas" = "0" ] || { echo "ERROR: la base tiene la fila pasarela_simulada"; exit 1; }
@@ -367,11 +382,66 @@ jobs:
           esperados=$(grep -c "^CREATE TRIGGER" scripts/mysql/03-triggers.sql)
           [ "$total" = "$esperados" ] || { echo "ERROR: cc_app ve $total triggers con triggers_instalados() y 03-triggers.sql tiene $esperados"; exit 1; }
           echo "OK: cc_app ve los $total triggers con la función triggers_instalados()"
+          # Sprint 7, tanda 2 (H1, E1, E4, E5, E10, E11, E14, E15): la identidad, las sesiones y las escrituras de los
+          # procesos son de cc_sistema. Con cc_app: 1142; nadie firma como sistema: 1644.
+          comprobar 1142 "INSERT INTO usuario (colegio_id, nombre_usuario, nombre_completo, clave_hash, creado_en, creado_por, actualizado_en) VALUES (1, 'ci.intruso', 'x', 'x', NOW(6), 'x', NOW(6))"
+          comprobar 1142 "UPDATE usuario SET clave_hash = clave_hash WHERE 1 = 0"
+          comprobar 1142 "INSERT INTO usuario_rol (usuario_id, rol) VALUES (${personal}, 'PROMOTOR')"
+          comprobar 1142 "DELETE FROM usuario_rol WHERE 1 = 0"
+          comprobar 1142 "INSERT INTO sesion_usuario (colegio_id, usuario_id, hash_token, abierta_en, vence_en, creado_en, creado_por, actualizado_en) VALUES (1, ${personal}, REPEAT('a', 64), NOW(6), NOW(6) + INTERVAL 1 HOUR, NOW(6), 'x', NOW(6))"
+          comprobar 1142 "INSERT INTO semilla_muestreo (colegio_id, ambito, fecha, semilla, creado_en, creado_por, actualizado_en) VALUES (1, 'CAJA', '2099-01-05', 1, NOW(6), 'sistema.muestreo', NOW(6))"
+          comprobar 1142 "UPDATE comprobante SET estado_envio = estado_envio WHERE 1 = 0"
+          comprobar 1142 "UPDATE mensaje SET estado = estado WHERE 1 = 0"
+          comprobar 1142 "DELETE FROM firma_operacion WHERE 1 = 0"
+          comprobar 1142 "UPDATE firma_operacion SET version = version WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO evento_auditoria (secuencia, ocurrido_en, nombre_usuario, accion, hash) VALUES (0, NOW(6), 'sistema.verificador', 'VERIFICADOR', NULL)"
+          comprobar 1644 "INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, comprobante_id, medio, total, recibido, vuelto, origen, clave_idempotencia, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'sistema.pasarela', '2000-01-01', 0, 'YAPE', 1, 1, 0, 'PASARELA', 'ci-sistema', 'VIGENTE', NOW(6), 'sistema.pasarela', NOW(6))"
+          # Con cc_sistema: no edita la bitácora ni borra los libros (1142); sus inserciones imposibles llegan al trigger (1644).
+          comprobar_sistema() {
+            codigo="$1"; sql="$2"
+            if salida=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_sistema -p"${CC_MYSQL_CLAVE_SISTEMA}" cuentasclaras -e "$sql" 2>&1); then
+              echo "ERROR: cc_sistema pudo ejecutar: $sql"
+              exit 1
+            fi
+            echo "$salida" | grep -q "ERROR $codigo" || { echo "Error inesperado: $salida"; exit 1; }
+            echo "OK cc_sistema ($codigo): $sql"
+          }
+          comprobar_sistema 1142 "UPDATE evento_auditoria SET ip = ip WHERE 1 = 0"
+          comprobar_sistema 1142 "DELETE FROM evento_auditoria WHERE 1 = 0"
+          comprobar_sistema 1142 "DELETE FROM pago WHERE 1 = 0"
+          comprobar_sistema 1142 "DELETE FROM sesion_usuario WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE sesion_usuario SET hash_token = hash_token WHERE 1 = 0"
+          # Sprint 7, tanda 2: el comprobante, los mensajes y los avisos de la pasarela los actualiza solo cc_sistema (cc_app:
+          # 1142, arriba), y solo las columnas del envío (1143).
+          comprobar_sistema 1143 "UPDATE comprobante SET numero = numero WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE comprobante SET total = total WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE comprobante SET reemplaza_id = reemplaza_id WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE evento_pasarela SET orden_pago_id = orden_pago_id WHERE 1 = 0"
+          for columna in destino parametros apoderado_id usuario_id plantilla tipo clave; do
+            comprobar_sistema 1143 "UPDATE mensaje SET $columna = $columna WHERE 1 = 0"
+          done
+          comprobar_sistema 1644 "INSERT INTO firma_operacion (colegio_id, sesion_id, usuario_id, clave, token, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'verificador:0', REPEAT('0', 64), NOW(6), 'verificador', NOW(6))"
+          comprobar_sistema 1644 "INSERT INTO sesion_usuario (colegio_id, usuario_id, hash_token, abierta_en, vence_en, creado_en, creado_por, actualizado_en) VALUES (0, 0, REPEAT('0', 64), NOW(6), NOW(6) + INTERVAL 1 HOUR, NOW(6), 'verificador', NOW(6))"
+          comprobar_sistema 1644 "INSERT INTO semilla_muestreo (colegio_id, ambito, fecha, semilla, creado_en, creado_por, actualizado_en) VALUES (0, 'CAJA', '2000-01-03', 1, NOW(6), 'sistema.muestreo', NOW(6))"
+          comprobar_sistema 1644 "INSERT INTO usuario (colegio_id, nombre_usuario, nombre_completo, clave_hash, activo, debe_cambiar_clave, creado_en, creado_por, actualizado_en) VALUES (0, 'verificador', 'x', 'x', TRUE, FALSE, NOW(6), 'verificador', NOW(6))"
+          comprobar_sistema 1644 "INSERT INTO usuario_rol (usuario_id, rol) VALUES (${personal}, 'PROMOTOR')"
+          comprobar_sistema 1644 "INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-03', 0, 'EFECTIVO', NOW(6), 'verificador', NOW(6))"
+          comprobar_sistema 1644 "INSERT INTO huella_bitacora (colegio_id, fecha, secuencia, codigo, eventos_del_dia, creado_en, creado_por, actualizado_en) VALUES (0, '2000-01-01', 1, REPEAT('0', 16), 0, NOW(6), 'sistema.auditoria', NOW(6))"
+          comprobar_sistema 1644 "UPDATE usuario SET telefono_whatsapp = '+51900000009' WHERE id = ${personal}"
+          comprobar_sistema 1644 "UPDATE usuario SET apoderado_id = (SELECT MIN(id) FROM apoderado) WHERE id = ${personal}"
+          comprobar_sistema 1644 "UPDATE mensaje SET proveedor = 'SIMULADO', proveedor_mensaje_id = CONCAT('SIM-', id), estado = 'ENVIADO', enviado_en = NOW(6), intentos = intentos + 1 WHERE clave LIKE 'pendiente-para-ci-%' AND estado = 'PENDIENTE'"
+          # Huellas (H7): cc_app ve las de los 73 triggers y las 5 funciones con huellas_objetos().
+          objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
+          [ "$objetos" = "$((esperados + 5))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
+          echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
-      - name: Arranque real en prod con cc_app (y rechazo con cc_migrador)
+      - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
         env:
           SPRING_PROFILES_ACTIVE: prod
-          DB_URL: ${{ env.CC_MYSQL_URL }}
+          # Sprint 7, tanda 2 (H11): en prod la conexión va cifrada (el MySQL del contenedor trae su certificado).
+          DB_URL: "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&sslMode=REQUIRED"
+          DB_SISTEMA_USUARIO: cc_sistema
+          DB_SISTEMA_CLAVE: ${{ env.CC_MYSQL_CLAVE_SISTEMA }}
           AUDITORIA_CLAVE_HMAC: "clave-hmac-del-job-de-integracion-continua-0001"
           # Sprint 5 (decisión 40): prod no arranca sin un canal real para avisar a las familias. Correo SMTP (no se
           # conecta al arrancar; la salud no depende del correo).
@@ -400,6 +470,12 @@ jobs:
           grep -q "Permisos y triggers de las correcciones del sprint 6 (muestra congelada, delegación de las llamadas, texto del resumen y correo externo por colegio) verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Permisos del respaldo verificados" prod.log || { cat prod.log; exit 1; }
           grep -q "Triggers verificados: están los" prod.log || { cat prod.log; exit 1; }
+          # Sprint 7, tanda 2 (sección 6.5).
+          grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
+          grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 73 triggers y las 5 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Privilegios verificados: cc_app y cc_sistema tienen solo los de 02-permisos-tablas.sql" prod.log || { cat prod.log; exit 1; }
+          grep -q "Conexiones a MySQL cifradas (TLS) verificadas" prod.log || { cat prod.log; exit 1; }
           # Sprint 7: en prod el log es JSON (ECS) y las sondas de vida y de disponibilidad son públicas.
           grep -q '^{"@timestamp".*Triggers verificados' prod.log || { echo "ERROR: el log de prod no es JSON"; head -n 5 prod.log; exit 1; }
 
@@ -414,11 +490,34 @@ jobs:
           fi
           grep -q "PUEDE ejecutar" prod-migrador.log || { cat prod-migrador.log; exit 1; }
           echo "OK: arranca con cc_app y se niega con cc_migrador"
+          # E9: sin TLS no arranca.
+          if DB_URL="${CC_MYSQL_URL}" DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" timeout 120 \
+               java -jar target/cuentas-claras-*.jar --server.port=18083 > prod-sin-tls.log 2>&1; then
+            echo "ERROR: la aplicación arrancó en prod sin TLS"; exit 1
+          fi
+          grep -q "no va cifrada (TLS)" prod-sin-tls.log || { cat prod-sin-tls.log; exit 1; }
+          # E9: el mismo usuario para las personas y los procesos no arranca.
+          if DB_USUARIO=cc_sistema DB_CLAVE="${CC_MYSQL_CLAVE_SISTEMA}" timeout 120 \
+               java -jar target/cuentas-claras-*.jar --server.port=18084 > prod-mismo-usuario.log 2>&1; then
+            echo "ERROR: la aplicación arrancó con el mismo usuario en los dos pools"; exit 1
+          fi
+          grep -q "no pueden ser el mismo usuario" prod-mismo-usuario.log || { cat prod-mismo-usuario.log; exit 1; }
+          # E9: un privilegio de más (TRIGGER sobre el esquema) no deja arrancar; 02 lo quita.
+          $MYSQL_ADMIN -e "GRANT TRIGGER ON cuentasclaras.* TO 'cc_app'@'%'"
+          if DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" timeout 120 \
+               java -jar target/cuentas-claras-*.jar --server.port=18085 > prod-privilegio.log 2>&1; then
+            echo "ERROR: la aplicación arrancó con un privilegio de más"; exit 1
+          fi
+          grep -q "tiene privilegios que 02-permisos-tablas.sql no da" prod-privilegio.log || { cat prod-privilegio.log; exit 1; }
+          $MYSQL_ADMIN < scripts/mysql/02-permisos-tablas.sql
+          echo "OK: sin TLS, con el mismo usuario o con un privilegio de más, prod no arranca"
 
       - name: "M2: prod no arranca si falta un trigger BEFORE UPDATE (y vuelve a arrancar al restaurarlo)"
         env:
           SPRING_PROFILES_ACTIVE: prod
-          DB_URL: ${{ env.CC_MYSQL_URL }}
+          DB_URL: "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&sslMode=REQUIRED"
+          DB_SISTEMA_USUARIO: cc_sistema
+          DB_SISTEMA_CLAVE: ${{ env.CC_MYSQL_CLAVE_SISTEMA }}
           AUDITORIA_CLAVE_HMAC: "clave-hmac-del-job-de-integracion-continua-0001"
           MENSAJERIA_CORREO_PROVEEDOR: SMTP
           CORREO_REMITENTE: "avisos@ci.cuentasclaras.pe"
@@ -430,10 +529,68 @@ jobs:
                java -jar target/cuentas-claras-*.jar --server.port=18082 > prod-sin-trigger.log 2>&1; then
             echo "ERROR: la aplicación arrancó sin trg_mensaje_envio"; exit 1
           fi
-          grep -q "Faltan triggers en la base: trg_mensaje_envio" prod-sin-trigger.log || { cat prod-sin-trigger.log; exit 1; }
+          # Sprint 7, tanda 2: lo nombran primero las huellas («Faltan: …»); sin la función, la lista de triggers.
+          grep -q "Faltan: trg_mensaje_envio\|Faltan triggers en la base: trg_mensaje_envio" prod-sin-trigger.log \
+            || { cat prod-sin-trigger.log; exit 1; }
           mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras \
             < scripts/mysql/03-triggers.sql
           echo "OK: sin el trigger BEFORE UPDATE, prod no arranca; restaurado con 03-triggers.sql"
+
+      - name: "M3 (E7 y E8): un trigger debilitado con el mismo nombre, una función reemplazada o un trigger de más no dejan arrancar prod"
+        env:
+          SPRING_PROFILES_ACTIVE: prod
+          DB_URL: "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&sslMode=REQUIRED"
+          DB_SISTEMA_USUARIO: cc_sistema
+          DB_SISTEMA_CLAVE: ${{ env.CC_MYSQL_CLAVE_SISTEMA }}
+          AUDITORIA_CLAVE_HMAC: "clave-hmac-del-job-de-integracion-continua-0001"
+          MENSAJERIA_CORREO_PROVEEDOR: SMTP
+          CORREO_REMITENTE: "avisos@ci.cuentasclaras.pe"
+          SPRING_MAIL_HOST: "127.0.0.1"
+        run: |
+          migrador() {
+            mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras "$@"
+          }
+          no_arranca() {
+            caso="$1"; esperado="$2"
+            if DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" timeout 120 \
+                 java -jar target/cuentas-claras-*.jar --server.port=18086 > "prod-$caso.log" 2>&1; then
+              echo "ERROR: la aplicación arrancó con $caso"; exit 1
+            fi
+            grep -q "$esperado" "prod-$caso.log" || { cat "prod-$caso.log"; exit 1; }
+            echo "OK: con $caso, prod no arranca ($esperado)"
+          }
+          # 1. trg_usuario_rol_alta sin el bloque de Promotoría y Dirección (como el de antes del sprint 7).
+          migrador <<'SQL'
+          DELIMITER //
+          DROP TRIGGER trg_usuario_rol_alta//
+          CREATE TRIGGER trg_usuario_rol_alta BEFORE INSERT ON usuario_rol FOR EACH ROW
+          BEGIN
+              IF SUBSTRING_INDEX(SESSION_USER(), '@', 1) <> 'cc_sistema' THEN
+                  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los roles los cambia solo cc_sistema';
+              END IF;
+          END//
+          DELIMITER ;
+          SQL
+          no_arranca "trigger-debilitado" "huella distinta: trg_usuario_rol_alta"
+          migrador < scripts/mysql/03-triggers.sql
+          # 2. cc_es_sistema() reemplazada por una que siempre dice TRUE (cc_app firmaría como sistema).
+          migrador -e "DROP FUNCTION cc_es_sistema; CREATE FUNCTION cc_es_sistema() RETURNS BOOLEAN NO SQL RETURN TRUE"
+          no_arranca "funcion-reemplazada" "huella distinta: cc_es_sistema"
+          migrador < scripts/mysql/03-triggers.sql
+          # 3. Un trigger de más (que no está en 03-triggers.sql).
+          migrador -e "CREATE TRIGGER trg_de_mas BEFORE INSERT ON colegio FOR EACH ROW SET NEW.nombre = NEW.nombre"
+          no_arranca "trigger-de-mas" "Sobran (no están en 03-triggers.sql ni en 02): trg_de_mas"
+          migrador -e "DROP TRIGGER trg_de_mas"
+          # Restaurada, vuelve a arrancar.
+          DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" java -jar target/cuentas-claras-*.jar --server.port=18087 > prod-restaurada.log 2>&1 &
+          PID_APP=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:18087/actuator/health | grep -q UP && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:18087/actuator/health | grep -q UP || { cat prod-restaurada.log; exit 1; }
+          kill "$PID_APP"
+          echo "OK: restaurados 02 y 03, prod vuelve a arrancar"
 
   respaldo:
     name: Respaldo cifrado, restauración real y ataques E29 a E32
@@ -469,6 +626,7 @@ jobs:
       CC_MYSQL_URL: "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false"
       CC_MYSQL_CLAVE_MIGRADOR: "migrador-solo-ci-2"
       CC_MYSQL_CLAVE_APP: "app-solo-ci-2"
+      CC_MYSQL_CLAVE_SISTEMA: "sistema-solo-ci-2"
       CC_MYSQL_CLAVE_RESPALDO: "respaldo-solo-ci-2"
       MYSQL_ADMIN: "mysql --protocol=TCP -h 127.0.0.1 -P 3306 -uroot -proot-ci"
       # El respaldo (scripts/respaldo/respaldar.sh) como en el servidor: cc_respaldo y dos destinatarios age.
@@ -510,10 +668,11 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V24, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V25, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
-              -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" scripts/mysql/01-usuarios.sql | $MYSQL_ADMIN
+              -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \
+              scripts/mysql/01-usuarios.sql | $MYSQL_ADMIN
           DB_URL="$CC_MYSQL_URL" DB_MIGRADOR_USUARIO=cc_migrador DB_MIGRADOR_CLAVE="$CC_MYSQL_CLAVE_MIGRADOR" \
             java -jar target/cuentas-claras-*.jar migrar
           $MYSQL_ADMIN < scripts/mysql/02-permisos-tablas.sql

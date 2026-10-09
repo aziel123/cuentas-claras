@@ -12,7 +12,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
-import pe.edu.virgenmaria.cuentasclaras.comun.prueba.OtraPersona;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.Actor;
@@ -22,6 +21,7 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.service.VerificadorIntegridadA
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.VerificadorPermisosBaseDatos;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.OtraPersona;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.CambiarRolesRequest;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
@@ -553,16 +553,23 @@ class PermisosMySqlTest {
 				"UPDATE pago SET medio = medio WHERE 1 = 0", "UPDATE pago SET vuelto = vuelto WHERE 1 = 0",
 				"UPDATE pago SET caja_diaria_id = caja_diaria_id WHERE 1 = 0",
 				"UPDATE pago SET clave_idempotencia = clave_idempotencia WHERE 1 = 0",
-				"UPDATE comprobante SET numero = numero WHERE 1 = 0", "UPDATE comprobante SET total = total WHERE 1 = 0",
-				"UPDATE comprobante SET receptor_numero_documento = receptor_numero_documento WHERE 1 = 0",
 				"UPDATE serie_comprobante SET serie = serie WHERE 1 = 0", "UPDATE caja_diaria SET fecha = fecha WHERE 1 = 0",
 				"UPDATE caja_diaria SET cajero = cajero WHERE 1 = 0", "UPDATE caja_diaria SET fondo_fijo = fondo_fijo WHERE 1 = 0",
 				"UPDATE cuota SET monto = monto WHERE 1 = 0" }) {
 			assertThat(codigoAl(() -> jdbc.update(sentencia))).as(sentencia).isEqualTo(1143);
 		}
+		// Sprint 7, tanda 2 (E15): el comprobante lo actualiza solo cc_sistema (el envío al OSE), y por columna.
+		for (String sentencia : new String[] { "UPDATE comprobante SET numero = numero WHERE 1 = 0",
+				"UPDATE comprobante SET total = total WHERE 1 = 0",
+				"UPDATE comprobante SET receptor_numero_documento = receptor_numero_documento WHERE 1 = 0" }) {
+			assertThat(codigoAl(() -> jdbc.update(sentencia))).as("cc_app: " + sentencia).isEqualTo(1142);
+			assertThat(codigoAl(() -> sistema().update(sentencia))).as("cc_sistema: " + sentencia).isEqualTo(1143);
+		}
+		assertThat(codigoAl(() -> jdbc.update("UPDATE comprobante SET estado_envio = estado_envio WHERE 1 = 0")))
+				.isEqualTo(1142);
 		// Lo que sí cambia (envío al OSE, anulación, número de la serie, estado de la caja y lo pagado de la cuota).
 		assertThatCode(() -> {
-			jdbc.update("UPDATE comprobante SET estado_envio = estado_envio, intentos = intentos, respuesta = respuesta "
+			sistema().update("UPDATE comprobante SET estado_envio = estado_envio, intentos = intentos, respuesta = respuesta "
 					+ "WHERE 1 = 0");
 			jdbc.update("UPDATE pago SET estado = estado, operacion_vigente = operacion_vigente WHERE 1 = 0");
 			jdbc.update("UPDATE serie_comprobante SET ultimo_numero = ultimo_numero WHERE 1 = 0");
@@ -1222,10 +1229,13 @@ class PermisosMySqlTest {
 		Long aceptado = jdbc.queryForObject("SELECT id FROM comprobante WHERE id = ?", Long.class, p.get("comprobante_id"));
 		assertThat(jdbc.queryForObject("SELECT estado_envio FROM comprobante WHERE id = ?", String.class, aceptado))
 				.isEqualTo("ACEPTADO");
+		// Sprint 7, tanda 2 (E15): con cc_app ni se intenta (1142); con cc_sistema, el trigger (1644).
 		assertThat(codigoAl(() -> jdbc.update("UPDATE comprobante SET codigo_hash = 'manipulado' WHERE id = ?", aceptado)))
-				.isEqualTo(1644);
-		assertThat(codigoAl(() -> jdbc.update("UPDATE comprobante SET estado_envio = 'RECHAZADO' WHERE id = ?", aceptado)))
-				.isEqualTo(1644);
+				.isEqualTo(1142);
+		assertThat(codigoAl(() -> sistema().update("UPDATE comprobante SET codigo_hash = 'manipulado' WHERE id = ?",
+				aceptado))).isEqualTo(1644);
+		assertThat(codigoAl(() -> sistema().update("UPDATE comprobante SET estado_envio = 'RECHAZADO' WHERE id = ?",
+				aceptado))).isEqualTo(1644);
 
 		// C1: una verificación «encontrada» con un monto que no es el del pago.
 		UsuariosDePrueba.iniciarSesion(cajera);
@@ -1269,10 +1279,14 @@ class PermisosMySqlTest {
 		for (String sentencia : new String[] { "UPDATE orden_pago SET monto = monto WHERE 1 = 0",
 				"UPDATE orden_pago SET familia_id = familia_id WHERE 1 = 0",
 				"UPDATE orden_pago SET referencia = referencia WHERE 1 = 0",
-				"UPDATE evento_pasarela SET orden_pago_id = orden_pago_id WHERE 1 = 0",
-				"UPDATE caja_diaria SET canal = canal WHERE 1 = 0", "UPDATE pago SET orden_pago_id = orden_pago_id WHERE 1 = 0",
-				"UPDATE comprobante SET reemplaza_id = reemplaza_id WHERE 1 = 0" }) {
+				"UPDATE caja_diaria SET canal = canal WHERE 1 = 0", "UPDATE pago SET orden_pago_id = orden_pago_id WHERE 1 = 0" }) {
 			assertThat(codigoAl(() -> jdbc.update(sentencia))).as(sentencia).isEqualTo(1143);
+		}
+		// Sprint 7, tanda 2: los avisos de la pasarela y el comprobante los escribe solo cc_sistema (y por columna).
+		for (String sentencia : new String[] { "UPDATE evento_pasarela SET orden_pago_id = orden_pago_id WHERE 1 = 0",
+				"UPDATE comprobante SET reemplaza_id = reemplaza_id WHERE 1 = 0" }) {
+			assertThat(codigoAl(() -> jdbc.update(sentencia))).as("cc_app: " + sentencia).isEqualTo(1142);
+			assertThat(codigoAl(() -> sistema().update(sentencia))).as("cc_sistema: " + sentencia).isEqualTo(1143);
 		}
 		// Triggers: una orden que nace pagada, una cuota de una orden que no existe y (sin la fila del DBA) una orden
 		// de la pasarela simulada.
@@ -1581,10 +1595,11 @@ class PermisosMySqlTest {
 		Long lote = loteCargado(archivoDeAyer().linea(ayer(), pe.edu.virgenmaria.cuentasclaras.comun.texto.CodigoPago
 				.deAlumno(familias.otroAlumno()), "", "450.00", "PEN", operacion(21)));
 
+		// Sprint 7, tanda 2: el trigger (sin la firma de quien confirma: 1644) va antes que el CHECK (3819).
 		assertThat(codigoAl(() -> jdbc.update("UPDATE lote_recaudacion SET estado = 'CONFIRMADO', confirmado_por = "
-				+ "creado_por, confirmado_en = NOW(6), total_ciego = total WHERE id = ?", lote))).isEqualTo(3819);
+				+ "creado_por, confirmado_en = NOW(6), total_ciego = total WHERE id = ?", lote))).isIn(1644, 3819);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE lote_recaudacion SET estado = 'CONFIRMADO', confirmado_por = "
-				+ "'otra.persona', confirmado_en = NOW(6), total_ciego = total - 1 WHERE id = ?", lote))).isEqualTo(3819);
+				+ "'otra.persona', confirmado_en = NOW(6), total_ciego = total - 1 WHERE id = ?", lote))).isIn(1644, 3819);
 		UsuariosDePrueba.iniciarSesion(persona(412, "director.banco", Rol.DIRECTOR));
 		try {
 			assertThatThrownBy(() -> recaudacion.confirmar(lote, pe.edu.virgenmaria.cuentasclaras.comun.prueba
@@ -1629,9 +1644,14 @@ class PermisosMySqlTest {
 				.deAlumno(familias.otroAlumno()), "", total, "PEN", operacion(41)));
 		Long linea = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioRecaudacion.idLinea(jdbc, lote, 1);
 		Long caja = cajaRecaudacionDeAyer();
-		// Riesgo aceptado (M1): cc_app puede escribir la confirmación con otro nombre; el resto lo frena la base.
-		jdbc.update("UPDATE lote_recaudacion SET estado = 'CONFIRMADO', confirmado_por = 'otra.persona', confirmado_en = "
-				+ "NOW(6), total_ciego = total WHERE id = ?", lote);
+		// Sprint 7, tanda 2 (E2): el riesgo aceptado M1 (cc_app escribía la confirmación con otro nombre) ya no existe: sin
+		// la firma de la sesión de quien confirma, 1644. Aquí confirma otra persona con su firma; el resto lo frena la base.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE lote_recaudacion SET estado = 'CONFIRMADO', confirmado_por = "
+				+ "'otra.persona', confirmado_en = NOW(6), total_ciego = total WHERE id = ?", lote))).isEqualTo(1644);
+		Usuario confirma = guardar("conf.rec41." + sufijo, Rol.DIRECTOR);
+		firmaDe(confirma.getNombreUsuario(), "lote_recaudacion:" + lote + ":CONFIRMADO");
+		jdbc.update("UPDATE lote_recaudacion SET estado = 'CONFIRMADO', confirmado_por = ?, confirmado_en = NOW(6), "
+				+ "total_ciego = total WHERE id = ?", confirma.getNombreUsuario(), lote);
 
 		assertThat(insertarPagoRecaudacion("EFECTIVO", familias.otraFamilia(), caja, boleta.get("id"), total,
 				operacion(41), "clave-" + sufijo + "-41", linea)).isEqualTo(3819);
@@ -1806,7 +1826,12 @@ class PermisosMySqlTest {
 				Long.class, itf);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET estado = 'CONFIRMADA', resuelto_por = ?, "
 				+ "resuelto_en = NOW(6) WHERE id = ?", administracion.getUsername(), explicacion))).isEqualTo(1644);
-		// Promotoría (que no lo subió) lo explica mirando su app del banco.
+		// Promotoría (que no lo subió) lo explica mirando su app del banco (sprint 7: con la firma de su sesión).
+		if (jdbc.queryForObject("SELECT COUNT(*) FROM usuario WHERE nombre_usuario = ?", Long.class,
+				"promotora.conc." + sufijo) == 0) {
+			guardar("promotora.conc." + sufijo, Rol.PROMOTOR);
+		}
+		firmaDe("promotora.conc." + sufijo, "partida_conciliacion:" + explicacion + ":CONFIRMADA");
 		assertThat(codigoAl(() -> jdbc.update("UPDATE partida_conciliacion SET estado = 'CONFIRMADA', resuelto_por = ?, "
 				+ "resuelto_en = NOW(6) WHERE id = ?", "promotora.conc." + sufijo, explicacion))).isNull();
 		assertThat(jdbc.queryForList("SELECT CONCAT(origen, ' ', resultado, ' ', creado_por) FROM verificacion_bancaria "
@@ -2079,7 +2104,8 @@ class PermisosMySqlTest {
 	/** INSERT directo de un pago de recaudación como cc_app (lo que haría alguien con sus credenciales). */
 	private Integer insertarPagoRecaudacion(String medio, Long familia, Long caja, Object comprobante, String total,
 			String operacion, String clave, Long linea) {
-		return codigoAl(() -> jdbc.update("INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, "
+		// Sprint 7, tanda 2 (E1): el pago de sistema.recaudacion lo inserta solo cc_sistema (con cc_app, 1644 siempre).
+		return codigoAl(() -> sistema().update("INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, "
 				+ "comprobante_id, medio, total, numero_operacion, operacion_vigente, a_cuenta, origen, clave_idempotencia, "
 				+ "linea_recaudacion_id, estado, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, "
 				+ "'sistema.recaudacion', ?, ?, ?, ?, ?, ?, FALSE, 'RECAUDACION', ?, ?, 'VIGENTE', NOW(6), "
@@ -2271,13 +2297,16 @@ class PermisosMySqlTest {
 		}
 		assertThat(jdbc.queryForMap("SELECT estado, proveedor FROM mensaje WHERE id = ?", mensaje))
 				.containsEntry("estado", "ENVIADO").containsEntry("proveedor", "SIMULADO");
-		assertThat(jdbc.update("UPDATE mensaje SET estado = 'ENTREGADO', entregado_en = NOW(6), version = version + 1 "
+		// Sprint 7, tanda 2 (E15): la entrega la marca solo cc_sistema; con cc_app, 1142.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE mensaje SET estado = 'ENTREGADO', entregado_en = NOW(6), "
+				+ "version = version + 1 WHERE id = ?", mensaje))).isEqualTo(1142);
+		assertThat(sistema().update("UPDATE mensaje SET estado = 'ENTREGADO', entregado_en = NOW(6), version = version + 1 "
 				+ "WHERE id = ?", mensaje)).isEqualTo(1);
-		assertThat(codigoAl(() -> jdbc.update("UPDATE mensaje SET estado = 'PENDIENTE' WHERE id = ?", mensaje)))
+		assertThat(codigoAl(() -> sistema().update("UPDATE mensaje SET estado = 'PENDIENTE' WHERE id = ?", mensaje)))
 				.isEqualTo(1644);
-		assertThat(codigoAl(() -> jdbc.update("UPDATE mensaje SET proveedor_mensaje_id = 'otro' WHERE id = ?", mensaje)))
+		assertThat(codigoAl(() -> sistema().update("UPDATE mensaje SET proveedor_mensaje_id = 'otro' WHERE id = ?", mensaje)))
 				.isEqualTo(1644);
-		assertThat(codigoAl(() -> jdbc.update("UPDATE mensaje SET intentos = intentos + 5 WHERE id = ?", mensaje)))
+		assertThat(codigoAl(() -> sistema().update("UPDATE mensaje SET intentos = intentos + 5 WHERE id = ?", mensaje)))
 				.isEqualTo(1644);
 	}
 
@@ -2290,8 +2319,11 @@ class PermisosMySqlTest {
 				.isEqualTo(1142);
 		for (String columna : new String[] { "destino", "parametros", "apoderado_id", "usuario_id", "plantilla", "tipo",
 				"clave" }) {
+			// Sprint 7, tanda 2: cc_app ya no actualiza mensajes (1142); cc_sistema, solo las columnas del envío (1143).
 			assertThat(codigoAl(() -> jdbc.update("UPDATE mensaje SET " + columna + " = " + columna + " WHERE 1 = 0")))
-					.as(columna).isEqualTo(1143);
+					.as(columna).isEqualTo(1142);
+			assertThat(codigoAl(() -> sistema().update("UPDATE mensaje SET " + columna + " = " + columna + " WHERE 1 = 0")))
+					.as("cc_sistema: " + columna).isEqualTo(1143);
 		}
 	}
 
@@ -2326,7 +2358,7 @@ class PermisosMySqlTest {
 	 */
 	private Long mensajePendiente(String prefijoClave) {
 		Usuario titular = guardar("pendiente." + prefijoClave + sufijo, Rol.PROMOTOR);
-		jdbc.update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, usuario_id, destino, plantilla, "
+		sistema().update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, usuario_id, destino, plantilla, "
 				+ "parametros, entidad, entidad_id, estado, proximo_intento_en, creado_en, creado_por, actualizado_en) "
 				+ "VALUES (1, ?, 'HUELLA_BITACORA', 'WHATSAPP', 'USUARIO', ?, ?, 'HUELLA', '01/01/2000', 'huella_bitacora', 0, "
 				+ "'PENDIENTE', '2100-01-01', NOW(6), 'sistema.auditoria', NOW(6))", prefijoClave + sufijo, titular.getId(),
@@ -2339,7 +2371,7 @@ class PermisosMySqlTest {
 	void mensajeConTokenFallaCon3819() {
 		Usuario titular = guardar("token." + sufijo, Rol.PROMOTOR);
 		for (String enlace : new String[] { "https://colegio.pe/activar/1/abc", "https://colegio.pe/verificar/1/abc" }) {
-			assertThat(codigoAl(() -> jdbc.update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, "
+			assertThat(codigoAl(() -> sistema().update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, "
 					+ "usuario_id, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) "
 					+ "VALUES (1, ?, 'HUELLA_BITACORA', 'WHATSAPP', 'USUARIO', ?, ?, 'HUELLA', ?, 'PENDIENTE', NOW(6), "
 					+ "'sistema.auditoria', NOW(6))", "token-" + enlace.length() + sufijo, titular.getId(),
@@ -2351,7 +2383,7 @@ class PermisosMySqlTest {
 	@Test
 	void enviadoSinIdDelProveedorFallaCon3819() {
 		Long mensaje = mensajePendiente("sin-id-");
-		assertThat(codigoAl(() -> jdbc.update("UPDATE mensaje SET estado = 'ENVIADO' WHERE id = ?", mensaje)))
+		assertThat(codigoAl(() -> sistema().update("UPDATE mensaje SET estado = 'ENVIADO' WHERE id = ?", mensaje)))
 				.isEqualTo(3819);
 	}
 
@@ -2365,7 +2397,7 @@ class PermisosMySqlTest {
 		String simulado = "UPDATE mensaje SET proveedor = 'SIMULADO', proveedor_mensaje_id = CONCAT('SIM-', id), "
 				+ "estado = 'ENVIADO', enviado_en = NOW(6), intentos = intentos + 1 WHERE id = ?";
 		if (!mensajeriaSimuladaHabilitada()) {
-			assertThat(codigoAl(() -> jdbc.update(simulado, mensaje))).isEqualTo(1644);
+			assertThat(codigoAl(() -> sistema().update(simulado, mensaje))).isEqualTo(1644);
 		}
 		assertThat(jdbc.queryForObject("SELECT estado FROM mensaje WHERE id = ?", String.class, mensaje))
 				.isEqualTo("PENDIENTE");
@@ -2378,7 +2410,7 @@ class PermisosMySqlTest {
 		huellaDiaria.enColegio(1L, manana);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM huella_bitacora WHERE colegio_id = 1 AND fecha = ?",
 				Long.class, manana.minusDays(1))).isEqualTo(1);
-		assertThat(codigoAl(() -> jdbc.update("INSERT INTO huella_bitacora (colegio_id, fecha, secuencia, codigo, "
+		assertThat(codigoAl(() -> sistema().update("INSERT INTO huella_bitacora (colegio_id, fecha, secuencia, codigo, "
 				+ "eventos_del_dia, creado_en, creado_por, actualizado_en) VALUES (1, '1999-01-01', 1, "
 				+ "'ffffffffffffffff', 0, NOW(6), 'sistema.auditoria', NOW(6))"))).isEqualTo(1644);
 	}
@@ -2487,16 +2519,15 @@ class PermisosMySqlTest {
 		String nombre = "ren.familia." + apoderado + "." + sufijo;
 		// La cuenta de un apoderado solo nace desde su ficha (con el enlace al titular, fase 2b): aquí se enlaza por SQL
 		// con los permisos de cc_app, como quedaría después de activarla.
-		Usuario usuario = UsuariosDePrueba.guardar(usuarios, codificador, r.id(), nombre, UsuariosDePrueba.CLAVE, false,
-				Rol.DOCENTE);
-		// Sprint 6 (trg_usuario_contacto): el contacto del PERSONAL no cambia por SQL; la cuenta pasa a ser del apoderado y
-		// después pierde el celular (la regla del apoderado no cambió). Correcciones del sprint 6 (S6-A1): una cuenta con
-		// roles del personal no se enlaza a un apoderado, así que primero cambia el rol y después se enlaza.
-		jdbc.update("UPDATE usuario_rol SET rol = 'APODERADO' WHERE usuario_id = ?", usuario.getId());
-		jdbc.update("UPDATE usuario SET apoderado_id = ? WHERE id = ?", apoderado, usuario.getId());
-		jdbc.update("UPDATE usuario SET telefono_whatsapp = NULL WHERE id = ?", usuario.getId());
-		return new pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado(usuario.getId(), r.id(), nombre,
-				nombre, null, true, false, false, EnumSet.of(Rol.APODERADO), apoderado);
+		// Sprint 7, tanda 2: la cuenta del apoderado nace enlazada a él (como desde su ficha), por la ruta de identidad
+		// (cc_sistema; cc_app no crea cuentas y nadie cambia un rol con UPDATE).
+		String documento = jdbc.queryForObject("SELECT numero_documento FROM apoderado WHERE id = ?", String.class,
+				apoderado);
+		Usuario usuario = pe.edu.virgenmaria.cuentasclaras.comun.basedatos.RutaConexion.identidad(() -> pe.edu.virgenmaria
+				.cuentasclaras.comun.multicolegio.ContextoColegio.en(r.id(), () -> usuarios.saveAndFlush(Usuario.deApoderado(
+						documento, nombre, null, codificador.encode(UsuariosDePrueba.CLAVE), apoderado))));
+		return new pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado(usuario.getId(), r.id(),
+				usuario.getNombreUsuario(), nombre, null, true, false, false, EnumSet.of(Rol.APODERADO), apoderado);
 	}
 
 	/** Abre (o completa) la campaña y devuelve la renovación del alumno. */
@@ -2665,14 +2696,45 @@ class PermisosMySqlTest {
 		return UsuariosDePrueba.guardar(usuarios, codificador, 1L, nombre, UsuariosDePrueba.CLAVE, false, rol);
 	}
 
+	/** Sprint 7, tanda 2: la conexión de cc_sistema (procesos e identidad). Los triggers valen para las dos conexiones. */
+	private JdbcTemplate sistema() {
+		return new JdbcTemplate(((pe.edu.virgenmaria.cuentasclaras.comun.basedatos.FuenteDatosEnrutada) fuenteDatos)
+				.sistema());
+	}
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.SesionesFirmadas sesionesFirmadas;
+
+	/**
+	 * Sprint 7, tanda 2: la firma de esa persona del colegio 1 para la clave, como la deja la aplicación al aprobar (con
+	 * el secreto de una sesión abierta por la ruta de identidad). Si la persona no existe o la clave ya tiene firma, no
+	 * hace nada (los casos que deben fallar fallan igual).
+	 */
+	private void firmaDe(String nombreUsuario, String clave) {
+		java.util.List<Long> ids = jdbc.queryForList("SELECT id FROM usuario WHERE colegio_id = 1 AND nombre_usuario = ? "
+				+ "AND activo", Long.class, nombreUsuario);
+		if (ids.isEmpty() || jdbc.queryForObject("SELECT COUNT(*) FROM firma_operacion WHERE colegio_id = 1 AND clave = ?",
+				Long.class, clave) > 0) {
+			return;
+		}
+		var sesion = sesionesFirmadas.abrir(1L, ids.getFirst(), "127.0.0.1");
+		jdbc.update("INSERT INTO firma_operacion (colegio_id, sesion_id, usuario_id, clave, token, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (1, ?, ?, ?, ?, NOW(6), ?, NOW(6))", sesion.sesionId(), ids.getFirst(), clave,
+				sesion.token(), nombreUsuario);
+	}
+
 	/** Una persona del personal con correo desde su alta (un INSERT: trg_usuario_contacto vigila los UPDATE). */
 	private Usuario guardarConCorreo(String nombre, Rol rol, String correo) {
-		return pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio.en(1L, () -> {
-			Usuario usuario = Usuario.nuevo(nombre, "Nombre de " + nombre, correo, codificador.encode(UsuariosDePrueba.CLAVE),
-					EnumSet.of(rol));
-			usuario.asignarTelefonoWhatsapp(UsuariosDePrueba.celular(nombre));
-			return usuarios.save(usuario);
-		});
+		// Sprint 7, tanda 2: las cuentas las crea cc_sistema (ruta de identidad), con la clave por cambiar; después la cambia.
+		return pe.edu.virgenmaria.cuentasclaras.comun.basedatos.RutaConexion.identidad(() -> pe.edu.virgenmaria
+				.cuentasclaras.comun.multicolegio.ContextoColegio.en(1L, () -> {
+					String hash = codificador.encode(UsuariosDePrueba.CLAVE);
+					Usuario usuario = Usuario.nuevo(nombre, "Nombre de " + nombre, correo, hash, EnumSet.of(rol));
+					usuario.asignarTelefonoWhatsapp(UsuariosDePrueba.celular(nombre));
+					Usuario guardado = usuarios.saveAndFlush(usuario);
+					guardado.cambiarClave(hash, java.time.LocalDateTime.now(LIMA), false);
+					return usuarios.saveAndFlush(guardado);
+				}));
 	}
 
 	private static Integer codigoMySql(Throwable error) {
@@ -2839,7 +2901,8 @@ class PermisosMySqlTest {
 	/** Tanda 3 (G21): la semilla del muestreo nace una vez por día y no se edita ni se borra. */
 	@Test
 	void semillaNoSeEditaFallaCon1142() {
-		java.time.LocalDate dia = java.time.LocalDate.of(2026, 1, 1).plusDays(Math.floorMod(System.nanoTime(), 3000));
+		// Sprint 7, tanda 2 (E11): la semilla es de hoy (la planta sistema.muestreo con cc_sistema).
+		java.time.LocalDate dia = java.time.LocalDate.now(LIMA);
 		UsuariosDePrueba.iniciarSesion(persona(550, "promotor.semilla", Rol.PROMOTOR));
 		long semilla;
 		try {
@@ -2986,6 +3049,10 @@ class PermisosMySqlTest {
 		String atender = "UPDATE aviso_familia SET estado = 'ATENDIDO', atendido_por = ?, atendido_en = NOW(6), "
 				+ "respuesta = 'Revisado', version = version + 1 WHERE id = ?";
 		assertThat(codigoAl(() -> jdbc.update(atender, cajera.getUsername(), aviso))).isEqualTo(1644);
+		// Sprint 7, tanda 2 (E2): atender lleva la firma de la sesión de quien atiende.
+		assertThat(codigoAl(() -> jdbc.update(atender, "promotor.m2." + sufijo, aviso))).as("sin firma").isEqualTo(1644);
+		guardar("promotor.m2." + sufijo, Rol.PROMOTOR);
+		firmaDe("promotor.m2." + sufijo, "aviso_familia:" + aviso + ":ATENDIDO");
 		assertThat(jdbc.update(atender, "promotor.m2." + sufijo, aviso)).isEqualTo(1);
 	}
 
@@ -3012,7 +3079,11 @@ class PermisosMySqlTest {
 				dia);
 		String aprobar = "UPDATE feriado SET pendiente = FALSE, aprobado_por = ?, aprobado_en = NOW(6) WHERE id = ?";
 		assertThat(codigoAl(() -> jdbc.update(aprobar, "director.m3", id))).as("quien lo propuso").isEqualTo(1644);
-		assertThat(jdbc.update(aprobar, "promotor.m3", id)).isEqualTo(1);
+		// Sprint 7, tanda 2 (E2): aprobar lleva la firma de la sesión de quien aprueba.
+		Usuario aprobadora = guardar("promotor.m3." + sufijo, Rol.PROMOTOR);
+		assertThat(codigoAl(() -> jdbc.update(aprobar, aprobadora.getNombreUsuario(), id))).as("sin firma").isEqualTo(1644);
+		firmaDe(aprobadora.getNombreUsuario(), "feriado:" + id + ":APROBADO");
+		assertThat(jdbc.update(aprobar, aprobadora.getNombreUsuario(), id)).isEqualTo(1);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE feriado SET pendiente = TRUE, aprobado_por = NULL, aprobado_en = NULL "
 				+ "WHERE id = ?", id))).as("no vuelve a propuesto").isEqualTo(1644);
 	}
@@ -3024,10 +3095,13 @@ class PermisosMySqlTest {
 		java.util.Map<String, Object> viejo = jdbc.queryForMap("SELECT secuencia, LEFT(hash, 16) AS codigo FROM "
 				+ "evento_auditoria WHERE colegio_id = 1 ORDER BY secuencia LIMIT 1");
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM huella_hora WHERE colegio_id = 1", Long.class)).isPositive();
-		assertThat(codigoAl(() -> jdbc.update("INSERT INTO huella_bitacora (colegio_id, fecha, secuencia, codigo, "
+		assertThat(codigoAl(() -> sistema().update("INSERT INTO huella_bitacora (colegio_id, fecha, secuencia, codigo, "
 				+ "eventos_del_dia, creado_en, creado_por, actualizado_en) VALUES (1, '1999-01-02', ?, ?, 0, NOW(6), "
 				+ "'sistema.auditoria', NOW(6))", viejo.get("secuencia"), viejo.get("codigo")))).isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update("INSERT INTO huella_hora (colegio_id, momento, secuencia, codigo, creado_en, "
+				+ "creado_por, actualizado_en) VALUES (1, NOW(), 1, 'x', NOW(6), 'sistema.auditoria', NOW(6))")))
+				.as("cc_app no escribe huellas").isEqualTo(1142);
+		assertThat(codigoAl(() -> sistema().update("INSERT INTO huella_hora (colegio_id, momento, secuencia, codigo, creado_en, "
 				+ "creado_por, actualizado_en) VALUES (1, '1999-01-02 10:00:00', ?, ?, NOW(6), 'sistema.auditoria', NOW(6))",
 				viejo.get("secuencia"), viejo.get("codigo")))).isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update("DELETE FROM huella_hora WHERE 1 = 0"))).isEqualTo(1142);
@@ -3180,8 +3254,11 @@ class PermisosMySqlTest {
 
 	private int foto(java.time.LocalDate dia, java.time.LocalDateTime corte, String cobrado, Long huella, String codigo,
 			String actor) {
-		return jdbc.update(INSERTAR_FOTO, dia, corte, new java.math.BigDecimal(cobrado), new java.math.BigDecimal(cobrado),
-				huella, codigo, "x", actor);
+		// Sprint 7, tanda 2 (E14): con cc_app ni se inserta (1142); los triggers frenan lo mismo con cc_sistema.
+		assertThat(codigoAl(() -> jdbc.update(INSERTAR_FOTO, dia, corte, new java.math.BigDecimal(cobrado),
+				new java.math.BigDecimal(cobrado), huella, codigo, "x", actor))).isEqualTo(1142);
+		return sistema().update(INSERTAR_FOTO, dia, corte, new java.math.BigDecimal(cobrado),
+				new java.math.BigDecimal(cobrado), huella, codigo, "x", actor);
 	}
 
 	/**
@@ -3283,10 +3360,14 @@ class PermisosMySqlTest {
 			}
 		}
 		// Lo que sí: sistema.panel a Promotoría (el resumen con su texto y la alerta) y a Dirección (la alerta).
-		assertThat(jdbc.update(insertar, "p7g-" + sufijo, "RESUMEN_DIARIO", promotora.getId(),
+		// Sprint 7, tanda 2 (E1): como sistema.panel escribe solo cc_sistema.
+		assertThat(codigoAl(() -> jdbc.update(insertar, "p7f-" + sufijo, "ALERTA_PROMOTORIA", directora.getId(),
+				directora.getTelefonoWhatsapp(), "ALERTA_PROMOTORIA", "x", "aviso", null, "sistema.panel")))
+				.as("cc_app como sistema.panel").isEqualTo(1644);
+		assertThat(sistema().update(insertar, "p7g-" + sufijo, "RESUMEN_DIARIO", promotora.getId(),
 				promotora.getTelefonoWhatsapp(), "RESUMEN_DIARIO", texto, "resumen_diario", foto, "sistema.panel"))
 				.isEqualTo(1);
-		assertThat(jdbc.update(insertar, "p7h-" + sufijo, "ALERTA_PROMOTORIA", directora.getId(),
+		assertThat(sistema().update(insertar, "p7h-" + sufijo, "ALERTA_PROMOTORIA", directora.getId(),
 				directora.getTelefonoWhatsapp(), "ALERTA_PROMOTORIA", "x", "aviso", null, "sistema.panel")).isEqualTo(1);
 		assertThat(codigoAl(() -> jdbc.update("INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en) "
 				+ "VALUES (1, 'resumen_correo_externo', 'x@y.pe', NOW(6))"))).as("cc_app no escribe la fila del DBA")
@@ -3331,19 +3412,22 @@ class PermisosMySqlTest {
 	@Test
 	void cambiarElCelularDeLaPromotoraSinSolicitudFallaCon1644() {
 		Usuario promotora = guardar("promo.p6." + sufijo, Rol.PROMOTOR);
+		// Sprint 7, tanda 2 (E4): con cc_app la cuenta ni se toca (1142); con cc_sistema, el trigger del contacto (1644).
 		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET telefono_whatsapp = '+51900000001' WHERE id = ?",
+				promotora.getId()))).isEqualTo(1142);
+		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET telefono_whatsapp = '+51900000001' WHERE id = ?",
 				promotora.getId()))).isEqualTo(1644);
-		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET correo = 'otro@correo.pe' WHERE id = ?",
+		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET correo = 'otro@correo.pe' WHERE id = ?",
 				promotora.getId()))).isEqualTo(1644);
 		Long otraAprobada = jdbc.queryForObject("SELECT MIN(id) FROM solicitud_cambio WHERE colegio_id = 1 AND estado = "
 				+ "'APROBADA'", Long.class);
 		if (otraAprobada != null) {
-			assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET telefono_whatsapp = '+51900000001', "
+			assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET telefono_whatsapp = '+51900000001', "
 					+ "contacto_solicitud_id = ? WHERE id = ?", otraAprobada, promotora.getId())))
 					.as("una solicitud aprobada que no es la suya").isEqualTo(1644);
 		}
 		// Lo demás de la cuenta (el ingreso, el bloqueo) sí cambia.
-		assertThat(jdbc.update("UPDATE usuario SET intentos_fallidos = 0 WHERE id = ?", promotora.getId())).isEqualTo(1);
+		assertThat(sistema().update("UPDATE usuario SET intentos_fallidos = 0 WHERE id = ?", promotora.getId())).isEqualTo(1);
 	}
 
 	/**
@@ -3370,9 +3454,9 @@ class PermisosMySqlTest {
 				+ "usuario_id = ?", lucia.getId())).containsEntry("destino", anterior)
 				.containsEntry("plantilla", "CONTACTO_PERSONAL_CAMBIADO").containsEntry("estado", "PENDIENTE");
 		// La misma solicitud no sirve para otro cambio ni para otra persona.
-		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET correo = 'lucia@otro.pe' WHERE id = ?", lucia.getId())))
+		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET correo = 'lucia@otro.pe' WHERE id = ?", lucia.getId())))
 				.isEqualTo(1644);
-		assertThat(codigoAl(() -> jdbc.update("UPDATE usuario SET telefono_whatsapp = '+51911111111', "
+		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET telefono_whatsapp = '+51911111111', "
 				+ "contacto_solicitud_id = ? WHERE id = ?", solicitud, otra.getId()))).isEqualTo(1644);
 		// El «aviso al contacto anterior» no sirve para escribir a otro número.
 		assertThat(codigoAl(() -> jdbc.update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, "
@@ -3445,6 +3529,8 @@ class PermisosMySqlTest {
 	}
 
 	private int llamada(java.time.LocalDate semana, Long familia, String resultado, String nota, String quien) {
+		// Sprint 7, tanda 2: la llamada lleva la firma de la sesión de quien la registra.
+		firmaDe(quien, "llamada_control:" + semana + ":" + familia + ":1");
 		return jdbc.update(INSERTAR_LLAMADA, semana, familia, resultado, nota, quien);
 	}
 
@@ -3475,12 +3561,14 @@ class PermisosMySqlTest {
 				Long.class, lunesDeEstaSemana(), familia) > 0) {
 			return 1;
 		}
-		return jdbc.update("INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, creado_en, creado_por, "
+		// Sprint 7, tanda 2 (E10): la muestra la fija solo sistema.panel con cc_sistema (con cc_app, 1142).
+		return sistema().update("INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, creado_en, creado_por, "
 				+ "actualizado_en) VALUES (1, ?, ?, ?, NOW(6), ?, NOW(6))", lunesDeEstaSemana(), familia, motivo, quien);
 	}
 
 	private int llamadaIntento(Long familia, String resultado, int intento, boolean porDelegacion, String quien,
 			java.time.LocalDateTime creadoEn) {
+		firmaDe(quien, "llamada_control:" + lunesDeEstaSemana() + ":" + familia + ":" + intento);
 		return jdbc.update("INSERT INTO llamada_control (colegio_id, semana, familia_id, resultado, intento, por_delegacion, "
 				+ "creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, ?, ?, ?, ?, ?, NOW(6))", lunesDeEstaSemana(), familia,
 				resultado, intento, porDelegacion, creadoEn, quien);
@@ -3499,16 +3587,22 @@ class PermisosMySqlTest {
 		Usuario promotora = guardar("promo.mu1." + sufijo, Rol.PROMOTOR);
 		Usuario caja = guardar("caja.mu1b." + sufijo, Rol.CAJA);
 		assertThat(codigoAl(() -> enLaMuestra(familia, "EFECTIVO", caja.getNombreUsuario()))).as("Caja").isEqualTo(1644);
+		// Sprint 7, tanda 2 (E10): ni Promotoría la fija a mano (solo sistema.panel); con cc_app, ni se inserta (1142).
+		assertThat(codigoAl(() -> enLaMuestra(familia, "EFECTIVO", promotora.getNombreUsuario()))).as("Promotoría")
+				.isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update("INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, "
-				+ "creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'EFECTIVO', NOW(6), ?, NOW(6))",
-				lunesDeEstaSemana().minusWeeks(1), familia, promotora.getNombreUsuario()))).as("otra semana").isEqualTo(1644);
-		assertThat(codigoAl(() -> enLaMuestra(sinEfectivo, "EFECTIVO", promotora.getNombreUsuario())))
+				+ "creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'EFECTIVO', NOW(6), 'sistema.panel', NOW(6))",
+				lunesDeEstaSemana(), familia))).as("cc_app").isEqualTo(1142);
+		assertThat(codigoAl(() -> sistema().update("INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, "
+				+ "creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'EFECTIVO', NOW(6), 'sistema.panel', NOW(6))",
+				lunesDeEstaSemana().minusWeeks(1), familia))).as("otra semana").isEqualTo(1644);
+		assertThat(codigoAl(() -> enLaMuestra(sinEfectivo, "EFECTIVO", "sistema.panel")))
 				.as("EFECTIVO de una familia que no pagó en efectivo").isEqualTo(1644);
-		assertThat(enLaMuestra(familia, "EFECTIVO", promotora.getNombreUsuario())).isEqualTo(1);
+		assertThat(enLaMuestra(familia, "EFECTIVO", "sistema.panel")).isEqualTo(1);
 		Long otra = familiaQuePagoEnEfectivo("caja.mu1c");
-		assertThat(codigoAl(() -> jdbc.update("INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, "
-				+ "reemplaza_familia_id, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'REEMPLAZO', ?, NOW(6), ?, "
-				+ "NOW(6))", lunesDeEstaSemana(), otra, familia, promotora.getNombreUsuario())))
+		assertThat(codigoAl(() -> sistema().update("INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, "
+				+ "reemplaza_familia_id, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'REEMPLAZO', ?, NOW(6), "
+				+ "'sistema.panel', NOW(6))", lunesDeEstaSemana(), otra, familia)))
 				.as("reemplazo de una familia que no dejó de contestar dos veces").isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE muestra_llamada SET motivo = 'DEUDA' WHERE familia_id = ?", familia)))
 				.isEqualTo(1142);
@@ -3529,8 +3623,8 @@ class PermisosMySqlTest {
 		Usuario promotora = guardar("promo.de1." + sufijo, Rol.PROMOTOR);
 		Usuario directora = guardar("dir.de1." + sufijo, Rol.DIRECTOR);
 		java.time.LocalDateTime ahora = java.time.LocalDateTime.now(LIMA);
-		enLaMuestra(familia, "EFECTIVO", promotora.getNombreUsuario());
-		enLaMuestra(otra, "EFECTIVO", promotora.getNombreUsuario());
+		enLaMuestra(familia, "EFECTIVO", "sistema.panel");
+		enLaMuestra(otra, "EFECTIVO", "sistema.panel");
 		boolean yaDelegada = jdbc.queryForObject("SELECT COUNT(*) FROM delegacion_llamada WHERE colegio_id = 1 AND semana = ?",
 				Long.class, lunesDeEstaSemana()) > 0;
 		if (!yaDelegada) {
@@ -3544,10 +3638,14 @@ class PermisosMySqlTest {
 		assertThat(codigoAl(() -> jdbc.update(delegar, lunesDeEstaSemana().minusWeeks(1), promotora.getNombreUsuario())))
 				.as("otra semana").isEqualTo(1644);
 		if (!yaDelegada) {
+			assertThat(codigoAl(() -> jdbc.update(delegar, lunesDeEstaSemana(), promotora.getNombreUsuario())))
+					.as("sprint 7: sin la firma de su sesión").isEqualTo(1644);
+			firmaDe(promotora.getNombreUsuario(), "delegacion_llamada:" + lunesDeEstaSemana());
 			assertThat(jdbc.update(delegar, lunesDeEstaSemana(), promotora.getNombreUsuario())).isEqualTo(1);
 		}
+		firmaDe(promotora.getNombreUsuario(), "delegacion_llamada:" + lunesDeEstaSemana());
 		assertThat(codigoAl(() -> jdbc.update(delegar, lunesDeEstaSemana(), promotora.getNombreUsuario())))
-				.as("una por semana").isEqualTo(1062);
+				.as("una por semana").isIn(1062, 1644);
 		assertThat(codigoAl(() -> jdbc.update("DELETE FROM delegacion_llamada WHERE 1 = 0"))).isEqualTo(1142);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE delegacion_llamada SET version = version WHERE 1 = 0")))
 				.isEqualTo(1142);
@@ -3562,15 +3660,21 @@ class PermisosMySqlTest {
 		assertThat(codigoAl(() -> llamadaIntento(familia, "NO_CONTESTA", 2, false, promotora.getNombreUsuario(), ahora)))
 				.as("segundo intento tras un «Confirma»").isEqualTo(1644);
 		assertThat(llamadaIntento(otra, "NO_CONTESTA", 1, false, promotora.getNombreUsuario(), ahora)).isEqualTo(1);
-		assertThat(llamadaIntento(otra, "NO_CONTESTA", 2, false, promotora.getNombreUsuario(), ahora)).isEqualTo(1);
+		// Sprint 7, tanda 2 (E13): el segundo intento exige un «No contesta» de hace una hora con la hora de la BASE
+		// (registrada_bd): ni con un creado_en de dentro de dos horas pasa ahora.
+		assertThat(codigoAl(() -> llamadaIntento(otra, "NO_CONTESTA", 2, false, promotora.getNombreUsuario(),
+				ahora.plusHours(2)))).as("el segundo intento antes de la hora").isEqualTo(1644);
+		assertThat(jdbc.queryForObject("SELECT registrada_bd IS NOT NULL FROM llamada_control WHERE familia_id = ? AND "
+				+ "intento = 1", Boolean.class, otra)).isTrue();
 		assertThat(codigoAl(() -> llamadaIntento(otra, "CONFIRMA", 3, false, promotora.getNombreUsuario(), ahora)))
 				.as("un tercer intento").isEqualTo(1644);
 	}
 
 	/**
-	 * Correcciones del sprint 6 (S6-M2) con los permisos mínimos: el primer «No contesta» (de hace dos horas), el segundo
-	 * por el servicio y el reemplazo que elige el servicio con la semilla pasan los triggers (muestra con REEMPLAZO y
-	 * llamada); la familia reemplazada ya no se registra.
+	 * Correcciones del sprint 6 (S6-M2) con los permisos mínimos. Sprint 7, tanda 2 (E13): el primer «No contesta» guarda
+	 * la hora de la BASE (registrada_bd) y un creado_en de hace dos horas ya no adelanta el segundo intento: ni el servicio
+	 * ni el SQL lo registran antes de la hora. El reemplazo que elige el servicio lo cubren las pruebas de H2
+	 * (LlamadasControlBordesTest), porque aquí habría que esperar una hora.
 	 */
 	@Test
 	void flujoReemplazoConPermisosMinimos() {
@@ -3581,20 +3685,22 @@ class PermisosMySqlTest {
 		UsuariosDePrueba.iniciarSesion(promotora);
 		llamadasControl.deEstaSemana();
 		SecurityContextHolder.clearContext();
-		enLaMuestra(familia, "EFECTIVO", promotora.getNombreUsuario());
+		enLaMuestra(familia, "EFECTIVO", "sistema.panel");
 		assertThat(llamadaIntento(familia, "NO_CONTESTA", 1, false, promotora.getNombreUsuario(),
 				java.time.LocalDateTime.now(LIMA).minusHours(2))).isEqualTo(1);
 		UsuariosDePrueba.iniciarSesion(promotora);
-		llamadasControl.registrar(familia, new pe.edu.virgenmaria.cuentasclaras.panel.dto.LlamadaRequest(
-				pe.edu.virgenmaria.cuentasclaras.panel.model.ResultadoLlamada.NO_CONTESTA, null));
-		SecurityContextHolder.clearContext();
+		try {
+			assertThatThrownBy(() -> llamadasControl.registrar(familia, new pe.edu.virgenmaria.cuentasclaras.panel.dto
+					.LlamadaRequest(pe.edu.virgenmaria.cuentasclaras.panel.model.ResultadoLlamada.NO_CONTESTA, null)))
+					.as("el servicio, antes de la hora de la base").isInstanceOf(RuntimeException.class);
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+		assertThat(codigoAl(() -> llamadaIntento(familia, "NO_CONTESTA", 2, false, promotora.getNombreUsuario(),
+				java.time.LocalDateTime.now(LIMA)))).as("el SQL, con un primer intento de creado_en falso").isEqualTo(1644);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM muestra_llamada WHERE colegio_id = 1 AND semana = ? AND "
-				+ "motivo = 'REEMPLAZO' AND reemplaza_familia_id = ?", Long.class, lunesDeEstaSemana(), familia))
-				.as("el servicio eligió otra con la semilla").isEqualTo(1);
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'LLAMADA_CONTROL_REEMPLAZADA' "
-				+ "AND entidad_id = ?", Long.class, familia.toString())).isEqualTo(1);
-		assertThat(codigoAl(() -> llamadaIntento(familia, "CONFIRMA", 1, false, promotora.getNombreUsuario(),
-				java.time.LocalDateTime.now(LIMA)))).as("a la reemplazada ya no").isIn(1644, 1062);
+				+ "motivo = 'REEMPLAZO' AND reemplaza_familia_id = ?", Long.class, lunesDeEstaSemana(), familia)).isZero();
 	}
 
 	/** P17: Administración o Caja no registran llamadas de control (aunque la familia pagó en efectivo). */
@@ -3641,7 +3747,7 @@ class PermisosMySqlTest {
 		congelarConElServicio();
 		Long familia = familiaQuePagoEnEfectivo("caja.lc4");
 		Usuario promotora = guardar("promo.lc4." + sufijo, Rol.PROMOTOR);
-		assertThat(enLaMuestra(familia, "EFECTIVO", promotora.getNombreUsuario())).isEqualTo(1);
+		assertThat(enLaMuestra(familia, "EFECTIVO", "sistema.panel")).isEqualTo(1);
 		assertThat(codigoAl(() -> llamada(lunesDeEstaSemana(), familia, "NO_CONFIRMA", null,
 				promotora.getNombreUsuario()))).as("«No confirma» sin nota").isEqualTo(3819);
 		assertThat(llamada(lunesDeEstaSemana(), familia, "NO_CONFIRMA", "Dice que pagó 500 soles, no 450",
@@ -3674,7 +3780,9 @@ class PermisosMySqlTest {
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE colegio_id = 1 AND accion = "
 				+ "'MUESTRA_LLAMADAS_FIJADA'", Long.class)).as("la congeló el servicio (trigger con las filas de la aplicación)")
 				.isPositive();
-		var pendiente = semana.familias().stream().filter(f -> f.pendiente()).findFirst();
+		// La muestra sale al azar (semilla derivada con HMAC): puede tener familias por DEUDA sin pagos en esas semanas. Se
+		// llama a una que pagó (la de «caja.lc5» es candidata por EFECTIVO; si no salió, a otra de la muestra con pagos).
+		var pendiente = semana.familias().stream().filter(f -> f.pendiente() && !f.pagos().isEmpty()).findFirst();
 		org.junit.jupiter.api.Assumptions.assumeTrue(pendiente.isPresent(), "ya se llamó a toda la muestra (otra corrida)");
 		Long familia = pendiente.get().familiaId();
 		assertThat(pendiente.get().pagos()).isNotEmpty();

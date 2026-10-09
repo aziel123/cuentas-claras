@@ -1464,3 +1464,132 @@ que responde 503).
 - Las alertas y los latidos viven en memoria (una instancia), como dice la sección 17.
 - La comparación de conteos detecta filas borradas con id menor o igual al máximo anterior; una fila insertada y borrada
   entre dos respaldos no deja rastro en los conteos (sí en la bitácora, si era financiera).
+
+## Tanda 2 · Implementación
+
+> Agente `backend-spring`, 9 de octubre de 2026, sobre la tanda 1 (commit 50ee328). V25 y **73 triggers** (más 3
+> funciones en `03` y 2 en `02`). Todo lo que tocó MySQL se probó en contenedores `mysql:8` desechables (8.4.11).
+
+### Comprobaciones previas en MySQL 8.4.11
+Las de la tanda 1 siguen valiendo (`SESSION_USER()` en triggers y funciones DEFINER, `REVOKE` del rol, rol por
+defecto). Dos hallazgos nuevos, los dos sobre las huellas (3.7):
+
+| Comportamiento | Resultado y qué se hizo |
+|---|---|
+| Escapes de los literales en el cuerpo guardado | MySQL guarda el cuerpo de un trigger o función con los escapes **ya procesados** (`'\n'` del archivo queda como un salto de línea real en `ACTION_STATEMENT`). La normalización procesa `\n` igual en los dos lados |
+| Juego de caracteres del cliente | El `mysql` de un contenedor usa latin1 por defecto: las tildes de los cuerpos se guardaban dobles y 39 huellas no coincidían. `02` y `03` empiezan con `SET NAMES utf8mb4` |
+
+Con eso, las 78 huellas (73 triggers y 5 funciones) coinciden con las del jar, también con un cliente que quita los
+comentarios (`--skip-comments`).
+
+### Qué se construyó
+- **Base:** `V25__identidad_sesiones_y_firmas.sql` (`sesion_usuario`, `firma_operacion`, `usuario.roles_solicitud_id`,
+  `llamada_control.registrada_bd`, `huella_correo_externo` permitido en `configuracion_colegio` y copiado si había un
+  solo colegio). `01` crea `cc_sistema` y el rol `cc_negocio`; `04` los agrega a una base existente. `02` empieza con
+  el `REVOKE` de todo (privilegios de los tres usuarios, el rol concedido y los privilegios del rol), da lo de negocio
+  al rol, lo exclusivo a `cc_sistema` y crea `huellas_objetos()`. `03` agrega `cc_es_sistema` y `cc_firma_valida`, los
+  9 triggers nuevos y la versión nueva de 25 (patrón A: la firma de quien resuelve; patrón B: un actor `sistema.*` solo
+  con `cc_sistema`).
+- **Dos conexiones:** `RutaConexion` (APP o SISTEMA, decidida al pedir la conexión), `FuenteDatosEnrutada` con dos pools
+  Hikari (el de `cc_sistema` con 4 conexiones) y `ConfiguracionFuentesDatos`. `EjecucionComoSistema` abre siempre su
+  transacción con `cc_sistema` (con una transacción de una persona abierta, `REQUIRES_NEW`; sin cambiar de colegio).
+- **Identidad:** `EjecucionIdentidad` (ruta de identidad en una transacción propia, sin cambiar la persona de la
+  bitácora) para el ingreso, el bloqueo, las claves, la activación, las altas, los roles, el contacto, el acceso de los
+  apoderados y los datos de demostración. `Usuario.cambiarRoles` cambia solo la diferencia; dar o quitar PROMOTOR o
+  DIRECTOR crea una solicitud `CAMBIO_ROLES` (`ManejadorCambioRoles`), que no aprueban ni quien la pidió ni el titular, y
+  cierra las sesiones del titular. Una cuenta nueva nace sin esos roles.
+- **Sesiones y firmas:** `SesionUsuario`, `FirmaOperacion`, `SesionesFirmadas` (abrir al ingresar, cerrar al salir, al
+  vencer la sesión HTTP, al cambiar la cuenta y al arrancar), `TokenDeSesionHttp` (el secreto en la sesión HTTP),
+  `FirmaSesion` (MANDATORY; un actor de sistema no firma) y `ClaveFirma`. Firman: la bandeja (aprobar y rechazar), los
+  descuentos, los cierres de caja, los planes, los lotes de saldo inicial (confirmar y devolver), los extractos, la
+  recaudación, las partidas, el cierre mensual (cada intento), los feriados, los avisos, las renovaciones, las
+  verificaciones manuales, las llamadas y la delegación.
+- **Muestreo:** `ActorSistema.MUESTREO` planta la semilla; `DerivadorSecreto` deriva la semilla efectiva con HMAC.
+  `FijacionMuestra` (solo `SISTEMA_PANEL`), `MuestraSemanal` (lunes 00:10, y en la primera consulta si no corrió) y
+  `ReemplazosLlamadas` (después del commit del segundo «No contesta» y cada 15 minutos). El segundo intento usa
+  `registrada_bd`, la hora de la base.
+- **Huella por colegio** (`AvisosCuenta` lee `configuracion_colegio`; `trg_mensaje_nace` exige el correo de ESE
+  colegio). Los reintentos «adelantar» de comprobantes y mensajes los hace el proceso (`AdelantosEnvio`,
+  `AdelantosMensajes`), porque `cc_app` ya no actualiza esas tablas.
+- **Verificador de prod:** `HuellasObjetosBd` (huella del cuerpo normalizado de cada objeto de `03` y `02` del jar),
+  `PermisosEsperados` (lo que `02` da, leído del jar, contra `SHOW GRANTS`), los dos usuarios (distintos y el segundo
+  llamado `cc_sistema`), TLS de las dos conexiones (`exigir-tls`), las inserciones imposibles nuevas (como `cc_app` y
+  como `cc_sistema`) y el aviso por la fila vieja de `huella_correo_externo`. `VerificadorConfiguracion` exige
+  `DB_SISTEMA_USUARIO` distinto de `DB_USUARIO` en prod y piloto.
+- **CI:** el job `mysql` crea los cuatro usuarios y el rol, prueba que `02` quita un GRANT dado a mano, corre
+  `AuditoriaSprint7MySqlTest` (E1 a E18), comprueba los 1142 y 1644 nuevos como `cc_app` y como `cc_sistema`, arranca
+  prod con TLS y dos usuarios, y prueba que no arranca sin TLS, con el mismo usuario o con `GRANT TRIGGER` de más. Paso
+  nuevo «M3»: un trigger debilitado con el mismo nombre, `cc_es_sistema` reemplazada y un trigger de más no dejan
+  arrancar, y al restaurar `03` vuelve a arrancar. El job `respaldo` usa la base con `cc_sistema` y compara también las
+  huellas de los objetos de la copia (como administrador).
+- **Documentos:** `mysql-usuarios.md`, `custodia-clave-auditoria.md` e `instalacion-local.md`; `docker-compose.yml`,
+  `.env.ejemplo` (`CC_CLAVE_SISTEMA`) y los scripts de Docker.
+
+### Desviaciones del diseño (y por qué)
+1. **`SET NAMES utf8mb4` y escapes procesados en la normalización** (arriba): sin eso las huellas no coincidían.
+2. **`datos.roles` de `CAMBIO_ROLES` es texto separado por comas** (`DatosSolicitud` es `Map<String, String>`): el
+   trigger usa `FIND_IN_SET` en lugar de `JSON_CONTAINS` sobre un arreglo.
+3. **Excepción de arranque del primer DIRECTOR** (además del primer PROMOTOR): en un colegio sin Dirección activa y con
+   una sola Promotoría no hay otra persona que pueda aprobar; sin ella, la instalación nueva no podía tener Dirección.
+   La aplicación aplica ese caso sin solicitud y el trigger lo acepta solo en esas condiciones.
+4. **Sin una clase `RegistroIdentidad`:** la ruta de identidad la abre `EjecucionIdentidad` y cada servicio de
+   identidad sigue siendo el dueño de su regla (regla ArchUnit: solo esas clases usan la ruta).
+5. **«Adelantar» un comprobante o un mensaje lo hace el proceso**, no la persona: `cc_app` perdió el UPDATE de esas
+   tablas (y `SELECT … FOR UPDATE` lo necesita). La persona pide y el proceso lo hace como `sistema.ose` o
+   `sistema.mensajeria`.
+6. **El verificador lee primero las huellas** (si `02` ya creó la función): un trigger debilitado se nombra tal cual
+   antes de que una inserción imposible falle por otra razón. En la fase 1 (sin `02`) se salta y se exige después.
+7. **`01` sigue dando el SELECT de la fase 1** a `cc_app` y `cc_sistema`; `02` lo quita y lo vuelve a dar al rol.
+8. **El verificador de privilegios es más estricto que una lista:** rechaza cualquier línea de `SHOW GRANTS` que `02`
+   no dé (también `PROXY`, roles de más, funciones que no son de `02` y privilegios globales salvo `USAGE`).
+9. **`trg_usuario_rol_alta` rechaza un rol de una cuenta que no existe** (antes de la FK): sin eso, el primer PROMOTOR
+   de un colegio «sin Promotoría» (el colegio nulo) pasaba el trigger y la inserción imposible del verificador daba
+   1452 en lugar de 1644.
+10. **El reemplazo periódico** solo reemplaza cuando hay una candidata (no audita «sin reemplazo» cada 15 minutos).
+11. **Datos de demostración** (perfil dev): actúan con `PersonaDemo`, que abre la sesión de la base de la persona de la
+    demo como si acabara de ingresar y deja su secreto disponible solo durante la operación (solo con los perfiles dev
+    y test). Si faltan las personas de la demo, esa parte no se crea.
+12. **Pruebas:** en H2 (sin triggers), `TokenDeSesionDePrueba` abre la sesión de la persona de la prueba y, para las
+    personas inventadas de los escenarios, crea una cuenta suplente inactiva con ese id (los ids reales empiezan en
+    1 000 000). En MySQL real, `CuentasDePrueba` lleva a una cuenta real a cada persona inventada (por su nombre y sus
+    roles) y da PROMOTOR o DIRECTOR por el camino legítimo (`CAMBIO_ROLES` aprobada por otra cuenta).
+13. **E13 en MySQL:** el segundo «No contesta» no se puede probar completo sin esperar una hora (la hora es de la base).
+    `PermisosMySqlTest.flujoReemplazoConPermisosMinimos` prueba que ni el servicio ni el SQL con un `creado_en` falso lo
+    adelantan; el reemplazo que elige el servicio lo cubren las pruebas de H2.
+14. **E18 a las 10 horas** no se prueba en MySQL (la sesión nace «ahora» y `vence_en` no se edita): lo cubren el trigger
+    (`s.vence_en > ahora`) y `InmutabilidadIdentidadTest`; el cierre al salir sí se prueba en MySQL (E3).
+
+15. **`PermisosMySqlTest` adaptado a los permisos nuevos:** lo que antes probaba un trigger con la clave de `cc_app` en
+    tablas que ahora escribe solo `cc_sistema` (la foto, las huellas, la muestra, los mensajes y comprobantes del
+    sistema) prueba dos cosas: con `cc_app`, 1142; con `cc_sistema`, el mismo 1644 o 1143 de antes. Las aprobaciones
+    por SQL de las pruebas (feriado, aviso, lote, partida, delegación y llamadas) llevan la firma de una sesión real
+    (`firmaDe`). `flujoLlamadaControlConPermisosMinimos` llama a una familia de la muestra con pagos (la muestra sale al
+    azar y puede traer familias por DEUDA sin pagos esas semanas).
+
+### Escenarios cubiertos
+E1 a E6, E10, E11, E14 a E17 y el camino legítimo (`AuditoriaSprint7MySqlTest`); E2, E3 y E13 también en
+`PermisosMySqlTest` (feriado, delegación y llamadas con firma); E7, E8 y E9 (`VerificadorPermisosBaseDatosTest` y el
+paso «M3» del CI); E12 (`DerivadorSecretoTest`, `AlertasCajaTest`); E17 (`EjecucionComoSistemaTest`); E18
+(`FirmaSesionTest`, `InmutabilidadIdentidadTest`).
+
+### Resultados (9 de octubre de 2026)
+- `./mvnw -B verify`: **1971 pruebas**, 0 fallas, 105 omitidas (las de MySQL real); también en verde con
+  `-DargLine=-Duser.timezone=America/Los_Angeles`.
+- **Job `mysql` reproducido completo** (de una sola vez, en contenedores desechables `mysql:8`, 8.4.11): cuatro usuarios
+  y el rol, V1–V25, `02` quita un GRANT dado a mano, 73 triggers y 78 huellas, los 1142, 1143 y 1644 nuevos como
+  `cc_app` y como `cc_sistema`, arranque real en prod con TLS y dos usuarios (y rechazo con `cc_migrador`, sin TLS, con
+  el mismo usuario y con `GRANT TRIGGER` de más), M2 y M3 (huella distinta de `trg_usuario_rol_alta` y de
+  `cc_es_sistema`, y «Sobran: trg_de_mas»; restaurados `02` y `03`, prod vuelve a arrancar). **105 pruebas de MySQL
+  real**, 0 fallas: 2 de migración, 81 + 7 de permisos (7 en la fase 2b), 3 de la auditoría del sprint 6 y 12 de
+  `AuditoriaSprint7MySqlTest`.
+- **Job `respaldo` reproducido completo**: E29, restauración en el segundo MySQL con la cadena HMAC y las huellas de los
+  objetos de la copia (**17 comprobaciones**) y arranque de prod sobre la copia, E31 («la cadena no verifica en la
+  secuencia 531»), E30 (`pago (faltan 1)`), E32 (ancla y bitácora), el simulacro sin clave y el destino simulado.
+
+### Riesgos residuales nuevos
+- Una persona con acceso al servidor de la aplicación (no solo a la base) ve las dos claves y la memoria del proceso: la
+  separación protege de quien tiene solo la clave de `cc_app` o solo acceso a la base.
+- La firma vale 5 minutos y para una sola clave: si la aprobación falla después de firmar en la misma transacción, la
+  firma también se revierte; con autocommit (solo en pruebas) la firma queda y se reusa dentro de esos minutos.
+- El secreto de la firma pasa por la conexión de `cc_app` en el INSERT: con el registro general de MySQL encendido
+  quedaría en el log (por eso se exige apagado, `mysql-usuarios.md`).

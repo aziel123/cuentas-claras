@@ -20,17 +20,18 @@ import pe.edu.virgenmaria.cuentasclaras.comun.fecha.FeriadoRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.FeriadosNacionales;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
-
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.time.Clock;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Días no laborables EXTRA del colegio (sprint 5, tanda 3; G20 y decisión 59). Los 16 nacionales están en el código y
@@ -59,8 +60,12 @@ public class ServicioFeriados {
 
 	private final ApplicationEventPublisher eventos;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ServicioFeriados(FeriadoRepository feriados, CalendarioHabil calendario, AuditoriaService auditoria,
-			Clock reloj, UsuarioRepository usuarios, ApplicationEventPublisher eventos) {
+			Clock reloj, UsuarioRepository usuarios, ApplicationEventPublisher eventos, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.usuarios = usuarios;
 		this.eventos = eventos;
 		this.feriados = feriados;
@@ -154,6 +159,7 @@ public class ServicioFeriados {
 					+ ": debe aprobarlo " + (otro == Rol.DIRECTOR ? "Dirección." : "Promotoría."));
 		}
 		exigirTopes(feriado.getFecha(), feriado.getId());
+		firmaSesion.firmar(ClaveFirma.feriado(feriado.getId()));
 		feriado.aprobar(quien, LocalDateTime.now(reloj));
 		feriados.saveAndFlush(feriado);
 		calendario.invalidar(ContextoColegio.actual());

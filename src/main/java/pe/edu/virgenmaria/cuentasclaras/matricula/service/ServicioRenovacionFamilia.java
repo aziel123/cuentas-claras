@@ -16,6 +16,8 @@ import pe.edu.virgenmaria.cuentasclaras.matricula.model.CanalRespuesta;
 import pe.edu.virgenmaria.cuentasclaras.matricula.model.EstadoRenovacion;
 import pe.edu.virgenmaria.cuentasclaras.matricula.model.RenovacionMatricula;
 import pe.edu.virgenmaria.cuentasclaras.matricula.repository.RenovacionMatriculaRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -46,8 +48,12 @@ public class ServicioRenovacionFamilia {
 
 	private final Clock reloj;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ServicioRenovacionFamilia(RenovacionMatriculaRepository renovaciones, PlanPensionRepository planes,
-			SesionApoderado sesion, AuditoriaService auditoria, ApplicationEventPublisher eventos, Clock reloj) {
+			SesionApoderado sesion, AuditoriaService auditoria, ApplicationEventPublisher eventos, Clock reloj, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.renovaciones = renovaciones;
 		this.planes = planes;
 		this.sesion = sesion;
@@ -71,6 +77,8 @@ public class ServicioRenovacionFamilia {
 		Long familia = sesion.familiaId();
 		RenovacionMatricula renovacion = renovaciones.bloquear(id).filter(r -> Objects.equals(r.getFamiliaId(), familia))
 				.orElseThrow(() -> new RecursoNoEncontradoException("Renovación no encontrada"));
+		firmaSesion.firmar(ClaveFirma.renovacion(renovacion.getId(), continua ? EstadoRenovacion.CONFIRMADA
+				: EstadoRenovacion.NO_CONTINUA));
 		renovacion.responder(continua, CanalRespuesta.PORTAL, SesionActual.usuario(), LocalDateTime.now(reloj));
 		renovaciones.saveAndFlush(renovacion);
 		auditoria.registrar(continua ? AccionAuditoria.RENOVACION_CONFIRMADA : AccionAuditoria.RENOVACION_NO_CONTINUA,

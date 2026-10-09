@@ -9,8 +9,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Apoderado;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.DocumentoIdentidad;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.TipoDocumento;
@@ -22,6 +20,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.inicial.DatosDemoDev;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.PoliticaClaves;
 
 import java.time.Clock;
@@ -52,7 +51,8 @@ public class DatosDemoApoderadoDev implements ApplicationRunner {
 
 	private final AuditoriaService auditoria;
 
-	private final TransactionTemplate transaccion;
+	/** Sprint 7, tanda 2: la cuenta se crea por la ruta de identidad (cc_sistema). */
+	private final EjecucionIdentidad identidad;
 
 	private final Clock reloj;
 
@@ -61,14 +61,14 @@ public class DatosDemoApoderadoDev implements ApplicationRunner {
 	private final String claveDemo;
 
 	public DatosDemoApoderadoDev(UsuarioRepository usuarios, ApoderadoRepository apoderados, PasswordEncoder codificador,
-			AuditoriaService auditoria, PlatformTransactionManager transacciones, Clock reloj,
+			AuditoriaService auditoria, EjecucionIdentidad identidad, Clock reloj,
 			@Value("${spring.datasource.url:}") String urlBaseDatos,
 			@Value("${cuentasclaras.demo.clave:}") String claveDemo) {
 		this.usuarios = usuarios;
 		this.apoderados = apoderados;
 		this.codificador = codificador;
 		this.auditoria = auditoria;
-		this.transaccion = new TransactionTemplate(transacciones);
+		this.identidad = identidad;
 		this.reloj = reloj;
 		this.urlBaseDatos = urlBaseDatos;
 		this.claveDemo = claveDemo;
@@ -85,7 +85,7 @@ public class DatosDemoApoderadoDev implements ApplicationRunner {
 			return false;
 		}
 		long colegio = DatosDemoDev.COLEGIO_PRINCIPAL;
-		return ContextoColegio.en(colegio, () -> transaccion.execute(estado -> {
+		return ContextoColegio.en(colegio, () -> identidad.como(() -> {
 			if (usuarios.findByNombreUsuario(USUARIO).isPresent()) {
 				return false;
 			}

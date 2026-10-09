@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.panel.service;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,8 +16,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
-import pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillaMuestreo;
-import pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillasMuestreo;
+import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.TextoSeguro;
 import pe.edu.virgenmaria.cuentasclaras.panel.config.PropiedadesPanel;
@@ -25,12 +25,13 @@ import pe.edu.virgenmaria.cuentasclaras.panel.dto.LlamadaRequest;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.LlamadasSemana;
 import pe.edu.virgenmaria.cuentasclaras.panel.model.DelegacionLlamada;
 import pe.edu.virgenmaria.cuentasclaras.panel.model.LlamadaControl;
-import pe.edu.virgenmaria.cuentasclaras.panel.model.MotivoMuestra;
 import pe.edu.virgenmaria.cuentasclaras.panel.model.MuestraLlamada;
 import pe.edu.virgenmaria.cuentasclaras.panel.model.ResultadoLlamada;
 import pe.edu.virgenmaria.cuentasclaras.panel.repository.DelegacionLlamadaRepository;
 import pe.edu.virgenmaria.cuentasclaras.panel.repository.LlamadaControlRepository;
 import pe.edu.virgenmaria.cuentasclaras.panel.repository.MuestraLlamadaRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -40,12 +41,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -68,6 +67,11 @@ import java.util.stream.Collectors;
  *   <li>«No confirma» exige nota, queda resaltado en la bitácora y es una alerta CRÍTICA ({@link AlertasPanel}).</li>
  * </ul>
  * La base exige el resto (triggers de {@code muestra_llamada}, {@code delegacion_llamada} y {@code llamada_control}).
+ * <p>
+ * Sprint 7, tanda 2 (sección 3.6, E10 y E13): la muestra y sus reemplazos los fija SOLO {@code sistema.panel}
+ * ({@link FijacionMuestra}); esta pantalla, si la muestra aún no existe, se la pide ({@link FijadorMuestra}) y el
+ * reemplazo tras el segundo «No contesta» sale después del commit ({@link SegundoNoContesta}). Cada llamada y la
+ * delegación llevan la firma de la sesión de quien las registra; «una hora después» lo exige además la base, con su hora.
  */
 @Service
 @Transactional(readOnly = true)
@@ -99,7 +103,11 @@ public class LlamadasControl {
 
 	private final FamiliasParaLlamada familias;
 
-	private final SemillasMuestreo semillas;
+	private final FijadorMuestra fijador;
+
+	private final FirmaSesion firmaSesion;
+
+	private final ApplicationEventPublisher eventos;
 
 	private final LlamadaControlRepository llamadas;
 
@@ -113,14 +121,16 @@ public class LlamadasControl {
 
 	private final Clock reloj;
 
-	public LlamadasControl(CifrasCaja caja, CifrasCobranza cobranza, FamiliasParaLlamada familias,
-			SemillasMuestreo semillas, LlamadaControlRepository llamadas, MuestraLlamadaRepository muestras,
-			DelegacionLlamadaRepository delegaciones, AuditoriaService auditoria, PropiedadesPanel propiedades,
-			Clock reloj) {
+	public LlamadasControl(CifrasCaja caja, CifrasCobranza cobranza, FamiliasParaLlamada familias, FijadorMuestra fijador,
+			FirmaSesion firmaSesion, ApplicationEventPublisher eventos, LlamadaControlRepository llamadas,
+			MuestraLlamadaRepository muestras, DelegacionLlamadaRepository delegaciones, AuditoriaService auditoria,
+			PropiedadesPanel propiedades, Clock reloj) {
 		this.caja = caja;
 		this.cobranza = cobranza;
 		this.familias = familias;
-		this.semillas = semillas;
+		this.fijador = fijador;
+		this.firmaSesion = firmaSesion;
+		this.eventos = eventos;
 		this.llamadas = llamadas;
 		this.muestras = muestras;
 		this.delegaciones = delegaciones;
@@ -138,11 +148,10 @@ public class LlamadasControl {
 	 * La muestra de esta semana con sus contactos, lo ya registrado y (aparte) los pagos para comparar. La primera consulta
 	 * de la semana la congela (S6-B3).
 	 */
-	@Transactional
 	public LlamadasSemana deEstaSemana() {
 		LocalDate hoy = LocalDate.now(reloj);
 		LocalDate semana = lunes(hoy);
-		Estado estado = estado(semana, congelar(semana));
+		Estado estado = estado(semana, fijada(semana));
 		LocalDate desde = semana.minusDays(DIAS_ATRAS);
 		Map<Long, FamiliaParaLlamada> perfiles = familias.de(estado.muestra().stream().map(MuestraLlamada::getFamiliaId)
 				.toList()).stream().collect(Collectors.toMap(FamiliaParaLlamada::familiaId, Function.identity()));
@@ -179,6 +188,7 @@ public class LlamadasControl {
 		if (delegaciones.findBySemana(semana).isPresent()) {
 			throw new ReglaNegocioException("Las llamadas de esta semana ya están delegadas a Dirección.");
 		}
+		firmaSesion.firmar(ClaveFirma.delegacionLlamada(semana));
 		DelegacionLlamada d = delegaciones.saveAndFlush(DelegacionLlamada.de(semana));
 		auditoria.registrar(AccionAuditoria.LLAMADAS_DELEGADAS, "delegacion_llamada", String.valueOf(d.getId()), null,
 				"semana " + semana, "Promotoría delegó a Dirección las llamadas de control de la semana del "
@@ -203,7 +213,7 @@ public class LlamadasControl {
 			throw new ReglaNegocioException("Las llamadas de control las registra Promotoría. Dirección las registra solo "
 					+ "la semana que Promotoría se las delega.");
 		}
-		Estado estado = estado(semana, congelar(semana));
+		Estado estado = estado(semana, fijada(semana));
 		if (!estado.activas().contains(familiaId)) {
 			throw new RecursoNoEncontradoException("Esa familia no está en la llamada de control de esta semana.");
 		}
@@ -220,6 +230,7 @@ public class LlamadasControl {
 		}
 		ResultadoLlamada resultado = solicitud.resultado();
 		String nota = nota(resultado, solicitud.nota());
+		firmaSesion.firmar(ClaveFirma.llamadaControl(semana, familiaId, intento));
 		LlamadaControl guardada = llamadas.saveAndFlush(LlamadaControl.registrar(semana, familiaId, resultado, nota, intento,
 				porDelegacion));
 		boolean noConfirma = resultado == ResultadoLlamada.NO_CONFIRMA;
@@ -230,22 +241,10 @@ public class LlamadasControl {
 						+ (porDelegacion ? " · registrada por Dirección con la semana delegada" : "")
 						+ (noConfirma ? ". Revisa sus pagos y la caja de quien los cobró." : "."));
 		if (intento == 2 && resultado == ResultadoLlamada.NO_CONTESTA) {
-			reemplazar(semana, familiaId, estado);
+			// Sprint 7, tanda 2: el reemplazo lo hace sistema.panel después del commit (ReemplazosLlamadas).
+			eventos.publishEvent(new SegundoNoContesta(guardada.getColegioId(), semana, familiaId));
 		}
 		return guardada.getId();
-	}
-
-	/** S6-M2: la familia no contestó dos veces; otra de las candidatas (con la misma semilla) ocupa su plaza. */
-	private void reemplazar(LocalDate semana, Long familiaId, Estado estado) {
-		Set<Long> yaEstan = estado.muestra().stream().map(MuestraLlamada::getFamiliaId).collect(Collectors.toSet());
-		Optional<MuestraLlamadas.Candidata> otra = MuestraLlamadas.reemplazo(semilla(semana), candidatas(semana, true),
-				yaEstan);
-		otra.ifPresent(c -> muestras.saveAndFlush(MuestraLlamada.reemplazo(semana, c.familiaId(), familiaId)));
-		auditoria.registrar(AccionAuditoria.LLAMADA_CONTROL_REEMPLAZADA, "muestra_llamada", String.valueOf(familiaId), null,
-				otra.map(c -> "reemplazada").orElse("sin reemplazo"), "La familia (código " + familiaId + ") no contestó "
-						+ "dos veces en la semana del " + Calendario.formatear(semana) + ". "
-						+ otra.map(c -> "Se eligió otra familia de la muestra con la semilla de la semana.")
-								.orElse("No quedan candidatas para reemplazarla."));
 	}
 
 	/**
@@ -298,63 +297,17 @@ public class LlamadasControl {
 
 	// ------------------------------------------------------------------ muestra
 
-	/** La muestra congelada de la semana; si aún no existe, la elige con la semilla y la guarda (S6-B3). */
-	private List<MuestraLlamada> congelar(LocalDate semana) {
+	/**
+	 * La muestra fija de la semana. Si todavía no existe (la tarea del lunes no corrió), se la pide a {@code sistema.panel}
+	 * en una transacción propia y se vuelve a leer.
+	 */
+	private List<MuestraLlamada> fijada(LocalDate semana) {
 		List<MuestraLlamada> muestra = muestras.findBySemanaOrderByIdAsc(semana);
 		if (!muestra.isEmpty()) {
 			return muestra;
 		}
-		List<MuestraLlamadas.Candidata> candidatas = candidatas(semana, false);
-		if (candidatas.isEmpty()) {
-			return List.of();
-		}
-		Set<Long> conEfectivo = new HashSet<>(caja.familiasConEfectivo(semana.minusDays(DIAS_ATRAS), semana.minusDays(1)));
-		List<MuestraLlamada> guardadas = new ArrayList<>();
-		for (MuestraLlamadas.Candidata c : MuestraLlamadas.elegirCandidatas(semilla(semana), candidatas,
-				propiedades.llamadasPorSemana())) {
-			MotivoMuestra motivo = conEfectivo.contains(c.familiaId()) ? MotivoMuestra.EFECTIVO : MotivoMuestra.DEUDA;
-			guardadas.add(muestras.saveAndFlush(MuestraLlamada.elegida(semana, c.familiaId(), motivo)));
-		}
-		auditoria.registrar(AccionAuditoria.MUESTRA_LLAMADAS_FIJADA, "muestra_llamada", null, null,
-				guardadas.size() + " familia(s)", "Quedó fija la muestra de la llamada de control de la semana del "
-						+ Calendario.formatear(semana) + " (" + guardadas.size() + " de " + candidatas.size()
-						+ " candidatas). No cambia durante la semana.");
-		return guardadas;
-	}
-
-	private long semilla(LocalDate semana) {
-		return semillas.de(SemillaMuestreo.Ambito.LLAMADA_CONTROL, semana);
-	}
-
-	/**
-	 * Las candidatas de la semana, por id: efectivo en las 5 semanas anteriores al lunes y deuda vencida al lunes (S6-A2).
-	 * Con {@code reemplazo}, las de efectivo se miran hasta hoy (para no quedarse sin reemplazos los primeros días).
-	 */
-	private List<MuestraLlamadas.Candidata> candidatas(LocalDate semana, boolean reemplazo) {
-		LocalDate hasta = reemplazo ? LocalDate.now(reloj) : semana.minusDays(1);
-		Set<Long> conEfectivo = new HashSet<>(caja.familiasConEfectivo(semana.minusDays(DIAS_ATRAS), hasta));
-		Set<Long> conDeuda = new HashSet<>(cobranza.familiasConDeudaVencida(semana));
-		Set<Long> todas = new java.util.TreeSet<>(conEfectivo);
-		todas.addAll(conDeuda);
-		if (todas.isEmpty()) {
-			return List.of();
-		}
-		Set<Long> pagabanEnEfectivo = new HashSet<>(caja.familiasConEfectivo(semana.minusDays(DIAS_HISTORIA),
-				semana.minusDays(DIAS_ATRAS + 1)));
-		Set<Long> pagaronHace5Semanas = new HashSet<>(caja.familiasConPagos(semana.minusDays(DIAS_ATRAS),
-				semana.minusDays(1)));
-		Map<Long, FamiliaParaLlamada> perfiles = familias.de(todas).stream()
-				.collect(Collectors.toMap(FamiliaParaLlamada::familiaId, Function.identity()));
-		List<MuestraLlamadas.Candidata> lista = new ArrayList<>();
-		for (Long id : todas) {
-			FamiliaParaLlamada perfil = perfiles.get(id);
-			if (perfil != null) {
-				boolean debe = conDeuda.contains(id);
-				lista.add(new MuestraLlamadas.Candidata(perfil, debe, debe && pagabanEnEfectivo.contains(id)
-						&& !pagaronHace5Semanas.contains(id)));
-			}
-		}
-		return lista;
+		fijador.asegurar(ContextoColegio.actual(), semana);
+		return muestras.findBySemanaOrderByIdAsc(semana);
 	}
 
 	/** Lo que pasó en la semana: la muestra, las llamadas y qué plazas siguen abiertas. */

@@ -52,6 +52,14 @@ public class LlamadaControl extends BaseEntity {
 	@Column(name = "por_delegacion", nullable = false, updatable = false)
 	private boolean porDelegacion;
 
+	/**
+	 * Sprint 7, tanda 2 (residual S6): la hora en que se registró según la BASE (la pone trg_llamada_control_registro; la
+	 * aplicación no la escribe). En MySQL, el segundo intento exige un «No contesta» de hace una hora o más con esta hora.
+	 * En H2 queda en NULL.
+	 */
+	@Column(name = "registrada_bd", insertable = false, updatable = false)
+	private java.time.LocalDateTime registradaBd;
+
 	protected LlamadaControl() {
 		// requerido por JPA
 	}
@@ -114,6 +122,10 @@ public class LlamadaControl extends BaseEntity {
 
 	public String getNota() {
 		return nota;
+	}
+
+	public java.time.LocalDateTime getRegistradaBd() {
+		return registradaBd;
 	}
 
 	public int getIntento() {

@@ -29,7 +29,10 @@ public enum TipoSolicitud {
 	PARTIDA_MANUAL("Pareja manual de la conciliación"),
 	// Sprint 6, tanda 2 (hallazgo 5, P6): el celular o el correo de alguien del personal (por ahí le llegan la huella, el
 	// resumen y las alertas). Lo pide el titular o Promotoría; lo aprueba otra persona de Promotoría o Dirección.
-	CAMBIO_CONTACTO_PERSONAL("Cambio de celular o correo del personal");
+	CAMBIO_CONTACTO_PERSONAL("Cambio de celular o correo del personal"),
+	// Sprint 7, tanda 2 (H1, decisión 84): dar o quitar Promotoría o Dirección. Lo pide Promotoría; lo aprueba OTRA persona
+	// de Promotoría o Dirección (nunca quien lo pidió ni el titular). En MySQL, los triggers de usuario_rol lo exigen.
+	CAMBIO_ROLES("Cambio de roles de Promotoría o Dirección");
 
 	private final String etiqueta;
 

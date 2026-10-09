@@ -72,8 +72,14 @@ public class UsuarioController {
 	@PostMapping("/{id}/roles")
 	public String cambiarRoles(@PathVariable Long id, @Valid CambiarRolesRequest solicitud, BindingResult validacion,
 			RedirectAttributes avisos) {
-		return ejecutar(id, validacion, avisos, () -> servicio.cambiarRoles(id, solicitud),
-				"Listo: se cambiaron los roles. Sus sesiones abiertas se cerraron.");
+		// Sprint 7, tanda 2: dar o quitar Promotoría o Dirección se pide; lo aprueba otra persona en la bandeja.
+		String[] exito = { "Listo: se cambiaron los roles. Sus sesiones abiertas se cerraron." };
+		return ejecutar(id, validacion, avisos, () -> {
+			if (servicio.cambiarRoles(id, solicitud)) {
+				exito[0] = "Listo: se pidió el cambio de roles. Lo aprueba otra persona de Promotoría o Dirección en la "
+						+ "bandeja de aprobaciones; hasta entonces los roles no cambian.";
+			}
+		}, exito);
 	}
 
 	@PostMapping("/{id}/desactivar")
@@ -117,13 +123,18 @@ public class UsuarioController {
 
 	private static String ejecutar(Long id, BindingResult validacion, RedirectAttributes avisos, Runnable accion,
 			String exito) {
+		return ejecutar(id, validacion, avisos, accion, new String[] { exito });
+	}
+
+	private static String ejecutar(Long id, BindingResult validacion, RedirectAttributes avisos, Runnable accion,
+			String[] exito) {
 		if (validacion.hasErrors()) {
 			avisos.addFlashAttribute("error", primerError(validacion));
 			return redirigirADetalle(id);
 		}
 		try {
 			accion.run();
-			avisos.addFlashAttribute("exito", exito);
+			avisos.addFlashAttribute("exito", exito[0]);
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());

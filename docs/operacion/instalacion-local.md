@@ -53,7 +53,7 @@ Después de ese primer ingreso puedes borrar la línea `CC_PROMOTOR_CLAVE` del `
 ## 6. Primeros pasos para probar el flujo completo
 Muchas acciones necesitan **dos personas distintas** (quien pide no aprueba), así que crea varios usuarios:
 
-1. **Usuarios y roles** (como promotora): crea al menos `direccion` (Dirección), `admin` (Administración) y `cajera` (Caja). Cada uno recibe una clave temporal que debe cambiar al entrar.
+1. **Usuarios y roles** (como promotora): crea al menos `direccion`, `admin` (Administración) y `cajera` (Caja). Cada uno recibe un enlace para elegir su clave. Desde el sprint 7, una cuenta nueva nace sin Promotoría ni Dirección: crea `direccion` como Docente y después, en «Cambiar roles», dale Dirección (la primera Dirección de un colegio con una sola promotora se aplica al momento; las siguientes las aprueba otra persona de Promotoría o Dirección).
 2. **Colegio** (como Administración): crea el año 2026 «en curso» y sus secciones (por ejemplo, 1.° Primaria A).
 3. **Alumnos**: regístralos a mano o impórtalos con la plantilla de Excel. `docs/ux/ejemplo-importacion-corregido.xlsx` sirve si creaste las secciones A del año 2026.
 4. **Pensiones** (como Administración): arma el plan y envíalo; **Dirección o Promotoría lo aprueba**. Se generan las cuotas.
@@ -86,6 +86,7 @@ Con `cc_app` puedes leer, pero no editar la bitácora ni borrar pagos: lo impide
 - **«./mvnw: not found»** al compilar: el `mvnw` quedó con saltos de línea de Windows. Actualiza el código (`git pull`): el `Dockerfile` ya lo corrige.
 - **`mysql` tarda o aparece como *unhealthy*** la primera vez: espera y vuelve a ejecutar `docker compose up -d`. La inicialización solo ocurre una vez.
 - **La aplicación no arranca y dice que faltan permisos o triggers**: revisa `docker compose logs preparar-bd`. Si cambiaste las claves después de la primera vez, ejecuta `docker compose down -v` y empieza de cero (las claves de MySQL se fijan al crear la base).
+- **«Define CC_CLAVE_SISTEMA en .env»** al actualizar (sprint 7, tanda 2): agrega la línea `CC_CLAVE_SISTEMA=...` (una clave distinta de las demás, ver `.env.ejemplo`) y vuelve a levantar; `preparar-bd` crea el usuario `cc_sistema` (los procesos y la identidad) en tu base existente. Las sesiones abiertas se cierran al reiniciar: vuelve a ingresar.
 - **«Define CC_CLAVE_RESPALDO en .env»** al actualizar (sprint 7): agrega la línea `CC_CLAVE_RESPALDO=...` (ver `.env.ejemplo`) y vuelve a levantar; `preparar-bd` crea el usuario de respaldos en tu base existente. Después, el panel muestra «No hay un respaldo de las últimas 26 horas» hasta que hagas el primero (ver [respaldos.md](respaldos.md)).
 - **No puedo iniciar sesión desde el celular por la IP de la PC**:
  es esperable. Esta configuración es solo para `localhost`. Para usarla en red o internet hace falta https; eso se hace al elegir el hosting (decisión D3 del plan).

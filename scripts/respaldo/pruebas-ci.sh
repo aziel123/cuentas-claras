@@ -71,7 +71,7 @@ restauracion)
 e31)
 	# La base de la restauración anterior se descarta: la restauración solo usa un MySQL vacío.
 	# shellcheck disable=SC2086
-	$MYSQL_RESTAURACION -e "DROP DATABASE cuentasclaras; DROP USER cc_migrador, cc_app, cc_respaldo"
+	$MYSQL_RESTAURACION -e "DROP DATABASE cuentasclaras; DROP USER cc_migrador, cc_app, cc_sistema, cc_respaldo; DROP ROLE cc_negocio"
 	mkdir -p "$forjados_ci"
 	original=$(ls "$destino_ci"/*.sql.gz.age | sort | head -n 1)
 	nombre=$(basename "$original" .sql.gz.age)
@@ -134,7 +134,7 @@ restauracion-sin-clave)
 	# El simulacro semanal (sin la clave HMAC) sobre el último respaldo, el de después de E30 y E32: las anclas de los
 	# respaldos anteriores y los libros delatan el recorte y el pago borrado.
 	# shellcheck disable=SC2086
-	$MYSQL_RESTAURACION -e "DROP DATABASE IF EXISTS cuentasclaras; DROP USER IF EXISTS cc_migrador, cc_app, cc_respaldo"
+	$MYSQL_RESTAURACION -e "DROP DATABASE IF EXISTS cuentasclaras; DROP USER IF EXISTS cc_migrador, cc_app, cc_sistema, cc_respaldo; DROP ROLE IF EXISTS cc_negocio"
 	if RESTAURAR_ORIGEN=cirespaldos RESTAURAR_INFORME_DIR=/tmp/cc-informes-semanal RESTAURAR_ARRANCAR=no 			sh "$restaurar" > /tmp/cc-semanal.out 2>&1; then
 		cat /tmp/cc-semanal.out
 		echo "ERROR: el simulacro sin clave no detectó el recorte"; exit 1

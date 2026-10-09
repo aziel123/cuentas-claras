@@ -1,42 +1,57 @@
 # MySQL en producción: usuarios y permisos
 
-La plataforma usa **tres usuarios de MySQL**:
+La plataforma usa **cuatro usuarios de MySQL y un rol** (sprint 7, tanda 2):
 
 | Usuario | Lo usa | Permisos |
 |---|---|---|
-| `cc_migrador` | Flyway, al arrancar (`spring.flyway.user`) | Todo sobre la base `cuentasclaras`: crea y cambia tablas |
-| `cc_app` | La aplicación (`spring.datasource.username`) | Lectura de todo y escritura **solo** donde hace falta. Sobre `evento_auditoria` solo puede **insertar**: ni UPDATE ni DELETE |
-| `cc_respaldo` | El respaldo diario (`scripts/respaldo/respaldar.sh`, sprint 7) | `SELECT` y `SHOW VIEW` del esquema e `INSERT` en `respaldo`. Nada más: ni escribe tablas de negocio, ni edita ni borra el registro de respaldos (ver [respaldos.md](respaldos.md)) |
+| `cc_migrador` | `java -jar cuentas-claras.jar migrar` y `03-triggers.sql` | Todo sobre la base `cuentasclaras`: crea y cambia tablas, triggers y funciones |
+| `cc_app` | Las peticiones de las **personas** (`DB_USUARIO`) | El rol `cc_negocio`: lectura de todo y escritura **solo** donde hace falta. Sobre `evento_auditoria` solo puede **insertar**. **No** crea cuentas, no cambia claves ni roles, no abre sesiones y no escribe como un actor `sistema.*` |
+| `cc_sistema` | Los **procesos** `sistema.*` y la **identidad** (ingreso, sesiones, claves, roles y altas) (`DB_SISTEMA_USUARIO`) | El rol `cc_negocio` más lo exclusivo: `usuario`, `usuario_rol`, `sesion_usuario`, la semilla y la muestra, la foto del resumen, las huellas, las liquidaciones, los avisos de la pasarela y el envío de comprobantes y mensajes. Los triggers lo reconocen por `SESSION_USER()` (`cc_es_sistema()`) |
+| `cc_respaldo` | El respaldo diario (`scripts/respaldo/respaldar.sh`) | `SELECT` y `SHOW VIEW` del esquema e `INSERT` en `respaldo`. Nada más (ver [respaldos.md](respaldos.md)) |
+| rol `cc_negocio` | `cc_app` y `cc_sistema` (rol por defecto) | Lo que tenía `cc_app` hasta el sprint 6, salvo la identidad y lo que escriben solo los procesos |
 
-Así, aunque alguien robe la clave de la aplicación o encuentre una falla en el código, no puede editar ni borrar la bitácora de auditoría. Y si alguien la toca con otro usuario, la cadena HMAC lo detecta (pantalla Bitácora → «Verificar integridad»).
+Así, aunque alguien robe la clave de la aplicación (`cc_app`) o encuentre una falla en el código, no puede editar ni
+borrar la bitácora, ni crear una cuenta de Promotoría, ni darse un rol, ni aprobar a nombre de otra persona (falta la
+firma de su sesión), ni escribir como el sistema. Y si alguien la toca con otro usuario, la cadena HMAC lo detecta
+(pantalla Bitácora → «Verificar integridad»). La clave de `cc_sistema` va solo al proceso de la aplicación, nunca a una
+persona ni a una herramienta de consulta.
 
 ## Instalación (una sola vez)
 Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` del CI.
 
-1. **Usuarios y base**, como administrador. Reemplaza `__CLAVE_MIGRADOR__`, `__CLAVE_APP__` y `__CLAVE_RESPALDO__` por claves del gestor de secretos y **no guardes el archivo modificado**:
+1. **Usuarios y base**, como administrador. Reemplaza `__CLAVE_MIGRADOR__`, `__CLAVE_APP__`, `__CLAVE_SISTEMA__` y `__CLAVE_RESPALDO__` por claves del gestor de secretos (cuatro claves distintas) y **no guardes el archivo modificado**:
    ```bash
    sed -e 's/__CLAVE_MIGRADOR__/<clave-migrador>/' -e 's/__CLAVE_APP__/<clave-app>/' \
-       -e 's/__CLAVE_RESPALDO__/<clave-respaldo>/' scripts/mysql/01-usuarios.sql | mysql -h <host> -u root -p
+       -e 's/__CLAVE_SISTEMA__/<clave-sistema>/' -e 's/__CLAVE_RESPALDO__/<clave-respaldo>/' \
+       scripts/mysql/01-usuarios.sql | mysql -h <host> -u root -p
    ```
-   Crea la base `cuentasclaras` (utf8mb4), `cc_migrador` con todos los permisos sobre ella, `cc_app` solo con SELECT y
-   `cc_respaldo` sin permisos (sus GRANT van en el paso 3).
+   Crea la base `cuentasclaras` (utf8mb4), `cc_migrador` con todos los permisos sobre ella, `cc_app` y `cc_sistema` solo
+   con SELECT (fase 1), `cc_respaldo` sin permisos y el rol `cc_negocio` (sus GRANT van en el paso 3).
 
-   **Base creada antes del sprint 7:** aplica una vez `scripts/mysql/04-una-vez-sprint-7.sql` (crea `cc_respaldo`; es
-   idempotente) antes de volver a aplicar `02` y `03`:
+   **Base creada antes del sprint 7:** aplica una vez `scripts/mysql/04-una-vez-sprint-7.sql` (crea `cc_respaldo`,
+   `cc_sistema` y el rol `cc_negocio`; es idempotente) antes de volver a aplicar `02` y `03`:
    ```bash
-   sed -e 's/__CLAVE_RESPALDO__/<clave-respaldo>/' scripts/mysql/04-una-vez-sprint-7.sql | mysql -h <host> -u root -p
+   sed -e 's/__CLAVE_RESPALDO__/<clave-respaldo>/' -e 's/__CLAVE_SISTEMA__/<clave-sistema>/' \
+       scripts/mysql/04-una-vez-sprint-7.sql | mysql -h <host> -u root -p
    ```
 2. **Primera migración** (ver «Despliegue»): crea las tablas con `cc_migrador`.
 3. **Permisos por tabla**, después de esa primera migración. MySQL no acepta un GRANT sobre una tabla que todavía no existe:
    ```bash
    mysql -h <host> -u root -p < scripts/mysql/02-permisos-tablas.sql
    ```
+   **Sprint 7, tanda 2: `02` es la fuente única.** Empieza quitándolo todo (`REVOKE ALL` de `cc_app`, `cc_sistema` y
+   `cc_respaldo`, y del rol `cc_negocio`) y vuelve a dar solo lo suyo: un GRANT dado a mano no sobrevive a la siguiente
+   aplicación de `02`. Los permisos de negocio van al rol `cc_negocio` (rol por defecto de `cc_app` y `cc_sistema`) y lo
+   exclusivo de los procesos y la identidad, solo a `cc_sistema`. La tabla de abajo dice lo que tiene `cc_negocio` (es
+   decir, `cc_app`); la sección «Identidad, sesiones y firmas» dice lo que es solo de `cc_sistema`. Empieza con
+   `SET NAMES utf8mb4` (el cliente `mysql` de un contenedor usa latin1 por defecto y guardaría mal las tildes de las
+   funciones).
 
 | Tabla | Permisos de `cc_app` | Por qué |
 |---|---|---|
 | (todas) | SELECT | Leer |
-| `usuario` | INSERT, UPDATE | Crear usuarios, intentos de ingreso, desactivar (nunca se borran) |
-| `usuario_rol` | INSERT, UPDATE, DELETE | La colección de roles se reescribe al cambiarlos |
+| `usuario`, `usuario_rol`, `sesion_usuario` | Ninguno (solo el SELECT general) | **Sprint 7, tanda 2:** las cuentas, las claves, los roles y las sesiones los escribe solo `cc_sistema` (ruta de identidad). Con `cc_app`: 1142 |
+| `firma_operacion` | INSERT | **Solo inserción**: la firma de una aprobación con el secreto de la sesión de quien aprueba; `trg_firma_operacion_nace` la valida contra su sesión ABIERTA y borra el secreto |
 | `evento_auditoria` | INSERT | **Solo inserción** |
 | `auditoria_cadena` | UPDATE | Avanzar el eslabón; MySQL también lo exige para `SELECT ... FOR UPDATE` |
 | `anio_escolar`, `seccion`, `familia`, `apoderado`, `alumno`, `matricula` | INSERT, UPDATE | Nada se borra: se desactiva, se retira o se mueve |
@@ -47,7 +62,7 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `solicitud_cambio` | INSERT y UPDATE **solo** de su resolución | Tipo, datos, motivo y solicitante inmutables |
 | `cuota` | INSERT y UPDATE **solo** de `estado, monto_pagado, monto_descuento, obligacion, anulacion_*, anulada_en, anulacion_solicitud_id, actualizado_en, version` | El monto, la fecha de vencimiento, el alumno, el origen y la clave no se cambian ni por SQL (error 1143). Lo pagado y lo descontado solo pueden ser la suma de su libro; se anula solo con su solicitud APROBADA enlazada por id (trigger) |
 | `serie_comprobante` | INSERT y UPDATE **solo** de `ultimo_numero` | La serie no cambia; el número avanza de uno en uno (trigger) |
-| `comprobante` | INSERT y UPDATE **solo** del envío al OSE (`estado_envio, intentos, enviado_en, respuesta, codigo_hash, enlace_pdf`) | Serie, número, receptor y total no cambian (1143); el número es el siguiente de la serie; el resultado del envío se registra una vez, desde PENDIENTE, y ACEPTADO exige hash y respuesta (trigger). Con el OSE real, los envíos los registrará un usuario de proceso aparte |
+| `comprobante` | INSERT | El comprobante nace con el pago (la persona). **Sprint 7, tanda 2:** el envío al OSE (`estado_envio, intentos, enviado_en, respuesta, codigo_hash, enlace_pdf`) lo escribe solo `cc_sistema` (UPDATE por columna); con `cc_app`, 1142. Serie, número, receptor y total no cambian (1143 también para `cc_sistema`) |
 | `comprobante_linea`, `aplicacion_pago` | INSERT | **Solo inserción**: el libro de pagos no se edita ni se borra (1142) |
 | `caja_diaria` | INSERT y UPDATE **solo** de `estado, cierres, conteos, primer_conteo, reapertura_solicitud_id` | Cajero, fecha y fondo fijo no cambian (1143). Se cierra solo con su cierre registrado, el primer conteo no se reescribe y se reabre solo con SU solicitud de reapertura APROBADA (enlazada por id, una vez), resuelta el día de la caja por otra persona y sin depósito (trigger) |
 | `pago` | INSERT y UPDATE **solo** de `estado, operacion_vigente` | Familia, caja, medio, operación, total, vuelto y comprobante no cambian (1143); nace VIGENTE con su boleta por el mismo total (trigger) |
@@ -63,11 +78,12 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `linea_recaudacion` | INSERT y UPDATE **solo** de estado, motivo de la excepción y devolución | Monto, fecha, código, alumno, cuota y operación no cambian (1143); entra PENDIENTE a un lote CARGADO y en sus fechas; APLICADA exige su pago; DEVUELTA exige la devolución aprobada por otra persona (trigger) |
 | `reembolso_pasarela` | INSERT | **Solo inserción** (correcciones del sprint 4, V16): la devolución de un pago en línea por la API de la pasarela (al mismo medio de origen), una por anulación aprobada de tipo DEVOLUCION y nunca con contracargo (trigger `trg_reembolso_pasarela_registro`). `reembolso` rechaza los pagos de la pasarela (trigger) |
 | `enlace_activacion` | INSERT y UPDATE **solo** de `usado_en, usado_ip, anulado_en, actualizado_en, version` | Enlace de un solo uso para que el apoderado elija su clave (S4-M2). El hash del token, el usuario, el vencimiento y la IP de quien lo creó no cambian (1143); no se borra (1142) |
-| `resumen_diario` | INSERT | **Solo inserción** (sprint 6, tanda 2): la foto del resumen de las 19:30. La escribe solo `sistema.panel` y cada cifra debe ser la suma de `pago` y `cuota` en ese momento (trigger `trg_resumen_diario_registro`); desde V23, además, es de HOY (Lima), su corte es de ahora, los conteos de cajas, cierres, solicitudes y avisos salen de las tablas y su texto (`parametros`, el que exige cada mensaje RESUMEN_DIARIO) dice esas cifras; nadie la corrige ni la borra (1142) |
-| `llamada_control` | INSERT | **Solo inserción** (sprint 6, tanda 3): el resultado de la llamada de control semanal. Desde V23 la registra una persona activa de Promotoría (Dirección, solo con la semana delegada y marcando `por_delegacion`), para el lunes de la semana en curso (hora de Lima), a una familia de la muestra congelada que no fue reemplazada, y el segundo intento solo tras un «No contesta» (trigger `trg_llamada_control_registro`); no se corrige ni se borra (1142) |
-| `muestra_llamada` | INSERT | **Solo inserción** (correcciones del sprint 6, V23): la muestra congelada de la semana. La fija Promotoría, Dirección o `sistema.panel`, para la semana en curso, con familias que pagaron en efectivo o tienen deuda vencida; un reemplazo solo de quien no contestó dos veces (trigger `trg_muestra_llamada_registro`) |
+| `resumen_diario` | Ninguno (sprint 7: solo `cc_sistema`, INSERT) | **Solo inserción** (sprint 6, tanda 2): la foto del resumen de las 19:30. La escribe solo `sistema.panel` y cada cifra debe ser la suma de `pago` y `cuota` en ese momento (trigger `trg_resumen_diario_registro`); desde V23, además, es de HOY (Lima), su corte es de ahora, los conteos de cajas, cierres, solicitudes y avisos salen de las tablas y su texto (`parametros`, el que exige cada mensaje RESUMEN_DIARIO) dice esas cifras; nadie la corrige ni la borra (1142) |
+| `llamada_control` | INSERT | **Solo inserción** (sprint 6, tanda 3): el resultado de la llamada de control semanal. **Sprint 7, tanda 2:** lleva la firma de la sesión de quien la registra y el segundo intento exige un «No contesta» de hace una hora con la hora de la BASE (`registrada_bd`, la pone el trigger). Desde V23 la registra una persona activa de Promotoría (Dirección, solo con la semana delegada y marcando `por_delegacion`), para el lunes de la semana en curso (hora de Lima), a una familia de la muestra congelada que no fue reemplazada, y el segundo intento solo tras un «No contesta» (trigger `trg_llamada_control_registro`); no se corrige ni se borra (1142) |
+| `muestra_llamada` | Ninguno (sprint 7: solo `cc_sistema`, INSERT) | **Solo inserción** (correcciones del sprint 6, V23): la muestra congelada de la semana. **Sprint 7, tanda 2 (E10):** la fija solo `sistema.panel` con `cc_sistema` (el lunes a las 00:10 o en la primera consulta de la semana), para la semana en curso, con familias que pagaron en efectivo o tienen deuda vencida; un reemplazo solo de quien no contestó dos veces (trigger `trg_muestra_llamada_registro`) |
 | `delegacion_llamada` | INSERT | **Solo inserción** (V23): Promotoría delega a Dirección las llamadas de la semana en curso (trigger `trg_delegacion_llamada_registro`) |
-| `configuracion_colegio` | Ninguno (solo el SELECT general) | La escribe solo el DBA (V23, QA-S6-6): `resumen_correo_externo` por colegio. INSERT, UPDATE y DELETE dan 1142 |
+| `configuracion_colegio` | Ninguno (solo el SELECT general) | La escribe solo el DBA (V23, QA-S6-6): `resumen_correo_externo` y, desde V25, `huella_correo_externo`, por colegio. INSERT, UPDATE y DELETE dan 1142 |
+| `semilla_muestreo`, `huella_bitacora`, `huella_hora`, `liquidacion_pasarela`, `liquidacion_linea`, `evento_pasarela`, `mensaje` (envío) | Sprint 7, tanda 2: solo `cc_sistema` | Los escriben solo los procesos (`sistema.muestreo`, `sistema.auditoria`, `sistema.pasarela`, `sistema.mensajeria`). `cc_app` sigue insertando los mensajes que nacen con un pago (el outbox) pero no los marca enviados ni entregados (1142) |
 
 ## Triggers (paso 3, después de los permisos)
 Los aplica `cc_migrador` (no van en Flyway: H2 no los soporta):
@@ -123,6 +139,43 @@ La aplicación en `prod` **no arranca** si falta alguno:
   MySQL evalúa después del trigger) significa que falta el trigger.
 Un trigger nuevo se agrega en `03-triggers.sql` y en `TRIGGERS_ESPERADOS`.
 
+## Identidad, sesiones y firmas (sprint 7, tanda 2)
+- **Dos conexiones en la aplicación.** Las peticiones de las personas usan `cc_app`; los procesos `sistema.*` y la
+  identidad (ingreso, cierre de sesión, claves, roles, altas) usan `cc_sistema`. La conexión se elige al pedirla
+  (`FuenteDatosEnrutada`), y un proceso llamado dentro de la transacción de una persona abre SU transacción con
+  `cc_sistema` (`EjecucionComoSistema`, `REQUIRES_NEW`).
+- **Sesión de la base.** Al ingresar se abre una fila en `sesion_usuario` con el SHA-256 de un secreto de 32 bytes que
+  vive solo en la sesión HTTP (memoria del servidor). Se cierra al salir, al vencer la sesión HTTP, al ingresar en otro
+  equipo, al cambiar la clave, los roles o el contacto, al desactivar la cuenta y al reiniciar la aplicación; vence a
+  las 10 horas como máximo (`cuentasclaras.sesion.vigencia-maxima`, 12 horas como tope en la base).
+- **Firma.** Cada aprobación o resolución (solicitudes, descuentos, cierres, planes, lotes, extractos, partidas,
+  feriados, avisos, renovaciones, verificaciones manuales, llamadas y delegaciones) inserta antes una fila en
+  `firma_operacion` con su clave canónica (por ejemplo `solicitud_cambio:<id>:APROBADA`) y el secreto. El trigger de la
+  tabla resuelta exige esa firma, a nombre de quien figura como aprobador y de los últimos 5 minutos
+  (`cc_firma_valida`). Con la clave de `cc_app` no se aprueba a nombre de otra persona: falta el secreto de su sesión.
+- **Roles.** Dar o quitar PROMOTOR o DIRECTOR exige una solicitud `CAMBIO_ROLES` aprobada y firmada por otra persona
+  (ni quien la pidió ni el titular); el colegio nunca se queda sin Promotoría activa; CAJA no se combina con PROMOTOR,
+  DIRECTOR ni ADMINISTRACION, ni DIRECTOR con ADMINISTRACION (`trg_usuario_rol_alta|baja`). Excepciones de arranque: el
+  primer PROMOTOR de un colegio sin Promotoría y el primer DIRECTOR de un colegio sin Dirección y con una sola Promotoría.
+- **Muestreo.** La semilla la planta `sistema.muestreo` (solo la de hoy o la de esta semana) y la muestra la usa
+  derivada con la clave HMAC del servidor: leer `semilla_muestreo` no basta para calcularla.
+- **Correo externo de la huella diaria, por colegio** (antes en `configuracion_bd`, que ya no se usa; V25 lo copió si
+  había un solo colegio y el verificador avisa si la fila vieja sigue):
+  ```sql
+  INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en)
+  VALUES (<id del colegio>, 'huella_correo_externo', 'contador@estudio.pe', NOW(6));
+  ```
+- **TLS.** En prod las dos conexiones van cifradas (`sslMode=VERIFY_IDENTITY` o `REQUIRED` en `DB_URL`): si no, la
+  aplicación no arranca. Solo la instalación local en Docker, con la base en el mismo servidor, lo apaga con
+  `CC_EXIGIR_TLS_BD=false`.
+- **Registro general de MySQL apagado** (`general_log = OFF`, el valor por defecto): con él encendido, el secreto de la
+  firma quedaría escrito en el log del servidor al insertarse.
+- **Huellas de los triggers y funciones.** `02` crea `huellas_objetos()` (DEFINER, la ejecutan `cc_negocio` y
+  `cc_respaldo`): el SHA-256 del cuerpo normalizado de cada trigger y función (sin comentarios, con los escapes de los
+  literales procesados y los espacios colapsados). El arranque en prod compara cada huella con la de `03-triggers.sql`
+  empaquetado en el jar: un trigger debilitado con el mismo nombre, una función reemplazada o un objeto de más no dejan
+  arrancar. También rechaza cualquier privilegio que `02` no da (`SHOW GRANTS` de `cc_app` y `cc_sistema`).
+
 ## Despliegue (cada versión)
 La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **nunca** recibe las credenciales de `cc_migrador`. Cada despliegue tiene dos pasos separados:
 
@@ -134,11 +187,15 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
    ```
    Si una migración crea una tabla, aplica después su GRANT (paso 3 de la instalación) y vuelve a aplicar
    `03-triggers.sql` (es idempotente).
-2. **Arrancar** la aplicación con `SPRING_PROFILES_ACTIVE=prod` y **solo** `DB_USUARIO=cc_app` / `DB_CLAVE`. Antes de aceptar peticiones comprueba que no falten migraciones, que `cc_app` no pueda editar ni borrar la bitácora ni borrar cuotas (error 1142) y que no pueda cambiar el monto de una cuota ni las columnas inmutables de planes, lotes, líneas y solicitudes (error
+2. **Arrancar** la aplicación con `SPRING_PROFILES_ACTIVE=prod`, `DB_USUARIO=cc_app` / `DB_CLAVE` y
+   `DB_SISTEMA_USUARIO=cc_sistema` / `DB_SISTEMA_CLAVE` (sprint 7, tanda 2: sin el segundo usuario, o con el mismo para
+   los dos, no arranca). Antes de aceptar peticiones comprueba que no falten migraciones, que `cc_app` no pueda editar ni borrar la bitácora ni borrar cuotas (error 1142) y que no pueda cambiar el monto de una cuota ni las columnas inmutables de planes, lotes, líneas y solicitudes (error
 1143, o 1142 si no tiene ningún UPDATE sobre la tabla), además de los triggers del paso 3. Si algo falla, **no arranca**.
 
 **Sprint 7 (orden nuevo del despliegue):** respaldo → detener la aplicación → `migrar` → `04` (solo la primera vez) →
-`02` → `03` → arrancar → verificador. Detalle y desastre en [respaldos.md](respaldos.md).
+`02` → `03` → arrancar → verificador. Detalle y desastre en [respaldos.md](respaldos.md). En la tanda 2, después de
+`04`: configura `DB_SISTEMA_USUARIO` y `DB_SISTEMA_CLAVE` en el entorno de la aplicación, mueve la fila
+`huella_correo_externo` a `configuracion_colegio` si V25 no lo hizo (más de un colegio) y confirma que `DB_URL` pide TLS.
 
 ## Respaldos (sprint 7, tanda 1)
 - La tabla `respaldo` (V24) la escribe **solo** `cc_respaldo` (GRANT de INSERT y `trg_respaldo_registro`, que exige
@@ -190,10 +247,9 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
   ```sql
   INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('mensajeria_simulada', 'PERMITIDA', NOW(6));
   ```
-- Opcional en prod (decisión 49): el correo externo del contador que recibe la huella diaria de la bitácora:
-  ```sql
-  INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('huella_correo_externo', 'contador@estudio.pe', NOW(6));
-  ```
+- Opcional en prod (decisión 49): el correo externo del contador que recibe la huella diaria de la bitácora. Desde el
+  sprint 7 (tanda 2, V25) es **por colegio**, en `configuracion_colegio` (ver «Identidad, sesiones y firmas»); la fila
+  de `configuracion_bd` ya no se usa.
 - Opcional en prod (sprint 6, decisión 69): el correo externo del contador que recibe también el resumen diario de las
   19:30 (sin la fila, el resumen sale solo a Promotoría). Correcciones del sprint 6 (QA-S6-6, V23): la fila es **por
   colegio**, en `configuracion_colegio` (cc_app tampoco la escribe: 1142); la de `configuracion_bd` ya no se usa:
@@ -209,6 +265,8 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
 |---|---|
 | `DB_URL` | `jdbc:mysql://<host>:3306/cuentasclaras` |
 | `DB_USUARIO`, `DB_CLAVE` | `cc_app` y su clave |
+| `DB_SISTEMA_USUARIO`, `DB_SISTEMA_CLAVE` | `cc_sistema` y su clave (sprint 7, tanda 2): procesos e identidad. Distinto de `DB_USUARIO` |
+| `CC_EXIGIR_TLS_BD` | `true` por defecto: la conexión a MySQL debe ir cifrada. `false` solo en la instalación local en Docker |
 | `DB_MIGRADOR_USUARIO`, `DB_MIGRADOR_CLAVE` | `cc_migrador` y su clave. **Solo** para `java -jar cuentas-claras.jar migrar`, nunca en el entorno de la aplicación |
 | `AUDITORIA_CLAVE_HMAC` | Clave de la cadena de auditoría, de 32 caracteres o más. Custodia: `custodia-clave-auditoria.md` |
 | `CC_PROXIES_INTERNOS` | Expresión regular con las IP de tus proxies inversos. Solo de ellos se acepta la cabecera X-Forwarded-For. Por defecto: loopback y redes privadas (10.x, 172.16-31.x, 192.168.x) |
@@ -308,7 +366,15 @@ Sprint 6, tanda 3 (V22, llamada de control): `DELETE` y `UPDATE` sobre `llamada_
 registra una persona activa de Promotoría o Dirección, que no es del lunes de la semana en curso en Lima
 (`DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR)`) o a una familia sin pagos en efectivo en esas semanas da 1644; dos llamadas a
 la misma familia en la semana dan 1062 y «No confirma» sin nota, 3819. V22 recrea `ck_semilla_muestreo_ambito` con el
-ámbito `LLAMADA_CONTROL`. Se agrega `trg_llamada_control_registro`: **61 triggers en total**.
+ámbito `LLAMADA_CONTROL`. Se agrega `trg_llamada_control_registro`: 61 triggers en total.
+Sprint 7 (V24 y V25): `trg_respaldo_registro` (tanda 1, 64 en total) y, en la tanda 2, `trg_firma_operacion_nace`,
+`trg_sesion_usuario_nace|cierre`, `trg_evento_auditoria_actor`, `trg_semilla_muestreo_registro`, `trg_usuario_nace`,
+`trg_usuario_identidad` y `trg_usuario_rol_alta|baja`, con versión nueva de 25 triggers (firma de sesión y actor de
+sistema) y las funciones `cc_es_sistema` y `cc_firma_valida`: **73 triggers en total**. Con `cc_app`: `INSERT` en
+`usuario`, `usuario_rol` o `sesion_usuario`, `UPDATE usuario`, `DELETE FROM usuario_rol` y `UPDATE comprobante|mensaje`
+dan 1142; un evento, un pago o una verificación AUTOMATICA a nombre de un actor `sistema.*` dan 1644; una aprobación sin
+la firma de la sesión de quien aprueba da 1644. Con `cc_sistema`: editar la bitácora da 1142 y una firma o una sesión
+imposibles, 1644.
 La aplicación lo comprueba sola al arrancar en `prod` (`VerificadorPermisosBaseDatos`), antes de aceptar peticiones. Si `cc_app` puede ejecutarlas, **no arranca** y el log dice qué revisar. Esta comprobación no se puede desactivar.
 
 Si la bitácora queda bloqueada por un evento falso, sigue `incidente-auditoria.md`.

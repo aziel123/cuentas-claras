@@ -24,6 +24,8 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.CuentaBancariaRe
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.ExtractoBancarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.MovimientoBancarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -66,9 +68,13 @@ public class ServicioCierreMensual {
 
 	private final Clock reloj;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ServicioCierreMensual(CierreMensualBancoRepository cierres, CuentaBancariaRepository cuentas,
 			ExtractoBancarioRepository extractos, MovimientoBancarioRepository movimientos,
-			ControlParticipantes participantes, AuditoriaService auditoria, Clock reloj) {
+			ControlParticipantes participantes, AuditoriaService auditoria, Clock reloj, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.cierres = cierres;
 		this.cuentas = cuentas;
 		this.extractos = extractos;
@@ -194,6 +200,7 @@ public class ServicioCierreMensual {
 		if (a.signum() < 0 || c.signum() < 0) {
 			throw new ReglaNegocioException("Los totales de abonos y de cargos se escriben en positivo.");
 		}
+		firmaSesion.firmar(ClaveFirma.cierreMensual(cierre.getId(), cierre.getIntentos() + 1));
 		EstadoCierreMensual estado = cierre.intentar(a, c, s, usuario,
 				LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS));
 		cierres.saveAndFlush(cierre);

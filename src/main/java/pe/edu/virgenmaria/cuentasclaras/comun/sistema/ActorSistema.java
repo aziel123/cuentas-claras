@@ -21,7 +21,12 @@ public enum ActorSistema {
 	 * Sprint 6, tanda 2: guarda la foto del resumen diario (y la envía a Promotoría), la recalcula cada mañana y difunde
 	 * las alertas al celular. Solo lee los libros por los puertos de cifras y alertas; nunca registra dinero.
 	 */
-	PANEL("sistema.panel");
+	PANEL("sistema.panel"),
+	/**
+	 * Sprint 7, tanda 2 (H4): crea y lee la semilla secreta del muestreo (solo él la inserta, con la conexión de
+	 * {@code cc_sistema}, y solo para hoy o el lunes en curso). La semilla efectiva se deriva con la clave del servidor.
+	 */
+	MUESTREO("sistema.muestreo");
 
 	/** Prefijo reservado: ninguna persona puede tener un nombre de usuario que empiece así. */
 	public static final String PREFIJO_RESERVADO = "sistema";

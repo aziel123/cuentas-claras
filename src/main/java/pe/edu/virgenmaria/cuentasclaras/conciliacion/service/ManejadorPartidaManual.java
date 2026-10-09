@@ -18,6 +18,8 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.MovimientoBancario;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.PartidaConciliacion;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.ReglaPartida;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.PartidaConciliacionRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -50,8 +52,12 @@ public class ManejadorPartidaManual implements ManejadorSolicitud {
 
 	private final Clock reloj;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ManejadorPartidaManual(PartidaConciliacionRepository partidas, ResponsablesPartida responsables,
-			AuditoriaService auditoria, ApplicationEventPublisher eventos, Clock reloj) {
+			AuditoriaService auditoria, ApplicationEventPublisher eventos, Clock reloj, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.partidas = partidas;
 		this.responsables = responsables;
 		this.auditoria = auditoria;
@@ -84,6 +90,7 @@ public class ManejadorPartidaManual implements ManejadorSolicitud {
 				!= pe.edu.virgenmaria.cuentasclaras.conciliacion.model.ObjetoPartida.LIQUIDACION) {
 			throw new ReglaNegocioException("Los montos no coinciden: recházala.");
 		}
+		firmaSesion.firmar(ClaveFirma.partida(partida.getId(), EstadoPartida.CONFIRMADA));
 		partida.confirmar(aprobador, LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS));
 		partidas.saveAndFlush(partida);
 		auditoria.registrar(AccionAuditoria.PARTIDA_MANUAL_APROBADA, ENTIDAD, partida.getId().toString(),
@@ -99,6 +106,7 @@ public class ManejadorPartidaManual implements ManejadorSolicitud {
 	public void alRechazar(SolicitudCambio solicitud) {
 		partidas.bloquear(solicitud.getEntidadId()).filter(p -> p.getEstado() == EstadoPartida.PROPUESTA)
 				.ifPresent(p -> {
+					firmaSesion.firmar(ClaveFirma.partida(p.getId(), EstadoPartida.DESCARTADA));
 					p.descartar(solicitud.getResueltoPor(), LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS));
 					partidas.saveAndFlush(p);
 				});

@@ -15,6 +15,8 @@ import pe.edu.virgenmaria.cuentasclaras.caja.repository.CierreCajaRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -41,8 +43,12 @@ public class ManejadorCierreCaja implements ManejadorSolicitud {
 
 	private final Clock reloj;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ManejadorCierreCaja(CierreCajaRepository cierres, AuditoriaService auditoria, NombresUsuarios nombres,
-			Clock reloj) {
+			Clock reloj, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.cierres = cierres;
 		this.auditoria = auditoria;
 		this.nombres = nombres;
@@ -71,6 +77,7 @@ public class ManejadorCierreCaja implements ManejadorSolicitud {
 			throw new ReglaNegocioException("Es un cierre tras reapertura (no fue ciego): para aprobarlo escribe qué "
 					+ "verificaste de los pagos agregados después de reabrir.");
 		}
+		firmaSesion.firmar(ClaveFirma.cierreCaja(cierre.getId(), EstadoCierre.APROBADO));
 		cierre.aprobar(aprobador, ahora(), comentario);
 		cierres.saveAndFlush(cierre);
 		CajaDiaria caja = cierre.getCaja();
@@ -85,6 +92,7 @@ public class ManejadorCierreCaja implements ManejadorSolicitud {
 	public void alRechazar(SolicitudCambio solicitud) {
 		CierreCaja cierre = cierres.bloquear(solicitud.getEntidadId())
 				.orElseThrow(() -> new ReglaNegocioException("El cierre ya no existe."));
+		firmaSesion.firmar(ClaveFirma.cierreCaja(cierre.getId(), EstadoCierre.OBSERVADO));
 		cierre.observar(solicitud.getResueltoPor(), ahora(), solicitud.getComentario());
 		cierres.saveAndFlush(cierre);
 		CajaDiaria caja = cierre.getCaja();

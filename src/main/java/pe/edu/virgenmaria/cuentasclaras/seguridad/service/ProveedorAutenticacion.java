@@ -9,8 +9,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.Actor;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
@@ -19,6 +17,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.PropiedadesSeguridad;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -64,7 +63,7 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 
 	private final PropiedadesSeguridad propiedades;
 
-	private final TransactionTemplate transaccion;
+	private final EjecucionIdentidad identidad;
 
 	private final Clock reloj;
 
@@ -72,14 +71,14 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 
 	public ProveedorAutenticacion(UsuarioRepository usuarios, ServicioDetallesUsuario detalles,
 			PasswordEncoder codificador, AuditoriaService auditoria, SelladorAuditoria sellador,
-			PropiedadesSeguridad propiedades, PlatformTransactionManager transacciones, Clock reloj) {
+			PropiedadesSeguridad propiedades, EjecucionIdentidad identidad, Clock reloj) {
 		this.usuarios = usuarios;
 		this.detalles = detalles;
 		this.codificador = codificador;
 		this.auditoria = auditoria;
 		this.sellador = sellador;
 		this.propiedades = propiedades;
-		this.transaccion = new TransactionTemplate(transacciones);
+		this.identidad = identidad;
 		this.reloj = reloj;
 		this.hashSenuelo = codificador.encode("clave señuelo para igualar el tiempo de respuesta");
 	}
@@ -95,7 +94,9 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 					AccionAuditoria.INGRESO_FALLIDO, "usuario", null, null, null, "Usuario no registrado.");
 			throw new BadCredentialsException("Usuario o clave incorrectos");
 		}
-		Intento intento = ContextoColegio.en(colegio.get(), () -> transaccion.execute(estado -> intentar(nombre, clave)));
+		// Sprint 7, tanda 2: el contador de intentos, el bloqueo y el último ingreso se escriben por la ruta de identidad
+		// (cc_sistema): cc_app no tiene UPDATE sobre usuario.
+		Intento intento = ContextoColegio.en(colegio.get(), () -> identidad.como(() -> intentar(nombre, clave)));
 		return switch (intento.resultado()) {
 			case CORRECTO -> {
 				UsernamePasswordAuthenticationToken token = UsernamePasswordAuthenticationToken

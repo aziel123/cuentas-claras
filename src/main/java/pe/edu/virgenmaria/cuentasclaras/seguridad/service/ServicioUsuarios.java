@@ -28,6 +28,12 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PropositoEnlace;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.SesionesFirmadas;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.TipoSolicitud;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.RegistroSolicitudes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.MotivoCierreSesion;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.ReglasSegregacion;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -50,6 +56,12 @@ import java.util.stream.Collectors;
  *       con el valor anterior y el nuevo (nunca con claves).</li>
  * </ul>
  * Las consultas las filtra {@code @TenantId}: un usuario de otro colegio "no existe" (404).
+ * <p>
+ * Sprint 7, tanda 2 (H1): todo cambio de una cuenta (alta, roles, clave, bloqueo, desactivación) se escribe por la ruta
+ * de identidad ({@link EjecucionIdentidad}: conexión de {@code cc_sistema}, su propia transacción). Dar o quitar
+ * PROMOTOR o DIRECTOR crea una solicitud {@code CAMBIO_ROLES} que aprueba OTRA persona ({@link ManejadorCambioRoles});
+ * una cuenta nueva nace sin esos roles (decisiones 84 y 85). Única excepción de arranque: el primer DIRECTOR de un
+ * colegio sin Dirección activa y con una sola Promotoría (no hay otra persona que pueda aprobar).
  */
 @Service
 @PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
@@ -87,10 +99,20 @@ public class ServicioUsuarios {
 
 	private final ApplicationEventPublisher eventos;
 
+	private final EjecucionIdentidad identidad;
+
+	private final SesionesFirmadas sesionesFirmadas;
+
+	private final RegistroSolicitudes solicitudes;
+
 	public ServicioUsuarios(UsuarioRepository usuarios, ServicioDetallesUsuario detalles, PasswordEncoder codificador,
 			GeneradorClaveTemporal generador, AuditoriaService auditoria, SesionesUsuario sesiones,
 			PropiedadesSeguridad propiedades, PlatformTransactionManager transacciones, Clock reloj,
-			EnlacesActivacion enlaces, ApplicationEventPublisher eventos) {
+			EnlacesActivacion enlaces, ApplicationEventPublisher eventos, EjecucionIdentidad identidad,
+			SesionesFirmadas sesionesFirmadas, RegistroSolicitudes solicitudes) {
+		this.identidad = identidad;
+		this.sesionesFirmadas = sesionesFirmadas;
+		this.solicitudes = solicitudes;
 		this.enlaces = enlaces;
 		this.eventos = eventos;
 		this.propiedades = propiedades;
@@ -146,6 +168,11 @@ public class ServicioUsuarios {
 		UsuarioAutenticado actor = actor();
 		Set<Rol> roles = rolesValidos(solicitud.roles());
 		exigirPuedeAsignar(actor, roles);
+		if (roles.stream().anyMatch(ROLES_DIRECTIVOS::contains)) {
+			throw new ReglaNegocioException("Una cuenta nueva nace sin Promotoría ni Dirección: créala con su otro rol (por "
+					+ "ejemplo, Docente) y después pide Promotoría o Dirección con «Cambiar roles». Lo aprueba otra persona "
+					+ "de Promotoría o Dirección.");
+		}
 		String nombreUsuario = Usuario.normalizarNombreUsuario(solicitud.nombreUsuario());
 		if (!Usuario.esNombreUsuarioValido(nombreUsuario)) {
 			throw new ReglaNegocioException("El usuario debe tener de 3 a 60 caracteres: letras minúsculas sin tildes, "
@@ -162,7 +189,7 @@ public class ServicioUsuarios {
 		}
 		Usuario usuario;
 		try {
-			usuario = transaccion.execute(estado -> {
+			usuario = identidad.como(() -> {
 				exigirNoEsMiContacto(actor, telefono, correo);
 				LocalDateTime ahora = ahora();
 				// Una clave al azar que nadie conoce y que ya venció: la cuenta solo se activa con el enlace.
@@ -199,79 +226,136 @@ public class ServicioUsuarios {
 		return EnumSet.copyOf(roles);
 	}
 
-	@Transactional
-	public void cambiarRoles(Long id, CambiarRolesRequest solicitud) {
+	/**
+	 * Cambia los roles. Si da o quita PROMOTOR o DIRECTOR, crea una solicitud {@code CAMBIO_ROLES} (la aprueba otra persona)
+	 * y devuelve {@code true}; si no, los aplica por la ruta de identidad y devuelve {@code false}.
+	 */
+	public boolean cambiarRoles(Long id, CambiarRolesRequest solicitud) {
 		UsuarioAutenticado actor = actor();
+		Set<Rol> nuevos = rolesValidos(solicitud.roles());
+		String motivo = motivo(solicitud.motivo());
+		Set<Rol> actuales = transaccion.execute(t -> rolesDe(buscar(id)));
+		Set<Rol> cambian = EnumSet.copyOf(actuales);
+		cambian.addAll(nuevos);
+		cambian.removeIf(r -> actuales.contains(r) && nuevos.contains(r));
+		boolean directivos = cambian.stream().anyMatch(ROLES_DIRECTIVOS::contains);
+		if (directivos && !esPrimerDirector(actuales, nuevos)) {
+			transaccion.executeWithoutResult(t -> pedirCambioDeRoles(actor, id, nuevos, motivo));
+			return true;
+		}
+		identidad.ejecutar(() -> {
+			Usuario usuario = validarCambioDeRoles(actor, id, nuevos);
+			String anteriores = roles(usuario.getRoles());
+			usuario.cambiarRoles(nuevos);
+			usuarios.saveAndFlush(usuario);
+			auditoria.registrar(AccionAuditoria.ROLES_CAMBIADOS, "usuario", id.toString(), anteriores, roles(nuevos),
+					detalle(usuario, motivo) + (directivos ? ". Primer usuario de Dirección del colegio: sin solicitud, porque "
+							+ "no hay otra persona de Promotoría o Dirección que pueda aprobarla" : ""));
+			sesionesFirmadas.cerrarDe(id, MotivoCierreSesion.CUENTA_CAMBIADA);
+		});
+		sesiones.expirar(id);
+		return false;
+	}
+
+	/** Las validaciones de siempre, con la cuenta leída en la transacción en curso. */
+	private Usuario validarCambioDeRoles(UsuarioAutenticado actor, Long id, Set<Rol> nuevos) {
 		Usuario usuario = buscar(id);
 		exigirNoEsUnoMismo(actor, usuario, "No puedes cambiar tus propios roles.");
-		Set<Rol> nuevos = rolesValidos(solicitud.roles());
 		if (!nuevos.contains(Rol.PROMOTOR)) {
 			exigirNoEsElUltimoPromotor(usuario, "No puedes quitarle Promotoría al último usuario de Promotoría activo.");
 		}
 		exigirPuedeTocar(actor, usuario);
 		exigirPuedeAsignar(actor, usuario.getRoles());
 		exigirPuedeAsignar(actor, nuevos);
-		String motivo = motivo(solicitud.motivo());
-		String anteriores = roles(usuario.getRoles());
-		usuario.cambiarRoles(nuevos);
-		auditoria.registrar(AccionAuditoria.ROLES_CAMBIADOS, "usuario", id.toString(), anteriores, roles(nuevos),
-				detalle(usuario, motivo));
-		sesiones.expirar(id);
+		ReglasSegregacion.validarCuenta(nuevos, usuario.getApoderadoId());
+		return usuario;
 	}
 
-	@Transactional
+	/** Sprint 7, tanda 2: dar o quitar Promotoría o Dirección se pide; lo aprueba otra persona en la bandeja. */
+	private void pedirCambioDeRoles(UsuarioAutenticado actor, Long id, Set<Rol> nuevos, String motivo) {
+		Usuario usuario = validarCambioDeRoles(actor, id, nuevos);
+		solicitudes.crear(TipoSolicitud.CAMBIO_ROLES, "usuario", usuario.getId(), "Roles de "
+				+ usuario.getNombreCompleto() + " (" + usuario.getNombreUsuario() + "): " + rolesTexto(usuario.getRoles())
+				+ " → " + rolesTexto(nuevos), ManejadorCambioRoles.datos(rolesDe(usuario), nuevos), motivo);
+	}
+
+	/**
+	 * Excepción de arranque: dar DIRECTOR (y nada más que toque Promotoría o Dirección) en un colegio sin Dirección activa y
+	 * con una sola Promotoría: no hay otra persona que pueda aprobar la solicitud. En MySQL, trg_usuario_rol_alta exige lo
+	 * mismo.
+	 */
+	private boolean esPrimerDirector(Set<Rol> actuales, Set<Rol> nuevos) {
+		boolean soloAgregaDirector = !actuales.contains(Rol.DIRECTOR) && nuevos.contains(Rol.DIRECTOR)
+				&& actuales.contains(Rol.PROMOTOR) == nuevos.contains(Rol.PROMOTOR);
+		return soloAgregaDirector && Boolean.TRUE.equals(transaccion.execute(t ->
+				usuarios.contarActivosConRol(Rol.DIRECTOR) == 0 && usuarios.contarActivosConRol(Rol.PROMOTOR) <= 1));
+	}
+
+	private static Set<Rol> rolesDe(Usuario usuario) {
+		return usuario.getRoles().isEmpty() ? EnumSet.noneOf(Rol.class) : EnumSet.copyOf(usuario.getRoles());
+	}
+
 	public void desactivar(Long id, String motivo) {
 		UsuarioAutenticado actor = actor();
-		Usuario usuario = buscar(id);
-		exigirNoEsUnoMismo(actor, usuario, "No puedes desactivar tu propio usuario.");
-		exigirNoEsElUltimoPromotor(usuario, "No puedes desactivar al último usuario de Promotoría activo.");
-		exigirPuedeTocar(actor, usuario);
-		String texto = motivo(motivo);
-		usuario.desactivar(actor.getUsername(), ahora());
-		auditoria.registrar(AccionAuditoria.USUARIO_DESACTIVADO, "usuario", id.toString(), "activo", "inactivo",
-				detalle(usuario, texto));
+		identidad.ejecutar(() -> {
+			Usuario usuario = buscar(id);
+			exigirNoEsUnoMismo(actor, usuario, "No puedes desactivar tu propio usuario.");
+			exigirNoEsElUltimoPromotor(usuario, "No puedes desactivar al último usuario de Promotoría activo.");
+			exigirPuedeTocar(actor, usuario);
+			String texto = motivo(motivo);
+			usuario.desactivar(actor.getUsername(), ahora());
+			usuarios.saveAndFlush(usuario);
+			auditoria.registrar(AccionAuditoria.USUARIO_DESACTIVADO, "usuario", id.toString(), "activo", "inactivo",
+					detalle(usuario, texto));
+			sesionesFirmadas.cerrarDe(id, MotivoCierreSesion.CUENTA_CAMBIADA);
+		});
 		sesiones.expirar(id);
 	}
 
-	@Transactional
 	public void reactivar(Long id, String motivo) {
 		UsuarioAutenticado actor = actor();
-		Usuario usuario = buscar(id);
-		exigirNoEsUnoMismo(actor, usuario, "No puedes reactivar tu propio usuario.");
-		exigirPuedeTocar(actor, usuario);
-		String texto = motivo(motivo);
-		usuario.reactivar();
-		auditoria.registrar(AccionAuditoria.USUARIO_REACTIVADO, "usuario", id.toString(), "inactivo", "activo",
-				detalle(usuario, texto));
+		identidad.ejecutar(() -> {
+			Usuario usuario = buscar(id);
+			exigirNoEsUnoMismo(actor, usuario, "No puedes reactivar tu propio usuario.");
+			exigirPuedeTocar(actor, usuario);
+			String texto = motivo(motivo);
+			usuario.reactivar();
+			usuarios.saveAndFlush(usuario);
+			auditoria.registrar(AccionAuditoria.USUARIO_REACTIVADO, "usuario", id.toString(), "inactivo", "activo",
+					detalle(usuario, texto));
+		});
 	}
 
 	/**
 	 * Restablece el acceso: anula los enlaces anteriores, deja una clave al azar ya vencida (nadie la conoce), desbloquea
 	 * la cuenta, cierra sus sesiones y envía un enlace nuevo DIRECTO al titular (sprint 5). No devuelve ninguna clave.
 	 */
-	@Transactional
 	public UsuarioCreado restablecerClave(Long id, String motivo) {
 		UsuarioAutenticado actor = actor();
-		Usuario usuario = buscar(id);
-		exigirNoEsUnoMismo(actor, usuario, "Para cambiar tu propia clave usa «Cambiar clave».");
-		exigirPuedeTocar(actor, usuario);
-		exigirPuedeAsignar(actor, usuario.getRoles());
-		String texto = motivo(motivo);
-		if (usuario.getTelefonoWhatsapp() == null && usuario.getCorreo() == null) {
-			throw new ReglaNegocioException("La cuenta de " + usuario.getNombreUsuario() + " no tiene celular ni correo: "
-					+ "no hay dónde enviarle su enlace. Registra primero su contacto.");
-		}
-		exigirNoEsMiContacto(actor, usuario.getTelefonoWhatsapp(), usuario.getCorreo());
-		LocalDateTime ahora = ahora();
-		enlaces.anularVigentes(usuario.getId());
-		usuario.restablecerClave(codificador.encode(generador.generar()), ahora, ahora, actor.getUsername());
-		usuarios.saveAndFlush(usuario);
-		auditoria.registrar(AccionAuditoria.CLAVE_RESTABLECIDA, "usuario", id.toString(), null,
-				"enlace nuevo de un solo uso al titular", detalle(usuario, texto) + ". El enlace va a "
-						+ destinoEnmascarado(usuario) + "; los anteriores ya no sirven.");
-		eventos.publishEvent(new EnvioEnlaceSolicitado(usuario.getId(), PropositoEnlace.PERSONAL, null));
+		UsuarioCreado creado = identidad.como(() -> {
+			Usuario usuario = buscar(id);
+			exigirNoEsUnoMismo(actor, usuario, "Para cambiar tu propia clave usa «Cambiar clave».");
+			exigirPuedeTocar(actor, usuario);
+			exigirPuedeAsignar(actor, usuario.getRoles());
+			String texto = motivo(motivo);
+			if (usuario.getTelefonoWhatsapp() == null && usuario.getCorreo() == null) {
+				throw new ReglaNegocioException("La cuenta de " + usuario.getNombreUsuario() + " no tiene celular ni correo: "
+						+ "no hay dónde enviarle su enlace. Registra primero su contacto.");
+			}
+			exigirNoEsMiContacto(actor, usuario.getTelefonoWhatsapp(), usuario.getCorreo());
+			LocalDateTime ahora = ahora();
+			enlaces.anularVigentes(usuario.getId());
+			usuario.restablecerClave(codificador.encode(generador.generar()), ahora, ahora, actor.getUsername());
+			usuarios.saveAndFlush(usuario);
+			auditoria.registrar(AccionAuditoria.CLAVE_RESTABLECIDA, "usuario", id.toString(), null,
+					"enlace nuevo de un solo uso al titular", detalle(usuario, texto) + ". El enlace va a "
+							+ destinoEnmascarado(usuario) + "; los anteriores ya no sirven.");
+			eventos.publishEvent(new EnvioEnlaceSolicitado(usuario.getId(), PropositoEnlace.PERSONAL, null));
+			sesionesFirmadas.cerrarDe(id, MotivoCierreSesion.CUENTA_CAMBIADA);
+			return enviado(usuario);
+		});
 		sesiones.expirar(id);
-		return enviado(usuario);
+		return creado;
 	}
 
 	/** El enlace no va a un contacto de quien lo pide (G8; en MySQL también lo impide trg_mensaje_nace). */
@@ -311,20 +395,22 @@ public class ServicioUsuarios {
 				ahora().plus(propiedades.vigenciaClaveTemporal()));
 	}
 
-	@Transactional
 	public void desbloquear(Long id, String motivo) {
 		UsuarioAutenticado actor = actor();
-		Usuario usuario = buscar(id);
-		exigirNoEsUnoMismo(actor, usuario, "No puedes desbloquear tu propio usuario.");
-		exigirPuedeTocar(actor, usuario);
-		if (!usuario.estaBloqueado(ahora())) {
-			throw new ReglaNegocioException("La cuenta de " + usuario.getNombreUsuario() + " no está bloqueada.");
-		}
-		String texto = motivo(motivo);
-		String anterior = "bloqueada hasta " + usuario.getBloqueadoHasta();
-		usuario.desbloquear();
-		auditoria.registrar(AccionAuditoria.CUENTA_DESBLOQUEADA, "usuario", id.toString(), anterior, "desbloqueada",
-				detalle(usuario, texto));
+		identidad.ejecutar(() -> {
+			Usuario usuario = buscar(id);
+			exigirNoEsUnoMismo(actor, usuario, "No puedes desbloquear tu propio usuario.");
+			exigirPuedeTocar(actor, usuario);
+			if (!usuario.estaBloqueado(ahora())) {
+				throw new ReglaNegocioException("La cuenta de " + usuario.getNombreUsuario() + " no está bloqueada.");
+			}
+			String texto = motivo(motivo);
+			String anterior = "bloqueada hasta " + usuario.getBloqueadoHasta();
+			usuario.desbloquear();
+			usuarios.saveAndFlush(usuario);
+			auditoria.registrar(AccionAuditoria.CUENTA_DESBLOQUEADA, "usuario", id.toString(), anterior, "desbloqueada",
+					detalle(usuario, texto));
+		});
 	}
 
 	private Usuario buscar(Long id) {

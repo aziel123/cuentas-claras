@@ -101,6 +101,15 @@ public class Usuario extends BaseEntity {
 	@Column(name = "contacto_solicitud_id")
 	private Long contactoSolicitudId;
 
+	/**
+	 * Sprint 7, tanda 2 (H1): la solicitud CAMBIO_ROLES aprobada (y firmada por otra persona) con la que se dio o se quitó
+	 * PROMOTOR o DIRECTOR por última vez. En MySQL, trg_usuario_rol_alta y trg_usuario_rol_baja la exigen y
+	 * trg_usuario_identidad solo deja que avance a una más nueva de esta cuenta (uk_usuario_roles_solicitud: una vez).
+	 * Solo la cambia {@link #aplicarRolesAprobados}.
+	 */
+	@Column(name = "roles_solicitud_id")
+	private Long rolesSolicitudId;
+
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "usuario_rol", joinColumns = @JoinColumn(name = "usuario_id"))
 	@Enumerated(EnumType.STRING)
@@ -260,10 +269,37 @@ public class Usuario extends BaseEntity {
 		return debeCambiarClave && claveTemporalHasta != null && !ahora.isBefore(claveTemporalHasta);
 	}
 
+	/**
+	 * Sprint 7, tanda 2 (H2): cambia SOLO la diferencia (quita los que ya no van y agrega los nuevos). Borrar todas las
+	 * filas y volver a insertarlas haría que trg_usuario_rol_baja rechace un cambio legítimo (por ejemplo, quitar
+	 * PROMOTOR un instante a la única Promotoría).
+	 */
 	public void cambiarRoles(Set<Rol> nuevosRoles) {
 		ReglasSegregacion.validarCuenta(nuevosRoles, apoderadoId);
-		roles.clear();
-		roles.addAll(nuevosRoles);
+		roles.removeIf(rol -> !nuevosRoles.contains(rol));
+		for (Rol rol : nuevosRoles) {
+			if (!roles.contains(rol)) {
+				roles.add(rol);
+			}
+		}
+	}
+
+	/**
+	 * Sprint 7, tanda 2: los roles de una solicitud CAMBIO_ROLES aprobada por otra persona (da o quita PROMOTOR o
+	 * DIRECTOR). Enlaza la solicitud ANTES de cambiar los roles: Hibernate escribe el UPDATE de la cuenta antes que las
+	 * filas de usuario_rol, y los triggers de esas filas la exigen.
+	 */
+	public void aplicarRolesAprobados(Set<Rol> nuevosRoles, Long solicitudId) {
+		Objects.requireNonNull(solicitudId, "solicitudId");
+		if (rolesSolicitudId != null && solicitudId <= rolesSolicitudId) {
+			throw new IllegalStateException("La solicitud de roles debe ser más nueva que la anterior");
+		}
+		cambiarRoles(nuevosRoles);
+		rolesSolicitudId = solicitudId;
+	}
+
+	public Long getRolesSolicitudId() {
+		return rolesSolicitudId;
 	}
 
 	public void desactivar(String por, LocalDateTime ahora) {

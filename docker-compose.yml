@@ -13,6 +13,8 @@ services:
       CC_CLAVE_APP: ${CC_CLAVE_APP:?Define CC_CLAVE_APP en .env}
       # Sprint 7: usuario de los respaldos (scripts/respaldo/respaldar.sh).
       CC_CLAVE_RESPALDO: ${CC_CLAVE_RESPALDO:?Define CC_CLAVE_RESPALDO en .env (sprint 7, respaldos)}
+      # Sprint 7, tanda 2: usuario de los procesos y la identidad (ingreso, claves, roles y sesiones).
+      CC_CLAVE_SISTEMA: ${CC_CLAVE_SISTEMA:?Define CC_CLAVE_SISTEMA en .env (sprint 7, usuario cc_sistema)}
       TZ: America/Lima
     # cc_migrador crea triggers con el binlog activo (docs/operacion/mysql-usuarios.md).
     command: ["--log-bin-trust-function-creators=1"]
@@ -45,7 +47,7 @@ services:
         condition: service_healthy
     restart: "no"
 
-  # Paso 2: permisos por tabla de cc_app y triggers, y termina.
+  # Paso 2: usuarios del sprint 7 (04), permisos (02: empieza quitándolo todo) y triggers (03), y termina.
   preparar-bd:
     image: mysql:8.4
     entrypoint: ["sh", "/preparar-bd.sh"]
@@ -53,6 +55,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       CC_CLAVE_MIGRADOR: ${CC_CLAVE_MIGRADOR}
       CC_CLAVE_RESPALDO: ${CC_CLAVE_RESPALDO:?Define CC_CLAVE_RESPALDO en .env (sprint 7, respaldos)}
+      CC_CLAVE_SISTEMA: ${CC_CLAVE_SISTEMA:?Define CC_CLAVE_SISTEMA en .env (sprint 7, usuario cc_sistema)}
     volumes:
       - ./scripts/mysql:/scripts:ro
       - ./docker/preparar-bd.sh:/preparar-bd.sh:ro
@@ -61,7 +64,7 @@ services:
         condition: service_completed_successfully
     restart: "no"
 
-  # Paso 3: la aplicación (front y back) con cc_app y el perfil prod.
+  # Paso 3: la aplicación (front y back) con cc_app y cc_sistema y el perfil prod.
   app:
     image: cuentas-claras:local
     restart: unless-stopped
@@ -70,6 +73,11 @@ services:
       DB_URL: jdbc:mysql://mysql:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false
       DB_USUARIO: cc_app
       DB_CLAVE: ${CC_CLAVE_APP}
+      # Sprint 7, tanda 2: los procesos sistema.* y la identidad usan su propio usuario (el nombre es fijo).
+      DB_SISTEMA_USUARIO: cc_sistema
+      DB_SISTEMA_CLAVE: ${CC_CLAVE_SISTEMA}
+      # La base está en el mismo equipo, en la red interna de Docker: aquí no se exige TLS (en un servidor real, sí).
+      CC_EXIGIR_TLS_BD: "false"
       AUDITORIA_CLAVE_HMAC: ${AUDITORIA_CLAVE_HMAC:?Define AUDITORIA_CLAVE_HMAC en .env}
       CC_PROMOTOR_USUARIO: ${CC_PROMOTOR_USUARIO:-}
       CC_PROMOTOR_NOMBRE: ${CC_PROMOTOR_NOMBRE:-}

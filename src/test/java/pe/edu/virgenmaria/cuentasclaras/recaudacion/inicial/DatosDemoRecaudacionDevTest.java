@@ -117,6 +117,9 @@ class DatosDemoRecaudacionDevTest {
 
 	@Test
 	void noRepiteNiCargaSinAdministracionNiFueraDeH2EnMemoria() {
+		// Las pensiones de demostración ya crearon a «administracion» (sprint 7, tanda 2): otro nombre para probar sin ella.
+		jdbc.update("UPDATE usuario SET nombre_usuario = 'administracion.pensiones' WHERE nombre_usuario = ?",
+				DatosDemoRecaudacionDev.USUARIO);
 		assertThat(demo(true).crearSiCorresponde()).isFalse();
 		crearAdministracion();
 		assertThat(demo(false).crearSiCorresponde()).isFalse();
@@ -128,6 +131,10 @@ class DatosDemoRecaudacionDevTest {
 	}
 
 	private void crearAdministracion() {
+		if (jdbc.queryForObject("SELECT COUNT(*) FROM usuario WHERE nombre_usuario = ?", Long.class,
+				DatosDemoRecaudacionDev.USUARIO) > 0) {
+			return;
+		}
 		ContextoColegio.en(DatosDemoDev.COLEGIO_PRINCIPAL, () -> new TransactionTemplate(transacciones).execute(e -> {
 			Usuario usuario = Usuario.nuevo(DatosDemoRecaudacionDev.USUARIO, "Administración de prueba", null,
 					"{noop}no-se-usa", EnumSet.of(Rol.ADMINISTRACION));

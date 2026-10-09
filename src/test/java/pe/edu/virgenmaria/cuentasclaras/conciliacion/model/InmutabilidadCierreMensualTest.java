@@ -46,7 +46,7 @@ class InmutabilidadCierreMensualTest {
 	@Test
 	void laSemillaEsDeSoloInsercionYNadaSeBorra() throws IOException {
 		assertThat(ColumnasActualizables.de(SemillaMuestreo.class)).containsOnly("actualizado_en", "version");
-		assertThat(permisos()).contains("GRANT INSERT ON cuentasclaras.semilla_muestreo TO 'cc_app'@'%';")
+		assertThat(permisos()).contains("GRANT INSERT ON cuentasclaras.semilla_muestreo TO 'cc_sistema'@'%';")
 				.doesNotContainPattern("GRANT [^;]*UPDATE[^;]*ON cuentasclaras\\.semilla_muestreo")
 				.doesNotContainPattern("GRANT [^;]*DELETE[^;]*ON cuentasclaras\\.(feriado|semilla_muestreo|cierre_mensual_banco)");
 	}

@@ -12,9 +12,11 @@ import pe.edu.virgenmaria.cuentasclaras.alumnos.service.SesionApoderado;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.Pago;
+import pe.edu.virgenmaria.cuentasclaras.caja.repository.AnulacionPagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.caja.repository.PagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.DescuentoRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.service.AvisosMatricula;
@@ -24,20 +26,19 @@ import pe.edu.virgenmaria.cuentasclaras.familias.dto.OpcionesAviso;
 import pe.edu.virgenmaria.cuentasclaras.familias.model.AvisoFamilia;
 import pe.edu.virgenmaria.cuentasclaras.familias.model.EstadoAvisoFamilia;
 import pe.edu.virgenmaria.cuentasclaras.familias.repository.AvisoFamiliaRepository;
-
-import pe.edu.virgenmaria.cuentasclaras.caja.repository.AnulacionPagoRepository;
-import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.DescuentoRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.time.Clock;
-import java.util.LinkedHashSet;
-import java.util.Set;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * «¿Algo no cuadra?» (sprint 5, tanda 2; decisión 52). El apoderado lo envía desde el portal (5 por día y por familia,
@@ -76,11 +77,15 @@ public class ServicioAvisosFamilia {
 
 	private final ControlParticipantes participantes;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ServicioAvisosFamilia(AvisoFamiliaRepository avisos, SesionApoderado sesion, PagoRepository pagos,
 			CuotaRepository cuotas, FamiliaRepository familias, ApoderadoRepository apoderados, AuditoriaService auditoria,
 			AvisosMatricula mensajes, Clock reloj,
 			@Value("${cuentasclaras.familias.avisos-por-dia:5}") int maximoPorDia, AnulacionPagoRepository anulaciones,
-			DescuentoRepository descuentos, ControlParticipantes participantes) {
+			DescuentoRepository descuentos, ControlParticipantes participantes, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.anulaciones = anulaciones;
 		this.descuentos = descuentos;
 		this.participantes = participantes;
@@ -174,7 +179,10 @@ public class ServicioAvisosFamilia {
 					+ "aprobaste la anulación o el descuento del que se queja la familia. Debe atenderlo otra persona "
 					+ "(Promotoría).");
 		}
+		// Primero la regla (un aviso atendido no se vuelve a atender) y después la firma: la firma se inserta antes que el
+		// UPDATE del aviso, que espera al saveAndFlush.
 		aviso.atender(respuesta, quien, LocalDateTime.now(reloj));
+		firmaSesion.firmar(ClaveFirma.avisoFamilia(aviso.getId()));
 		avisos.saveAndFlush(aviso);
 		auditoria.registrar(AccionAuditoria.AVISO_FAMILIA_ATENDIDO, "aviso_familia", id.toString(), "ABIERTO",
 				"ATENDIDO", "Aviso «" + aviso.getTipo().etiqueta() + "» de la familia " + nombreFamilia(aviso.getFamiliaId())

@@ -35,6 +35,8 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.PartidaConciliac
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ReglasEmparejamiento.ObjetoAbierto;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LoteRecaudacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -98,6 +100,9 @@ public class ServicioPartidas {
 
 	private final Clock reloj;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ServicioPartidas(PartidaConciliacionRepository partidas, MovimientoBancarioRepository movimientos,
 			ObjetosConciliables objetos, PagoRepository pagos, DepositoCajaRepository depositos,
 			ReembolsoRepository reembolsos, LoteRecaudacionRepository lotes,
@@ -105,7 +110,8 @@ public class ServicioPartidas {
 			ResponsablesPartida responsables,
 			ControlParticipantes participantes,
 			RegistroSolicitudes solicitudes, PropiedadesConciliacion propiedades, AuditoriaService auditoria,
-			ApplicationEventPublisher eventos, Clock reloj) {
+			ApplicationEventPublisher eventos, Clock reloj, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.partidas = partidas;
 		this.movimientos = movimientos;
 		this.objetos = objetos;
@@ -139,6 +145,7 @@ public class ServicioPartidas {
 		exigirExtractoConfirmado(movimiento);
 		String usuario = usuario();
 		exigirOtraPersona(partida.getObjetoTipo(), partida.objetoId(), usuario, partidaId);
+		firmaSesion.firmar(ClaveFirma.partida(partida.getId(), EstadoPartida.CONFIRMADA));
 		partida.confirmar(usuario, ahora());
 		partidas.saveAndFlush(partida);
 		auditoria.registrar(AccionAuditoria.PARTIDA_SUGERIDA_CONFIRMADA, "partida_conciliacion", partidaId.toString(),
@@ -167,6 +174,7 @@ public class ServicioPartidas {
 		}
 		String motivo = Motivo.exigir(nota);
 		String usuario = usuario();
+		firmaSesion.firmar(ClaveFirma.partida(partida.getId(), EstadoPartida.DESCARTADA));
 		partida.descartar(usuario, ahora());
 		partidas.saveAndFlush(partida);
 		MovimientoBancario m = partida.getMovimiento();
@@ -262,6 +270,7 @@ public class ServicioPartidas {
 					+ "otra persona (Promotoría o Dirección, mirando su app del banco).");
 		}
 		PartidaConciliacion partida = partidas.save(PartidaConciliacion.explicar(movimiento, categoria, motivo));
+		firmaSesion.firmar(ClaveFirma.partida(partida.getId(), EstadoPartida.CONFIRMADA));
 		partida.confirmar(usuario, ahora());
 		partidas.saveAndFlush(partida);
 		auditoria.registrar(AccionAuditoria.MOVIMIENTO_EXPLICADO, "partida_conciliacion", partida.getId().toString(),

@@ -31,7 +31,9 @@ import java.util.function.Function;
  *   <li>sprint 5 (sección 8.3): con la mensajería SIMULADA en {@code prod} o fuera de dev, test o piloto; en {@code prod}
  *       sin ningún canal real (WhatsApp o correo: sin aviso al padre no existe el control 4, decisión 40); con un canal
  *       real sin sus credenciales o, fuera de {@code prod}, sin la marca y la lista de números o correos de prueba;</li>
- *   <li>sprint 7, tanda 1: en {@code prod}, aceptando el respaldo simulado o sin exigir el respaldo.</li>
+ *   <li>sprint 7, tanda 1: en {@code prod}, aceptando el respaldo simulado o sin exigir el respaldo;</li>
+ *   <li>sprint 7, tanda 2: en {@code prod} o {@code piloto}, sin el segundo usuario de base ({@code cc_sistema}) o con el
+ *       mismo usuario para las personas y para los procesos.</li>
  * </ul>
  */
 @Component
@@ -110,6 +112,10 @@ public class VerificadorConfiguracion implements InitializingBean {
 
 	static final String RESPALDO_EXIGIDO = "cuentasclaras.monitoreo.respaldo-exigido";
 
+	static final String DB_USUARIO = "spring.datasource.username";
+
+	static final String DB_SISTEMA_USUARIO = "cuentasclaras.basedatos.sistema.usuario";
+
 	/** Donde puede existir la mensajería simulada (los beans tienen el mismo {@code @Profile}). */
 	static final Set<String> PERFILES_MENSAJERIA_SIMULADA = Set.of("dev", "test", "piloto");
 
@@ -180,6 +186,28 @@ public class VerificadorConfiguracion implements InitializingBean {
 		verificarComprobantes(prod, propiedad);
 		verificarMensajeria(activos, prod, propiedad);
 		verificarRespaldos(prod, propiedad);
+		verificarBaseDatos(despliegue == 1, propiedad);
+	}
+
+	/**
+	 * Sprint 7, tanda 2 (sección 3.2): en prod y piloto la aplicación usa DOS usuarios de base: {@code DB_USUARIO}
+	 * ({@code cc_app}, las personas) y {@code DB_SISTEMA_USUARIO} ({@code cc_sistema}, los procesos y la identidad), y no
+	 * pueden ser el mismo. Sin el segundo, una persona escribiría como el sistema (o nada de la identidad funcionaría).
+	 */
+	private static void verificarBaseDatos(boolean despliegue, Function<String, String> propiedad) {
+		if (!despliegue) {
+			return;
+		}
+		String sistema = propiedad.apply(DB_SISTEMA_USUARIO);
+		if (sistema == null || sistema.isBlank()) {
+			throw new IllegalStateException("Falta DB_SISTEMA_USUARIO (y DB_SISTEMA_CLAVE): los procesos y la identidad usan "
+					+ "su propio usuario de base, cc_sistema. Revisa docs/operacion/mysql-usuarios.md.");
+		}
+		String app = propiedad.apply(DB_USUARIO);
+		if (sistema.strip().equalsIgnoreCase(String.valueOf(app).strip())) {
+			throw new IllegalStateException("DB_SISTEMA_USUARIO y DB_USUARIO no pueden ser el mismo usuario de base: las "
+					+ "personas usan cc_app y los procesos y la identidad, cc_sistema.");
+		}
 	}
 
 	/**
