@@ -6,6 +6,7 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.model.Colegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoColegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.LogoColegioRepository;
+import pe.edu.virgenmaria.cuentasclaras.comun.marca.Marca;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 
 import java.util.Optional;
@@ -22,9 +23,24 @@ public class ColegioService {
 
 	private final LogoColegioRepository logos;
 
-	public ColegioService(ColegioRepository colegios, LogoColegioRepository logos) {
+	private final Marca marca;
+
+	public ColegioService(ColegioRepository colegios, LogoColegioRepository logos, Marca marca) {
 		this.colegios = colegios;
 		this.logos = logos;
+		this.marca = marca;
+	}
+
+	/**
+	 * Sprint 8, tanda 1 (sección 3.7): el nombre con el que un mensaje se presenta a su destinatario, el primer parámetro
+	 * de toda plantilla: el nombre del colegio; para el colegio de plataforma (los operadores), la marca del producto.
+	 */
+	public String nombreParaMensajes(Long colegioId) {
+		if (colegioId == null) {
+			return marca.nombre();
+		}
+		return colegios.findById(colegioId).map(c -> c.esPlataforma() ? marca.nombre() : c.getNombre())
+				.orElse(marca.nombre());
 	}
 
 	/** Nombre del colegio del usuario; vacío si no hay colegio. */

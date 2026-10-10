@@ -317,6 +317,30 @@ public enum AccionAuditoria {
 	/** Se resalta: se pidió desactivar o reactivar una cuenta de Promotoría o Dirección (la aprueba otra persona). */
 	ESTADO_CUENTA_PEDIDO("Pidió desactivar o reactivar una cuenta de Promotoría o Dirección", true),
 
+	// Sprint 8, tanda 1 (plataforma, alta y marca)
+	/** Se resalta: el operador dio de alta un colegio (en la bitácora de la plataforma y en la del colegio nuevo). */
+	COLEGIO_CREADO("Dio de alta un colegio en la plataforma", true),
+	/** Se resalta: el operador creó la primera Promotoría del colegio (una sola vez) y le envió su enlace. */
+	PRIMERA_PROMOTORIA_CREADA("Creó la primera cuenta de Promotoría del colegio", true),
+	/** Se resalta: el operador corrigió el contacto del titular y reenvió su enlace (antes de la activación). */
+	TITULAR_CONTACTO_CORREGIDO("Corrigió el contacto del titular y reenvió su enlace", true),
+	/** El operador corrigió la ficha del colegio (en preparación). */
+	FICHA_COLEGIO_CORREGIDA("Corrigió la ficha del colegio", false),
+	/** Se resalta: el operador registró o cambió el correo externo de control del colegio. */
+	CORREO_CONTROL_REGISTRADO("Registró el correo externo de control del colegio", true),
+	/** Se resalta: Promotoría pasó el colegio a producción (desde ahora se registran pagos). */
+	COLEGIO_EN_PRODUCCION("Pasó el colegio a producción", true),
+	/** Se resalta: el despliegue agregó un operador de la plataforma (CC_OPERADORES). */
+	OPERADOR_CREADO("Se creó un operador de la plataforma", true),
+	/** Se resalta: el despliegue quitó un operador de la plataforma (CC_OPERADORES). */
+	OPERADOR_DESACTIVADO("Se desactivó un operador de la plataforma", true),
+	/** Promotoría cambió la marca del colegio (razón social, dirección, correo institucional). */
+	MARCA_COLEGIO_CAMBIADA("Cambió la marca del colegio", false),
+	/** Promotoría cambió el logo del colegio. */
+	LOGO_COLEGIO_CAMBIADO("Cambió el logo del colegio", false),
+	/** Dirección aprobó la versión vigente del aviso de privacidad del colegio. */
+	PRIVACIDAD_COLEGIO_APROBADA("Aprobó el aviso de privacidad del colegio", false),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);
