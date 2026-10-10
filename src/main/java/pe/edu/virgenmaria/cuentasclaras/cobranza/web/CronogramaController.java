@@ -12,6 +12,9 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.service.GeneradorCronograma;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioCronograma;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.AccesoMostrado;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.RegistraAcceso;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.TipoAcceso;
 
 /**
  * Cronogramas: la pestaña «Cronograma» de la ficha del alumno y las matrículas pendientes de generar con el botón
@@ -30,8 +33,12 @@ public class CronogramaController {
 	}
 
 	@GetMapping("/alumnos/{id:\\d+}/cronograma")
+	@RegistraAcceso(TipoAcceso.FICHA_ALUMNO)
 	public String deAlumno(@PathVariable Long id, Model model) {
-		model.addAttribute("cronograma", cronogramas.deAlumno(id));
+		var cronograma = cronogramas.deAlumno(id);
+		model.addAttribute("cronograma", cronograma);
+		// Correcciones del sprint 7 (QA-S7-4): muestra el nombre y el DNI del alumno: cuenta como su ficha.
+		AccesoMostrado.alumno(id, cronograma.alumno().familiaId());
 		return "alumnos/cronograma";
 	}
 

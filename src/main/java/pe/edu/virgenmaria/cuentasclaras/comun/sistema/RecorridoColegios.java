@@ -29,14 +29,12 @@ public class RecorridoColegios {
 		return colegios.findByActivoTrueOrderByIdAsc().stream().map(Colegio::getId).toList();
 	}
 
+	/**
+	 * Correcciones del sprint 7 (QA-S7-2): si falló en algún colegio (después de intentar en todos), la pasada queda
+	 * marcada ({@link PasadaPorColegios}) y la tarea no deja latido.
+	 */
 	public void enCadaColegio(ActorSistema actor, Consumer<Long> tarea) {
-		for (Long colegio : activos()) {
-			try {
-				EjecucionComoSistema.como(actor, colegio, () -> tarea.accept(colegio));
-			}
-			catch (RuntimeException e) {
-				LOG.error("La tarea de {} falló en el colegio {}: {}", actor.usuario(), colegio, e.getClass().getSimpleName());
-			}
-		}
+		PasadaPorColegios.recorrer(LOG, "La tarea de " + actor.usuario(), activos(),
+				colegio -> EjecucionComoSistema.como(actor, colegio, () -> tarea.accept(colegio)));
 	}
 }

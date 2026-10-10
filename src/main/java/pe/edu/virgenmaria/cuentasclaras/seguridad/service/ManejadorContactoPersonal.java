@@ -11,8 +11,10 @@ import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.ManejadorSolicitud;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.MotivoCierreSesion;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.SesionesFirmadas;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,13 +41,16 @@ public class ManejadorContactoPersonal implements ManejadorSolicitud {
 
 	private final SesionesUsuario sesiones;
 
+	private final SesionesFirmadas sesionesFirmadas;
+
 	public ManejadorContactoPersonal(UsuarioRepository usuarios, ContactoPropio propio, AuditoriaService auditoria,
-			ApplicationEventPublisher eventos, SesionesUsuario sesiones) {
+			ApplicationEventPublisher eventos, SesionesUsuario sesiones, SesionesFirmadas sesionesFirmadas) {
 		this.usuarios = usuarios;
 		this.propio = propio;
 		this.auditoria = auditoria;
 		this.eventos = eventos;
 		this.sesiones = sesiones;
+		this.sesionesFirmadas = sesionesFirmadas;
 	}
 
 	@Override
@@ -102,7 +107,9 @@ public class ManejadorContactoPersonal implements ManejadorSolicitud {
 				ServicioContactoPersonal.visible(telefono, correo), "Contacto de " + usuario.getNombreUsuario()
 						+ " cambiado con la solicitud " + solicitud.getId() + ": pedida por " + solicitud.getSolicitadoPor()
 						+ ", aprobada por " + aprobador + ". Se avisó al contacto anterior.");
-		// Sus sesiones abiertas se cierran: si alguien más la estaba usando, tiene que volver a ingresar.
+		// Sus sesiones abiertas se cierran: si alguien más la estaba usando, tiene que volver a ingresar (sprint 7, tanda 2:
+		// también las de la base, así su secreto ya no firma).
+		sesionesFirmadas.cerrarDe(usuario.getId(), MotivoCierreSesion.CUENTA_CAMBIADA);
 		sesiones.expirar(usuario.getId());
 	}
 

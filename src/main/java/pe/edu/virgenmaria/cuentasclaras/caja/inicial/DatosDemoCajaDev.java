@@ -7,23 +7,19 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.dto.SolicitudVista;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.TipoSolicitud;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CobroRequest;
+import pe.edu.virgenmaria.cuentasclaras.caja.dto.ConteoRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CuentaFamilia;
+import pe.edu.virgenmaria.cuentasclaras.caja.dto.DepositoRequest;
+import pe.edu.virgenmaria.cuentasclaras.caja.dto.ReconteoRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.ResultadoBusqueda;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.RevisionCobro;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.SeleccionCobroRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.MedioPago;
-import pe.edu.virgenmaria.cuentasclaras.caja.dto.ConteoRequest;
-import pe.edu.virgenmaria.cuentasclaras.caja.dto.DepositoRequest;
-import pe.edu.virgenmaria.cuentasclaras.caja.dto.ReconteoRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioAnulacionPagos;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioCierreCaja;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioCobro;
@@ -34,8 +30,8 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.model.TipoDescuento;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioDescuentos;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante;
 import pe.edu.virgenmaria.cuentasclaras.comun.config.RelojMovible;
-import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.inicial.DatosDemoDev;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.PersonaDemo;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -87,13 +83,15 @@ public class DatosDemoCajaDev implements ApplicationRunner {
 
 	private final RelojMovible reloj;
 
+	private final PersonaDemo personaDemo;
+
 	private final String urlBaseDatos;
 
 	private final boolean habilitado;
 
 	public DatosDemoCajaDev(ServicioDescuentos descuentos, BandejaAprobaciones bandeja, ServicioCobro cobro,
 			ServicioAnulacionPagos anulaciones, ServicioCierreCaja cierres, RelojMovible reloj,
-			@Value("${spring.datasource.url:}") String urlBaseDatos,
+			PersonaDemo personaDemo, @Value("${spring.datasource.url:}") String urlBaseDatos,
 			@Value("${cuentasclaras.demo.datos-colegio:true}") boolean habilitado) {
 		this.descuentos = descuentos;
 		this.bandeja = bandeja;
@@ -101,6 +99,7 @@ public class DatosDemoCajaDev implements ApplicationRunner {
 		this.anulaciones = anulaciones;
 		this.cierres = cierres;
 		this.reloj = reloj;
+		this.personaDemo = personaDemo;
 		this.urlBaseDatos = urlBaseDatos;
 		this.habilitado = habilitado;
 	}
@@ -115,7 +114,11 @@ public class DatosDemoCajaDev implements ApplicationRunner {
 		if (!habilitado || urlBaseDatos == null || !urlBaseDatos.startsWith("jdbc:h2:mem:")) {
 			return false;
 		}
-		if (!como("administracion", "ADMINISTRACION", descuentos::lista).isEmpty()) {
+		if (!personaDemo.existen(DatosDemoDev.COLEGIO_PRINCIPAL, "administracion", "promotor", "director", "caja", "caja2")) {
+			LOG.info("No se crea la caja de demostración: faltan las personas de demostración.");
+			return false;
+		}
+		if (!como("administracion", descuentos::lista).isEmpty()) {
 			LOG.info("No se crea la caja de demostración: ya hay descuentos.");
 			return false;
 		}
@@ -134,15 +137,15 @@ public class DatosDemoCajaDev implements ApplicationRunner {
 	}
 
 	private void descuentoPorHermanos() {
-		como("administracion", "ADMINISTRACION", () -> {
+		como("administracion", () -> {
 			SolicitudDescuentoVista valeria = descuentos.prepararSolicitud(DNI_VALERIA);
 			return descuentos.solicitar(new DescuentoRequest(valeria.alumnoId(), TipoDescuento.HERMANOS,
 					ModalidadDescuento.PORCENTAJE, new BigDecimal("10"), List.of(valeria.cuotas().getFirst().id()),
 					"Descuento por hermanos del reglamento: Mateo y Valeria estudian en el colegio",
 					"Reglamento de pensiones 2026, art. 12"));
 		});
-		Long solicitud = como("promotor", "PROMOTOR", () -> pendiente(TipoSolicitud.DESCUENTO));
-		como("promotor", "PROMOTOR", () -> {
+		Long solicitud = como("promotor", () -> pendiente(TipoSolicitud.DESCUENTO));
+		como("promotor", () -> {
 			bandeja.aprobar(solicitud, null);
 			return null;
 		});
@@ -152,24 +155,24 @@ public class DatosDemoCajaDev implements ApplicationRunner {
 	private void diaAnterior() {
 		reloj.mover(Duration.ofDays(-1));
 		try {
-			BigDecimal efectivo = como("caja", "CAJA", () -> {
+			BigDecimal efectivo = como("caja", () -> {
 				BigDecimal total = cobrar(DNI_SEBASTIAN, "Sebastián", MedioPago.EFECTIVO, null);
 				cobrar(DNI_LUCIA_FLORES, "Lucía", MedioPago.YAPE, "YP" + DNI_LUCIA_FLORES);
 				cierres.contar(new ConteoRequest(total, null));
 				return total;
 			});
-			Long cierre = como("director", "DIRECTOR", () -> pendiente(TipoSolicitud.CIERRE_CAJA));
-			como("director", "DIRECTOR", () -> {
+			Long cierre = como("director", () -> pendiente(TipoSolicitud.CIERRE_CAJA));
+			como("director", () -> {
 				bandeja.aprobar(cierre, "Cuadró al primer conteo: revisado con la cajera.");
 				return null;
 			});
-			como("caja", "CAJA", () -> {
+			como("caja", () -> {
 				var estado = cierres.estado();
 				Long caja = estado.porDepositar().getFirst().cajaId();
 				return cierres.registrarDeposito(new DepositoRequest(caja, estado.cuentas().getFirst(), "DEP-" + caja,
 						estado.hoy(), efectivo, null));
 			});
-			como("caja2", "CAJA", () -> {
+			como("caja2", () -> {
 				BigDecimal total = cobrar(DNI_CAMILA, "Camila", MedioPago.EFECTIVO, null);
 				BigDecimal contado = total.subtract(FALTANTE);
 				cierres.contar(new ConteoRequest(contado, null));
@@ -198,7 +201,7 @@ public class DatosDemoCajaDev implements ApplicationRunner {
 	}
 
 	private void anulacionPendiente() {
-		Long pago = como("caja", "CAJA", () -> {
+		Long pago = como("caja", () -> {
 			ResultadoBusqueda thiago = cobro.buscar(DNI_THIAGO).resultados().getFirst();
 			CuentaFamilia cuenta = cobro.cuentaDeFamilia(thiago.familiaId());
 			Long cuota = cuenta.alumnos().stream().flatMap(a -> a.cuotas().stream()).filter(CuentaFamilia.CuotaPorCobrar::cobrable)
@@ -209,7 +212,7 @@ public class DatosDemoCajaDev implements ApplicationRunner {
 					MedioPago.EFECTIVO, null, revision.total(), null, revision.total(), TipoComprobante.BOLETA,
 					revision.receptorPorDefecto(), null, null));
 		});
-		como("caja", "CAJA", () -> {
+		como("caja", () -> {
 			anulaciones.solicitarDevolucion(pago, "El apoderado ya había pagado esta pensión por transferencia");
 			return null;
 		});
@@ -220,18 +223,8 @@ public class DatosDemoCajaDev implements ApplicationRunner {
 				.findFirst().orElseThrow();
 	}
 
-	/** Ejecuta como ese usuario del colegio principal (sin transacción abierta: cada servicio abre la suya). */
-	private static <T> T como(String usuario, String rol, Supplier<T> operacion) {
-		SecurityContext anterior = SecurityContextHolder.getContext();
-		SecurityContext contexto = SecurityContextHolder.createEmptyContext();
-		contexto.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(usuario, null,
-				List.of(new SimpleGrantedAuthority("ROLE_" + rol))));
-		SecurityContextHolder.setContext(contexto);
-		try {
-			return ContextoColegio.en(DatosDemoDev.COLEGIO_PRINCIPAL, operacion);
-		}
-		finally {
-			SecurityContextHolder.setContext(anterior);
-		}
+	/** Ejecuta como esa persona de la demo del colegio principal, con su sesión (firma sus aprobaciones). */
+	private <T> T como(String usuario, Supplier<T> operacion) {
+		return personaDemo.como(DatosDemoDev.COLEGIO_PRINCIPAL, usuario, operacion);
 	}
 }

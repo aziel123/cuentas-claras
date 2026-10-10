@@ -9,8 +9,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.Actor;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
@@ -19,6 +17,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.PropiedadesSeguridad;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -28,8 +27,8 @@ import java.util.Optional;
  * Autentica el formulario de ingreso. Por cada intento, en UNA transacción y con la fila del usuario
  * bloqueada ({@code SELECT ... FOR UPDATE}):
  * <ol>
- *   <li>si la cuenta está bloqueada, rechaza sin mirar la clave;</li>
- *   <li>si está desactivada, rechaza;</li>
+ *   <li>si la cuenta está bloqueada, rechaza sin mirar su clave (pero pasa por BCrypt contra el señuelo: QA-S7-5);</li>
+ *   <li>si está desactivada, rechaza (también después de BCrypt contra el señuelo);</li>
  *   <li>si la clave no coincide, suma el intento (y bloquea al llegar al máximo);</li>
  *   <li>si la clave temporal venció, rechaza;</li>
  *   <li>si todo está bien, reinicia el contador.</li>
@@ -64,7 +63,7 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 
 	private final PropiedadesSeguridad propiedades;
 
-	private final TransactionTemplate transaccion;
+	private final EjecucionIdentidad identidad;
 
 	private final Clock reloj;
 
@@ -72,14 +71,14 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 
 	public ProveedorAutenticacion(UsuarioRepository usuarios, ServicioDetallesUsuario detalles,
 			PasswordEncoder codificador, AuditoriaService auditoria, SelladorAuditoria sellador,
-			PropiedadesSeguridad propiedades, PlatformTransactionManager transacciones, Clock reloj) {
+			PropiedadesSeguridad propiedades, EjecucionIdentidad identidad, Clock reloj) {
 		this.usuarios = usuarios;
 		this.detalles = detalles;
 		this.codificador = codificador;
 		this.auditoria = auditoria;
 		this.sellador = sellador;
 		this.propiedades = propiedades;
-		this.transaccion = new TransactionTemplate(transacciones);
+		this.identidad = identidad;
 		this.reloj = reloj;
 		this.hashSenuelo = codificador.encode("clave señuelo para igualar el tiempo de respuesta");
 	}
@@ -95,7 +94,9 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 					AccionAuditoria.INGRESO_FALLIDO, "usuario", null, null, null, "Usuario no registrado.");
 			throw new BadCredentialsException("Usuario o clave incorrectos");
 		}
-		Intento intento = ContextoColegio.en(colegio.get(), () -> transaccion.execute(estado -> intentar(nombre, clave)));
+		// Sprint 7, tanda 2: el contador de intentos, el bloqueo y el último ingreso se escriben por la ruta de identidad
+		// (cc_sistema): cc_app no tiene UPDATE sobre usuario.
+		Intento intento = ContextoColegio.en(colegio.get(), () -> identidad.como(() -> intentar(nombre, clave)));
 		return switch (intento.resultado()) {
 			case CORRECTO -> {
 				UsernamePasswordAuthenticationToken token = UsernamePasswordAuthenticationToken
@@ -116,11 +117,15 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 		Actor actor = actorDe(usuario);
 		String id = usuario.getId().toString();
 		if (usuario.estaBloqueado(ahora)) {
+			// Correcciones del sprint 7 (QA-S7-5): una cuenta bloqueada o desactivada pasa por BCrypt (contra el señuelo, sin
+			// mirar su clave) igual que una inexistente: el tiempo de respuesta no dice que la cuenta existe.
+			codificador.matches(clave, hashSenuelo);
 			auditoria.registrar(actor, AccionAuditoria.INGRESO_RECHAZADO_BLOQUEADA, "usuario", id, null, null,
 					"La cuenta está bloqueada por intentos fallidos.");
 			return new Intento(Resultado.BLOQUEADA, null);
 		}
 		if (!usuario.isActivo()) {
+			codificador.matches(clave, hashSenuelo);
 			auditoria.registrar(actor, AccionAuditoria.INGRESO_RECHAZADO_INACTIVA, "usuario", id, null, null,
 					"La cuenta está desactivada.");
 			return new Intento(Resultado.INACTIVA, null);

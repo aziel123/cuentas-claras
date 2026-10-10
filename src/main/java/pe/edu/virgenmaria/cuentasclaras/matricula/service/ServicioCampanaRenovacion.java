@@ -24,13 +24,15 @@ import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.matricula.dto.CampanaRenovacion;
 import pe.edu.virgenmaria.cuentasclaras.matricula.model.CanalRespuesta;
 import pe.edu.virgenmaria.cuentasclaras.matricula.model.EstadoRenovacion;
 import pe.edu.virgenmaria.cuentasclaras.matricula.model.RenovacionMatricula;
 import pe.edu.virgenmaria.cuentasclaras.matricula.repository.MatriculasReservadasRepository;
 import pe.edu.virgenmaria.cuentasclaras.matricula.repository.RenovacionMatriculaRepository;
-import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -85,10 +87,14 @@ public class ServicioCampanaRenovacion {
 
 	private final Clock reloj;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ServicioCampanaRenovacion(RenovacionMatriculaRepository renovaciones, MatriculasReservadasRepository reservadas,
 			AnioEscolarRepository anios, SeccionRepository secciones, MatriculaRepository matriculas,
 			PlanPensionRepository planes, CuotaRepository cuotas, AuditoriaService auditoria,
-			ApplicationEventPublisher eventos, Clock reloj) {
+			ApplicationEventPublisher eventos, Clock reloj, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.renovaciones = renovaciones;
 		this.reservadas = reservadas;
 		this.anios = anios;
@@ -225,6 +231,8 @@ public class ServicioCampanaRenovacion {
 	public void registrarPresencial(Long renovacionId, boolean continua) {
 		RenovacionMatricula renovacion = renovaciones.bloquear(renovacionId)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Renovación no encontrada"));
+		firmaSesion.firmar(ClaveFirma.renovacion(renovacion.getId(), continua ? EstadoRenovacion.CONFIRMADA
+				: EstadoRenovacion.NO_CONTINUA));
 		renovacion.responder(continua, CanalRespuesta.PRESENCIAL, SesionActual.usuario(), LocalDateTime.now(reloj));
 		renovaciones.saveAndFlush(renovacion);
 		auditoria.registrar(AccionAuditoria.RENOVACION_PRESENCIAL, "renovacion_matricula", renovacionId.toString(),

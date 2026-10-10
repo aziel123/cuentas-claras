@@ -6,6 +6,7 @@
 		<h1 id="titulo-error">El archivo es demasiado grande</h1>
 		<p class="secundario">No lo recibimos y no se guardó nada. Un archivo de alumnos puede pesar hasta 2 MB: si tienes
 			más alumnos, haz un archivo por nivel y súbelos uno por uno.</p>
+		<p class="secundario" th:if="${codigoError}">Código de error: <strong th:text="${codigoError}">a1b2c3d4e5f6</strong>. Si avisas del problema, dalo: así encontramos lo que pasó.</p>
 		<div class="fila">
 			<a class="btn btn-primario" th:href="@{/alumnos/importar}">Volver a subir</a>
 			<a class="btn btn-secundario" th:href="@{/inicio}">Volver al inicio</a>

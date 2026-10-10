@@ -58,13 +58,40 @@ class VerificadorConfiguracionTest {
 	private static java.util.Map<String, String> sinCorreo(String... pares) {
 		java.util.Map<String, String> mapa = new java.util.HashMap<>();
 		mapa.put(VerificadorConfiguracion.CLAVE_HMAC, CLAVE_REAL);
+		mapa.putAll(DOS_USUARIOS);
 		for (int i = 0; i < pares.length; i += 2) {
 			mapa.put(pares[i], pares[i + 1]);
 		}
 		return mapa;
 	}
 
+	/** Sprint 7, tanda 1: en prod el respaldo simulado no cuenta y la falta de respaldo siempre es alerta. */
+	@Test
+	void enProduccionElRespaldoSimuladoNoCuentaYElRespaldoSeExige() {
+		java.util.Map<String, String> prod = new java.util.HashMap<>(sinCorreo());
+		prod.putAll(CORREO_REAL);
+		prod.remove(VerificadorConfiguracion.CORREO_REAL_FUERA_DE_PROD);
+		prod.remove(VerificadorConfiguracion.CORREO_PRUEBA);
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, prod)).doesNotThrowAnyException();
+
+		java.util.Map<String, String> simulado = new java.util.HashMap<>(prod);
+		simulado.put(VerificadorConfiguracion.RESPALDO_SIMULADO, "true");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, simulado))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("aceptar-respaldo-simulado");
+
+		java.util.Map<String, String> sinExigir = new java.util.HashMap<>(prod);
+		sinExigir.put(VerificadorConfiguracion.RESPALDO_EXIGIDO, "false");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, sinExigir))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("respaldo-exigido");
+
+		java.util.Map<String, String> piloto = sinCorreo(VerificadorConfiguracion.WHATSAPP, "SIMULADO",
+				VerificadorConfiguracion.CORREO, "SIMULADO", VerificadorConfiguracion.RESPALDO_SIMULADO, "true");
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" }, piloto))
+				.doesNotThrowAnyException();
+	}
+
 	// Sprint 5, sección 8.3: la mensajería simulada nunca en prod; prod sin canal real no arranca.
+
 
 	@Test
 	void mensajeriaSimuladaNuncaArrancaEnProduccion() {
@@ -143,15 +170,73 @@ class VerificadorConfiguracionTest {
 				VerificadorConfiguracion.WHATSAPP_VERIFICACION, "verifica");
 	}
 
+	/** Sprint 7, tanda 2: prod y piloto usan dos usuarios de base (cc_app y cc_sistema). */
+	private static final java.util.Map<String, String> DOS_USUARIOS = java.util.Map.of(VerificadorConfiguracion.DB_USUARIO,
+			"cc_app", VerificadorConfiguracion.DB_SISTEMA_USUARIO, "cc_sistema");
+
 	private static java.util.Map<String, String> config(String... pares) {
 		java.util.Map<String, String> mapa = new java.util.HashMap<>();
 		mapa.put(VerificadorConfiguracion.CLAVE_HMAC, CLAVE_REAL);
+		mapa.putAll(DOS_USUARIOS);
 		// Sprint 5: prod no arranca sin un canal real para avisar a las familias (decisión 40).
 		mapa.putAll(CORREO_REAL);
 		for (int i = 0; i < pares.length; i += 2) {
 			mapa.put(pares[i], pares[i + 1]);
 		}
 		return mapa;
+	}
+
+	/**
+	 * Sprint 7, tanda 2 (sección 3.2): en prod y piloto, sin el usuario de los procesos y la identidad (cc_sistema) o con el
+	 * mismo usuario para las personas y para el sistema, no arranca. En dev y test (H2) no hace falta.
+	 */
+	@Test
+	void enProdYPilotoExigeDosUsuariosDeBaseDistintos() {
+		for (String perfil : new String[] { "prod", "piloto" }) {
+			java.util.Map<String, String> sinSistema = new java.util.HashMap<>(config(VerificadorConfiguracion.ENTORNO, "PILOTO"));
+			sinSistema.remove(VerificadorConfiguracion.DB_SISTEMA_USUARIO);
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { perfil }, sinSistema)).as(perfil)
+					.isInstanceOf(IllegalStateException.class).hasMessageContaining("DB_SISTEMA_USUARIO");
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { perfil },
+					config(VerificadorConfiguracion.ENTORNO, "PILOTO", VerificadorConfiguracion.DB_SISTEMA_USUARIO, "CC_APP")))
+					.as(perfil).isInstanceOf(IllegalStateException.class).hasMessageContaining("no pueden ser el mismo usuario");
+		}
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "test", "mysql" }, CLAVE_DEV))
+				.doesNotThrowAnyException();
+	}
+
+	/**
+	 * Sprint 7, tanda 3 (decisión 103): la cookie __Host-CCSESION exige Secure (sin ella el navegador la rechaza) y, en prod
+	 * y piloto con Secure, la cookie debe llevar el prefijo. La instalación local por http usa CCSESION sin Secure.
+	 */
+	@Test
+	void laCookieDeSesionHostExigeSecureYEnProdSiempreLlevaElPrefijo() {
+		for (String perfil : new String[] { "prod", "piloto" }) {
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { perfil }, config(
+					VerificadorConfiguracion.ENTORNO, "PILOTO", VerificadorConfiguracion.COOKIE_NOMBRE, "CCSESION",
+					VerificadorConfiguracion.COOKIE_SEGURA, "true"))).as(perfil)
+					.isInstanceOf(IllegalStateException.class).hasMessageContaining("__Host-CCSESION");
+			assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { perfil }, config(
+					VerificadorConfiguracion.ENTORNO, "PILOTO", VerificadorConfiguracion.COOKIE_NOMBRE, "__Host-CCSESION",
+					VerificadorConfiguracion.COOKIE_SEGURA, "true"))).as(perfil).doesNotThrowAnyException();
+			// La instalación local en Docker (http): sin Secure y sin el prefijo.
+			assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { perfil }, config(
+					VerificadorConfiguracion.ENTORNO, "PILOTO", VerificadorConfiguracion.COOKIE_NOMBRE, "CCSESION",
+					VerificadorConfiguracion.COOKIE_SEGURA, "false"))).as(perfil).doesNotThrowAnyException();
+		}
+		for (String perfil : new String[] { "prod", "dev" }) {
+			java.util.Map<String, String> mal = new java.util.HashMap<>(config(VerificadorConfiguracion.ENTORNO, "PILOTO",
+					VerificadorConfiguracion.COOKIE_NOMBRE, "__Host-CCSESION", VerificadorConfiguracion.COOKIE_SEGURA,
+					"false"));
+			if (perfil.equals("dev")) {
+				mal = new java.util.HashMap<>(java.util.Map.of(VerificadorConfiguracion.CLAVE_HMAC, CLAVE_DEV,
+						VerificadorConfiguracion.COOKIE_NOMBRE, "__Host-CCSESION", VerificadorConfiguracion.COOKIE_SEGURA,
+						"false"));
+			}
+			java.util.Map<String, String> configuracion = mal;
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { perfil }, configuracion)).as(perfil)
+					.isInstanceOf(IllegalStateException.class).hasMessageContaining("exige Secure");
+		}
 	}
 
 	@Test

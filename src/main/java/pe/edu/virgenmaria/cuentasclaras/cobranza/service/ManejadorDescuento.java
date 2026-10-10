@@ -23,6 +23,8 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.DescuentoRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -79,9 +81,13 @@ public class ManejadorDescuento implements ManejadorSolicitud {
 
 	private final org.springframework.context.ApplicationEventPublisher eventos;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ManejadorDescuento(DescuentoRepository descuentos, AjusteCuotaRepository ajustes, CuotaRepository cuotas,
 			AlumnoRepository alumnos, MatriculaRepository matriculas, AuditoriaService auditoria, Clock reloj,
-			org.springframework.context.ApplicationEventPublisher eventos) {
+			org.springframework.context.ApplicationEventPublisher eventos, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.eventos = eventos;
 		this.descuentos = descuentos;
 		this.ajustes = ajustes;
@@ -133,6 +139,7 @@ public class ManejadorDescuento implements ManejadorSolicitud {
 			throw new ReglaNegocioException(CAMBIO + " (ahora sería " + Dinero.formatear(total) + " y se pidió "
 					+ Dinero.formatear(descuento.getTotalEstimado()) + "). Recházalo y pide otro.");
 		}
+		firmaSesion.firmar(ClaveFirma.descuento(descuento.getId(), EstadoDescuento.APROBADO));
 		descuento.aprobar(aprobador, ahora());
 		descuentos.saveAndFlush(descuento);
 		for (Map.Entry<Cuota, BigDecimal> e : calculo.entrySet()) {
@@ -158,6 +165,7 @@ public class ManejadorDescuento implements ManejadorSolicitud {
 		if (descuento.getEstado() != EstadoDescuento.SOLICITADO) {
 			return;
 		}
+		firmaSesion.firmar(ClaveFirma.descuento(descuento.getId(), EstadoDescuento.RECHAZADO));
 		descuento.rechazar(solicitud.getResueltoPor(), ahora());
 		descuentos.saveAndFlush(descuento);
 		auditoria.registrar(AccionAuditoria.DESCUENTO_RECHAZADO, "descuento", descuento.getId().toString(),

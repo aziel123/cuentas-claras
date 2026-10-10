@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Datos con plazo vencido', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="auditoria-datos-vencidos">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Auditoría · Ley 29733</p>
+			<h1>Datos con plazo vencido</h1>
+			<p class="secundario">Familias que dejaron el colegio sin deuda hace más de <span th:text="${meses}">12</span> meses
+				y cuyo celular o correo todavía guardamos. Ese plazo lo confirma el asesor legal. Los pagos, las boletas y la
+				bitácora no se borran: el colegio debe guardarlos por ley.</p>
+		</div>
+		<a class="btn btn-secundario" th:href="@{/auditoria/accesos}">Quién vio datos personales</a>
+	</div>
+
+	<section class="tarjeta" aria-labelledby="titulo-vencidos">
+		<h2 id="titulo-vencidos">Familias</h2>
+		<th:block th:if="${familias.empty}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('No hay datos con el plazo vencido', 'Cuando una familia que se fue sin deuda cumpla el plazo, aparecerá aquí.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${familias.empty}">
+			<caption class="solo-lectores">Familias con contactos guardados más allá del plazo, de la más antigua a la más reciente.</caption>
+			<thead>
+				<tr><th scope="col">Familia</th><th scope="col">Dejó el colegio</th><th scope="col">Contactos guardados</th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="f : ${familias}" data-familia-vencida>
+					<td data-etiqueta="Familia"><a th:href="@{/alumnos/familias/{id}(id=${f.familiaId})}" th:text="${f.familia}">Familia Flores</a></td>
+					<td data-etiqueta="Dejó el colegio" class="num" th:text="${#temporals.format(f.salida, 'dd/MM/yyyy')}">20/12/2026</td>
+					<td data-etiqueta="Contactos guardados" class="num" th:text="${f.contactos}">2</td>
+				</tr>
+			</tbody>
+		</table>
+		<p class="ayuda">La anonimización de los contactos todavía no es automática: coordínala con el responsable técnico y
+			deja constancia en un acta (docs/manuales/operador.md).</p>
+	</section>
+</main>
+</body>
+</html>

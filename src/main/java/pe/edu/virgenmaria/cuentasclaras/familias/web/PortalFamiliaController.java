@@ -2,6 +2,7 @@ package pe.edu.virgenmaria.cuentasclaras.familias.web;
 
 import pe.edu.virgenmaria.cuentasclaras.familias.service.ServicioPreferencias;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -14,6 +15,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.familias.dto.AvisoRequest;
 import pe.edu.virgenmaria.cuentasclaras.familias.dto.InicioFamilia;
+import pe.edu.virgenmaria.cuentasclaras.familias.model.DerechoDatos;
 import pe.edu.virgenmaria.cuentasclaras.familias.model.TipoAvisoFamilia;
 import pe.edu.virgenmaria.cuentasclaras.familias.service.ConsultaEstadoCuentaFamilia;
 import pe.edu.virgenmaria.cuentasclaras.familias.service.InicioPortalFamilia;
@@ -40,8 +42,17 @@ public class PortalFamiliaController {
 
 	private final ServicioPreferencias preferencias;
 
+	/** Sprint 7, tanda 3: los plazos de los pedidos sobre datos personales que se le dicen a la familia (decisión 97). */
+	private final int plazoAcceso;
+
+	private final int plazoOtros;
+
 	public PortalFamiliaController(InicioPortalFamilia inicio, ConsultaEstadoCuentaFamilia estadoCuenta,
-			ServicioAvisosFamilia avisos, ServicioRenovacionFamilia renovaciones, ServicioPreferencias preferencias) {
+			ServicioAvisosFamilia avisos, ServicioRenovacionFamilia renovaciones, ServicioPreferencias preferencias,
+			@Value("${cuentasclaras.privacidad.plazo-acceso-dias-habiles:20}") int plazoAcceso,
+			@Value("${cuentasclaras.privacidad.plazo-otros-dias-habiles:10}") int plazoOtros) {
+		this.plazoAcceso = plazoAcceso;
+		this.plazoOtros = plazoOtros;
 		this.preferencias = preferencias;
 		this.inicio = inicio;
 		this.estadoCuenta = estadoCuenta;
@@ -135,6 +146,9 @@ public class PortalFamiliaController {
 
 	private void prepararAviso(Model model) {
 		model.addAttribute("tipos", TipoAvisoFamilia.values());
+		model.addAttribute("derechos", DerechoDatos.values());
+		model.addAttribute("plazoAcceso", plazoAcceso);
+		model.addAttribute("plazoOtros", plazoOtros);
 		model.addAttribute("opciones", avisos.opciones());
 		model.addAttribute("misAvisos", avisos.misAvisos());
 	}

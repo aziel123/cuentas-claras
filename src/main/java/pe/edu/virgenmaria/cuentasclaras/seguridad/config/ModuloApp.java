@@ -31,6 +31,12 @@ public enum ModuloApp {
 
 	USUARIOS("Usuarios y roles", "Crea cuentas, asigna roles y desactiva accesos.", "Sprint 1", true,
 			"/usuarios", new String[] { "/usuarios", "/usuarios/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
+	// Sprint 7, tanda 3 (Ley 29733, sección 8.2): quién vio datos personales y los datos con plazo vencido, SOLO Promotoría.
+	// Va ANTES que AUDITORIA (la primera regla que coincide gana: /auditoria/** también es de Dirección).
+	ACCESOS_DATOS("Quién vio datos personales", "Quién del colegio abrió la ficha de una familia o un alumno, buscó alumnos o "
+			+ "vio a los morosos, y los contactos con el plazo de conservación vencido.", "Sprint 7", true,
+			"/auditoria/accesos", new String[] { "/auditoria/accesos", "/auditoria/datos-vencidos" },
+			EnumSet.of(PROMOTOR)),
 	AUDITORIA("Bitácora de auditoría", "Revisa quién hizo qué y cuándo, y comprueba que nadie alteró el registro.",
 			"Sprint 1", true, "/auditoria", new String[] { "/auditoria", "/auditoria/**" },
 			EnumSet.of(PROMOTOR, DIRECTOR)),
@@ -112,7 +118,14 @@ public enum ModuloApp {
 			"/comunicados", new String[] { "/comunicados", "/comunicados/**" }, EnumSet.of(PROMOTOR, DIRECTOR, DOCENTE));
 
 	/** Rutas públicas: no exigen sesión. */
-	public static final String[] RUTAS_PUBLICAS = { "/login", "/error", "/actuator/health", "/activar/*/*", "/verificar/*/*" };
+	public static final String[] RUTAS_PUBLICAS = { "/login", "/error", "/actuator/health", "/activar/*/*", "/verificar/*/*",
+			// Sprint 7, tanda 1: sondas de vida y de disponibilidad (solo el estado) y el vigilante externo del respaldo.
+			"/actuator/health/liveness", "/actuator/health/readiness", "/salud/respaldo",
+			// Sprint 7, tanda 3 (Ley 29733): el aviso de privacidad vigente, enlazado desde el ingreso y el portal.
+			"/privacidad",
+			// Sprint 7, tanda 3 (H9): la página de ingreso con el aviso «Demasiados intentos» (429), a donde reenvía
+			// FiltroLimiteIngresos. Sin datos: solo el formulario y un mensaje genérico.
+			"/login/demasiados-intentos" };
 
 	/**
 	 * Sprint 4: avisos (webhooks) de la pasarela. Sin sesión ni CSRF, SOLO por POST y en una cadena de seguridad aparte:

@@ -4,6 +4,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.RutaConexion;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
@@ -63,8 +64,14 @@ public final class UsuariosDePrueba {
 		return authentication(autenticacion(autenticado(usuario)));
 	}
 
+	/**
+	 * Sprint 7, tanda 2: en MySQL real la persona inventada pasa a ser una cuenta real con su nombre y sus roles (para que
+	 * abra su sesión de la base y firme como ella; ver {@link CuentasDePrueba}). En H2, tal cual.
+	 */
 	public static Authentication autenticacion(UsuarioAutenticado usuario) {
-		return UsernamePasswordAuthenticationToken.authenticated(usuario, null, usuario.getAuthorities());
+		CuentasDePrueba mysql = CuentasDePrueba.enMySql();
+		UsuarioAutenticado persona = mysql == null ? usuario : mysql.real(usuario);
+		return UsernamePasswordAuthenticationToken.authenticated(persona, null, persona.getAuthorities());
 	}
 
 	/** Para MockMvc: {@code .with(UsuariosDePrueba.como(Rol.CAJA))}. */
@@ -78,22 +85,43 @@ public final class UsuariosDePrueba {
 
 	/**
 	 * Guarda un usuario real en la base, en el colegio indicado.
+	 * <p>
+	 * Sprint 7, tanda 2: por la ruta de identidad (en MySQL real, la conexión de {@code cc_sistema}); nace con la clave
+	 * por cambiar y después la cambia (trg_usuario_nace). En MySQL real, PROMOTOR y DIRECTOR se dan con una solicitud
+	 * CAMBIO_ROLES que aprueba otra persona ({@link CuentasDePrueba}); en H2, directo.
 	 *
 	 * @param temporal {@code true}: su clave es temporal y debe cambiarla al ingresar
 	 */
 	public static Usuario guardar(UsuarioRepository usuarios, PasswordEncoder codificador, long colegioId,
 			String nombreUsuario, String clave, boolean temporal, Rol... roles) {
-		return ContextoColegio.en(colegioId, () -> {
+		Set<Rol> pedidos = EnumSet.copyOf(List.of(roles));
+		CuentasDePrueba mysql = CuentasDePrueba.enMySql();
+		boolean directivos = pedidos.contains(Rol.PROMOTOR) || pedidos.contains(Rol.DIRECTOR);
+		if (mysql == null || !directivos) {
+			return insertar(usuarios, codificador, colegioId, nombreUsuario, clave, temporal, pedidos);
+		}
+		Set<Rol> otros = EnumSet.copyOf(pedidos);
+		otros.removeAll(EnumSet.of(Rol.PROMOTOR, Rol.DIRECTOR));
+		Usuario cuenta = insertar(usuarios, codificador, colegioId, nombreUsuario, clave, temporal,
+				otros.isEmpty() ? EnumSet.of(Rol.DOCENTE) : otros);
+		return mysql.conRolesDirectivos(colegioId, cuenta, pedidos);
+	}
+
+	/** Inserta la cuenta con esos roles por la ruta de identidad (sin solicitud: en MySQL, solo roles del personal). */
+	static Usuario insertar(UsuarioRepository usuarios, PasswordEncoder codificador, long colegioId,
+			String nombreUsuario, String clave, boolean temporal, Set<Rol> roles) {
+		return RutaConexion.identidad(() -> ContextoColegio.en(colegioId, () -> {
 			String hash = codificador.encode(clave);
-			Usuario usuario = Usuario.nuevo(nombreUsuario, "Nombre de " + nombreUsuario, null, hash,
-					EnumSet.copyOf(List.of(roles)));
+			Usuario usuario = Usuario.nuevo(nombreUsuario, "Nombre de " + nombreUsuario, null, hash, roles);
 			// Sprint 5: el personal tiene celular (ahí le llega su enlace). Rango 966 para no chocar con los apoderados.
 			usuario.asignarTelefonoWhatsapp(celular(nombreUsuario));
+			Usuario guardado = usuarios.saveAndFlush(usuario);
 			if (!temporal) {
-				usuario.cambiarClave(hash, LocalDateTime.now(RELOJ), false);
+				guardado.cambiarClave(hash, LocalDateTime.now(RELOJ), false);
+				guardado = usuarios.saveAndFlush(guardado);
 			}
-			return usuarios.save(usuario);
-		});
+			return guardado;
+		}));
 	}
 
 	/** Sprint 5: el celular de prueba de un usuario del personal (+51966XXXXXX, distinto por nombre). */

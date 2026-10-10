@@ -18,7 +18,21 @@ server:
       # Expresión regular de las IP de tus proxies. Por defecto: loopback y redes privadas típicas.
       internal-proxies: ${CC_PROXIES_INTERNOS:10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|127\.\d+\.\d+\.\d+|0:0:0:0:0:0:0:1|::1}
 
+# Sprint 7, tanda 1 (sección 10.2): una línea JSON (ECS) por evento a la salida estándar; mensajes, trazas y MDC pasan
+# por el enmascarado (DNI, RUC, celulares, correos, tokens y el valor de un «Duplicate entry»). El servidor los rota y
+# los guarda 30 días (decisión 95).
+logging:
+  structured:
+    format:
+      console: ecs
+    json:
+      customizer: pe.edu.virgenmaria.cuentasclaras.operacion.log.EnmascaradoLogs
+
 cuentasclaras:
+  # Sprint 7, tanda 1: sin respaldo en 26 h es CRÍTICA y el destino simulado no cuenta (VerificadorConfiguracion).
+  monitoreo:
+    respaldo-exigido: true
+    aceptar-respaldo-simulado: false
   # Primer PROMOTOR: se crea al arrancar SOLO si no hay ningún usuario. Debe cambiar la clave al ingresar.
   inicial:
     colegio-id: ${CC_COLEGIO_ID:1}

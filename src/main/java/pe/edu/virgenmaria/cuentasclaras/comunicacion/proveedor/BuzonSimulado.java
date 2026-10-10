@@ -59,7 +59,8 @@ public class BuzonSimulado {
 			entregas.pollFirst();
 		}
 		if (registrarEnlacesEnLog && sufijoBoton != null) {
-			LOG.info("[dev] Enlace de activación simulado para {}: {}", destino, sufijoBoton);
+			// Sprint 7 (logs sin datos personales): sin el destino (celular o correo); solo el canal y el id simulado.
+			LOG.info("[dev] Enlace de activación simulado ({}, {}): {}", canal, id, sufijoBoton);
 		}
 		return ResultadoEnvio.aceptado(ProveedorMensajeria.SIMULADO, id);
 	}

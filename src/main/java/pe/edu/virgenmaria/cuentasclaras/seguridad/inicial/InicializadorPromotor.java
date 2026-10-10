@@ -8,8 +8,6 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.Actor;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
@@ -19,6 +17,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.PoliticaClaves;
 
 import java.util.ArrayList;
@@ -44,7 +43,8 @@ public class InicializadorPromotor implements ApplicationRunner {
 
 	private final AuditoriaService auditoria;
 
-	private final TransactionTemplate transaccion;
+	/** Sprint 7, tanda 2: las cuentas se crean por la ruta de identidad (cc_sistema). */
+	private final EjecucionIdentidad identidad;
 
 	private final Long colegioId;
 
@@ -55,7 +55,7 @@ public class InicializadorPromotor implements ApplicationRunner {
 	private final String clave;
 
 	public InicializadorPromotor(UsuarioRepository usuarios, ColegioRepository colegios, PasswordEncoder codificador,
-			AuditoriaService auditoria, PlatformTransactionManager transacciones,
+			AuditoriaService auditoria, EjecucionIdentidad identidad,
 			@Value("${cuentasclaras.inicial.colegio-id:1}") Long colegioId,
 			@Value("${cuentasclaras.inicial.promotor-usuario:}") String nombreUsuario,
 			@Value("${cuentasclaras.inicial.promotor-nombre:}") String nombreCompleto,
@@ -64,7 +64,7 @@ public class InicializadorPromotor implements ApplicationRunner {
 		this.colegios = colegios;
 		this.codificador = codificador;
 		this.auditoria = auditoria;
-		this.transaccion = new TransactionTemplate(transacciones);
+		this.identidad = identidad;
 		this.colegioId = colegioId;
 		this.nombreUsuario = nombreUsuario;
 		this.nombreCompleto = nombreCompleto;
@@ -83,7 +83,7 @@ public class InicializadorPromotor implements ApplicationRunner {
 			return false;
 		}
 		validarVariables();
-		ContextoColegio.en(colegioId, () -> transaccion.executeWithoutResult(estado -> {
+		ContextoColegio.en(colegioId, () -> identidad.ejecutar(() -> {
 			Usuario promotor = usuarios.save(Usuario.nuevo(nombreUsuario, nombreCompleto, null,
 					codificador.encode(clave), Set.of(Rol.PROMOTOR)));
 			auditoria.registrar(Actor.sistema(colegioId), AccionAuditoria.USUARIO_CREADO, "usuario",

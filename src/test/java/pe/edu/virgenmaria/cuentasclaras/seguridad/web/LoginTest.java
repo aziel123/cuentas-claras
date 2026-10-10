@@ -57,6 +57,9 @@ class LoginTest {
 	@Autowired
 	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioUsuarios servicioUsuarios;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones bandeja;
+
 	@BeforeEach
 	void crearUsuarios() {
 		LimpiezaBaseDatos.limpiar(jdbc);
@@ -174,10 +177,17 @@ class LoginTest {
 		MockHttpSession sesionDirector = sesionDe(ingresar("director", CLAVE).andReturn());
 		mvc.perform(get("/usuarios").session(sesionDirector)).andExpect(status().isOk());
 
+		// Sprint 7, tanda 2: quitar Dirección se pide (Promotoría) y lo aprueba otra persona de Promotoría o Dirección.
+		Usuario otraPromotora = UsuariosDePrueba.guardar(usuarios, codificador, 1L, "otra.promotora", CLAVE, false,
+				Rol.PROMOTOR);
 		UsuariosDePrueba.iniciarSesion(promotora);
 		try {
 			servicioUsuarios.cambiarRoles(director.getId(), new pe.edu.virgenmaria.cuentasclaras.seguridad.dto
 					.CambiarRolesRequest(java.util.EnumSet.of(Rol.DOCENTE), "Ya no es director del colegio"));
+			Long solicitud = jdbc.queryForObject("SELECT id FROM solicitud_cambio WHERE tipo = 'CAMBIO_ROLES' "
+					+ "AND entidad_id = ? AND estado = 'PENDIENTE'", Long.class, director.getId());
+			UsuariosDePrueba.iniciarSesion(otraPromotora);
+			bandeja.aprobar(solicitud, "Confirmado en persona");
 		}
 		finally {
 			org.springframework.security.core.context.SecurityContextHolder.clearContext();

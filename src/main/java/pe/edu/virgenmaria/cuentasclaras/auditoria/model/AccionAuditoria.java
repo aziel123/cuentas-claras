@@ -305,6 +305,18 @@ public enum AccionAuditoria {
 	/** Se resalta (S6-M2): una familia de la llamada de control no contestó dos veces y se reemplazó. */
 	LLAMADA_CONTROL_REEMPLAZADA("Una familia de la llamada de control no contestó dos veces", true),
 
+	// Sprint 7, tanda 3 (Ley 29733)
+	/** La familia aceptó el aviso de privacidad (con su versión) al activar su cuenta del portal. */
+	PRIVACIDAD_ACEPTADA("La familia aceptó el aviso de privacidad", false),
+	/** Se resalta (H9): una conexión superó el límite de intentos de ingreso fallidos y debe esperar. */
+	INGRESOS_LIMITADOS("Una conexión superó el límite de intentos de ingreso y debe esperar", true),
+
+	// Correcciones del sprint 7
+	/** Se resalta (QA-S7-1): Promotoría resolvió con motivo la alerta «Faltan filas» de un respaldo. */
+	RESPALDO_FALTAN_FILAS_RESUELTO("Resolvió la alerta «Faltan filas» de un respaldo", true),
+	/** Se resalta: se pidió desactivar o reactivar una cuenta de Promotoría o Dirección (la aprueba otra persona). */
+	ESTADO_CUENTA_PEDIDO("Pidió desactivar o reactivar una cuenta de Promotoría o Dirección", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

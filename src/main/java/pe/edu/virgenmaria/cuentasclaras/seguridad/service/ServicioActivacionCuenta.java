@@ -13,6 +13,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PropositoEnlace;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.EnlaceActivacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -49,8 +50,18 @@ public class ServicioActivacionCuenta {
 
 	private final Clock reloj;
 
+	private final EjecucionIdentidad identidad;
+
+	/** Sprint 7, tanda 3 (Ley 29733): la versión vigente del aviso de privacidad que acepta la familia. */
+	private final String versionAviso;
+
 	public ServicioActivacionCuenta(EnlaceActivacionRepository enlaces, UsuarioRepository usuarios,
-			PasswordEncoder codificador, AuditoriaService auditoria, PlatformTransactionManager transacciones, Clock reloj) {
+			PasswordEncoder codificador, AuditoriaService auditoria, PlatformTransactionManager transacciones, Clock reloj,
+			EjecucionIdentidad identidad,
+			@org.springframework.beans.factory.annotation.Value("${cuentasclaras.privacidad.version-aviso:2027-01}")
+			String versionAviso) {
+		this.versionAviso = versionAviso;
+		this.identidad = identidad;
 		this.enlaces = enlaces;
 		this.usuarios = usuarios;
 		this.codificador = codificador;
@@ -74,12 +85,18 @@ public class ServicioActivacionCuenta {
 		})));
 	}
 
-	/** Activa la cuenta: el apoderado confirma su documento y elige su clave. */
-	public void activar(long colegioId, String token, String documento, String clave, String confirmacion) {
+	/**
+	 * Activa la cuenta: el apoderado confirma su documento y elige su clave. Sprint 7, tanda 3 (Ley 29733): la familia acepta
+	 * el aviso de privacidad vigente ({@code aceptaPrivacidad}); queda en la bitácora con su versión. El personal no lo
+	 * acepta aquí (sus datos son los de su relación laboral).
+	 */
+	public void activar(long colegioId, String token, String documento, String clave, String confirmacion,
+			boolean aceptaPrivacidad) {
 		if (!tokenValido(token) || colegioId <= 0) {
 			throw new ReglaNegocioException(ENLACE_NO_SIRVE);
 		}
-		ContextoColegio.en(colegioId, () -> transaccion.executeWithoutResult(t -> {
+		// Sprint 7, tanda 2: la clave se escribe por la ruta de identidad (cc_sistema).
+		ContextoColegio.en(colegioId, () -> identidad.ejecutar(() -> {
 			LocalDateTime ahora = ahora();
 			EnlaceActivacion enlace = enlaces.bloquearPorHash(EnlacesActivacion.hash(token)).filter(e -> e.vigente(ahora))
 					.orElseThrow(() -> new ReglaNegocioException(ENLACE_NO_SIRVE));
@@ -93,6 +110,10 @@ public class ServicioActivacionCuenta {
 			}
 			if (clave == null || !clave.equals(confirmacion)) {
 				throw new ReglaNegocioException("La clave y su confirmación no coinciden.");
+			}
+			boolean personalDelColegio = enlace.getProposito() == PropositoEnlace.PERSONAL;
+			if (!personalDelColegio && !aceptaPrivacidad) {
+				throw new ReglaNegocioException("Para activar tu cuenta, lee el aviso de privacidad y marca que lo aceptas.");
 			}
 			PoliticaClaves.validar(clave, usuario.getNombreUsuario());
 			usuario.cambiarClave(codificador.encode(clave), ahora, false);
@@ -110,6 +131,12 @@ public class ServicioActivacionCuenta {
 							+ enlace.getUsadoIp() + ". El enlace lo creó " + enlace.getCreadoPor() + " desde la IP "
 							+ enlace.getCreadoIp() + "." + (mismaIp ? " ATENCIÓN: es la MISMA IP de quien creó la cuenta: "
 									+ "confirma con el apoderado que fue él." : ""));
+			if (!personal) {
+				auditoria.registrar(auditoria.actorPara(colegioId, usuario.getId(), usuario.getNombreUsuario(), "APODERADO"),
+						AccionAuditoria.PRIVACIDAD_ACEPTADA, "usuario", usuario.getId().toString(), null, versionAviso,
+						usuario.getNombreCompleto() + " aceptó el aviso de privacidad, versión " + versionAviso
+								+ ", al activar su cuenta.");
+			}
 		}));
 	}
 

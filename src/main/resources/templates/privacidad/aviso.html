@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: publica('Aviso de privacidad', ~{::main})}">
+<body>
+<main id="contenido" class="contenido-publico">
+	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-privacidad" data-pantalla="aviso-privacidad">
+		<div>
+			<p class="etiqueta">Colegio Virgen María · Cuentas Claras</p>
+			<h1 id="titulo-privacidad">Aviso de privacidad</h1>
+			<p class="secundario">Versión <span th:text="${version}" data-version>2027-01</span>. Ley 29733 de Protección de
+				Datos Personales y su reglamento.</p>
+		</div>
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', 'Borrador: el texto final lo redacta y aprueba el asesor legal del colegio. Los plazos de este aviso están por confirmar.')}"></div>
+
+		<h2>Quién trata tus datos</h2>
+		<p>El Colegio Virgen María, institución educativa privada, es el responsable de los datos personales de las familias y
+			de sus alumnos. Responde por ellos la Dirección del colegio.</p>
+
+		<h2>Qué datos guardamos y para qué</h2>
+		<ul>
+			<li>Nombres, documento y parentesco del apoderado: para identificarte, emitir tus comprobantes y saber quién
+				responde por los pagos.</li>
+			<li>Nombres, documento y fecha de nacimiento de los alumnos: para matricularlos, generar sus pensiones y
+				registrarlos en el SIAGIE del Ministerio de Educación.</li>
+			<li>Celular y correo: para avisarte al momento de cada pago, anulación o descuento, enviarte tus boletas, los
+				recordatorios (si los tienes encendidos) y el enlace para activar tu cuenta.</li>
+			<li>Pagos, cuotas y comprobantes: para llevar tu estado de cuenta y cumplir las obligaciones tributarias.</li>
+		</ul>
+		<p>El colegio nunca condiciona las evaluaciones ni las notas de tus hijos al pago de las pensiones.</p>
+
+		<h2>A quién los enviamos</h2>
+		<ul>
+			<li>Al operador de comprobantes electrónicos y a SUNAT, para emitir tus boletas y facturas.</li>
+			<li>A Meta (WhatsApp) y al proveedor de correo del colegio, para enviarte los avisos. Los servidores de Meta están
+				fuera del Perú.</li>
+			<li>Al banco de la recaudación, para que puedas pagar con el código del alumno.</li>
+			<li>Al proveedor del servidor donde funciona el sistema, que los guarda de forma segura.</li>
+		</ul>
+
+		<h2>Cuánto tiempo los guardamos</h2>
+		<ul>
+			<li>Pagos, comprobantes, cuotas, anulaciones, descuentos, avisos enviados y la bitácora: mientras no prescriban
+				las obligaciones tributarias y contables del colegio. No se borran: son la evidencia de cada pago.</li>
+			<li>Celular y correo de una familia que deja el colegio sin deuda: hasta 1 año después del retiro o del egreso.</li>
+			<li>El registro de quién del colegio vio tus datos: 2 años.</li>
+		</ul>
+
+		<h2>Tus derechos</h2>
+		<p>Puedes ver ahora mismo los datos que guardamos en «Mis datos» de tu portal. También puedes pedir por escrito
+			acceso a tus datos, que los corrijamos, que dejemos de guardarlos o que no los usemos para algo, desde «¿Algo no
+			cuadra?» de tu portal (opción «Mis datos personales») o en la Dirección del colegio. Te respondemos en
+			<span th:text="${plazoAcceso}">20</span> días hábiles si pides acceso y en <span th:text="${plazoOtros}">10</span>
+			en los demás casos. Los avisos de tus pagos no se pueden apagar: son la forma en que compruebas que cada pago
+			quedó registrado.</p>
+		<p>Si no estás de acuerdo con la respuesta, puedes acudir a la Autoridad Nacional de Protección de Datos Personales
+			del Ministerio de Justicia y Derechos Humanos.</p>
+
+		<h2>Cómo protegemos tus datos</h2>
+		<p>Cada persona del colegio ve solo lo que necesita para su trabajo, y queda registrado quién abrió los datos de tu
+			familia. Las copias de respaldo están cifradas y nadie del colegio te pedirá nunca tu clave.</p>
+
+		<p><a class="btn btn-secundario" th:href="@{/login}">Ir al ingreso</a></p>
+	</section>
+</main>
+</body>
+</html>

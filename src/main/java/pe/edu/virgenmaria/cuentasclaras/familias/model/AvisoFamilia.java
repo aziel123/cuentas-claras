@@ -41,6 +41,11 @@ public class AvisoFamilia extends BaseEntity {
 	@Column(nullable = false, length = MAX_TEXTO, updatable = false)
 	private String texto;
 
+	/** Sprint 7, tanda 3: solo en los pedidos sobre datos personales; no cambia (1143 en MySQL). */
+	@Enumerated(EnumType.STRING)
+	@Column(length = 20, updatable = false)
+	private DerechoDatos derecho;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
 	private EstadoAvisoFamilia estado;
@@ -60,7 +65,31 @@ public class AvisoFamilia extends BaseEntity {
 
 	public static AvisoFamilia nuevo(Long familiaId, Long apoderadoId, TipoAvisoFamilia tipo, Long pagoId, Long cuotaId,
 			String texto) {
+		return nuevo(familiaId, apoderadoId, tipo, pagoId, cuotaId, null, texto);
+	}
+
+	/**
+	 * Sprint 7, tanda 3: un pedido sobre datos personales lleva su derecho y no refiere pagos ni cuotas; los demás avisos
+	 * no llevan derecho (también lo exige el CHECK ck_aviso_familia_derecho).
+	 */
+	public static AvisoFamilia nuevo(Long familiaId, Long apoderadoId, TipoAvisoFamilia tipo, Long pagoId, Long cuotaId,
+			DerechoDatos derecho, String texto) {
+		Objects.requireNonNull(tipo, "tipo");
+		if (tipo == TipoAvisoFamilia.DATOS_PERSONALES) {
+			if (derecho == null) {
+				throw new ReglaNegocioException("Elige qué quieres pedir sobre tus datos personales.");
+			}
+			if (pagoId != null || cuotaId != null) {
+				throw new ReglaNegocioException("Un pedido sobre tus datos personales no se refiere a un pago ni a una "
+						+ "cuota: deja esos campos vacíos.");
+			}
+		}
+		else if (derecho != null) {
+			throw new ReglaNegocioException("El pedido sobre datos personales va con el tipo «"
+					+ TipoAvisoFamilia.DATOS_PERSONALES.etiqueta() + "».");
+		}
 		AvisoFamilia aviso = new AvisoFamilia();
+		aviso.derecho = derecho;
 		aviso.familiaId = Objects.requireNonNull(familiaId, "familiaId");
 		aviso.apoderadoId = Objects.requireNonNull(apoderadoId, "apoderadoId");
 		aviso.tipo = Objects.requireNonNull(tipo, "tipo");
@@ -108,6 +137,10 @@ public class AvisoFamilia extends BaseEntity {
 
 	public Long getCuotaId() {
 		return cuotaId;
+	}
+
+	public DerechoDatos getDerecho() {
+		return derecho;
 	}
 
 	public String getTexto() {

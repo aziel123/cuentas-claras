@@ -45,7 +45,7 @@ class InmutabilidadMensajesTest {
 
 	@Test
 	void laHuellaEsDeSoloInsercion() throws IOException {
-		assertThat(permisos()).contains("GRANT INSERT ON cuentasclaras.huella_bitacora TO 'cc_app'@'%';")
+		assertThat(permisos()).contains("GRANT INSERT ON cuentasclaras.huella_bitacora TO 'cc_sistema'@'%';")
 				.doesNotContainPattern("GRANT [^;]*UPDATE[^;]*ON cuentasclaras\\.huella_bitacora")
 				.doesNotContainPattern("GRANT [^;]*DELETE[^;]*ON cuentasclaras\\.(mensaje|huella_bitacora)");
 		assertThat(Arrays.stream(HuellaGuardada.class.getDeclaredMethods()).map(Method::getName))

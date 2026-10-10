@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.AccesoMostrado;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.RegistraAcceso;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.TipoAcceso;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CobroRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CorreccionRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioAnulacionPagos;
@@ -36,14 +39,20 @@ public class CajaController {
 	}
 
 	@GetMapping("/caja")
+	@RegistraAcceso(TipoAcceso.BUSQUEDA)
 	public String buscar(@RequestParam(name = "q", required = false) String texto, Model model) {
-		model.addAttribute("busqueda", cobro.buscar(texto));
+		var busqueda = cobro.buscar(texto);
+		model.addAttribute("busqueda", busqueda);
+		AccesoMostrado.filas(busqueda.resultados().size());
 		return "caja/buscar";
 	}
 
 	@GetMapping("/caja/familias/{id:\\d+}")
+	@RegistraAcceso(TipoAcceso.COBRO)
 	public String familia(@PathVariable Long id, Model model) {
 		model.addAttribute("cuenta", cobro.cuentaDeFamilia(id));
+		// Correcciones del sprint 7 (S7-B1): queda en el registro de accesos con su tipo (no cuenta para la alerta).
+		AccesoMostrado.familia(id);
 		return "caja/familia";
 	}
 

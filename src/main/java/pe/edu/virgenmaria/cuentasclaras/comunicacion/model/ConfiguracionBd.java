@@ -18,6 +18,10 @@ import java.time.LocalDateTime;
 @Table(name = "configuracion_bd")
 public class ConfiguracionBd {
 
+	/**
+	 * Ya no se usa desde el sprint 7 (tanda 2): la huella va al correo de cada colegio ({@code configuracion_colegio}). En
+	 * prod, el verificador avisa en el log si la fila sigue aquí.
+	 */
 	public static final String HUELLA_CORREO_EXTERNO = "huella_correo_externo";
 
 	/** Sprint 6, tanda 2 (decisión 69): el correo del contador que también recibe el resumen diario (lo escribe el DBA). */

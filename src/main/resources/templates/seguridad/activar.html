@@ -32,6 +32,11 @@
 					<label for="confirmacion">Repite tu nueva clave</label>
 					<input type="password" class="input" id="confirmacion" name="confirmacion" autocomplete="new-password" required>
 				</div>
+				<label class="opcion" th:unless="${vista.personal}">
+					<input type="checkbox" name="aceptaPrivacidad" value="true" required>
+					<span>Leí el <a th:href="@{/privacidad}" target="_blank" rel="noopener">aviso de privacidad</a> y acepto
+						que el colegio use mis datos y los de mis hijos como ahí se explica.</span>
+				</label>
 				<button type="submit" class="btn btn-primario btn-bloque">Activar mi cuenta</button>
 			</form>
 			<p class="ayuda">Este enlace sirve una sola vez. Si no lo pediste tú, no lo uses y avisa al colegio.</p>

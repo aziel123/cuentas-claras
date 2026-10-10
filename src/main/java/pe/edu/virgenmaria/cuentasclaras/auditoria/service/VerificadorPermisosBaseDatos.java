@@ -9,13 +9,15 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.FuenteDatosEnrutada;
 
-import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.sql.DataSource;
 
 /**
  * En producción, al crearse (antes de que el servidor web acepte peticiones), comprueba:
@@ -39,7 +41,15 @@ import java.util.stream.Collectors;
  *       el resumen y las alertas los crea solo sistema.panel, y que está trg_usuario_contacto (BEFORE UPDATE: se comprueba
  *       por su presencia en {@link #TRIGGERS_ESPERADOS});</li>
  *   <li>sprint 6, tanda 3: que la llamada de control es de solo inserción y su trigger exige Promotoría o Dirección;</li>
- *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes).</li>
+ *   <li>que no faltan migraciones (en producción la aplicación no migra: se corre {@code migrar} antes);</li>
+ *   <li>sprint 7, tanda 2 (sección 6.5): que la aplicación usa DOS usuarios de base distintos, {@code cc_app} y
+ *       {@code cc_sistema} (el nombre del segundo es fijo: los triggers lo reconocen); que {@code cc_app} no crea cuentas,
+ *       no cambia claves ni roles, no abre sesiones, no firma como sistema y no escribe la semilla, la muestra, la foto ni el
+ *       envío al OSE o el estado de un mensaje (1142 o 1143); que los triggers de identidad, sesiones, firmas y semilla
+ *       rechazan sus inserciones imposibles (1644) con las dos conexiones; que la HUELLA de cada trigger y función de la
+ *       base es la de {@code 03-triggers.sql} y {@code 02-permisos-tablas.sql} del jar ({@link HuellasObjetosBd}: falta,
+ *       sobra o difiere y no arranca); que ninguna conexión tiene un privilegio que {@code 02} no da
+ *       ({@link PermisosEsperados}); y, en prod, que la conexión va cifrada (TLS) salvo que se apague a propósito.</li>
  * </ul>
  * Si algo falla, la aplicación NO arranca. No hay interruptor para saltarse esta comprobación.
  * Las sentencias usan {@code WHERE 1 = 0}: aunque MySQL las permitiera, no tocan ninguna fila.
@@ -318,7 +328,136 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "'resumen_correo_externo', 'x@y.pe', NOW(6))", Set.of(MYSQL_COMANDO_DENEGADO),
 					"la aplicación podría poner el correo externo que recibe el resumen de un colegio."),
 			new SentenciaProhibida("UPDATE configuracion_colegio SET valor = valor WHERE 1 = 0",
-					Set.of(MYSQL_COMANDO_DENEGADO), "la aplicación podría cambiar el correo externo de un colegio."));
+					Set.of(MYSQL_COMANDO_DENEGADO), "la aplicación podría cambiar el correo externo de un colegio."),
+			// Sprint 7, tanda 1 (V24): el registro de respaldos lo escribe SOLO cc_respaldo. La aplicación no registra un
+			// respaldo falso (1142 al insertar; trg_respaldo_registro, que exige cc_respaldo, se comprueba por su presencia
+			// en TRIGGERS_ESPERADOS) ni edita ni borra los que hay.
+			new SentenciaProhibida(VerificadorPermisosBaseDatos.RESPALDO_IMPOSIBLE, Set.of(MYSQL_COMANDO_DENEGADO),
+					"la aplicación podría registrar un respaldo que no existe (el registro lo escribe solo cc_respaldo)."),
+			sinBorrado("respaldo"), soloInsercion("respaldo"),
+			// Sprint 7, tanda 2 (H1, E4, E5, E10, E11, E14 y E15): la identidad, las sesiones y las escrituras de los
+			// procesos son de cc_sistema. cc_app no crea cuentas, no cambia claves ni roles, no abre sesiones, no planta
+			// la semilla, la muestra ni la foto, no marca el envío al OSE ni el estado de un mensaje (1142).
+			soloSistema("INSERT INTO usuario (colegio_id, nombre_usuario, nombre_completo, clave_hash, creado_en, "
+					+ "creado_por, actualizado_en) VALUES (0, 'verificador', 'verificador', 'x', NOW(6), 'verificador', "
+					+ "NOW(6))", "la aplicación podría crear cuentas (por ejemplo, una de Promotoría con una clave conocida)."),
+			soloSistema("UPDATE usuario SET clave_hash = clave_hash WHERE 1 = 0",
+					"la aplicación podría cambiar la clave de cualquier persona y entrar como ella."),
+			soloSistema("INSERT INTO usuario_rol (usuario_id, rol) VALUES (0, 'PROMOTOR')",
+					"la aplicación podría darse el rol de Promotoría."),
+			soloSistema("DELETE FROM usuario_rol WHERE 1 = 0", "la aplicación podría quitar roles."),
+			soloSistema(VerificadorPermisosBaseDatos.SESION_IMPOSIBLE,
+					"la aplicación podría abrir sesiones y firmar aprobaciones a nombre de otra persona."),
+			soloSistema("UPDATE sesion_usuario SET cerrada_en = cerrada_en WHERE 1 = 0",
+					"la aplicación podría cerrar o reabrir sesiones."),
+			soloSistema(VerificadorPermisosBaseDatos.SEMILLA_IMPOSIBLE, "la aplicación podría plantar la semilla del muestreo."),
+			soloSistema(VerificadorPermisosBaseDatos.MUESTRA_IMPOSIBLE, "la aplicación podría fijar la muestra de la semana."),
+			soloSistema(VerificadorPermisosBaseDatos.RESUMEN_IMPOSIBLE, "la aplicación podría plantar la foto del resumen."),
+			soloSistema("UPDATE comprobante SET estado_envio = estado_envio WHERE 1 = 0",
+					"la aplicación podría marcar un comprobante como ACEPTADO por el OSE."),
+			soloSistema("UPDATE mensaje SET estado = estado WHERE 1 = 0",
+					"la aplicación podría marcar un aviso como ENTREGADO."),
+			sinBorrado("sesion_usuario"), sinBorrado("firma_operacion"), soloInsercion("firma_operacion"),
+			// Sprint 7, tanda 3 (V26, Ley 29733): quién vio datos personales es de solo inserción (nadie borra ni cambia
+			// el rastro de una consulta: 1142) y el derecho de un pedido sobre datos personales no cambia (1143).
+			sinBorrado("acceso_dato_personal"), soloInsercion("acceso_dato_personal"),
+			columna("UPDATE aviso_familia SET derecho = derecho WHERE 1 = 0", "aviso_familia"),
+			// E1: con cc_app nadie firma como sistema (un evento de la bitácora o un pago de sistema.*: 1644; sin el
+			// trigger, el evento llega al NOT NULL de hash, 1048).
+			trigger(VerificadorPermisosBaseDatos.EVENTO_SISTEMA_IMPOSIBLE, "trg_evento_auditoria_actor"),
+			trigger(VerificadorPermisosBaseDatos.PAGO_SISTEMA_IMPOSIBLE, "trg_pago_registro (versión del sprint 7)"),
+			// Correcciones del sprint 7 (S7-A1): una solicitud nace PENDIENTE (con cc_app no se inserta una ya APROBADA a
+			// nombre de la directora: 1644; sin el trigger, la FK del colegio 0: 1452).
+			trigger(VerificadorPermisosBaseDatos.SOLICITUD_APROBADA_IMPOSIBLE, "trg_solicitud_cambio_nace"),
+			// Correcciones del sprint 7 (QA-S7-1): la resolución de una alerta de respaldo la hace Promotoría con su firma
+			// (1644; sin el trigger, la FK del respaldo 0: 1452) y no se edita ni se borra (1142).
+			trigger(VerificadorPermisosBaseDatos.RESOLUCION_IMPOSIBLE, "trg_resolucion_respaldo_registro"),
+			sinBorrado("resolucion_respaldo"),
+			new SentenciaProhibida("UPDATE resolucion_respaldo SET motivo = motivo WHERE 1 = 0",
+					Set.of(MYSQL_COMANDO_DENEGADO, MYSQL_COLUMNA_DENEGADA), "la resolución de una alerta de respaldo se podría reescribir."),
+			// Correcciones del sprint 7: la marca de la primera Dirección de un colegio la escribe solo cc_sistema (1142).
+			soloSistema(VerificadorPermisosBaseDatos.PRIMERA_DIRECCION_IMPOSIBLE,
+					"la aplicación podría gastar o fabricar la excepción de la primera Dirección de un colegio."));
+
+	/** Correcciones del sprint 7 (S7-A1): una solicitud ya APROBADA del colegio 0 (la rechaza trg_solicitud_cambio_nace). */
+	static final String SOLICITUD_APROBADA_IMPOSIBLE = "INSERT INTO solicitud_cambio (colegio_id, tipo, entidad, entidad_id, "
+			+ "resumen, datos, motivo, estado, pendiente, solicitado_por, resuelto_por, resuelto_en, creado_en, creado_por, "
+			+ "actualizado_en) VALUES (0, 'ANULACION_PAGO', 'pago', 0, 'verificador', '{}', 'verificador de permisos', "
+			+ "'APROBADA', NULL, 'verificador', 'verificador.otro', NOW(6), NOW(6), 'verificador', NOW(6))";
+
+	/** Correcciones del sprint 7 (QA-S7-1): la resolución del respaldo 0 (la rechaza trg_resolucion_respaldo_registro). */
+	static final String RESOLUCION_IMPOSIBLE = "INSERT INTO resolucion_respaldo (respaldo_id, colegio_id, usuario_id, motivo, "
+			+ "creado_en, creado_por) VALUES (0, 0, 0, 'verificador de permisos', NOW(6), 'verificador')";
+
+	/** Correcciones del sprint 7: la primera Dirección del colegio 0 (cc_app no tiene INSERT: 1142). */
+	static final String PRIMERA_DIRECCION_IMPOSIBLE = "INSERT INTO primera_direccion (colegio_id, usuario_id, creado_en, "
+			+ "creado_por, actualizado_en) VALUES (0, 0, NOW(6), 'verificador', NOW(6))";
+
+	/** Sprint 7, tanda 2: una sesión de la cuenta 0 (con cc_app, 1142; con cc_sistema, la rechaza su trigger: 1644). */
+	static final String SESION_IMPOSIBLE = "INSERT INTO sesion_usuario (colegio_id, usuario_id, hash_token, abierta_en, "
+			+ "vence_en, creado_en, creado_por, actualizado_en) VALUES (0, 0, REPEAT('0', 64), NOW(6), NOW(6) + INTERVAL 1 "
+			+ "HOUR, NOW(6), 'verificador', NOW(6))";
+
+	/** Sprint 7, tanda 2: la semilla del colegio 0 del año 2000 (con cc_sistema, la rechaza su trigger: 1644). */
+	static final String SEMILLA_IMPOSIBLE = "INSERT INTO semilla_muestreo (colegio_id, ambito, fecha, semilla, creado_en, "
+			+ "creado_por, actualizado_en) VALUES (0, 'CAJA', '2000-01-03', 1, NOW(6), 'sistema.muestreo', NOW(6))";
+
+	/** Sprint 7, tanda 2: una firma con un secreto que no es de ninguna sesión (1644; sin el trigger, la FK: 1452). */
+	static final String FIRMA_IMPOSIBLE = "INSERT INTO firma_operacion (colegio_id, sesion_id, usuario_id, clave, token, "
+			+ "creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'verificador:0', REPEAT('0', 64), NOW(6), "
+			+ "'verificador', NOW(6))";
+
+	/** Sprint 7, tanda 2 (E1): un evento de un actor de sistema escrito por cc_app, sin hash (1644; sin el trigger, 1048). */
+	static final String EVENTO_SISTEMA_IMPOSIBLE = "INSERT INTO evento_auditoria (secuencia, ocurrido_en, nombre_usuario, "
+			+ "accion, hash) VALUES (0, NOW(6), 'sistema.verificador', 'VERIFICADOR', NULL)";
+
+	/** Sprint 7, tanda 2 (E1): un pago de sistema.pasarela del colegio 0 escrito por cc_app (1644). */
+	static final String PAGO_SISTEMA_IMPOSIBLE = "INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, "
+			+ "comprobante_id, medio, total, recibido, vuelto, origen, clave_idempotencia, estado, creado_en, creado_por, "
+			+ "actualizado_en) VALUES (0, 0, 0, 'sistema.pasarela', '2000-01-01', 0, 'YAPE', 1, 1, 0, 'PASARELA', "
+			+ "'verificador-sistema', 'VIGENTE', NOW(6), 'sistema.pasarela', NOW(6))";
+
+	/**
+	 * Sprint 7, tanda 2: lo que la conexión de cc_sistema debe ver rechazado: la bitácora y los libros (1142, como cc_app) y
+	 * las inserciones imposibles de identidad, sesiones, firmas y semilla, que llegan a su trigger (1644; 1142 en la fase 1,
+	 * antes de 02).
+	 */
+	static final List<SentenciaProhibida> SENTENCIAS_SISTEMA = List.of(
+			new SentenciaProhibida("UPDATE evento_auditoria SET ip = ip WHERE 1 = 0", Set.of(MYSQL_COMANDO_DENEGADO),
+					"cc_sistema podría editar la bitácora."),
+			new SentenciaProhibida("DELETE FROM evento_auditoria WHERE 1 = 0", Set.of(MYSQL_COMANDO_DENEGADO),
+					"cc_sistema podría borrar la bitácora."),
+			sinBorrado("pago"), sinBorrado("cuota"), sinBorrado("sesion_usuario"), sinBorrado("firma_operacion"),
+			soloInsercion("firma_operacion"), soloInsercion("semilla_muestreo"), soloInsercion("muestra_llamada"),
+			sinBorrado("acceso_dato_personal"), soloInsercion("acceso_dato_personal"),
+			columna("UPDATE cuota SET monto = monto WHERE 1 = 0", "cuota"),
+			columna("UPDATE sesion_usuario SET hash_token = hash_token WHERE 1 = 0", "sesion_usuario"),
+			trigger(VerificadorPermisosBaseDatos.FIRMA_IMPOSIBLE, "trg_firma_operacion_nace"),
+			trigger(VerificadorPermisosBaseDatos.SESION_IMPOSIBLE, "trg_sesion_usuario_nace"),
+			trigger(VerificadorPermisosBaseDatos.SEMILLA_IMPOSIBLE, "trg_semilla_muestreo_registro"),
+			trigger("INSERT INTO usuario (colegio_id, nombre_usuario, nombre_completo, clave_hash, activo, debe_cambiar_clave, "
+					+ "creado_en, creado_por, actualizado_en) VALUES (0, 'verificador', 'verificador', 'x', TRUE, FALSE, "
+					+ "NOW(6), 'verificador', NOW(6))", "trg_usuario_nace"),
+			trigger("INSERT INTO usuario_rol (usuario_id, rol) VALUES (0, 'PROMOTOR')", "trg_usuario_rol_alta"),
+			trigger(VerificadorPermisosBaseDatos.MUESTRA_IMPOSIBLE, "trg_muestra_llamada_registro (versión del sprint 7)"),
+			// Correcciones del sprint 7: la primera Dirección y la resolución de un respaldo no se editan ni se borran.
+			sinBorrado("primera_direccion"), soloInsercion("primera_direccion"), sinBorrado("resolucion_respaldo"),
+			trigger(VerificadorPermisosBaseDatos.SOLICITUD_APROBADA_IMPOSIBLE, "trg_solicitud_cambio_nace"));
+
+	/** 1142 (o 1143): solo cc_sistema la escribe. */
+	private static SentenciaProhibida soloSistema(String sql, String riesgo) {
+		return new SentenciaProhibida(sql, Set.of(MYSQL_COMANDO_DENEGADO, MYSQL_COLUMNA_DENEGADA), riesgo
+				+ " Es una escritura exclusiva de cc_sistema: revisa 02-permisos-tablas.sql.");
+	}
+
+	/** Sprint 7, tanda 1: un respaldo del año 2000 registrado por la aplicación (cc_app no tiene INSERT: 1142). */
+	static final String RESPALDO_IMPOSIBLE = "INSERT INTO respaldo (inicio, fin, archivo, sha256, bytes, version_esquema, "
+			+ "secuencia_antes, hash_antes, secuencia_despues, hash_despues, conteos, destino, comparacion, creado_en, "
+			+ "creado_por) VALUES ('2000-01-01', '2000-01-01', 'cc-20000101-000000.sql.gz.age', REPEAT('0', 64), 1, '0', 0, "
+			+ "REPEAT('0', 64), 0, REPEAT('0', 64), '{}', 'verificador', 'PRIMERO', NOW(6), 'cc_respaldo')";
+
+	/** Sprint 7, tanda 1: el destino simulado de los respaldos solo existe en una base habilitada por el DBA. */
+	static final String SQL_RESPALDO_SIMULADO = "SELECT COUNT(*) FROM configuracion_bd WHERE clave = 'respaldo_simulado'";
 
 	/** Correcciones del sprint 6 (V23): una familia en la muestra del colegio 0 fijada por quien no es del personal. */
 	static final String MUESTRA_IMPOSIBLE = "INSERT INTO muestra_llamada (colegio_id, semana, familia_id, motivo, creado_en, "
@@ -372,7 +511,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_caja_diaria_estado", "trg_pago_registro", "trg_pago_anulacion", "trg_aplicacion_pago_registro",
 			"trg_anulacion_pago_registro", "trg_ajuste_cuota_registro", "trg_descuento_nace", "trg_descuento_resuelto",
 			"trg_cierre_caja_registro", "trg_cierre_caja_revisado", "trg_verificacion_bancaria_registro",
-			"trg_reembolso_registro", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio", "trg_apoderado_nace",
+			"trg_reembolso_registro", "trg_solicitud_cambio_nace", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio", "trg_apoderado_nace",
 			"trg_apoderado_facturacion", "trg_orden_pago_nace", "trg_orden_pago_cuota_registro", "trg_orden_pago_estado",
 			"trg_lote_recaudacion_nace", "trg_lote_recaudacion_estado", "trg_linea_recaudacion_registro",
 			"trg_linea_recaudacion_estado", "trg_extracto_bancario_nace", "trg_extracto_bancario_estado",
@@ -383,7 +522,10 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_feriado_registro", "trg_feriado_anulacion", "trg_cierre_mensual_banco_nace",
 			"trg_cierre_mensual_banco_estado", "trg_verificacion_contacto_nace", "trg_verificacion_contacto_uso",
 			"trg_huella_hora_registro", "trg_resumen_diario_registro", "trg_usuario_contacto",
-			"trg_llamada_control_registro", "trg_muestra_llamada_registro", "trg_delegacion_llamada_registro");
+			"trg_llamada_control_registro", "trg_muestra_llamada_registro", "trg_delegacion_llamada_registro",
+			"trg_respaldo_registro", "trg_resolucion_respaldo_registro", "trg_firma_operacion_nace", "trg_sesion_usuario_nace", "trg_sesion_usuario_cierre",
+			"trg_evento_auditoria_actor", "trg_semilla_muestreo_registro", "trg_usuario_nace", "trg_usuario_identidad",
+			"trg_usuario_rol_alta", "trg_usuario_rol_baja");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -418,37 +560,295 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 
 	private final JdbcTemplate jdbc;
 
+	/** Sprint 7, tanda 2: la conexión de cc_sistema ({@code null} si la fuente de datos no tiene dos usuarios). */
+	private final JdbcTemplate sistema;
+
 	private final DataSource fuenteDatos;
 
 	/** {@code true} en prod; {@code false} en piloto (allí la pasarela simulada debe estar habilitada por el DBA). */
 	private final boolean produccion;
 
-	/** Como en producción. */
+	/** Sprint 7, tanda 2 (H11): en prod la conexión va cifrada salvo {@code cuentasclaras.basedatos.exigir-tls: false}. */
+	private final boolean exigirTls;
+
+	/** Como en producción, con las dos conexiones de la fuente de datos de la aplicación y sin exigir TLS (pruebas). */
 	public VerificadorPermisosBaseDatos(JdbcTemplate jdbc, DataSource fuenteDatos) {
-		this(jdbc, fuenteDatos, true);
+		this(jdbc, sistemaDe(fuenteDatos), fuenteDatos, true, false);
 	}
 
 	@org.springframework.beans.factory.annotation.Autowired
 	public VerificadorPermisosBaseDatos(JdbcTemplate jdbc, DataSource fuenteDatos,
 			org.springframework.core.env.Environment entorno) {
-		this(jdbc, fuenteDatos, !Arrays.asList(entorno.getActiveProfiles()).contains("piloto"));
+		this(jdbc, sistemaDe(fuenteDatos), fuenteDatos, !Arrays.asList(entorno.getActiveProfiles()).contains("piloto"),
+				Arrays.asList(entorno.getActiveProfiles()).contains("prod")
+						&& entorno.getProperty("cuentasclaras.basedatos.exigir-tls", Boolean.class, true));
 	}
 
 	VerificadorPermisosBaseDatos(JdbcTemplate jdbc, DataSource fuenteDatos, boolean produccion) {
+		this(jdbc, sistemaDe(fuenteDatos), fuenteDatos, produccion, false);
+	}
+
+	VerificadorPermisosBaseDatos(JdbcTemplate jdbc, JdbcTemplate sistema, DataSource fuenteDatos, boolean produccion,
+			boolean exigirTls) {
 		this.jdbc = jdbc;
+		this.sistema = sistema;
 		this.fuenteDatos = fuenteDatos;
 		this.produccion = produccion;
+		this.exigirTls = exigirTls;
+	}
+
+	/** La conexión de cc_sistema de la fuente enrutada (sprint 7, tanda 2), si tiene un usuario aparte. */
+	private static JdbcTemplate sistemaDe(DataSource fuenteDatos) {
+		return fuenteDatos instanceof FuenteDatosEnrutada enrutada && enrutada.separadas()
+				? new JdbcTemplate(enrutada.sistema()) : null;
 	}
 
 	@Override
 	public void afterPropertiesSet() {
 		verificarMigraciones();
-		if (comprobarPermisos()) {
+		// Primero las huellas (si 02 ya creó la función): un trigger debilitado o una función reemplazada se nombran tal
+		// cual, antes de que una inserción imposible falle por otra razón.
+		boolean huellas = verificarHuellasSiEstan();
+		boolean escribe = comprobarPermisos();
+		verificarUsuarios();
+		boolean sistemaEscribe = comprobarSistema();
+		if (escribe || sistemaEscribe) {
 			verificarTriggers();
+			if (!huellas) {
+				verificarHuellas();
+			}
 		}
 		else {
-			// Fase 1 del despliegue (antes de 02 y 03): cc_app solo lee, así que no hay nada que un trigger deba frenar.
+			// Fase 1 del despliegue (antes de 02 y 03): las conexiones solo leen: no hay nada que un trigger deba frenar.
 			LOG.warn("La aplicación solo puede leer (faltan los GRANT de 02-permisos-tablas.sql): no se exigen los triggers.");
+		}
+		verificarPrivilegios();
+		verificarTls();
+		avisarConfiguracionVieja();
+	}
+
+	/**
+	 * Las huellas, si la función existe y la aplicación puede ejecutarla (después de 02). En la fase 1 (sin 02) no hay
+	 * función: se salta, y si después resulta que la aplicación escribe, {@link #verificarHuellas()} la exige.
+	 *
+	 * @return si se verificaron
+	 */
+	private boolean verificarHuellasSiEstan() {
+		String json;
+		try {
+			json = jdbc.queryForObject(SQL_HUELLAS, String.class);
+		}
+		catch (DataAccessException e) {
+			// Sin la función (1305) o sin permiso para ejecutarla (1370, 1142): la fase 1. Si la aplicación escribe, se
+			// exige después con verificarHuellas().
+			return false;
+		}
+		if (json == null) {
+			return false;
+		}
+		compararHuellas(leerJson(json));
+		return true;
+	}
+
+	static final String SQL_USUARIO_ACTUAL = "SELECT CURRENT_USER()";
+
+	static final String SQL_HUELLAS = "SELECT huellas_objetos()";
+
+	static final String SQL_PRIVILEGIOS = "SHOW GRANTS";
+
+	static final String SQL_TLS = "SELECT VARIABLE_VALUE FROM performance_schema.session_status "
+			+ "WHERE VARIABLE_NAME = 'Ssl_cipher'";
+
+	static final String SQL_HUELLA_CORREO_VIEJA = "SELECT COUNT(*) FROM configuracion_bd "
+			+ "WHERE clave = 'huella_correo_externo'";
+
+	/**
+	 * Sprint 7, tanda 2: dos usuarios distintos y el de los procesos e identidad se llama {@code cc_sistema} (los triggers
+	 * lo reconocen por su nombre). Si son el mismo o falta el segundo, no arranca.
+	 */
+	public void verificarUsuarios() {
+		if (sistema == null) {
+			throw new IllegalStateException("Falta la conexión de cc_sistema (DB_SISTEMA_USUARIO y DB_SISTEMA_CLAVE): los "
+					+ "procesos y la identidad (ingreso, claves, roles, sesiones) no se escriben con la conexión de la "
+					+ "aplicación. Revisa docs/operacion/mysql-usuarios.md.");
+		}
+		String app = usuarioDe(jdbc);
+		String deSistema = usuarioDe(sistema);
+		if (deSistema.equals(app)) {
+			throw new IllegalStateException("La aplicación y los procesos usan el MISMO usuario de base (" + app + "): las "
+					+ "personas no deben poder escribir como el sistema. DB_USUARIO es cc_app y DB_SISTEMA_USUARIO, "
+					+ "cc_sistema. Revisa docs/operacion/mysql-usuarios.md.");
+		}
+		if (!PermisosEsperados.SISTEMA.equals(deSistema)) {
+			throw new IllegalStateException("La conexión de los procesos y la identidad usa el usuario «" + deSistema
+					+ "» y debe ser cc_sistema (los triggers lo reconocen por su nombre). Revisa DB_SISTEMA_USUARIO.");
+		}
+		LOG.info("Conexiones verificadas: las personas con {} y los procesos y la identidad con {}.", app, deSistema);
+	}
+
+	private static String usuarioDe(JdbcTemplate conexion) {
+		String actual = conexion.queryForObject(SQL_USUARIO_ACTUAL, String.class);
+		if (actual == null) {
+			return "";
+		}
+		int arroba = actual.indexOf('@');
+		return arroba < 0 ? actual : actual.substring(0, arroba);
+	}
+
+	/**
+	 * Sprint 7, tanda 2: con la conexión de cc_sistema, la bitácora y los libros siguen protegidos (1142) y los triggers
+	 * nuevos rechazan sus inserciones imposibles (1644).
+	 *
+	 * @return si cc_sistema puede escribir (alguna inserción imposible llegó a su trigger)
+	 */
+	private boolean comprobarSistema() {
+		boolean escribe = false;
+		for (SentenciaProhibida sentencia : SENTENCIAS_SISTEMA) {
+			String problema = comprobarDenegada(sistema, sentencia);
+			if (problema != null) {
+				throw new IllegalStateException(problema.replace("El usuario de la aplicación", "cc_sistema")
+						+ " Revisa docs/operacion/mysql-usuarios.md.");
+			}
+			escribe |= sentencia.codigosAceptados().contains(MYSQL_SIGNAL) && llegoAlTrigger(sentencia);
+		}
+		LOG.info("Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema; cc_sistema no "
+				+ "edita la bitácora ni los libros.");
+		return escribe;
+	}
+
+	/**
+	 * Sprint 7, tanda 2 (H7, E7 y E8): la huella de cada trigger y función de la base es la del jar. Un trigger debilitado
+	 * que conserva su nombre, una función reemplazada o un objeto de más no dejan arrancar.
+	 */
+	public void verificarHuellas() {
+		Map<String, String> instaladas;
+		try {
+			instaladas = leerJson(jdbc.queryForObject(SQL_HUELLAS, String.class));
+		}
+		catch (DataAccessException e) {
+			throw new IllegalStateException("No se pudo leer la función cuentasclaras.huellas_objetos() (código "
+					+ codigoMySql(e) + "): aplica scripts/mysql/02-permisos-tablas.sql como administrador. Revisa "
+					+ "docs/operacion/mysql-usuarios.md.", e);
+		}
+		compararHuellas(instaladas);
+	}
+
+	private void compararHuellas(Map<String, String> instaladas) {
+		Map<String, String> esperadas = HuellasObjetosBd.esperadas();
+		List<String> faltan = esperadas.keySet().stream().filter(n -> !instaladas.containsKey(n)).sorted().toList();
+		List<String> sobran = instaladas.keySet().stream().filter(n -> !esperadas.containsKey(n)).sorted().toList();
+		List<String> difieren = esperadas.keySet().stream()
+				.filter(n -> instaladas.containsKey(n) && !esperadas.get(n).equals(instaladas.get(n))).sorted().toList();
+		if (!faltan.isEmpty() || !sobran.isEmpty() || !difieren.isEmpty()) {
+			throw new IllegalStateException("Los triggers y funciones de la base no son los de esta versión."
+					+ (faltan.isEmpty() ? "" : " Faltan: " + String.join(", ", faltan) + ".")
+					+ (sobran.isEmpty() ? "" : " Sobran (no están en 03-triggers.sql ni en 02): " + String.join(", ", sobran)
+							+ ".")
+					+ difieren.stream().map(n -> " huella distinta: " + n + ".").reduce("", String::concat)
+					+ " Aplica 02-permisos-tablas.sql (administrador) y 03-triggers.sql (cc_migrador) de ESTA versión; si "
+					+ "nadie los cambió a propósito, es un incidente (docs/operacion/incidente-auditoria.md).");
+		}
+		LOG.info("Huellas de los {} triggers y las {} funciones verificadas: son las de esta versión.",
+				TRIGGERS_ESPERADOS.size(), esperadas.size() - TRIGGERS_ESPERADOS.size());
+	}
+
+	private static Map<String, String> leerJson(String json) {
+		if (json == null || json.isBlank()) {
+			return Map.of();
+		}
+		return tools.jackson.databind.json.JsonMapper.builder().build().readValue(json,
+				new tools.jackson.core.type.TypeReference<java.util.LinkedHashMap<String, String>>() {
+				});
+	}
+
+	/** Sprint 7, tanda 2 (H6, E9): ninguna conexión tiene un privilegio que 02 no da. */
+	public void verificarPrivilegios() {
+		// Primero los roles: un rol anidado se nombra tal cual (SHOW GRANTS muestra sus privilegios como si fueran de
+		// cc_negocio, sin decir de dónde salen).
+		rolesDe(jdbc, "cc_app");
+		rolesDe(sistema, PermisosEsperados.SISTEMA);
+		privilegiosDe(jdbc, "cc_app", PermisosEsperados.de("cc_app"));
+		privilegiosDe(sistema, PermisosEsperados.SISTEMA, PermisosEsperados.de(PermisosEsperados.SISTEMA));
+		LOG.info("Privilegios verificados: cc_app y cc_sistema tienen solo los de 02-permisos-tablas.sql, sin roles "
+				+ "anidados.");
+	}
+
+	/**
+	 * Correcciones del sprint 7 (S7-M1): {@code SHOW GRANTS} no muestra los privilegios de un rol concedido DENTRO de
+	 * {@code cc_negocio} («GRANT otro_rol TO cc_negocio»), pero la conexión los tiene. {@code APPLICABLE_ROLES} lista
+	 * todos los roles que alcanzan a la conexión, también los anidados: el único permitido es {@code cc_negocio}, concedido
+	 * directamente a la cuenta. Cualquier otro (o un rol dentro de cc_negocio) no deja arrancar.
+	 */
+	public static final String SQL_ROLES = "SELECT CONCAT(GRANTEE, '|', ROLE_NAME) FROM information_schema.APPLICABLE_ROLES";
+
+	private static void rolesDe(JdbcTemplate conexion, String quien) {
+		List<String> filas;
+		try {
+			filas = conexion.queryForList(SQL_ROLES, String.class);
+		}
+		catch (DataAccessException e) {
+			throw new IllegalStateException("No se pudieron leer los roles de " + quien + " (código " + codigoMySql(e)
+					+ ").", e);
+		}
+		List<String> deMas = filas.stream().filter(f -> !f.equals(quien + "|" + PermisosEsperados.ROL_NEGOCIO))
+				.map(f -> f.replace("|", " recibe el rol ")).sorted().toList();
+		if (!deMas.isEmpty()) {
+			throw new IllegalStateException("La conexión de " + quien + " tiene roles que 02-permisos-tablas.sql no da "
+					+ "(roles anidados o de más): " + String.join(" | ", deMas) + ". Sus privilegios no salen en SHOW "
+					+ "GRANTS. Aplica 02 de esta versión (recrea cc_negocio) y revisa quién los dio. Revisa "
+					+ "docs/operacion/mysql-usuarios.md.");
+		}
+	}
+
+	private static void privilegiosDe(JdbcTemplate conexion, String quien, PermisosEsperados esperados) {
+		List<String> lineas;
+		try {
+			lineas = conexion.queryForList(SQL_PRIVILEGIOS, String.class);
+		}
+		catch (DataAccessException e) {
+			throw new IllegalStateException("No se pudieron leer los privilegios de " + quien + " (código " + codigoMySql(e)
+					+ ").", e);
+		}
+		List<String> deMas = esperados.deMas(lineas);
+		if (!deMas.isEmpty()) {
+			throw new IllegalStateException("La conexión de " + quien + " tiene privilegios que 02-permisos-tablas.sql no "
+					+ "da: " + String.join(" | ", deMas) + ". Aplica 02 de esta versión (empieza quitándolo todo) y revisa "
+					+ "quién los dio. Revisa docs/operacion/mysql-usuarios.md.");
+		}
+	}
+
+	/** Sprint 7, tanda 2 (H11): en prod las dos conexiones van cifradas; solo la instalación local en Docker lo apaga. */
+	public void verificarTls() {
+		if (!produccion) {
+			return;
+		}
+		if (!exigirTls) {
+			LOG.warn("La conexión a MySQL NO se exige cifrada (cuentasclaras.basedatos.exigir-tls: false). Solo es aceptable "
+					+ "en la instalación local en Docker, con la base en el mismo servidor.");
+			return;
+		}
+		for (Map.Entry<String, JdbcTemplate> conexion : Map.of("cc_app", jdbc, PermisosEsperados.SISTEMA, sistema)
+				.entrySet()) {
+			String cifrado = conexion.getValue().queryForList(SQL_TLS, String.class).stream().findFirst().orElse("");
+			if (cifrado == null || cifrado.isBlank()) {
+				throw new IllegalStateException("La conexión de " + conexion.getKey() + " a MySQL no va cifrada (TLS): "
+						+ "agrega sslMode=VERIFY_IDENTITY (o REQUIRED) a DB_URL. Revisa docs/operacion/mysql-usuarios.md.");
+			}
+		}
+		LOG.info("Conexiones a MySQL cifradas (TLS) verificadas.");
+	}
+
+	/** Sprint 7, tanda 2 (H5): la fila vieja del correo de la huella ya no se usa (ahora es por colegio). */
+	private void avisarConfiguracionVieja() {
+		try {
+			Integer filas = jdbc.queryForObject(SQL_HUELLA_CORREO_VIEJA, Integer.class);
+			if (filas != null && filas > 0) {
+				LOG.warn("configuracion_bd todavía tiene 'huella_correo_externo': ya no se usa. Muévela a "
+						+ "configuracion_colegio, una fila por colegio (docs/operacion/mysql-usuarios.md).");
+			}
+		}
+		catch (DataAccessException e) {
+			LOG.warn("No se pudo leer configuracion_bd: {}", e.getClass().getSimpleName());
 		}
 	}
 
@@ -506,6 +906,10 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 				+ "control) verificados.");
 		LOG.info("Permisos y triggers de las correcciones del sprint 6 (muestra congelada, delegación de las llamadas, texto "
 				+ "del resumen y correo externo por colegio) verificados.");
+		verificarRespaldoSimulado();
+		LOG.info("Permisos del respaldo verificados: la aplicación no registra, edita ni borra respaldos.");
+		LOG.info("Permisos de la Ley 29733 verificados: nadie edita ni borra el registro de quién vio datos personales, ni "
+				+ "cambia el derecho de un pedido sobre datos personales.");
 		return escribe;
 	}
 
@@ -564,6 +968,27 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		}
 	}
 
+	/**
+	 * Sprint 7, tanda 1: en prod la base NO admite el destino simulado de los respaldos (una carpeta en el mismo servidor
+	 * no protege nada). Sin la fila 'respaldo_simulado', trg_respaldo_registro rechaza registrar un respaldo simulado y
+	 * el monitoreo lo da por atrasado.
+	 */
+	private void verificarRespaldoSimulado() {
+		Integer filas;
+		try {
+			filas = jdbc.queryForObject(SQL_RESPALDO_SIMULADO, Integer.class);
+		}
+		catch (DataAccessException e) {
+			throw new IllegalStateException("No se pudo leer configuracion_bd (código " + codigoMySql(e) + "). Revisa "
+					+ "docs/operacion/mysql-usuarios.md.", e);
+		}
+		if (produccion && filas != null && filas > 0) {
+			throw new IllegalStateException("La base de PRODUCCIÓN admite el destino simulado de los respaldos (fila "
+					+ "'respaldo_simulado' en configuracion_bd): los respaldos quedarían en el mismo servidor. El DBA debe "
+					+ "borrarla. Revisa docs/operacion/respaldos.md.");
+		}
+	}
+
 	public void verificarMigraciones() {
 		MigrationInfo[] pendientes = Flyway.configure().dataSource(fuenteDatos).locations("classpath:db/migration")
 				.load().info().pending();
@@ -583,8 +1008,12 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 
 	/** @return {@code null} si la base la rechazó con un código aceptado; si no, la descripción del problema */
 	private String comprobarDenegada(SentenciaProhibida sentencia) {
+		return comprobarDenegada(jdbc, sentencia);
+	}
+
+	private String comprobarDenegada(JdbcTemplate conexion, SentenciaProhibida sentencia) {
 		try {
-			jdbc.update(sentencia.sql());
+			conexion.update(sentencia.sql());
 			return "El usuario de la aplicación PUEDE ejecutar «" + sentencia.sql() + "»: " + sentencia.riesgo();
 		}
 		catch (DataAccessException e) {

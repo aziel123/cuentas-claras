@@ -41,6 +41,9 @@ class ServicioUsuariosTest {
 	private ServicioUsuarios servicio;
 
 	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones bandeja;
+
+	@Autowired
 	private UsuarioRepository usuarios;
 
 	@Autowired
@@ -74,6 +77,52 @@ class ServicioUsuariosTest {
 	void limpiar() {
 		SecurityContextHolder.clearContext();
 		LimpiezaBaseDatos.limpiar(jdbc);
+	}
+
+	/**
+	 * Sprint 7, tanda 2 (decisión 84, H1): dar Dirección se pide; no lo aprueba quien lo pidió ni el titular (otra
+	 * persona sí). Mientras tanto, los roles no cambian.
+	 */
+	@Test
+	void darDireccionLoApruebaOtraPersonaNiQuienPidioNiElTitular() {
+		Usuario docente = guardar("docente.nuevo", Rol.DOCENTE);
+
+		assertThat(servicio.cambiarRoles(docente.getId(), new CambiarRolesRequest(EnumSet.of(Rol.DOCENTE, Rol.DIRECTOR),
+				"Asume la dirección del nivel secundaria"))).isTrue();
+		Long solicitud = jdbc.queryForObject("SELECT id FROM solicitud_cambio WHERE tipo = 'CAMBIO_ROLES' "
+				+ "AND entidad_id = ? AND estado = 'PENDIENTE'", Long.class, docente.getId());
+		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ?", String.class, docente.getId()))
+				.containsExactly("DOCENTE");
+
+		assertThatThrownBy(() -> bandeja.aprobar(solicitud, "Me apruebo lo que pedí")).as("quien pidió")
+				.isInstanceOf(RuntimeException.class);
+		UsuariosDePrueba.iniciarSesion(docente);
+		assertThatThrownBy(() -> bandeja.aprobar(solicitud, "Me doy Dirección")).as("el titular")
+				.isInstanceOf(RuntimeException.class);
+		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ?", String.class, docente.getId()))
+				.containsExactly("DOCENTE");
+
+		UsuariosDePrueba.iniciarSesion(director);
+		bandeja.aprobar(solicitud, "Confirmado con la promotora");
+
+		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ? ORDER BY rol", String.class,
+				docente.getId())).containsExactly("DIRECTOR", "DOCENTE");
+		assertThat(accionesAuditadas()).contains("ROLES_CAMBIADOS");
+		// La firma de la aprobación quedó a nombre de quien aprobó, con su sesión.
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM firma_operacion WHERE clave = ? AND usuario_id = ?",
+				Long.class, "solicitud_cambio:" + solicitud + ":APROBADA", director.getId())).isEqualTo(1);
+	}
+
+	/** Sprint 7, tanda 2: un rol del personal (sin Promotoría ni Dirección) se aplica directo, sin solicitud. */
+	@Test
+	void losRolesDelPersonalSeAplicanSinSolicitud() {
+		assertThat(servicio.cambiarRoles(caja.getId(), new CambiarRolesRequest(EnumSet.of(Rol.CAJA, Rol.DOCENTE),
+				"También dicta talleres por las tardes"))).isFalse();
+
+		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ? ORDER BY rol", String.class,
+				caja.getId())).containsExactly("CAJA", "DOCENTE");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM solicitud_cambio WHERE tipo = 'CAMBIO_ROLES'", Long.class))
+				.isZero();
 	}
 
 	@Test
@@ -322,7 +371,9 @@ class ServicioUsuariosTest {
 	@Test
 	void direccionNoPuedeReactivarAUnaPromotoraDesactivada() {
 		Usuario otra = guardar("otra.promotora", Rol.PROMOTOR);
-		servicio.desactivar(otra.getId(), MOTIVO);
+		// Correcciones del sprint 7: una Promotoría se desactiva con una solicitud aprobada; aquí ya está desactivada.
+		jdbc.update("UPDATE usuario SET activo = FALSE, desactivado_en = CURRENT_TIMESTAMP, desactivado_por = 'promotora' "
+				+ "WHERE id = ?", otra.getId());
 		UsuariosDePrueba.iniciarSesion(director);
 
 		assertThatThrownBy(() -> servicio.reactivar(otra.getId(), MOTIVO)).isInstanceOf(AccessDeniedException.class);
@@ -352,9 +403,15 @@ class ServicioUsuariosTest {
 		assertThatThrownBy(() -> servicio.desactivar(promotora.getId(), MOTIVO))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("último usuario de Promotoría");
 
-		// Colegio B tiene dos: una puede desactivar a la otra; la que queda ya es la última.
+		// Colegio B tiene dos: una pide desactivar a la otra (correcciones del sprint 7: lo aprueba otra persona, aquí la
+		// directora de B); la que queda ya es la última.
 		UsuariosDePrueba.iniciarSesion(promotoraB1);
-		servicio.desactivar(promotoraB2.getId(), MOTIVO);
+		assertThat(servicio.desactivar(promotoraB2.getId(), MOTIVO)).isTrue();
+		Usuario directoraB = UsuariosDePrueba.guardar(usuarios, codificador, colegioB, "directora.b", UsuariosDePrueba.CLAVE,
+				false, Rol.DIRECTOR);
+		UsuariosDePrueba.iniciarSesion(directoraB);
+		bandeja.aprobar(jdbc.queryForObject("SELECT id FROM solicitud_cambio WHERE tipo = 'ESTADO_CUENTA' AND entidad_id = ?",
+				Long.class, promotoraB2.getId()), "Confirmado en persona con las dos promotoras");
 		assertThat(fila(promotoraB2.getId())).containsEntry("activo", false);
 		UsuariosDePrueba.iniciarSesion(promotoraB2);
 		assertThatThrownBy(() -> servicio.desactivar(promotoraB1.getId(), MOTIVO))
@@ -365,10 +422,20 @@ class ServicioUsuariosTest {
 	void conDosPromotorasActivasSePuedeQuitarPromotoriaAUna() {
 		Usuario otra = guardar("otra.promotora", Rol.PROMOTOR);
 
-		servicio.cambiarRoles(otra.getId(), new CambiarRolesRequest(EnumSet.of(Rol.DIRECTOR), MOTIVO));
+		// Sprint 7, tanda 2 (decisión 84): quitar Promotoría y dar Dirección se PIDE; lo aprueba otra persona.
+		assertThat(servicio.cambiarRoles(otra.getId(), new CambiarRolesRequest(EnumSet.of(Rol.DIRECTOR), MOTIVO))).isTrue();
+		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ?", String.class, otra.getId()))
+				.containsExactly("PROMOTOR");
+		Long solicitud = jdbc.queryForObject("SELECT id FROM solicitud_cambio WHERE tipo = 'CAMBIO_ROLES' "
+				+ "AND entidad_id = ? AND estado = 'PENDIENTE'", Long.class, otra.getId());
+
+		UsuariosDePrueba.iniciarSesion(director);
+		bandeja.aprobar(solicitud, "Confirmado en persona");
 
 		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ?", String.class, otra.getId()))
 				.containsExactly("DIRECTOR");
+		assertThat(jdbc.queryForObject("SELECT roles_solicitud_id FROM usuario WHERE id = ?", Long.class, otra.getId()))
+				.isEqualTo(solicitud);
 	}
 
 	@Test

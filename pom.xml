@@ -18,6 +18,14 @@
 		<java.version>21</java.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<poi.version>5.5.1</poi.version>
+		<!-- Sprint 7, tanda 3 (A06, decisión 102): OSV-Scanner encontró vulnerabilidades con arreglo en las versiones que
+		     trae Spring Boot 4.1.1 (no hay 4.1.2 publicado). Se suben solo los parches de la misma línea:
+		     - Tomcat 11.0.24 → 11.0.26: CVE-2026-65905, CVE-2026-65182 y CVE-2026-68525 (críticas; corregidas en 11.0.25).
+		     - Jackson 3.1.5 → 3.1.7: CVE-2026-89425, CVE-2026-89407, CVE-2026-91777, CVE-2026-68497 y CVE-2026-91776
+		       (altas) y CVE-2026-83557 y CVE-2026-19032 (medias).
+		     Quitar estas dos líneas cuando Spring Boot traiga esas versiones o mayores (Dependabot lo propone). -->
+		<tomcat.version>11.0.26</tomcat.version>
+		<jackson-bom.version>3.1.7</jackson-bom.version>
 	</properties>
 
 	<dependencies>
@@ -109,6 +117,30 @@
 	</dependencies>
 
 	<build>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+			</resource>
+			<!-- Sprint 7: el modo «verificar-respaldo» corre las comprobaciones de consistencia del mismo archivo que
+			     usa el operador (una sola fuente: scripts/respaldo/comprobaciones.sql). -->
+			<resource>
+				<directory>scripts/respaldo</directory>
+				<targetPath>db/respaldo</targetPath>
+				<includes>
+					<include>comprobaciones.sql</include>
+				</includes>
+			</resource>
+			<!-- Sprint 7, tanda 2: el verificador de prod compara la huella de cada trigger y función de la base con la de
+			     estos archivos, empaquetados en el jar (una sola fuente: scripts/mysql/). -->
+			<resource>
+				<directory>scripts/mysql</directory>
+				<targetPath>db/mysql</targetPath>
+				<includes>
+					<include>02-permisos-tablas.sql</include>
+					<include>03-triggers.sql</include>
+				</includes>
+			</resource>
+		</resources>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
@@ -120,6 +152,14 @@
 						<profile>dev</profile>
 					</profiles>
 				</configuration>
+			</plugin>
+			<!-- Sprint 7, tanda 3 (A06 de OWASP, decisión 102): lista de componentes (SBOM CycloneDX) de lo que va en el jar,
+			     en target/classes/META-INF/sbom/application.cdx.json (versión y configuración del parent de Spring Boot; sin
+			     las dependencias de prueba). Solo en el build: no es una dependencia de la aplicación. El CI la revisa con
+			     OSV-Scanner (scripts/dependencias/revisar.sh) y falla con una vulnerabilidad CRÍTICA o ALTA con arreglo. -->
+			<plugin>
+				<groupId>org.cyclonedx</groupId>
+				<artifactId>cyclonedx-maven-plugin</artifactId>
 			</plugin>
 		</plugins>
 	</build>

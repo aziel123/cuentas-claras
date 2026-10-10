@@ -118,7 +118,8 @@ class InicializadorPromotorTest {
 	}
 
 	private InicializadorPromotor inicializador(Long colegioId, String usuario, String nombre, String clave) {
-		return new InicializadorPromotor(usuarios, colegios, codificador, auditoria, transacciones, colegioId, usuario,
+		return new InicializadorPromotor(usuarios, colegios, codificador, auditoria,
+				new pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad(transacciones), colegioId, usuario,
 				nombre, clave);
 	}
 }

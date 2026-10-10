@@ -1,0 +1,34 @@
+# Cuentas Claras · tablas que el manifiesto de cada respaldo cuenta (filas e id máximo) para que el respaldo siguiente
+# detecte filas BORRADAS por alguien con acceso de administrador a la base (la aplicación nunca las borra: 1142).
+# Son las de solo inserción (y los libros financieros que nunca se borran). Una por línea; # comenta. Una tabla que
+# todavía no existe en la base se salta (desde V26 existen todas).
+evento_auditoria
+pago
+aplicacion_pago
+anulacion_pago
+ajuste_cuota
+cuota
+comprobante
+comprobante_linea
+cierre_caja
+deposito_caja
+verificacion_bancaria
+reembolso
+reembolso_pasarela
+movimiento_bancario
+liquidacion_pasarela
+liquidacion_linea
+archivo_cargado
+importacion_alumnos
+mensaje
+huella_bitacora
+huella_hora
+resumen_diario
+llamada_control
+muestra_llamada
+delegacion_llamada
+semilla_muestreo
+firma_operacion
+sesion_usuario
+acceso_dato_personal
+respaldo

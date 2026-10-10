@@ -8,12 +8,12 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CobroRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CuentaFamilia;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.ResultadoBusqueda;
@@ -42,6 +42,7 @@ import pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LoteRecaudacionRe
 import pe.edu.virgenmaria.cuentasclaras.seguridad.inicial.DatosDemoDev;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.PersonaDemo;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -115,13 +116,16 @@ public class DatosDemoConciliacionDev implements ApplicationRunner {
 
 	private final boolean habilitado;
 
+	private final PersonaDemo personaDemo;
+
 	public DatosDemoConciliacionDev(ServicioCuentasBancarias cuentas, ServicioExtractos extractos,
 			CuentaBancariaRepository repositorioCuentas, PagoRepository pagos, DepositoCajaRepository depositos,
 			LoteRecaudacionRepository lotes, UsuarioRepository usuarios, EjemploExtractoDev ejemplo, ServicioCobro cobro,
-			PlatformTransactionManager transacciones, Clock reloj, RelojMovible relojMovible,
+			PlatformTransactionManager transacciones, Clock reloj, RelojMovible relojMovible, PersonaDemo personaDemo,
 			@Value("${spring.datasource.url:}") String urlBaseDatos,
 			@Value("${cuentasclaras.demo.datos-colegio:true}") boolean habilitado) {
 		this.cuentas = cuentas;
+		this.personaDemo = personaDemo;
 		this.extractos = extractos;
 		this.repositorioCuentas = repositorioCuentas;
 		this.pagos = pagos;
@@ -273,18 +277,9 @@ public class DatosDemoConciliacionDev implements ApplicationRunner {
 				.map(u -> UsuarioAutenticado.de(u, LocalDateTime.now(reloj))).orElse(null));
 	}
 
-	private static <T> T como(UsuarioAutenticado usuario, Supplier<T> operacion) {
-		SecurityContext anterior = SecurityContextHolder.getContext();
-		SecurityContext contexto = SecurityContextHolder.createEmptyContext();
-		contexto.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(usuario, null,
-				usuario.getAuthorities()));
-		SecurityContextHolder.setContext(contexto);
-		try {
-			return operacion.get();
-		}
-		finally {
-			SecurityContextHolder.setContext(anterior);
-		}
+	/** Ejecuta como esa persona de la demo, con su sesión de la base (firma sus aprobaciones). */
+	private <T> T como(UsuarioAutenticado usuario, Supplier<T> operacion) {
+		return personaDemo.como(usuario, operacion);
 	}
 
 }

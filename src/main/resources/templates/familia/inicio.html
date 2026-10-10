@@ -11,6 +11,7 @@
 				<a class="btn btn-secundario" th:href="@{/familia/estado-de-cuenta}">Estado de cuenta</a>
 				<a class="btn btn-secundario" th:href="@{/familia/comprobantes}">Mis boletas</a>
 				<a class="btn btn-secundario" th:href="@{/familia/mensajes}">Mensajes del colegio</a>
+				<a class="btn btn-secundario" th:href="@{/familia/mis-datos}">Mis datos</a>
 			</nav>
 		</div>
 	</div>
@@ -126,6 +127,15 @@
 			<button type="submit" class="btn btn-secundario" data-accion="recordatorios"
 				th:text="${recordatoriosActivos} ? 'Apagar recordatorios' : 'Encender recordatorios'">Apagar recordatorios</button>
 		</form>
+	</section>
+	<section class="tarjeta" aria-labelledby="titulo-datos">
+		<h2 id="titulo-datos">Tus datos personales</h2>
+		<p class="secundario">Mira qué datos tuyos y de tus hijos guarda el colegio, para qué los usa y a quién los envía. Si
+			algo está mal o quieres pedir algo sobre ellos, avísanos.</p>
+		<p class="fila">
+			<a class="btn btn-secundario" th:href="@{/familia/mis-datos}">Mis datos</a>
+			<a class="btn btn-texto" th:href="@{/privacidad}">Aviso de privacidad</a>
+		</p>
 	</section>
 </main>
 </body>

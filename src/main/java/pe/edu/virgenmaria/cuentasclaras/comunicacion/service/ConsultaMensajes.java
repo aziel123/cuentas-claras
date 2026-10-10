@@ -20,6 +20,7 @@ import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.EstadoMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.Mensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ProveedorMensajeria;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.TipoMensaje;
+import pe.edu.virgenmaria.cuentasclaras.comunicacion.proceso.AdelantosMensajes;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.repository.MensajeRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
@@ -55,8 +56,12 @@ public class ConsultaMensajes {
 
 	private final UsuarioRepository usuarios;
 
+	/** Sprint 7, tanda 2: el adelanto lo escribe sistema.mensajeria. */
+	private final AdelantosMensajes adelantos;
+
 	public ConsultaMensajes(MensajeRepository mensajes, SesionApoderado sesion, PropiedadesMensajeria propiedades,
-			Clock reloj, UsuarioRepository usuarios) {
+			Clock reloj, UsuarioRepository usuarios, AdelantosMensajes adelantos) {
+		this.adelantos = adelantos;
 		this.mensajes = mensajes;
 		this.sesion = sesion;
 		this.propiedades = propiedades;
@@ -155,17 +160,19 @@ public class ConsultaMensajes {
 				reintenta);
 	}
 
-	/** Administración adelanta el siguiente intento de un PENDIENTE (nunca edita el destino ni el texto). */
+	/**
+	 * Administración adelanta el siguiente intento de un PENDIENTE (nunca edita el destino ni el texto). Sprint 7, tanda 2:
+	 * el cambio lo escribe {@code sistema.mensajeria} ({@link AdelantosMensajes}), nunca la conexión de la persona.
+	 */
 	@PreAuthorize("hasRole('ADMINISTRACION')")
-	@Transactional
+	@Transactional(readOnly = true)
 	public void reintentar(Long id) {
-		Mensaje mensaje = mensajes.bloquear(id).orElseThrow(() -> new RecursoNoEncontradoException("Mensaje no encontrado"));
+		Mensaje mensaje = mensajes.findById(id).orElseThrow(() -> new RecursoNoEncontradoException("Mensaje no encontrado"));
 		if (mensaje.getEstado() != EstadoMensaje.PENDIENTE) {
 			throw new ReglaNegocioException("Solo se adelanta un mensaje pendiente: este ya está "
 					+ mensaje.getEstado().etiqueta().toLowerCase(java.util.Locale.ROOT) + ".");
 		}
-		mensaje.adelantar(LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS));
-		mensajes.saveAndFlush(mensaje);
+		adelantos.adelantar(mensaje.getColegioId(), mensaje.getId());
 	}
 
 	/** Historial de la familia del apoderado en sesión (la familia sale de su cuenta, nunca de la URL). */

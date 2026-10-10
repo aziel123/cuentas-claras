@@ -20,7 +20,6 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.model.PlanPension;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.LoteSaldoInicialRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.PlanPensionRepository;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoAnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado;
@@ -30,6 +29,9 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -72,9 +74,13 @@ public class ServicioPlanesPension {
 
 	private final Clock reloj;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ServicioPlanesPension(PlanPensionRepository planes, AnioEscolarRepository anios, CuotaRepository cuotas,
 			GeneradorCronograma generador, LoteSaldoInicialRepository lotes, ControlParticipantes participantes,
-			AuditoriaService auditoria, Clock reloj) {
+			AuditoriaService auditoria, Clock reloj, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.lotes = lotes;
 		this.participantes = participantes;
 		this.planes = planes;
@@ -280,6 +286,7 @@ public class ServicioPlanesPension {
 			// Primero sale de vigente: el UNIQUE (año, nivel, vigente) no admite dos versiones vigentes a la vez.
 			planes.saveAndFlush(a);
 		});
+		firmaSesion.firmar(ClaveFirma.planPension(plan.getId()));
 		plan.aprobar(usuario, ahora);
 		planes.saveAndFlush(plan);
 		auditoria.registrar(AccionAuditoria.PLAN_PENSION_APROBADO, "plan_pension", plan.getId().toString(),

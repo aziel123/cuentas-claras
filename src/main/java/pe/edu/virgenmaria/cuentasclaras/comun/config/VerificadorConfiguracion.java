@@ -30,7 +30,12 @@ import java.util.function.Function;
  *       «OSE» a un servidor propio que responda ACEPTADO) o, fuera de {@code prod}, sin la marca explícita;</li>
  *   <li>sprint 5 (sección 8.3): con la mensajería SIMULADA en {@code prod} o fuera de dev, test o piloto; en {@code prod}
  *       sin ningún canal real (WhatsApp o correo: sin aviso al padre no existe el control 4, decisión 40); con un canal
- *       real sin sus credenciales o, fuera de {@code prod}, sin la marca y la lista de números o correos de prueba.</li>
+ *       real sin sus credenciales o, fuera de {@code prod}, sin la marca y la lista de números o correos de prueba;</li>
+ *   <li>sprint 7, tanda 1: en {@code prod}, aceptando el respaldo simulado o sin exigir el respaldo;</li>
+ *   <li>sprint 7, tanda 2: en {@code prod} o {@code piloto}, sin el segundo usuario de base ({@code cc_sistema}) o con el
+ *       mismo usuario para las personas y para los procesos;</li>
+ *   <li>sprint 7, tanda 3 (decisión 103): con la cookie {@code __Host-} sin {@code Secure} (el navegador la rechaza y
+ *       nadie podría ingresar) o, en {@code prod} o {@code piloto} con {@code Secure}, con una cookie sin ese prefijo.</li>
  * </ul>
  */
 @Component
@@ -105,6 +110,20 @@ public class VerificadorConfiguracion implements InitializingBean {
 
 	static final String SMTP_HOST = "spring.mail.host";
 
+	static final String RESPALDO_SIMULADO = "cuentasclaras.monitoreo.aceptar-respaldo-simulado";
+
+	static final String RESPALDO_EXIGIDO = "cuentasclaras.monitoreo.respaldo-exigido";
+
+	static final String DB_USUARIO = "spring.datasource.username";
+
+	static final String DB_SISTEMA_USUARIO = "cuentasclaras.basedatos.sistema.usuario";
+
+	static final String COOKIE_NOMBRE = "server.servlet.session.cookie.name";
+
+	static final String COOKIE_SEGURA = "server.servlet.session.cookie.secure";
+
+	static final String PREFIJO_HOST = "__Host-";
+
 	/** Donde puede existir la mensajería simulada (los beans tienen el mismo {@code @Profile}). */
 	static final Set<String> PERFILES_MENSAJERIA_SIMULADA = Set.of("dev", "test", "piloto");
 
@@ -174,6 +193,70 @@ public class VerificadorConfiguracion implements InitializingBean {
 		verificarPasarela(activos, prod, propiedad);
 		verificarComprobantes(prod, propiedad);
 		verificarMensajeria(activos, prod, propiedad);
+		verificarRespaldos(prod, propiedad);
+		verificarBaseDatos(despliegue == 1, propiedad);
+		verificarCookie(despliegue == 1, propiedad);
+	}
+
+	/**
+	 * Sprint 7, tanda 3 (decisión 103): la cookie de sesión {@code __Host-CCSESION} exige {@code Secure} (y la raíz, sin
+	 * dominio: así la deja Spring Boot). Sin https (dev, test o la instalación local en Docker) va {@code CCSESION} con
+	 * {@code secure: false}; en prod y piloto con {@code Secure}, siempre con el prefijo.
+	 */
+	private static void verificarCookie(boolean despliegue, Function<String, String> propiedad) {
+		String nombre = propiedad.apply(COOKIE_NOMBRE);
+		boolean segura = !"false".equalsIgnoreCase(String.valueOf(propiedad.apply(COOKIE_SEGURA)).strip());
+		if (nombre == null || nombre.isBlank()) {
+			return;
+		}
+		if (nombre.startsWith(PREFIJO_HOST) && !segura) {
+			throw new IllegalStateException("La cookie de sesión " + nombre + " exige Secure (https): sin ella el navegador "
+					+ "la rechaza y nadie puede ingresar. Para probar por http usa CC_COOKIE_SESION=CCSESION.");
+		}
+		if (despliegue && segura && !nombre.startsWith(PREFIJO_HOST)) {
+			throw new IllegalStateException("En producción la cookie de sesión debe llamarse " + PREFIJO_HOST + "CCSESION "
+					+ "(decisión 103): quita CC_COOKIE_SESION o usa un nombre con el prefijo " + PREFIJO_HOST + ".");
+		}
+	}
+
+	/**
+	 * Sprint 7, tanda 2 (sección 3.2): en prod y piloto la aplicación usa DOS usuarios de base: {@code DB_USUARIO}
+	 * ({@code cc_app}, las personas) y {@code DB_SISTEMA_USUARIO} ({@code cc_sistema}, los procesos y la identidad), y no
+	 * pueden ser el mismo. Sin el segundo, una persona escribiría como el sistema (o nada de la identidad funcionaría).
+	 */
+	private static void verificarBaseDatos(boolean despliegue, Function<String, String> propiedad) {
+		if (!despliegue) {
+			return;
+		}
+		String sistema = propiedad.apply(DB_SISTEMA_USUARIO);
+		if (sistema == null || sistema.isBlank()) {
+			throw new IllegalStateException("Falta DB_SISTEMA_USUARIO (y DB_SISTEMA_CLAVE): los procesos y la identidad usan "
+					+ "su propio usuario de base, cc_sistema. Revisa docs/operacion/mysql-usuarios.md.");
+		}
+		String app = propiedad.apply(DB_USUARIO);
+		if (sistema.strip().equalsIgnoreCase(String.valueOf(app).strip())) {
+			throw new IllegalStateException("DB_SISTEMA_USUARIO y DB_USUARIO no pueden ser el mismo usuario de base: las "
+					+ "personas usan cc_app y los procesos y la identidad, cc_sistema.");
+		}
+	}
+
+	/**
+	 * Sprint 7, tanda 1: en prod el destino simulado de los respaldos (una carpeta en el mismo servidor) no cuenta como
+	 * respaldo y la falta de respaldo siempre es alerta. (La base de prod tampoco admite registrarlo:
+	 * trg_respaldo_registro y VerificadorPermisosBaseDatos.)
+	 */
+	private static void verificarRespaldos(boolean prod, Function<String, String> propiedad) {
+		if (!prod) {
+			return;
+		}
+		if ("true".equalsIgnoreCase(String.valueOf(propiedad.apply(RESPALDO_SIMULADO)).strip())) {
+			throw new IllegalStateException("En producción el respaldo al destino simulado no cuenta: quita "
+					+ "cuentasclaras.monitoreo.aceptar-respaldo-simulado (el respaldo va a un almacenamiento externo).");
+		}
+		if ("false".equalsIgnoreCase(String.valueOf(propiedad.apply(RESPALDO_EXIGIDO)).strip())) {
+			throw new IllegalStateException("En producción la falta de respaldo siempre es alerta: quita "
+					+ "cuentasclaras.monitoreo.respaldo-exigido: false.");
+		}
 	}
 
 	/** Sprint 5, sección 8.3: la mensajería simulada nunca en prod, y prod nunca sin un canal real. */

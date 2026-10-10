@@ -15,11 +15,11 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.service.HuellaDelDia;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Enmascarar;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.CanalMensaje;
-import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionBd;
+import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionColegio;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.Mensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.PlantillaMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.TipoMensaje;
-import pe.edu.virgenmaria.cuentasclaras.comunicacion.repository.ConfiguracionBdRepository;
+import pe.edu.virgenmaria.cuentasclaras.comunicacion.repository.ConfiguracionColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PropositoEnlace;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
@@ -55,12 +55,12 @@ public class AvisosCuenta {
 
 	private final ApoderadoRepository apoderados;
 
-	private final ConfiguracionBdRepository configuracion;
+	private final ConfiguracionColegioRepository configuracion;
 
 	private final AuditoriaService auditoria;
 
 	public AvisosCuenta(CreadorMensajes creador, UsuarioRepository usuarios, ApoderadoRepository apoderados,
-			ConfiguracionBdRepository configuracion, AuditoriaService auditoria) {
+			ConfiguracionColegioRepository configuracion, AuditoriaService auditoria) {
 		this.creador = creador;
 		this.usuarios = usuarios;
 		this.apoderados = apoderados;
@@ -127,8 +127,11 @@ public class AvisosCuenta {
 		// La clave lleva la fecha: una huella que NO se guardó (la bitácora retrocedió) no tiene id.
 		String sufijo = evento.fecha().toString();
 		usuarios.activosConRol(Rol.PROMOTOR).forEach(p -> creador.paraUsuario(p, contenido, sufijo));
-		configuracion.findById(ConfiguracionBd.HUELLA_CORREO_EXTERNO).map(ConfiguracionBd::getValor)
-				.filter(c -> c.contains("@")).ifPresent(c -> creador.externo(c.strip(), contenido));
+		// Sprint 7, tanda 2 (H5, E16): el correo externo de la huella es el de ESTE colegio (configuracion_colegio, la escribe
+		// el DBA); en MySQL, trg_mensaje_nace lo exige. La fila vieja de configuracion_bd ya no se usa.
+		configuracion.findByColegioIdAndClave(evento.colegioId(), ConfiguracionColegio.HUELLA_CORREO_EXTERNO)
+				.map(ConfiguracionColegio::getValor).filter(c -> c.contains("@")).ifPresent(c -> creador.externo(c.strip(),
+						contenido));
 	}
 
 	/**

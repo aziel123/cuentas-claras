@@ -116,7 +116,7 @@ class DatosDemoColegioDevTest {
 	@Test
 	void creaElUsuarioApoderadoEnlazadoARosa() {
 		DatosDemoApoderadoDev demoApoderado = new DatosDemoApoderadoDev(usuarios, apoderadosRepo, codificador, auditoria,
-				transacciones, reloj, "jdbc:h2:mem:demo", "demo-cuentas-claras-2026");
+				new pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad(transacciones), reloj, "jdbc:h2:mem:demo", "demo-cuentas-claras-2026");
 		assertThat(demoApoderado.crearSiCorresponde()).as("sin familias no se crea").isFalse();
 		assertThat(datosDemo("jdbc:h2:mem:demo", true).crearSiCorresponde()).isTrue();
 

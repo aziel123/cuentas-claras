@@ -50,6 +50,47 @@ class EjecucionComoSistemaTest {
 		assertThat(SecurityContextHolder.getContext().getAuthentication()).isSameAs(antes);
 	}
 
+	/**
+	 * Sprint 7, tanda 2 (hallazgo 4, H3): con una transacción abierta (la de una persona, con la conexión de cc_app), el
+	 * actor NO se une a ella: abre una propia (REQUIRES_NEW), que toma su conexión de cc_sistema. Y no cambia de colegio.
+	 */
+	@Test
+	void conUnaTransaccionAbiertaAbreOtraPropia() throws Exception {
+		java.lang.reflect.Field campo = EjecucionComoSistema.class.getDeclaredField("transacciones");
+		campo.setAccessible(true);
+		Object anterior = campo.get(null);
+		org.springframework.transaction.PlatformTransactionManager manejador = org.mockito.Mockito
+				.mock(org.springframework.transaction.PlatformTransactionManager.class);
+		org.mockito.Mockito.when(manejador.getTransaction(org.mockito.ArgumentMatchers.any()))
+				.thenReturn(new org.springframework.transaction.support.SimpleTransactionStatus());
+		EjecucionComoSistema.usarTransacciones(manejador);
+		try {
+			String visto = ContextoColegio.en(3L, () -> {
+				org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(true);
+				try {
+					assertThatThrownBy(() -> EjecucionComoSistema.como(ActorSistema.PANEL, 4L, () -> "otro colegio"))
+							.isInstanceOf(IllegalStateException.class).hasMessageContaining("cambiar de colegio");
+					return EjecucionComoSistema.como(ActorSistema.PANEL, 3L,
+							() -> SecurityContextHolder.getContext().getAuthentication().getName());
+				}
+				finally {
+					org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(false);
+				}
+			});
+
+			assertThat(visto).isEqualTo("sistema.panel");
+			org.mockito.ArgumentCaptor<org.springframework.transaction.TransactionDefinition> definicion = org.mockito
+					.ArgumentCaptor.forClass(org.springframework.transaction.TransactionDefinition.class);
+			org.mockito.Mockito.verify(manejador).getTransaction(definicion.capture());
+			assertThat(definicion.getValue().getPropagationBehavior())
+					.isEqualTo(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+			org.mockito.Mockito.verify(manejador).commit(org.mockito.ArgumentMatchers.any());
+		}
+		finally {
+			campo.set(null, anterior);
+		}
+	}
+
 	@Test
 	void nadiePuedeLlamarseComoUnActorDeSistema() {
 		for (ActorSistema actor : ActorSistema.values()) {

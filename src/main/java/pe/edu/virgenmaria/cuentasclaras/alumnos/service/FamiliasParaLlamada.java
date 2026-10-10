@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @Transactional(readOnly = true)
-@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR','SISTEMA_PANEL')")
 public class FamiliasParaLlamada {
 
 	private final FamiliaRepository familias;

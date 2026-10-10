@@ -112,6 +112,7 @@ class DatosDemoDevTest {
 	}
 
 	private DatosDemoDev datosDemo(String url, String clave) {
-		return new DatosDemoDev(usuarios, colegios, codificador, auditoria, transacciones, reloj, url, clave);
+		return new DatosDemoDev(usuarios, colegios, codificador, auditoria,
+				new pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad(transacciones), reloj, url, clave);
 	}
 }

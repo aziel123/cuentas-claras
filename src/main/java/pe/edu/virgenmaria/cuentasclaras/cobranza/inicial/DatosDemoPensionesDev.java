@@ -7,29 +7,26 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.AnioOpcion;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LineaSaldoRequest;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LoteRequest;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.PlanRequest;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.ResumenPensiones;
-import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.AnioOpcion;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConceptoSaldo;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConfiguracionPlan;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioSaldoInicial;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
-import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.inicial.DatosDemoDev;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.PersonaDemo;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * Pensiones de demostración (solo perfil {@code dev}, después de {@code DatosDemoColegioDev}), creadas con los mismos
@@ -79,16 +76,19 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 
 	private final Clock reloj;
 
+	private final PersonaDemo personaDemo;
+
 	private final String urlBaseDatos;
 
 	private final boolean habilitado;
 
 	public DatosDemoPensionesDev(ServicioPlanesPension planes, ServicioSaldoInicial saldoInicial, Clock reloj,
-			@Value("${spring.datasource.url:}") String urlBaseDatos,
+			PersonaDemo personaDemo, @Value("${spring.datasource.url:}") String urlBaseDatos,
 			@Value("${cuentasclaras.demo.datos-colegio:true}") boolean habilitado) {
 		this.planes = planes;
 		this.saldoInicial = saldoInicial;
 		this.reloj = reloj;
+		this.personaDemo = personaDemo;
 		this.urlBaseDatos = urlBaseDatos;
 		this.habilitado = habilitado;
 	}
@@ -103,7 +103,11 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 		if (!habilitado || urlBaseDatos == null || !urlBaseDatos.startsWith("jdbc:h2:mem:")) {
 			return false;
 		}
-		ResumenPensiones resumen = como("administracion", "ADMINISTRACION", () -> planes.resumen(null));
+		if (!personaDemo.existen(DatosDemoDev.COLEGIO_PRINCIPAL, "administracion", "director")) {
+			LOG.info("No se crean las pensiones de demostración: faltan las personas de demostración.");
+			return false;
+		}
+		ResumenPensiones resumen = como("administracion", () -> planes.resumen(null));
 		if (resumen.anio() == null || resumen.niveles().stream().anyMatch(n -> n.vigente() != null
 				|| !n.borradores().isEmpty())) {
 			LOG.info("No se crean pensiones de demostración: no hay años o ya hay planes.");
@@ -124,12 +128,12 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 			ConfiguracionPlan porDefecto = ConfiguracionPlan.porDefecto(anio.anio(), MATRICULA, PENSIONES.get(nivel));
 			PlanRequest solicitud = new PlanRequest(porDefecto.montoMatricula(), porDefecto.vencimientoMatricula(),
 					porDefecto.montoPension(), porDefecto.vencimientos(), anio.anio() == 2026 ? COBRO_DESDE_2026 : null);
-			Long id = como("administracion", "ADMINISTRACION", () -> {
+			Long id = como("administracion", () -> {
 				Long creado = planes.crearBorrador(anio.id(), nivel, solicitud);
 				planes.enviar(creado);
 				return creado;
 			});
-			como("director", "DIRECTOR", () -> planes.aprobar(id, planes.obtener(id).version()));
+			como("director", () -> planes.aprobar(id, planes.obtener(id).version()));
 		}
 	}
 
@@ -137,7 +141,7 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 		LocalDate corte = LocalDate.of(2026, 9, 30);
 		LocalDate hoy = LocalDate.now(reloj);
 		BigDecimal total = DEUDAS.stream().map(d -> new BigDecimal(d.monto())).reduce(BigDecimal.ZERO, BigDecimal::add);
-		como("administracion", "ADMINISTRACION", () -> {
+		como("administracion", () -> {
 			Long lote = saldoInicial.crearLote(new LoteRequest(anio.id(), corte.isAfter(hoy) ? hoy : corte,
 					"Informe del contador N.° 014-2026 (ejemplo)", total));
 			for (DeudaDemo deuda : DEUDAS) {
@@ -149,18 +153,8 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 		});
 	}
 
-	/** Ejecuta como ese usuario del colegio principal (sin transacción abierta: cada servicio abre la suya). */
-	private static <T> T como(String usuario, String rol, java.util.function.Supplier<T> operacion) {
-		SecurityContext anterior = SecurityContextHolder.getContext();
-		SecurityContext contexto = SecurityContextHolder.createEmptyContext();
-		contexto.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(usuario, null,
-				List.of(new SimpleGrantedAuthority("ROLE_" + rol))));
-		SecurityContextHolder.setContext(contexto);
-		try {
-			return ContextoColegio.en(DatosDemoDev.COLEGIO_PRINCIPAL, operacion);
-		}
-		finally {
-			SecurityContextHolder.setContext(anterior);
-		}
+	/** Ejecuta como esa persona de la demo del colegio principal, con su sesión (firma sus aprobaciones). */
+	private <T> T como(String usuario, Supplier<T> operacion) {
+		return personaDemo.como(DatosDemoDev.COLEGIO_PRINCIPAL, usuario, operacion);
 	}
 }

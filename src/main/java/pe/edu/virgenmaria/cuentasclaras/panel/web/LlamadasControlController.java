@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.AccesoMostrado;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.RegistraAcceso;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.TipoAcceso;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.LlamadaRequest;
 import pe.edu.virgenmaria.cuentasclaras.panel.service.LlamadasControl;
@@ -33,8 +36,12 @@ public class LlamadasControlController {
 	}
 
 	@GetMapping("/panel/llamadas")
+	@RegistraAcceso(TipoAcceso.LLAMADA_CONTROL)
 	public String ver(@AuthenticationPrincipal UsuarioAutenticado usuario, Model model) {
-		model.addAttribute("llamadas", llamadas.deEstaSemana());
+		var semana = llamadas.deEstaSemana();
+		model.addAttribute("llamadas", semana);
+		// Muestra los celulares de cada familia de la muestra: una fila del registro por familia.
+		AccesoMostrado.familias(semana.familias().stream().map(f -> f.familiaId()).toList());
 		model.addAttribute("volver", usuario != null && usuario.roles().contains(Rol.PROMOTOR) ? "/panel" : "/inicio");
 		return "panel/llamadas";
 	}

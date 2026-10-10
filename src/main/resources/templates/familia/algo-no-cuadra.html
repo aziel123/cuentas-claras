@@ -21,6 +21,18 @@
 			</label>
 			<p class="error" th:if="${#fields.hasErrors('tipo')}" th:errors="*{tipo}" role="alert">Elige qué no cuadra.</p>
 		</fieldset>
+		<fieldset class="grupo-opciones" aria-describedby="ayuda-derecho">
+			<legend>Si elegiste «Mis datos personales»: ¿qué quieres pedir?</legend>
+			<p class="ayuda" id="ayuda-derecho">Puedes ver ahora mismo los datos que guarda el colegio en
+				<a th:href="@{/familia/mis-datos}">Mis datos</a>. Si quieres una respuesta por escrito, una corrección o que
+				dejen de usarlos, elige aquí. Te respondemos en
+				<span th:text="${plazoAcceso}">20</span> días hábiles si pides saber qué datos tenemos y en
+				<span th:text="${plazoOtros}">10</span> en los demás casos.</p>
+			<label class="fila" th:each="d : ${derechos}">
+				<input type="radio" th:field="*{derecho}" th:value="${d}">
+				<span th:text="${d.etiqueta()}">Quiero corregir un dato que está mal</span>
+			</label>
+		</fieldset>
 		<div class="campo">
 			<label for="pagoId">¿Sobre qué pago? (opcional)</label>
 			<select class="input" id="pagoId" th:field="*{pagoId}">
@@ -55,6 +67,8 @@
 					<span th:replace="~{fragments/componentes :: badge(${a.abierto} ? 'Enviado' : 'Respondido', ${a.abierto} ? 'alerta' : 'exito')}"></span>
 				</div>
 				<span class="secundario" th:text="${#temporals.format(a.creadoEn, 'dd/MM/yyyy HH:mm')}">05/10/2026 10:40</span>
+				<p class="secundario" th:if="${a.derecho != null and a.abierto}">Pediste: <span th:text="${a.derecho}">Acceso</span>.
+					Te responderemos a más tardar el <span th:text="${#temporals.format(a.venceEl, 'dd/MM/yyyy')}">20/10/2026</span>.</p>
 				<p class="texto-largo" th:text="${a.texto}">Pagué y no aparece</p>
 				<p class="texto-largo" th:if="${a.respuesta != null}"><strong>Respuesta del colegio:</strong> <span th:text="${a.respuesta}">Ya lo revisamos.</span></p>
 			</li>

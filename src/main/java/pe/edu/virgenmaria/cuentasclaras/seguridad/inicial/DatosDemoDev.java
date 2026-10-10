@@ -9,8 +9,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.Actor;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
@@ -20,6 +18,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.PoliticaClaves;
 
 import java.time.Clock;
@@ -76,7 +75,8 @@ public class DatosDemoDev implements ApplicationRunner {
 
 	private final AuditoriaService auditoria;
 
-	private final TransactionTemplate transaccion;
+	/** Sprint 7, tanda 2: las cuentas se crean por la ruta de identidad (cc_sistema). */
+	private final EjecucionIdentidad identidad;
 
 	private final Clock reloj;
 
@@ -85,14 +85,14 @@ public class DatosDemoDev implements ApplicationRunner {
 	private final String claveDemo;
 
 	public DatosDemoDev(UsuarioRepository usuarios, ColegioRepository colegios, PasswordEncoder codificador,
-			AuditoriaService auditoria, PlatformTransactionManager transacciones, Clock reloj,
+			AuditoriaService auditoria, EjecucionIdentidad identidad, Clock reloj,
 			@Value("${spring.datasource.url:}") String urlBaseDatos,
 			@Value("${cuentasclaras.demo.clave:}") String claveDemo) {
 		this.usuarios = usuarios;
 		this.colegios = colegios;
 		this.codificador = codificador;
 		this.auditoria = auditoria;
-		this.transaccion = new TransactionTemplate(transacciones);
+		this.identidad = identidad;
 		this.reloj = reloj;
 		this.urlBaseDatos = urlBaseDatos;
 		this.claveDemo = claveDemo;
@@ -125,7 +125,7 @@ public class DatosDemoDev implements ApplicationRunner {
 
 	private void crear(long colegioId, UsuarioDemo demo) {
 		PoliticaClaves.validar(claveDemo, demo.nombreUsuario());
-		ContextoColegio.en(colegioId, () -> transaccion.executeWithoutResult(estado -> {
+		ContextoColegio.en(colegioId, () -> identidad.ejecutar(() -> {
 			String hash = codificador.encode(claveDemo);
 			Usuario usuario = Usuario.nuevo(demo.nombreUsuario(), demo.nombreCompleto(), null, hash, Set.of(demo.rol()));
 			// Sprint 5: celular de demostración (rango 966, que no usan los apoderados de ejemplo): ahí le llegaría su

@@ -38,6 +38,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.service.EnlacesActivacion;
 
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.VerificacionesContacto;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
+import pe.edu.virgenmaria.cuentasclaras.comun.sistema.PasadaPorColegios;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -125,14 +126,7 @@ public class DespachoMensajes {
 
 	@Scheduled(fixedDelayString = "${cuentasclaras.mensajeria.envio-cada:30s}", initialDelayString = "20s")
 	public void despachar() {
-		for (Long colegio : colegios.activos()) {
-			try {
-				despacharColegio(colegio);
-			}
-			catch (RuntimeException e) {
-				LOG.error("El envío de mensajes falló en el colegio {}: {}", colegio, e.getClass().getSimpleName());
-			}
-		}
+		PasadaPorColegios.recorrer(LOG, "El envío de mensajes", colegios.activos(), this::despacharColegio);
 	}
 
 	/** Una pasada del outbox en un colegio (la usan la tarea programada y las pruebas). @return cuántos salieron */

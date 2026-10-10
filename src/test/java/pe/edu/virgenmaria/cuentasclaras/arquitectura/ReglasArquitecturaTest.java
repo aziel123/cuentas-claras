@@ -15,6 +15,7 @@ import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.MappedSuperclass;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.NativeQuery;
 import org.springframework.data.jpa.repository.Query;
@@ -25,20 +26,18 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.CuentasClarasApplication;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.EslabonCadena;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.EventoAuditoria;
+import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EslabonCadenaRepository;
+import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EventoAuditoriaRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Colegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.model.BaseEntity;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
-
-import jakarta.persistence.MappedSuperclass;
-import org.springframework.security.access.prepost.PreAuthorize;
-import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EslabonCadenaRepository;
-import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EventoAuditoriaRepository;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -74,7 +73,9 @@ class ReglasArquitecturaTest {
 	private static final Set<String> AUTORIZADAS_COMO_SISTEMA = Set.of(
 			BASE + ".seguridad.service.ServicioDetallesUsuario",
 			BASE + ".seguridad.inicial.InicializadorPromotor",
-			BASE + ".seguridad.inicial.DatosDemoDev");
+			BASE + ".seguridad.inicial.DatosDemoDev",
+			// Sprint 7, tanda 2: al arrancar cierra las sesiones de la base de todos los colegios (REINICIO).
+			BASE + ".seguridad.service.sesion.SesionesFirmadas");
 
 	/** Única clase que puede usar JDBC directo: comprueba los permisos de MySQL (paso 9). */
 	private static final String VERIFICADOR_PERMISOS = BASE + ".auditoria.service.VerificadorPermisosBaseDatos";
@@ -96,6 +97,20 @@ class ReglasArquitecturaTest {
 				.check(clases);
 	}
 
+	/**
+	 * Sprint 7, tanda 3 (A10 de OWASP, SSRF): solo los conectores con su lista cerrada de dominios (el OSE y WhatsApp) hacen
+	 * peticiones HTTP salientes. Ninguna URL la escribe una persona.
+	 */
+	@ArchTest
+	static final ArchRule soloLosConectoresHacenPeticionesSalientes = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".comprobantes.service.EmisorNubefact")
+			.and().doNotHaveFullyQualifiedName(BASE + ".comunicacion.proveedor.WhatsAppCloudApi")
+			.and().resideInAPackage(BASE + "..")
+			.should().dependOnClassesThat().resideInAnyPackage("org.springframework.web.client..", "java.net.http..",
+					"org.springframework.web.reactive.function.client..")
+			.orShould().dependOnClassesThat().haveFullyQualifiedName("java.net.HttpURLConnection")
+			.because("una petición saliente a una URL que no es de la lista cerrada permitiría SSRF");
+
 	@ArchTest
 	static final ArchRule soloVerificadorPermisosUsaJdbcTemplate = noClasses()
 			.that().doNotHaveFullyQualifiedName(VERIFICADOR_PERMISOS)
@@ -108,7 +123,10 @@ class ReglasArquitecturaTest {
 			.that().areAnnotatedWith(Entity.class)
 			.and().doNotBelongToAnyOf(Colegio.class, EventoAuditoria.class, EslabonCadena.class,
 					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionBd.class,
-					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionColegio.class)
+					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionColegio.class,
+					pe.edu.virgenmaria.cuentasclaras.operacion.model.Respaldo.class,
+					// Correcciones del sprint 7 (QA-S7-1): la resolución de una alerta de respaldo es de toda la base.
+					pe.edu.virgenmaria.cuentasclaras.operacion.model.ResolucionRespaldo.class)
 			.should().beAssignableTo(BaseEntity.class)
 			.because("BaseEntity aporta colegioId (@TenantId), autoría y versión");
 
@@ -426,7 +444,9 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".panel.service.LlamadasControl#avanceDe", ALERTAS),
 			Map.entry(BASE + ".panel.service.LlamadasControl#sinRespuestaRecientes", ALERTAS),
 			Map.entry(BASE + ".panel.service.LlamadasControl#registradasPorDireccion", ALERTAS),
-			Map.entry(BASE + ".alumnos.service.FamiliasParaLlamada", APROBACION),
+			Map.entry(BASE + ".alumnos.service.FamiliasParaLlamada", "hasAnyRole('PROMOTOR','DIRECTOR','SISTEMA_PANEL')"),
+			// Sprint 7, tanda 2 (sección 3.6): la muestra y sus reemplazos los fija solo sistema.panel.
+			Map.entry(BASE + ".panel.service.FijacionMuestra", "hasRole('SISTEMA_PANEL')"),
 			Map.entry(BASE + ".caja.service.CifrasCaja#pagosDeFamilia", APROBACION));
 
 	/**
@@ -898,9 +918,59 @@ class ReglasArquitecturaTest {
 	/** Actuar como sistema (sin persona detrás) solo desde los procesos: nunca desde un controlador ni un servicio web. */
 	@ArchTest
 	static final ArchRule ejecucionComoSistemaSoloEnProcesos = noClasses()
-			.that().resideOutsideOfPackages(BASE + "..proceso..", BASE + ".comun.sistema..")
+			.that().resideOutsideOfPackages(BASE + "..proceso..", BASE + ".comun.sistema..", BASE + ".comun.muestreo..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".comun.sistema.EjecucionComoSistema")
-			.because("un actor de sistema salta los permisos de las personas: solo lo usan las tareas y los procesos");
+			.because("un actor de sistema salta los permisos de las personas: solo lo usan las tareas, los procesos y la "
+					+ "semilla del muestreo (sistema.muestreo, sprint 7)");
+
+	/**
+	 * Sprint 7, tanda 2 (sección 3.2): la ruta de identidad (conexión de cc_sistema con el contexto de la persona) solo la
+	 * marca EjecucionIdentidad, que además abre su propia transacción y falla si ya hay una.
+	 */
+	@ArchTest
+	static final ArchRule rutaDeIdentidadSoloDesdeEjecucionIdentidad = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".seguridad.service.identidad.EjecucionIdentidad")
+			.and().resideOutsideOfPackage(BASE + ".comun.basedatos..")
+			.should().callMethod(pe.edu.virgenmaria.cuentasclaras.comun.basedatos.RutaConexion.class, "identidad",
+					Supplier.class)
+			.because("escribir la identidad con la conexión de cc_sistema solo se hace por EjecucionIdentidad");
+
+	/**
+	 * Sprint 7, tanda 2 (sección 3.3): las operaciones de identidad (ingreso, sesiones, gestión de usuarios y de accesos,
+	 * cambio de clave, activación, contacto y roles del personal, la bandeja para esos tipos y los inicializadores).
+	 */
+	@ArchTest
+	static final ArchRule ejecucionIdentidadSoloEnLasClasesDeIdentidad = noClasses()
+			.that().resideOutsideOfPackages(BASE + ".seguridad.service..", BASE + ".seguridad.inicial..")
+			.and().doNotHaveFullyQualifiedName(BASE + ".alumnos.service.ServicioAccesoApoderados")
+			.and().doNotHaveFullyQualifiedName(BASE + ".alumnos.inicial.DatosDemoApoderadoDev")
+			.and().doNotHaveFullyQualifiedName(BASE + ".aprobaciones.service.BandejaAprobaciones")
+			.should().dependOnClassesThat()
+			.haveFullyQualifiedName(BASE + ".seguridad.service.identidad.EjecucionIdentidad")
+			.because("la conexión de cc_sistema escribe cuentas, claves, roles y sesiones: solo desde la identidad");
+
+	/** Sprint 7, tanda 2 (sección 3.4): quien resuelve una aprobación firma con su sesión (en MySQL, sin firma: 1644). */
+	@ArchTest
+	static final ArchRule quienResuelveFirma = classes()
+			.that().haveFullyQualifiedName(BASE + ".aprobaciones.service.BandejaAprobaciones")
+			.or().haveFullyQualifiedName(BASE + ".cobranza.service.ManejadorDescuento")
+			.or().haveFullyQualifiedName(BASE + ".caja.service.ManejadorCierreCaja")
+			.or().haveFullyQualifiedName(BASE + ".cobranza.service.ServicioPlanesPension")
+			.or().haveFullyQualifiedName(BASE + ".cobranza.service.ServicioSaldoInicial")
+			.or().haveFullyQualifiedName(BASE + ".conciliacion.service.ServicioExtractos")
+			.or().haveFullyQualifiedName(BASE + ".recaudacion.service.ServicioRecaudacion")
+			.or().haveFullyQualifiedName(BASE + ".conciliacion.service.ServicioPartidas")
+			.or().haveFullyQualifiedName(BASE + ".conciliacion.service.ManejadorPartidaManual")
+			.or().haveFullyQualifiedName(BASE + ".conciliacion.service.ServicioCierreMensual")
+			.or().haveFullyQualifiedName(BASE + ".colegio.service.ServicioFeriados")
+			.or().haveFullyQualifiedName(BASE + ".familias.service.ServicioAvisosFamilia")
+			.or().haveFullyQualifiedName(BASE + ".matricula.service.ServicioRenovacionFamilia")
+			.or().haveFullyQualifiedName(BASE + ".matricula.service.ServicioCampanaRenovacion")
+			.or().haveFullyQualifiedName(BASE + ".caja.service.ServicioVerificacionBancaria")
+			.or().haveFullyQualifiedName(BASE + ".panel.service.LlamadasControl")
+			.or().haveFullyQualifiedName(BASE + ".operacion.service.ResolucionesRespaldo")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".seguridad.service.sesion.FirmaSesion")
+			.because("cada aprobación de una persona lleva la firma de su sesión (sección 3.4 del sprint 7)");
 
 	/** La pasarela simulada solo existe en dev, test y piloto (nunca en prod). */
 	@ArchTest

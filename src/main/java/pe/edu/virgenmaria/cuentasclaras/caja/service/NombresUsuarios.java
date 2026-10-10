@@ -33,6 +33,7 @@ public class NombresUsuarios {
 					case AUDITORIA -> "Huella de la bitácora (automático)";
 					case MATRICULA -> "Matrícula del año siguiente (automático)";
 					case PANEL -> "Panel del colegio (automático)";
+					case MUESTREO -> "Muestreo al azar (automático)";
 				};
 			}
 		}

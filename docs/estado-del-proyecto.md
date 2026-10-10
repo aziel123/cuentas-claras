@@ -1,6 +1,6 @@
 # Estado del proyecto · Cuentas Claras
 
-> Última actualización: 8 de octubre de 2026.
+> Última actualización: 9 de octubre de 2026 (correcciones del sprint 7: versión 1 terminada).
 > Resumen para retomar el trabajo: qué está hecho, cómo probarlo y qué hay que decidir con el colegio.
 
 ## Avance
@@ -13,7 +13,8 @@
 | 3 · Caja (pagos, comprobantes, anulaciones, descuentos, cierre ciego, conciliación) | ✅ Terminado, auditado y corregido | `claude/sprint-3-correcciones` | 967 |
 | 4 · Cero digitación (pago en línea, comprobante automático, recaudación bancaria, conciliación automática) | ✅ Terminado, auditado y corregido | `claude/sprint-4-cero-digitacion` | 1429 |
 | 5 · Familias y matrícula 2027 (avisos por WhatsApp, acceso directo al titular, huella diaria, portal, renovación 2027, feriados, cierre mensual) | ✅ Terminado, auditado y corregido | `claude/sprint-5-familias` | 1694 (más las de MySQL real, que corren en el CI) |
-| 6 · Panel de la promotora (panel, reportes y Excel, resumen diario, alertas y aprobaciones en el celular, contacto del personal, llamada de control) | Implementado en 3 tandas, auditado y corregido (`docs/arquitectura/sprint-6-correcciones.md`, V23, 63 triggers) | `claude/sprint-6-panel-promotora` | 1883 (92 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
+| 6 · Panel de la promotora (panel, reportes y Excel, resumen diario, alertas y aprobaciones en el celular, contacto del personal, llamada de control) | Implementado en 3 tandas, auditado y corregido (`docs/arquitectura/sprint-6-correcciones.md`, V23, 63 triggers) | `main` (PR #4) | 1883 (92 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
+| 7 · Endurecimiento y entrega (respaldos cifrados y restauración probada, monitoreo, base de datos endurecida, seguridad web, Ley 29733, manuales y capacitación) | ✅ Terminado, auditado y corregido (`docs/arquitectura/sprint-7-correcciones.md`, V24 a V27, 75 triggers) | `claude/sprint-7-endurecimiento` | 2226 (120 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
 
 El sprint 4 se implementó en 3 tandas verificadas, cada una con su migración y probada también contra MySQL 8 real, y luego se corrigió todo lo que encontraron la auditoría antifraude y QA:
 
@@ -23,6 +24,15 @@ El sprint 4 se implementó en 3 tandas verificadas, cada una con su migración y
 | 2 | Recaudación bancaria: archivo del banco confirmado a ciegas y aplicado por el sistema | V14 | 1101 |
 | 3 | Extracto bancario encadenado y conciliación automática | V15 | 1175 (44 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL`) |
 | Correcciones | Los 11 hallazgos de la auditoría y los 6 de QA (`docs/arquitectura/sprint-4-correcciones.md`) | V16 | 1429 (46 de MySQL real) |
+
+El sprint 7 va en 3 tandas (`docs/arquitectura/sprint-7-endurecimiento.md`, con la sección «Implementación» de cada una):
+
+| Tanda | Qué trae | Migración | Triggers | Pruebas al cerrarla |
+|---|---|---|---|---|
+| 1 | Respaldo diario cifrado fuera del servidor, restauración automática en el CI, logs JSON enmascarados, health checks, alertas técnicas y vigilante externo | V24 | 64 | 1920 (93 de MySQL real) |
+| 2 | Base de datos endurecida: usuario `cc_sistema` para los procesos y la identidad, firma de sesión en cada aprobación, roles de Promotoría y Dirección solo con solicitud, huellas de triggers y funciones | V25 | 73 | 1971 (105 de MySQL real) |
+| 3 | Seguridad web (cabeceras, cookie `__Host-`, límite de ingresos por conexión, sesión de 10 horas, IDOR, CSRF, archivos hostiles, dependencias), Ley 29733 (registro de accesos, «Mis datos», pedidos con plazo, aviso de privacidad) y documentos de entrega | V26 | 73 | 2035 (107 de MySQL real) |
+| Correcciones | La auditoría (S7-A1: anular un pago sin firma; S7-M1: rol anidado; S7-B1: registro de la caja) y los 8 hallazgos y 2 observaciones de QA (`docs/arquitectura/sprint-7-correcciones.md`) | V27 | 75 | 2226 (120 de MySQL real) |
 
 Las ramas están **apiladas**: cada una parte de la anterior y contiene todo su trabajo. La más completa es `claude/sprint-5-familias`. Los sprints 1 a 4 están en revisión en el PR #1 hacia `main` (CI en verde, también el job de MySQL 8). El sprint 5 pasó el CI completo en un PR en borrador que se cerró sin merge; se propone a `main` cuando se una el PR #1.
 
@@ -37,7 +47,7 @@ Los diseños están en `docs/arquitectura/`.
 ## Qué hace hoy la plataforma
 
 ### Seguridad y control
-- Inicio de sesión con bloqueo tras 5 intentos fallidos. Los intentos en paralelo no evitan el bloqueo.
+- Inicio de sesión: tras 5 intentos fallidos con un usuario desde una conexión, esa conexión espera 15 minutos (sprint 7); la cuenta se bloquea con 15 intentos fallidos desde varias conexiones. Los intentos en paralelo no evitan el bloqueo.
 - 6 roles con permisos verificados en el servidor y combinaciones de roles prohibidas (Caja no se combina con Dirección, Promotoría ni Administración).
 - Cada colegio ve solo sus datos. La base de datos también impide referencias cruzadas entre colegios.
 - **Bitácora de auditoría inmutable** con sello criptográfico encadenado y botón "Verificar integridad". La promotora puede anotar la "huella" para detectar si la bitácora fue recortada.
@@ -90,6 +100,15 @@ Diseño en `docs/arquitectura/sprint-5-familias.md` y correcciones en `sprint-5-
 - **Recordatorios:** 3 días antes y el día hábil siguiente, de lunes a sábado de 08:00 a 20:00, sin mencionar lo académico. El apoderado los puede apagar; los avisos de pago no.
 - **Feriados:** los 16 nacionales en el código; los días no laborables extra los propone un rol y los aprueba otro, con tope.
 - **Muestra de caja con semilla secreta** y **cierre bancario mensual a ciegas** contra el estado de cuenta oficial.
+
+### Endurecimiento y entrega (sprint 7)
+- **Respaldos:** diario a las 02:30 y antes de cada despliegue, cifrado con `age` para dos destinatarios (Promotoría y el responsable técnico) y guardado fuera del servidor. El manifiesto ancla la bitácora y cuenta las filas de las tablas de solo inserción: el respaldo siguiente avisa si alguien borró algo. El CI restaura cada respaldo en un MySQL aparte, verifica la cadena de la bitácora y arranca la aplicación sobre la copia.
+- **Monitoreo sin servicios pagos:** logs en JSON sin datos personales (DNI, celulares, correos y el valor de un «Duplicate entry» salen enmascarados), un código de error en vez del mensaje, alertas técnicas por correo, `/panel/sistema` para Promotoría y un vigilante externo en GitHub.
+- **Base de datos endurecida:** con la clave de `cc_app` ya no se crean cuentas, no se cambian claves ni roles, no se firma como el sistema y no se aprueba a nombre de otra persona: cada aprobación lleva la firma de la sesión de quien aprueba. Prod no arranca si un trigger o una función de la base no es el de esta versión.
+- **Correcciones de la auditoría y QA:** ninguna operación de dinero (anulación de un pago y su nota de crédito, devoluciones, contracargos, correcciones, reaperturas de caja, anulación de cuotas, ingresos por revisar, parejas manuales) se completa sin SU solicitud aprobada y firmada, y una solicitud ya no se puede insertar aprobada; desactivar o reactivar una cuenta de Promotoría o Dirección se pide y lo aprueba otra persona; la primera Dirección sin solicitud, una sola vez por colegio; un rol anidado en `cc_negocio` no deja arrancar prod y el simulacro semanal relee los GRANT; la alerta «Faltan filas» sigue hasta que Promotoría la resuelve con motivo; los procesos que fallan en algún colegio dejan de latir; el monitoreo mira las dos conexiones; las alertas técnicas se reintentan; la caja, el estado de cuenta y el cronograma quedan en el registro de accesos; «Mis datos» ya no muestra los datos de otro apoderado; los logs ocultan el carné de extranjería y más formatos de celular.
+- **Seguridad web:** HSTS de 1 año, cookie `__Host-CCSESION`, Cross-Origin-Opener-Policy y Cross-Origin-Resource-Policy en toda respuesta; desde una misma conexión, 5 intentos fallidos con un usuario o 20 con cualquiera y esa conexión espera 15 minutos (un tercero ya no bloquea la cuenta de la promotora); la sesión dura como máximo 10 horas; una prueba recorre las 132 rutas con id contra otra familia y otro colegio; todo POST exige CSRF; ninguna dependencia con una vulnerabilidad crítica o alta con arreglo (Tomcat y Jackson subidos a sus parches).
+- **Ley 29733:** queda registrado quién del personal vio datos personales (fichas, búsquedas, morosos, llamada de control, importación y cambios de contacto) y Promotoría lo ve en la ficha de la familia y en «Quién vio datos personales», con alerta si alguien ve más de 50 fichas en un día; las familias ven «Mis datos» en el portal y piden acceso, rectificación, cancelación u oposición por «¿Algo no cuadra?», con plazo y alertas; aviso de privacidad público que la familia acepta al activar su cuenta; reporte de datos con plazo vencido. Los plazos los confirma el asesor legal.
+- **Entrega:** manuales de una página por rol (`docs/manuales/`), guion de 9 videos, plan de capacitación, acta de conformidad y acta del simulacro de restauración (`docs/entrega/` y `docs/operacion/`).
 
 ### Panel de la promotora (sprint 6)
 Diseño en `docs/arquitectura/sprint-6-panel-promotora.md`, con una sección de implementación por tanda (migraciones V21 y
@@ -197,6 +216,36 @@ Todas tienen un valor por defecto ya implementado y se pueden cambiar.
 
 La lista completa está en los documentos de `docs/arquitectura/`, incluidas la sección 16 de `sprint-3-caja.md` y la 17 de `sprint-4-cero-digitacion.md`.
 
+### Sprint 7 (por confirmar; valores por defecto del diseño, sección 18)
+| # | Tema | Valor actual |
+|---|---|---|
+| 82 | Usuario de base para los procesos (decisión 35) | Uno, `cc_sistema`, para los procesos y la identidad |
+| 83 | Duración máxima de una sesión | 10 horas aunque haya actividad, y 30 minutos de inactividad |
+| 84 | Roles que asigna Promotoría sin aprobación | ADMINISTRACION, CAJA y DOCENTE; PROMOTOR y DIRECTOR con solicitud aprobada por otra persona |
+| 85 | Alta de una cuenta de Promotoría o Dirección | Nace sin ese rol y se le asigna con la solicitud |
+| 86 | Segundo factor (decisión 79) | No: firma de sesión, sesión única, 30 minutos de inactividad y 10 horas como máximo |
+| 87 | Muestra de la llamada de control | Lunes a las 00:10, la fija el sistema |
+| 88 | Respaldo y ventana de despliegue | Diario a las 02:30 y antes de cada despliegue; despliegues después de las 21:00 o en fin de semana |
+| 89 | Dónde se guardan los respaldos | Almacenamiento de objetos con bloqueo de objetos, a nombre del colegio; 35 diarios y 12 mensuales |
+| 90 | Quién puede abrir un respaldo | Dos claves privadas: Promotoría y el responsable técnico |
+| 91 | Simulacros de restauración | Semanal y automático; mensual y presencial con Promotoría |
+| 92 | Copia física adicional | No |
+| 93 | A quién llegan las alertas técnicas | Al responsable técnico; «sin respaldo» y «faltan filas» también a Promotoría |
+| 94 | Vigilante externo | Workflow de GitHub cada 15 minutos |
+| 95 | Conservación de los logs técnicos | 30 días |
+| 96 | Registro de quién ve datos personales | Fichas, búsquedas, morosos, llamada de control, importación y cambios de contacto; 2 años; alerta con más de 50 fichas al día |
+| 97 | Pedidos sobre datos personales | «Mis datos» al instante; pedidos por «¿Algo no cuadra?»; 20 días hábiles el acceso y 10 lo demás, con aviso a los 7 (a confirmar por el asesor legal) |
+| 98 | Plazos de conservación | Lo financiero mientras no prescriba (lo fija el contador); contactos de familias que se fueron sin deuda, 1 año (a confirmar por el asesor legal) |
+| 99 | Aviso de privacidad | Lo redacta y aprueba el asesor legal; el sistema lo muestra (borrador en `/privacidad`) y registra su aceptación |
+| 100 | Inscripción de los bancos de datos y flujo transfronterizo | Trámite del colegio con su asesor, antes de la matrícula 2027 |
+| 101 | Responsable de los datos personales | Dirección |
+| 102 | Dependencias vulnerables | OSV-Scanner en cada PR (bloquea CRÍTICA o ALTA con arreglo) y Dependabot cada semana |
+| 103 | Cookie y HSTS | `__Host-CCSESION`; HSTS de 1 año con subdominios, sin `preload` (exige https) |
+| 104 | Intentos de ingreso por conexión | 5 con un usuario o 20 con cualquiera en 15 minutos; la cuenta se bloquea con 15 desde varias conexiones |
+| 105 | Fechas de la capacitación | Semana del 25 de enero (sesiones S1 a S6 de `docs/entrega/capacitacion.md`) |
+| 106 | Publicación de los videos | Sin listar, en la cuenta del colegio, con datos de demostración |
+| 107 | Soporte después del acta | 30 días, por WhatsApp y correo, en horario escolar |
+
 ## Pendiente fuera del código
 - [ ] Reunión de descubrimiento con el colegio (kit en `docs/ux/`).
 - [ ] Trámites largos: verificación de WhatsApp Business, proveedor de comprobantes electrónicos (OSE), pasarela de pagos, Yape o Plin empresarial.
@@ -205,6 +254,12 @@ La lista completa está en los documentos de `docs/arquitectura/`, incluidas la 
 - [x] Auditoría del sprint 4 (`auditor-seguridad-antifraude` y `qa-tester`) y sus correcciones (`docs/arquitectura/sprint-4-correcciones.md`).
 - [ ] Pedir al banco un extracto y un archivo de recaudación reales (anonimizados) para construir sus adaptadores, y preguntar por H2H y por la glosa del abono de la recaudación.
 - [ ] Elegir la pasarela y confirmar si tiene API de liquidaciones.
+- [x] Sprint 7: QA (`qa-tester`) y auditoría (`auditor-seguridad-antifraude`) de las 3 tandas y sus correcciones (`docs/arquitectura/sprint-7-correcciones.md`).
+- [ ] Sprint 7: el PR hacia `main` (CI completo: jobs `mysql`, `respaldo` y `dependencias`).
+- [ ] Asesor legal: confirmar los plazos de la Ley 29733 (20 y 10 días hábiles, 48 horas, 1 y 2 años), redactar el aviso de privacidad y confirmar qué se responde a un pedido de cancelación.
+- [ ] El colegio: inscribir sus bancos de datos y declarar el flujo transfronterizo (Meta y, si aplica, el hosting); nombrar al responsable de los datos personales.
+- [ ] Contratar el almacenamiento de objetos con bloqueo de objetos y generar las dos claves `age` (Promotoría y responsable técnico).
+- [ ] Primer simulacro presencial de restauración en el servidor del colegio (`docs/operacion/acta-simulacro-restauracion.md`), capacitación (S1 a S6), grabar los videos 1, 2, 4 y 7 y firmar el acta de conformidad (`docs/entrega/`).
 
 ## Riesgos conocidos
 - La aplicación está pensada para **una sola instancia**: las sesiones y algunos límites viven en memoria.
@@ -216,9 +271,13 @@ La lista completa está en los documentos de `docs/arquitectura/`, incluidas la 
 - **Extracto de varios días:** solo se confirma a ciegas el saldo de cierre; un abono y un cargo inventados que se compensan dentro del mismo extracto los detecta la alerta CRÍTICA de compensación (mismo monto) o quedan como cargos sin explicar que revisa otra persona. Conviene subir el extracto a diario.
 - El muestreo de las verificaciones de caja (sprint 3) todavía usa la fecha como semilla; el del extracto ya usa una semilla secreta.
 - **Colusión entre quien sube y quien confirma** el extracto o la recaudación: queda fuera del control. La mitigan la bitácora, el archivo original con su SHA-256 y el estado de cuenta oficial del banco. Se recomienda un cierre mensual en el que el contador compare a ciegas los abonos del mes con el estado de cuenta.
-- `cc_app` puede escribir cualquier texto en `creado_por`: con sus credenciales, alguien podría firmar como `sistema.conciliacion`. Lo frenan los triggers (una verificación automática exige una partida confirmada sobre un extracto confirmado) y la bitácora.
+- Los riesgos aceptados para la entrega de la versión 1 están en `docs/arquitectura/sprint-7-correcciones.md` («Riesgos residuales aceptados para la entrega»); van al acta de conformidad.
+- Desde el sprint 7 (tanda 2), con la clave de `cc_app` ya no se firma como `sistema.*` ni se aprueba a nombre de otra persona. Lo que una persona hace por sí misma (un cobro, un pedido) sí se puede registrar con la clave de `cc_app` «como la cajera X»: lo detectan el aviso a la familia, el cierre a ciegas, la conciliación y la bitácora sin su evento.
+- Quien toma el servidor de la aplicación tiene las claves de `cc_app` y `cc_sistema`, la clave HMAC y los secretos de las sesiones abiertas: el sprint 7 lo hace visible (huella diaria, manifiestos de respaldo que no se pueden alterar, avisos a las familias), no lo evita.
+- El límite de intentos de ingreso, los latidos y las sesiones viven en memoria (una sola instancia). Un ataque desde 3 conexiones o más todavía puede bloquear una cuenta 15 minutos (decisión 104).
+- Ley 29733: los plazos salen de fuentes secundarias (no del texto oficial del DS 016-2024-JUS) y los confirma el asesor legal; la anonimización de los contactos todavía es manual (reporte «Datos con plazo vencido»).
 - Los formatos reales de los bancos y de la pasarela no se pudieron verificar: el extracto y la recaudación usan un formato genérico hasta tener un archivo de ejemplo.
 - Los feriados no se consideran días hábiles todavía: un feriado puede adelantar una alerta de «no aparece en el banco» o «sin abono»; se resuelve con nota.
-- **El panel y sus controles dependen de que la promotora los mire:** el resumen diario, las alertas al celular y la llamada de control semanal no sirven si nadie los lee o nadie llama. Lo mitigan la alerta «el resumen no salió», el recordatorio del sábado de las llamadas que faltan y la capacitación (`docs/operacion/guia-promotora.md`).
+- **El panel y sus controles dependen de que la promotora los mire:** el resumen diario, las alertas al celular y la llamada de control semanal no sirven si nadie los lee o nadie llama. Lo mitigan la alerta «el resumen no salió», el recordatorio del sábado de las llamadas que faltan y la capacitación (`docs/manuales/promotoria.md`).
 - **La llamada de control** detecta efectivo no registrado solo en la muestra de la semana (3 familias). Una familia que confirma de memoria un monto equivocado da un falso «Confirma»: por eso se pregunta primero y se compara después.
 - El comprobante simulado no tiene validez tributaria: mientras no se active el OSE, el colegio sigue emitiendo su comprobante legal también por los pagos en línea y por banco.

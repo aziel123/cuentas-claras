@@ -10,6 +10,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.EjecucionComoSistema;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.RecorridoColegios;
 import pe.edu.virgenmaria.cuentasclaras.panel.service.DifusionAvisos;
+import pe.edu.virgenmaria.cuentasclaras.comun.sistema.PasadaPorColegios;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -41,14 +42,7 @@ public class AvisosPromotoria {
 	@Scheduled(cron = "${cuentasclaras.panel.avisos-cada:0 */15 7-20 * * *}", zone = ConfiguracionTiempo.ZONA)
 	public void ejecutar() {
 		LocalDate hoy = LocalDate.now(reloj);
-		for (Long colegio : colegios.activos()) {
-			try {
-				enColegio(colegio, hoy);
-			}
-			catch (RuntimeException e) {
-				LOG.error("Los avisos a Promotoría fallaron en el colegio {}: {}", colegio, e.getClass().getSimpleName());
-			}
-		}
+		PasadaPorColegios.recorrer(LOG, "Los avisos a Promotoría", colegios.activos(), colegio -> enColegio(colegio, hoy));
 	}
 
 	/** Una pasada en un colegio (la tarea programada y las pruebas). @return los avisos publicados */

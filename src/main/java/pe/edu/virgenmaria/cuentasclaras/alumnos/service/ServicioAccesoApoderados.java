@@ -20,7 +20,10 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.AccesoEnviado;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PropositoEnlace;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.EnvioEnlaceSolicitado;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Enmascarar;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.MotivoCierreSesion;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.SesionesFirmadas;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.EnlacesActivacion;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.GeneradorClaveTemporal;
@@ -70,11 +73,19 @@ public class ServicioAccesoApoderados {
 
 	private final org.springframework.context.ApplicationEventPublisher eventos;
 
+	/** Sprint 7, tanda 2: la cuenta se crea, se restablece o se desactiva por la ruta de identidad (cc_sistema). */
+	private final EjecucionIdentidad identidad;
+
+	private final SesionesFirmadas sesionesFirmadas;
+
 	public ServicioAccesoApoderados(ApoderadoRepository apoderados, UsuarioRepository usuarios,
 			ServicioDetallesUsuario detalles, PasswordEncoder codificador, GeneradorClaveTemporal generador,
 			PropiedadesSeguridad propiedades, AuditoriaService auditoria, PlatformTransactionManager transacciones,
 			Clock reloj, pe.edu.virgenmaria.cuentasclaras.seguridad.service.SesionesUsuario sesiones,
-			EnlacesActivacion enlaces, org.springframework.context.ApplicationEventPublisher eventos) {
+			EnlacesActivacion enlaces, org.springframework.context.ApplicationEventPublisher eventos,
+			EjecucionIdentidad identidad, SesionesFirmadas sesionesFirmadas) {
+		this.identidad = identidad;
+		this.sesionesFirmadas = sesionesFirmadas;
 		this.eventos = eventos;
 		this.sesiones = sesiones;
 		this.enlaces = enlaces;
@@ -123,7 +134,7 @@ public class ServicioAccesoApoderados {
 					+ "apoderado ya tiene cuenta o si su documento está repetido.");
 		}
 		try {
-			return transaccion.execute(t -> {
+			return identidad.como(() -> {
 				// Releído en ESTA transacción (el de arriba ya no tiene sesión para su familia).
 				Apoderado vigente = apoderados.findById(apoderadoId).filter(Apoderado::isActivo)
 						.orElseThrow(() -> new RecursoNoEncontradoException("Apoderado no encontrado"));
@@ -156,7 +167,7 @@ public class ServicioAccesoApoderados {
 	 */
 	@PreAuthorize("hasRole('PROMOTOR')")
 	public AccesoEnviado restablecerAcceso(Long apoderadoId) {
-		AccesoEnviado creado = transaccion.execute(t -> {
+		AccesoEnviado creado = identidad.como(() -> {
 			Usuario usuario = usuarios.findByApoderadoId(apoderadoId)
 					.orElseThrow(() -> new ReglaNegocioException("Este apoderado no tiene cuenta en línea."));
 			if (!usuario.isActivo()) {
@@ -176,6 +187,7 @@ public class ServicioAccesoApoderados {
 							+ "El enlace nuevo va a " + destino(apoderado) + " y vence el "
 							+ Calendario.formatear(vence.toLocalDate()) + ".");
 			eventos.publishEvent(new EnvioEnlaceSolicitado(usuario.getId(), PropositoEnlace.APODERADO, apoderadoId));
+			sesionesFirmadas.cerrarDe(usuario.getId(), MotivoCierreSesion.CUENTA_CAMBIADA);
 			return enviado(usuario, apoderado, vence);
 		});
 		sesiones.expirar(creado.usuarioId());
@@ -198,11 +210,13 @@ public class ServicioAccesoApoderados {
 	/** Desactiva la cuenta en línea del apoderado (con motivo, resaltado en la bitácora). */
 	public void quitarAcceso(Long apoderadoId, String motivo) {
 		String texto = Motivo.exigir(motivo);
-		Long usuarioId = transaccion.execute(t -> {
+		Long usuarioId = identidad.como(() -> {
 			Usuario usuario = usuarios.findByApoderadoId(apoderadoId)
 					.orElseThrow(() -> new ReglaNegocioException("Este apoderado no tiene cuenta en línea."));
 			LocalDateTime ahora = LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS);
 			usuario.desactivar(SecurityContextHolder.getContext().getAuthentication().getName(), ahora);
+			usuarios.saveAndFlush(usuario);
+			sesionesFirmadas.cerrarDe(usuario.getId(), MotivoCierreSesion.CUENTA_CAMBIADA);
 			auditoria.registrar(AccionAuditoria.ACCESO_APODERADO_QUITADO, "usuario", usuario.getId().toString(), "activo",
 					"desactivado", "Se quitó el acceso en línea de " + usuario.getNombreCompleto() + ". Motivo: " + texto);
 			return usuario.getId();

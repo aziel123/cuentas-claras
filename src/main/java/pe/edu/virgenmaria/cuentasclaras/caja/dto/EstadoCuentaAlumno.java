@@ -9,7 +9,7 @@ import java.util.List;
  * comprobante, cajera, estado y nota de crédito) y sus descuentos. {@code puedeSolicitar}: quien mira es de
  * Administración y puede pedir anulaciones.
  */
-public record EstadoCuentaAlumno(Long alumnoId, String alumno, String documento, String familia, String grado,
+public record EstadoCuentaAlumno(Long alumnoId, String alumno, String documento, Long familiaId, String familia, String grado,
 		LocalDate hoy, List<Cuota> cuotas, BigDecimal totalMonto, BigDecimal totalDescuento, BigDecimal totalPagado,
 		BigDecimal totalSaldo, List<PagoAlumno> pagos, List<DescuentoAlumno> descuentos, boolean puedeSolicitar) {
 

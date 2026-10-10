@@ -10,6 +10,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.sistema.EjecucionComoSistema;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.RecorridoColegios;
 import pe.edu.virgenmaria.cuentasclaras.panel.model.ResumenDiario;
 import pe.edu.virgenmaria.cuentasclaras.panel.service.ResumenesDiarios;
+import pe.edu.virgenmaria.cuentasclaras.comun.sistema.PasadaPorColegios;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -46,14 +47,7 @@ public class ResumenDiarioTarea {
 	@Scheduled(cron = "${cuentasclaras.panel.resumen-diario:0 30 19 * * *}", zone = ConfiguracionTiempo.ZONA)
 	public void ejecutar() {
 		LocalDate hoy = LocalDate.now(reloj);
-		for (Long colegio : colegios.activos()) {
-			try {
-				enColegio(colegio, hoy);
-			}
-			catch (RuntimeException e) {
-				LOG.error("El resumen diario falló en el colegio {}: {}", colegio, e.getClass().getSimpleName());
-			}
-		}
+		PasadaPorColegios.recorrer(LOG, "El resumen diario", colegios.activos(), colegio -> enColegio(colegio, hoy));
 	}
 
 	/** El resumen de un día en un colegio (lo llama la tarea programada; las pruebas, directamente). */

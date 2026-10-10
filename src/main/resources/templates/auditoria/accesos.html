@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Quién vio datos personales', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="auditoria-accesos">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Auditoría · Ley 29733</p>
+			<h1>Quién vio datos personales</h1>
+			<p class="secundario">Cada vez que alguien del colegio abre la ficha de una familia o de un alumno, busca alumnos, ve
+				la lista de morosos, la llamada de control, una importación o un cambio de contacto, queda aquí. Nadie puede
+				borrarlo ni cambiarlo. Las familias no aparecen cuando ven sus propios datos.</p>
+		</div>
+		<a class="btn btn-secundario" th:href="@{/auditoria/datos-vencidos}">Datos con plazo vencido</a>
+	</div>
+
+	<section class="tarjeta" aria-labelledby="titulo-accesos">
+		<h2 id="titulo-accesos">Consultas</h2>
+		<form class="filtros" method="get" th:action="@{/auditoria/accesos}">
+			<div class="campo">
+				<label for="usuarioId">Persona</label>
+				<select class="input" id="usuarioId" name="usuarioId">
+					<option value="">Todas</option>
+					<option th:each="p : ${personal}" th:value="${p.id}" th:text="${p.nombre}"
+						th:selected="${filtro.usuarioId == p.id}">María Torres (promotora)</option>
+				</select>
+			</div>
+			<div class="campo">
+				<label for="desde">Desde</label>
+				<input class="input" type="date" id="desde" name="desde" th:value="${filtro.desde}">
+			</div>
+			<div class="campo">
+				<label for="hasta">Hasta</label>
+				<input class="input" type="date" id="hasta" name="hasta" th:value="${filtro.hasta}">
+			</div>
+			<button type="submit" class="btn btn-secundario">Filtrar</button>
+		</form>
+		<p class="ayuda">Sin fechas, los últimos 7 días. Como máximo 92 días y las 500 consultas más recientes.</p>
+
+		<th:block th:if="${error != null}">
+			<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+		</th:block>
+
+		<th:block th:if="${accesos != null}">
+			<th:block th:if="${accesos.empty}">
+				<div th:replace="~{fragments/componentes :: estadoVacio('Nadie vio datos personales con estos filtros', 'Prueba con otra persona o un rango de fechas más amplio.')}"></div>
+			</th:block>
+			<table class="tabla" th:unless="${accesos.empty}">
+				<caption class="solo-lectores">Consultas a datos personales, de la más reciente a la más antigua. Horas de Lima.</caption>
+				<thead>
+					<tr><th scope="col">Fecha y hora</th><th scope="col">Quién</th><th scope="col">Pantalla</th><th scope="col">Familia o alumno</th><th scope="col">Filas</th><th scope="col">IP</th></tr>
+				</thead>
+				<tbody>
+					<tr th:each="a : ${accesos}" data-acceso>
+						<td data-etiqueta="Fecha y hora" class="num" th:text="${#temporals.format(a.fecha, 'dd/MM/yyyy HH:mm:ss')}">02/10/2026 08:15:30</td>
+						<td data-etiqueta="Quién">
+							<span th:text="${a.nombreCompleto}">Lucía Ramos</span>
+							<small class="secundario bloque" th:text="${a.persona}">caja</small>
+						</td>
+						<td data-etiqueta="Pantalla" th:text="${a.pantalla}">Ficha de la familia</td>
+						<td data-etiqueta="Familia o alumno">
+							<span th:if="${a.familia != null}" class="bloque" th:text="${a.familia}">Familia Quispe</span>
+							<span th:if="${a.alumno != null}" class="bloque secundario" th:text="${a.alumno}">Mateo Quispe</span>
+							<span th:if="${a.familia == null and a.alumno == null}">—</span>
+						</td>
+						<td data-etiqueta="Filas" class="num" th:text="${a.cantidad}">1</td>
+						<td data-etiqueta="IP" class="num" th:text="${a.ip} ?: '—'">127.0.0.1</td>
+					</tr>
+				</tbody>
+			</table>
+		</th:block>
+	</section>
+</main>
+</body>
+</html>

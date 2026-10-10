@@ -72,23 +72,41 @@ public class UsuarioController {
 	@PostMapping("/{id}/roles")
 	public String cambiarRoles(@PathVariable Long id, @Valid CambiarRolesRequest solicitud, BindingResult validacion,
 			RedirectAttributes avisos) {
-		return ejecutar(id, validacion, avisos, () -> servicio.cambiarRoles(id, solicitud),
-				"Listo: se cambiaron los roles. Sus sesiones abiertas se cerraron.");
+		// Sprint 7, tanda 2: dar o quitar Promotoría o Dirección se pide; lo aprueba otra persona en la bandeja.
+		String[] exito = { "Listo: se cambiaron los roles. Sus sesiones abiertas se cerraron." };
+		return ejecutar(id, validacion, avisos, () -> {
+			if (servicio.cambiarRoles(id, solicitud)) {
+				exito[0] = "Listo: se pidió el cambio de roles. Lo aprueba otra persona de Promotoría o Dirección en la "
+						+ "bandeja de aprobaciones; hasta entonces los roles no cambian.";
+			}
+		}, exito);
 	}
 
 	@PostMapping("/{id}/desactivar")
 	public String desactivar(@PathVariable Long id, @Valid MotivoRequest solicitud, BindingResult validacion,
 			RedirectAttributes avisos) {
-		return ejecutar(id, validacion, avisos, () -> servicio.desactivar(id, solicitud.motivo()),
-				"Listo: el usuario quedó desactivado y ya no puede ingresar.");
+		// Correcciones del sprint 7: una cuenta de Promotoría o Dirección se pide; la aprueba otra persona.
+		String[] exito = { "Listo: el usuario quedó desactivado y ya no puede ingresar." };
+		return ejecutar(id, validacion, avisos, () -> {
+			if (servicio.desactivar(id, solicitud.motivo())) {
+				exito[0] = PEDIDO_ESTADO;
+			}
+		}, exito);
 	}
 
 	@PostMapping("/{id}/reactivar")
 	public String reactivar(@PathVariable Long id, @Valid MotivoRequest solicitud, BindingResult validacion,
 			RedirectAttributes avisos) {
-		return ejecutar(id, validacion, avisos, () -> servicio.reactivar(id, solicitud.motivo()),
-				"Listo: el usuario puede volver a ingresar.");
+		String[] exito = { "Listo: el usuario puede volver a ingresar." };
+		return ejecutar(id, validacion, avisos, () -> {
+			if (servicio.reactivar(id, solicitud.motivo())) {
+				exito[0] = PEDIDO_ESTADO;
+			}
+		}, exito);
 	}
+
+	private static final String PEDIDO_ESTADO = "Listo: se pidió el cambio. Es una cuenta de Promotoría o Dirección: lo "
+			+ "aprueba otra persona de Promotoría o Dirección en la bandeja de aprobaciones; hasta entonces no cambia.";
 
 	@PostMapping("/{id}/desbloquear")
 	public String desbloquear(@PathVariable Long id, @Valid MotivoRequest solicitud, BindingResult validacion,
@@ -117,13 +135,18 @@ public class UsuarioController {
 
 	private static String ejecutar(Long id, BindingResult validacion, RedirectAttributes avisos, Runnable accion,
 			String exito) {
+		return ejecutar(id, validacion, avisos, accion, new String[] { exito });
+	}
+
+	private static String ejecutar(Long id, BindingResult validacion, RedirectAttributes avisos, Runnable accion,
+			String[] exito) {
 		if (validacion.hasErrors()) {
 			avisos.addFlashAttribute("error", primerError(validacion));
 			return redirigirADetalle(id);
 		}
 		try {
 			accion.run();
-			avisos.addFlashAttribute("exito", exito);
+			avisos.addFlashAttribute("exito", exito[0]);
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());

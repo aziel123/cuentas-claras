@@ -104,8 +104,12 @@ class HuellaDiariaTest {
 
 	@Test
 	void laHuellaSaleCadaDiaAPromotoriaYAlCorreoExterno() {
+		// Sprint 7, tanda 2 (H5): el correo externo de la huella es por colegio (configuracion_colegio); la fila vieja de
+		// configuracion_bd ya no se usa.
+		jdbc.update("INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en) VALUES (1, "
+				+ "'huella_correo_externo', 'contador@estudio.pe', CURRENT_TIMESTAMP)");
 		jdbc.update("INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('huella_correo_externo', "
-				+ "'contador@estudio.pe', CURRENT_TIMESTAMP)");
+				+ "'viejo@estudio.pe', CURRENT_TIMESTAMP)");
 		eventos(3);
 		long ultimo = jdbc.queryForObject("SELECT MAX(secuencia) FROM evento_auditoria", Long.class);
 		String hash = jdbc.queryForObject("SELECT hash FROM evento_auditoria WHERE secuencia = ?", String.class, ultimo);
@@ -130,6 +134,28 @@ class HuellaDiariaTest {
 		// Es idempotente: otra pasada del mismo día no duplica nada.
 		huella.enColegio(1L, LocalDate.now(reloj));
 		assertThat(contar(jdbc, "huella_bitacora")).isEqualTo(1);
+	}
+
+	/**
+	 * Sprint 7, tanda 2 (H5): el correo externo de OTRO colegio (y la fila vieja de configuracion_bd) no recibe la huella
+	 * de este: sin su propio correo, la huella del colegio 1 va solo a su Promotoría.
+	 */
+	@Test
+	void elCorreoExternoDeOtroColegioNoRecibeLaHuella() {
+		jdbc.update("INSERT INTO colegio (nombre) VALUES ('Colegio de Prueba B')");
+		Long otro = jdbc.queryForObject("SELECT MAX(id) FROM colegio", Long.class);
+		jdbc.update("INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en) VALUES (?, "
+				+ "'huella_correo_externo', 'contador@otro-colegio.pe', CURRENT_TIMESTAMP)", otro);
+		jdbc.update("INSERT INTO configuracion_bd (clave, valor, creado_en) VALUES ('huella_correo_externo', "
+				+ "'viejo@estudio.pe', CURRENT_TIMESTAMP)");
+		eventos(2);
+		manana0600();
+
+		huella.enColegio(1L, LocalDate.now(reloj));
+
+		assertThat(jdbc.queryForList("SELECT destinatario_tipo FROM mensaje WHERE tipo = 'HUELLA_BITACORA'", String.class))
+				.containsExactly("USUARIO");
+		assertThat(contar(jdbc, "mensaje WHERE destino LIKE '%@%'")).isZero();
 	}
 
 	@Test

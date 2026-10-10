@@ -4,10 +4,12 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Alumno;
+import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Matricula;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.AlumnoRepository;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.MatriculaRepository;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.config.PropiedadesSaldoInicial;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.AnioOpcion;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LineaSaldoRequest;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LineaVista;
@@ -15,21 +17,18 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LoteDetalle;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LoteRequest;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.dto.LoteResumen;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.AutoaprobacionException;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.model.CalculadoraCronograma;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConceptoSaldo;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoLote;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.LineaSaldoInicial;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.LoteSaldoInicial;
-import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Matricula;
-import pe.edu.virgenmaria.cuentasclaras.cobranza.config.PropiedadesSaldoInicial;
-import pe.edu.virgenmaria.cuentasclaras.cobranza.model.CalculadoraCronograma;
-import pe.edu.virgenmaria.cuentasclaras.cobranza.model.ConceptoSaldo;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.PlanPension;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.TotalNoCoincideException;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
-import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.PlanPensionRepository;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.LineaSaldoInicialRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.LoteSaldoInicialRepository;
+import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.PlanPensionRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
@@ -38,6 +37,9 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -46,10 +48,10 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Optional;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -89,11 +91,15 @@ public class ServicioSaldoInicial {
 
 	private final Clock reloj;
 
+	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
+	private final FirmaSesion firmaSesion;
+
 	public ServicioSaldoInicial(LoteSaldoInicialRepository lotes, LineaSaldoInicialRepository lineas,
 			CuotaRepository cuotas, AnioEscolarRepository anios,
 			AlumnoRepository alumnos, MatriculaRepository matriculas, AuditoriaService auditoria,
 			PlanPensionRepository planes, ControlParticipantes participantes, PropiedadesSaldoInicial propiedades,
-			Clock reloj) {
+			Clock reloj, FirmaSesion firmaSesion) {
+		this.firmaSesion = firmaSesion;
 		this.planes = planes;
 		this.participantes = participantes;
 		this.propiedades = propiedades;
@@ -323,6 +329,11 @@ public class ServicioSaldoInicial {
 					+ ". Devuelve el lote para que Administración quite esas deudas.");
 		}
 		try {
+			// Sprint 7, tanda 2: firma solo si el total coincide (un intento fallido no confirma nada).
+			if (totalInforme != null && pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero.normalizar(totalInforme)
+					.compareTo(lote.getTotalDeclarado()) == 0) {
+				firmaSesion.firmar(ClaveFirma.loteSaldoInicialConfirmado(lote.getId()));
+			}
 			lote.confirmar(usuario, totalInforme, ahora());
 		}
 		catch (TotalNoCoincideException e) {
@@ -362,7 +373,9 @@ public class ServicioSaldoInicial {
 	public void devolver(Long loteId, Long version, String motivo) {
 		LoteSaldoInicial lote = bloquear(loteId);
 		exigirVersion(lote, version);
-		lote.devolver(SesionActual.usuario(), motivo, ahora());
+		LocalDateTime cuando = ahora();
+		firmaSesion.firmar(ClaveFirma.loteSaldoInicialDevuelto(lote.getId(), cuando));
+		lote.devolver(SesionActual.usuario(), motivo, cuando);
 		auditoria.registrar(AccionAuditoria.SALDO_INICIAL_DEVUELTO, "lote_saldo_inicial", loteId.toString(),
 				EstadoLote.ENVIADO.name(), EstadoLote.BORRADOR.name(), "Motivo: " + lote.getMotivoDevolucion());
 	}

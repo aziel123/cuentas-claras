@@ -134,6 +134,27 @@
 			<button type="submit" class="btn btn-secundario">Cambiar nombre</button>
 		</form>
 	</section>
+	<section class="tarjeta" th:if="${accesosRecientes != null}" aria-labelledby="titulo-accesos" data-accesos-familia>
+		<h2 id="titulo-accesos">Quién consultó estos datos (<span th:text="${diasAccesos}">90</span> días)</h2>
+		<p class="secundario">Cada vez que alguien del colegio abre esta ficha, la de uno de sus hijos o una solicitud de cambio
+			de contacto de la familia, queda aquí (Ley 29733). Solo lo ve Promotoría.</p>
+		<th:block th:if="${#lists.isEmpty(accesosRecientes)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Nadie más consultó estos datos', 'En los últimos 90 días nadie del colegio abrió los datos de esta familia.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(accesosRecientes)}">
+			<caption class="solo-lectores">Consultas a los datos de la familia, de la más reciente a la más antigua.</caption>
+			<thead><tr><th scope="col">Fecha y hora</th><th scope="col">Quién</th><th scope="col">Pantalla</th></tr></thead>
+			<tbody>
+				<tr th:each="a : ${accesosRecientes}">
+					<td data-etiqueta="Fecha y hora" class="num" th:text="${#temporals.format(a.fecha, 'dd/MM/yyyy HH:mm')}">02/10/2026 08:15</td>
+					<td data-etiqueta="Quién"><span th:text="${a.nombreCompleto}">Lucía Ramos</span>
+						<small class="secundario bloque" th:text="${a.persona}">caja</small></td>
+					<td data-etiqueta="Pantalla" th:text="${a.pantalla}">Ficha de la familia</td>
+				</tr>
+			</tbody>
+		</table>
+		<p><a class="btn btn-texto" th:href="@{/auditoria/accesos}">Ver todas las consultas</a></p>
+	</section>
 </main>
 </body>
 </html>

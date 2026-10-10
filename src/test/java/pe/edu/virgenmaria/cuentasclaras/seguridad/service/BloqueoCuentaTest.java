@@ -110,7 +110,7 @@ class BloqueoCuentaTest {
 
 		mvc.perform(get("/login").param("error", ""))
 				.andExpect(content().string(containsString(
-						"Usuario o clave incorrectos. Después de 5 intentos fallidos la cuenta se bloquea 15 minutos.")));
+						"Usuario o clave incorrectos. Después de 5 intentos fallidos tendrás que esperar 15 minutos.")));
 		assertThat(contar("INGRESO_RECHAZADO_BLOQUEADA")).isEqualTo(1);
 	}
 
