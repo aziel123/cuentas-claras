@@ -116,6 +116,9 @@ class PermisosMySqlTest {
 	@Autowired
 	private pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAccesoApoderados accesoApoderados;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.familias.service.ServicioAvisosFamilia servicioAvisos;
+
 	@AfterEach
 	void limpiar() {
 		SecurityContextHolder.clearContext();
@@ -2205,7 +2208,8 @@ class PermisosMySqlTest {
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
 						.string(org.hamcrest.Matchers.containsString("ya no sirve")));
 		String clave = "una clave elegida en mysql " + sufijo;
-		mvc.perform(post(ruta).with(csrf()).param("documento", dni).param("clave", clave).param("confirmacion", clave))
+		mvc.perform(post(ruta).with(csrf()).param("documento", dni).param("clave", clave).param("confirmacion", clave)
+				.param("aceptaPrivacidad", "true"))
 				.andExpect(redirectedUrl("/login?cuenta-activada"));
 		mvc.perform(post("/login").with(csrf()).param("usuario", dni).param("clave", clave))
 				.andExpect(redirectedUrl("/inicio"));
@@ -2242,7 +2246,7 @@ class PermisosMySqlTest {
 				(String) f[2]);
 		String clave = "otra clave elegida en mysql " + sufijo;
 		mvc.perform(post(ruta).with(csrf()).param("documento", (String) f[3]).param("clave", clave)
-				.param("confirmacion", clave)).andExpect(redirectedUrl("/login?cuenta-activada"));
+				.param("confirmacion", clave).param("aceptaPrivacidad", "true")).andExpect(redirectedUrl("/login?cuenta-activada"));
 		Long usuario = jdbc.queryForObject("SELECT id FROM usuario WHERE apoderado_id = ?", Long.class, f[1]);
 		Long usado = jdbc.queryForObject("SELECT id FROM enlace_activacion WHERE usuario_id = ? AND usado_en IS NOT NULL",
 				Long.class, usuario);
@@ -3856,6 +3860,79 @@ class PermisosMySqlTest {
 		assertThat(estado.existe()).isTrue();
 		assertThat(estado.alDia()).isTrue();
 		assertThat(estado.archivo()).isEqualTo(archivo);
+	}
+
+	/**
+	 * Sprint 7, tanda 3 (V26, Ley 29733; E27 y E28) con los permisos mínimos: ver la ficha de una familia deja su registro
+	 * (con la sesión de la base de quien vio), que nadie edita ni borra (1142, también cc_sistema); la familia pide algo
+	 * sobre sus datos con su derecho, que no cambia (1143) y que el CHECK exige; y Promotoría lo atiende con su firma.
+	 */
+	@Test
+	void flujoLey29733ConPermisosMinimos() throws Exception {
+		FamiliasCaja familias = familiasDeCaja();
+		Usuario administracion = guardar("adm.ley." + sufijo, Rol.ADMINISTRACION);
+		mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+				.get("/alumnos/familias/{id}", familias.familia()).with(UsuariosDePrueba.como(administracion)))
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
+		java.util.Map<String, Object> acceso = jdbc.queryForMap("SELECT id, tipo, familia_id, sesion_id FROM "
+				+ "acceso_dato_personal WHERE usuario_id = ?", administracion.getId());
+		assertThat(acceso).containsEntry("tipo", "FICHA_FAMILIA").containsEntry("familia_id", familias.familia());
+		assertThat(acceso.get("sesion_id")).as("la sesión de la base de quien vio").isNotNull();
+		Object id = acceso.get("id");
+		for (JdbcTemplate conexion : java.util.List.of(jdbc, sistema())) {
+			assertThat(codigoAl(() -> conexion.update("UPDATE acceso_dato_personal SET familia_id = NULL WHERE id = ?", id)))
+					.isEqualTo(1142);
+			assertThat(codigoAl(() -> conexion.update("DELETE FROM acceso_dato_personal WHERE id = ?", id)))
+					.isEqualTo(1142);
+		}
+
+		Long apoderado = jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class,
+				familias.hermano1());
+		UsuariosDePrueba.iniciarSesion(new pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado(970L, 1L,
+				"familia.ley." + sufijo, "Familia", null, true, false, false, java.util.EnumSet.of(Rol.APODERADO),
+				apoderado));
+		Long pedido = servicioAvisos.enviar(new pe.edu.virgenmaria.cuentasclaras.familias.dto.AvisoRequest(
+				pe.edu.virgenmaria.cuentasclaras.familias.model.TipoAvisoFamilia.DATOS_PERSONALES, null, null,
+				pe.edu.virgenmaria.cuentasclaras.familias.model.DerechoDatos.RECTIFICACION,
+				"Mi segundo apellido está mal escrito"));
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT derecho FROM aviso_familia WHERE id = ?", String.class, pedido))
+				.isEqualTo("RECTIFICACION");
+		assertThat(codigoAl(() -> jdbc.update("UPDATE aviso_familia SET derecho = 'ACCESO' WHERE id = ?", pedido)))
+				.isEqualTo(1143);
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO aviso_familia (colegio_id, familia_id, apoderado_id, tipo, texto, "
+				+ "estado, creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'DATOS_PERSONALES', 'Sin derecho', "
+				+ "'ABIERTO', NOW(6), 'familia', NOW(6))", familias.familia(), apoderado))).as("sin derecho")
+				.isEqualTo(3819);
+
+		Usuario promotora = guardar("promotor.ley." + sufijo, Rol.PROMOTOR);
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(promotora));
+		servicioAvisos.atender(pedido, "Corregimos tu segundo apellido en la ficha");
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT estado FROM aviso_familia WHERE id = ?", String.class, pedido))
+				.isEqualTo("ATENDIDO");
+	}
+
+	/**
+	 * Sprint 7, tanda 3 (H10, A09): el error REAL de MySQL por una clave única repetida lleva el valor que chocó (el DNI); en
+	 * los logs de prod y piloto sale enmascarado (Enmascarar, que aplica EnmascaradoLogs a mensajes y trazas).
+	 */
+	@Test
+	void elDuplicateEntryDeMySqlSaleSinElDni() {
+		FamiliasCaja familias = familiasDeCaja();
+		Long apoderado = jdbc.queryForObject("SELECT responsable_pago_id FROM alumno WHERE id = ?", Long.class,
+				familias.hermano1());
+		String dni = jdbc.queryForObject("SELECT numero_documento FROM apoderado WHERE id = ?", String.class, apoderado);
+		Throwable error = org.assertj.core.api.Assertions.catchThrowable(() -> jdbc.update("INSERT INTO apoderado "
+				+ "(colegio_id, familia_id, tipo_documento, numero_documento, apellido_paterno, nombres, parentesco, "
+				+ "nombre_busqueda, activo, correo, creado_en, creado_por, actualizado_en) SELECT colegio_id, familia_id, "
+				+ "tipo_documento, numero_documento, apellido_paterno, nombres, parentesco, nombre_busqueda, activo, "
+				+ "'copia@ejemplo.pe', creado_en, creado_por, actualizado_en FROM apoderado WHERE id = ?", apoderado));
+		assertThat(codigoMySql(error)).isEqualTo(1062);
+		String mensaje = org.springframework.core.NestedExceptionUtils.getMostSpecificCause(error).getMessage();
+		assertThat(mensaje).as("MySQL incluye el DNI en su mensaje").contains(dni).startsWith("Duplicate entry");
+		String enLog = pe.edu.virgenmaria.cuentasclaras.comun.texto.Enmascarar.enTexto(mensaje);
+		assertThat(enLog).doesNotContain(dni).contains("Duplicate entry '********' for key");
 	}
 
 	private static String registroRespaldo(String archivo, String fin, long secuencia, String hash, String destino) {

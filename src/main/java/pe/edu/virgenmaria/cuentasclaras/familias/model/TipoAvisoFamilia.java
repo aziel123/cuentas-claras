@@ -6,7 +6,9 @@ public enum TipoAvisoFamilia {
 	PAGUE_Y_NO_APARECE("Pagué y no aparece", true),
 	NO_RECONOZCO_PAGO("No reconozco un pago", true),
 	NO_RECONOZCO_ANULACION_O_DESCUENTO("No reconozco una anulación o un descuento", true),
-	OTRO("Otra cosa", false);
+	OTRO("Otra cosa", false),
+	/** Sprint 7, tanda 3 (Ley 29733): un pedido sobre los datos personales, con su derecho y su plazo. */
+	DATOS_PERSONALES("Mis datos personales", false);
 
 	private final String etiqueta;
 

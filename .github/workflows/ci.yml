@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
 
+# Sprint 7, tanda 3 (A08 de OWASP, H13): toda acción de terceros va fijada por el SHA de su commit (una etiqueta se
+# puede mover); el comentario dice la versión. Dependabot (.github/dependabot.yml) propone las actualizaciones.
 permissions:
   contents: read
 
@@ -13,9 +15,9 @@ jobs:
     name: Compilar y probar
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: "21"
@@ -26,6 +28,36 @@ jobs:
 
       - name: Las pruebas no dependen de la zona horaria del servidor
         run: ./mvnw -B test -DargLine=-Duser.timezone=America/Los_Angeles
+
+  dependencias:
+    name: Dependencias con vulnerabilidades conocidas (SBOM y OSV-Scanner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: "SBOM CycloneDX de lo que va en el jar"
+        run: |
+          ./mvnw -B -q -DskipTests package
+          test -s target/classes/META-INF/sbom/application.cdx.json
+
+      - name: "Sprint 7, tanda 3 (A06, decisión 102): ninguna CRÍTICA ni ALTA con arreglo publicado"
+        run: sh scripts/dependencias/revisar.sh target/classes/META-INF/sbom/application.cdx.json
+
+      - name: "E26: la revisión SÍ falla con una dependencia vulnerable (muestra con log4j-core 2.14.1)"
+        run: |
+          ./mvnw -B -q -f scripts/dependencias/muestra-vulnerable/pom.xml org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeBom
+          if sh scripts/dependencias/revisar.sh scripts/dependencias/muestra-vulnerable/target/muestra.cdx.json > muestra.txt 2>&1; then
+            cat muestra.txt; echo "ERROR: la revisión no detectó log4j-core 2.14.1"; exit 1
+          fi
+          grep -q "BLOQUEA (CRÍTICA o ALTA con arreglo): log4j-core 2.14.1" muestra.txt || { cat muestra.txt; exit 1; }
+          echo "OK: la muestra vulnerable no pasa (Log4Shell detectado)"
 
   mysql:
     name: Migraciones, permisos y arranque en MySQL 8
@@ -53,9 +85,9 @@ jobs:
       CC_MYSQL_CLAVE_RESPALDO: "respaldo-solo-ci-1"
       MYSQL_ADMIN: "mysql --protocol=TCP -h 127.0.0.1 -P 3306 -uroot -proot-ci"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: "21"
@@ -79,7 +111,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V25): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V26): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -395,6 +427,12 @@ jobs:
           comprobar 1142 "DELETE FROM firma_operacion WHERE 1 = 0"
           comprobar 1142 "UPDATE firma_operacion SET version = version WHERE 1 = 0"
           comprobar 1644 "INSERT INTO evento_auditoria (secuencia, ocurrido_en, nombre_usuario, accion, hash) VALUES (0, NOW(6), 'sistema.verificador', 'VERIFICADOR', NULL)"
+          # Sprint 7, tanda 3 (V26, Ley 29733): quién vio datos personales no se edita ni se borra (1142); el derecho de un
+          # pedido sobre datos personales no cambia (1143) y solo lo lleva ese tipo de aviso (CHECK: 3819).
+          comprobar 1142 "UPDATE acceso_dato_personal SET familia_id = NULL WHERE 1 = 0"
+          comprobar 1142 "DELETE FROM acceso_dato_personal WHERE 1 = 0"
+          comprobar 1143 "UPDATE aviso_familia SET derecho = derecho WHERE 1 = 0"
+          comprobar 3819 "INSERT INTO aviso_familia (colegio_id, familia_id, apoderado_id, tipo, texto, estado, derecho, creado_en, creado_por, actualizado_en) SELECT colegio_id, familia_id, id, 'OTRO', 'verificador de permisos', 'ABIERTO', 'ACCESO', NOW(6), 'verificador', NOW(6) FROM apoderado LIMIT 1"
           comprobar 1644 "INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, comprobante_id, medio, total, recibido, vuelto, origen, clave_idempotencia, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'sistema.pasarela', '2000-01-01', 0, 'YAPE', 1, 1, 0, 'PASARELA', 'ci-sistema', 'VIGENTE', NOW(6), 'sistema.pasarela', NOW(6))"
           # Con cc_sistema: no edita la bitácora ni borra los libros (1142); sus inserciones imposibles llegan al trigger (1644).
           comprobar_sistema() {
@@ -411,6 +449,8 @@ jobs:
           comprobar_sistema 1142 "DELETE FROM pago WHERE 1 = 0"
           comprobar_sistema 1142 "DELETE FROM sesion_usuario WHERE 1 = 0"
           comprobar_sistema 1143 "UPDATE sesion_usuario SET hash_token = hash_token WHERE 1 = 0"
+          comprobar_sistema 1142 "UPDATE acceso_dato_personal SET familia_id = NULL WHERE 1 = 0"
+          comprobar_sistema 1142 "DELETE FROM acceso_dato_personal WHERE 1 = 0"
           # Sprint 7, tanda 2: el comprobante, los mensajes y los avisos de la pasarela los actualiza solo cc_sistema (cc_app:
           # 1142, arriba), y solo las columnas del envío (1143).
           comprobar_sistema 1143 "UPDATE comprobante SET numero = numero WHERE 1 = 0"
@@ -476,12 +516,47 @@ jobs:
           grep -q "Huellas de los 73 triggers y las 5 funciones verificadas" prod.log || { cat prod.log; exit 1; }
           grep -q "Privilegios verificados: cc_app y cc_sistema tienen solo los de 02-permisos-tablas.sql" prod.log || { cat prod.log; exit 1; }
           grep -q "Conexiones a MySQL cifradas (TLS) verificadas" prod.log || { cat prod.log; exit 1; }
+          # Sprint 7, tanda 3 (V26, Ley 29733).
+          grep -q "Permisos de la Ley 29733 verificados" prod.log || { cat prod.log; exit 1; }
           # Sprint 7: en prod el log es JSON (ECS) y las sondas de vida y de disponibilidad son públicas.
           grep -q '^{"@timestamp".*Triggers verificados' prod.log || { echo "ERROR: el log de prod no es JSON"; head -n 5 prod.log; exit 1; }
 
           curl -sf http://127.0.0.1:18080/actuator/health/liveness | grep -q UP || { cat prod.log; exit 1; }
           curl -sf http://127.0.0.1:18080/actuator/health/readiness | grep -q UP || { cat prod.log; exit 1; }
           curl -sf http://127.0.0.1:18080/salud/respaldo | grep -qx "ATRASADO\|OK" || { echo "ERROR: /salud/respaldo"; exit 1; }
+
+          # Sprint 7, tanda 3 (A02, A05, E22): cabeceras de seguridad y cookie __Host- del servidor real de prod.
+          curl -s -D cabeceras.txt -o login.html http://127.0.0.1:18080/login
+          for cabecera in "Strict-Transport-Security: max-age=31536000 ; includeSubDomains" \
+              "Cross-Origin-Opener-Policy: same-origin" "Cross-Origin-Resource-Policy: same-origin" \
+              "Content-Security-Policy: default-src 'self'" "X-Frame-Options: DENY" "X-Content-Type-Options: nosniff"; do
+            grep -qi "^$cabecera" cabeceras.txt || { echo "ERROR: falta la cabecera $cabecera"; cat cabeceras.txt; exit 1; }
+          done
+          grep -i "^Set-Cookie: __Host-CCSESION=" cabeceras.txt | grep -qi "Path=/" || { cat cabeceras.txt; exit 1; }
+          grep -i "^Set-Cookie: __Host-CCSESION=" cabeceras.txt | grep -i "Secure" | grep -qi "HttpOnly" \
+            || { echo "ERROR: la cookie de sesión no es __Host- con Secure y HttpOnly"; cat cabeceras.txt; exit 1; }
+          if grep -i "^Set-Cookie: __Host-CCSESION=" cabeceras.txt | grep -qi "Domain="; then
+            echo "ERROR: una cookie __Host- no lleva dominio"; exit 1
+          fi
+          echo "OK: HSTS, COOP, CORP, CSP y la cookie __Host-CCSESION (Secure, HttpOnly, Path=/, sin dominio)"
+          # Sprint 7, tanda 3 (H9, E24): 5 intentos fallidos con un usuario desde esta conexión y la 6.a espera (429, la
+          # página de ingreso con el aviso), sin llegar a la cuenta. La cookie Secure se envía a mano (curl no la manda
+          # por http).
+          cookie=$(grep -i "^Set-Cookie: __Host-CCSESION=" cabeceras.txt | sed -e 's/^[^:]*: //' -e 's/;.*//' | tr -d '\r')
+          token=$(grep -o 'name="_csrf" value="[^"]*"' login.html | sed 's/.*value="//; s/"$//')
+          for i in 1 2 3 4 5; do
+            estado=$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: $cookie" \
+              --data-urlencode "usuario=nadie.ci" --data-urlencode "clave=no-es-la-clave" --data-urlencode "_csrf=$token" \
+              http://127.0.0.1:18080/login)
+            [ "$estado" = "302" ] || { echo "ERROR: el intento $i respondió $estado"; exit 1; }
+          done
+          estado=$(curl -s -o espera.html -w '%{http_code}' -H "Cookie: $cookie" \
+            --data-urlencode "usuario=nadie.ci" --data-urlencode "clave=no-es-la-clave" --data-urlencode "_csrf=$token" \
+            http://127.0.0.1:18080/login)
+          [ "$estado" = "429" ] || { echo "ERROR: el 6.o intento respondió $estado (esperaba 429)"; exit 1; }
+          grep -q "Demasiados intentos con este usuario desde esta conexi" espera.html \
+            || { echo "ERROR: la página del 429 no trae el aviso"; cat espera.html; exit 1; }
+          echo "OK: tras 5 intentos fallidos la conexión espera (429) sin bloquear la cuenta"
 
           kill "$PID_APP"
           if DB_USUARIO=cc_migrador DB_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" timeout 120 \
@@ -650,9 +725,9 @@ jobs:
       # La clave HMAC con la que las pruebas sellaron la bitácora (perfil test): la verificación recalcula toda la cadena.
       CLAVE_HMAC_PRUEBAS: "clave-hmac-de-pruebas-no-usar-en-produccion-0001"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: "21"
@@ -668,7 +743,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V25, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V26, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \

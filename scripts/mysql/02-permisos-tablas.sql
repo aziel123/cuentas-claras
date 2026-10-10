@@ -234,6 +234,12 @@ GRANT EXECUTE ON FUNCTION cuentasclaras.triggers_instalados TO 'cc_negocio';
 -- contra una sesión abierta de esa persona y lo deja en NULL. Solo inserción (1142 al editar o borrar).
 GRANT INSERT ON cuentasclaras.firma_operacion TO 'cc_negocio';
 
+-- ===================== Sprint 7 · tanda 3 (V26): Ley 29733 =====================
+-- Quién vio datos personales: lo inserta la persona que los vio (cc_app, por el rol), ANTES de que se le muestren. Solo
+-- inserción: nadie lo edita ni lo borra (1142); lo purga el DBA a los 2 años con un script revisado (sección 8.4).
+GRANT INSERT ON cuentasclaras.acceso_dato_personal TO 'cc_negocio';
+-- aviso_familia: SIN cambios. El derecho de un pedido sobre datos personales (columna nueva) no está en su UPDATE: 1143.
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se

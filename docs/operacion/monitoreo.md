@@ -67,5 +67,5 @@ el correo. También se prueba en local: `VIGILANCIA_URL=http://127.0.0.1:8080 sh
 **Límites conocidos:**
 - la cron de GitHub puede atrasarse varios minutos;
 - GitHub **apaga los workflows programados** de un repositorio público tras **60 días sin actividad**. El paso
-  «actividad» falla desde el día 53 para avisar con una semana; basta un commit (por ejemplo, el acta del simulacro
-  mensual). La alternativa es la capa gratuita de un servicio de monitoreo de disponibilidad (decisión 94).
+  «actividad» falla desde el día 53 para avisar con una semana; basta un commit (por ejemplo, la fecha del último
+  simulacro mensual, sin firmas ni datos: el repositorio es público; el acta firmada se guarda en el colegio). La alternativa es la capa gratuita de un servicio de monitoreo de disponibilidad (decisión 94).

@@ -13,6 +13,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.SesionesFirmada
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.TokenDeSesionHttp;
 
 import java.io.IOException;
+import java.time.Clock;
 
 /**
  * Después de ingresar: abre la sesión de la base (sprint 7, tanda 2: su secreto queda en la sesión HTTP y firma cada
@@ -22,10 +23,19 @@ import java.io.IOException;
 @Component
 public class ManejadorIngresoExitoso extends SavedRequestAwareAuthenticationSuccessHandler {
 
+	/**
+	 * Atributo de la sesión HTTP con el instante del ingreso (sprint 7, tanda 3): desde ahí cuenta el tiempo máximo de la
+	 * sesión ({@code FiltroSesionMaxima}, decisión 83).
+	 */
+	public static final String ATRIBUTO_INGRESO = ManejadorIngresoExitoso.class.getName() + ".INGRESO";
+
 	private final SesionesFirmadas sesiones;
 
-	public ManejadorIngresoExitoso(SesionesFirmadas sesiones) {
+	private final Clock reloj;
+
+	public ManejadorIngresoExitoso(SesionesFirmadas sesiones, Clock reloj) {
 		this.sesiones = sesiones;
+		this.reloj = reloj;
 		setDefaultTargetUrl("/inicio");
 	}
 
@@ -37,6 +47,7 @@ public class ManejadorIngresoExitoso extends SavedRequestAwareAuthenticationSucc
 					Actor.normalizarIp(request.getRemoteAddr()));
 			TokenDeSesionHttp.guardar(request.getSession(), abierta);
 		}
+		request.getSession().setAttribute(ATRIBUTO_INGRESO, reloj.instant());
 		boolean clavePendiente = autenticacion.getAuthorities().stream()
 				.anyMatch(a -> UsuarioAutenticado.CLAVE_PENDIENTE.equals(a.getAuthority()));
 		if (clavePendiente) {

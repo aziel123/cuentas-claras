@@ -22,8 +22,9 @@ public record MensajeLogin(String tipo, String texto) {
 	static MensajeLogin para(String error, String vencida, String salio, String expirada, String claveCambiada,
 			String cuentaActivada, int intentosMaximos, long minutosBloqueo, long horasClaveTemporal) {
 		if (error != null) {
+			// Sprint 7, tanda 3 (H9): tras esos intentos espera la conexión (o, si vienen de varias conexiones, la cuenta).
 			return new MensajeLogin("error", "Usuario o clave incorrectos. Después de " + intentosMaximos
-					+ " intentos fallidos la cuenta se bloquea " + minutosBloqueo + " minutos.");
+					+ " intentos fallidos tendrás que esperar " + minutosBloqueo + " minutos.");
 		}
 		if (vencida != null) {
 			return new MensajeLogin("advertencia", "Tu clave temporal venció: dura " + horasClaveTemporal + " horas. "
@@ -31,7 +32,8 @@ public record MensajeLogin(String tipo, String texto) {
 		}
 		if (expirada != null) {
 			return new MensajeLogin("info", "Tu sesión se cerró porque ingresaste desde otro equipo, cambiaron tus "
-					+ "permisos o pasó mucho tiempo sin actividad. Vuelve a ingresar.");
+					+ "permisos, pasó mucho tiempo sin actividad o se cumplieron 10 horas desde que ingresaste. Vuelve a "
+					+ "ingresar.");
 		}
 		if (cuentaActivada != null) {
 			return new MensajeLogin("exito", "Listo, tu cuenta está activa. Ingresa con tu número de documento y la "

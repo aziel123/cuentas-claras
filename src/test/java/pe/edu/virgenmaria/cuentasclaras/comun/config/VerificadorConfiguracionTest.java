@@ -205,6 +205,40 @@ class VerificadorConfiguracionTest {
 				.doesNotThrowAnyException();
 	}
 
+	/**
+	 * Sprint 7, tanda 3 (decisión 103): la cookie __Host-CCSESION exige Secure (sin ella el navegador la rechaza) y, en prod
+	 * y piloto con Secure, la cookie debe llevar el prefijo. La instalación local por http usa CCSESION sin Secure.
+	 */
+	@Test
+	void laCookieDeSesionHostExigeSecureYEnProdSiempreLlevaElPrefijo() {
+		for (String perfil : new String[] { "prod", "piloto" }) {
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { perfil }, config(
+					VerificadorConfiguracion.ENTORNO, "PILOTO", VerificadorConfiguracion.COOKIE_NOMBRE, "CCSESION",
+					VerificadorConfiguracion.COOKIE_SEGURA, "true"))).as(perfil)
+					.isInstanceOf(IllegalStateException.class).hasMessageContaining("__Host-CCSESION");
+			assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { perfil }, config(
+					VerificadorConfiguracion.ENTORNO, "PILOTO", VerificadorConfiguracion.COOKIE_NOMBRE, "__Host-CCSESION",
+					VerificadorConfiguracion.COOKIE_SEGURA, "true"))).as(perfil).doesNotThrowAnyException();
+			// La instalación local en Docker (http): sin Secure y sin el prefijo.
+			assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { perfil }, config(
+					VerificadorConfiguracion.ENTORNO, "PILOTO", VerificadorConfiguracion.COOKIE_NOMBRE, "CCSESION",
+					VerificadorConfiguracion.COOKIE_SEGURA, "false"))).as(perfil).doesNotThrowAnyException();
+		}
+		for (String perfil : new String[] { "prod", "dev" }) {
+			java.util.Map<String, String> mal = new java.util.HashMap<>(config(VerificadorConfiguracion.ENTORNO, "PILOTO",
+					VerificadorConfiguracion.COOKIE_NOMBRE, "__Host-CCSESION", VerificadorConfiguracion.COOKIE_SEGURA,
+					"false"));
+			if (perfil.equals("dev")) {
+				mal = new java.util.HashMap<>(java.util.Map.of(VerificadorConfiguracion.CLAVE_HMAC, CLAVE_DEV,
+						VerificadorConfiguracion.COOKIE_NOMBRE, "__Host-CCSESION", VerificadorConfiguracion.COOKIE_SEGURA,
+						"false"));
+			}
+			java.util.Map<String, String> configuracion = mal;
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { perfil }, configuracion)).as(perfil)
+					.isInstanceOf(IllegalStateException.class).hasMessageContaining("exige Secure");
+		}
+	}
+
 	@Test
 	void prodYPilotoNoSeCombinanConDevNiTestNiEntreSi() {
 		for (String[] perfiles : new String[][] { { "prod", "dev" }, { "prod", "test" }, { "piloto", "dev" },

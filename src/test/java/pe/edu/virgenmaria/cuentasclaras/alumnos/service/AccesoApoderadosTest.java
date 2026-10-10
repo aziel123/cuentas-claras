@@ -47,6 +47,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.como;
@@ -162,15 +163,27 @@ class AccesoApoderadosTest {
 
 		mvc.perform(get(ruta)).andExpect(status().isOk())
 				.andExpect(content().string(containsString("Activa tu cuenta")))
-				.andExpect(content().string(containsString("Rosa")));
+				.andExpect(content().string(containsString("Rosa")))
+				// Sprint 7, tanda 3 (Ley 29733): acepta el aviso de privacidad vigente.
+				.andExpect(content().string(containsString("name=\"aceptaPrivacidad\"")))
+				.andExpect(content().string(containsString("href=\"/privacidad\"")));
 
 		// Un documento que no es el suyo no activa nada.
 		mvc.perform(post(ruta).with(csrf()).param("documento", EscenarioCaja.DNI_PEDRO).param("clave", CLAVE_ROSA)
-				.param("confirmacion", CLAVE_ROSA)).andExpect(redirectedUrl(ruta));
+				.param("confirmacion", CLAVE_ROSA).param("aceptaPrivacidad", "true")).andExpect(redirectedUrl(ruta));
+		assertThat(contar(jdbc, "enlace_activacion WHERE usado_en IS NULL")).isEqualTo(1);
+
+		// Sin aceptar el aviso de privacidad no se activa.
+		mvc.perform(post(ruta).with(csrf()).param("documento", EscenarioEscolar.DNI_ROSA).param("clave", CLAVE_ROSA)
+				.param("confirmacion", CLAVE_ROSA)).andExpect(redirectedUrl(ruta))
+				.andExpect(flash().attribute("error", containsString("aviso de privacidad")));
 		assertThat(contar(jdbc, "enlace_activacion WHERE usado_en IS NULL")).isEqualTo(1);
 
 		mvc.perform(post(ruta).with(csrf()).param("documento", EscenarioEscolar.DNI_ROSA).param("clave", CLAVE_ROSA)
-				.param("confirmacion", CLAVE_ROSA)).andExpect(redirectedUrl("/login?cuenta-activada"));
+				.param("confirmacion", CLAVE_ROSA).param("aceptaPrivacidad", "true"))
+				.andExpect(redirectedUrl("/login?cuenta-activada"));
+		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'PRIVACIDAD_ACEPTADA' AND valor_nuevo = '2027-01' "
+				+ "AND nombre_usuario = '" + EscenarioEscolar.DNI_ROSA + "'")).isEqualTo(1);
 		mvc.perform(get("/login").param("cuenta-activada", ""))
 				.andExpect(content().string(containsString("tu cuenta está activa")));
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'ACCESO_APODERADO_ACTIVADO' AND ip IS NOT NULL"))
@@ -179,7 +192,7 @@ class AccesoApoderadosTest {
 		// Un solo uso: el mismo enlace ya no sirve.
 		mvc.perform(get(ruta)).andExpect(content().string(containsString("Este enlace ya no sirve")));
 		assertThatThrownBy(() -> activacion.activar(1L, token, EscenarioEscolar.DNI_ROSA, "otra clave larguisima 99",
-				"otra clave larguisima 99")).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("ya no sirve");
+				"otra clave larguisima 99", true)).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("ya no sirve");
 
 		// Entra con la clave que eligió; el primer ingreso queda señalado con su IP.
 		MvcResult ingreso = mvc.perform(post("/login").with(csrf()).param("usuario", EscenarioEscolar.DNI_ROSA)
@@ -216,7 +229,7 @@ class AccesoApoderadosTest {
 			assertThat(v.nombreCompleto()).contains("Rosa");
 			assertThat(v.venceEn()).isEqualTo(restablecido.venceEn());
 		});
-		assertThatThrownBy(() -> activacion.activar(1L, primero, EscenarioEscolar.DNI_ROSA, CLAVE_ROSA, CLAVE_ROSA))
+		assertThatThrownBy(() -> activacion.activar(1L, primero, EscenarioEscolar.DNI_ROSA, CLAVE_ROSA, CLAVE_ROSA, true))
 				.isInstanceOf(ReglaNegocioException.class);
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'ACCESO_APODERADO_RESTABLECIDO'")).isEqualTo(1);
 		assertThat(contar(jdbc, "enlace_activacion WHERE anulado_en IS NOT NULL")).isEqualTo(1);
@@ -226,7 +239,7 @@ class AccesoApoderadosTest {
 		// El enlace vence (48 horas): después ya no sirve y Promotoría da otro.
 		reloj.avanzar(Duration.ofHours(49));
 		assertThat(activacion.vista(1L, segundo)).isEmpty();
-		assertThatThrownBy(() -> activacion.activar(1L, segundo, EscenarioEscolar.DNI_ROSA, CLAVE_ROSA, CLAVE_ROSA))
+		assertThatThrownBy(() -> activacion.activar(1L, segundo, EscenarioEscolar.DNI_ROSA, CLAVE_ROSA, CLAVE_ROSA, true))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("ya no sirve");
 	}
 
@@ -255,7 +268,7 @@ class AccesoApoderadosTest {
 		mvc.perform(post(ruta).with(csrf()).with(r -> {
 			r.setRemoteAddr("181.65.10.20");
 			return r;
-		}).param("documento", EscenarioCaja.DNI_PEDRO).param("clave", CLAVE_ROSA).param("confirmacion", CLAVE_ROSA))
+		}).param("documento", EscenarioCaja.DNI_PEDRO).param("clave", CLAVE_ROSA).param("confirmacion", CLAVE_ROSA).param("aceptaPrivacidad", "true"))
 				.andExpect(redirectedUrl("/login?cuenta-activada"));
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'ACCESO_APODERADO_ACTIVADO'")).isEqualTo(1);
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'ENLACE_ACTIVACION_ENVIADO'")).isEqualTo(1);

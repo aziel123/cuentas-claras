@@ -33,6 +33,9 @@ import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAlumnos;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioMatriculas;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.AccesoMostrado;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.RegistraAcceso;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.TipoAcceso;
 import pe.edu.virgenmaria.cuentasclaras.comun.web.Formularios;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 
@@ -64,13 +67,16 @@ public class AlumnoController {
 	}
 
 	@GetMapping
+	@RegistraAcceso(TipoAcceso.BUSQUEDA)
 	public String lista(@RequestParam(required = false) String q, @RequestParam(required = false) Long anio,
 			@RequestParam(required = false) Long seccion, @RequestParam(required = false) EstadoAlumno estado,
 			@RequestParam(defaultValue = "0") int pagina, @AuthenticationPrincipal UsuarioAutenticado sesion,
 			Model model) {
 		BusquedaAlumnos busqueda = new BusquedaAlumnos(q, anio, seccion, estado);
 		prepararLista(model, busqueda, sesion);
-		model.addAttribute("alumnos", alumnos.buscar(busqueda, pagina));
+		var resultado = alumnos.buscar(busqueda, pagina);
+		model.addAttribute("alumnos", resultado);
+		AccesoMostrado.filas(resultado.getNumberOfElements());
 		return VISTA_LISTA;
 	}
 
@@ -118,15 +124,20 @@ public class AlumnoController {
 	}
 
 	@GetMapping("/{id:\\d+}")
+	@RegistraAcceso(TipoAcceso.FICHA_ALUMNO)
 	public String ficha(@PathVariable Long id, @AuthenticationPrincipal UsuarioAutenticado sesion, Model model) {
-		model.addAttribute("ficha", alumnos.obtenerFicha(id));
+		var ficha = alumnos.obtenerFicha(id);
+		model.addAttribute("ficha", ficha);
+		AccesoMostrado.alumno(id, ficha.cabecera().familiaId());
 		model.addAttribute("puedeEditar", Formularios.puedeEditar(sesion));
 		return "alumnos/ficha";
 	}
 
 	@GetMapping("/{id:\\d+}/editar")
+	@RegistraAcceso(TipoAcceso.FICHA_ALUMNO)
 	public String editar(@PathVariable Long id, Model model) {
 		EdicionAlumno edicion = alumnos.datosParaEditar(id);
+		AccesoMostrado.alumno(id, edicion.cabecera().familiaId());
 		model.addAttribute("cabecera", edicion.cabecera());
 		model.addAttribute("solicitud", edicion.datos());
 		model.addAttribute("tiposDocumento", TipoDocumento.values());

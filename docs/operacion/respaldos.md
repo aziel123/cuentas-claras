@@ -131,8 +131,9 @@ Son unos 2 minutos sin servicio, después de las 21:00 o en fin de semana (decis
 1. Preservar la evidencia ([incidente-auditoria.md](incidente-auditoria.md)): no borrar nada, copiar los logs.
 2. Restaurar el **último respaldo verificado** en una base nueva con `restaurar-y-verificar.sh` (sin `RESTAURAR_DOCKER`,
    apuntando al MySQL nuevo, y `RESTAURAR_ARRANCAR=no`).
-3. Cambiar las claves de `cc_app`, `cc_respaldo` y del migrador.
+3. Cambiar las claves de `cc_app`, `cc_sistema`, `cc_respaldo` y del migrador.
 4. Apuntar `DB_URL` a la base nueva y arrancar.
 5. Promotoría compara el resumen y la huella de los días entre el respaldo y la caída con lo que recibió por WhatsApp;
    los pagos de ese tramo se reconstruyen con las boletas y el banco.
-6. Si hubo exposición de datos personales, notificar en 48 horas (sección 8.5 del diseño).
+6. Si hubo exposición de datos personales, notificar en 48 horas (sección 8.5 del diseño; plazo a confirmar por el
+   asesor legal) con la plantilla `docs/operacion/incidente-datos-personales.md`.

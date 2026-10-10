@@ -1,7 +1,7 @@
 # Cuentas Claras · tablas que el manifiesto de cada respaldo cuenta (filas e id máximo) para que el respaldo siguiente
 # detecte filas BORRADAS por alguien con acceso de administrador a la base (la aplicación nunca las borra: 1142).
 # Son las de solo inserción (y los libros financieros que nunca se borran). Una por línea; # comenta. Una tabla que
-# todavía no existe en la base se salta (la de la tanda 3: acceso_dato_personal).
+# todavía no existe en la base se salta (desde V26 existen todas).
 evento_auditoria
 pago
 aplicacion_pago

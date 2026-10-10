@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sprint 7, tanda 3 (E26): proyecto de MUESTRA que solo existe para probar el paso «dependencias» del CI. Trae
+     log4j-core 2.14.1 (Log4Shell, CVE-2021-44228, CRÍTICA y con arreglo): scripts/dependencias/revisar.sh debe fallar con
+     su SBOM. No se compila ni se ejecuta: el CI solo genera su SBOM. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>pe.edu.virgenmaria</groupId>
+	<artifactId>muestra-vulnerable</artifactId>
+	<version>0.0.1</version>
+	<packaging>pom</packaging>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-core</artifactId>
+			<version>2.14.1</version>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.cyclonedx</groupId>
+				<artifactId>cyclonedx-maven-plugin</artifactId>
+				<version>2.9.3</version>
+				<configuration>
+					<outputFormat>json</outputFormat>
+					<outputName>muestra.cdx</outputName>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>

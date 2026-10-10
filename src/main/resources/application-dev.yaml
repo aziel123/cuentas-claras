@@ -13,6 +13,8 @@ server:
     session:
       cookie:
         secure: false
+        # Sin https, el navegador rechaza una cookie __Host- (exige Secure).
+        name: CCSESION
 
 cuentasclaras:
   mensajeria:

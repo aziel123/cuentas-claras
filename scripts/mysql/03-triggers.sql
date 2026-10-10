@@ -7,6 +7,8 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
+-- Versión de la migración V26 (sprint 7, tanda 3): 73 triggers y 3 funciones, los mismos de la tanda 2 (V26 solo agrega
+-- acceso_dato_personal, de solo inserción por GRANT, y el derecho de aviso_familia, que fija su CHECK y su GRANT).
 
 -- Sprint 7, tanda 2: el texto de los cuerpos se interpreta SIEMPRE como UTF-8, use el cliente el juego de caracteres que
 -- use (el mysql de un contenedor sin locale envía latin1 y las tildes de los mensajes quedaban dobles: la huella de cada

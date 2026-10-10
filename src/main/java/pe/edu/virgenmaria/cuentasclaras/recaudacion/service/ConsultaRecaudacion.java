@@ -128,7 +128,18 @@ public class ConsultaRecaudacion {
 		auditoria.registrar(AccionAuditoria.ARCHIVO_BANCO_DESCARGADO, "archivo_cargado", archivo.getId().toString(), null,
 				archivo.getNombre(), "Descargó el archivo original de la recaudación del lote " + loteId + " (SHA-256 "
 						+ archivo.getSha256() + "). Lleva datos de familias (Ley 29733).");
-		return new ArchivoOriginal(archivo.getNombre(), archivo.contenido(), archivo.getSha256());
+		return new ArchivoOriginal(nombreDescarga(loteId, archivo.getNombre()), archivo.contenido(), archivo.getSha256());
+	}
+
+	/**
+	 * Sprint 7, tanda 3 (A03 de OWASP): el nombre con el que se descarga es FIJO ({@code recaudacion-lote-<id>.<ext>}), nunca
+	 * el que escribió quien subió el archivo (podría traer «../», comillas o un nombre engañoso). El original queda en la
+	 * base y en la bitácora; la extensión solo puede ser csv, txt o xlsx.
+	 */
+	static String nombreDescarga(Long loteId, String original) {
+		String minusculas = original == null ? "" : original.strip().toLowerCase(java.util.Locale.ROOT);
+		String extension = minusculas.endsWith(".xlsx") ? "xlsx" : minusculas.endsWith(".txt") ? "txt" : "csv";
+		return "recaudacion-lote-" + loteId + "." + extension;
 	}
 
 	/** El archivo original para descargar. */

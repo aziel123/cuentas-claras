@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.AccesoMostrado;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.RegistraAcceso;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.TipoAcceso;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.panel.dto.ArchivoExportado;
 import pe.edu.virgenmaria.cuentasclaras.panel.service.ExportacionContador;
@@ -39,8 +42,11 @@ public class ReportesController {
 	}
 
 	@GetMapping("/panel/morosos")
+	@RegistraAcceso(TipoAcceso.MOROSOS)
 	public String morosos(Model model) {
-		model.addAttribute("familias", reportes.familiasMorosas());
+		var familias = reportes.familiasMorosas();
+		model.addAttribute("familias", familias);
+		AccesoMostrado.filas(familias.size());
 		return "panel/morosos";
 	}
 

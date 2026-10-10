@@ -358,6 +358,10 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			soloSistema("UPDATE mensaje SET estado = estado WHERE 1 = 0",
 					"la aplicación podría marcar un aviso como ENTREGADO."),
 			sinBorrado("sesion_usuario"), sinBorrado("firma_operacion"), soloInsercion("firma_operacion"),
+			// Sprint 7, tanda 3 (V26, Ley 29733): quién vio datos personales es de solo inserción (nadie borra ni cambia
+			// el rastro de una consulta: 1142) y el derecho de un pedido sobre datos personales no cambia (1143).
+			sinBorrado("acceso_dato_personal"), soloInsercion("acceso_dato_personal"),
+			columna("UPDATE aviso_familia SET derecho = derecho WHERE 1 = 0", "aviso_familia"),
 			// E1: con cc_app nadie firma como sistema (un evento de la bitácora o un pago de sistema.*: 1644; sin el
 			// trigger, el evento llega al NOT NULL de hash, 1048).
 			trigger(VerificadorPermisosBaseDatos.EVENTO_SISTEMA_IMPOSIBLE, "trg_evento_auditoria_actor"),
@@ -399,6 +403,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					"cc_sistema podría borrar la bitácora."),
 			sinBorrado("pago"), sinBorrado("cuota"), sinBorrado("sesion_usuario"), sinBorrado("firma_operacion"),
 			soloInsercion("firma_operacion"), soloInsercion("semilla_muestreo"), soloInsercion("muestra_llamada"),
+			sinBorrado("acceso_dato_personal"), soloInsercion("acceso_dato_personal"),
 			columna("UPDATE cuota SET monto = monto WHERE 1 = 0", "cuota"),
 			columna("UPDATE sesion_usuario SET hash_token = hash_token WHERE 1 = 0", "sesion_usuario"),
 			trigger(VerificadorPermisosBaseDatos.FIRMA_IMPOSIBLE, "trg_firma_operacion_nace"),
@@ -842,6 +847,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 				+ "del resumen y correo externo por colegio) verificados.");
 		verificarRespaldoSimulado();
 		LOG.info("Permisos del respaldo verificados: la aplicación no registra, edita ni borra respaldos.");
+		LOG.info("Permisos de la Ley 29733 verificados: nadie edita ni borra el registro de quién vio datos personales, ni "
+				+ "cambia el derecho de un pedido sobre datos personales.");
 		return escribe;
 	}
 

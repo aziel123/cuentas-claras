@@ -22,6 +22,14 @@ cuentasclaras:
     proveedor: SIMULADA
     simulada:
       secreto-aviso: secreto-pasarela-simulada-de-pruebas-no-usar-en-produccion
+  seguridad:
+    # Las pruebas de bloqueo de cuenta (sprint 1) intentan siempre desde la misma conexión: bloqueo a los 5 y BCrypt con
+    # el costo de antes (10), más rápido. El límite por conexión lo prueba LimiteIngresosPorIpTest con los valores de prod.
+    intentos-maximos: 5
+    costo-bcrypt: 10
+  sesion:
+    intentos-por-ip: 100000
+    intentos-por-cuenta-e-ip: 100000
   tareas:
     # Sin tareas programadas en las pruebas: cada prueba invoca el proceso que necesita (reintentos, consultas).
     activas: false
@@ -35,3 +43,5 @@ server:
     session:
       cookie:
         secure: false
+        # Sin https, el navegador rechaza una cookie __Host- (exige Secure).
+        name: CCSESION

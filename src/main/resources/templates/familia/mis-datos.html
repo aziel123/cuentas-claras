@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Mis datos', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-mis-datos" th:with="d=${datos}">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta" th:text="${d.familia}">Familia Quispe Huamán</p>
+			<h1>Mis datos</h1>
+			<p class="secundario">Estos son los datos tuyos y de tus hijos que guarda el colegio, para qué los usamos, a quién
+				los enviamos y cuánto tiempo los guardamos. Puedes imprimir esta página.</p>
+		</div>
+		<button type="button" class="btn btn-secundario no-imprimir" data-imprimir>Imprimir</button>
+	</div>
+
+	<section class="tarjeta" aria-labelledby="titulo-apoderados">
+		<h2 id="titulo-apoderados">Apoderados</h2>
+		<ul class="cuotas-familia">
+			<li th:each="a : ${d.apoderados}" data-apoderado>
+				<div class="cuota-cabecera">
+					<strong th:text="${a.nombre}">Rosa Huamán Quispe</strong>
+					<span class="secundario" th:text="${a.parentesco}">Madre</span>
+				</div>
+				<dl class="datos">
+					<div><dt>Documento</dt><dd th:text="${a.documento}">DNI 41234567</dd></div>
+					<div><dt>Celular</dt>
+					<dd><span th:text="${a.celular} ?: 'No registrado'">+51 912 345 678</span>
+						<span th:if="${a.celular != null}" th:replace="~{fragments/componentes :: badge(${a.celularVerificado} ? 'Confirmado por ti' : 'Sin confirmar', ${a.celularVerificado} ? 'exito' : 'alerta')}"></span></dd></div>
+					<div><dt>Correo</dt>
+					<dd><span th:text="${a.correo} ?: 'No registrado'">rosa@correo.pe</span>
+						<span th:if="${a.correo != null}" th:replace="~{fragments/componentes :: badge(${a.correoVerificado} ? 'Confirmado por ti' : 'Sin confirmar', ${a.correoVerificado} ? 'exito' : 'alerta')}"></span></dd></div>
+					<th:block th:if="${a.ruc != null}">
+						<div><dt>RUC</dt><dd th:text="|${a.ruc} · ${a.razonSocial}|">20123456789 · Empresa</dd></div>
+					</th:block>
+					<div><dt>Recordatorios</dt><dd th:text="${a.recordatorios} ? 'Encendidos' : 'Apagados'">Encendidos</dd></div>
+					<div><dt>Responsable de pago</dt><dd th:text="${a.responsableDePago} ? 'Sí' : 'No'">Sí</dd></div>
+				</dl>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-hijos">
+		<h2 id="titulo-hijos">Tus hijos</h2>
+		<ul class="cuotas-familia">
+			<li th:each="h : ${d.hijos}" data-hijo>
+				<div class="cuota-cabecera">
+					<strong th:text="${h.nombre}">Mateo Quispe Huamán</strong>
+					<span class="secundario" th:text="${h.estado}">Activo</span>
+				</div>
+				<dl class="datos">
+					<div><dt>Documento</dt><dd th:text="${h.documento}">DNI 76543210</dd></div>
+					<div><dt>Fecha de nacimiento</dt><dd th:text="${#temporals.format(h.fechaNacimiento, 'dd/MM/yyyy')}">21/08/2014</dd></div>
+				</dl>
+				<table class="tabla" th:unless="${#lists.isEmpty(h.matriculas)}">
+					<caption class="solo-lectores">Matrículas</caption>
+					<thead><tr><th scope="col">Año</th><th scope="col">Grado</th><th scope="col">Sección</th><th scope="col">Estado</th></tr></thead>
+					<tbody>
+						<tr th:each="m : ${h.matriculas}">
+							<td data-etiqueta="Año" class="num" th:text="${m.anio}">2026</td>
+							<td data-etiqueta="Grado" th:text="${m.grado}">6.° de primaria</td>
+							<td data-etiqueta="Sección" th:text="${m.seccion}">A</td>
+							<td data-etiqueta="Estado" th:text="${m.estado}">Activa</td>
+						</tr>
+					</tbody>
+				</table>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-usos">
+		<h2 id="titulo-usos">Para qué usamos tus datos</h2>
+		<dl class="datos">
+			<div th:each="u : ${d.usos}">
+				<dt th:text="${u.dato}">Celular y correo</dt>
+				<dd th:text="${u.paraQue}">Avisarte de cada pago.</dd>
+			</div>
+		</dl>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-destinatarios">
+		<h2 id="titulo-destinatarios">A quién los enviamos</h2>
+		<dl class="datos">
+			<div th:each="x : ${d.destinatarios}">
+				<dt th:text="${x.quien}">Meta (WhatsApp)</dt>
+				<dd><span th:text="${x.que}">Tu celular</span>. <span th:text="${x.paraQue}">Enviarte los avisos.</span></dd>
+			</div>
+		</dl>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-plazos">
+		<h2 id="titulo-plazos">Cuánto tiempo los guardamos</h2>
+		<dl class="datos">
+			<div th:each="p : ${d.plazos}">
+				<dt th:text="${p.datos}">Pagos</dt>
+				<dd th:text="${p.cuanto}">Mientras no prescriban.</dd>
+			</div>
+		</dl>
+		<p class="ayuda">Plazos según el aviso de privacidad, versión <span th:text="${d.versionAviso}">2027-01</span>.</p>
+	</section>
+
+	<section class="tarjeta no-imprimir" aria-labelledby="titulo-pedir">
+		<h2 id="titulo-pedir">¿Algo está mal o quieres pedir algo sobre tus datos?</h2>
+		<p class="secundario">Tu celular y tu correo los cambias pidiéndolo al colegio: te enviamos un enlace para que los
+			confirmes. Para corregir un nombre o un documento, pedir una respuesta por escrito, que dejemos de usar tus datos para
+			algo o que dejemos de guardarlos, envía un pedido. Los pagos y las boletas no se borran: el colegio debe guardarlos
+			por ley.</p>
+		<p class="fila">
+			<a class="btn btn-primario" th:href="@{/familia/algo-no-cuadra}">Enviar un pedido</a>
+			<a class="btn btn-texto" th:href="@{/privacidad}">Aviso de privacidad</a>
+			<a class="btn btn-secundario" th:href="@{/familia}">Volver</a>
+		</p>
+	</section>
+	<script src="/js/imprimir.js" th:src="@{/js/imprimir.js}" defer></script>
+</main>
+</body>
+</html>

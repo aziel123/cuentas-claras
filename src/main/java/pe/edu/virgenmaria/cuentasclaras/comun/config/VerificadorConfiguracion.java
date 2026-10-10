@@ -33,7 +33,9 @@ import java.util.function.Function;
  *       real sin sus credenciales o, fuera de {@code prod}, sin la marca y la lista de números o correos de prueba;</li>
  *   <li>sprint 7, tanda 1: en {@code prod}, aceptando el respaldo simulado o sin exigir el respaldo;</li>
  *   <li>sprint 7, tanda 2: en {@code prod} o {@code piloto}, sin el segundo usuario de base ({@code cc_sistema}) o con el
- *       mismo usuario para las personas y para los procesos.</li>
+ *       mismo usuario para las personas y para los procesos;</li>
+ *   <li>sprint 7, tanda 3 (decisión 103): con la cookie {@code __Host-} sin {@code Secure} (el navegador la rechaza y
+ *       nadie podría ingresar) o, en {@code prod} o {@code piloto} con {@code Secure}, con una cookie sin ese prefijo.</li>
  * </ul>
  */
 @Component
@@ -116,6 +118,12 @@ public class VerificadorConfiguracion implements InitializingBean {
 
 	static final String DB_SISTEMA_USUARIO = "cuentasclaras.basedatos.sistema.usuario";
 
+	static final String COOKIE_NOMBRE = "server.servlet.session.cookie.name";
+
+	static final String COOKIE_SEGURA = "server.servlet.session.cookie.secure";
+
+	static final String PREFIJO_HOST = "__Host-";
+
 	/** Donde puede existir la mensajería simulada (los beans tienen el mismo {@code @Profile}). */
 	static final Set<String> PERFILES_MENSAJERIA_SIMULADA = Set.of("dev", "test", "piloto");
 
@@ -187,6 +195,28 @@ public class VerificadorConfiguracion implements InitializingBean {
 		verificarMensajeria(activos, prod, propiedad);
 		verificarRespaldos(prod, propiedad);
 		verificarBaseDatos(despliegue == 1, propiedad);
+		verificarCookie(despliegue == 1, propiedad);
+	}
+
+	/**
+	 * Sprint 7, tanda 3 (decisión 103): la cookie de sesión {@code __Host-CCSESION} exige {@code Secure} (y la raíz, sin
+	 * dominio: así la deja Spring Boot). Sin https (dev, test o la instalación local en Docker) va {@code CCSESION} con
+	 * {@code secure: false}; en prod y piloto con {@code Secure}, siempre con el prefijo.
+	 */
+	private static void verificarCookie(boolean despliegue, Function<String, String> propiedad) {
+		String nombre = propiedad.apply(COOKIE_NOMBRE);
+		boolean segura = !"false".equalsIgnoreCase(String.valueOf(propiedad.apply(COOKIE_SEGURA)).strip());
+		if (nombre == null || nombre.isBlank()) {
+			return;
+		}
+		if (nombre.startsWith(PREFIJO_HOST) && !segura) {
+			throw new IllegalStateException("La cookie de sesión " + nombre + " exige Secure (https): sin ella el navegador "
+					+ "la rechaza y nadie puede ingresar. Para probar por http usa CC_COOKIE_SESION=CCSESION.");
+		}
+		if (despliegue && segura && !nombre.startsWith(PREFIJO_HOST)) {
+			throw new IllegalStateException("En producción la cookie de sesión debe llamarse " + PREFIJO_HOST + "CCSESION "
+					+ "(decisión 103): quita CC_COOKIE_SESION o usa un nombre con el prefijo " + PREFIJO_HOST + ".");
+		}
 	}
 
 	/**

@@ -6,6 +6,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Apoderado;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.EstadoSolicitud;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.TipoSolicitud;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.repository.SolicitudCambioRepository;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.DiasHabiles;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.ApoderadoRepository;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.FamiliaRepository;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.SesionApoderado;
@@ -24,6 +28,7 @@ import pe.edu.virgenmaria.cuentasclaras.familias.dto.AvisoRequest;
 import pe.edu.virgenmaria.cuentasclaras.familias.dto.AvisoVista;
 import pe.edu.virgenmaria.cuentasclaras.familias.dto.OpcionesAviso;
 import pe.edu.virgenmaria.cuentasclaras.familias.model.AvisoFamilia;
+import pe.edu.virgenmaria.cuentasclaras.familias.model.DerechoDatos;
 import pe.edu.virgenmaria.cuentasclaras.familias.model.EstadoAvisoFamilia;
 import pe.edu.virgenmaria.cuentasclaras.familias.repository.AvisoFamiliaRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
@@ -31,6 +36,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -44,6 +50,10 @@ import java.util.Set;
  * «¿Algo no cuadra?» (sprint 5, tanda 2; decisión 52). El apoderado lo envía desde el portal (5 por día y por familia,
  * G24) y le llega SOLO a Promotoría y Dirección como alerta: Caja y Administración no lo ven ni lo cierran, porque pueden
  * ser parte del problema (G1). Al atenderlo, la familia recibe un mensaje y ve la respuesta en el portal.
+ * <p>
+ * Sprint 7, tanda 3 (Ley 29733, sección 8.3): el tipo {@code DATOS_PERSONALES} es un pedido de acceso, rectificación,
+ * cancelación u oposición, con su plazo en días hábiles (20 para el acceso y 10 para los demás, a confirmar por el asesor
+ * legal). Tampoco lo atiende quien pidió o aprobó un cambio del celular o el correo de esa familia.
  */
 @Service
 @Transactional
@@ -80,12 +90,28 @@ public class ServicioAvisosFamilia {
 	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
 	private final FirmaSesion firmaSesion;
 
+	/** Sprint 7, tanda 3: plazos de los pedidos sobre datos personales (decisión 97). */
+	private final DiasHabiles calendario;
+
+	private final int plazoAcceso;
+
+	private final int plazoOtros;
+
+	private final SolicitudCambioRepository solicitudes;
+
 	public ServicioAvisosFamilia(AvisoFamiliaRepository avisos, SesionApoderado sesion, PagoRepository pagos,
 			CuotaRepository cuotas, FamiliaRepository familias, ApoderadoRepository apoderados, AuditoriaService auditoria,
 			AvisosMatricula mensajes, Clock reloj,
 			@Value("${cuentasclaras.familias.avisos-por-dia:5}") int maximoPorDia, AnulacionPagoRepository anulaciones,
-			DescuentoRepository descuentos, ControlParticipantes participantes, FirmaSesion firmaSesion) {
+			DescuentoRepository descuentos, ControlParticipantes participantes, FirmaSesion firmaSesion,
+			DiasHabiles calendario, SolicitudCambioRepository solicitudes,
+			@Value("${cuentasclaras.privacidad.plazo-acceso-dias-habiles:20}") int plazoAcceso,
+			@Value("${cuentasclaras.privacidad.plazo-otros-dias-habiles:10}") int plazoOtros) {
 		this.firmaSesion = firmaSesion;
+		this.calendario = calendario;
+		this.solicitudes = solicitudes;
+		this.plazoAcceso = plazoAcceso;
+		this.plazoOtros = plazoOtros;
 		this.anulaciones = anulaciones;
 		this.descuentos = descuentos;
 		this.participantes = participantes;
@@ -121,11 +147,13 @@ public class ServicioAvisosFamilia {
 				.filter(c -> Objects.equals(c.getAlumno().getFamilia().getId(), familiaId))
 				.orElseThrow(() -> new ReglaNegocioException("Elige una de tus cuotas."));
 		AvisoFamilia aviso = avisos.saveAndFlush(AvisoFamilia.nuevo(familiaId, apoderado.getId(), pedido.tipo(),
-				pago == null ? null : pago.getId(), cuota == null ? null : cuota.getId(), pedido.texto()));
+				pago == null ? null : pago.getId(), cuota == null ? null : cuota.getId(), pedido.derecho(), pedido.texto()));
 		// Ley 29733: la bitácora guarda el tipo y la referencia, no el texto de la familia.
+		String derecho = aviso.getDerecho() == null ? "" : ": " + aviso.getDerecho().nombre() + ", con plazo hasta el "
+				+ vence(aviso).format(FECHA);
 		auditoria.registrar(AccionAuditoria.AVISO_FAMILIA_RECIBIDO, "aviso_familia", aviso.getId().toString(), null,
 				pedido.tipo().etiqueta(), "Familia " + apoderado.getFamilia().getNombre() + referencia(pago, cuota)
-						+ ". Lo ven solo Promotoría y Dirección.");
+						+ derecho + ". Lo ven solo Promotoría y Dirección.");
 		return aviso.getId();
 	}
 
@@ -210,8 +238,24 @@ public class ServicioAvisosFamilia {
 						quienes.add(d.getResueltoPor());
 					}));
 		}
+		// Sprint 7, tanda 3: en un pedido sobre datos personales, quien pidió o aprobó un cambio del celular o el correo
+		// de un apoderado de esa familia (el dato que se reclama pudo ser suyo).
+		if (aviso.getTipo() == pe.edu.virgenmaria.cuentasclaras.familias.model.TipoAvisoFamilia.DATOS_PERSONALES) {
+			apoderados.findByFamiliaIdOrderByApellidoPaternoAsc(aviso.getFamiliaId()).forEach(a -> solicitudes
+					.findByEntidadAndEntidadIdAndEstadoOrderByIdAsc("apoderado", a.getId(), EstadoSolicitud.APROBADA)
+					.stream().filter(s -> s.getTipo() == TipoSolicitud.CAMBIO_CONTACTO_APODERADO).forEach(s -> {
+						quienes.add(s.getSolicitadoPor());
+						quienes.add(s.getResueltoPor());
+					}));
+		}
 		quienes.remove(null);
 		return quienes;
+	}
+
+	/** Sprint 7, tanda 3: el último día hábil para responder un pedido sobre datos personales. */
+	public LocalDate vence(AvisoFamilia aviso) {
+		return aviso.getDerecho() == null ? null
+				: aviso.getDerecho().vence(aviso.getCreadoEn().toLocalDate(), calendario, plazoAcceso, plazoOtros);
 	}
 
 	private AvisoVista vistaPersonal(AvisoFamilia a) {
@@ -223,9 +267,12 @@ public class ServicioAvisosFamilia {
 		Pago pago = a.getPagoId() == null ? null : pagos.findById(a.getPagoId()).orElse(null);
 		Cuota cuota = a.getCuotaId() == null ? null : cuotas.findById(a.getCuotaId()).orElse(null);
 		String ref = referencia(pago, cuota);
+		LocalDate venceEl = vence(a);
+		boolean abierto = a.getEstado() == EstadoAvisoFamilia.ABIERTO;
 		return new AvisoVista(a.getId(), a.getCreadoEn(), familia, apoderado, a.getTipo().etiqueta(), a.getTipo().critico(),
-				ref.isEmpty() ? null : ref.substring(2), a.getTexto(), a.getEstado() == EstadoAvisoFamilia.ABIERTO,
-				a.getRespuesta(), a.getAtendidoEn());
+				ref.isEmpty() ? null : ref.substring(2), a.getTexto(), abierto, a.getRespuesta(), a.getAtendidoEn(),
+				a.getDerecho() == null ? null : a.getDerecho().nombre(), venceEl,
+				abierto && venceEl != null && LocalDate.now(reloj).isAfter(venceEl));
 	}
 
 	private String nombreFamilia(Long familiaId) {

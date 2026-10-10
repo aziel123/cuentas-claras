@@ -97,6 +97,20 @@ class ReglasArquitecturaTest {
 				.check(clases);
 	}
 
+	/**
+	 * Sprint 7, tanda 3 (A10 de OWASP, SSRF): solo los conectores con su lista cerrada de dominios (el OSE y WhatsApp) hacen
+	 * peticiones HTTP salientes. Ninguna URL la escribe una persona.
+	 */
+	@ArchTest
+	static final ArchRule soloLosConectoresHacenPeticionesSalientes = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".comprobantes.service.EmisorNubefact")
+			.and().doNotHaveFullyQualifiedName(BASE + ".comunicacion.proveedor.WhatsAppCloudApi")
+			.and().resideInAPackage(BASE + "..")
+			.should().dependOnClassesThat().resideInAnyPackage("org.springframework.web.client..", "java.net.http..",
+					"org.springframework.web.reactive.function.client..")
+			.orShould().dependOnClassesThat().haveFullyQualifiedName("java.net.HttpURLConnection")
+			.because("una petición saliente a una URL que no es de la lista cerrada permitiría SSRF");
+
 	@ArchTest
 	static final ArchRule soloVerificadorPermisosUsaJdbcTemplate = noClasses()
 			.that().doNotHaveFullyQualifiedName(VERIFICADOR_PERMISOS)

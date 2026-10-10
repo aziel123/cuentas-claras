@@ -20,6 +20,10 @@ import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Parentesco;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.TipoDocumento;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioFamilias;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.AccesoMostrado;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.RegistraAcceso;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.TipoAcceso;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.ConsultaAccesos;
 import pe.edu.virgenmaria.cuentasclaras.comun.web.Formularios;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.MotivoRequest;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
@@ -39,16 +43,23 @@ public class FamiliaController {
 
 	private final pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAccesoApoderados accesos;
 
+	/** Sprint 7, tanda 3: «Quién consultó estos datos (90 días)», solo para Promotoría (puerto de {@code privacidad}). */
+	private final ConsultaAccesos consultasDatos;
+
 	public FamiliaController(ServicioFamilias familias,
-			pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAccesoApoderados accesos) {
+			pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAccesoApoderados accesos,
+			ConsultaAccesos consultasDatos) {
 		this.familias = familias;
 		this.accesos = accesos;
+		this.consultasDatos = consultasDatos;
 	}
 
 	@GetMapping("/familias/{id:\\d+}")
+	@RegistraAcceso(TipoAcceso.FICHA_FAMILIA)
 	public String familia(@PathVariable Long id, @AuthenticationPrincipal UsuarioAutenticado sesion, Model model) {
 		model.addAttribute("nuevoApoderado", ApoderadoRequest.vacio());
 		prepararFamilia(model, id, sesion);
+		AccesoMostrado.familia(id);
 		return VISTA_FAMILIA;
 	}
 
@@ -89,8 +100,10 @@ public class FamiliaController {
 	}
 
 	@GetMapping("/apoderados/{id:\\d+}")
+	@RegistraAcceso(TipoAcceso.FICHA_FAMILIA)
 	public String apoderado(@PathVariable Long id, @AuthenticationPrincipal UsuarioAutenticado sesion, Model model) {
 		ApoderadoDetalle detalle = familias.obtenerApoderado(id);
+		AccesoMostrado.familia(detalle.familiaId());
 		model.addAttribute("solicitud", detalle.datos());
 		prepararApoderado(model, detalle);
 		// Sprint 4: la cuenta en línea del apoderado (la dan Promotoría o Administración).
@@ -186,6 +199,9 @@ public class FamiliaController {
 		model.addAttribute("puedeEditar", Formularios.puedeEditar(sesion));
 		model.addAttribute("tiposDocumento", TipoDocumento.values());
 		model.addAttribute("parentescos", Parentesco.values());
+		// Sprint 7, tanda 3 (Ley 29733): quién consultó los datos de esta familia en los últimos 90 días. Solo Promotoría.
+		model.addAttribute("accesosRecientes", restablece ? consultasDatos.deFamilia(id) : null);
+		model.addAttribute("diasAccesos", ConsultaAccesos.DIAS_FICHA);
 	}
 
 	private static void prepararApoderado(Model model, ApoderadoDetalle detalle) {

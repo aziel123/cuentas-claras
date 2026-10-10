@@ -42,3 +42,6 @@ Solo con un **acta firmada** por Promotoría y el responsable técnico, y con el
 3. Cambia las claves de `cc_migrador` y `cc_app` y revisa los permisos (ver `mysql-usuarios.md`).
 4. Comprueba que se puede ingresar y ejecuta **Verificar integridad**, que debe salir "íntegra". La pantalla llega en el paso 9; mientras tanto la verificación la corre el responsable técnico.
 5. Registra el incidente en el acta: hora de detección, evidencia tomada, filas puestas en cuarentena y acciones siguientes.
+
+## 5. Si también hubo datos personales de por medio
+Si el incidente expuso, perdió o dejó en manos equivocadas datos personales de las familias, los alumnos o el personal, sigue además [incidente-datos-personales.md](incidente-datos-personales.md): incluye la notificación a la Autoridad Nacional de Protección de Datos Personales en 48 horas (a confirmar por el asesor legal) y el aviso a las familias cuando corresponda.

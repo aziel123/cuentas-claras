@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.AccesoMostrado;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.RegistraAcceso;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.TipoAcceso;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.importacion.PlantillaImportacionAlumnos;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.importacion.ResultadoImportacion;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.importacion.ServicioImportacionAlumnos;
@@ -98,11 +101,13 @@ public class ImportacionController {
 	}
 
 	@GetMapping("/importar/revision")
+	@RegistraAcceso(TipoAcceso.IMPORTACION)
 	public String revision(HttpSession sesion, Model model) {
 		if (!(sesion.getAttribute(CLAVE_SESION) instanceof VistaPreviaImportacion previa)) {
 			return "redirect:" + RUTA_SUBIR;
 		}
 		model.addAttribute("previa", previa);
+		AccesoMostrado.filas(previa.plan().filas().size());
 		return "alumnos/importar-revisar";
 	}
 

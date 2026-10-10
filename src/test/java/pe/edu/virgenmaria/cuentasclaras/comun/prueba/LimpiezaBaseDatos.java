@@ -19,6 +19,9 @@ public final class LimpiezaBaseDatos {
 	public static void limpiar(JdbcTemplate jdbc) {
 		// Sprint 7, tanda 1 (V24): el registro de respaldos (técnico, sin colegio; en MySQL solo lo escribe cc_respaldo).
 		jdbc.update("DELETE FROM respaldo");
+		// Sprint 7, tanda 3 (V26): el registro de accesos a datos personales apunta a la cuenta, a la sesión, a la familia y
+		// al alumno (en MySQL cc_app no lo borra: 1142; solo H2).
+		jdbc.update("DELETE FROM acceso_dato_personal");
 		// Sprint 7, tanda 2 (V25): las firmas apuntan a la sesión y a la cuenta; la sesión, a la cuenta; la cuenta, a su
 		// solicitud de roles (en MySQL nada de esto se limpia: solo H2).
 		jdbc.update("DELETE FROM firma_operacion");

@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.AccesoMostrado;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.RegistraAcceso;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.TipoAcceso;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 
@@ -38,8 +41,11 @@ public class AprobacionesController {
 	}
 
 	@GetMapping("/{id:\\d+}")
+	@RegistraAcceso(TipoAcceso.APROBACION_CONTACTO)
 	public String detalle(@PathVariable Long id, Model model) {
 		model.addAttribute("s", bandeja.detalle(id));
+		// Ley 29733: si es el cambio de contacto de un apoderado, queda registrado quién lo abrió (lo decide privacidad).
+		AccesoMostrado.solicitud(id);
 		return "aprobaciones/detalle";
 	}
 

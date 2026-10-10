@@ -85,9 +85,11 @@ services:
       # Sprint 7: alertas técnicas por correo al responsable técnico (necesitan también el correo de salida SMTP).
       CC_OPERADOR_CORREO: ${CC_OPERADOR_CORREO:-}
 
-      # Solo para probar en tu PC por http (sin https): permite la cookie de sesión sin "Secure".
-      # En un servidor real con https, quita esta línea.
+      # Solo para probar en tu PC por http (sin https): permite la cookie de sesión sin "Secure" y, por eso, sin el
+      # prefijo __Host- (sprint 7, tanda 3: el navegador rechaza una cookie __Host- sin Secure).
+      # En un servidor real con https, quita estas dos líneas.
       SERVER_SERVLET_SESSION_COOKIE_SECURE: "false"
+      CC_COOKIE_SESION: "CCSESION"
       TZ: America/Lima
     ports:
       - "${PUERTO_APP:-8080}:8080"

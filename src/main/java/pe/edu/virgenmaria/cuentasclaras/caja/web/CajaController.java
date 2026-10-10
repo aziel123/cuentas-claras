@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.AccesoMostrado;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.RegistraAcceso;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.TipoAcceso;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CobroRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CorreccionRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioAnulacionPagos;
@@ -36,8 +39,11 @@ public class CajaController {
 	}
 
 	@GetMapping("/caja")
+	@RegistraAcceso(TipoAcceso.BUSQUEDA)
 	public String buscar(@RequestParam(name = "q", required = false) String texto, Model model) {
-		model.addAttribute("busqueda", cobro.buscar(texto));
+		var busqueda = cobro.buscar(texto);
+		model.addAttribute("busqueda", busqueda);
+		AccesoMostrado.filas(busqueda.resultados().size());
 		return "caja/buscar";
 	}
 

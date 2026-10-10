@@ -1593,3 +1593,157 @@ paso «M3» del CI); E12 (`DerivadorSecretoTest`, `AlertasCajaTest`); E17 (`Ejec
   firma también se revierte; con autocommit (solo en pruebas) la firma queda y se reusa dentro de esos minutos.
 - El secreto de la firma pasa por la conexión de `cc_app` en el INSERT: con el registro general de MySQL encendido
   quedaría en el log (por eso se exige apagado, `mysql-usuarios.md`).
+
+## Tanda 3 · Implementación
+
+> Agente `backend-spring`, 9 de octubre de 2026, sobre la tanda 2 (commit 965b07c). V26 y **73 triggers** (sin triggers
+> nuevos ni versiones nuevas, como dice el conteo de la sección 6.3). Lo que tocó MySQL se probó en contenedores `mysql:8`
+> desechables (8.4.11).
+
+### Comprobaciones previas
+| Qué | Resultado y qué se hizo |
+|---|---|
+| V26 sobre V1–V25 | Aplica en H2 2.4.240 (MODE=MySQL) y en MySQL 8.4.11 (`DROP CONSTRAINT` y el CHECK nuevo); Hibernate la valida con `cc_app` y `cc_sistema` |
+| Nombre de `ck_aviso_familia_tipo` | Es el de V18; ninguna migración posterior lo recreó |
+| Texto oficial del DS 016-2024-JUS | **No se pudo leer** (el PDF del portal del Congreso responde 404). Los plazos (20 y 10 días hábiles, 48 horas, 1 y 2 años) siguen saliendo de fuentes secundarias y van marcados **«a confirmar por el asesor legal»** en la configuración, el aviso de privacidad, «Mis datos», los manuales y el acta |
+| Dependencias (OSV-Scanner 2.6.0 sobre el SBOM de Spring Boot 4.1.1) | **10 vulnerabilidades con arreglo**: 3 CRÍTICAS en Tomcat 11.0.24 (CVE-2026-65905, CVE-2026-65182 y CVE-2026-68525) y 5 ALTAS y 2 MEDIAS en Jackson 3.1.5. Spring Boot 4.1.2 no está publicado: se subieron solo los parches de la misma línea (Tomcat 11.0.26 y Jackson 3.1.7, propiedades del `pom.xml`). Después: ninguna |
+
+### Qué se construyó
+- **Cabeceras (A02, A05, E22):** una sola configuración para las dos cadenas. HSTS de 1 año con subdominios y sin `preload`
+  en **toda** respuesta (no depende de que el proxy marque la petición como segura; el navegador lo ignora por http),
+  `Cross-Origin-Opener-Policy` y `Cross-Origin-Resource-Policy` `same-origin`, además de la CSP, X-Frame-Options, nosniff,
+  Referrer-Policy y Permissions-Policy de siempre. `CabecerasSeguridadTest` las exige con un servidor real en 200, 302,
+  403 (sin CSRF y sin permiso), 404, 500 y en un estático; el CI las mira en el arranque real de prod.
+- **Cookie `__Host-CCSESION` (decisión 103):** nombre configurable (`CC_COOKIE_SESION`); dev, test y la instalación en
+  Docker usan `CCSESION` sin Secure. `VerificadorConfiguracion` no arranca con una `__Host-` sin Secure ni, en prod y
+  piloto con Secure, con una cookie sin el prefijo. El cierre de sesión borra la cookie por su nombre configurado.
+- **Límite de ingresos por conexión (H9, E24):** `LimiteIngresos` (en memoria) y `FiltroLimiteIngresos`, antes del
+  formulario y después del CSRF: 5 intentos fallidos con un usuario o 20 con cualquiera desde una conexión en 15 minutos,
+  y la conexión espera 15 minutos con un **429** (la página de ingreso con el aviso) **sin autenticar**. La cuenta se
+  bloquea con `intentos-maximos: 15` (antes 5), así que un tercero desde una conexión no bloquea la cuenta de la
+  promotora. Cuando una conexión empieza a esperar queda en la bitácora (`INGRESOS_LIMITADOS`, «Revisar»).
+- **Sesión de 10 horas (decisión 83, E18):** `FiltroSesionMaxima` cierra la sesión HTTP a las 10 horas del ingreso aunque
+  haya actividad (al invalidarla se cierra la sesión de la base, VENCIO).
+- **BCrypt con costo configurable (A02):** 12 por defecto (`costo-bcrypt`), 10 en las pruebas; los hashes guardados con
+  otro costo siguen sirviendo.
+- **IDOR (A01, E19 a E21):** `CatalogoRutasConId` clasifica las **132** rutas con un id en la ruta, un parámetro `Long` o
+  un campo `Long` del formulario (`RutasDeLaAplicacion` las lee de Spring MVC). `RutasIdorTest`: con cada rol que la ruta
+  permite, una persona del colegio B pide los recursos reales del colegio A (uno de cada uno de los 30 tipos); la
+  apoderada de una familia pide lo de otra familia del mismo colegio en las 9 rutas del portal. Ninguna respuesta muestra
+  datos del otro, ninguna es un 500, ninguna dice «Listo» y ninguna cambia una sola tabla del colegio A. Un control
+  comprueba que el mismo recorrido sí marca a quien ve y cambia los datos; una ruta nueva sin clasificar hace fallar la
+  prueba.
+- **CSRF (E23):** `CsrfEnTodoPostTest` recorre todos los POST (más `/login` y `/salir`) con el rol que cada uno permite y
+  sin token: 403 en todos; solo `/webhooks/**` (avisos firmados) queda fuera.
+- **Subida de archivos (E25):** catálogo `src/test/resources/hostiles/` (bomba zip, XXE, HTML con extensión de planilla,
+  CSV con fórmulas, nombre con `../` y 0 bytes) contra las tres subidas: `ArchivosHostilesTest` (21 casos).
+- **Enumeración de usuarios:** `EnumeracionUsuariosTest` (mismo mensaje y tiempos parecidos: el señuelo pasa por BCrypt).
+- **Dependencias (A06, E26):** SBOM CycloneDX con la configuración del parent de Spring Boot
+  (`target/classes/META-INF/sbom/application.cdx.json`, sin las dependencias de prueba); `scripts/dependencias/revisar.sh`
+  corre OSV-Scanner desde la imagen **oficial** de Google (`ghcr.io/google/osv-scanner`, fijada por su digest) y
+  `revisar_osv.py` falla con una CRÍTICA o ALTA con arreglo publicado. Job nuevo `dependencias` del CI, con la muestra
+  `scripts/dependencias/muestra-vulnerable` (log4j-core 2.14.1), que debe fallar. `.github/dependabot.yml` para Maven,
+  Docker y las acciones, cada semana.
+- **Acciones de GitHub fijadas por SHA (A08, H13):** `actions/checkout` v4.4.0 y `actions/setup-java` v4.9.1 en `ci.yml` y
+  `vigilancia.yml`, con la versión en un comentario.
+- **Logs sin DNI (H10):** ya los dejó la tanda 1 (ECS + `EnmascaradoLogs`); se agregó `elDuplicateEntryDeMySqlSaleSinElDni`
+  en `PermisosMySqlTest`, que provoca un «Duplicate entry» REAL de MySQL (el DNI de un apoderado) y comprueba que sale
+  enmascarado.
+- **Ley 29733 (V26, paquete `privacidad`, E27 y E28):**
+  - `acceso_dato_personal`: lo escribe `RegistroAccesosInterceptor` en las pantallas con `@RegistraAcceso` (fichas de
+    familia, apoderado y alumno, búsquedas de alumnos y de caja, morosos, llamada de control, vista previa de la
+    importación y detalle de un cambio de contacto de apoderado), **antes** de mostrar la página (si el registro falla, la
+    página no se muestra), con la sesión de la base de quien vio y su IP. Sin el texto buscado. Solo personal.
+  - Promotoría lo ve en la ficha de la familia («Quién consultó estos datos, 90 días») y en `/auditoria/accesos`
+    (persona y fechas, 92 días como máximo), con la alerta ATENCIÓN de más de 50 fichas en un día (`AlertasPrivacidad`).
+  - «Mis datos» en `/familia/mis-datos` (la familia de la sesión; apoderados, hijos, matrículas, usos, destinatarios y
+    plazos; se imprime), el aviso de privacidad público en `/privacidad` (borrador que aprueba el asesor legal),
+    aceptado al activar la cuenta de una familia (`PRIVACIDAD_ACEPTADA` con la versión).
+  - Pedidos `DATOS_PERSONALES` con su derecho por «¿Algo no cuadra?», con su último día hábil en el portal y en la bandeja;
+    ATENCIÓN a los 7 días hábiles y CRÍTICA (también al celular) al vencer. Reporte «Datos con plazo vencido»
+    (`/auditoria/datos-vencidos`).
+- **MySQL:** `02` da `INSERT` en `acceso_dato_personal` al rol; `01` y `03` solo cambian sus cabeceras (73 triggers);
+  el verificador de prod exige que el registro no se edite ni se borre (1142, también con `cc_sistema`) y que el derecho no
+  cambie (1143), con la línea de log «Permisos de la Ley 29733 verificados». CI: los 1142, 1143 y 3819 nuevos, las
+  cabeceras, la cookie `__Host-` y el 429 en el arranque real de prod.
+- **Entrega:** `docs/manuales/` (7 manuales e índice), `docs/entrega/` (guion de los 9 videos, capacitación, acta de
+  conformidad e índice), `docs/operacion/incidente-datos-personales.md` y el acta del simulacro como plantilla a completar
+  en el servidor del colegio; `guia-promotora.md` remite al manual de Promotoría.
+
+### Desviaciones del diseño (y por qué)
+1. **H9 no se cerraba con el límite por IP solo:** con 20 intentos por conexión y el bloqueo de la cuenta a los 5, un
+   tercero seguía bloqueando la cuenta de la promotora con 5 intentos. Se agregó el límite **por usuario y conexión** (5)
+   y el bloqueo de la cuenta pasó a 15 intentos (desde 3 conexiones o más). Residual: un ataque desde 3 conexiones todavía
+   bloquea la cuenta 15 minutos. En las pruebas los límites por conexión van altos y el bloqueo en 5 (las de los sprints
+   anteriores intentan siempre desde la misma conexión); `LimiteIngresosPorIpTest` usa los valores de prod.
+2. **`acceso_dato_personal` lleva `sesion_id`** (FK a la sesión de la base, como la firma de las aprobaciones) y un CHECK
+   de qué ficha nombra a quién; `tipo` y `cantidad` como en el diseño.
+3. **`/portal/mis-datos` es `/familia/mis-datos`:** el portal de familias vive en `/familia/**`.
+4. **`/auditoria/accesos` y `/auditoria/datos-vencidos` son un módulo aparte de la matriz (`ACCESOS_DATOS`, solo
+   Promotoría)**, antes de `AUDITORIA` (que también es de Dirección).
+5. **La caja no registra su pantalla de cobro** (`/caja/familias/{id}`): una cajera abre decenas de familias al día para
+   cobrar y la alerta de 50 fichas sonaría siempre. Sí registra su búsqueda (cantidad) y ya queda el cobro en la bitácora.
+6. **Quien intervino en un pedido sobre datos personales:** quien pidió o aprobó un cambio del celular o el correo de un
+   apoderado de esa familia (la regla de los pagos no aplica: el pedido no nombra un pago). Es una regla de la aplicación;
+   el trigger de `aviso_familia` no cambió (73 triggers).
+7. **Sin una clave de prueba con datos reales en la base para el 429 del CI:** el paso usa un usuario que no existe
+   (`nadie.ci`): prueba el filtro, el reenvío de Tomcat y el aviso sin tocar ninguna cuenta.
+8. **Costo de BCrypt:** 12 por defecto sin medir el servidor del colegio (no existe todavía); el manual del operador dice
+   cómo bajarlo a 11 si el ingreso pasa de 500 ms.
+9. **OSV-Scanner por Docker:** la imagen oficial fijada por digest, en el CI y en local (nada se descarga de otra fuente).
+   El SBOM es el que Spring Boot ya configura (dentro del jar); no se usó el plugin de OWASP dependency-check, que necesita
+   descargar la base del NVD con una clave.
+10. **Datos con plazo vencido:** la salida de una familia es la fecha de retiro o, si egresó, el fin de clases de su última
+    matrícula; «sin deuda» = sin cuotas pendientes ni parciales.
+
+### Revisión OWASP fila por fila (sección 7)
+| Riesgo | Revisado | Hallazgo | Qué se hizo | Prueba |
+|---|---|---|---|---|
+| A01 Control de acceso e IDOR | Las 132 rutas con id, con cada rol permitido, contra otro colegio; las 9 del portal contra otra familia | **Ninguna fuga** (ningún 200 con datos del otro, ningún 500, ningún «Listo», ninguna tabla del colegio A cambiada) | Catálogo obligatorio de rutas con id | `RutasIdorTest` |
+| A02 Fallas criptográficas | HSTS, TLS a MySQL, BCrypt, respaldos | **HSTS dependía de que el proxy marcara la petición como segura (H8)** | HSTS explícito en toda respuesta; BCrypt 12 configurable (antes 10); TLS a MySQL y respaldos cifrados ya en las tandas 1 y 2 | `CabecerasSeguridadTest`, paso del CI |
+| A03 Inyección | SQL, plantillas, logs, Excel, `Content-Disposition` | **La descarga del archivo original de la recaudación usaba el nombre que escribió quien lo subió** | Nombre fijo `recaudacion-lote-<id>.<ext>` (el original queda en la base y la bitácora). Sin SQL nativo, sin `th:utext` ni scripts en línea (ya lo exigían ArchUnit e `InterfazBaseTest`), logs JSON de una línea | `NombreDescargaTest`, `InterfazBaseTest`, `EnmascaradoLogsTest` |
+| A04 Diseño inseguro | Firmas, segregación, triggers | Sin hallazgos nuevos (tanda 2) | — | E1 a E10 (tanda 2) |
+| A05 Configuración insegura | Cabeceras, cookie, página de error, Actuator | **Faltaban COOP y CORP y la cookie no usaba `__Host-` (H8)** | COOP y CORP `same-origin`; `__Host-CCSESION` con su verificación al arrancar; página de error con código (tanda 1); Actuator solo `health` | `CabecerasSeguridadTest`, `VerificadorConfiguracionTest`, paso del CI |
+| A06 Componentes vulnerables | SBOM de Spring Boot 4.1.1 con OSV-Scanner 2.6.0 | **Tomcat 11.0.24: 3 CRÍTICAS (CVE-2026-65905, CVE-2026-65182, CVE-2026-68525); Jackson 3.1.5: 5 ALTAS (CVE-2026-89425, CVE-2026-89407, CVE-2026-91777, CVE-2026-68497, CVE-2026-91776) y 2 MEDIAS (CVE-2026-83557, CVE-2026-19032)**, todas con arreglo | Tomcat 11.0.26 y Jackson 3.1.7 (sin cambiar de línea); después, ninguna. OSV-Scanner en cada PR y Dependabot semanal | Job `dependencias` (y su muestra con log4j-core 2.14.1, que falla) |
+| A07 Identificación y autenticación | Bloqueo, enumeración, sesiones | **Bloqueo dirigido de una cuenta con 5 intentos (H9); la sesión HTTP no tenía máximo** | Límite por usuario y conexión (5) y por conexión (20), 429 sin llegar a la cuenta; bloqueo de la cuenta a los 15; sesión de 10 h. Enumeración: mismo mensaje y tiempos parecidos (ya existía el señuelo) | `LimiteIngresosPorIpTest`, `SesionMaximaTest`, `EnumeracionUsuariosTest`, paso del CI |
+| A08 Integridad | Acciones de GitHub, huellas, jar | **Las acciones se fijaban por etiqueta (H13)** | Fijadas por SHA (`checkout` v4.4.0, `setup-java` v4.9.1) en `ci.yml` y `vigilancia.yml`; Dependabot las actualiza | Revisión del workflow |
+| A09 Registro y monitoreo | Logs, bitácora | Sin hallazgos nuevos: el «Duplicate entry» real de MySQL sale enmascarado | Bitácora de las conexiones que superan el límite (`INGRESOS_LIMITADOS`) y registro de accesos a datos personales | `PermisosMySqlTest.elDuplicateEntryDeMySqlSaleSinElDni`, `LogsSinDatosPersonalesTest` |
+| A10 SSRF | Peticiones salientes | Sin hallazgos: solo `EmisorNubefact` y `WhatsAppCloudApi` hacen peticiones, a dominios de una lista cerrada | Regla ArchUnit nueva | `ReglasArquitecturaTest.soloLosConectoresHacenPeticionesSalientes` |
+| CSP | Directivas | Sin hallazgos: sin `unsafe-inline` ni `unsafe-eval`, `frame-ancestors 'none'`, `object-src 'none'`, `form-action 'self'` | Sin cambios | `CabecerasSeguridadTest` |
+| CSRF | Todos los POST | Sin hallazgos: 403 sin token en todos, salvo `/webhooks/**` (firma) | — | `CsrfEnTodoPostTest` |
+| Subida de archivos | 6 archivos hostiles × 3 subidas | Sin hallazgos: ninguno pasa, ninguno rompe, ninguno expande entidades ni escribe en disco | Catálogo `src/test/resources/hostiles/` | `ArchivosHostilesTest` |
+
+
+### Escenarios cubiertos
+E19, E20 y E21 (`RutasIdorTest`), E22 (`CabecerasSeguridadTest` y el CI), E23 (`CsrfEnTodoPostTest`), E24
+(`LimiteIngresosPorIpTest` y el CI), E25 (`ArchivosHostilesTest`), E26 (job `dependencias`), E27
+(`AccesosDatosPersonalesTest`, `PermisosMySqlTest.flujoLey29733ConPermisosMinimos`), E28 (`MisDatosTest`,
+`PedidosDatosPersonalesTest`, `PrivacidadWebTest`) y E18 a las 10 horas (`SesionMaximaTest`).
+
+### Resultados (9 de octubre de 2026)
+- `./mvnw -B verify`: **2035 pruebas**, 0 fallas, 107 omitidas (las de MySQL real); también en verde con
+  `-DargLine=-Duser.timezone=America/Los_Angeles` (2035, 0 fallas).
+- **Job `mysql` reproducido completo** en contenedores desechables `mysql:8` (8.4.11): V1–V26, `02` quita un GRANT dado a
+  mano, 73 triggers y 78 huellas, los 1142, 1143 y 3819 nuevos como `cc_app` y como `cc_sistema`, arranque real en prod
+  con TLS y dos usuarios (línea «Permisos de la Ley 29733 verificados»), HSTS, COOP, CORP, CSP y la cookie
+  `__Host-CCSESION` (Secure, HttpOnly, `Path=/`, sin dominio) del servidor real, el 429 tras 5 intentos fallidos desde una
+  conexión (la página de Tomcat con el aviso), los rechazos con `cc_migrador`, sin TLS, con el mismo usuario y con un
+  privilegio de más, M2 y M3. **107 pruebas de MySQL real**, 0 fallas: 2 de migración, 83 + 7 de permisos (7 en la fase
+  2b; 2 nuevas: `flujoLey29733ConPermisosMinimos` y `elDuplicateEntryDeMySqlSaleSinElDni`), 3 de la auditoría del sprint 6
+  y 12 de `AuditoriaSprint7MySqlTest`.
+- **Job `respaldo` reproducido completo**: E29, restauración en el segundo MySQL con la cadena HMAC y las huellas de los
+  objetos (17 comprobaciones; el manifiesto ya cuenta `acceso_dato_personal`) y arranque de prod sobre la copia, E31, E30
+  (`pago (faltan 1)`), E32 (ancla de la bitácora), el simulacro sin clave y el destino simulado.
+- **Job `dependencias`** (en el equipo, con la imagen oficial de OSV-Scanner): el SBOM del proyecto, sin vulnerabilidades
+  conocidas tras los parches; la muestra con log4j-core 2.14.1 falla con 3 CRÍTICAS o ALTAS con arreglo.
+- Los contenedores desechables se borraron al terminar; no se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`, los
+  `supabase_*` ni `cc-mysql-s5` / `cc-mysql-s5b`.
+
+### Riesgos residuales nuevos
+- Un ataque desde 3 conexiones o más todavía bloquea una cuenta 15 minutos (decisión 104); el límite vive en memoria.
+- Con la clave de `cc_app` se puede insertar un acceso falso a nombre de otra persona (no edita ni borra los reales): no
+  mueve dinero; lo delata la sesión, que no sería de esa persona.
+- La regla «quien intervino no atiende» de los pedidos sobre datos personales es solo de la aplicación.
+- La purga del registro de accesos (2 años) la hace el DBA y el respaldo siguiente avisa «faltan filas»: es lo esperado y
+  debe constar en un acta.
+- Los plazos de la Ley 29733 no se verificaron en el texto oficial.

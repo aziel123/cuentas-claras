@@ -34,9 +34,10 @@ public class ActivacionController {
 	@PostMapping("/activar/{colegio:\\d+}/{token:[A-Za-z0-9_-]+}")
 	public String activar(@PathVariable Long colegio, @PathVariable String token,
 			@RequestParam(required = false) String documento, @RequestParam(required = false) String clave,
-			@RequestParam(required = false) String confirmacion, RedirectAttributes avisos) {
+			@RequestParam(required = false) String confirmacion,
+			@RequestParam(defaultValue = "false") boolean aceptaPrivacidad, RedirectAttributes avisos) {
 		try {
-			activacion.activar(colegio, token, documento, clave, confirmacion);
+			activacion.activar(colegio, token, documento, clave, confirmacion, aceptaPrivacidad);
 			return "redirect:/login?cuenta-activada";
 		}
 		catch (ReglaNegocioException e) {

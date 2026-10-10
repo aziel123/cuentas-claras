@@ -207,6 +207,26 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
 - `cc_respaldo` vuelca con `mysqldump --single-transaction --no-tablespaces --skip-triggers`: no necesita `LOCK TABLES`,
   `PROCESS`, `RELOAD` ni `TRIGGER` (comprobado en MySQL 8.4.11).
 
+## Ley 29733 (sprint 7, tanda 3)
+- `acceso_dato_personal` (V26): quién del personal vio datos personales. La inserta `cc_app` (por el rol `cc_negocio`,
+  solo INSERT) **antes** de mostrar la pantalla; nadie la edita ni la borra (1142, también `cc_sistema`). No entra en la
+  cadena HMAC de la bitácora (son cientos de filas al día), pero sí en los conteos de los manifiestos de respaldo.
+- `aviso_familia.derecho` (V26): el derecho de un pedido sobre datos personales (acceso, rectificación, cancelación u
+  oposición). No está en el UPDATE de la tabla (1143) y el CHECK `ck_aviso_familia_derecho` exige que solo lo lleve ese
+  tipo de aviso, sin pago ni cuota.
+- **Purga a los 2 años** (decisión 96, a confirmar por el asesor legal): la hace el DBA, nunca la aplicación, con la
+  aplicación en marcha y después del respaldo del día, y deja constancia en un acta. El respaldo siguiente avisará «faltan
+  filas» en `acceso_dato_personal`: es lo esperado y el acta lo explica.
+  ```sql
+  -- Revisar primero cuántas filas se van (en hora de Lima, como las guarda la aplicación):
+  SELECT colegio_id, COUNT(*) FROM cuentasclaras.acceso_dato_personal
+   WHERE creado_en < (UTC_TIMESTAMP(6) - INTERVAL 5 HOUR) - INTERVAL 2 YEAR GROUP BY colegio_id;
+  DELETE FROM cuentasclaras.acceso_dato_personal
+   WHERE creado_en < (UTC_TIMESTAMP(6) - INTERVAL 5 HOUR) - INTERVAL 2 YEAR;
+  ```
+- La migración V26 no agrega usuarios, triggers ni funciones: siguen siendo 73 triggers. Basta el orden de despliegue de
+  siempre (respaldo, detener, `migrar`, `02`, `03`, arrancar).
+
 ## Cada migración nueva
 
 - Si crea una tabla, agrega su GRANT en `scripts/mysql/02-permisos-tablas.sql` y aplícalo después de migrar.

@@ -1,0 +1,35 @@
+# Sprint 7, tanda 3 (A06 y A08 de OWASP, decisión 102): Dependabot propone cada semana las actualizaciones de las
+# dependencias de Maven, de la imagen base del Dockerfile (eclipse-temurin) y de las acciones de GitHub (que el CI fija
+# por SHA: Dependabot actualiza el SHA y el comentario con la versión). Cada propuesta pasa por el CI completo
+# (pruebas, MySQL real, respaldo y el paso «dependencias») y la une una persona.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/Lima
+    open-pull-requests-limit: 5
+    # Solo el pom.xml de la raíz: la muestra vulnerable de scripts/dependencias/ (log4j-core 2.14.1 a propósito) queda
+    # fuera porque está en otra carpeta.
+    labels: [dependencias]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/Lima
+    labels: [dependencias]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/Lima
+    labels: [dependencias]

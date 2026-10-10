@@ -53,7 +53,10 @@ server:
       timeout: 30m
       tracking-modes: cookie
       cookie:
-        name: CCSESION
+        # Sprint 7, tanda 3 (decisión 103): el prefijo __Host- obliga al navegador a aceptarla solo con Secure, en la raíz
+        # y sin dominio (nadie la fija desde un subdominio). Exige https: en local por http (dev, test y la instalación
+        # en Docker) va CCSESION con secure: false. VerificadorConfiguracion no deja combinarlos mal.
+        name: ${CC_COOKIE_SESION:__Host-CCSESION}
         http-only: true
         same-site: lax
         secure: true
@@ -91,11 +94,23 @@ cuentasclaras:
     # H11: en prod la conexión a MySQL va cifrada (sslMode en DB_URL). Solo la instalación local en Docker lo apaga.
     exigir-tls: ${CC_EXIGIR_TLS_BD:true}
   sesion:
-    # Sprint 7, tanda 2 (decisión 83): el secreto con que se firman las aprobaciones sirve 10 h aunque haya actividad.
+    # Sprint 7, tanda 2 (decisión 83): la sesión (y el secreto con que se firman las aprobaciones) dura 10 h aunque haya
+    # actividad; tanda 3: también la sesión HTTP se cierra a las 10 h.
     vigencia-maxima: 10h
+    # Sprint 7, tanda 3 (H9, decisión 104): desde una misma conexión, 5 intentos fallidos con un usuario o 20 con
+    # cualquiera, en 15 minutos, y esa conexión espera 15 minutos (429). Esos intentos no llegan a la cuenta: un tercero no
+    # bloquea la cuenta de otra persona. Si todo el colegio sale a internet por una sola IP, se puede subir intentos-por-ip.
+    intentos-por-ip: 20
+    intentos-por-cuenta-e-ip: 5
+    ventana-intentos-ip: 15m
   seguridad:
-    # Intentos fallidos seguidos antes de bloquear la cuenta, y cuánto dura el bloqueo.
-    intentos-maximos: 5
+    # Intentos fallidos seguidos (desde cualquier conexión) antes de bloquear la cuenta, y cuánto dura el bloqueo. Sprint 7,
+    # tanda 3 (H9): 15, el triple del límite por conexión (intentos-por-cuenta-e-ip): bloquear una cuenta exige intentos
+    # desde 3 conexiones o más; desde una sola, solo espera esa conexión.
+    intentos-maximos: 15
+    # Sprint 7, tanda 3 (A02): costo de BCrypt de las claves nuevas (12: unos 250 ms; si el ingreso pasa de 500 ms en el
+    # servidor del colegio, bajar a 11).
+    costo-bcrypt: 12
     duracion-bloqueo: 15m
     # Una clave temporal (alta o restablecimiento) deja de servir pasado este tiempo.
     vigencia-clave-temporal: 48h
@@ -220,6 +235,15 @@ cuentasclaras:
     llamadas-por-semana: 3                # decisión 77: familias de la llamada de control de cada semana
     muestra-semanal: "0 10 0 * * MON"     # sprint 7, tanda 2 (decisión 87): la muestra de la semana la fija sistema.panel
     reemplazos-cada: "0 */15 * * * *"     # reintento del reemplazo tras dos «No contesta» (si el de después del commit falló)
+  privacidad:
+    # Sprint 7, tanda 3 (Ley 29733, sección 8). Los plazos salen de fuentes secundarias (no del texto oficial del
+    # DS 016-2024-JUS): A CONFIRMAR POR EL ASESOR LEGAL (decisiones 97 a 99).
+    version-aviso: "2027-01"
+    accesos-umbral-diario: 50             # decisión 96: más fichas vistas por una persona en un día es ATENCIÓN
+    plazo-acceso-dias-habiles: 20         # derecho de acceso
+    plazo-otros-dias-habiles: 10          # rectificación, cancelación y oposición
+    aviso-dias-habiles: 7                 # sin atender: ATENCIÓN; vencido el plazo: CRÍTICA
+    contactos-meses: 12                   # decisión 98: contactos de familias que se fueron sin deuda
   monitoreo:
     # Sprint 7, tanda 1 (sección 10): alertas técnicas por correo directo (SMTP de spring.mail y remitente
     # CORREO_REMITENTE) al responsable técnico. Sin CC_OPERADOR_CORREO quedan apagadas y /panel/sistema lo dice en rojo.

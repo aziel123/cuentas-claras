@@ -31,7 +31,7 @@
 		<div th:replace="~{fragments/componentes :: alerta('info', 'Comprobante simulado: aún sin envío a SUNAT.')}"></div>
 	</th:block>
 	<div th:replace="~{fragments/componentes :: alerta('info',
-		'Aviso al apoderado: se activa en diciembre (WhatsApp o correo). Por ahora, entrega la boleta impresa.')}"></div>
+		'Aviso al apoderado: el sistema le envía el aviso de este pago a su celular o correo registrado. Entrega igual la boleta impresa.')}"></div>
 
 	<div class="acciones acciones-izquierda">
 		<a class="btn btn-primario" data-imprimir-boleta th:href="@{/caja/pagos/{id}/comprobante(id=${p.id},imprimir=true)}">Imprimir boleta</a>

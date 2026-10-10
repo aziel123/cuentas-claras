@@ -142,7 +142,7 @@ class VerificadorPermisosBaseDatosTest {
 					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado|movimiento_bancario|"
 					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora|semilla_muestreo|huella_hora|"
 					+ "resumen_diario|llamada_control|muestra_llamada|delegacion_llamada|configuracion_colegio|respaldo|"
-					+ "firma_operacion) ");
+					+ "firma_operacion|acceso_dato_personal) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -534,6 +534,22 @@ class VerificadorPermisosBaseDatosTest {
 				{ "DELETE FROM aviso_familia WHERE 1 = 0", "aviso_familia" },
 				{ "UPDATE renovacion_matricula SET alumno_id = alumno_id WHERE 1 = 0", "renovacion_matricula" },
 				{ "UPDATE aviso_familia SET texto = texto WHERE 1 = 0", "aviso_familia" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+	}
+
+	/**
+	 * Sprint 7, tanda 3 (V26, Ley 29733): si la aplicación pudiera borrar o editar el registro de quién vio datos personales,
+	 * o cambiar el derecho de un pedido sobre datos personales, prod no arranca.
+	 */
+	@Test
+	void fallaSiSePuedeTocarElRegistroDeAccesosOElDerechoDeUnPedido() {
+		for (String[] caso : new String[][] { { "DELETE FROM acceso_dato_personal WHERE 1 = 0", "acceso_dato_personal" },
+				{ "UPDATE acceso_dato_personal SET version = version WHERE 1 = 0", "acceso_dato_personal" },
+				{ "UPDATE aviso_familia SET derecho = derecho WHERE 1 = 0", "aviso_familia" } }) {
 			JdbcTemplate mysql = mysqlQueDeniega();
 			doReturn(0).when(mysql).update(caso[0]);
 			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())

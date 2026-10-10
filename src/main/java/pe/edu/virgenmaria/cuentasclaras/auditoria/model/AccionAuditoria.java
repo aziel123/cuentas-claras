@@ -305,6 +305,12 @@ public enum AccionAuditoria {
 	/** Se resalta (S6-M2): una familia de la llamada de control no contestó dos veces y se reemplazó. */
 	LLAMADA_CONTROL_REEMPLAZADA("Una familia de la llamada de control no contestó dos veces", true),
 
+	// Sprint 7, tanda 3 (Ley 29733)
+	/** La familia aceptó el aviso de privacidad (con su versión) al activar su cuenta del portal. */
+	PRIVACIDAD_ACEPTADA("La familia aceptó el aviso de privacidad", false),
+	/** Se resalta (H9): una conexión superó el límite de intentos de ingreso fallidos y debe esperar. */
+	INGRESOS_LIMITADOS("Una conexión superó el límite de intentos de ingreso y debe esperar", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

@@ -3,6 +3,8 @@
 -- (nunca las subas al repositorio). Para una base que ya existe (creada antes del sprint 7) aplica
 -- 04-una-vez-sprint-7.sql. Los permisos de cc_app, cc_sistema y cc_respaldo los da (y los quita) SOLO
 -- 02-permisos-tablas.sql.
+-- Sprint 7, tanda 3 (V26): sin usuarios nuevos. El registro de quién ve datos personales lo escribe cc_app (por el rol
+-- cc_negocio, solo INSERT) y lo purga el DBA a los 2 años (docs/operacion/mysql-usuarios.md).
 CREATE DATABASE IF NOT EXISTS cuentasclaras CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- Migrador: solo lo usa Flyway (java -jar ... migrar) y aplica 03-triggers.sql. Puede crear y cambiar tablas.
