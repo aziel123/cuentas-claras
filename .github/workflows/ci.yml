@@ -111,7 +111,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V26): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V27): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -145,6 +145,26 @@ jobs:
 
       - name: "Sprint 7, tanda 2: con la clave de cc_app no se crea una cuenta, no se firma como sistema ni se aprueba a nombre de otra persona (E1 a E18)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint7MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "QA del sprint 7: firmas de sesiones vencidas, cerradas o de otra persona, y sesiones que no se reabren"
+        run: ./mvnw -B test -Dtest=QaSprint7MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Correcciones del sprint 7 (S7-A1): con cc_app ya no se anula un pago sin la aprobación firmada (1644)"
+        run: ./mvnw -B test -Dtest=AuditoriaAnulacionPagoMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Correcciones del sprint 7: estado de las cuentas de Promotoría o Dirección y operaciones de dinero atadas a su solicitud firmada"
+        run: ./mvnw -B test -Dtest=CorreccionesSprint7MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Correcciones del sprint 7 (S7-M1): un rol anidado en cc_negocio no se ve en SHOW GRANTS: el verificador lo detecta y 02 lo quita"
+        run: |
+          $MYSQL_ADMIN -e "CREATE ROLE 'cc_rol_oculto'; GRANT DELETE ON cuentasclaras.acceso_dato_personal TO 'cc_rol_oculto'; GRANT 'cc_rol_oculto' TO 'cc_negocio'"
+          CC_PRUEBA_ROL_ANIDADO=presente ./mvnw -B test -Dtest=RolAnidadoMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+          $MYSQL_ADMIN < scripts/mysql/02-permisos-tablas.sql
+          aristas=$($MYSQL_ADMIN -N -e "SELECT COUNT(*) FROM mysql.role_edges WHERE TO_USER = 'cc_negocio'")
+          [ "$aristas" = "0" ] || { echo "ERROR: 02 no quitó el rol anidado en cc_negocio"; exit 1; }
+          CC_PRUEBA_ROL_ANIDADO=ausente ./mvnw -B test -Dtest=RolAnidadoMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+          $MYSQL_ADMIN -e "DROP ROLE 'cc_rol_oculto'"
+          echo "OK (S7-M1): el verificador ve el rol anidado y 02 lo quita al recrear cc_negocio"
 
       - name: "Fase 2b (sprint 5): con la mensajería simulada habilitada por el DBA, los mensajes y enlaces salen"
         run: |
@@ -434,6 +454,14 @@ jobs:
           comprobar 1143 "UPDATE aviso_familia SET derecho = derecho WHERE 1 = 0"
           comprobar 3819 "INSERT INTO aviso_familia (colegio_id, familia_id, apoderado_id, tipo, texto, estado, derecho, creado_en, creado_por, actualizado_en) SELECT colegio_id, familia_id, id, 'OTRO', 'verificador de permisos', 'ABIERTO', 'ACCESO', NOW(6), 'verificador', NOW(6) FROM apoderado LIMIT 1"
           comprobar 1644 "INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, comprobante_id, medio, total, recibido, vuelto, origen, clave_idempotencia, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'sistema.pasarela', '2000-01-01', 0, 'YAPE', 1, 1, 0, 'PASARELA', 'ci-sistema', 'VIGENTE', NOW(6), 'sistema.pasarela', NOW(6))"
+          # Correcciones del sprint 7 (V27): una solicitud nace PENDIENTE (S7-A1: con cc_app no se inserta una ya APROBADA:
+          # 1644); la resolución de una alerta de respaldo la hace Promotoría con su firma (QA-S7-1: 1644) y no se edita ni
+          # se borra (1142); la marca de la primera Dirección la escribe solo cc_sistema (1142).
+          comprobar 1644 "INSERT INTO solicitud_cambio (colegio_id, tipo, entidad, entidad_id, resumen, datos, motivo, estado, pendiente, solicitado_por, resuelto_por, resuelto_en, creado_en, creado_por, actualizado_en) VALUES (0, 'ANULACION_PAGO', 'pago', 0, 'x', '{}', 'verificador de permisos', 'APROBADA', NULL, 'x.pide', 'y.aprueba', NOW(6), NOW(6), 'x.pide', NOW(6))"
+          comprobar 1644 "INSERT INTO resolucion_respaldo (respaldo_id, colegio_id, usuario_id, motivo, creado_en, creado_por) VALUES (0, 0, 0, 'verificador de permisos', NOW(6), 'verificador')"
+          comprobar 1142 "UPDATE resolucion_respaldo SET motivo = motivo WHERE 1 = 0"
+          comprobar 1142 "DELETE FROM resolucion_respaldo WHERE 1 = 0"
+          comprobar 1142 "INSERT INTO primera_direccion (colegio_id, usuario_id, creado_en, creado_por, actualizado_en) VALUES (1, ${personal}, NOW(6), 'x', NOW(6))"
           # Con cc_sistema: no edita la bitácora ni borra los libros (1142); sus inserciones imposibles llegan al trigger (1644).
           comprobar_sistema() {
             codigo="$1"; sql="$2"
@@ -470,9 +498,16 @@ jobs:
           comprobar_sistema 1644 "UPDATE usuario SET telefono_whatsapp = '+51900000009' WHERE id = ${personal}"
           comprobar_sistema 1644 "UPDATE usuario SET apoderado_id = (SELECT MIN(id) FROM apoderado) WHERE id = ${personal}"
           comprobar_sistema 1644 "UPDATE mensaje SET proveedor = 'SIMULADO', proveedor_mensaje_id = CONCAT('SIM-', id), estado = 'ENVIADO', enviado_en = NOW(6), intentos = intentos + 1 WHERE clave LIKE 'pendiente-para-ci-%' AND estado = 'PENDIENTE'"
-          # Huellas (H7): cc_app ve las de los 73 triggers y las 5 funciones con huellas_objetos().
+          # Correcciones del sprint 7: cc_sistema tampoco inserta una solicitud ya aprobada (1644), ni edita o borra la marca
+          # de la primera Dirección (1142); una cuenta de Dirección no se desactiva sin su solicitud ESTADO_CUENTA (1644).
+          comprobar_sistema 1644 "INSERT INTO solicitud_cambio (colegio_id, tipo, entidad, entidad_id, resumen, datos, motivo, estado, pendiente, solicitado_por, resuelto_por, resuelto_en, creado_en, creado_por, actualizado_en) VALUES (0, 'ANULACION_PAGO', 'pago', 0, 'x', '{}', 'verificador de permisos', 'APROBADA', NULL, 'x.pide', 'y.aprueba', NOW(6), NOW(6), 'x.pide', NOW(6))"
+          comprobar_sistema 1142 "UPDATE primera_direccion SET version = version WHERE 1 = 0"
+          comprobar_sistema 1142 "DELETE FROM primera_direccion WHERE 1 = 0"
+          directora=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT MIN(u.id) FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id WHERE r.rol = 'DIRECTOR' AND u.activo")
+          comprobar_sistema 1644 "UPDATE usuario SET activo = FALSE, desactivado_en = NOW(6), desactivado_por = 'ci' WHERE id = ${directora}"
+          # Huellas (H7): cc_app ve las de los 75 triggers y las 7 funciones con huellas_objetos().
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
-          [ "$objetos" = "$((esperados + 5))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
+          [ "$objetos" = "$((esperados + 7))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -513,8 +548,8 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 73 triggers y las 5 funciones verificadas" prod.log || { cat prod.log; exit 1; }
-          grep -q "Privilegios verificados: cc_app y cc_sistema tienen solo los de 02-permisos-tablas.sql" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 75 triggers y las 7 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Privilegios verificados: cc_app y cc_sistema tienen solo los de 02-permisos-tablas.sql, sin roles anidados" prod.log || { cat prod.log; exit 1; }
           grep -q "Conexiones a MySQL cifradas (TLS) verificadas" prod.log || { cat prod.log; exit 1; }
           # Sprint 7, tanda 3 (V26, Ley 29733).
           grep -q "Permisos de la Ley 29733 verificados" prod.log || { cat prod.log; exit 1; }
@@ -743,7 +778,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V26, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V27, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \
@@ -788,8 +823,20 @@ jobs:
       - name: "E32: un DBA recorta el final de la bitácora (y el eslabón): el respaldo siguiente avisa por el ancla"
         run: sh scripts/respaldo/pruebas-ci.sh e32
 
+      - name: "QA-S7-1: un segundo respaldo NO borra la alerta «faltan filas» (y la base rechaza IGUAL mientras no se resuelva)"
+        run: sh scripts/respaldo/pruebas-ci.sh faltan-filas-sigue
+
       - name: "Simulacro semanal (sin la clave HMAC) del último respaldo: detecta el recorte y el pago borrado"
         run: sh scripts/respaldo/pruebas-ci.sh restauracion-sin-clave
+
+      - name: "S7-M1: el simulacro semanal relee los GRANT de prod (un rol anidado en cc_negocio aparece) y 02 lo quita"
+        run: sh scripts/respaldo/pruebas-ci.sh permisos-anidados
+
+      - name: "QA-S7-1: Promotoría resuelve la alerta con motivo y su firma (sin firma o sin Promotoría, 1644)"
+        run: CC_PRUEBA_RESOLUCION_RESPALDO=true ./mvnw -B test -Dtest=ResolucionRespaldoMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "QA-S7-1: resuelta, el respaldo siguiente vuelve a IGUAL"
+        run: sh scripts/respaldo/pruebas-ci.sh resuelto
 
       - name: "Destino simulado: solo con la fila del DBA (nunca en prod); sin ella, la base no lo registra (1644)"
         run: sh scripts/respaldo/pruebas-ci.sh simulado

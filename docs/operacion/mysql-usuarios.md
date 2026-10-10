@@ -41,7 +41,13 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
    ```
    **Sprint 7, tanda 2: `02` es la fuente única.** Empieza quitándolo todo (`REVOKE ALL` de `cc_app`, `cc_sistema` y
    `cc_respaldo`, y del rol `cc_negocio`) y vuelve a dar solo lo suyo: un GRANT dado a mano no sobrevive a la siguiente
-   aplicación de `02`. Los permisos de negocio van al rol `cc_negocio` (rol por defecto de `cc_app` y `cc_sistema`) y lo
+   aplicación de `02`. **Correcciones del sprint 7 (S7-M1):** el rol `cc_negocio` se **borra y se crea de nuevo**
+   (`DROP ROLE` y `CREATE ROLE`): un rol concedido DENTRO de él («GRANT otro_rol TO cc_negocio») daba privilegios que
+   `SHOW GRANTS` no muestra y que `REVOKE ALL` no quita. El verificador de prod lee `information_schema.APPLICABLE_ROLES`
+   y no arranca si una conexión recibe otro rol que `cc_negocio` (directo o anidado); el simulacro semanal compara los
+   permisos de prod (`permisos_objetos()`, en el manifiesto del respaldo) con los de `02`. Por eso `02` se aplica con la
+   aplicación detenida y `cc_negocio` no debe estar en `mandatory_roles`.
+   Los permisos de negocio van al rol `cc_negocio` (rol por defecto de `cc_app` y `cc_sistema`) y lo
    exclusivo de los procesos y la identidad, solo a `cc_sistema`. La tabla de abajo dice lo que tiene `cc_negocio` (es
    decir, `cc_app`); la sección «Identidad, sesiones y firmas» dice lo que es solo de `cc_sistema`. Empieza con
    `SET NAMES utf8mb4` (el cliente `mysql` de un contenedor usa latin1 por defecto y guardaría mal las tildes de las

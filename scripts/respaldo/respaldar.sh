@@ -22,6 +22,13 @@
 #
 # Código de salida: 0 bien; 3 respaldo hecho, pero FALTAN filas o el ancla del respaldo anterior (alerta CRÍTICA: el
 # respaldo es la evidencia); 1 cualquier otra falla (no quedó registrado: «Sin respaldo» a las 26 h).
+#
+# Correcciones del sprint 7 (QA-S7-1): la alerta «faltan filas» NO la borra un segundo respaldo. Mientras la base diga
+# que hay un respaldo con FALTAN_FILAS sin resolver (resolucion_respaldo, la escribe Promotoría con su firma), se compara
+# contra la LÍNEA BASE del manifiesto anterior (el bloque «base:»: por tabla, la referencia que mostró la falta, y el
+# ancla) y el registro dice FALTAN_FILAS (trg_respaldo_registro lo exige). Resuelta, la línea base vuelve a ser el
+# último manifiesto. Correcciones del sprint 7 (S7-M1): el manifiesto guarda los permisos de las cuentas de la
+# aplicación (permisos_objetos(), de 02) para que el simulacro semanal los compare con los de 02.
 set -eu
 umask 077
 
@@ -114,6 +121,18 @@ for tabla in $existentes; do
 done
 sql "$consulta" > "$trabajo/conteos.tsv"
 
+# S7-M1: los permisos de las cuentas (arreglo JSON de líneas canónicas, sin hosts ni claves); «[]» si 02 todavía no
+# crea la función.
+permisos=$(sql "SELECT permisos_objetos()" 2>/dev/null | tr -d '\\' || true)
+case "$permisos" in
+	\[*\]) ;;
+	*) permisos="[]" ;;
+esac
+
+# QA-S7-1: ¿hay en la base un respaldo con FALTAN_FILAS sin resolver? (0 si la tabla todavía no existe)
+pendiente=$(sql "SELECT r.archivo FROM respaldo r WHERE r.comparacion = 'FALTAN_FILAS' AND NOT EXISTS (SELECT 1
+	FROM resolucion_respaldo s WHERE s.respaldo_id >= r.id) ORDER BY r.id LIMIT 1" 2>/dev/null || true)
+
 # --- 2. Comparación con el manifiesto anterior (el del destino, que no se puede alterar) --------------------------------
 anterior="$trabajo/anterior.json"
 if [ "$destino" = "simulado" ]; then
@@ -126,30 +145,52 @@ else
 fi
 comparacion="PRIMERO"
 diferencias=""
+base_secuencia=""
+base_hash=""
+: > "$trabajo/base-faltantes.txt"
 if [ -s "$anterior" ]; then
 	comparacion="IGUAL"
 	sec_anterior=$(sed -n 's/^ *"secuencia_despues": *\([0-9][0-9]*\),*$/\1/p' "$anterior")
 	hash_anterior=$(sed -n 's/^ *"hash_despues": *"\([0-9a-f]*\)",*$/\1/p' "$anterior")
+	sed -n 's/^ *"\([a-z][a-z0-9_]*\)": *\[ *\([0-9][0-9]*\), *\([0-9][0-9]*\) *\],*$/\1 \2 \3/p' "$anterior" > "$trabajo/anteriores.txt"
+	# QA-S7-1: con una alerta sin resolver, la referencia es la línea base del manifiesto anterior (si la trae).
+	if [ -n "$pendiente" ] && grep -q '"base:' "$anterior"; then
+		sec_anterior=$(sed -n 's/^ *"base_secuencia": *\([0-9][0-9]*\),*$/\1/p' "$anterior")
+		hash_anterior=$(sed -n 's/^ *"base_hash": *"\([0-9a-f]*\)",*$/\1/p' "$anterior")
+		sed -n 's/^ *"base:\([a-z][a-z0-9_]*\)": *\[ *\([0-9][0-9]*\), *\([0-9][0-9]*\) *\],*$/\1 \2 \3/p' "$anterior" > "$trabajo/anteriores.txt"
+	fi
 	if [ -n "$sec_anterior" ] && [ "$sec_anterior" -gt 0 ]; then
 		hash_actual=$(sql "SELECT hash FROM evento_auditoria WHERE secuencia = $sec_anterior")
 		if [ "$hash_actual" != "$hash_anterior" ]; then
 			diferencias="ancla de la bitácora (evento $sec_anterior)"
+			base_secuencia="$sec_anterior"
+			base_hash="$hash_anterior"
 		fi
 	fi
-	sed -n 's/^ *"\([a-z][a-z0-9_]*\)": *\[ *\([0-9][0-9]*\), *\([0-9][0-9]*\) *\],*$/\1 \2 \3/p' "$anterior" > "$trabajo/anteriores.txt"
+	: > "$trabajo/base-faltantes.txt"
 	while read -r tabla filas maximo; do
 		echo "$existentes" | grep -qx "$tabla" || continue
 		quedan=$(sql "SELECT COUNT(*) FROM \`$tabla\` WHERE id <= $maximo")
 		if [ "$quedan" -lt "$filas" ]; then
 			[ -z "$diferencias" ] || diferencias="$diferencias, "
 			diferencias="$diferencias$tabla (faltan $((filas - quedan)))"
+			echo "$tabla $filas $maximo" >> "$trabajo/base-faltantes.txt"
 		fi
 	done < "$trabajo/anteriores.txt"
+	if [ -z "$diferencias" ] && [ -n "$pendiente" ]; then
+		# La base todavía tiene la alerta sin resolver (trg_respaldo_registro exige FALTAN_FILAS): se repite.
+		diferencias="alerta sin resolver desde el respaldo $pendiente"
+	fi
 	if [ -n "$diferencias" ]; then
 		comparacion="FALTAN_FILAS"
 		avisar "CRÍTICA: faltan filas que existían en el respaldo anterior" \
 			"Comparado con $ultimo faltan: $diferencias. El respaldo de hoy se hace igual (es la evidencia). Preserva todo y sigue docs/operacion/incidente-auditoria.md."
 	fi
+fi
+if [ "$comparacion" = "PRIMERO" ] && [ -n "$pendiente" ]; then
+	# Sin manifiesto anterior en este destino, pero la base tiene una alerta sin resolver: el registro la repite.
+	comparacion="FALTAN_FILAS"
+	diferencias="alerta sin resolver desde el respaldo $pendiente"
 fi
 
 # --- 3. Volcado, compresión y cifrado en una sola tubería ----------------------------------------------------------------
@@ -195,6 +236,17 @@ manifiesto="$trabajo/$manifiesto_nombre"
 	echo "  \"hash_despues\": \"$hash_despues\","
 	echo "  \"comparacion\": \"$comparacion\","
 	echo "  \"diferencias\": \"$diferencias\","
+	echo "  \"permisos\": $permisos,"
+	# QA-S7-1: la línea base para el respaldo siguiente: lo que mostró la falta se conserva (tabla y ancla); lo demás, lo
+	# de hoy. Solo se usa mientras la alerta siga sin resolver.
+	echo "  \"base_secuencia\": ${base_secuencia:-$secuencia_despues},"
+	echo "  \"base_hash\": \"${base_hash:-$hash_despues}\","
+	echo "  \"base\": {"
+	awk 'FILENAME == ARGV[1] { falta[$1] = $2 " " $3; next }
+		{ split(($1 in falta) ? falta[$1] : $2 " " $3, v, " ");
+		  printf "%s    \"base:%s\": [%s, %s]", (FNR > 1 ? ",\n" : ""), $1, v[1], v[2] } END { print "" }' \
+		"$trabajo/base-faltantes.txt" "$trabajo/conteos.tsv"
+	echo "  },"
 	echo "  \"conteos\": {"
 	awk '{ printf "%s    \"%s\": [%s, %s]", (NR > 1 ? ",\n" : ""), $1, $2, $3 } END { print "" }' "$trabajo/conteos.tsv"
 	echo "  }"

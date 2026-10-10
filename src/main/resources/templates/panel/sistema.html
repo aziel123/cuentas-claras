@@ -14,6 +14,8 @@
 		</div>
 	</div>
 
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
 	<th:block th:unless="${sistema.alertasEncendidas()}">
 		<div data-alertas-apagadas th:replace="~{fragments/componentes :: alerta('error', 'Alertas técnicas apagadas: el responsable técnico no recibe correos si algo falla. Pídele que configure CC_OPERADOR_CORREO y el correo de salida.')}"></div>
 	</th:block>
@@ -28,6 +30,13 @@
 			<th:block th:if="${!sistema.faltanFilas() and !sistema.respaldoAlDia()}"><span th:replace="~{fragments/componentes :: badge('Atrasado', 'peligro')}"></span></th:block>
 		</p>
 		<p class="secundario" data-respaldo-detalle th:text="${sistema.respaldoDetalle()}">Están todas las filas del respaldo anterior.</p>
+		<!--/* Correcciones del sprint 7 (QA-S7-1): la alerta sigue hasta que Promotoría la resuelve con motivo y su firma. */-->
+		<div th:if="${sistema.faltanFilas()}" class="acciones" data-resolver-respaldo>
+			<th:block th:replace="~{fragments/componentes :: modalConfirmacion('modal-resolver-respaldo',
+				'¿Resolver la alerta de filas faltantes?',
+				'Hazlo solo después de revisar con el responsable técnico qué filas faltaron y por qué. La alerta deja de verse y tu motivo queda en la bitácora.',
+				@{/panel/sistema/respaldo/resolver}, 'Resolver la alerta', true)}"></th:block>
+		</div>
 		<p class="secundario">Cifrado con dos llaves (la tuya y la del responsable técnico) y guardado fuera del servidor. Cada
 			mes se restaura uno contigo, con tu clave de la bitácora.</p>
 	</section>

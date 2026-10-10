@@ -89,10 +89,18 @@ public class MisDatos {
 		List<Alumno> hijos = alumnos.findByFamiliaIdOrderByFechaNacimientoAsc(familiaId);
 		List<VistaMisDatos.Apoderado> suyos = apoderados.findByFamiliaIdOrderByApellidoPaternoAsc(familiaId).stream()
 				.filter(Apoderado::isActivo)
-				.map(a -> new VistaMisDatos.Apoderado(a.nombreCompleto(), a.getParentesco().etiqueta(),
-						a.getDocumento().texto(), a.getTelefonoWhatsapp(), a.telefonoVerificado(), a.getCorreo(),
-						a.correoVerificado(), a.getRuc(), a.getRazonSocial(), a.isRecordatoriosActivos(),
-						hijos.stream().anyMatch(h -> Objects.equals(h.getResponsablePago().getId(), a.getId()))))
+				.map(a -> {
+					boolean responsable = hijos.stream()
+							.anyMatch(h -> Objects.equals(h.getResponsablePago().getId(), a.getId()));
+					// Correcciones del sprint 7 (QA-S7-8): los datos personales completos, solo los de quien consulta.
+					if (!Objects.equals(a.getId(), yo.getId())) {
+						return VistaMisDatos.Apoderado.otro(a.nombreCompleto(), a.getParentesco().etiqueta(), responsable);
+					}
+					return new VistaMisDatos.Apoderado(a.nombreCompleto(), a.getParentesco().etiqueta(),
+							a.getDocumento().texto(), a.getTelefonoWhatsapp(), a.telefonoVerificado(), a.getCorreo(),
+							a.correoVerificado(), a.getRuc(), a.getRazonSocial(), a.isRecordatoriosActivos(), responsable,
+							true);
+				})
 				.toList();
 		List<VistaMisDatos.Hijo> suyosHijos = hijos.stream().map(h -> new VistaMisDatos.Hijo(h.nombreCompleto(),
 				h.getDocumento().texto(), h.getFechaNacimiento(), h.getEstado().etiqueta(),

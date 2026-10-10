@@ -6,7 +6,7 @@
 1. **Abre la bandeja de aprobaciones** en la computadora o en el celular (*Aprobaciones*). Lee quién pidió, qué, el monto y el motivo. Toca **Aprobar** y confirma con **Sí, aprobar**, o rechaza con un comentario.
 2. **Cierres de caja:** los que tienen faltante o sobrante salen primero. Para aprobarlos escribe qué verificaste y cómo se resolvió. Para una devolución en efectivo, llama antes al apoderado a un celular registrado de la familia.
 3. **Descuentos y becas:** revisa el antes y el después de cada cuota y el sustento antes de aprobar.
-4. **Personal:** apruebas los cambios de celular o correo del personal y los cambios de roles de Promotoría o Dirección que pidió otra persona.
+4. **Personal:** apruebas los cambios de celular o correo del personal, los cambios de roles de Promotoría o Dirección y las desactivaciones o reactivaciones de esas cuentas que pidió otra persona.
 5. **Pedidos sobre datos personales** (*Avisos de las familias*, tipo «Mis datos personales»): la familia ejerce su derecho de acceso, rectificación, cancelación u oposición. Responde por escrito dentro del plazo: 20 días hábiles para el acceso y 10 para los demás (plazos a confirmar por el asesor legal). A los 7 días hábiles sin respuesta aparece una alerta y, al vencer el plazo, una alerta crítica.
 6. **Llamadas de control:** solo la semana que Promotoría te las delega. Pregunta primero cuánto y cuándo pagó la familia y después compara.
 

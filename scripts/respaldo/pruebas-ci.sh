@@ -144,6 +144,65 @@ restauracion-sin-clave)
 	echo "OK: sin la clave HMAC, la restauración del último respaldo detecta el recorte (anclas) y el pago borrado (libros)"
 	;;
 
+faltan-filas-sigue)
+	# Correcciones del sprint 7 (QA-S7-1): un respaldo más, sin borrar nada nuevo. Antes decía IGUAL (comparaba con el
+	# manifiesto anterior, que ya no tenía el pago) y borraba la alerta. Ahora compara con la línea base y la base exige
+	# FALTAN_FILAS mientras nadie la resuelva.
+	set +e
+	sh "$respaldar" > /tmp/cc-respaldo-4.out 2> /tmp/cc-respaldo-4.err
+	codigo=$?
+	set -e
+	cat /tmp/cc-respaldo-4.out /tmp/cc-respaldo-4.err
+	test "$codigo" = "3"
+	grep -q "comparación: FALTAN_FILAS" /tmp/cc-respaldo-4.out
+	grep -q "pago (faltan 1)" /tmp/cc-respaldo-4.out
+	test "$(admin -e "SELECT comparacion FROM respaldo ORDER BY id DESC LIMIT 1")" = "FALTAN_FILAS"
+	# Y la base no acepta que cc_respaldo registre IGUAL mientras siga sin resolver (1644).
+	ultimo=$(admin -e "SELECT CONCAT_WS(' ', secuencia_despues, hash_despues) FROM respaldo ORDER BY id DESC LIMIT 1")
+	set -- $ultimo
+	clave_respaldo="${RESPALDO_DB_CLAVE:?}"
+	if mysql --protocol=TCP -h "${RESPALDO_DB_HOST:-127.0.0.1}" -P "${RESPALDO_DB_PUERTO:-3306}" -u cc_respaldo \
+			-p"$clave_respaldo" cuentasclaras -e "INSERT INTO respaldo (inicio, fin, archivo, sha256, bytes, version_esquema,
+			secuencia_antes, hash_antes, secuencia_despues, hash_despues, conteos, destino, comparacion, diferencias,
+			creado_en, creado_por) VALUES (UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR,
+			'cc-20000101-000000.sql.gz.age', REPEAT('a', 64), 1, '27', $1, '$2', $1, '$2', '{}', 'cirespaldos', 'IGUAL',
+			NULL, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, 'cc_respaldo')" 2> /tmp/cc-respaldo-igual.err; then
+		echo "ERROR: cc_respaldo registró IGUAL con la alerta sin resolver"; exit 1
+	fi
+	grep -q "1644.*filas faltantes sin resolver" /tmp/cc-respaldo-igual.err || { cat /tmp/cc-respaldo-igual.err; exit 1; }
+	echo "OK (QA-S7-1): un segundo respaldo sigue diciendo FALTAN_FILAS (pago (faltan 1)) y la base rechaza IGUAL (1644)"
+	;;
+
+permisos-anidados)
+	# Correcciones del sprint 7 (S7-M1): un DBA anida un rol con DELETE en cc_negocio. El respaldo lo guarda en su
+	# manifiesto (permisos_objetos()) y el simulacro semanal lo compara con lo que da 02: FALLA con la línea de más.
+	admin -e "CREATE ROLE IF NOT EXISTS 'cc_rol_extra'; GRANT DELETE ON cuentasclaras.pago TO 'cc_rol_extra';
+		GRANT 'cc_rol_extra' TO 'cc_negocio'"
+	set +e
+	sh "$respaldar" > /tmp/cc-respaldo-5.out 2>&1
+	set -e
+	grep -q "ROL cc_rol_extra A cc_negocio" "$(ultimo_manifiesto)" || { cat /tmp/cc-respaldo-5.out; exit 1; }
+	# shellcheck disable=SC2086
+	$MYSQL_RESTAURACION -e "DROP DATABASE IF EXISTS cuentasclaras; DROP USER IF EXISTS cc_migrador, cc_app, cc_sistema, cc_respaldo; DROP ROLE IF EXISTS cc_negocio"
+	RESTAURAR_ORIGEN=cirespaldos RESTAURAR_INFORME_DIR=/tmp/cc-informes-permisos RESTAURAR_ARRANCAR=no \
+		sh "$restaurar" > /tmp/cc-permisos.out 2>&1 || true
+	grep -q "\[FALLA\] permisos: .*ROL cc_rol_extra A cc_negocio" /tmp/cc-permisos.out || { cat /tmp/cc-permisos.out; exit 1; }
+	# 02 recrea el rol: el anidado desaparece.
+	$MYSQL_ADMIN < scripts/mysql/02-permisos-tablas.sql
+	test "$(admin -e "SELECT COUNT(*) FROM mysql.role_edges WHERE TO_USER = 'cc_negocio'")" = "0"
+	admin -e "DROP ROLE 'cc_rol_extra'"
+	echo "OK (S7-M1): el simulacro semanal muestra el rol anidado en cc_negocio y 02 lo quita"
+	;;
+
+resuelto)
+	# Correcciones del sprint 7 (QA-S7-1): Promotoría ya resolvió la alerta con su firma (ResolucionRespaldoMySqlTest): el
+	# respaldo siguiente vuelve a comparar con el último manifiesto y dice IGUAL.
+	test "$(admin -e "SELECT COUNT(*) FROM resolucion_respaldo")" = "1"
+	sh "$respaldar" | tee /tmp/cc-respaldo-6.out
+	grep -q "comparación: IGUAL" /tmp/cc-respaldo-6.out
+	echo "OK (QA-S7-1): resuelta por Promotoría, el respaldo siguiente vuelve a IGUAL"
+	;;
+
 simulado)
 	export RESPALDO_DESTINO=simulado RESPALDO_SIMULADO_DIR="$simulados_ci"
 	if sh "$respaldar" > /tmp/cc-simulado-1.out 2>&1; then
@@ -162,7 +221,7 @@ simulado)
 	;;
 
 *)
-	echo "Uso: $0 sin-credenciales|primer-respaldo|e29|restauracion|e31|e30|e32|restauracion-sin-clave|simulado" >&2
+	echo "Uso: $0 sin-credenciales|primer-respaldo|e29|restauracion|e31|e30|e32|faltan-filas-sigue|restauracion-sin-clave|permisos-anidados|resuelto|simulado" >&2
 	exit 2
 	;;
 esac

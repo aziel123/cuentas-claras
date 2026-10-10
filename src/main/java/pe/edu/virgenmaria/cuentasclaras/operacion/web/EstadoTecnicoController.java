@@ -6,6 +6,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.operacion.service.ResolucionesRespaldo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.service.ServicioEstadoTecnico;
 
 /**
@@ -17,8 +22,25 @@ public class EstadoTecnicoController {
 
 	private final ServicioEstadoTecnico servicio;
 
-	public EstadoTecnicoController(ServicioEstadoTecnico servicio) {
+	private final ResolucionesRespaldo resoluciones;
+
+	public EstadoTecnicoController(ServicioEstadoTecnico servicio, ResolucionesRespaldo resoluciones) {
 		this.servicio = servicio;
+		this.resoluciones = resoluciones;
+	}
+
+	/** Correcciones del sprint 7 (QA-S7-1): Promotoría resuelve con motivo la alerta «Faltan filas». */
+	@PostMapping("/panel/sistema/respaldo/resolver")
+	public String resolver(@RequestParam(required = false) String motivo, RedirectAttributes avisos) {
+		try {
+			String archivo = resoluciones.resolver(motivo);
+			avisos.addFlashAttribute("exito", "Listo: resolviste la alerta del respaldo " + archivo
+					+ ". Tu motivo quedó en la bitácora.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/panel/sistema";
 	}
 
 	@GetMapping("/panel/sistema")

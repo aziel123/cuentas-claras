@@ -26,7 +26,9 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.UsuarioDetalle;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.dto.UsuarioResumen;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PropositoEnlace;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PrimeraDireccion;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraDireccionRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.SesionesFirmadas;
@@ -61,7 +63,12 @@ import java.util.stream.Collectors;
  * de identidad ({@link EjecucionIdentidad}: conexión de {@code cc_sistema}, su propia transacción). Dar o quitar
  * PROMOTOR o DIRECTOR crea una solicitud {@code CAMBIO_ROLES} que aprueba OTRA persona ({@link ManejadorCambioRoles});
  * una cuenta nueva nace sin esos roles (decisiones 84 y 85). Única excepción de arranque: el primer DIRECTOR de un
- * colegio sin Dirección activa y con una sola Promotoría (no hay otra persona que pueda aprobar).
+ * colegio sin Dirección activa y con una sola Promotoría (no hay otra persona que pueda aprobar), UNA vez por colegio: la
+ * primera Dirección de su historia ({@link PrimeraDireccion}, correcciones del sprint 7).
+ * <p>
+ * Correcciones del sprint 7 (observación de QA): desactivar o reactivar una cuenta con Promotoría o Dirección crea una
+ * solicitud {@code ESTADO_CUENTA} que aprueba OTRA persona ({@link ManejadorEstadoCuenta}); el colegio nunca queda sin
+ * Promotoría activa.
  */
 @Service
 @PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
@@ -105,11 +112,14 @@ public class ServicioUsuarios {
 
 	private final RegistroSolicitudes solicitudes;
 
+	private final PrimeraDireccionRepository primeras;
+
 	public ServicioUsuarios(UsuarioRepository usuarios, ServicioDetallesUsuario detalles, PasswordEncoder codificador,
 			GeneradorClaveTemporal generador, AuditoriaService auditoria, SesionesUsuario sesiones,
 			PropiedadesSeguridad propiedades, PlatformTransactionManager transacciones, Clock reloj,
 			EnlacesActivacion enlaces, ApplicationEventPublisher eventos, EjecucionIdentidad identidad,
-			SesionesFirmadas sesionesFirmadas, RegistroSolicitudes solicitudes) {
+			SesionesFirmadas sesionesFirmadas, RegistroSolicitudes solicitudes, PrimeraDireccionRepository primeras) {
+		this.primeras = primeras;
 		this.identidad = identidad;
 		this.sesionesFirmadas = sesionesFirmadas;
 		this.solicitudes = solicitudes;
@@ -240,12 +250,22 @@ public class ServicioUsuarios {
 		cambian.removeIf(r -> actuales.contains(r) && nuevos.contains(r));
 		boolean directivos = cambian.stream().anyMatch(ROLES_DIRECTIVOS::contains);
 		if (directivos && !esPrimerDirector(actuales, nuevos)) {
-			transaccion.executeWithoutResult(t -> pedirCambioDeRoles(actor, id, nuevos, motivo));
+			// Correcciones del sprint 7: por la ruta de identidad. Quitarle Promotoría a una de dos cuenta las Promotorías con
+			// bloqueo (SELECT ... FOR UPDATE), que con cc_app daba 1142 en MySQL.
+			identidad.ejecutar(() -> pedirCambioDeRoles(actor, id, nuevos, motivo));
 			return true;
 		}
 		identidad.ejecutar(() -> {
 			Usuario usuario = validarCambioDeRoles(actor, id, nuevos);
 			String anteriores = roles(usuario.getRoles());
+			if (directivos) {
+				// Correcciones del sprint 7: la excepción se gasta (una vez por colegio). En MySQL, trg_usuario_rol_alta exige
+				// esta fila, de esta cuenta y recién escrita; uk_primera_direccion_colegio impide una segunda.
+				if (primeras.existsByIdNotNull()) {
+					throw new ReglaNegocioException("Este colegio ya tuvo Dirección: el rol se pide y lo aprueba otra persona.");
+				}
+				primeras.saveAndFlush(PrimeraDireccion.de(usuario.getId()));
+			}
 			usuario.cambiarRoles(nuevos);
 			usuarios.saveAndFlush(usuario);
 			auditoria.registrar(AccionAuditoria.ROLES_CAMBIADOS, "usuario", id.toString(), anteriores, roles(nuevos),
@@ -288,15 +308,24 @@ public class ServicioUsuarios {
 		boolean soloAgregaDirector = !actuales.contains(Rol.DIRECTOR) && nuevos.contains(Rol.DIRECTOR)
 				&& actuales.contains(Rol.PROMOTOR) == nuevos.contains(Rol.PROMOTOR);
 		return soloAgregaDirector && Boolean.TRUE.equals(transaccion.execute(t ->
-				usuarios.contarActivosConRol(Rol.DIRECTOR) == 0 && usuarios.contarActivosConRol(Rol.PROMOTOR) <= 1));
+				usuarios.contarActivosConRol(Rol.DIRECTOR) == 0 && usuarios.contarActivosConRol(Rol.PROMOTOR) <= 1
+						// Correcciones del sprint 7 (observación de QA): solo la PRIMERA Dirección de la historia del colegio.
+						&& !primeras.existsByIdNotNull()));
 	}
 
 	private static Set<Rol> rolesDe(Usuario usuario) {
 		return usuario.getRoles().isEmpty() ? EnumSet.noneOf(Rol.class) : EnumSet.copyOf(usuario.getRoles());
 	}
 
-	public void desactivar(Long id, String motivo) {
+	/**
+	 * Desactiva una cuenta. Si tiene Promotoría o Dirección, crea una solicitud {@code ESTADO_CUENTA} (la aprueba otra
+	 * persona) y devuelve {@code true}; si no, la desactiva por la ruta de identidad y devuelve {@code false}.
+	 */
+	public boolean desactivar(Long id, String motivo) {
 		UsuarioAutenticado actor = actor();
+		if (pedirEstadoSiEsDirectiva(actor, id, false, motivo)) {
+			return true;
+		}
 		identidad.ejecutar(() -> {
 			Usuario usuario = buscar(id);
 			exigirNoEsUnoMismo(actor, usuario, "No puedes desactivar tu propio usuario.");
@@ -310,10 +339,18 @@ public class ServicioUsuarios {
 			sesionesFirmadas.cerrarDe(id, MotivoCierreSesion.CUENTA_CAMBIADA);
 		});
 		sesiones.expirar(id);
+		return false;
 	}
 
-	public void reactivar(Long id, String motivo) {
+	/**
+	 * Reactiva una cuenta. Si tiene Promotoría o Dirección, crea una solicitud {@code ESTADO_CUENTA} (la aprueba otra
+	 * persona) y devuelve {@code true}; si no, la reactiva por la ruta de identidad y devuelve {@code false}.
+	 */
+	public boolean reactivar(Long id, String motivo) {
 		UsuarioAutenticado actor = actor();
+		if (pedirEstadoSiEsDirectiva(actor, id, true, motivo)) {
+			return true;
+		}
 		identidad.ejecutar(() -> {
 			Usuario usuario = buscar(id);
 			exigirNoEsUnoMismo(actor, usuario, "No puedes reactivar tu propio usuario.");
@@ -324,6 +361,45 @@ public class ServicioUsuarios {
 			auditoria.registrar(AccionAuditoria.USUARIO_REACTIVADO, "usuario", id.toString(), "inactivo", "activo",
 					detalle(usuario, texto));
 		});
+		return false;
+	}
+
+	/**
+	 * Correcciones del sprint 7 (observación de QA): una cuenta con Promotoría o Dirección no se desactiva ni se reactiva
+	 * de un solo paso: se pide y la aprueba otra persona (nunca quien pidió ni el titular). Las mismas validaciones de
+	 * siempre (no uno mismo, Dirección no toca Promotoría ni Dirección, nunca la última Promotoría activa) se hacen al
+	 * pedir y otra vez al aplicar.
+	 *
+	 * @return {@code true} si se creó la solicitud (la cuenta es de Promotoría o Dirección)
+	 */
+	private boolean pedirEstadoSiEsDirectiva(UsuarioAutenticado actor, Long id, boolean activar, String motivo) {
+		// Por la ruta de identidad: contar las Promotorías activas con bloqueo (SELECT ... FOR UPDATE) exige el UPDATE de
+		// usuario, que cc_app no tiene. La bitácora sigue registrando a la persona que lo pidió.
+		Boolean pedido = identidad.como(() -> {
+			Usuario usuario = buscar(id);
+			if (usuario.getRoles().stream().noneMatch(ROLES_DIRECTIVOS::contains)) {
+				return false;
+			}
+			exigirNoEsUnoMismo(actor, usuario, activar ? "No puedes reactivar tu propio usuario."
+					: "No puedes desactivar tu propio usuario.");
+			if (!activar) {
+				exigirNoEsElUltimoPromotor(usuario, "No puedes desactivar al último usuario de Promotoría activo.");
+			}
+			exigirPuedeTocar(actor, usuario);
+			if (usuario.isActivo() == activar) {
+				throw new ReglaNegocioException("La cuenta de " + usuario.getNombreUsuario() + " ya está "
+						+ (activar ? "activa." : "desactivada."));
+			}
+			String texto = motivo(motivo);
+			solicitudes.crear(TipoSolicitud.ESTADO_CUENTA, "usuario", usuario.getId(), (activar ? "Reactivar" : "Desactivar")
+					+ " la cuenta de " + usuario.getNombreCompleto() + " (" + usuario.getNombreUsuario() + ", "
+					+ rolesTexto(usuario.getRoles()) + ")", ManejadorEstadoCuenta.datos(activar), texto);
+			auditoria.registrar(AccionAuditoria.ESTADO_CUENTA_PEDIDO, "usuario", id.toString(),
+					usuario.isActivo() ? "activo" : "inactivo", activar ? "activo (pedido)" : "inactivo (pedido)",
+					detalle(usuario, texto));
+			return true;
+		});
+		return Boolean.TRUE.equals(pedido);
 	}
 
 	/**

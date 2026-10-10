@@ -33,7 +33,7 @@ Detalle en `docs/operacion/`: [respaldos.md](../operacion/respaldos.md), [monito
 |---|---|---|
 | `PROCESO_ATRASADO` | CRÍTICA si es mensajes, huellas o resumen | Busca el proceso en el log; reinicia si está colgado. Avisa a Promotoría si el resumen de las 19:30 no salió |
 | `SIN_RESPALDO` | CRÍTICA (también Promotoría) | Revisa el temporizador y el último error de `respaldar.sh`; respalda a mano |
-| `FALTAN_FILAS` | CRÍTICA (también Promotoría) | **No toques nada.** Sigue [incidente-auditoria.md](../operacion/incidente-auditoria.md) |
+| `FALTAN_FILAS` | CRÍTICA (también Promotoría) | **No toques nada.** Sigue [incidente-auditoria.md](../operacion/incidente-auditoria.md). La alerta sigue en cada respaldo hasta que Promotoría la resuelva con motivo en `/panel/sistema` (tú no puedes) |
 | `BITACORA` | CRÍTICA | El eslabón no apunta al último evento: [incidente-auditoria.md](../operacion/incidente-auditoria.md) |
 | `BASE` / `POOL` | CRÍTICA | Revisa MySQL, conexiones y consultas lentas |
 | `ERRORES` / `ERROR_NUEVO` | ATENCIÓN | Busca el `id_peticion` (el «código de error» que ve la persona) en el log |

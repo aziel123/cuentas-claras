@@ -27,8 +27,8 @@ import java.util.Optional;
  * Autentica el formulario de ingreso. Por cada intento, en UNA transacción y con la fila del usuario
  * bloqueada ({@code SELECT ... FOR UPDATE}):
  * <ol>
- *   <li>si la cuenta está bloqueada, rechaza sin mirar la clave;</li>
- *   <li>si está desactivada, rechaza;</li>
+ *   <li>si la cuenta está bloqueada, rechaza sin mirar su clave (pero pasa por BCrypt contra el señuelo: QA-S7-5);</li>
+ *   <li>si está desactivada, rechaza (también después de BCrypt contra el señuelo);</li>
  *   <li>si la clave no coincide, suma el intento (y bloquea al llegar al máximo);</li>
  *   <li>si la clave temporal venció, rechaza;</li>
  *   <li>si todo está bien, reinicia el contador.</li>
@@ -117,11 +117,15 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 		Actor actor = actorDe(usuario);
 		String id = usuario.getId().toString();
 		if (usuario.estaBloqueado(ahora)) {
+			// Correcciones del sprint 7 (QA-S7-5): una cuenta bloqueada o desactivada pasa por BCrypt (contra el señuelo, sin
+			// mirar su clave) igual que una inexistente: el tiempo de respuesta no dice que la cuenta existe.
+			codificador.matches(clave, hashSenuelo);
 			auditoria.registrar(actor, AccionAuditoria.INGRESO_RECHAZADO_BLOQUEADA, "usuario", id, null, null,
 					"La cuenta está bloqueada por intentos fallidos.");
 			return new Intento(Resultado.BLOQUEADA, null);
 		}
 		if (!usuario.isActivo()) {
+			codificador.matches(clave, hashSenuelo);
 			auditoria.registrar(actor, AccionAuditoria.INGRESO_RECHAZADO_INACTIVA, "usuario", id, null, null,
 					"La cuenta está desactivada.");
 			return new Intento(Resultado.INACTIVA, null);

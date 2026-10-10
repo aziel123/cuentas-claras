@@ -3,7 +3,6 @@ package pe.edu.virgenmaria.cuentasclaras.operacion.log;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.LoggingEvent;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -51,7 +50,6 @@ class EnmascaradoBordesTest {
 	 * como el DNI y, en las cuentas del portal, es además el NOMBRE DE USUARIO del apoderado (como el DNI). Hoy solo se
 	 * ocultan 8 (DNI) y 11 dígitos (RUC): un CE de 9 que no empieza en 9 sale entero.
 	 */
-	@Disabled("QA-S7-6: Enmascarar.enTexto no oculta el carné de extranjería (9 o 12 dígitos) en los logs")
 	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = { "Ya existe el apoderado con CE 001234567", "documento CE-000123456789 no válido" })
 	void debeOcultarElCarneDeExtranjeria(String mensaje) {
@@ -73,7 +71,6 @@ class EnmascaradoBordesTest {
 	 * QA-S7-6 (mismo hallazgo). Un celular con puntos (como lo escriben muchas familias en el formulario) o con el prefijo
 	 * internacional 0051 sale entero.
 	 */
-	@Disabled("QA-S7-6: Enmascarar.enTexto no oculta celulares con puntos (987.654.321) ni con el prefijo 0051")
 	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = { "987.654.321", "0051987654321" })
 	void debeOcultarElCelularConPuntosOConPrefijoInternacional(String celular) {

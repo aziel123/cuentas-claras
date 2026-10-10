@@ -124,7 +124,9 @@ class ReglasArquitecturaTest {
 			.and().doNotBelongToAnyOf(Colegio.class, EventoAuditoria.class, EslabonCadena.class,
 					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionBd.class,
 					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionColegio.class,
-					pe.edu.virgenmaria.cuentasclaras.operacion.model.Respaldo.class)
+					pe.edu.virgenmaria.cuentasclaras.operacion.model.Respaldo.class,
+					// Correcciones del sprint 7 (QA-S7-1): la resolución de una alerta de respaldo es de toda la base.
+					pe.edu.virgenmaria.cuentasclaras.operacion.model.ResolucionRespaldo.class)
 			.should().beAssignableTo(BaseEntity.class)
 			.because("BaseEntity aporta colegioId (@TenantId), autoría y versión");
 
@@ -966,6 +968,7 @@ class ReglasArquitecturaTest {
 			.or().haveFullyQualifiedName(BASE + ".matricula.service.ServicioCampanaRenovacion")
 			.or().haveFullyQualifiedName(BASE + ".caja.service.ServicioVerificacionBancaria")
 			.or().haveFullyQualifiedName(BASE + ".panel.service.LlamadasControl")
+			.or().haveFullyQualifiedName(BASE + ".operacion.service.ResolucionesRespaldo")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".seguridad.service.sesion.FirmaSesion")
 			.because("cada aprobación de una persona lleva la firma de su sesión (sección 3.4 del sprint 7)");
 

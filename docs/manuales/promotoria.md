@@ -15,13 +15,16 @@
 - **Corregir cifras ya enviadas:** si cambian sin explicación, es una alerta crítica.
 - **Cambiar un registro de la llamada de control:** queda tal cual.
 - **Dar Promotoría o Dirección sin otra firma:** ese cambio de roles lo aprueba otra persona, nunca quien lo pidió ni el titular.
+- **Desactivar o reactivar de un solo paso una cuenta de Promotoría o Dirección:** se pide y lo aprueba otra persona; el colegio nunca queda sin Promotoría activa.
 - **Cambiar tu celular o correo sin una solicitud aprobada** por otra persona.
 - **Tener dos sesiones:** entrar desde el celular cierra la de la computadora; también a los 30 minutos sin actividad y a las 10 horas.
 
 ## Si algo no cuadra
 - **«No confirma» es crítica:** revisa los pagos de esa familia y la caja de quien cobró.
 - **Alerta de que alguien vio más de 50 fichas en un día:** revisa en los accesos qué abrió antes de hablar con esa persona.
-- **«Sin respaldo» o «Faltan filas»:** avisa al responsable técnico y no toques nada.
+- **«Sin respaldo» o «Faltan filas»:** avisa al responsable técnico y no toques nada. «Faltan filas» sigue en rojo
+  hasta que **tú** la resuelvas en el estado técnico («Resolver la alerta»), con un motivo, después de revisar con el
+  responsable técnico qué faltó y por qué. Él no puede cerrarla.
 - **Te avisan de un cambio de contacto que no pediste:** avisa de inmediato.
 - Revisa la bitácora (*Verificar integridad*) y la caja del día.
 

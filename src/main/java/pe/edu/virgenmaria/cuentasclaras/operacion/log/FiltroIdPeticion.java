@@ -57,9 +57,17 @@ public class FiltroIdPeticion extends OncePerRequestFilter {
 		}
 	}
 
+	/**
+	 * 12 caracteres hexadecimales con una letra (a-f) cada 4: el código nunca tiene 8, 9, 11 o 12 dígitos seguidos, así
+	 * que el enmascarado de los logs (DNI, carné de extranjería, RUC) no lo oculta (correcciones del sprint 7, QA-S7-6).
+	 */
 	static String nuevoId() {
 		byte[] bytes = new byte[6];
 		AZAR.nextBytes(bytes);
-		return HexFormat.of().formatHex(bytes);
+		char[] id = HexFormat.of().formatHex(bytes).toCharArray();
+		for (int i = 0; i < id.length; i += 4) {
+			id[i] = (char) ('a' + Math.floorMod(id[i], 6));
+		}
+		return new String(id);
 	}
 }

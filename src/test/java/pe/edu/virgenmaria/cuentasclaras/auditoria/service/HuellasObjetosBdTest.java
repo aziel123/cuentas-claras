@@ -22,13 +22,17 @@ class HuellasObjetosBdTest {
 	}
 
 	@Test
-	void sonLos73TriggersYLas5FuncionesDeLosScripts() {
+	void sonLos75TriggersYLas7FuncionesDeLosScripts() {
 		Map<String, String> esperadas = HuellasObjetosBd.esperadas();
 
-		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(73)
+		// Correcciones del sprint 7 (V27): 75 triggers (trg_solicitud_cambio_nace y trg_resolucion_respaldo_registro) y 7
+		// funciones (cc_solicitud_firmada en 03 y permisos_objetos en 02).
+		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(75)
 				.isEqualTo(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
-		assertThat(esperadas).hasSize(78).containsKeys("cc_contacto_normal", "cc_es_sistema", "cc_firma_valida",
-				"triggers_instalados", "huellas_objetos", "trg_usuario_rol_alta", "trg_firma_operacion_nace");
+		assertThat(esperadas).hasSize(82).containsKeys("cc_contacto_normal", "cc_es_sistema", "cc_firma_valida",
+				"cc_solicitud_firmada", "triggers_instalados", "huellas_objetos", "permisos_objetos",
+				"trg_usuario_rol_alta", "trg_firma_operacion_nace", "trg_solicitud_cambio_nace",
+				"trg_resolucion_respaldo_registro");
 		assertThat(esperadas.values()).allMatch(h -> h.matches("[0-9a-f]{64}"));
 	}
 

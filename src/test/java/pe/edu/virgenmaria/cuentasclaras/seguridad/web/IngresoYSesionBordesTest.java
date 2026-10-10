@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.seguridad.web;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -103,7 +102,6 @@ class IngresoYSesionBordesTest {
 	 * ProveedorAutenticacion rechaza la cuenta desactivada SIN comparar la clave: responde en milisegundos y el atacante
 	 * sabe que ese usuario existe (enumeración por tiempo).
 	 */
-	@Disabled("QA-S7-5: una cuenta desactivada responde sin BCrypt: se distingue de una inexistente por el tiempo")
 	@Test
 	void debeCompararContraUnHashAunqueLaCuentaEsteDesactivada() throws Exception {
 		ingresar("198.51.100.31", "ex.cajera", INCORRECTA).andExpect(redirectedUrl("/login?error"));
@@ -116,7 +114,6 @@ class IngresoYSesionBordesTest {
 	 * cuando se intenta ingresar con ella, entonces debe pasar por BCrypt igual que una inexistente: si no, el atacante
 	 * confirma que la cuenta existe en cuanto la bloquea.
 	 */
-	@Disabled("QA-S7-5: una cuenta bloqueada responde sin BCrypt: se distingue de una inexistente por el tiempo")
 	@Test
 	void debeCompararContraUnHashAunqueLaCuentaEsteBloqueada() throws Exception {
 		bloquear("caja");

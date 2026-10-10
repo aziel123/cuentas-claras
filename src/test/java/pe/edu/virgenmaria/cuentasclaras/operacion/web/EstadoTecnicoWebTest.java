@@ -84,7 +84,7 @@ class EstadoTecnicoWebTest {
 		respaldo("cc-20261002-023000.sql.gz.age", "2026-10-02 02:31:10", "FALTAN_FILAS", "pago (1)");
 
 		mvc.perform(get("/panel/sistema").with(UsuariosDePrueba.como(Rol.PROMOTOR)))
-				.andExpect(content().string(containsString("Faltan filas que existían en el respaldo anterior (pago (1))")));
+				.andExpect(content().string(containsString("Faltan filas que existían en un respaldo anterior (pago (1); respaldo ")));
 		mvc.perform(get("/salud/respaldo")).andExpect(content().string("REVISAR"));
 	}
 

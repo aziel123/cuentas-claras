@@ -160,11 +160,14 @@ class RolesConSolicitudBordesTest {
 		UsuariosDePrueba.iniciarSesion(otra);
 		assertThat(servicio.cambiarRoles(promotora.getId(), new CambiarRolesRequest(EnumSet.of(Rol.DOCENTE), MOTIVO)))
 				.isTrue();
-		// Mientras la solicitud espera, la promotora desactiva a la otra (con dos Promotorías activas se puede).
+		// Mientras la solicitud espera, la promotora pide desactivar a la otra (con dos Promotorías activas se puede) y la
+		// directora lo aprueba (correcciones del sprint 7: una cuenta de Promotoría no se desactiva de un solo paso).
 		UsuariosDePrueba.iniciarSesion(promotora);
-		servicio.desactivar(otra.getId(), "Dejó de trabajar en el colegio");
-
+		assertThat(servicio.desactivar(otra.getId(), "Dejó de trabajar en el colegio")).isTrue();
 		UsuariosDePrueba.iniciarSesion(directora);
+		bandeja.aprobar(solicitudPendiente("ESTADO_CUENTA", otra), "Confirmado en persona con las dos");
+		assertThat(activa(otra)).isFalse();
+
 		Long solicitud = solicitudPendienteDe(promotora);
 		assertThatThrownBy(() -> bandeja.aprobar(solicitud, "Confirmado en persona con la promotora"))
 				.isInstanceOf(ReglaNegocioException.class);
@@ -254,6 +257,92 @@ class RolesConSolicitudBordesTest {
 		assertThat(roles(cajera)).containsExactly("CAJA");
 	}
 
+	/**
+	 * Observación de QA (correcciones del sprint 7). La excepción de la primera Dirección es UNA vez por colegio: si el
+	 * colegio ya tuvo Dirección (aunque hoy no haya ninguna activa), una Dirección nueva se pide y la aprueba otra persona.
+	 */
+	@Test
+	void laExcepcionDeLaPrimeraDireccionSeUsaUnaSolaVezPorColegio() {
+		Usuario primera = guardar("primera.directora", Rol.DOCENTE);
+		assertThat(servicio.cambiarRoles(primera.getId(), new CambiarRolesRequest(EnumSet.of(Rol.DOCENTE, Rol.DIRECTOR),
+				MOTIVO))).as("la primera de la historia: sin solicitud").isFalse();
+		assertThat(jdbc.queryForObject("SELECT usuario_id FROM primera_direccion WHERE colegio_id = 1", Long.class))
+				.isEqualTo(primera.getId());
+		// La primera Dirección deja el colegio: hoy no hay ninguna activa y sigue habiendo una sola Promotoría.
+		jdbc.update("DELETE FROM usuario_rol WHERE usuario_id = ? AND rol = 'DIRECTOR'", primera.getId());
+		Usuario segunda = guardar("segunda.directora", Rol.DOCENTE);
+
+		assertThat(servicio.cambiarRoles(segunda.getId(), new CambiarRolesRequest(EnumSet.of(Rol.DOCENTE, Rol.DIRECTOR),
+				MOTIVO))).as("la excepción ya se usó: se pide").isTrue();
+
+		assertThat(roles(segunda)).containsExactly("DOCENTE");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM primera_direccion", Long.class)).isEqualTo(1L);
+	}
+
+	// ------------------------------------------------------------------ desactivar y reactivar Promotoría o Dirección
+
+	/** Observación de QA: desactivar una cuenta de Dirección se pide; la aprueba otra persona y queda enlazada. */
+	@Test
+	void desactivarUnaDireccionSePideYLaApruebaOtraPersona() {
+		Usuario directora = guardar("directora", Rol.DIRECTOR);
+		Usuario otraDirectora = guardar("otra.directora", Rol.DIRECTOR);
+
+		assertThat(servicio.desactivar(directora.getId(), "Dejó de trabajar en el colegio")).isTrue();
+		assertThat(activa(directora)).as("hasta que otra persona lo apruebe, sigue activa").isTrue();
+
+		UsuariosDePrueba.iniciarSesion(otraDirectora);
+		Long solicitud = solicitudPendiente("ESTADO_CUENTA", directora);
+		bandeja.aprobar(solicitud, "Confirmado en persona con la promotora");
+
+		assertThat(activa(directora)).isFalse();
+		assertThat(jdbc.queryForObject("SELECT estado_solicitud_id FROM usuario WHERE id = ?", Long.class,
+				directora.getId())).isEqualTo(solicitud);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'USUARIO_DESACTIVADO'",
+				Long.class)).isEqualTo(1L);
+	}
+
+	/** Observación de QA: reactivar una cuenta de Promotoría también se pide (no vuelve a aprobar de un solo paso). */
+	@Test
+	void reactivarUnaPromotoriaSePide() {
+		Usuario otra = guardar("otra.promotora", Rol.PROMOTOR);
+		jdbc.update("UPDATE usuario SET activo = FALSE, desactivado_en = CURRENT_TIMESTAMP, desactivado_por = 'promotora' "
+				+ "WHERE id = ?", otra.getId());
+
+		assertThat(servicio.reactivar(otra.getId(), "Volvió a trabajar en el colegio")).isTrue();
+
+		assertThat(activa(otra)).isFalse();
+		assertThat(jdbc.queryForObject("SELECT datos FROM solicitud_cambio WHERE tipo = 'ESTADO_CUENTA'", String.class))
+				.contains("\"activo\":\"true\"");
+	}
+
+	/** Ni quien la pidió ni la titular aprueban la desactivación de su cuenta. */
+	@Test
+	void niQuienPidioNiLaTitularApruebanElEstado() {
+		Usuario directora = guardar("directora", Rol.DIRECTOR);
+		assertThat(servicio.desactivar(directora.getId(), "Dejó de trabajar en el colegio")).isTrue();
+		Long solicitud = solicitudPendiente("ESTADO_CUENTA", directora);
+
+		assertThatThrownBy(() -> bandeja.aprobar(solicitud, "Lo apruebo yo misma")).as("quien la pidió")
+				.isInstanceOf(RuntimeException.class);
+		UsuariosDePrueba.iniciarSesion(directora);
+		assertThatThrownBy(() -> bandeja.aprobar(solicitud, "Lo apruebo yo misma")).as("la titular")
+				.isInstanceOf(RuntimeException.class);
+
+		assertThat(activa(directora)).isTrue();
+	}
+
+	/** Una cuenta sin Promotoría ni Dirección se desactiva como siempre, de un solo paso. */
+	@Test
+	void unaCuentaDeCajaSeDesactivaSinSolicitud() {
+		Usuario cajera = guardar("caja", Rol.CAJA);
+
+		assertThat(servicio.desactivar(cajera.getId(), "Dejó de trabajar en el colegio")).isFalse();
+
+		assertThat(activa(cajera)).isFalse();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM solicitud_cambio WHERE tipo = 'ESTADO_CUENTA'", Long.class))
+				.isZero();
+	}
+
 	// ------------------------------------------------------------------ sesiones del titular
 
 	@Test
@@ -275,6 +364,16 @@ class RolesConSolicitudBordesTest {
 	private Long solicitudPendienteDe(Usuario usuario) {
 		return jdbc.queryForObject("SELECT id FROM solicitud_cambio WHERE tipo = 'CAMBIO_ROLES' AND entidad_id = ? "
 				+ "AND estado = 'PENDIENTE'", Long.class, usuario.getId());
+	}
+
+	private Long solicitudPendiente(String tipo, Usuario usuario) {
+		return jdbc.queryForObject("SELECT id FROM solicitud_cambio WHERE tipo = ? AND entidad_id = ? AND estado = 'PENDIENTE'",
+				Long.class, tipo, usuario.getId());
+	}
+
+	private boolean activa(Usuario usuario) {
+		return Boolean.TRUE.equals(jdbc.queryForObject("SELECT activo FROM usuario WHERE id = ?", Boolean.class,
+				usuario.getId()));
 	}
 
 	private List<String> roles(Usuario usuario) {

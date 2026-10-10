@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.privacidad;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -273,7 +272,6 @@ class Ley29733BordesTest {
 	 * no se registra: se pueden recorrer los DNI de todos los alumnos por esas pantallas sin dejar rastro y sin sumar a la
 	 * alerta de más de 50 fichas en un día.
 	 */
-	@Disabled("QA-S7-4: el estado de cuenta y el cronograma del alumno muestran su DNI y no quedan en el registro de accesos")
 	@Test
 	void elEstadoDeCuentaYElCronogramaDeUnAlumnoQuedanRegistrados() throws Exception {
 		Usuario administracion = personal("lucia.adm", Rol.ADMINISTRACION);
@@ -287,15 +285,34 @@ class Ley29733BordesTest {
 				.containsExactly("FICHA_ALUMNO " + f.mateo(), "FICHA_ALUMNO " + f.mateo());
 	}
 
+	/**
+	 * Correcciones del sprint 7 (S7-B1): la pantalla de cobro de caja SÍ queda en el registro de accesos, con su propio
+	 * tipo (COBRO) y la familia; antes no dejaba rastro (la tanda 3 la excluía para no disparar la alerta de 50 fichas).
+	 */
 	@Test
-	void laPantallaDeCobroDeCajaNoSeRegistra() throws Exception {
+	void laPantallaDeCobroDeCajaSeRegistraComoCobro() throws Exception {
 		Usuario cajera = personal("caja.uno", Rol.CAJA);
 
-		mvc.perform(get("/caja/familias/{id}", f.quispe()).with(UsuariosDePrueba.como(cajera)));
+		mvc.perform(get("/caja/familias/{id}", f.quispe()).with(UsuariosDePrueba.como(cajera))).andExpect(status().isOk());
 
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM acceso_dato_personal", Long.class))
-				.as("decisión de la tanda 3: la caja abre decenas de familias al día y queda el cobro en la bitácora")
-				.isZero();
+		assertThat(jdbc.queryForList("SELECT CONCAT(tipo, ' ', familia_id) FROM acceso_dato_personal WHERE usuario_id = ?",
+				String.class, cajera.getId())).containsExactly("COBRO " + f.quispe());
+	}
+
+	/** S7-B1: las pantallas de cobro no cuentan para la alerta de más de 50 fichas en un día (una cajera abre decenas). */
+	@Test
+	void cienPantallasDeCobroEnUnDiaNoSonAlerta() {
+		Usuario cajera = personal("caja.uno", Rol.CAJA);
+		for (int i = 0; i < 100; i++) {
+			jdbc.update("INSERT INTO acceso_dato_personal (colegio_id, usuario_id, tipo, familia_id, cantidad, ip, creado_en, "
+					+ "creado_por, actualizado_en) VALUES (1, ?, 'COBRO', ?, 1, '192.0.2.51', ?, ?, ?)", cajera.getId(),
+					f.quispe(), LocalDateTime.of(2026, 10, 2, 8, 0).plusMinutes(i), cajera.getNombreUsuario(),
+					LocalDateTime.of(2026, 10, 2, 8, 0).plusMinutes(i));
+		}
+		UsuariosDePrueba.iniciarSesion(EscenarioCobranza.PROMOTORIA);
+
+		reloj.fijar(lima(2026, 10, 2, 11, 0));
+		assertThat(alertas.alertas()).noneSatisfy(a -> assertThat(a.texto()).contains("caja.uno"));
 	}
 
 	@Test
@@ -406,7 +423,6 @@ class Ley29733BordesTest {
 	 * personales de otra persona (la página misma dice «los datos tuyos y de tus hijos»). Hoy {@code MisDatos} muestra los
 	 * datos completos de todos los apoderados activos de la familia.
 	 */
-	@Disabled("QA-S7-8: «Mis datos» muestra el DNI, el celular y el correo de los OTROS apoderados de la familia")
 	@Test
 	void misDatosNoMuestraElDocumentoNiLosContactosDeOtroApoderado() throws Exception {
 		UsuariosDePrueba.iniciarSesion(EscenarioCobranza.ADMINISTRACION);

@@ -25,8 +25,19 @@ public class ObservadorLatidos implements ObservationHandler<ScheduledTaskObserv
 	}
 
 	@Override
+	public void onStart(ScheduledTaskObservationContext contexto) {
+		PasadaPorColegios.reiniciar();
+	}
+
+	/**
+	 * Correcciones del sprint 7 (QA-S7-2): tampoco late si una pasada por los colegios falló en alguno
+	 * ({@link PasadaPorColegios}), aunque la tarea haya terminado sin excepción.
+	 */
+	@Override
 	public void onStop(ScheduledTaskObservationContext contexto) {
-		if (contexto.isComplete() && contexto.getError() == null) {
+		boolean fallas = PasadaPorColegios.huboFallas();
+		PasadaPorColegios.reiniciar();
+		if (contexto.isComplete() && contexto.getError() == null && !fallas) {
 			latidos.latido(nombre(contexto.getMethod()));
 		}
 	}

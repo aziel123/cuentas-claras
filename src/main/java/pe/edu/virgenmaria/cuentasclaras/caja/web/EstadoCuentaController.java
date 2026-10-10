@@ -15,6 +15,9 @@ import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioAnulacionPagos;
 import pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioEstadoCuenta;
 import pe.edu.virgenmaria.cuentasclaras.caja.model.CausaDevolucion;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.AccesoMostrado;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.RegistraAcceso;
+import pe.edu.virgenmaria.cuentasclaras.comun.privacidad.TipoAcceso;
 import pe.edu.virgenmaria.cuentasclaras.comun.web.Formularios;
 
 /**
@@ -34,8 +37,12 @@ public class EstadoCuentaController {
 	}
 
 	@GetMapping("/alumnos/{id:\\d+}/estado-cuenta")
+	@RegistraAcceso(TipoAcceso.FICHA_ALUMNO)
 	public String estadoCuenta(@PathVariable Long id, Model model) {
-		model.addAttribute("estado", estados.deAlumno(id));
+		var estado = estados.deAlumno(id);
+		model.addAttribute("estado", estado);
+		// Correcciones del sprint 7 (QA-S7-4): muestra el nombre y el DNI del alumno: cuenta como su ficha.
+		AccesoMostrado.alumno(id, estado.familiaId());
 		return "alumnos/estado-cuenta";
 	}
 

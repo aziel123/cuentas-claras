@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.operacion;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -102,7 +101,6 @@ class RespaldosBordesTest {
 	 * REVISAR. Hoy el estado sale SOLO del último registro: un segundo respaldo borra la evidencia del panel, de
 	 * «Para revisar» y del vigilante en minutos.
 	 */
-	@Disabled("QA-S7-1: un segundo respaldo con comparación IGUAL borra la alerta «Faltan filas» del panel y del vigilante")
 	@Test
 	void debeSeguirAvisandoFaltanFilasAunqueUnSegundoRespaldoDigaIgual() throws Exception {
 		respaldo("cc-20261002-023000.sql.gz.age", "2026-10-02T02:31:10", "FALTAN_FILAS", "pago (faltan 1)");

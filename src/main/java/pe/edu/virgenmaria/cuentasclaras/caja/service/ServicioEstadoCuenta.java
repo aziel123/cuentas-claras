@@ -131,7 +131,7 @@ public class ServicioEstadoCuenta {
 						d.getResueltoPor()))
 				.toList();
 		return new EstadoCuentaAlumno(alumno.getId(), alumno.nombreCompleto(), alumno.getDocumento().texto(),
-				alumno.getFamilia().getNombre(), busqueda.grado(alumno), hoy, filas,
+				alumno.getFamilia().getId(), alumno.getFamilia().getNombre(), busqueda.grado(alumno), hoy, filas,
 				Dinero.sumar(vigentes.stream().map(Cuota::getMonto).toList()),
 				Dinero.sumar(vigentes.stream().map(Cuota::getMontoDescuento).toList()),
 				Dinero.sumar(vigentes.stream().map(Cuota::getMontoPagado).toList()),

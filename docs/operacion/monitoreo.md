@@ -42,7 +42,7 @@ la tabla de mensajes: si la base se cae, la alerta igual sale. Una misma alerta,
 |---|---|---|---|
 | `PROCESO_ATRASADO` | Un latido fuera de su ventana | CRÍTICA (mensajes, huellas, resumen) o ATENCIÓN | Revisar el log por el nombre del proceso; reiniciar si está colgado |
 | `SIN_RESPALDO` | Más de 26 h sin un respaldo (real, en prod) | CRÍTICA, también a Promotoría | Revisar el temporizador y el último error de `respaldar.sh` ([respaldos.md](respaldos.md)) |
-| `FALTAN_FILAS` | El último respaldo encontró filas faltantes o un ancla distinta | CRÍTICA, también a Promotoría | No tocar nada: [incidente-auditoria.md](incidente-auditoria.md) |
+| `FALTAN_FILAS` | Un respaldo encontró filas faltantes o un ancla distinta y nadie la resolvió todavía (correcciones del sprint 7: un respaldo posterior no la borra) | CRÍTICA, también a Promotoría | No tocar nada: [incidente-auditoria.md](incidente-auditoria.md). La resuelve Promotoría con motivo en `/panel/sistema` |
 | `BITACORA` | El eslabón no apunta al último evento | CRÍTICA | [incidente-auditoria.md](incidente-auditoria.md) |
 | `BASE` / `POOL` | La base no responde o hay peticiones esperando conexión en dos revisiones | CRÍTICA | Revisar MySQL y las conexiones |
 | `ERRORES` / `ERROR_NUEVO` | 5 o más errores de una huella en 15 minutos, o una huella nueva | ATENCIÓN | Buscar el código de petición en el log |

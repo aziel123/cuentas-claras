@@ -13,6 +13,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.sistema.RecorridoColegios;
 import pe.edu.virgenmaria.cuentasclaras.panel.model.MuestraLlamada;
 import pe.edu.virgenmaria.cuentasclaras.panel.service.FijacionMuestra;
 import pe.edu.virgenmaria.cuentasclaras.panel.service.FijadorMuestra;
+import pe.edu.virgenmaria.cuentasclaras.comun.sistema.PasadaPorColegios;
 
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -51,17 +52,11 @@ public class MuestraSemanal implements FijadorMuestra {
 	@Scheduled(cron = "${cuentasclaras.panel.muestra-semanal:0 10 0 * * MON}", zone = ConfiguracionTiempo.ZONA)
 	public void ejecutar() {
 		LocalDate semana = LocalDate.now(reloj).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-		for (Long colegio : colegios.activos()) {
-			try {
-				int familias = asegurar(colegio, semana).size();
-				LOG.info("Muestra de la llamada de control de la semana del {} fijada en el colegio {}: {} familia(s).",
-						semana, colegio, familias);
-			}
-			catch (RuntimeException e) {
-				LOG.error("No se pudo fijar la muestra de la semana en el colegio {}: {}", colegio,
-						e.getClass().getSimpleName());
-			}
-		}
+		PasadaPorColegios.recorrer(LOG, "La muestra de la semana", colegios.activos(), colegio -> {
+			int familias = asegurar(colegio, semana).size();
+			LOG.info("Muestra de la llamada de control de la semana del {} fijada en el colegio {}: {} familia(s).",
+					semana, colegio, familias);
+		});
 	}
 
 	@Override

@@ -371,7 +371,9 @@ class ServicioUsuariosTest {
 	@Test
 	void direccionNoPuedeReactivarAUnaPromotoraDesactivada() {
 		Usuario otra = guardar("otra.promotora", Rol.PROMOTOR);
-		servicio.desactivar(otra.getId(), MOTIVO);
+		// Correcciones del sprint 7: una Promotoría se desactiva con una solicitud aprobada; aquí ya está desactivada.
+		jdbc.update("UPDATE usuario SET activo = FALSE, desactivado_en = CURRENT_TIMESTAMP, desactivado_por = 'promotora' "
+				+ "WHERE id = ?", otra.getId());
 		UsuariosDePrueba.iniciarSesion(director);
 
 		assertThatThrownBy(() -> servicio.reactivar(otra.getId(), MOTIVO)).isInstanceOf(AccessDeniedException.class);
@@ -401,9 +403,15 @@ class ServicioUsuariosTest {
 		assertThatThrownBy(() -> servicio.desactivar(promotora.getId(), MOTIVO))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("último usuario de Promotoría");
 
-		// Colegio B tiene dos: una puede desactivar a la otra; la que queda ya es la última.
+		// Colegio B tiene dos: una pide desactivar a la otra (correcciones del sprint 7: lo aprueba otra persona, aquí la
+		// directora de B); la que queda ya es la última.
 		UsuariosDePrueba.iniciarSesion(promotoraB1);
-		servicio.desactivar(promotoraB2.getId(), MOTIVO);
+		assertThat(servicio.desactivar(promotoraB2.getId(), MOTIVO)).isTrue();
+		Usuario directoraB = UsuariosDePrueba.guardar(usuarios, codificador, colegioB, "directora.b", UsuariosDePrueba.CLAVE,
+				false, Rol.DIRECTOR);
+		UsuariosDePrueba.iniciarSesion(directoraB);
+		bandeja.aprobar(jdbc.queryForObject("SELECT id FROM solicitud_cambio WHERE tipo = 'ESTADO_CUENTA' AND entidad_id = ?",
+				Long.class, promotoraB2.getId()), "Confirmado en persona con las dos promotoras");
 		assertThat(fila(promotoraB2.getId())).containsEntry("activo", false);
 		UsuariosDePrueba.iniciarSesion(promotoraB2);
 		assertThatThrownBy(() -> servicio.desactivar(promotoraB1.getId(), MOTIVO))

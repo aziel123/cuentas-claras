@@ -19,6 +19,7 @@ import pe.edu.virgenmaria.cuentasclaras.operacion.salud.FotoTecnica;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -87,9 +88,15 @@ public class AlertasTecnicas {
 		}
 		nuevas.forEach(a -> LOG.warn("Alerta técnica {} · {} · {}: {}", a.gravedad(), a.tipo(), a.huella(), a.texto()));
 		long criticas = nuevas.stream().filter(a -> a.gravedad() == Gravedad.CRITICA).count();
-		enviar("[Cuentas Claras] " + nuevas.size() + " alerta(s) técnica(s)" + (criticas > 0 ? ", " + criticas + " CRÍTICA(S)" : ""),
+		boolean salio = enviar("[Cuentas Claras] " + nuevas.size() + " alerta(s) técnica(s)"
+				+ (criticas > 0 ? ", " + criticas + " CRÍTICA(S)" : ""),
 				nuevas.stream().map(a -> a.gravedad() + " · " + a.tipo() + " · " + a.huella() + "\n  " + a.texto())
 						.collect(Collectors.joining("\n\n")));
+		// Correcciones del sprint 7 (QA-S7-7): se dan por enviadas SOLO si el correo salió (o si las alertas por correo
+		// están apagadas: no hay nada que reintentar). Si el SMTP falló, la revisión siguiente (5 minutos) las reintenta.
+		if (salio) {
+			marcarEnviadas(nuevas);
+		}
 	}
 
 	/** A las 07:00: el resumen técnico del día (aunque no haya alertas). */
@@ -129,12 +136,15 @@ public class AlertasTecnicas {
 			alertas.add(new AlertaTecnica(proceso.critico() ? Gravedad.CRITICA : Gravedad.ATENCION, "PROCESO_ATRASADO",
 					proceso.clave(), "«" + proceso.nombre() + "» no terminó bien en su ventana (" + proceso.programacion()
 							+ "; último éxito: " + (proceso.ultimoExito() == null ? "ninguno desde el arranque"
-									: proceso.ultimoExito()) + ")."));
+									: enLima(proceso.ultimoExito()) + ", hora de Lima") + ")."));
 		}
 		if (foto.baseResponde() && foto.respaldo().faltanFilas()) {
-			alertas.add(new AlertaTecnica(Gravedad.CRITICA, "FALTAN_FILAS", foto.respaldo().archivo(),
-					"El respaldo " + foto.respaldo().archivo() + " encontró filas faltantes o un ancla distinta: "
-							+ foto.respaldo().diferencias() + ". Preserva la evidencia (incidente-auditoria.md)."));
+			String archivo = foto.respaldo().porResolverArchivo() != null ? foto.respaldo().porResolverArchivo()
+					: foto.respaldo().archivo();
+			alertas.add(new AlertaTecnica(Gravedad.CRITICA, "FALTAN_FILAS", archivo,
+					"El respaldo " + archivo + " encontró filas faltantes o un ancla distinta: "
+							+ foto.respaldo().diferencias() + ". Sigue abierta hasta que Promotoría la resuelva con motivo "
+							+ "en /panel/sistema. Preserva la evidencia (incidente-auditoria.md)."));
 		}
 		if (foto.baseResponde() && propiedades.respaldoExigido() && !foto.respaldo().alDia()) {
 			alertas.add(new AlertaTecnica(Gravedad.CRITICA, "SIN_RESPALDO", "respaldo",
@@ -164,29 +174,37 @@ public class AlertasTecnicas {
 		return alertas;
 	}
 
-	/** Las que no salieron en la última hora (y marca como conocidas las huellas de error). */
+	/** Las que no salieron en la última hora (no las marca: lo hace {@link #marcarEnviadas} si el correo salió). */
 	synchronized List<AlertaTecnica> porEnviar(List<AlertaTecnica> alertas) {
 		Instant ahora = reloj.instant();
 		List<AlertaTecnica> nuevas = new ArrayList<>();
 		for (AlertaTecnica alerta : alertas) {
 			Instant ultima = enviadas.get(alerta.clave());
 			if (ultima == null || !ahora.isBefore(ultima.plus(propiedades.repetirCada()))) {
-				enviadas.put(alerta.clave(), ahora);
 				nuevas.add(alerta);
-			}
-			if (alerta.tipo().startsWith("ERROR")) {
-				huellasConocidas.add(alerta.huella());
 			}
 		}
 		return nuevas;
 	}
 
-	private void enviar(String asunto, String texto) {
+	/** Las alertas que salieron: no se repiten en la próxima hora; sus huellas de error quedan conocidas. */
+	synchronized void marcarEnviadas(List<AlertaTecnica> alertas) {
+		Instant ahora = reloj.instant();
+		for (AlertaTecnica alerta : alertas) {
+			enviadas.put(alerta.clave(), ahora);
+			if (alerta.tipo().startsWith("ERROR")) {
+				huellasConocidas.add(alerta.huella());
+			}
+		}
+	}
+
+	/** @return si el correo salió o si las alertas por correo están apagadas (no hay nada que reintentar) */
+	private boolean enviar(String asunto, String texto) {
 		JavaMailSender servidor = correo.getIfAvailable();
 		if (propiedades.operadorCorreo().isBlank() || remitente.isBlank() || servidor == null) {
 			LOG.warn("Alertas técnicas apagadas (falta CC_OPERADOR_CORREO, el remitente o el servidor de correo): {}",
 					asunto);
-			return;
+			return true;
 		}
 		SimpleMailMessage mensaje = new SimpleMailMessage();
 		mensaje.setFrom(remitente);
@@ -195,9 +213,20 @@ public class AlertasTecnicas {
 		mensaje.setText(texto + "\n\nDetalle en /panel/sistema. Este correo no lleva datos personales.");
 		try {
 			servidor.send(mensaje);
+			return true;
 		}
 		catch (MailException e) {
-			LOG.error("No se pudo enviar la alerta técnica por correo: {}", e.getClass().getSimpleName());
+			LOG.error("No se pudo enviar la alerta técnica por correo (se reintenta en la revisión siguiente): {}",
+					e.getClass().getSimpleName());
+			return false;
 		}
+	}
+
+	private static final DateTimeFormatter LIMA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+			.withZone(ConfiguracionTiempo.ZONA_LIMA);
+
+	/** Correcciones del sprint 7 (QA-S7-7): las horas de las alertas, en hora de Lima como todo el sistema. */
+	private static String enLima(Instant instante) {
+		return LIMA.format(instante);
 	}
 }

@@ -259,7 +259,7 @@ class VerificadorPermisosBaseDatosTest {
 	/** Un MySQL bien configurado: DELETE → 1142, UPDATE de columnas inmutables → 1143, INSERT imposible → 1644. */
 	/** Sprint 7, tanda 2: lo que solo escribe cc_sistema (a cc_app le falta el GRANT: 1142). */
 	private static final java.util.regex.Pattern SOLO_SISTEMA = java.util.regex.Pattern.compile(
-			"^INSERT INTO (usuario|usuario_rol|sesion_usuario|semilla_muestreo|muestra_llamada|resumen_diario) ");
+			"^INSERT INTO (usuario|usuario_rol|sesion_usuario|semilla_muestreo|muestra_llamada|resumen_diario|primera_direccion) ");
 
 	private static JdbcTemplate mysqlQueDeniega() {
 		JdbcTemplate mysql = mock(JdbcTemplate.class);
@@ -573,8 +573,9 @@ class VerificadorPermisosBaseDatosTest {
 		// correcciones (V20): 58 con los de la verificación de contactos y la huella por hora; sprint 6, tanda 2 (V21): 60
 		// con la foto del resumen diario y el contacto del personal; tanda 3 (V22): 61 con la llamada de control;
 		// correcciones del sprint 6 (V23): 63 con la muestra congelada y la delegación de las llamadas.
-		// Sprint 7, tanda 1 (V24): 64 con el registro de respaldos; tanda 2 (V25): 73 con identidad, sesiones y firmas.
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(73);
+		// Sprint 7, tanda 1 (V24): 64 con el registro de respaldos; tanda 2 (V25): 73 con identidad, sesiones y firmas;
+		// correcciones (V27): 75 con el nacimiento de las solicitudes y la resolución de las alertas de respaldo.
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(75);
 	}
 
 	/**

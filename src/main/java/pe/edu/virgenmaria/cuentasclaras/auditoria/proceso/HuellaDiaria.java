@@ -11,6 +11,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.config.ConfiguracionTiempo;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.EjecucionComoSistema;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.RecorridoColegios;
+import pe.edu.virgenmaria.cuentasclaras.comun.sistema.PasadaPorColegios;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -52,14 +53,7 @@ public class HuellaDiaria {
 	@Scheduled(cron = "${cuentasclaras.huella.cron:0 0 6 * * *}", zone = ConfiguracionTiempo.ZONA)
 	public void ejecutar() {
 		LocalDate hoy = LocalDate.now(reloj);
-		for (Long colegio : colegios.activos()) {
-			try {
-				enColegio(colegio, hoy);
-			}
-			catch (RuntimeException e) {
-				LOG.error("La huella diaria falló en el colegio {}: {}", colegio, e.getClass().getSimpleName());
-			}
-		}
+		PasadaPorColegios.recorrer(LOG, "La huella diaria", colegios.activos(), colegio -> enColegio(colegio, hoy));
 	}
 
 	/**
@@ -69,14 +63,7 @@ public class HuellaDiaria {
 	@Scheduled(cron = "${cuentasclaras.huella.cron-hora:0 0 8-19 * * MON-SAT}", zone = ConfiguracionTiempo.ZONA)
 	public void cadaHora() {
 		LocalDateTime ahora = LocalDateTime.now(reloj);
-		for (Long colegio : colegios.activos()) {
-			try {
-				horaEnColegio(colegio, ahora);
-			}
-			catch (RuntimeException e) {
-				LOG.error("La huella de la hora falló en el colegio {}: {}", colegio, e.getClass().getSimpleName());
-			}
-		}
+		PasadaPorColegios.recorrer(LOG, "La huella de la hora", colegios.activos(), colegio -> horaEnColegio(colegio, ahora));
 	}
 
 	/** La huella de la hora de un colegio (lo llama la tarea programada; las pruebas, directamente). */

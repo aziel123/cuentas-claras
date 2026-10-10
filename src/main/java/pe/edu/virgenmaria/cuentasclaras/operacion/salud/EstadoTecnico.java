@@ -16,11 +16,14 @@ import org.springframework.scheduling.support.CronExpression;
 import org.springframework.scheduling.support.ScheduledMethodRunnable;
 import org.springframework.stereotype.Service;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.EstadoCadena;
+import org.springframework.data.domain.Limit;
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.FuenteDatosEnrutada;
 import pe.edu.virgenmaria.cuentasclaras.comun.config.ConfiguracionTiempo;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.Latidos;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ObservadorLatidos;
 import pe.edu.virgenmaria.cuentasclaras.operacion.config.PropiedadesMonitoreo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.log.ContadorErrores;
+import pe.edu.virgenmaria.cuentasclaras.operacion.model.ComparacionRespaldo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.model.Respaldo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.repository.RespaldoRepository;
 
@@ -35,6 +38,8 @@ import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -106,7 +111,8 @@ public class EstadoTecnico {
 
 	private final Clock reloj;
 
-	private Instant esperaDesde;
+	/** Desde cuándo espera cada pool (por nombre: «app» o «sistema»). */
+	private final Map<String, Instant> esperaDesde = new HashMap<>();
 
 	public EstadoTecnico(RespaldoRepository respaldos, PropiedadesMonitoreo propiedades, Latidos latidos,
 			ObjectProvider<ScheduledTaskHolder> tareas, ContadorErrores errores, EstadoCadena cadena,
@@ -143,9 +149,26 @@ public class EstadoTecnico {
 		Respaldo r = ultimo.get();
 		LocalDateTime limite = LocalDateTime.now(reloj.withZone(ConfiguracionTiempo.ZONA_LIMA))
 				.minusHours(propiedades.respaldoMaxHoras());
+		// Correcciones del sprint 7 (QA-S7-1): la alerta sigue mientras haya un respaldo con FALTAN_FILAS sin resolver,
+		// aunque el último diga IGUAL (un segundo respaldo no borra la evidencia del panel ni del vigilante).
+		Optional<Respaldo> pendiente = respaldos.sinResolver(ComparacionRespaldo.FALTAN_FILAS,
+				propiedades.aceptarRespaldoSimulado(), Respaldo.DESTINO_SIMULADO, Limit.of(1)).stream().findFirst();
+		if (pendiente.isPresent()) {
+			Respaldo p = pendiente.get();
+			return new EstadoRespaldo(true, r.getFin(), r.getDestino(), r.getArchivo(), ComparacionRespaldo.FALTAN_FILAS,
+					p.getDiferencias(), r.getFin().isAfter(limite), p.getId(), p.getArchivo());
+		}
+		if (r.getComparacion() == ComparacionRespaldo.FALTAN_FILAS) {
+			// El último respaldo encontró filas faltantes, pero Promotoría ya lo resolvió con motivo: no es alerta.
+			return new EstadoRespaldo(true, r.getFin(), r.getDestino(), r.getArchivo(), ComparacionRespaldo.IGUAL,
+					RESUELTA + r.getDiferencias(), r.getFin().isAfter(limite));
+		}
 		return new EstadoRespaldo(true, r.getFin(), r.getDestino(), r.getArchivo(), r.getComparacion(),
 				r.getDiferencias(), r.getFin().isAfter(limite));
 	}
+
+	/** Las diferencias de un respaldo con FALTAN_FILAS cuya alerta ya resolvió Promotoría empiezan así. */
+	public static final String RESUELTA = "Alerta resuelta por Promotoría: ";
 
 	/** Si las alertas técnicas pueden salir: hay a quién, desde qué remitente y un servidor de correo configurado. */
 	public boolean alertasEncendidas() {
@@ -235,8 +258,17 @@ public class EstadoTecnico {
 		}
 	}
 
+	/**
+	 * Correcciones del sprint 7 (QA-S7-3): las DOS conexiones (la de cc_app y la de cc_sistema) deben responder. Si la de
+	 * cc_sistema no conecta (clave cambiada, usuario bloqueado), los procesos y el ingreso están caídos aunque las
+	 * pantallas lean.
+	 */
 	private boolean baseResponde() {
-		try (Connection conexion = fuenteDatos.getConnection()) {
+		return pools().values().stream().allMatch(EstadoTecnico::responde);
+	}
+
+	private static boolean responde(DataSource fuente) {
+		try (Connection conexion = fuente.getConnection()) {
 			return conexion.isValid(2);
 		}
 		catch (SQLException e) {
@@ -244,25 +276,43 @@ public class EstadoTecnico {
 		}
 	}
 
+	/** Las conexiones que vigilar: con dos usuarios, «app» (cc_app) y «sistema» (cc_sistema); si no, la única. */
+	private Map<String, DataSource> pools() {
+		if (fuenteDatos instanceof FuenteDatosEnrutada enrutada && enrutada.separadas()) {
+			Map<String, DataSource> pools = new LinkedHashMap<>();
+			pools.put("app", enrutada.app());
+			pools.put("sistema", enrutada.sistema());
+			return pools;
+		}
+		return Map.of("app", fuenteDatos);
+	}
+
+	/** QA-S7-3: el pool de cc_sistema (4 conexiones) también se agota; cada pool lleva su propia cuenta. */
 	private synchronized boolean poolAgotado() {
+		boolean agotado = false;
+		for (Map.Entry<String, DataSource> pool : pools().entrySet()) {
+			agotado |= poolAgotado(pool.getKey(), pool.getValue());
+		}
+		return agotado;
+	}
+
+	private boolean poolAgotado(String nombre, DataSource fuente) {
 		HikariPoolMXBean pool = null;
 		try {
-			if (fuenteDatos.isWrapperFor(HikariDataSource.class)) {
-				pool = fuenteDatos.unwrap(HikariDataSource.class).getHikariPoolMXBean();
+			if (fuente.isWrapperFor(HikariDataSource.class)) {
+				pool = fuente.unwrap(HikariDataSource.class).getHikariPoolMXBean();
 			}
 		}
 		catch (SQLException e) {
 			pool = null;
 		}
 		if (pool == null || pool.getThreadsAwaitingConnection() == 0) {
-			esperaDesde = null;
+			esperaDesde.remove(nombre);
 			return false;
 		}
 		Instant ahora = reloj.instant();
-		if (esperaDesde == null) {
-			esperaDesde = ahora;
-		}
-		return !ahora.isBefore(esperaDesde.plus(POOL_AGOTADO));
+		Instant desde = esperaDesde.computeIfAbsent(nombre, n -> ahora);
+		return !ahora.isBefore(desde.plus(POOL_AGOTADO));
 	}
 
 	private static Integer discoLibre() {

@@ -48,8 +48,11 @@ public class CajaController {
 	}
 
 	@GetMapping("/caja/familias/{id:\\d+}")
+	@RegistraAcceso(TipoAcceso.COBRO)
 	public String familia(@PathVariable Long id, Model model) {
 		model.addAttribute("cuenta", cobro.cuentaDeFamilia(id));
+		// Correcciones del sprint 7 (S7-B1): queda en el registro de accesos con su tipo (no cuenta para la alerta).
+		AccesoMostrado.familia(id);
 		return "caja/familia";
 	}
 

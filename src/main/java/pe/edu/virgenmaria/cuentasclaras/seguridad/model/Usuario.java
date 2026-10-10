@@ -110,6 +110,15 @@ public class Usuario extends BaseEntity {
 	@Column(name = "roles_solicitud_id")
 	private Long rolesSolicitudId;
 
+	/**
+	 * Correcciones del sprint 7 (observación de QA): la solicitud ESTADO_CUENTA aprobada (y firmada por otra persona) con la
+	 * que se desactivó o reactivó por última vez esta cuenta de Promotoría o Dirección. En MySQL, trg_usuario_identidad la
+	 * exige y solo la deja avanzar junto con el estado (uk_usuario_estado_solicitud: una vez). Solo la cambia
+	 * {@link #aplicarEstadoAprobado}.
+	 */
+	@Column(name = "estado_solicitud_id")
+	private Long estadoSolicitudId;
+
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "usuario_rol", joinColumns = @JoinColumn(name = "usuario_id"))
 	@Enumerated(EnumType.STRING)
@@ -300,6 +309,28 @@ public class Usuario extends BaseEntity {
 
 	public Long getRolesSolicitudId() {
 		return rolesSolicitudId;
+	}
+
+	/**
+	 * Correcciones del sprint 7: desactiva o reactiva una cuenta de Promotoría o Dirección con su solicitud ESTADO_CUENTA
+	 * aprobada por otra persona. Enlaza la solicitud en el mismo UPDATE que cambia el estado (el trigger lo exige).
+	 */
+	public void aplicarEstadoAprobado(boolean activar, Long solicitudId, String por, LocalDateTime ahora) {
+		Objects.requireNonNull(solicitudId, "solicitudId");
+		if (estadoSolicitudId != null && solicitudId <= estadoSolicitudId) {
+			throw new IllegalStateException("La solicitud del estado debe ser más nueva que la anterior");
+		}
+		if (activar) {
+			reactivar();
+		}
+		else {
+			desactivar(por, ahora);
+		}
+		estadoSolicitudId = solicitudId;
+	}
+
+	public Long getEstadoSolicitudId() {
+		return estadoSolicitudId;
 	}
 
 	public void desactivar(String por, LocalDateTime ahora) {

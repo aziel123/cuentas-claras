@@ -49,6 +49,25 @@ Lo que hace, en orden (sale con error en el primer paso que falle):
 6. Registra la fila en `respaldo` como `cc_respaldo`. El trigger exige anclas reales y que se registre al terminar; si
    el ancla del respaldo anterior ya no está, exige que diga `FALTAN_FILAS`.
 
+**Correcciones del sprint 7 (QA-S7-1): la alerta «Faltan filas» no la borra un segundo respaldo.**
+- Mientras la base tenga un respaldo con `FALTAN_FILAS` sin resolver, `respaldar.sh` compara contra la **línea base** del
+  manifiesto anterior (el bloque `base:`, que conserva la referencia de la tabla con filas faltantes y el ancla) en lugar
+  del último manifiesto, y el registro vuelve a decir `FALTAN_FILAS` (código 3). `trg_respaldo_registro` lo exige: con la
+  alerta sin resolver, la base rechaza `IGUAL` (1644).
+- `/panel/sistema`, «Para revisar», las alertas técnicas y `/salud/respaldo` (`REVISAR`) siguen mostrando la alerta.
+- **La resuelve una persona de Promotoría** en `/panel/sistema` («Resolver la alerta»), con motivo (10 a 500 caracteres) y
+  la firma de su sesión, **después de revisar con el responsable técnico qué filas faltaron y por qué** (por ejemplo, la
+  purga de 2 años del registro de accesos hecha por el DBA, que debe constar en un acta). Nunca el operador: ni
+  `cc_respaldo` ni la cuenta cuyo correo es `CC_OPERADOR_CORREO`. Queda en la bitácora
+  (`RESPALDO_FALTAN_FILAS_RESUELTO`, resaltado) y en `resolucion_respaldo` (solo inserción). El respaldo siguiente
+  vuelve a comparar con el último manifiesto (`IGUAL`).
+
+**Correcciones del sprint 7 (S7-M1): el manifiesto guarda los permisos.** `respaldar.sh` lee `permisos_objetos()` (de `02`,
+como `cc_respaldo`): los roles (también los anidados), los privilegios globales, por esquema, tabla, columna y rutina de
+`cc_app`, `cc_sistema`, `cc_respaldo` y `cc_negocio`, sin hosts ni claves. El simulacro semanal
+(`restaurar-y-verificar.sh`, paso `permisos`) los compara con los que deja `02` de esa versión en la copia: un GRANT dado
+a mano en prod o un rol anidado en `cc_negocio` sale en el informe aunque nadie reinicie la aplicación.
+
 Código de salida: `0` bien; `3` respaldo hecho pero **faltan filas** (alerta crítica); `1` falló (no quedó registrado:
 a las 26 horas, «Sin respaldo»).
 

@@ -12,7 +12,13 @@ public enum TipoAcceso {
 	MOROSOS("Familias morosas", false),
 	LLAMADA_CONTROL("Llamada de control", false),
 	IMPORTACION("Vista previa de la importación", false),
-	APROBACION_CONTACTO("Solicitud de cambio de contacto", false);
+	APROBACION_CONTACTO("Solicitud de cambio de contacto", false),
+	/**
+	 * Correcciones del sprint 7 (S7-B1): la pantalla de cobro de caja ({@code /caja/familias/{id}}). Queda registrada con
+	 * la familia, pero NO cuenta para la alerta de más de 50 fichas en un día: una cajera abre decenas de familias al día
+	 * para cobrar (y cada cobro queda además en la bitácora).
+	 */
+	COBRO("Pantalla de cobro de caja", false);
 
 	private final String etiqueta;
 

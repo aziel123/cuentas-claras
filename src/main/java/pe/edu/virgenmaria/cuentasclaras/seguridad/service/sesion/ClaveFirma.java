@@ -91,6 +91,11 @@ public final class ClaveFirma {
 		return "delegacion_llamada:" + Objects.requireNonNull(semana, "semana");
 	}
 
+	/** Correcciones del sprint 7 (QA-S7-1): Promotoría resuelve la alerta «Faltan filas» de ese respaldo. */
+	public static String respaldoResuelto(Long respaldoId) {
+		return "respaldo:" + id(respaldoId) + ":RESUELTO";
+	}
+
 	private static Long id(Long id) {
 		return Objects.requireNonNull(id, "id");
 	}

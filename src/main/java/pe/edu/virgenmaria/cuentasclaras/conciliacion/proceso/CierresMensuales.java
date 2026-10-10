@@ -12,6 +12,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.EjecucionComoSistema;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.RecorridoColegios;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ServicioCierreMensual;
+import pe.edu.virgenmaria.cuentasclaras.comun.sistema.PasadaPorColegios;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -46,14 +47,7 @@ public class CierresMensuales {
 	@Scheduled(cron = "${cuentasclaras.conciliacion.cierre-mensual-cron:0 0 7 * * *}", zone = ConfiguracionTiempo.ZONA)
 	public void ejecutar() {
 		LocalDate hoy = LocalDate.now(reloj);
-		for (Long colegio : colegios.activos()) {
-			try {
-				enColegio(colegio, hoy);
-			}
-			catch (RuntimeException e) {
-				LOG.error("El cierre mensual falló en el colegio {}: {}", colegio, e.getClass().getSimpleName());
-			}
-		}
+		PasadaPorColegios.recorrer(LOG, "El cierre mensual", colegios.activos(), colegio -> enColegio(colegio, hoy));
 	}
 
 	/** @return cuántos cierres creó en el colegio */

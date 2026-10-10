@@ -51,9 +51,13 @@ public class ServicioEstadoTecnico {
 			respaldo = "Último respaldo: " + cuando(r.fin()) + (r.alDia() ? ", verificado en el destino" : ", ATRASADO");
 			detalle = switch (r.comparacion()) {
 				case PRIMERO -> "Primer respaldo de este destino.";
-				case IGUAL -> "Están todas las filas del respaldo anterior.";
-				case FALTAN_FILAS -> "Faltan filas que existían en el respaldo anterior (" + r.diferencias()
-						+ "). Avisa al responsable técnico y no toques nada.";
+				case IGUAL -> r.diferencias() != null && r.diferencias().startsWith(EstadoTecnico.RESUELTA)
+						? r.diferencias() + "."
+						: "Están todas las filas del respaldo anterior.";
+				case FALTAN_FILAS -> "Faltan filas que existían en un respaldo anterior (" + r.diferencias()
+						+ (r.porResolverArchivo() == null ? "" : "; respaldo " + r.porResolverArchivo())
+						+ "). Avisa al responsable técnico y no toques nada. La alerta sigue hasta que la resuelvas con "
+						+ "motivo, después de revisar qué pasó.";
 			};
 		}
 		return new VistaSistema(respaldo, detalle, r.alDia(), r.faltanFilas(), propiedades.respaldoExigido(),

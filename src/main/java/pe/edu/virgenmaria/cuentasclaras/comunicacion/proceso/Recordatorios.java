@@ -12,6 +12,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.EjecucionComoSistema;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.RecorridoColegios;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.service.ServicioRecordatorios;
+import pe.edu.virgenmaria.cuentasclaras.comun.sistema.PasadaPorColegios;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -54,14 +55,7 @@ public class Recordatorios {
 			return;
 		}
 		LocalDate hoy = LocalDate.now(reloj);
-		for (Long colegio : colegios.activos()) {
-			try {
-				enColegio(colegio, hoy);
-			}
-			catch (RuntimeException e) {
-				LOG.error("Los recordatorios fallaron en el colegio {}: {}", colegio, e.getClass().getSimpleName());
-			}
-		}
+		PasadaPorColegios.recorrer(LOG, "Los recordatorios", colegios.activos(), colegio -> enColegio(colegio, hoy));
 	}
 
 	/** @return cuántos mensajes quedaron preparados en el colegio */

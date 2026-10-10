@@ -53,7 +53,8 @@ class ClaveFirmaTest {
 				ClaveFirma.partida(1L, EstadoSolicitud.APROBADA), ClaveFirma.cierreMensual(1L, 1), ClaveFirma.feriado(1L),
 				ClaveFirma.avisoFamilia(1L), ClaveFirma.renovacion(1L, EstadoSolicitud.APROBADA),
 				ClaveFirma.verificacionPago(1L, 1), ClaveFirma.verificacionDeposito(1L, 1),
-				ClaveFirma.llamadaControl(LocalDate.of(2026, 10, 5), 1L, 1), ClaveFirma.delegacionLlamada(LocalDate.of(2026, 10, 5)))
+				ClaveFirma.llamadaControl(LocalDate.of(2026, 10, 5), 1L, 1), ClaveFirma.delegacionLlamada(LocalDate.of(2026, 10, 5)),
+				ClaveFirma.respaldoResuelto(1L))
 				.forEach(clave -> {
 					// El CHECK de V25 (firma_operacion.clave) y el largo de la columna.
 					assertThat(clave).matches("^[a-z_]+:[A-Za-z0-9:_-]+$").hasSizeLessThanOrEqualTo(120);

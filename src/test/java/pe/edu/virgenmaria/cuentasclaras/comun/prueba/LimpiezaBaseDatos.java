@@ -17,6 +17,11 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Correcciones del sprint 7 (V27): la resolución de una alerta apunta al respaldo y a la cuenta; la primera Dirección,
+		// a la cuenta; el estado de la cuenta, a su solicitud.
+		jdbc.update("DELETE FROM resolucion_respaldo");
+		jdbc.update("DELETE FROM primera_direccion");
+		jdbc.update("UPDATE usuario SET estado_solicitud_id = NULL WHERE estado_solicitud_id IS NOT NULL");
 		// Sprint 7, tanda 1 (V24): el registro de respaldos (técnico, sin colegio; en MySQL solo lo escribe cc_respaldo).
 		jdbc.update("DELETE FROM respaldo");
 		// Sprint 7, tanda 3 (V26): el registro de accesos a datos personales apunta a la cuenta, a la sesión, a la familia y

@@ -7,8 +7,10 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
--- Versión de la migración V26 (sprint 7, tanda 3): 73 triggers y 3 funciones, los mismos de la tanda 2 (V26 solo agrega
--- acceso_dato_personal, de solo inserción por GRANT, y el derecho de aviso_familia, que fija su CHECK y su GRANT).
+-- Versión de la migración V27 (correcciones del sprint 7): 75 triggers y 4 funciones. Nuevos: trg_solicitud_cambio_nace
+-- (una solicitud nace PENDIENTE: una APROBADA solo existe si su aprobador la firmó), trg_resolucion_respaldo_registro
+-- (QA-S7-1) y la función cc_solicitud_firmada. Versión nueva de las operaciones de dinero que pasan a un estado aprobado o
+-- anulado (S7-A1): cada una exige SU solicitud aprobada y firmada.
 
 -- Sprint 7, tanda 2: el texto de los cuerpos se interpreta SIEMPRE como UTF-8, use el cliente el juego de caracteres que
 -- use (el mysql de un contenedor sin locale envía latin1 y las tildes de los mensajes quedaban dobles: la huella de cada
@@ -63,6 +65,18 @@ CREATE FUNCTION cc_firma_valida(p_colegio BIGINT, p_clave VARCHAR(120), p_quien 
             WHERE f.colegio_id = p_colegio AND f.clave = p_clave AND u.colegio_id = p_colegio
               AND u.nombre_usuario = p_quien
               AND f.firmada_bd >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE) END$$
+
+-- Correcciones del sprint 7 (S7-A1): ¿la solicitud está APROBADA y quien figura como aprobador la firmó con su sesión? Sin
+-- límite de tiempo: la usan las operaciones que se ejecutan DESPUÉS de aprobar (una devolución que hace otra persona días
+-- más tarde, el ingreso que aplica el proceso). Las que se ejecutan en la misma transacción de la aprobación usan además
+-- cc_firma_valida (5 minutos). Una solicitud resuelta por sistema.* no sirve: ninguna aprobación de dinero es del sistema.
+DROP FUNCTION IF EXISTS cc_solicitud_firmada$$
+CREATE FUNCTION cc_solicitud_firmada(p_solicitud BIGINT) RETURNS BOOLEAN NOT DETERMINISTIC READS SQL DATA
+    RETURN EXISTS (SELECT 1 FROM solicitud_cambio s
+        JOIN firma_operacion f ON f.colegio_id = s.colegio_id AND f.clave = CONCAT('solicitud_cambio:', s.id, ':APROBADA')
+        JOIN usuario u ON u.id = f.usuario_id AND u.colegio_id = s.colegio_id
+        WHERE s.id = p_solicitud AND s.estado = 'APROBADA' AND u.nombre_usuario = s.resuelto_por
+          AND s.resuelto_por <> s.solicitado_por)$$
 
 -- Un plan nace en BORRADOR (nadie inserta un plan ya aprobado).
 DROP TRIGGER IF EXISTS trg_plan_pension_nace_borrador$$
@@ -179,7 +193,9 @@ BEGIN
             AND s.solicitado_por = NEW.anulacion_solicitada_por AND s.resuelto_por = NEW.anulacion_aprobada_por
             AND DATE(s.resuelto_en) = DATE(NEW.anulada_en)
             AND ((s.tipo = 'ANULACION_CUOTA' AND s.entidad = 'cuota' AND s.entidad_id = NEW.id)
-                OR (s.tipo = 'FECHA_MATRICULA' AND s.entidad = 'matricula' AND s.entidad_id = NEW.matricula_id))) THEN
+                OR (s.tipo = 'FECHA_MATRICULA' AND s.entidad = 'matricula' AND s.entidad_id = NEW.matricula_id))
+            -- Correcciones del sprint 7 (S7-A1): y firmada por quien la aprobó.
+            AND cc_solicitud_firmada(s.id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la cuota se anula solo con su solicitud aprobada';
     END IF;
     IF NOT (NEW.anulacion_solicitud_id <=> OLD.anulacion_solicitud_id)
@@ -225,6 +241,20 @@ BEGIN
             (SELECT LEFT(m.serie, 1) FROM comprobante m WHERE m.id = NEW.modifica_id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la nota de crédito usa la letra del comprobante que anula';
     END IF;
+    -- Correcciones del sprint 7 (S7-A1): una nota de crédito anula ante SUNAT el comprobante de un pago. Solo nace de la
+    -- anulación de ESE pago aprobada y firmada ahora por quien la aprobó (en la transacción de la bandeja), o reemite la
+    -- de un pago ya anulado.
+    IF NEW.tipo = 'NOTA_CREDITO' AND NOT (
+            (NEW.reemplaza_id IS NULL AND EXISTS (SELECT 1 FROM pago p JOIN solicitud_cambio s ON s.entidad_id = p.id
+                WHERE p.comprobante_id = NEW.modifica_id AND p.colegio_id = NEW.colegio_id AND p.estado = 'VIGENTE'
+                  AND s.colegio_id = NEW.colegio_id AND s.tipo = 'ANULACION_PAGO' AND s.entidad = 'pago'
+                  AND s.estado = 'APROBADA'
+                  AND NOT EXISTS (SELECT 1 FROM anulacion_pago n WHERE n.solicitud_id = s.id)
+                  AND cc_firma_valida(NEW.colegio_id, CONCAT('solicitud_cambio:', s.id, ':APROBADA'), s.resuelto_por)))
+            OR (NEW.reemplaza_id IS NOT NULL AND EXISTS (SELECT 1 FROM anulacion_pago n JOIN pago p ON p.id = n.pago_id
+                WHERE p.comprobante_id = NEW.modifica_id AND p.colegio_id = NEW.colegio_id AND p.estado = 'ANULADO'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la nota de crédito necesita la anulación aprobada y firmada de su pago';
+    END IF;
     IF NEW.reemplaza_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM comprobante r WHERE r.id = NEW.reemplaza_id
             AND r.estado_envio = 'RECHAZADO' AND r.tipo = NEW.tipo AND r.total = NEW.total
             AND r.modifica_id <=> NEW.modifica_id) THEN
@@ -259,7 +289,8 @@ BEGIN
             OR (NEW.reapertura_solicitud_id <=> OLD.reapertura_solicitud_id)
             OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.reapertura_solicitud_id
                 AND s.tipo = 'REAPERTURA_CAJA' AND s.entidad = 'caja_diaria' AND s.entidad_id = NEW.id
-                AND s.estado = 'APROBADA' AND DATE(s.resuelto_en) = NEW.fecha AND s.resuelto_por <> NEW.cajero)
+                AND s.estado = 'APROBADA' AND DATE(s.resuelto_en) = NEW.fecha AND s.resuelto_por <> NEW.cajero
+                AND cc_firma_valida(NEW.colegio_id, CONCAT('solicitud_cambio:', s.id, ':APROBADA'), s.resuelto_por))
             OR EXISTS (SELECT 1 FROM deposito_caja x WHERE x.caja_diaria_id = NEW.id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la caja solo se reabre con una reapertura aprobada y sin depósito';
     END IF;
@@ -312,7 +343,7 @@ BEGIN
             AND ((o.estado IN ('CREADA', 'VENCIDA') AND o.familia_id = NEW.familia_id AND o.monto = NEW.total)
                 OR (o.estado = 'POR_REVISAR' AND EXISTS (SELECT 1 FROM solicitud_cambio s
                     WHERE s.tipo = 'APLICAR_INGRESO' AND s.entidad = 'orden_pago' AND s.entidad_id = o.id
-                    AND s.estado = 'APROBADA')))) THEN
+                    AND s.estado = 'APROBADA' AND cc_solicitud_firmada(s.id))))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: pago en línea sin la confirmación de la pasarela por ese monto';
     END IF;
     IF NEW.origen = 'RECAUDACION' AND NOT EXISTS (SELECT 1 FROM linea_recaudacion l
@@ -323,7 +354,7 @@ BEGIN
                     AND a.familia_id = NEW.familia_id))
                 OR (l.estado = 'EXCEPCION' AND EXISTS (SELECT 1 FROM solicitud_cambio s
                     WHERE s.tipo = 'APLICAR_INGRESO' AND s.entidad = 'linea_recaudacion' AND s.entidad_id = l.id
-                    AND s.estado = 'APROBADA')))) THEN
+                    AND s.estado = 'APROBADA' AND cc_solicitud_firmada(s.id))))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: pago de recaudación sin su línea confirmada por ese monto';
     END IF;
 END$$
@@ -378,6 +409,21 @@ BEGIN
             WHERE p.id = NEW.pago_id AND p.estado = 'VIGENTE' AND p.cajero = NEW.cajero_pago AND p.total = NEW.monto
             AND n.tipo = 'NOTA_CREDITO' AND n.modifica_id = p.comprobante_id AND n.total = p.total) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: anulación que no corresponde al pago o a su nota de crédito';
+    END IF;
+    -- Correcciones del sprint 7 (S7-A1, ALTO): con la clave de cc_app se anulaba un pago sin la aprobación de nadie (y el
+    -- cierre a ciegas dejaba de esperar ese efectivo). Ahora la anulación es la de SU solicitud ANULACION_PAGO de ese
+    -- pago, APROBADA por quien figura como aprobador y pedida por quien figura como solicitante, del mismo tipo y motivo,
+    -- firmada con la sesión del aprobador hace 5 minutos o menos (se registra en la transacción de la bandeja), y quien
+    -- aprueba es Promotoría o Dirección activa de ese colegio.
+    IF NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id
+            AND s.tipo = 'ANULACION_PAGO' AND s.entidad = 'pago' AND s.entidad_id = NEW.pago_id AND s.estado = 'APROBADA'
+            AND s.solicitado_por = NEW.solicitado_por AND s.resuelto_por = NEW.aprobado_por AND s.motivo = NEW.motivo
+            AND JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.tipo')) = NEW.tipo
+            AND cc_firma_valida(NEW.colegio_id, CONCAT('solicitud_cambio:', s.id, ':APROBADA'), s.resuelto_por))
+            OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.aprobado_por AND u.activo
+                  AND r.rol IN ('PROMOTOR', 'DIRECTOR')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la anulación necesita su solicitud aprobada y firmada por Promotoría o Dirección';
     END IF;
     IF NEW.tipo = 'CONTRACARGO' AND NOT EXISTS (SELECT 1 FROM pago p JOIN orden_pago o ON o.id = p.orden_pago_id
             WHERE p.id = NEW.pago_id AND p.origen = 'PASARELA' AND o.contracargo_en IS NOT NULL) THEN
@@ -531,6 +577,17 @@ BEGIN
     END IF;
 END$$
 
+-- Correcciones del sprint 7 (S7-A1): una solicitud nace PENDIENTE. Con la clave de cc_app se podía INSERTAR una ya
+-- APROBADA «por la directora»: ahora una solicitud aprobada solo existe si pasó por trg_solicitud_cambio_resuelta, que
+-- exige la firma de la sesión de quien la aprobó.
+DROP TRIGGER IF EXISTS trg_solicitud_cambio_nace$$
+CREATE TRIGGER trg_solicitud_cambio_nace BEFORE INSERT ON solicitud_cambio FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> 'PENDIENTE') OR NEW.resuelto_por IS NOT NULL OR NEW.resuelto_en IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una solicitud nace PENDIENTE';
+    END IF;
+END$$
+
 -- M1. Una solicitud resuelta no cambia: ni su estado ni quién, cuándo y con qué comentario la resolvió.
 DROP TRIGGER IF EXISTS trg_solicitud_cambio_resuelta$$
 CREATE TRIGGER trg_solicitud_cambio_resuelta BEFORE UPDATE ON solicitud_cambio FOR EACH ROW
@@ -596,7 +653,7 @@ BEGIN
             AND ((NEW.facturacion_solicitud_id <=> OLD.facturacion_solicitud_id)
                 OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.facturacion_solicitud_id
                     AND s.tipo = 'DATOS_FACTURACION' AND s.entidad = 'apoderado' AND s.entidad_id = NEW.id
-                    AND s.estado = 'APROBADA')) THEN
+                    AND s.estado = 'APROBADA' AND cc_solicitud_firmada(s.id))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el RUC del apoderado solo cambia con su solicitud aprobada';
     END IF;
     IF (NOT (NEW.telefono_whatsapp <=> OLD.telefono_whatsapp) OR NOT (NEW.correo <=> OLD.correo)
@@ -604,7 +661,7 @@ BEGIN
             AND ((NEW.contacto_solicitud_id <=> OLD.contacto_solicitud_id)
                 OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.contacto_solicitud_id
                     AND s.tipo = 'CAMBIO_CONTACTO_APODERADO' AND s.entidad = 'apoderado' AND s.entidad_id = NEW.id
-                    AND s.estado = 'APROBADA')) THEN
+                    AND s.estado = 'APROBADA' AND cc_solicitud_firmada(s.id))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el contacto del apoderado solo cambia con su solicitud aprobada';
     END IF;
     -- S5-M1: el contacto aprobado lo fija una solicitud aprobada nueva y es el contacto registrado de ese canal.
@@ -693,7 +750,7 @@ BEGIN
     END IF;
     IF NEW.estado = 'DEVUELTA' AND NOT (NEW.estado <=> OLD.estado) AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s
             WHERE s.tipo = 'DEVOLVER_INGRESO' AND s.entidad = 'orden_pago' AND s.entidad_id = NEW.id
-            AND s.estado = 'APROBADA' AND s.resuelto_por <> NEW.devuelto_por) THEN
+            AND s.estado = 'APROBADA' AND s.resuelto_por <> NEW.devuelto_por AND cc_solicitud_firmada(s.id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la devolución necesita su aprobación';
     END IF;
     -- Correcciones del sprint 4 (S4-A3): el contracargo se registra una vez y no cambia; con contracargo, un ingreso por
@@ -793,7 +850,8 @@ BEGIN
     END IF;
     IF NEW.estado = 'DEVUELTA' AND NOT (NEW.estado <=> OLD.estado) AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s
             WHERE s.tipo = 'DEVOLVER_INGRESO' AND s.entidad = 'linea_recaudacion' AND s.entidad_id = NEW.id
-            AND s.estado = 'APROBADA' AND s.resuelto_por <> NEW.devuelto_por AND s.solicitado_por <> NEW.devuelto_por) THEN
+            AND s.estado = 'APROBADA' AND s.resuelto_por <> NEW.devuelto_por AND s.solicitado_por <> NEW.devuelto_por
+            AND cc_solicitud_firmada(s.id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la devolución necesita su aprobación';
     END IF;
     IF OLD.estado <> 'PENDIENTE' AND NOT (NEW.motivo_excepcion <=> OLD.motivo_excepcion) THEN
@@ -973,7 +1031,8 @@ BEGIN
                     AND e.creado_por = NEW.resuelto_por))))
             OR (NEW.regla = 'MANUAL' AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.tipo = 'PARTIDA_MANUAL'
                 AND s.entidad = 'partida_conciliacion' AND s.entidad_id = NEW.id AND s.estado = 'APROBADA'
-                AND s.resuelto_por = NEW.resuelto_por AND s.solicitado_por <> NEW.resuelto_por))) THEN
+                AND s.resuelto_por = NEW.resuelto_por AND s.solicitado_por <> NEW.resuelto_por
+                AND cc_solicitud_firmada(s.id)))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la partida se confirma con el extracto confirmado y por otra persona';
     END IF;
 END$$
@@ -1628,7 +1687,7 @@ BEGIN
             AND (NEW.contacto_solicitud_id IS NULL OR NEW.contacto_solicitud_id <= COALESCE(OLD.contacto_solicitud_id, 0)
                 OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.contacto_solicitud_id
                     AND s.colegio_id = NEW.colegio_id AND s.tipo = 'CAMBIO_CONTACTO_PERSONAL' AND s.entidad = 'usuario'
-                    AND s.entidad_id = NEW.id AND s.estado = 'APROBADA'
+                    AND s.entidad_id = NEW.id AND s.estado = 'APROBADA' AND cc_solicitud_firmada(s.id)
                     AND NEW.telefono_whatsapp <=> NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.telefono')), '')
                     AND NEW.correo <=> NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.correo')), ''))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el contacto del personal solo cambia con su solicitud aprobada';
@@ -1800,6 +1859,30 @@ BEGIN
                   WHERE e.secuencia = r.secuencia_despues AND e.hash = r.hash_despues)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el ancla del respaldo anterior ya no esta: el registro debe decir FALTAN_FILAS';
     END IF;
+    -- Correcciones del sprint 7 (QA-S7-1): mientras haya un respaldo con FALTAN_FILAS sin resolver (ninguna resolución en
+    -- él ni en uno posterior), cada respaldo nuevo dice FALTAN_FILAS. Un segundo respaldo no borra la alerta.
+    IF NOT (NEW.comparacion <=> 'FALTAN_FILAS') AND EXISTS (SELECT 1 FROM respaldo r WHERE r.comparacion = 'FALTAN_FILAS'
+            AND NOT EXISTS (SELECT 1 FROM resolucion_respaldo s WHERE s.respaldo_id >= r.id)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: hay filas faltantes sin resolver: el registro debe decir FALTAN_FILAS';
+    END IF;
+END$$
+
+-- Correcciones del sprint 7 (QA-S7-1): la alerta «Faltan filas» la resuelve una PERSONA de Promotoría activa de su
+-- colegio (nunca cc_respaldo ni sistema.*), con motivo y la firma de su sesión, sobre el ÚLTIMO respaldo con FALTAN_FILAS.
+-- Queda además en la bitácora (RESPALDO_FALTAN_FILAS_RESUELTO).
+DROP TRIGGER IF EXISTS trg_resolucion_respaldo_registro$$
+CREATE TRIGGER trg_resolucion_respaldo_registro BEFORE INSERT ON resolucion_respaldo FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM respaldo r WHERE r.id = NEW.respaldo_id AND r.comparacion = 'FALTAN_FILAS'
+            AND NOT EXISTS (SELECT 1 FROM respaldo x WHERE x.comparacion = 'FALTAN_FILAS' AND x.id > r.id)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: se resuelve el ultimo respaldo con filas faltantes';
+    END IF;
+    IF cc_es_sistema() OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol p ON p.usuario_id = u.id
+            WHERE u.id = NEW.usuario_id AND u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.creado_por
+              AND u.activo AND u.apoderado_id IS NULL AND p.rol = 'PROMOTOR')
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('respaldo:', NEW.respaldo_id, ':RESUELTO'), NEW.creado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resuelve Promotoria con la firma de su sesion';
+    END IF;
 END$$
 
 DELIMITER ;
@@ -1913,6 +1996,22 @@ BEGIN
                 AND s.entidad_id = NEW.id AND s.estado = 'APROBADA')) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los roles cambian con su solicitud aprobada';
     END IF;
+    -- Correcciones del sprint 7 (observación de QA): desactivar o reactivar una cuenta con Promotoría o Dirección exige SU
+    -- solicitud ESTADO_CUENTA (más nueva que la anterior, de esta cuenta, con el estado final en datos.activo) aprobada y
+    -- firmada por otra persona en la misma transacción. estado_solicitud_id solo cambia junto con el estado de la cuenta.
+    IF NOT (NEW.activo <=> OLD.activo) AND EXISTS (SELECT 1 FROM usuario_rol r WHERE r.usuario_id = OLD.id
+            AND r.rol IN ('PROMOTOR', 'DIRECTOR'))
+            AND (NEW.estado_solicitud_id IS NULL OR NEW.estado_solicitud_id <= COALESCE(OLD.estado_solicitud_id, 0)
+                OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.estado_solicitud_id
+                    AND s.colegio_id = NEW.colegio_id AND s.tipo = 'ESTADO_CUENTA' AND s.entidad = 'usuario'
+                    AND s.entidad_id = NEW.id AND s.estado = 'APROBADA' AND s.resuelto_por <> NEW.nombre_usuario
+                    AND JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.activo')) = IF(NEW.activo, 'true', 'false')
+                    AND cc_firma_valida(NEW.colegio_id, CONCAT('solicitud_cambio:', s.id, ':APROBADA'), s.resuelto_por))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una cuenta de Promotoria o Direccion cambia de estado con su solicitud aprobada';
+    END IF;
+    IF NOT (NEW.estado_solicitud_id <=> OLD.estado_solicitud_id) AND NEW.activo <=> OLD.activo THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la solicitud del estado solo cambia con el estado';
+    END IF;
 END$$
 
 -- Residual del sprint 6 (E6): cc_app daba o quitaba PROMOTOR. Ahora los roles los escribe solo cc_sistema; APODERADO solo
@@ -1950,7 +2049,12 @@ BEGIN
             AND NOT (NEW.rol = 'DIRECTOR' AND NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r
                 ON r.usuario_id = u.id WHERE u.colegio_id = v_colegio AND u.activo AND r.rol = 'DIRECTOR')
                 AND (SELECT COUNT(*) FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
-                    WHERE u.colegio_id = v_colegio AND u.activo AND r.rol = 'PROMOTOR') <= 1)
+                    WHERE u.colegio_id = v_colegio AND u.activo AND r.rol = 'PROMOTOR') <= 1
+                -- Correcciones del sprint 7 (observación de QA): una sola vez por colegio, la PRIMERA Dirección de su
+                -- historia, marcada en primera_direccion (UNIQUE por colegio) para esta cuenta en esta operación.
+                AND EXISTS (SELECT 1 FROM primera_direccion p WHERE p.colegio_id = v_colegio
+                    AND p.usuario_id = NEW.usuario_id
+                    AND p.creado_en >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE))
             AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = v_solicitud AND s.colegio_id = v_colegio
                 AND s.tipo = 'CAMBIO_ROLES' AND s.entidad = 'usuario' AND s.entidad_id = NEW.usuario_id
                 AND s.estado = 'APROBADA'

@@ -32,7 +32,11 @@ public enum TipoSolicitud {
 	CAMBIO_CONTACTO_PERSONAL("Cambio de celular o correo del personal"),
 	// Sprint 7, tanda 2 (H1, decisión 84): dar o quitar Promotoría o Dirección. Lo pide Promotoría; lo aprueba OTRA persona
 	// de Promotoría o Dirección (nunca quien lo pidió ni el titular). En MySQL, los triggers de usuario_rol lo exigen.
-	CAMBIO_ROLES("Cambio de roles de Promotoría o Dirección");
+	CAMBIO_ROLES("Cambio de roles de Promotoría o Dirección"),
+	// Correcciones del sprint 7 (observación de QA): desactivar o reactivar una cuenta con Promotoría o Dirección. Lo pide
+	// Promotoría; lo aprueba OTRA persona de Promotoría o Dirección (nunca quien lo pidió ni el titular). En MySQL,
+	// trg_usuario_identidad lo exige; el colegio nunca queda sin Promotoría activa.
+	ESTADO_CUENTA("Desactivar o reactivar una cuenta de Promotoría o Dirección");
 
 	private final String etiqueta;
 

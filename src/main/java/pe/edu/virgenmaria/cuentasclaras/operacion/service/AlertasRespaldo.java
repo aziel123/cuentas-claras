@@ -36,8 +36,9 @@ public class AlertasRespaldo implements AlertasRevision {
 		EstadoRespaldo respaldo = estado.respaldo();
 		List<AlertaRevision> alertas = new ArrayList<>();
 		if (respaldo.faltanFilas()) {
-			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Faltan filas que existían en el respaldo de ayer. "
-					+ "Avisa al responsable técnico y no toques nada.", "/panel/sistema"));
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Faltan filas que existían en un respaldo anterior. "
+					+ "Avisa al responsable técnico y no toques nada: la alerta sigue hasta que la resuelvas con motivo en "
+					+ "el estado técnico.", "/panel/sistema"));
 		}
 		if (propiedades.respaldoExigido() && !respaldo.alDia()) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "No hay un respaldo de las últimas "

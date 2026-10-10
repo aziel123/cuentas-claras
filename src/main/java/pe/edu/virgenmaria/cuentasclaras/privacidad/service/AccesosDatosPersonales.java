@@ -121,7 +121,7 @@ public class AccesosDatosPersonales implements ConsultaAccesos {
 			filas.add(AccesoDatoPersonal.de(persona.usuarioId(), sesionId, tipo, familia.get(), null, 1, ip));
 		}
 		else if (mostrado == null && (tipo == TipoAcceso.FICHA_FAMILIA || tipo == TipoAcceso.FICHA_ALUMNO
-				|| tipo == TipoAcceso.APROBACION_CONTACTO)) {
+				|| tipo == TipoAcceso.APROBACION_CONTACTO || tipo == TipoAcceso.COBRO)) {
 			// Falla cerrado: una ficha que no dijo de quién es no se muestra.
 			throw new IllegalStateException("La pantalla " + tipo + " no indicó qué ficha mostró");
 		}

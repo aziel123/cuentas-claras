@@ -175,7 +175,13 @@ class PermisosMySqlTest {
 		Usuario segunda = guardar("promo2." + sufijo, Rol.PROMOTOR);
 		UsuariosDePrueba.iniciarSesion(primera);
 
-		servicioUsuarios.desactivar(segunda.getId(), "Prueba de bloqueo en MySQL");
+		// Correcciones del sprint 7: desactivar una Promotoría se pide (por la ruta de identidad, que cuenta las Promotorías
+		// con bloqueo) y lo aprueba otra persona (el manejador vuelve a contar con bloqueo, como cc_sistema).
+		assertThat(servicioUsuarios.desactivar(segunda.getId(), "Prueba de bloqueo en MySQL")).isTrue();
+		Long solicitud = jdbc.queryForObject("SELECT id FROM solicitud_cambio WHERE tipo = 'ESTADO_CUENTA' "
+				+ "AND entidad_id = ? AND estado = 'PENDIENTE'", Long.class, segunda.getId());
+		UsuariosDePrueba.iniciarSesion(guardar("dir.bloqueo." + sufijo, Rol.DIRECTOR));
+		bandeja.aprobar(solicitud, "Confirmado en persona con las dos promotoras");
 
 		assertThat(jdbc.queryForObject("SELECT activo FROM usuario WHERE id = ?", Boolean.class, segunda.getId()))
 				.isFalse();

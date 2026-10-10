@@ -18,7 +18,12 @@ SET NAMES utf8mb4;
 -- 0. Fuente única: se quita todo (privilegios, GRANT OPTION y el rol) y se vuelve a dar.
 REVOKE IF EXISTS ALL PRIVILEGES, GRANT OPTION FROM 'cc_app'@'%', 'cc_sistema'@'%', 'cc_respaldo'@'%' IGNORE UNKNOWN USER;
 REVOKE IF EXISTS 'cc_negocio' FROM 'cc_app'@'%', 'cc_sistema'@'%', 'cc_respaldo'@'%' IGNORE UNKNOWN USER;
-REVOKE IF EXISTS ALL PRIVILEGES, GRANT OPTION FROM 'cc_negocio' IGNORE UNKNOWN USER;
+--    Correcciones del sprint 7 (S7-M1): un rol concedido DENTRO de cc_negocio («GRANT otro_rol TO cc_negocio») le daba a
+--    cc_app y cc_sistema privilegios que SHOW GRANTS no muestra y que «REVOKE ALL PRIVILEGES» no quita: sobrevivía a cada
+--    despliegue. El rol se borra y se crea de nuevo (DROP ROLE quita también los roles anidados y sus concesiones). Los
+--    roles concedidos directamente a los usuarios los rechaza el verificador de prod (information_schema.APPLICABLE_ROLES).
+DROP ROLE IF EXISTS 'cc_negocio';
+CREATE ROLE 'cc_negocio';
 
 -- 1. Rol de negocio: lo que tenía cc_app hasta el sprint 7, salvo la identidad (usuario, usuario_rol, sesion_usuario), las
 --    escrituras de los procesos (huellas, resumen, muestra, semilla, pasarela, liquidaciones) y el UPDATE del envío al
@@ -238,6 +243,11 @@ GRANT INSERT ON cuentasclaras.firma_operacion TO 'cc_negocio';
 -- Quién vio datos personales: lo inserta la persona que los vio (cc_app, por el rol), ANTES de que se le muestren. Solo
 -- inserción: nadie lo edita ni lo borra (1142); lo purga el DBA a los 2 años con un script revisado (sección 8.4).
 GRANT INSERT ON cuentasclaras.acceso_dato_personal TO 'cc_negocio';
+
+-- ===================== Correcciones del sprint 7 (V27) =====================
+-- QA-S7-1: la resolución de una alerta «Faltan filas» la inserta la persona de Promotoría (cc_app, por el rol), con la
+-- firma de su sesión (trg_resolucion_respaldo_registro). Solo inserción.
+GRANT INSERT ON cuentasclaras.resolucion_respaldo TO 'cc_negocio';
 -- aviso_familia: SIN cambios. El derecho de un pedido sobre datos personales (columna nueva) no está en su UPDATE: 1143.
 
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
@@ -247,6 +257,8 @@ GRANT INSERT ON cuentasclaras.acceso_dato_personal TO 'cc_negocio';
 GRANT INSERT, UPDATE ON cuentasclaras.usuario TO 'cc_sistema'@'%';
 GRANT INSERT, DELETE ON cuentasclaras.usuario_rol TO 'cc_sistema'@'%';
 GRANT INSERT, UPDATE (cerrada_en, motivo_cierre, actualizado_en, version) ON cuentasclaras.sesion_usuario TO 'cc_sistema'@'%';
+--    Correcciones del sprint 7: la marca de la primera Dirección de cada colegio (una sola vez, solo inserción).
+GRANT INSERT ON cuentasclaras.primera_direccion TO 'cc_sistema'@'%';
 --    Escrituras que solo hace un proceso: con cc_app, 1142.
 GRANT INSERT ON cuentasclaras.semilla_muestreo TO 'cc_sistema'@'%';               -- sistema.muestreo, solo inserción
 GRANT INSERT ON cuentasclaras.muestra_llamada TO 'cc_sistema'@'%';                -- sistema.panel, solo inserción
@@ -285,6 +297,69 @@ CREATE FUNCTION cuentasclaras.huellas_objetos() RETURNS JSON READS SQL DATA SQL 
           FROM information_schema.ROUTINES r WHERE r.ROUTINE_SCHEMA = 'cuentasclaras') o);
 GRANT EXECUTE ON FUNCTION cuentasclaras.huellas_objetos TO 'cc_negocio';
 GRANT EXECUTE ON FUNCTION cuentasclaras.huellas_objetos TO 'cc_respaldo'@'%';
+
+-- 3b. Correcciones del sprint 7 (S7-M1): los permisos de las cuentas de la aplicación como un arreglo JSON de líneas
+--    canónicas (una por privilegio; quien las compara las ordena; sin GROUP_CONCAT, que corta en 1024 caracteres), SIN hosts (en prod las cuentas pueden ir restringidas por host): roles
+--    concedidos (también los anidados: «ROL x A cc_negocio») y por defecto, privilegios globales, dinámicos, por esquema,
+--    por tabla, por columna y por rutina de cc_app, cc_sistema, cc_respaldo y cc_negocio. respaldar.sh (cc_respaldo) lo
+--    guarda en el manifiesto de cada respaldo y el simulacro semanal (restaurar-y-verificar.sh) lo compara con el que deja
+--    ESTE archivo en la copia: un GRANT dado a mano en prod (o un rol anidado) aparece en el informe aunque nadie reinicie
+--    la aplicación. Lee las tablas del esquema mysql como su DEFINER (el administrador que aplica este archivo); no lee
+--    claves.
+DROP FUNCTION IF EXISTS cuentasclaras.permisos_objetos;
+CREATE FUNCTION cuentasclaras.permisos_objetos() RETURNS JSON READS SQL DATA SQL SECURITY DEFINER
+    RETURN (SELECT COALESCE(JSON_ARRAYAGG(p.linea), JSON_ARRAY()) FROM (
+        SELECT CONCAT('ROL ', e.FROM_USER, ' A ', e.TO_USER) AS linea FROM mysql.role_edges e
+         WHERE e.TO_USER IN ('cc_app', 'cc_sistema', 'cc_respaldo', 'cc_negocio') OR e.FROM_USER IN ('cc_app', 'cc_sistema', 'cc_respaldo', 'cc_negocio')
+        UNION
+        SELECT CONCAT('DEFECTO ', d.DEFAULT_ROLE_USER, ' EN ', d.USER) FROM mysql.default_roles d
+         WHERE d.USER IN ('cc_app', 'cc_sistema', 'cc_respaldo', 'cc_negocio')
+        UNION
+        SELECT CONCAT('GLOBAL ', u.User, ' ', CONCAT_WS(',',
+            IF(u.Select_priv = 'Y', 'SELECT', NULL), IF(u.Insert_priv = 'Y', 'INSERT', NULL),
+            IF(u.Update_priv = 'Y', 'UPDATE', NULL), IF(u.Delete_priv = 'Y', 'DELETE', NULL),
+            IF(u.Create_priv = 'Y', 'CREATE', NULL), IF(u.Drop_priv = 'Y', 'DROP', NULL),
+            IF(u.Reload_priv = 'Y', 'RELOAD', NULL), IF(u.Shutdown_priv = 'Y', 'SHUTDOWN', NULL),
+            IF(u.Process_priv = 'Y', 'PROCESS', NULL), IF(u.File_priv = 'Y', 'FILE', NULL),
+            IF(u.Grant_priv = 'Y', 'GRANT', NULL), IF(u.References_priv = 'Y', 'REFERENCES', NULL),
+            IF(u.Index_priv = 'Y', 'INDEX', NULL), IF(u.Alter_priv = 'Y', 'ALTER', NULL),
+            IF(u.Show_db_priv = 'Y', 'SHOW_DB', NULL), IF(u.Super_priv = 'Y', 'SUPER', NULL),
+            IF(u.Create_tmp_table_priv = 'Y', 'CREATE_TMP', NULL), IF(u.Lock_tables_priv = 'Y', 'LOCK', NULL),
+            IF(u.Execute_priv = 'Y', 'EXECUTE', NULL), IF(u.Repl_slave_priv = 'Y', 'REPL_SLAVE', NULL),
+            IF(u.Repl_client_priv = 'Y', 'REPL_CLIENT', NULL), IF(u.Create_view_priv = 'Y', 'CREATE_VIEW', NULL),
+            IF(u.Show_view_priv = 'Y', 'SHOW_VIEW', NULL), IF(u.Create_routine_priv = 'Y', 'CREATE_ROUTINE', NULL),
+            IF(u.Alter_routine_priv = 'Y', 'ALTER_ROUTINE', NULL), IF(u.Create_user_priv = 'Y', 'CREATE_USER', NULL),
+            IF(u.Event_priv = 'Y', 'EVENT', NULL), IF(u.Trigger_priv = 'Y', 'TRIGGER', NULL),
+            IF(u.Create_tablespace_priv = 'Y', 'CREATE_TABLESPACE', NULL), IF(u.Create_role_priv = 'Y', 'CREATE_ROLE', NULL),
+            IF(u.Drop_role_priv = 'Y', 'DROP_ROLE', NULL)))
+          FROM mysql.user u WHERE u.User IN ('cc_app', 'cc_sistema', 'cc_respaldo', 'cc_negocio')
+        UNION
+        SELECT CONCAT('DINAMICO ', g.USER, ' ', g.PRIV) FROM mysql.global_grants g WHERE g.USER IN ('cc_app', 'cc_sistema', 'cc_respaldo', 'cc_negocio')
+        UNION
+        SELECT CONCAT('ESQUEMA ', b.User, ' ', b.Db, ' ', CONCAT_WS(',',
+            IF(b.Select_priv = 'Y', 'SELECT', NULL), IF(b.Insert_priv = 'Y', 'INSERT', NULL),
+            IF(b.Update_priv = 'Y', 'UPDATE', NULL), IF(b.Delete_priv = 'Y', 'DELETE', NULL),
+            IF(b.Create_priv = 'Y', 'CREATE', NULL), IF(b.Drop_priv = 'Y', 'DROP', NULL),
+            IF(b.Grant_priv = 'Y', 'GRANT', NULL), IF(b.References_priv = 'Y', 'REFERENCES', NULL),
+            IF(b.Index_priv = 'Y', 'INDEX', NULL), IF(b.Alter_priv = 'Y', 'ALTER', NULL),
+            IF(b.Create_tmp_table_priv = 'Y', 'CREATE_TMP', NULL), IF(b.Lock_tables_priv = 'Y', 'LOCK', NULL),
+            IF(b.Create_view_priv = 'Y', 'CREATE_VIEW', NULL), IF(b.Show_view_priv = 'Y', 'SHOW_VIEW', NULL),
+            IF(b.Create_routine_priv = 'Y', 'CREATE_ROUTINE', NULL), IF(b.Alter_routine_priv = 'Y', 'ALTER_ROUTINE', NULL),
+            IF(b.Execute_priv = 'Y', 'EXECUTE', NULL), IF(b.Event_priv = 'Y', 'EVENT', NULL),
+            IF(b.Trigger_priv = 'Y', 'TRIGGER', NULL)))
+          FROM mysql.db b WHERE b.User IN ('cc_app', 'cc_sistema', 'cc_respaldo', 'cc_negocio')
+        UNION
+        SELECT CONCAT('TABLA ', t.User, ' ', t.Db, '.', t.Table_name, ' ', REPLACE(t.Table_priv, ',', '+'), ' / ',
+            REPLACE(t.Column_priv, ',', '+'))
+          FROM mysql.tables_priv t WHERE t.User IN ('cc_app', 'cc_sistema', 'cc_respaldo', 'cc_negocio')
+        UNION
+        SELECT CONCAT('COLUMNA ', c.User, ' ', c.Db, '.', c.Table_name, '.', c.Column_name, ' ',
+            REPLACE(c.Column_priv, ',', '+'))
+          FROM mysql.columns_priv c WHERE c.User IN ('cc_app', 'cc_sistema', 'cc_respaldo', 'cc_negocio')
+        UNION
+        SELECT CONCAT('RUTINA ', r.User, ' ', r.Db, '.', r.Routine_name, ' ', REPLACE(r.Proc_priv, ',', '+'))
+          FROM mysql.procs_priv r WHERE r.User IN ('cc_app', 'cc_sistema', 'cc_respaldo', 'cc_negocio')) p);
+GRANT EXECUTE ON FUNCTION cuentasclaras.permisos_objetos TO 'cc_respaldo'@'%';
 
 -- 4. El rol a las dos conexiones de la aplicación, activo al conectar.
 GRANT 'cc_negocio' TO 'cc_app'@'%', 'cc_sistema'@'%';

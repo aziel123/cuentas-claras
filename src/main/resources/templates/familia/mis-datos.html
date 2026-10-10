@@ -20,7 +20,12 @@
 					<strong th:text="${a.nombre}">Rosa Huamán Quispe</strong>
 					<span class="secundario" th:text="${a.parentesco}">Madre</span>
 				</div>
-				<dl class="datos">
+				<p th:unless="${a.propio}" class="secundario">Otro apoderado de tu familia. Sus datos personales (documento, celular y
+					correo) solo los ve esa persona en su propia cuenta.</p>
+				<dl class="datos" th:unless="${a.propio}">
+					<div><dt>Responsable de pago</dt><dd th:text="${a.responsableDePago} ? 'Sí' : 'No'">No</dd></div>
+				</dl>
+				<dl class="datos" th:if="${a.propio}">
 					<div><dt>Documento</dt><dd th:text="${a.documento}">DNI 41234567</dd></div>
 					<div><dt>Celular</dt>
 					<dd><span th:text="${a.celular} ?: 'No registrado'">+51 912 345 678</span>

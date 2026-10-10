@@ -7,7 +7,6 @@ import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.HikariPoolMXBean;
 import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
@@ -88,7 +87,6 @@ class MonitoreoBordesTest {
 	 * HuellaDiaria (como DespachoMensajes, ResumenDiarioTarea y RecorridoColegios) atrapa la excepción de cada colegio, la
 	 * tarea termina «bien» y ObservadorLatidos registra el latido.
 	 */
-	@Disabled("QA-S7-2: un proceso crítico que falla en todos los colegios sigue latiendo (atrapa la excepción por colegio)")
 	@Test
 	void noDebeLatirLaHuellaDeLaHoraSiFalloEnTodosLosColegios() throws Exception {
 		HuellasDiarias huellas = mock(HuellasDiarias.class);
@@ -168,7 +166,6 @@ class MonitoreoBordesTest {
 	 * técnica mira el pool, entonces debe dar la alerta CRÍTICA «POOL». Hoy EstadoTecnico solo mira la ruta de la
 	 * conexión del hilo de la revisión, que no tiene actor: siempre la de cc_app.
 	 */
-	@Disabled("QA-S7-3: el monitoreo solo mira el pool de cc_app; el de cc_sistema agotado no da alerta")
 	@Test
 	void debeAvisarCuandoElPoolDeSistemaEstaAgotado() throws Exception {
 		HikariDataSource app = hikari(0, true);
@@ -185,7 +182,6 @@ class MonitoreoBordesTest {
 	 * QA-S7-3 (mismo hallazgo). Dado que la conexión de cc_sistema no responde (clave cambiada, usuario bloqueado), cuando
 	 * corre la revisión técnica, entonces la base no «responde»: los procesos y la identidad (ingreso) están caídos.
 	 */
-	@Disabled("QA-S7-3: el monitoreo solo prueba la conexión de cc_app; si cc_sistema no conecta, no hay alerta BASE")
 	@Test
 	void debeAvisarCuandoLaConexionDeSistemaNoResponde() throws Exception {
 		HikariDataSource app = hikari(0, true);
@@ -215,7 +211,6 @@ class MonitoreoBordesTest {
 	 * minutos después), entonces la alerta debe volver a intentarse. Hoy {@code porEnviar} la marca como enviada ANTES de
 	 * mandarla: no se reintenta durante una hora.
 	 */
-	@Disabled("QA-S7-7: una alerta técnica cuyo correo falló se da por enviada y no se reintenta en una hora")
 	@Test
 	void debeReintentarEnLaRevisionSiguienteUnaAlertaCuyoCorreoFallo() {
 		PropiedadesMonitoreo propiedades = propiedades(true);
@@ -250,7 +245,6 @@ class MonitoreoBordesTest {
 	 * lee en hora de Lima (como todo el sistema). Hoy sale en UTC ({@code 2026-10-08T15:00:00Z}): el operador lee 5 horas
 	 * de diferencia.
 	 */
-	@Disabled("QA-S7-7: la alerta de proceso atrasado muestra el último éxito en UTC, no en hora de Lima")
 	@Test
 	void debeMostrarEnHoraDeLimaElUltimoExitoDeUnProcesoAtrasado() throws Exception {
 		programarDespacho();

@@ -246,6 +246,31 @@ SELECT r.ROUTINE_NAME, SHA2(CONCAT_WS('|', r.ROUTINE_TYPE,
   FROM information_schema.ROUTINES r WHERE r.ROUTINE_SCHEMA = 'cuentasclaras';
 SQL
 
+# --- 5c. Correcciones del sprint 7 (S7-M1): los GRANT de prod, releídos. El manifiesto trae los permisos de las cuentas
+#         de la aplicación tal como estaban en prod al respaldar (permisos_objetos(), leída por cc_respaldo); la copia
+#         tiene los que da 02 de esta versión. Un GRANT dado a mano o un rol anidado en cc_negocio en prod aparece aquí
+#         aunque nadie haya reiniciado la aplicación (el verificador de prod solo mira al arrancar).
+lineas_permisos() {
+	# ["ROL a A b", "GLOBAL c ..."]: una línea por elemento, ordenadas (POSIX: el separador «", "» pasa a un salto).
+	sed -e 's/^ *\[//' -e 's/\] *,* *$//' -e 's/", *"/"@"/g' | tr '@' '\n' | tr -d '"' | sed '/^ *$/d' | sort
+}
+sed -n 's/^ *"permisos": *\(\[.*\]\),*$/\1/p' "$manifiesto" | head -n 1 | lineas_permisos > "$trabajo/permisos-prod.txt"
+admin_sql cuentasclaras -e "SELECT permisos_objetos()" < /dev/null 2>"$trabajo/permisos.err" | lineas_permisos \
+	> "$trabajo/permisos-02.txt" || true
+if ! grep -q '"permisos":' "$manifiesto"; then
+	paso "permisos" "OK" "el manifiesto no trae los permisos (respaldo anterior a las correcciones del sprint 7)"
+elif [ ! -s "$trabajo/permisos-02.txt" ]; then
+	paso "permisos" "FALLA" "no se pudieron leer los permisos que da 02 en la copia: $(head -c 200 "$trabajo/permisos.err")"
+else
+	de_mas=$(comm -23 "$trabajo/permisos-prod.txt" "$trabajo/permisos-02.txt" | paste -sd'|' -)
+	faltan=$(comm -13 "$trabajo/permisos-prod.txt" "$trabajo/permisos-02.txt" | paste -sd'|' -)
+	if [ -z "$de_mas" ] && [ -z "$faltan" ]; then
+		paso "permisos" "OK" "los permisos de prod son los de 02-permisos-tablas.sql ($(wc -l < "$trabajo/permisos-02.txt" | tr -d ' ') líneas, sin roles anidados)"
+	else
+		paso "permisos" "FALLA" "los permisos de prod no son los de 02. De más en prod: ${de_mas:-ninguno}. Faltan en prod: ${faltan:-ninguno}"
+	fi
+fi
+
 # --- 6. Verificación de la copia (cadena, anclas, conteos, libros y objetos de la base) ----------------------------------
 if DB_URL="$url" DB_USUARIO=cc_app DB_CLAVE="$clave_app" RESPALDO_MANIFIESTO="$manifiesto" \
 		RESPALDO_HUELLAS_ADMIN="$trabajo/huellas-admin.tsv" \

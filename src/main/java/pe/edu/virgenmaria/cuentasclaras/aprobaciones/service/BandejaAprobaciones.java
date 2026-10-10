@@ -54,7 +54,7 @@ public class BandejaAprobaciones {
 
 	/** Sprint 7, tanda 2: se resuelven por la ruta de identidad (escriben usuario o usuario_rol). */
 	public static final Set<TipoSolicitud> TIPOS_DE_IDENTIDAD = EnumSet.of(TipoSolicitud.CAMBIO_CONTACTO_PERSONAL,
-			TipoSolicitud.CAMBIO_ROLES);
+			TipoSolicitud.CAMBIO_ROLES, TipoSolicitud.ESTADO_CUENTA);
 
 	private final SolicitudCambioRepository solicitudes;
 

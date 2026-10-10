@@ -56,14 +56,23 @@ public final class Enmascarar {
 
 	private static final Pattern CORREO = Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
 
-	/** Celular peruano (9 dígitos que empiezan en 9), con o sin +51 y con espacios o guiones entre grupos. */
+	/**
+	 * Celular peruano (9 dígitos que empiezan en 9), con o sin +51 o 0051 y con espacios, guiones o puntos entre grupos
+	 * (correcciones del sprint 7, QA-S7-6: «987.654.321» y «0051987654321» salían enteros).
+	 */
 	private static final Pattern CELULAR = Pattern.compile(
-			"(?<![0-9])(?:\\+?51[ -]?)?9[0-9]{2}[ -]?[0-9]{3}[ -]?[0-9]{3}(?![0-9])");
+			"(?<![0-9])(?:(?:\\+|00)?51[ .-]?)?9[0-9]{2}[ .-]?[0-9]{3}[ .-]?[0-9]{3}(?![0-9])");
 
 	/** RUC (11 dígitos) y DNI (8 dígitos), sueltos (no dentro de un número más largo). */
 	private static final Pattern RUC = Pattern.compile("(?<![0-9])[0-9]{11}(?![0-9])");
 
 	private static final Pattern DNI = Pattern.compile("(?<![0-9])[0-9]{8}(?![0-9])");
+
+	/**
+	 * Carné de extranjería: 9 dígitos (el actual) o 12 (los antiguos), sueltos. Es un documento de identidad como el DNI y
+	 * el nombre de usuario de un apoderado extranjero en el portal (correcciones del sprint 7, QA-S7-6).
+	 */
+	private static final Pattern CARNE_EXTRANJERIA = Pattern.compile("(?<![0-9])(?:[0-9]{12}|[0-9]{9})(?![0-9])");
 
 	/**
 	 * Sprint 7 (logs sin datos personales): oculta en un texto libre (mensaje de log o traza) los DNI, RUC, celulares,
@@ -79,6 +88,7 @@ public final class Enmascarar {
 		limpio = CORREO.matcher(limpio).replaceAll("***@***");
 		limpio = CELULAR.matcher(limpio).replaceAll("*********");
 		limpio = RUC.matcher(limpio).replaceAll("***********");
+		limpio = CARNE_EXTRANJERIA.matcher(limpio).replaceAll("*********");
 		return DNI.matcher(limpio).replaceAll("********");
 	}
 

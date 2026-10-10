@@ -365,7 +365,33 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			// E1: con cc_app nadie firma como sistema (un evento de la bitácora o un pago de sistema.*: 1644; sin el
 			// trigger, el evento llega al NOT NULL de hash, 1048).
 			trigger(VerificadorPermisosBaseDatos.EVENTO_SISTEMA_IMPOSIBLE, "trg_evento_auditoria_actor"),
-			trigger(VerificadorPermisosBaseDatos.PAGO_SISTEMA_IMPOSIBLE, "trg_pago_registro (versión del sprint 7)"));
+			trigger(VerificadorPermisosBaseDatos.PAGO_SISTEMA_IMPOSIBLE, "trg_pago_registro (versión del sprint 7)"),
+			// Correcciones del sprint 7 (S7-A1): una solicitud nace PENDIENTE (con cc_app no se inserta una ya APROBADA a
+			// nombre de la directora: 1644; sin el trigger, la FK del colegio 0: 1452).
+			trigger(VerificadorPermisosBaseDatos.SOLICITUD_APROBADA_IMPOSIBLE, "trg_solicitud_cambio_nace"),
+			// Correcciones del sprint 7 (QA-S7-1): la resolución de una alerta de respaldo la hace Promotoría con su firma
+			// (1644; sin el trigger, la FK del respaldo 0: 1452) y no se edita ni se borra (1142).
+			trigger(VerificadorPermisosBaseDatos.RESOLUCION_IMPOSIBLE, "trg_resolucion_respaldo_registro"),
+			sinBorrado("resolucion_respaldo"),
+			new SentenciaProhibida("UPDATE resolucion_respaldo SET motivo = motivo WHERE 1 = 0",
+					Set.of(MYSQL_COMANDO_DENEGADO, MYSQL_COLUMNA_DENEGADA), "la resolución de una alerta de respaldo se podría reescribir."),
+			// Correcciones del sprint 7: la marca de la primera Dirección de un colegio la escribe solo cc_sistema (1142).
+			soloSistema(VerificadorPermisosBaseDatos.PRIMERA_DIRECCION_IMPOSIBLE,
+					"la aplicación podría gastar o fabricar la excepción de la primera Dirección de un colegio."));
+
+	/** Correcciones del sprint 7 (S7-A1): una solicitud ya APROBADA del colegio 0 (la rechaza trg_solicitud_cambio_nace). */
+	static final String SOLICITUD_APROBADA_IMPOSIBLE = "INSERT INTO solicitud_cambio (colegio_id, tipo, entidad, entidad_id, "
+			+ "resumen, datos, motivo, estado, pendiente, solicitado_por, resuelto_por, resuelto_en, creado_en, creado_por, "
+			+ "actualizado_en) VALUES (0, 'ANULACION_PAGO', 'pago', 0, 'verificador', '{}', 'verificador de permisos', "
+			+ "'APROBADA', NULL, 'verificador', 'verificador.otro', NOW(6), NOW(6), 'verificador', NOW(6))";
+
+	/** Correcciones del sprint 7 (QA-S7-1): la resolución del respaldo 0 (la rechaza trg_resolucion_respaldo_registro). */
+	static final String RESOLUCION_IMPOSIBLE = "INSERT INTO resolucion_respaldo (respaldo_id, colegio_id, usuario_id, motivo, "
+			+ "creado_en, creado_por) VALUES (0, 0, 0, 'verificador de permisos', NOW(6), 'verificador')";
+
+	/** Correcciones del sprint 7: la primera Dirección del colegio 0 (cc_app no tiene INSERT: 1142). */
+	static final String PRIMERA_DIRECCION_IMPOSIBLE = "INSERT INTO primera_direccion (colegio_id, usuario_id, creado_en, "
+			+ "creado_por, actualizado_en) VALUES (0, 0, NOW(6), 'verificador', NOW(6))";
 
 	/** Sprint 7, tanda 2: una sesión de la cuenta 0 (con cc_app, 1142; con cc_sistema, la rechaza su trigger: 1644). */
 	static final String SESION_IMPOSIBLE = "INSERT INTO sesion_usuario (colegio_id, usuario_id, hash_token, abierta_en, "
@@ -413,7 +439,10 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "creado_en, creado_por, actualizado_en) VALUES (0, 'verificador', 'verificador', 'x', TRUE, FALSE, "
 					+ "NOW(6), 'verificador', NOW(6))", "trg_usuario_nace"),
 			trigger("INSERT INTO usuario_rol (usuario_id, rol) VALUES (0, 'PROMOTOR')", "trg_usuario_rol_alta"),
-			trigger(VerificadorPermisosBaseDatos.MUESTRA_IMPOSIBLE, "trg_muestra_llamada_registro (versión del sprint 7)"));
+			trigger(VerificadorPermisosBaseDatos.MUESTRA_IMPOSIBLE, "trg_muestra_llamada_registro (versión del sprint 7)"),
+			// Correcciones del sprint 7: la primera Dirección y la resolución de un respaldo no se editan ni se borran.
+			sinBorrado("primera_direccion"), soloInsercion("primera_direccion"), sinBorrado("resolucion_respaldo"),
+			trigger(VerificadorPermisosBaseDatos.SOLICITUD_APROBADA_IMPOSIBLE, "trg_solicitud_cambio_nace"));
 
 	/** 1142 (o 1143): solo cc_sistema la escribe. */
 	private static SentenciaProhibida soloSistema(String sql, String riesgo) {
@@ -482,7 +511,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_caja_diaria_estado", "trg_pago_registro", "trg_pago_anulacion", "trg_aplicacion_pago_registro",
 			"trg_anulacion_pago_registro", "trg_ajuste_cuota_registro", "trg_descuento_nace", "trg_descuento_resuelto",
 			"trg_cierre_caja_registro", "trg_cierre_caja_revisado", "trg_verificacion_bancaria_registro",
-			"trg_reembolso_registro", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio", "trg_apoderado_nace",
+			"trg_reembolso_registro", "trg_solicitud_cambio_nace", "trg_solicitud_cambio_resuelta", "trg_comprobante_envio", "trg_apoderado_nace",
 			"trg_apoderado_facturacion", "trg_orden_pago_nace", "trg_orden_pago_cuota_registro", "trg_orden_pago_estado",
 			"trg_lote_recaudacion_nace", "trg_lote_recaudacion_estado", "trg_linea_recaudacion_registro",
 			"trg_linea_recaudacion_estado", "trg_extracto_bancario_nace", "trg_extracto_bancario_estado",
@@ -494,7 +523,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_cierre_mensual_banco_estado", "trg_verificacion_contacto_nace", "trg_verificacion_contacto_uso",
 			"trg_huella_hora_registro", "trg_resumen_diario_registro", "trg_usuario_contacto",
 			"trg_llamada_control_registro", "trg_muestra_llamada_registro", "trg_delegacion_llamada_registro",
-			"trg_respaldo_registro", "trg_firma_operacion_nace", "trg_sesion_usuario_nace", "trg_sesion_usuario_cierre",
+			"trg_respaldo_registro", "trg_resolucion_respaldo_registro", "trg_firma_operacion_nace", "trg_sesion_usuario_nace", "trg_sesion_usuario_cierre",
 			"trg_evento_auditoria_actor", "trg_semilla_muestreo_registro", "trg_usuario_nace", "trg_usuario_identidad",
 			"trg_usuario_rol_alta", "trg_usuario_rol_baja");
 
@@ -734,9 +763,41 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 
 	/** Sprint 7, tanda 2 (H6, E9): ninguna conexión tiene un privilegio que 02 no da. */
 	public void verificarPrivilegios() {
+		// Primero los roles: un rol anidado se nombra tal cual (SHOW GRANTS muestra sus privilegios como si fueran de
+		// cc_negocio, sin decir de dónde salen).
+		rolesDe(jdbc, "cc_app");
+		rolesDe(sistema, PermisosEsperados.SISTEMA);
 		privilegiosDe(jdbc, "cc_app", PermisosEsperados.de("cc_app"));
 		privilegiosDe(sistema, PermisosEsperados.SISTEMA, PermisosEsperados.de(PermisosEsperados.SISTEMA));
-		LOG.info("Privilegios verificados: cc_app y cc_sistema tienen solo los de 02-permisos-tablas.sql.");
+		LOG.info("Privilegios verificados: cc_app y cc_sistema tienen solo los de 02-permisos-tablas.sql, sin roles "
+				+ "anidados.");
+	}
+
+	/**
+	 * Correcciones del sprint 7 (S7-M1): {@code SHOW GRANTS} no muestra los privilegios de un rol concedido DENTRO de
+	 * {@code cc_negocio} («GRANT otro_rol TO cc_negocio»), pero la conexión los tiene. {@code APPLICABLE_ROLES} lista
+	 * todos los roles que alcanzan a la conexión, también los anidados: el único permitido es {@code cc_negocio}, concedido
+	 * directamente a la cuenta. Cualquier otro (o un rol dentro de cc_negocio) no deja arrancar.
+	 */
+	public static final String SQL_ROLES = "SELECT CONCAT(GRANTEE, '|', ROLE_NAME) FROM information_schema.APPLICABLE_ROLES";
+
+	private static void rolesDe(JdbcTemplate conexion, String quien) {
+		List<String> filas;
+		try {
+			filas = conexion.queryForList(SQL_ROLES, String.class);
+		}
+		catch (DataAccessException e) {
+			throw new IllegalStateException("No se pudieron leer los roles de " + quien + " (código " + codigoMySql(e)
+					+ ").", e);
+		}
+		List<String> deMas = filas.stream().filter(f -> !f.equals(quien + "|" + PermisosEsperados.ROL_NEGOCIO))
+				.map(f -> f.replace("|", " recibe el rol ")).sorted().toList();
+		if (!deMas.isEmpty()) {
+			throw new IllegalStateException("La conexión de " + quien + " tiene roles que 02-permisos-tablas.sql no da "
+					+ "(roles anidados o de más): " + String.join(" | ", deMas) + ". Sus privilegios no salen en SHOW "
+					+ "GRANTS. Aplica 02 de esta versión (recrea cc_negocio) y revisa quién los dio. Revisa "
+					+ "docs/operacion/mysql-usuarios.md.");
+		}
 	}
 
 	private static void privilegiosDe(JdbcTemplate conexion, String quien, PermisosEsperados esperados) {

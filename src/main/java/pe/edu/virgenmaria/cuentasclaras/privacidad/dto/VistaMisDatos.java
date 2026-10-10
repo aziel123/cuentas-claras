@@ -11,9 +11,19 @@ import java.util.List;
 public record VistaMisDatos(String familia, List<Apoderado> apoderados, List<Hijo> hijos, List<Uso> usos,
 		List<Destinatario> destinatarios, List<Plazo> plazos, String versionAviso) {
 
+	/**
+	 * Un apoderado de la familia. {@code propio}: es quien consulta. De los OTROS apoderados solo van el nombre, el
+	 * parentesco y si es responsable de pago: su documento, sus contactos y su RUC son datos personales de otra persona
+	 * (correcciones del sprint 7, QA-S7-8).
+	 */
 	public record Apoderado(String nombre, String parentesco, String documento, String celular, boolean celularVerificado,
 			String correo, boolean correoVerificado, String ruc, String razonSocial, boolean recordatorios,
-			boolean responsableDePago) {
+			boolean responsableDePago, boolean propio) {
+
+		public static Apoderado otro(String nombre, String parentesco, boolean responsableDePago) {
+			return new Apoderado(nombre, parentesco, null, null, false, null, false, null, null, false, responsableDePago,
+					false);
+		}
 	}
 
 	public record Hijo(String nombre, String documento, LocalDate fechaNacimiento, String estado,
