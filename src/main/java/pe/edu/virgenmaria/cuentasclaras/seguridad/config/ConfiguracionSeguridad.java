@@ -117,7 +117,9 @@ public class ConfiguracionSeguridad {
 				auth.dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.ERROR).permitAll()
 					.requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll()
 					.requestMatchers(ModuloApp.RUTAS_PUBLICAS).permitAll()
-					.requestMatchers(ModuloApp.RUTA_CAMBIAR_CLAVE).authenticated();
+					.requestMatchers(ModuloApp.RUTA_CAMBIAR_CLAVE).authenticated()
+					// Sprint 8, tanda 1: el logo del colegio de la sesión, para cualquier persona con sesión.
+					.requestMatchers(HttpMethod.GET, ModuloApp.RUTA_LOGO).authenticated();
 				for (ModuloApp modulo : ModuloApp.values()) {
 					auth.requestMatchers(modulo.patrones()).hasAnyRole(modulo.nombresDeRoles());
 				}

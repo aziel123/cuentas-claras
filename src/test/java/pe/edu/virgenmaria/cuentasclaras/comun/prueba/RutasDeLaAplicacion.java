@@ -144,7 +144,7 @@ public final class RutasDeLaAplicacion {
 
 	/** Los roles que pueden pedir la ruta concreta (vacío si es pública o no la cubre ningún módulo). */
 	public static List<Rol> roles(String ruta) {
-		if (ModuloApp.RUTA_CAMBIAR_CLAVE.equals(ruta)) {
+		if (ModuloApp.RUTA_CAMBIAR_CLAVE.equals(ruta) || ModuloApp.RUTA_LOGO.equals(ruta)) {
 			return List.of(Rol.values());
 		}
 		return modulo(ruta).map(m -> m.roles().stream().sorted().toList()).orElse(List.of());

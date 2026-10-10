@@ -14,6 +14,7 @@ import static pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.APODERADO;
 import static pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.CAJA;
 import static pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.DIRECTOR;
 import static pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.DOCENTE;
+import static pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.OPERADOR_PLATAFORMA;
 import static pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.PROMOTOR;
 
 /**
@@ -26,8 +27,15 @@ import static pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.PROMOTOR;
  */
 public enum ModuloApp {
 
+	// Sprint 8, tanda 1: el operador de la plataforma entra a /inicio (y a /) solo para que lo reenvíen a /plataforma.
 	INICIO("Inicio", "Tu resumen del día.", "Sprint 1", true, "/inicio",
 			new String[] { "/", "/inicio" }, EnumSet.allOf(Rol.class)),
+
+	// Sprint 8, tanda 1 (sección 3.2): la plataforma es SOLO del operador, y el operador no tiene ninguna otra ruta (salvo
+	// cambiar su clave y salir): nunca ve datos de las familias. Va primero: ninguna otra regla cubre /plataforma/**.
+	PLATAFORMA("Colegios de la plataforma", "Da de alta un colegio con su primera Promotoría, corrige su ficha y registra "
+			+ "su correo externo de control. Nunca muestra datos de las familias.", "Sprint 8", true, "/plataforma",
+			new String[] { "/plataforma", "/plataforma/**" }, EnumSet.of(OPERADOR_PLATAFORMA)),
 
 	USUARIOS("Usuarios y roles", "Crea cuentas, asigna roles y desactiva accesos.", "Sprint 1", true,
 			"/usuarios", new String[] { "/usuarios", "/usuarios/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
@@ -41,6 +49,16 @@ public enum ModuloApp {
 			"Sprint 1", true, "/auditoria", new String[] { "/auditoria", "/auditoria/**" },
 			EnumSet.of(PROMOTOR, DIRECTOR)),
 
+	// Sprint 8, tanda 1 (sección 3.7, decisión 123): la marca del colegio (razón social, dirección, correo y logo), solo
+	// Promotoría. Va ANTES que COLEGIO (/colegio/** es también de Dirección y Administración: la primera regla gana).
+	MARCA_COLEGIO("Marca del colegio", "Razón social, RUC, dirección y logo: lo que ven las familias en su portal y en "
+			+ "sus boletas.", "Sprint 8", true, "/colegio/marca", new String[] { "/colegio/marca", "/colegio/marca/**" },
+			EnumSet.of(PROMOTOR)),
+	// Sprint 8, tanda 1 (sección 3.4): el estado del colegio y el paso a producción (con la firma de Promotoría). La lista
+	// de verificación completa llega en la tanda 2.
+	PUESTA_EN_MARCHA("Puesta en marcha", "Lo que falta para que el colegio empiece a cobrar, y el paso a producción.",
+			"Sprint 8", true, "/puesta-en-marcha", new String[] { "/puesta-en-marcha", "/puesta-en-marcha/**" },
+			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 	COLEGIO("Colegio", "Años escolares, grados y secciones.", "Sprint 2", true, "/colegio",
 			new String[] { "/colegio", "/colegio/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 	ALUMNOS("Alumnos y apoderados", "Fichas de alumnos y familias, y matrícula en cada año.", "Sprint 2", true,
@@ -143,6 +161,12 @@ public enum ModuloApp {
 
 	/** Única ruta para quien inició sesión con una clave temporal (autoridad {@code CLAVE_PENDIENTE}). */
 	public static final String RUTA_CAMBIAR_CLAVE = "/cuenta/cambiar-clave";
+
+	/**
+	 * Sprint 8, tanda 1 (sección 3.7): el logo del colegio de la sesión (sin id: sin IDOR). Para cualquier persona con
+	 * sesión; no es un módulo del menú.
+	 */
+	public static final String RUTA_LOGO = "/marca/logo";
 
 	private static final String PREFIJO_ROL = "ROLE_";
 

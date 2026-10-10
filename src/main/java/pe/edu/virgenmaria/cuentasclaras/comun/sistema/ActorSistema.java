@@ -26,7 +26,12 @@ public enum ActorSistema {
 	 * Sprint 7, tanda 2 (H4): crea y lee la semilla secreta del muestreo (solo él la inserta, con la conexión de
 	 * {@code cc_sistema}, y solo para hoy o el lunes en curso). La semilla efectiva se deriva con la clave del servidor.
 	 */
-	MUESTREO("sistema.muestreo");
+	MUESTREO("sistema.muestreo"),
+	/**
+	 * Sprint 8, tanda 1 (sección 3.2): sincroniza los operadores de la plataforma con {@code CC_OPERADORES} al arrancar
+	 * (crea al que falta y le envía su enlace; desactiva al que ya no está) y registra los eventos de la plataforma.
+	 */
+	PLATAFORMA("sistema.plataforma");
 
 	/** Prefijo reservado: ninguna persona puede tener un nombre de usuario que empiece así. */
 	public static final String PREFIJO_RESERVADO = "sistema";

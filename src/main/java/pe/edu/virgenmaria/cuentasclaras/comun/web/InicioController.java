@@ -41,8 +41,12 @@ public class InicioController {
 
 	@GetMapping("/inicio")
 	public String inicio(@AuthenticationPrincipal UsuarioAutenticado usuario, Model model) {
-		model.addAttribute("avisoClave", servicioInicio.avisoClaveRestablecida(usuario.usuarioId()));
 		Rol principal = usuario.rolPrincipal();
+		// Sprint 8, tanda 1: el operador de la plataforma no tiene inicio de colegio: su pantalla es /plataforma.
+		if (principal == Rol.OPERADOR_PLATAFORMA) {
+			return "redirect:/plataforma";
+		}
+		model.addAttribute("avisoClave", servicioInicio.avisoClaveRestablecida(usuario.usuarioId()));
 		if (principal == Rol.PROMOTOR) {
 			model.addAttribute("paraRevisar", servicioInicio.paraRevisar());
 			// Las críticas primero (un faltante de caja antes que una matrícula sin cronograma).

@@ -2,26 +2,50 @@ package pe.edu.virgenmaria.cuentasclaras.colegio.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreRemove;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
- * Colegio cliente de la plataforma. Toda entidad de negocio referencia a un colegio
- * mediante {@code colegioId} (multi-colegio).
+ * Colegio cliente de la plataforma. Toda entidad de negocio referencia a un colegio mediante {@code colegioId}
+ * (multi-colegio). No extiende {@code BaseEntity}: no es «de» un colegio.
+ * <p>
+ * Sprint 8, tanda 1 (V28): tiene {@link TipoColegio tipo} (la fila {@code PLATAFORMA} es donde viven los operadores),
+ * {@link EstadoColegio estado} (en {@code PREPARACION} la base no deja registrar pagos), la ficha (razón social, RUC,
+ * dirección, correo institucional, niveles, titular y contrato) y la aprobación del aviso de privacidad. {@code tipo},
+ * {@code creadoPor} y {@code creadoEn} no cambian; nunca se borra. En MySQL, {@code trg_colegio_nace} y
+ * {@code trg_colegio_cambio} vigilan quién lo crea y quién lo pasa a producción.
  */
 @Entity
 @Table(name = "colegio")
+@EntityListeners(AuditingEntityListener.class)
 public class Colegio {
+
+	public static final int MAX_NOMBRE = 150;
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
-	@Column(nullable = false, length = 150)
+	@Column(nullable = false, length = MAX_NOMBRE)
 	private String nombre;
 
 	@Column(length = 11)
@@ -33,12 +57,178 @@ public class Colegio {
 	@Column(name = "creado_en", nullable = false, insertable = false, updatable = false)
 	private LocalDateTime creadoEn;
 
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, updatable = false, length = 12)
+	private TipoColegio tipo = TipoColegio.COLEGIO;
+
+	/** {@code TRUE} solo en la fila PLATAFORMA (UNIQUE: una sola); {@code null} en los colegios. */
+	@Column(name = "plataforma_unica", updatable = false)
+	private Boolean plataformaUnica;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 12)
+	private EstadoColegio estado = EstadoColegio.PREPARACION;
+
+	@Column(name = "razon_social", length = 150)
+	private String razonSocial;
+
+	@Column(length = 200)
+	private String direccion;
+
+	@Column(name = "correo_institucional", length = 150)
+	private String correoInstitucional;
+
+	/** Niveles que ofrece, en el orden del catálogo, separados por coma ({@code INICIAL,PRIMARIA}). */
+	@Column(nullable = false, length = 40)
+	private String niveles = "INICIAL,PRIMARIA,SECUNDARIA";
+
+	@Column(name = "titular_nombre", length = 150)
+	private String titularNombre;
+
+	/** El DNI (o CE) del titular del contrato: lo confirma al activar su cuenta de Promotoría. */
+	@Column(name = "titular_documento", length = 12)
+	private String titularDocumento;
+
+	@Column(name = "contrato_codigo", length = 30)
+	private String contratoCodigo;
+
+	@Column(name = "aviso_privacidad_version", length = 20)
+	private String avisoPrivacidadVersion;
+
+	@Column(name = "aviso_privacidad_aprobado_por", length = 60)
+	private String avisoPrivacidadAprobadoPor;
+
+	@Column(name = "aviso_privacidad_aprobado_en")
+	private LocalDateTime avisoPrivacidadAprobadoEn;
+
+	@Column(name = "produccion_desde")
+	private LocalDateTime produccionDesde;
+
+	@Column(name = "produccion_por", length = 60)
+	private String produccionPor;
+
+	@CreatedBy
+	@Column(name = "creado_por", nullable = false, updatable = false, length = 60)
+	private String creadoPor;
+
+	@LastModifiedDate
+	@Column(name = "actualizado_en", nullable = false)
+	private LocalDateTime actualizadoEn;
+
+	@Version
+	@Column(nullable = false)
+	private Long version;
+
 	protected Colegio() {
 		// requerido por JPA
 	}
 
+	/**
+	 * Un colegio que ya opera (datos de demostración y pruebas): nace directamente en producción, puesto ahí por quien lo
+	 * crea. En MySQL solo lo puede insertar el administrador (cc_app no tiene INSERT y cc_sistema solo crea en preparación).
+	 */
 	public Colegio(String nombre) {
-		this.nombre = nombre;
+		this.nombre = Objects.requireNonNull(nombre, "nombre");
+		this.estado = EstadoColegio.PRODUCCION;
+	}
+
+	/**
+	 * Sprint 8, tanda 1 (sección 3.3): el alta de un colegio nuevo por el operador de la plataforma. Nace en preparación con
+	 * su ficha completa; la base exige que lo cree un operador activo (trg_colegio_nace).
+	 */
+	public static Colegio enPreparacion(String nombre, String razonSocial, String ruc, String direccion,
+			String correoInstitucional, Set<Nivel> niveles, String titularNombre, String titularDocumento,
+			String contratoCodigo) {
+		Colegio c = new Colegio();
+		c.nombre = exigir(nombre, "el nombre del colegio", MAX_NOMBRE);
+		c.estado = EstadoColegio.PREPARACION;
+		c.razonSocial = exigir(razonSocial, "la razón social", 150);
+		c.ruc = Objects.requireNonNull(ruc, "ruc");
+		c.direccion = exigir(direccion, "la dirección", 200);
+		c.correoInstitucional = exigir(correoInstitucional, "el correo institucional", 150);
+		c.niveles = textoNiveles(niveles);
+		c.titularNombre = exigir(titularNombre, "el nombre del titular", 150);
+		c.titularDocumento = Objects.requireNonNull(titularDocumento, "titularDocumento");
+		c.contratoCodigo = contratoCodigo == null || contratoCodigo.isBlank() ? null : contratoCodigo.strip();
+		return c;
+	}
+
+	/** Corregir la ficha (operador en preparación, Promotoría en cualquier estado). El RUC no cambia en producción. */
+	public void corregirFicha(String nombre, String razonSocial, String direccion, String correoInstitucional) {
+		this.nombre = exigir(nombre, "el nombre del colegio", MAX_NOMBRE);
+		this.razonSocial = exigir(razonSocial, "la razón social", 150);
+		this.direccion = exigir(direccion, "la dirección", 200);
+		this.correoInstitucional = exigir(correoInstitucional, "el correo institucional", 150);
+	}
+
+	/** Solo en preparación (en producción el RUC no cambia: lo exige la base). */
+	public void cambiarRuc(String ruc) {
+		if (estado == EstadoColegio.PRODUCCION) {
+			throw new ReglaNegocioException("Un colegio en producción no cambia su RUC: sus comprobantes ya se emitieron con él.");
+		}
+		this.ruc = Objects.requireNonNull(ruc, "ruc");
+	}
+
+	public void cambiarNiveles(Set<Nivel> niveles) {
+		this.niveles = textoNiveles(niveles);
+	}
+
+	public void cambiarTitular(String titularNombre, String titularDocumento, String contratoCodigo) {
+		this.titularNombre = exigir(titularNombre, "el nombre del titular", 150);
+		this.titularDocumento = Objects.requireNonNull(titularDocumento, "titularDocumento");
+		this.contratoCodigo = contratoCodigo == null || contratoCodigo.isBlank() ? null : contratoCodigo.strip();
+	}
+
+	/**
+	 * PREPARACION → PRODUCCION, una sola vez y sin vuelta atrás (decisión 116). En MySQL, trg_colegio_cambio exige que
+	 * {@code por} sea una Promotoría activa de este colegio con su firma, y que haya Dirección y Caja activas.
+	 */
+	public void pasarAProduccion(String por, LocalDateTime ahora) {
+		if (tipo != TipoColegio.COLEGIO) {
+			throw new ReglaNegocioException("La plataforma no pasa a producción.");
+		}
+		if (estado == EstadoColegio.PRODUCCION) {
+			throw new ReglaNegocioException("El colegio ya está en producción.");
+		}
+		this.estado = EstadoColegio.PRODUCCION;
+		this.produccionPor = Objects.requireNonNull(por, "por");
+		this.produccionDesde = Objects.requireNonNull(ahora, "ahora");
+	}
+
+	/** Dirección aprobó la versión vigente del aviso de privacidad del colegio (sección 3.5, paso 11). */
+	public void aprobarAvisoPrivacidad(String version, String por, LocalDateTime ahora) {
+		this.avisoPrivacidadVersion = Objects.requireNonNull(version, "version");
+		this.avisoPrivacidadAprobadoPor = Objects.requireNonNull(por, "por");
+		this.avisoPrivacidadAprobadoEn = Objects.requireNonNull(ahora, "ahora");
+	}
+
+	/** Un colegio creado ya en producción (constructor de demostración) toma la hora y el autor de su alta. */
+	@PrePersist
+	void completarAlNacer() {
+		if (estado == EstadoColegio.PRODUCCION && produccionDesde == null) {
+			produccionDesde = actualizadoEn;
+			produccionPor = creadoPor == null ? "sistema" : creadoPor;
+		}
+	}
+
+	@PreRemove
+	void impedirBorrado() {
+		throw new UnsupportedOperationException("Un colegio no se borra");
+	}
+
+	private static String exigir(String valor, String que, int maximo) {
+		String texto = valor == null ? "" : valor.strip();
+		if (texto.isEmpty() || texto.length() > maximo) {
+			throw new ReglaNegocioException("Escribe " + que + " (hasta " + maximo + " caracteres).");
+		}
+		return texto;
+	}
+
+	private static String textoNiveles(Set<Nivel> niveles) {
+		if (niveles == null || niveles.isEmpty()) {
+			throw new ReglaNegocioException("Elige al menos un nivel (Inicial, Primaria o Secundaria).");
+		}
+		return EnumSet.copyOf(niveles).stream().map(Enum::name).collect(Collectors.joining(","));
 	}
 
 	public Long getId() {
@@ -59,5 +249,85 @@ public class Colegio {
 
 	public LocalDateTime getCreadoEn() {
 		return creadoEn;
+	}
+
+	public TipoColegio getTipo() {
+		return tipo;
+	}
+
+	public boolean esPlataforma() {
+		return tipo == TipoColegio.PLATAFORMA;
+	}
+
+	public EstadoColegio getEstado() {
+		return estado;
+	}
+
+	public boolean enProduccion() {
+		return estado == EstadoColegio.PRODUCCION;
+	}
+
+	public String getRazonSocial() {
+		return razonSocial;
+	}
+
+	public String getDireccion() {
+		return direccion;
+	}
+
+	public String getCorreoInstitucional() {
+		return correoInstitucional;
+	}
+
+	/** Los niveles que ofrece, en el orden del catálogo. */
+	public Set<Nivel> getNiveles() {
+		Set<Nivel> conjunto = EnumSet.noneOf(Nivel.class);
+		Arrays.stream(niveles.split(",")).map(String::strip).filter(n -> !n.isEmpty()).map(Nivel::valueOf)
+				.forEach(conjunto::add);
+		return conjunto;
+	}
+
+	public String getTitularNombre() {
+		return titularNombre;
+	}
+
+	public String getTitularDocumento() {
+		return titularDocumento;
+	}
+
+	public String getContratoCodigo() {
+		return contratoCodigo;
+	}
+
+	public String getAvisoPrivacidadVersion() {
+		return avisoPrivacidadVersion;
+	}
+
+	public String getAvisoPrivacidadAprobadoPor() {
+		return avisoPrivacidadAprobadoPor;
+	}
+
+	public LocalDateTime getAvisoPrivacidadAprobadoEn() {
+		return avisoPrivacidadAprobadoEn;
+	}
+
+	public LocalDateTime getProduccionDesde() {
+		return produccionDesde;
+	}
+
+	public String getProduccionPor() {
+		return produccionPor;
+	}
+
+	public String getCreadoPor() {
+		return creadoPor;
+	}
+
+	public LocalDateTime getActualizadoEn() {
+		return actualizadoEn;
+	}
+
+	public Long getVersion() {
+		return version;
 	}
 }

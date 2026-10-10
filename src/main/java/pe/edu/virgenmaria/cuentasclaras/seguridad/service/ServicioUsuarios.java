@@ -178,6 +178,10 @@ public class ServicioUsuarios {
 		UsuarioAutenticado actor = actor();
 		Set<Rol> roles = rolesValidos(solicitud.roles());
 		exigirPuedeAsignar(actor, roles);
+		if (roles.contains(Rol.OPERADOR_PLATAFORMA)) {
+			throw new ReglaNegocioException("El operador de la plataforma no se crea desde un colegio: lo define el "
+					+ "despliegue (CC_OPERADORES).");
+		}
 		if (roles.stream().anyMatch(ROLES_DIRECTIVOS::contains)) {
 			throw new ReglaNegocioException("Una cuenta nueva nace sin Promotoría ni Dirección: créala con su otro rol (por "
 					+ "ejemplo, Docente) y después pide Promotoría o Dirección con «Cambiar roles». Lo aprueba otra persona "
@@ -232,6 +236,9 @@ public class ServicioUsuarios {
 	private static Set<Rol> rolesValidos(Set<Rol> roles) {
 		if (roles == null || roles.isEmpty() || roles.stream().anyMatch(java.util.Objects::isNull)) {
 			throw new ReglaNegocioException("Elige al menos un rol.");
+		}
+		if (roles.contains(Rol.OPERADOR_PLATAFORMA)) {
+			throw new ReglaNegocioException("El operador de la plataforma no es un rol de un colegio.");
 		}
 		return EnumSet.copyOf(roles);
 	}

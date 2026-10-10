@@ -83,6 +83,27 @@ management:
           include: readinessState, db
 
 cuentasclaras:
+  marca:
+    # Sprint 8, tanda 1 (sección 3.7, decisión 122): el ÚNICO lugar del nombre comercial del producto. En prod es
+    # obligatorio (VerificadorConfiguracion). La empresa proveedora (razón social, RUC y soporte) va en el contrato y en el
+    # aviso de privacidad.
+    nombre: ${CC_MARCA_NOMBRE:Cuentas Claras}
+    empresa: ${CC_MARCA_EMPRESA:}
+    ruc-empresa: ${CC_MARCA_RUC:}
+    soporte-correo: ${CC_MARCA_SOPORTE_CORREO:}
+    soporte-whatsapp: ${CC_MARCA_SOPORTE_WHATSAPP:}
+  plataforma:
+    # Sprint 8, tanda 1 (secciones 3.1 a 3.3). DEDICADA: un colegio por instalación (como hoy). COMPARTIDA: varios
+    # colegios en una base, filtrados por colegio (la verificación de los conectores por instalación llega en la tanda 2).
+    instalacion: ${CC_INSTALACION:DEDICADA}
+    # Los operadores de la plataforma, "usuario:correo,usuario2:correo2" (decisión 112). Al arrancar se crea al que
+    # falta (con su enlace de activación al correo) y se desactiva al que ya no está. Sin clave en el entorno.
+    operadores: ${CC_OPERADORES:}
+    max-colegios: 25                 # decisión 138: tope de una instalación compartida
+    max-alumnos: 8000
+  colegio:
+    logo-max-subida: 1MB             # PNG o JPEG; se reescribe como PNG de 400 px y 200 KB como máximo
+    logo-max-lado: 400
   basedatos:
     # Sprint 7, tanda 2 (sección 3.2): segundo usuario de base para los procesos sistema.* y la identidad (ingreso,
     # sesiones, claves, roles y altas). En prod y piloto es obligatorio (VerificadorConfiguracion); en dev y test (H2)
