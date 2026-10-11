@@ -86,6 +86,9 @@ class AuditoriaSprint8MySqlTest {
 	@Autowired
 	private pe.edu.virgenmaria.cuentasclaras.comun.prueba.CuentasDePrueba cuentasDePrueba;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comun.prueba.TokenDeSesionDePrueba tokens;
+
 	@AfterEach
 	void limpiar() {
 		SecurityContextHolder.clearContext();
@@ -408,6 +411,9 @@ class AuditoriaSprint8MySqlTest {
 				.isIn(1143, 1644);
 		// Con la solicitud aprobada y firmada por Dirección, pero sin Promotoría de por medio (mueve dinero): 1644.
 		Long solicitud = solicitudDe(propuesto);
+		// La sesión de la base de la directora se abre ANTES (por la ruta de identidad, en su propia transacción).
+		UsuariosDePrueba.iniciarSesion(equipo.directora());
+		tokens.actual();
 		Integer sinPromotoria = new TransactionTemplate(transacciones).execute(t -> {
 			UsuariosDePrueba.iniciarSesion(equipo.directora());
 			firma.firmar(pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma.solicitud(solicitud,
@@ -422,8 +428,8 @@ class AuditoriaSprint8MySqlTest {
 		assertThat(sinPromotoria).isEqualTo(1644);
 		assertThat(estadoConector(propuesto)).isEqualTo("PROPUESTO");
 		// Enlazar otra solicitud o rechazar sin firma: 1644.
-		assertThat(codigoAl(() -> jdbc.update("UPDATE conector_colegio SET solicitud_id = (SELECT MIN(id) FROM solicitud_cambio "
-				+ "WHERE colegio_id = ?) WHERE id = ?", colegio, propuesto))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE conector_colegio SET solicitud_id = (SELECT MAX(id) FROM solicitud_cambio "
+				+ "WHERE colegio_id <> ?) WHERE id = ?", colegio, propuesto))).isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE conector_colegio SET estado = 'RECHAZADO', resuelto_por = ?, "
 				+ "resuelto_en = NOW(6) WHERE id = ?", equipo.directora().getNombreUsuario(), propuesto))).isEqualTo(1644);
 		// La prueba de conexión de un PROPUESTO sí se puede registrar (con cc_app).

@@ -1368,3 +1368,162 @@ E11, E16, E29 y E30 y el alta de punta a punta con los permisos mínimos.
 - La reproducción encontró y se corrigió en esta tanda: el `MEDIUMBLOB` del logo (desviación 1), el texto del resumen
   diario en dos pruebas de MySQL (desviación 7), la puesta en marcha de las pruebas y los saltos de línea de la lista de
   tablas vigiladas (riesgos).
+
+## Tanda 2 · Implementación
+
+> Implementada el 11 de octubre de 2026 en la rama `claude/sprint-8-lista-para-vender` (agente `backend-spring`). V29,
+> **82 triggers y 9 funciones con huella (91 huellas)**, como pedía la sección 6.3. Verificado con `./mvnw -B verify` (también
+> con `-Duser.timezone=America/Los_Angeles`) y con los jobs `mysql` y `respaldo` del CI reproducidos completos en
+> contenedores desechables `mysql:8`. Resultados: al final de esta sección.
+
+### Qué se hizo
+**Base (V29, `01`, `02` y `03`).**
+- `conector_colegio` (de cambios por versión, un VIGENTE por colegio y tipo, secreto cifrado en `VARBINARY`, clave pública
+  UUID única) con los CHECK de la sección 5 y algunos más (desviación 3). `ck_mensaje_tipo` y `ck_mensaje_destinatario`
+  admiten los avisos `CONECTOR_VIGENTE` y `COLEGIO_EN_PRODUCCION` (a la Promotoría y al correo externo de control).
+- `02`: INSERT y UPDATE por columna de `conector_colegio` a `cc_negocio` (sin DELETE). `01`: sin usuarios nuevos (solo el
+  comentario: la rotación la hace `cc_migrador`).
+- `03`: `trg_conector_colegio_nace` y `trg_conector_colegio_estado` (desviaciones 1 y 2). 82 triggers.
+- `VerificadorPermisosBaseDatos`: 82 triggers; con `cc_app` y con `cc_sistema`, un conector que nace VIGENTE (1644), su
+  borrado (1142) y sus columnas inmutables (1143); línea «Permisos y triggers de los conectores por colegio verificados».
+
+**Conectores (paquete `conectores`, nuevo).**
+- `SecretosConectores` y `CifradoAesGcm`: AES-256-GCM del JDK, nonce aleatorio de 12 bytes, AAD
+  `conector|{colegio}|{tipo}|{clave_publica}`, clave maestra `CC_CLAVE_CONECTORES` (32 bytes en base64) con su versión; en la
+  base, el cifrado, la versión y la pista (4 últimos caracteres). `descifrar` solo dentro de `conectores`.
+- `PropuestaConector` (Promotoría o Administración, con la firma de su sesión; un cambio propuesto por tipo a la vez):
+  valida la configuración por tipo (`ValidacionConector`), cifra los secretos, crea la solicitud `CAMBIO_CONECTOR` y la
+  enlaza; «Probar conexión» con el adaptador del módulo que lo usa (`AdaptadorConector`, fuera de la transacción).
+- `ManejadorCambioConector` (bandeja de siempre, otra persona de Promotoría o Dirección con su firma): vuelve a validar,
+  exige la prueba correcta y, si mueve dinero, una Promotoría; REEMPLAZADO (con flush) y VIGENTE; bitácora resaltada
+  `CONECTOR_VIGENTE`; evento `ConectorEnVigencia` que la mensajería convierte, en la misma transacción, en mensajes a TODA la
+  Promotoría y al correo externo de control (si no hay a quién avisar, el cambio no se guarda). Al rechazar, firma
+  `conector_colegio:{id}:RECHAZADO`.
+- `AlertasConectores`: alerta CRÍTICA en «Para revisar» durante `aviso-cambio-dias` (7) por cada conector que entró en
+  vigencia (sale una vez al celular: `TipoAviso.CONECTOR_CAMBIADO`).
+- `ConectoresColegio`: el vigente de cada tipo del colegio en contexto, descifrado y en caché por `(id, version)`; la
+  búsqueda por clave pública del aviso de la pasarela (`BusquedaPorClavePublica`, única clase de conectores autorizada a
+  `comoSistema`).
+- Pantalla `/conectores` (`ModuloApp.CONECTORES`: Promotoría, Dirección y Administración): vigente, propuestos e historial
+  por tipo, sin secretos (solo la pista); formularios por tipo y «Probar conexión».
+- Modo `java -jar … recifrar-conectores` (`RecifradoConectores`, con `cc_migrador`) y `VerificadorClaveConectores` (prod y
+  piloto: no arranca si la clave no descifra todos los secretos).
+
+**Los módulos usan el conector de SU colegio (H4).**
+- Comprobantes (`OseDelColegio`, `ConectorOse`): series, afectación y proveedor del conector OSE; el emisor de cada
+  comprobante es el de SU proveedor (Nubefact con la ruta y el token del conector, en caché por versión); la nota de
+  crédito de un comprobante de otro OSE sale con una serie de su proveedor; las series conocidas (alerta de series fuera del
+  sistema) incluyen las de todos los conectores OSE del colegio; un OSE real no reutiliza series del simulado (decisión 20,
+  ahora por colegio).
+- Pasarela (`Pasarelas`, `ConectorPasarela`): la del conector (si su adaptador existe en el perfil), con su monto máximo;
+  avisos en `POST /webhooks/pasarela/{clave_publica}` firmados con el secreto de ESE conector (otra firma: 401; clave
+  desconocida o conector no vigente: 404). El simulador firma con el secreto del conector y usa esa ruta.
+- Caja: la cuenta de depósito es la del conector CUENTA_BANCARIA. Conciliación: no registra otra cuenta mientras haya
+  conector; el abono y la glosa de la recaudación salen del conector RECAUDACION (`RecaudacionEnConciliacion`).
+  Recaudación: banco (formato) y modalidad del conector (`RecaudacionDelColegio`, que también lo prueba).
+- Sin conector vigente, el entorno, como hasta el sprint 7 (desviación 5).
+
+**Puesta en marcha (sección 3.5).** `EstadoPuestaEnMarcha` calcula los 14 pasos desde los datos (12 obligatorios; pago en
+línea y recaudación, opcionales). `PasoAProduccion.pasar()` exige la lista COMPLETA, además del equipo, y publica
+`ColegioEnProduccion` (aviso a toda la Promotoría y al correo externo). Los dos «aceptos» (`POST /puesta-en-marcha/
+sin-saldo-inicial` y `/ose-simulado`, solo Promotoría) se registran como su firma (`colegio:{id}:SIN_SALDO_INICIAL` y
+`:OSE_SIMULADO`) y un evento resaltado. La ficha del operador muestra los mismos 14 pasos como sí/no y conteos (E2).
+
+**Instalación compartida (`VerificadorConfiguracion`).** Una clave de conectores mal formada o de desarrollo fuera de dev y
+test no arranca; en una COMPARTIDA: `CC_CLAVE_CONECTORES` obligatoria, `CC_OPERADORES` obligatorio en prod y piloto, y ni
+secretos de conectores (`NUBEFACT_TOKEN`, `PASARELA_LLAVE_SECRETA`, `PASARELA_WEBHOOK_USUARIO`, `PASARELA_WEBHOOK_CLAVE`)
+ni un OSE o una pasarela reales en el entorno.
+
+**CI, configuración y documentos.** Job `mysql`: `CC_CLAVE_CONECTORES` del job, fase 1 con V1–V29, `comprobar` con los
+casos de `conector_colegio`, 82 triggers y 91 huellas, las líneas nuevas del arranque de prod, el rechazo de una COMPARTIDA
+con `NUBEFACT_TOKEN` y un paso final de rotación (`recifrar-conectores` con `cc_migrador`; prod no arranca con la clave
+anterior y sí con la nueva). Job `respaldo`: su `CC_CLAVE_CONECTORES` y V1–V29. `.env.ejemplo`, `docker-compose.yml`,
+`application*.yaml` y `docs/operacion/mysql-usuarios.md` (clave y rotación).
+
+### Desviaciones del diseño
+1. **`trg_conector_colegio_nace` exige además la firma de quien propone** (`conector_colegio:{clave_publica}:PROPUESTO`,
+   `ClaveFirma.conectorPropuesto`). Sin ella, con la clave de `cc_app` se podía insertar una propuesta a nombre de una
+   Promotoría y cumplir «una Promotoría participa» con un nombre escrito a mano.
+2. **`trg_conector_colegio_estado` endurecido.** El del diseño pasaba con `prueba_ok` o `resuelto_por` en NULL
+   (`NOT (NULL AND …)` es NULL y el IF no entra): ahora `COALESCE(prueba_ok, FALSE)`, `resuelto_por IS NOT NULL` y
+   `<=>`. Además exige la firma de la aprobación en la misma transacción (`cc_firma_valida`, 5 minutos, como las demás
+   operaciones de dinero que se aplican al aprobar), que VIGENTE → REEMPLAZADO no cambie la solicitud, la resolución ni la
+   prueba, que el enlace con la solicitud sea una sola vez y a SU `CAMBIO_CONECTOR`, y admite la rotación de la clave solo
+   con `cc_migrador` (el secreto y su versión, hacia arriba; nada más).
+3. **V29 con CHECK de más y `clave_publica VARCHAR(36)`** (el diseño decía `CHAR(36)`: Hibernate valida `varchar`, como la
+   desviación 1 de la tanda 1). CHECK nuevos: un VIGENTE pasó la prueba; solo OSE y pasarela guardan secreto; cuenta
+   bancaria y recaudación siempre REAL; quien aprueba no es quien propone; la clave pública es un UUID. V29 también
+   recrea `ck_mensaje_tipo` y `ck_mensaje_destinatario` para los avisos `CONECTOR_VIGENTE` y `COLEGIO_EN_PRODUCCION` al
+   correo externo: el segundo es el aviso del paso a producción de la sección 3.4, que la tanda 1 no enviaba.
+4. **Cómo se calculan algunos pasos de la lista.** La activación del titular va dentro del paso 2 (equipo). «WhatsApp y
+   correo»: un canal de la plataforma activo y algún mensaje ya salido (ENVIADO, ENTREGADO o LEÍDO) a una cuenta de
+   Promotoría (por ejemplo, su enlace de activación), en lugar de un botón «mensaje de prueba». Comprobantes: HECHO con un OSE
+   Nubefact en modo REAL vigente y probado, o con el acepto firmado; el modo de PRUEBAS de Nubefact no tiene valor legal y
+   necesita el acepto. Alumnos: matrículas ACTIVAS del año vigente. Respaldo: `EstadoTecnico.respaldo()` al día y sin
+   «faltan filas».
+5. **Sin conector vigente se usa el entorno también en una COMPARTIDA**, pero ahí `VerificadorConfiguracion` solo admite en
+   el entorno el comprobante SIMULADO y la pasarela NINGUNA o SIMULADA (y ningún secreto de conectores). Equivale a «sin
+   conector, SIMULADO (OSE) o ninguno (pasarela)» y conserva la pasarela simulada de dev, test y piloto. Un colegio con un
+   conector de pasarela cuyo adaptador no existe (Culqi, Niubiz, Izipay) no tiene pago en línea: su prueba falla y no puede
+   entrar en vigencia.
+6. **Los medios del conector de pasarela se guardan pero no filtran todavía el pago en línea** (no había dónde aplicarlos
+   en el flujo actual); el monto máximo del conector sí se aplica.
+7. **La ruta vieja de los avisos** (`/webhooks/pasarela/{proveedor}/{colegio}`) sigue para los colegios sin conector
+   (instalación dedicada o pasarela simulada del entorno); un colegio con conector de pasarela solo recibe por la de su clave
+   pública. Clave desconocida o conector no vigente: 404 (E15); la ruta vieja sigue respondiendo 401 (S4-B4).
+8. **La cuenta bancaria del conector no reemplaza la tabla `cuenta_bancaria` de la conciliación:** la caja deposita en la
+   del conector y la conciliación no registra otra cuenta mientras haya conector vigente.
+9. **Rotación:** `recifrar-conectores` corre con `cc_migrador` (la única cuenta con UPDATE del secreto) y, como `migrar`, no
+   escribe en la bitácora: queda en su log y en el acta de la rotación. **`VerificadorClaveConectores`** (no estaba en el
+   diseño): prod y piloto no arrancan si la clave no descifra todos los secretos.
+10. **`VerificadorConfiguracion`:** en una COMPARTIDA, `CC_OPERADORES` es obligatorio solo en prod y piloto (en dev el
+    operador lo crea `DatosDemoDev`); además rechaza un OSE o una pasarela reales en el entorno. «Una DEDICADA con más de un
+    colegio no arranca» sigue siendo la regla de `AltaColegio` (desviación 10 de la tanda 1).
+11. **Comprobantes, más allá del diseño:** la nota de crédito de un comprobante de otro OSE sale con una serie de SU
+    proveedor (una boleta simulada nunca se anula con una nota real), y las series «conocidas» de la alerta de series fuera
+    del sistema incluyen las de todos los conectores OSE del colegio.
+12. **Pruebas de MySQL real:** el flujo completo de los conectores con los permisos mínimos está en `AuditoriaSprint8MySqlTest`
+    (recaudación y pasarela) y en `PermisosMySqlTest` (cuenta bancaria), en colegios dados de alta por el operador y no en
+    el colegio 1, para no cambiar la cuenta de depósito ni el OSE de las demás pruebas. `CuentasDePrueba` pasa a producción
+    por el camino de la base (firma de la Promotoría y cambio de estado), no por `PasoAProduccion`, que ya exige la lista
+    completa (imposible en el job: respaldo de 26 h, conectores, planes…); la regla de la lista la prueban
+    `PasoAProduccionTest` y `AuditoriaSprint8MySqlTest.e10`.
+13. **Clave de los conectores en las pruebas:** `application-test.yaml` usa una clave de pruebas salvo que el entorno traiga
+    `CC_CLAVE_CONECTORES`; los jobs `mysql` y `respaldo` del CI ponen la suya (no es de desarrollo), así prod arranca sobre
+    los secretos que dejaron las pruebas. El job `mysql` pasa de 25 a 35 minutos de tope.
+
+### Riesgos y pendientes de la tanda
+- **Nubefact por colegio no se probó contra la API real** (no hay cuenta de pruebas en este entorno): la prueba de conexión
+  y el envío con la ruta y el token del conector se cubren con dobles (`ConectorOseTest`) y con el contrato de
+  `EmisorNubefact` del sprint 4. Se confirma con la cuenta DEMO del primer colegio.
+- **Los adaptadores reales de pasarela y los formatos de cada banco siguen pendientes** (decisiones 22 y 24): se registran,
+  pero su prueba falla y no entran en vigencia.
+- **El paso «WhatsApp y correo»** se da por hecho con cualquier mensaje ya salido a la Promotoría: no comprueba que lo haya
+  LEÍDO. Un botón de mensaje de prueba queda para la tanda 3 si el operador lo pide.
+- **Un PROPUESTO puede cambiar su prueba de conexión con `cc_app`** (columna con GRANT): quien tuviera esa clave podría marcar
+  la prueba como correcta. No alcanza para poner el conector en vigencia (falta la aprobación firmada de otra persona) y
+  quien aprueba ve el detalle de la prueba en la bandeja.
+- **Si se pierde la clave de los conectores** (o se despliega otra), prod no arranca hasta desplegar la correcta; sin ella,
+  cada colegio debe volver a proponer sus secretos (como dice la sección 15).
+- **El paso a producción en el job `mysql` usa el camino de la base** (desviación 12): la lista completa se prueba en H2 y
+  la parte de la base (firma, Dirección y Caja) en MySQL.
+
+### Resultados de la verificación
+- `./mvnw -B verify`: **2339 pruebas, 0 fallos, 0 errores, 133 omitidas** (las de MySQL real, que corren en los jobs
+  `mysql` y `respaldo`); BUILD SUCCESS. Con `-DargLine=-Duser.timezone=America/Los_Angeles`: **2339, 0 fallos, 0 errores,
+  133 omitidas**, BUILD SUCCESS. La tanda 1 cerró con 2290: 49 pruebas nuevas.
+- Job `mysql` del CI reproducido completo en contenedores desechables `mysql:8` (base nueva): los 21 pasos en OK, del 3
+  (usuarios) al 23 (rotación). Fase 1: 2 pruebas; fase 2 (`PermisosMySqlTest`, con el flujo de la cuenta bancaria): 91, 0
+  fallos (7 omitidas por la fecha); `AuditoriaSprint8MySqlTest`: 12 de 12 (E10 con la lista, E12 y E14 nuevas); correcciones
+  del sprint 6: 3; sprint 7, tanda 2: 12; QA del sprint 7: 5; S7-A1: 1; estado de cuentas: 4; S7-M1: 2 + 2; fase 2b: 7.
+  Arranque real en prod por TLS: «Huellas de los 82 triggers y las 9 funciones verificadas», «Permisos y triggers de los
+  conectores por colegio verificados» y «Secretos de los conectores verificados: 1 con la clave versión 1»; una COMPARTIDA con
+  `NUBEFACT_TOKEN` no arranca; M2, M3 y M4 en OK; rotación: `recifrar-conectores` pasó 1 secreto de la versión 1 a la 2,
+  `cc_migrador` no cambia el estado ni baja la versión (1644), `cc_app` no toca la versión (1143), prod no arranca con la clave
+  anterior y arranca con la nueva («1 con la clave versión 2»).
+- Job `respaldo` reproducido completo: los 17 pasos en OK (respaldo cifrado, E29, restauración real con la cadena HMAC y
+  prod arrancando sobre la copia, E30, E31, E32, QA-S7-1, simulacro semanal, S7-M1 y destino simulado).
+- La reproducción encontró y se corrigió en esta tanda: la firma de una prueba de MySQL dentro de una transacción abierta (la
+  sesión de la base se abre antes, por la ruta de identidad) y una prueba que enlazaba la solicitud que ya tenía el conector.
+  Los contenedores (`cc-s8t2-ci-*`) se borraron al terminar y los archivos que dejan los pasos del CI se movieron fuera del
+  repositorio.
