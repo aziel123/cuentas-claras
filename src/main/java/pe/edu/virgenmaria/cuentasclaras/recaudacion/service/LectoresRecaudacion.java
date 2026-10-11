@@ -15,16 +15,21 @@ public class LectoresRecaudacion {
 
 	private final PropiedadesRecaudacion propiedades;
 
-	public LectoresRecaudacion(List<AdaptadorRecaudacion> adaptadores, PropiedadesRecaudacion propiedades) {
+	/** Sprint 8, tanda 2: el banco y la modalidad del conector del colegio (o, sin conector, del entorno). */
+	private final RecaudacionDelColegio delColegio;
+
+	public LectoresRecaudacion(List<AdaptadorRecaudacion> adaptadores, PropiedadesRecaudacion propiedades,
+			RecaudacionDelColegio delColegio) {
+		this.delColegio = delColegio;
 		this.adaptadores = List.copyOf(adaptadores);
 		this.propiedades = propiedades;
 	}
 
 	public AdaptadorRecaudacion para(String nombreArchivo) {
-		List<AdaptadorRecaudacion> delBanco = adaptadores.stream().filter(a -> a.banco() == propiedades.banco()).toList();
+		List<AdaptadorRecaudacion> delBanco = adaptadores.stream().filter(a -> a.banco() == delColegio.banco()).toList();
 		if (delBanco.isEmpty()) {
 			throw new ArchivoNoValidoException("Todavía no está disponible el formato del banco "
-					+ propiedades.banco().etiqueta() + ": usa el formato genérico.");
+					+ delColegio.banco().etiqueta() + ": usa el formato genérico.");
 		}
 		return delBanco.stream().filter(a -> a.acepta(nombreArchivo)).findFirst()
 				.orElseThrow(() -> new ArchivoNoValidoException("Sube el archivo del banco en CSV (.csv o .txt) o en "

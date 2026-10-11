@@ -115,6 +115,9 @@ public class ServicioRecaudacion {
 
 	private final PropiedadesRecaudacion propiedades;
 
+	/** Sprint 8, tanda 2: el banco y la modalidad del conector del colegio (o, sin conector, del entorno). */
+	private final RecaudacionDelColegio delColegio;
+
 	private final Clock reloj;
 
 	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
@@ -123,7 +126,9 @@ public class ServicioRecaudacion {
 	public ServicioRecaudacion(LectoresRecaudacion lectores, RegistroArchivos archivos, LoteRecaudacionRepository lotes,
 			LineaRecaudacionRepository lineas, AlumnoRepository alumnos, CuotaRepository cuotas, PagoRepository pagos,
 			List<ExportadorBaseDeudas> exportadores, ControlParticipantes participantes, AuditoriaService auditoria,
-			ApplicationEventPublisher eventos, PropiedadesRecaudacion propiedades, Clock reloj, FirmaSesion firmaSesion) {
+			ApplicationEventPublisher eventos, PropiedadesRecaudacion propiedades, Clock reloj, FirmaSesion firmaSesion,
+			RecaudacionDelColegio delColegio) {
+		this.delColegio = delColegio;
 		this.firmaSesion = firmaSesion;
 		this.lectores = lectores;
 		this.archivos = archivos;
@@ -165,7 +170,7 @@ public class ServicioRecaudacion {
 		LOG.info("Vista previa de recaudación: sha256={}, bytes={}, líneas={}, errores={}", plan.sha256(),
 				contenido.length, lectura.filas().size(), plan.errores().size());
 		return new VistaPreviaRecaudacion(UUID.randomUUID(), actor.colegioId(), actor.usuarioId(), nombre, plan.sha256(),
-				contenido.length, contenido.clone(), propiedades.banco().etiqueta(), lectura.formato(), desde(lectura),
+				contenido.length, contenido.clone(), delColegio.banco().etiqueta(), lectura.formato(), desde(lectura),
 				hasta(lectura), lectura.filas().size(), plan.detalle(), plan.errores(),
 				(int) plan.contar(LineaPrevia.APLICAR), (int) plan.contar(LineaPrevia.EXCEPCION),
 				(int) plan.contar(LineaPrevia.YA_REGISTRADA), plan.huella(), plan.yaCargado());
@@ -206,7 +211,7 @@ public class ServicioRecaudacion {
 		BigDecimal total = Dinero.sumar(lectura.filas().stream().map(FilaRecaudacion::monto).toList());
 		ArchivoCargado archivo = archivos.guardar(TipoArchivo.RECAUDACION, previa.archivoNombre(), previa.contenido());
 		LoteRecaudacion lote = lotes.save(LoteRecaudacion.registrar(archivo.getId(), archivo.getSha256(),
-				propiedades.banco(), lectura.formato(), lectura.fechaProceso(), desde(lectura), hasta(lectura),
+				delColegio.banco(), lectura.formato(), lectura.fechaProceso(), desde(lectura), hasta(lectura),
 				lectura.filas().size(), total, lectura.totalDeclarado(), propiedades.muestreo()));
 		for (FilaRecaudacion fila : lectura.filas()) {
 			lineas.save(LineaRecaudacion.nueva(lote, fila.numero(), fila.fechaPago(), fila.codigo(),
@@ -335,7 +340,7 @@ public class ServicioRecaudacion {
 	@Transactional
 	@PreAuthorize("hasRole('ADMINISTRACION')")
 	public ArchivoExportado exportarBaseDeudas() {
-		ExportadorBaseDeudas exportador = exportadores.stream().filter(e -> e.banco() == propiedades.banco()).findFirst()
+		ExportadorBaseDeudas exportador = exportadores.stream().filter(e -> e.banco() == delColegio.banco()).findFirst()
 				.or(() -> exportadores.stream().filter(e -> e.banco() == pe.edu.virgenmaria.cuentasclaras.recaudacion
 						.model.BancoRecaudacion.GENERICO).findFirst())
 				.orElseThrow(() -> new IllegalStateException("Falta el exportador de la base de deudas"));
@@ -369,7 +374,7 @@ public class ServicioRecaudacion {
 		for (FilaRecaudacion fila : lectura.filas()) {
 			Alumno alumno = CodigoPago.alumnoDe(fila.codigo()).flatMap(alumnos::findById).orElse(null);
 			Cuota referida = null;
-			if (fila.referenciaDeuda() != null && propiedades.modalidad() == ModalidadRecaudacion.CON_BASE_DE_DEUDAS) {
+			if (fila.referenciaDeuda() != null && delColegio.modalidad() == ModalidadRecaudacion.CON_BASE_DE_DEUDAS) {
 				referida = CodigoPago.cuotaDe(fila.referenciaDeuda()).flatMap(cuotas::findById).orElse(null);
 				if (referida == null) {
 					errores.add(new ErrorFila(fila.linea(), "La referencia de deuda " + fila.referenciaDeuda()

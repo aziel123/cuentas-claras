@@ -74,7 +74,10 @@ class ReglasArquitecturaTest {
 			BASE + ".seguridad.service.ServicioDetallesUsuario",
 			BASE + ".seguridad.inicial.DatosDemoDev",
 			// Sprint 7, tanda 2: al arrancar cierra las sesiones de la base de todos los colegios (REINICIO).
-			BASE + ".seguridad.service.sesion.SesionesFirmadas");
+			BASE + ".seguridad.service.sesion.SesionesFirmadas",
+			// Sprint 8, tanda 2 (E15): el aviso de una pasarela trae solo la clave pública opaca de su conector; esta clase
+			// busca ESE conector (por su clave exacta) y nada más.
+			BASE + ".conectores.service.BusquedaPorClavePublica");
 
 	/** Única clase que puede usar JDBC directo: comprueba los permisos de MySQL (paso 9). */
 	private static final String VERIFICADOR_PERMISOS = BASE + ".auditoria.service.VerificadorPermisosBaseDatos";
@@ -618,7 +621,9 @@ class ReglasArquitecturaTest {
 	static final ArchRule registroSolicitudesSoloDesdeServicios = noClasses()
 			.that().resideOutsideOfPackages(BASE + ".aprobaciones.service..", BASE + ".alumnos.service..",
 					BASE + ".cobranza.service..", BASE + ".caja.service..", BASE + ".pasarela.service..",
-					BASE + ".recaudacion.service..", BASE + ".conciliacion.service..", BASE + ".seguridad.service..")
+					BASE + ".recaudacion.service..", BASE + ".conciliacion.service..", BASE + ".seguridad.service..",
+					// Sprint 8, tanda 2: la propuesta de un conector (PROMOTOR o ADMINISTRACION) crea su CAMBIO_CONECTOR.
+					BASE + ".conectores.service..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".aprobaciones.service.RegistroSolicitudes")
 			.because("la solicitud la crea el servicio protegido que valida el cambio pedido");
 

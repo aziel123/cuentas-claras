@@ -429,6 +429,10 @@ class MatrizPermisosTest {
 		if (PathPatternParser.defaultInstance.parse(ModuloApp.RUTA_WEBHOOK_PASARELA).matches(camino)) {
 			return true;
 		}
+		// Sprint 8, tanda 2 (E15): el aviso de la pasarela de UN conector (por su clave pública), en la misma cadena.
+		if (PathPatternParser.defaultInstance.parse(ModuloApp.RUTA_WEBHOOK_PASARELA_CONECTOR).matches(camino)) {
+			return true;
+		}
 		// Sprint 5: los avisos de WhatsApp (POST firmado) y su verificación (GET), en la cadena de los webhooks.
 		if (PathPatternParser.defaultInstance.parse(ModuloApp.RUTA_WEBHOOK_WHATSAPP).matches(camino)) {
 			return true;

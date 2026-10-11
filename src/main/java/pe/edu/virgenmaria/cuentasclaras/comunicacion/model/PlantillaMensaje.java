@@ -82,7 +82,16 @@ public enum PlantillaMensaje {
 	// P6: aviso al contacto ANTERIOR de alguien del personal (tipo CONTACTO_CAMBIADO).
 	CONTACTO_PERSONAL_CAMBIADO("cc_contacto_personal_cambiado_v2", "Cambió el contacto de tu cuenta", 2, false,
 			"{{1}}: este {{2}} dejó de recibir los mensajes de tu cuenta porque se registró otro. Si no lo "
-					+ "pediste, avisa hoy a Promotoría.");
+					+ "pediste, avisa hoy a Promotoría."),
+	// Sprint 8 · tanda 2 (sección 3.6, E12): cambió adónde entra el dinero (o quién emite las boletas). A TODA la Promotoría
+	// y al correo externo de control. Sin secretos ni el número completo de la cuenta: solo su terminación.
+	CONECTOR_VIGENTE("cc_conector_vigente_v2", "Cambió un conector del colegio", 6, false,
+			"{{1}}: cambió {{2}} a {{3}} ({{4}}). Lo propuso {{5}} y lo aprobó {{6}}. Si no lo reconoces, avisa hoy "
+					+ "al contador y revisa la conciliación."),
+	// Sprint 8 · tanda 2 (sección 3.4): el colegio pasó a producción (desde ahora se registran pagos).
+	COLEGIO_EN_PRODUCCION("cc_colegio_en_produccion_v2", "El colegio empezó a cobrar", 3, false,
+			"{{1}}: el colegio pasó a producción el {{2}} con la firma de {{3}}. Desde ahora se registran los pagos y "
+					+ "salen los avisos a las familias.");
 
 	private static final Pattern MARCADOR = Pattern.compile("\\{\\{(\\d+)}}");
 

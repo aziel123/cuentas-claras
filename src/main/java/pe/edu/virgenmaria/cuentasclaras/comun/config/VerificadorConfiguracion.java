@@ -41,6 +41,12 @@ import java.util.function.Function;
  *   <li>sprint 8, tanda 1 (decisión 120): en {@code prod}, sin el nombre comercial ({@code CC_MARCA_NOMBRE}). Las
  *       variables del promotor inicial ({@code CC_PROMOTOR_*} y {@code CC_COLEGIO_ID}) ya no se usan: si siguen
  *       definidas, solo se avisa.</li>
+ *   <li>sprint 8, tanda 2 (secciones 3.1 y 3.6, decisión 118): con una clave de los conectores
+ *       ({@code CC_CLAVE_CONECTORES}) que no son 32 bytes en base64, o que es la de desarrollo fuera de dev y test; y en
+ *       una instalación COMPARTIDA: sin esa clave, sin operadores ({@code CC_OPERADORES}, en prod y piloto), con secretos
+ *       de conectores en el entorno ({@code NUBEFACT_TOKEN}, {@code PASARELA_LLAVE_SECRETA},
+ *       {@code PASARELA_WEBHOOK_USUARIO}, {@code PASARELA_WEBHOOK_CLAVE}) o con un OSE o una pasarela reales en el entorno
+ *       (los de cada colegio van en sus conectores).</li>
  * </ul>
  */
 @Component
@@ -141,6 +147,23 @@ public class VerificadorConfiguracion implements InitializingBean {
 	static final List<String> VARIABLES_RETIRADAS = List.of("CC_PROMOTOR_USUARIO", "CC_PROMOTOR_NOMBRE",
 			"CC_PROMOTOR_CLAVE", "CC_COLEGIO_ID");
 
+	/** Sprint 8, tanda 2 (sección 3.1): COMPARTIDA o DEDICADA. */
+	static final String INSTALACION = "cuentasclaras.plataforma.instalacion";
+
+	static final String OPERADORES = "cuentasclaras.plataforma.operadores";
+
+	/** Sprint 8, tanda 2 (sección 3.6): la clave maestra de los secretos de los conectores y la anterior (rotación). */
+	static final String CLAVE_CONECTORES = "cuentasclaras.conectores.clave";
+
+	static final String CLAVE_CONECTORES_ANTERIOR = "cuentasclaras.conectores.clave-anterior";
+
+	/** Las claves de desarrollo y de pruebas de los conectores empiezan con este texto (en claro). */
+	static final String MARCA_CLAVE_CONECTORES_DE_DESARROLLO = "clave-conectores-";
+
+	/** Secretos de conectores que en una instalación COMPARTIDA no pueden estar en el entorno (van en cada colegio). */
+	static final List<String> SECRETOS_DE_CONECTORES = List.of(NUBEFACT_TOKEN, CULQI_LLAVE_SECRETA, CULQI_WEBHOOK_USUARIO,
+			CULQI_WEBHOOK_CLAVE);
+
 	/** Donde puede existir la mensajería simulada (los beans tienen el mismo {@code @Profile}). */
 	static final Set<String> PERFILES_MENSAJERIA_SIMULADA = Set.of("dev", "test", "piloto");
 
@@ -214,6 +237,7 @@ public class VerificadorConfiguracion implements InitializingBean {
 		verificarRespaldos(prod, propiedad);
 		verificarBaseDatos(despliegue == 1, propiedad);
 		verificarCookie(despliegue == 1, propiedad);
+		verificarInstalacion(desarrollo, despliegue == 1, propiedad);
 		variablesRetiradas(propiedad).forEach(v -> LOG.warn("La variable {} ya no se usa: el colegio y su primera "
 				+ "Promotoría se dan de alta desde /plataforma. Retírala del entorno.", v));
 	}
@@ -227,6 +251,68 @@ public class VerificadorConfiguracion implements InitializingBean {
 			throw new IllegalStateException("Falta el nombre comercial del producto: en producción define CC_MARCA_NOMBRE "
 					+ "(cuentasclaras.marca.nombre) con el nombre con el que se vende la plataforma. De él salen el título, "
 					+ "la cabecera, el pie, los asuntos de los correos y los mensajes a las familias.");
+		}
+	}
+
+	/**
+	 * Sprint 8, tanda 2 (secciones 3.1 y 3.6, decisión 118). La clave de los conectores, si está, son 32 bytes en base64 y
+	 * nunca la de desarrollo fuera de dev y test (también la anterior, durante una rotación). En una instalación COMPARTIDA
+	 * los conectores son de cada colegio: la clave es obligatoria, en prod y piloto hay operadores, y el entorno no lleva
+	 * secretos de conectores ni un OSE o una pasarela reales (un token del entorno serviría a todos los colegios).
+	 */
+	private static void verificarInstalacion(boolean desarrollo, boolean despliegue, Function<String, String> propiedad) {
+		String instalacion = mayusculas(propiedad.apply(INSTALACION));
+		if (instalacion != null && !instalacion.equals("COMPARTIDA") && !instalacion.equals("DEDICADA")) {
+			throw new IllegalStateException("CC_INSTALACION debe ser COMPARTIDA o DEDICADA.");
+		}
+		verificarClaveConectores(propiedad.apply(CLAVE_CONECTORES), "CC_CLAVE_CONECTORES", desarrollo);
+		verificarClaveConectores(propiedad.apply(CLAVE_CONECTORES_ANTERIOR), "CC_CLAVE_CONECTORES_ANTERIOR", desarrollo);
+		if (!"COMPARTIDA".equals(instalacion)) {
+			return;
+		}
+		if (vacio(propiedad.apply(CLAVE_CONECTORES))) {
+			throw new IllegalStateException("En una instalación COMPARTIDA los secretos de los conectores de cada colegio se "
+					+ "guardan cifrados: falta CC_CLAVE_CONECTORES (32 bytes en base64, del gestor de secretos).");
+		}
+		if (despliegue && vacio(propiedad.apply(OPERADORES))) {
+			throw new IllegalStateException("En una instalación COMPARTIDA hace falta al menos un operador de la plataforma "
+					+ "(CC_OPERADORES=usuario:correo): es quien da de alta los colegios.");
+		}
+		List<String> secretos = SECRETOS_DE_CONECTORES.stream().filter(s -> !vacio(propiedad.apply(s))).toList();
+		if (!secretos.isEmpty()) {
+			throw new IllegalStateException("En una instalación COMPARTIDA el entorno no lleva secretos de conectores (" + String
+					.join(", ", secretos) + "): cada colegio registra los suyos en Conectores, cifrados y aprobados por "
+					+ "otra persona. Quita NUBEFACT_TOKEN, PASARELA_LLAVE_SECRETA, PASARELA_WEBHOOK_USUARIO y "
+					+ "PASARELA_WEBHOOK_CLAVE.");
+		}
+		String comprobantes = mayusculas(propiedad.apply(COMPROBANTES));
+		String pasarela = mayusculas(propiedad.apply(PASARELA));
+		if ((comprobantes != null && !comprobantes.equals("SIMULADO"))
+				|| (pasarela != null && !pasarela.equals("NINGUNA") && !pasarela.equals("SIMULADA"))) {
+			throw new IllegalStateException("En una instalación COMPARTIDA el OSE y la pasarela reales son de cada colegio (en "
+					+ "sus conectores): el entorno solo admite el comprobante SIMULADO y la pasarela NINGUNA o SIMULADA.");
+		}
+	}
+
+	private static void verificarClaveConectores(String clave, String variable, boolean desarrollo) {
+		if (vacio(clave)) {
+			return;
+		}
+		byte[] bytes;
+		try {
+			bytes = java.util.Base64.getDecoder().decode(clave.strip());
+		}
+		catch (IllegalArgumentException e) {
+			throw new IllegalStateException(variable + " no es base64 válido: genera la clave con «openssl rand -base64 32».");
+		}
+		if (bytes.length != 32) {
+			throw new IllegalStateException(variable + " debe tener 32 bytes (AES-256) en base64: genérala con «openssl rand "
+					+ "-base64 32».");
+		}
+		if (!desarrollo && new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1)
+				.startsWith(MARCA_CLAVE_CONECTORES_DE_DESARROLLO)) {
+			throw new IllegalStateException(variable + " es la clave de desarrollo o de pruebas: en un despliegue usa la del "
+					+ "gestor de secretos.");
 		}
 	}
 

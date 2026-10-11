@@ -314,6 +314,7 @@ class RutasIdorTest {
 				case "accion" -> "PAGADO";
 				case "token" -> "a".repeat(43);
 				case "proveedor" -> "SIMULADA";
+				case "clavePublica" -> UUID.randomUUID().toString();
 				default -> "1";
 			};
 		}
@@ -412,6 +413,14 @@ class RutasIdorTest {
 
 		Map<Recurso, String> ids = new EnumMap<>(Recurso.class);
 		ids.put(Recurso.COLEGIO, "1");
+		// Sprint 8, tanda 2: un conector propuesto del colegio A (el colegio B no lo ve ni lo prueba: 404).
+		jdbc.update("INSERT INTO conector_colegio (colegio_id, tipo, proveedor, modo, configuracion, clave_publica, estado, "
+				+ "propuesto_por, creado_en, creado_por, actualizado_en) VALUES (1, 'CUENTA_BANCARIA', 'BCP', 'REAL', "
+				+ "'{\"numero\":\"1912345678901\",\"cci\":\"00219100345678901234\",\"moneda\":\"PEN\"}', ?, "
+				+ "'PROPUESTO', 'administracion', CURRENT_TIMESTAMP, 'administracion', CURRENT_TIMESTAMP)",
+				UUID.randomUUID().toString());
+		ids.put(Recurso.CONECTOR, texto("SELECT MIN(id) FROM conector_colegio WHERE colegio_id = 1"));
+		ids.put(Recurso.TIPO_CONECTOR, "cuenta-bancaria");
 		ids.put(Recurso.ALUMNO, f.mateo().toString());
 		ids.put(Recurso.FAMILIA, f.quispe().toString());
 		ids.put(Recurso.APODERADO, f.rosa().toString());

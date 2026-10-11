@@ -66,6 +66,39 @@ public class WebhookPasarelaController {
 		};
 	}
 
+	/**
+	 * Sprint 8, tanda 2 (sección 3.6, E15): {@code POST /webhooks/pasarela/{clave_publica}}, el aviso de la pasarela de UN
+	 * conector del colegio (un UUID opaco, no el id del colegio). Clave desconocida o conector que ya no está vigente: 404;
+	 * firma inválida o de otro conector: 401.
+	 */
+	@PostMapping("/webhooks/pasarela/{clavePublica:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}")
+	@ResponseBody
+	public ResponseEntity<String> recibirDeConector(@PathVariable String clavePublica, HttpServletRequest peticion)
+			throws IOException {
+		if (!limite.permitir(peticion.getRemoteAddr())) {
+			return respuesta(HttpStatus.TOO_MANY_REQUESTS, "demasiados avisos");
+		}
+		int maximo = recepcion.maximoBytes();
+		if (peticion.getContentLengthLong() > maximo) {
+			return respuesta(HttpStatus.CONTENT_TOO_LARGE, "aviso demasiado grande");
+		}
+		byte[] cuerpo;
+		try (InputStream entrada = peticion.getInputStream()) {
+			cuerpo = entrada.readNBytes(maximo + 1);
+		}
+		Map<String, String> cabeceras = new HashMap<>();
+		for (String nombre : Collections.list(peticion.getHeaderNames())) {
+			cabeceras.put(nombre.toLowerCase(Locale.ROOT), peticion.getHeader(nombre));
+		}
+		return switch (recepcion.recibirPorClave(clavePublica, cuerpo, cabeceras)) {
+			case ACEPTADO -> respuesta(HttpStatus.OK, "recibido");
+			case YA_RECIBIDO -> respuesta(HttpStatus.OK, "ya recibido");
+			case NO_AUTENTICO -> respuesta(HttpStatus.UNAUTHORIZED, "aviso no autentico");
+			case NO_ENCONTRADO -> respuesta(HttpStatus.NOT_FOUND, "conector no encontrado");
+			case MUY_GRANDE -> respuesta(HttpStatus.CONTENT_TOO_LARGE, "aviso demasiado grande");
+		};
+	}
+
 	private static ResponseEntity<String> respuesta(HttpStatus estado, String texto) {
 		return ResponseEntity.status(estado).contentType(MediaType.TEXT_PLAIN).body(texto);
 	}

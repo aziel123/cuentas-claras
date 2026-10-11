@@ -149,7 +149,7 @@ class OperadorSinDatosTest {
 		String cuerpo = mvc.perform(get("/plataforma/colegios/1").with(UsuariosDePrueba.como(operador))).andReturn()
 				.getResponse().getContentAsString();
 
-		assertThat(cuerpo).contains("Puesta en marcha").contains("Alumnos: 3");
+		assertThat(cuerpo).contains("Puesta en marcha").contains("Alumnos matriculados: 3");
 		MARCAS.forEach(m -> assertThat(cuerpo).as("la ficha no muestra «" + m + "»").doesNotContain(m));
 		assertThat(cuerpo).doesNotContain("S/ ");
 		String lista = mvc.perform(get("/plataforma").with(UsuariosDePrueba.como(operador))).andReturn().getResponse()

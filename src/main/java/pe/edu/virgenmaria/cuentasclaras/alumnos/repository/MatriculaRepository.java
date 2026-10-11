@@ -28,6 +28,9 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
 
 	long countBySeccionId(Long seccionId);
 
+	/** Sprint 8, tanda 2 (puesta en marcha): cuántas matrículas en ese estado tiene el año. */
+	long countByAnioEscolarIdAndEstado(Long anioEscolarId, EstadoMatricula estado);
+
 	@Query("select m.anioEscolar.id from Matricula m where m.id = :id")
 	Optional<Long> anioDe(@Param("id") Long id);
 

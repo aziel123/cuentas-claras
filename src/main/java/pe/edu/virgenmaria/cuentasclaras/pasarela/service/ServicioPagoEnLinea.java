@@ -161,7 +161,7 @@ public class ServicioPagoEnLinea {
 					.toList();
 			return new CuentaEnLinea(apoderado.getFamilia().getNombre(), apoderado.nombreCompleto(), hijos, total,
 					recientes, recientesPagos, pasarelas.configurada().isPresent(), pasarelas.simulada(),
-					propiedades.montoMaximo(), hoy);
+					pasarelas.montoMaximo(), hoy);
 		});
 	}
 
@@ -379,8 +379,8 @@ public class ServicioPagoEnLinea {
 	}
 
 	private void exigirMaximo(BigDecimal total) {
-		if (total.compareTo(propiedades.montoMaximo()) > 0) {
-			throw new ReglaNegocioException("El pago en línea es de hasta " + Dinero.formatear(propiedades.montoMaximo())
+		if (total.compareTo(pasarelas.montoMaximo()) > 0) {
+			throw new ReglaNegocioException("El pago en línea es de hasta " + Dinero.formatear(pasarelas.montoMaximo())
 					+ " por vez. Elige menos cuotas y paga el resto en otro pago.");
 		}
 	}

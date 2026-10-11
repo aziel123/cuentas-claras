@@ -5,7 +5,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import pe.edu.virgenmaria.cuentasclaras.comprobantes.config.PropiedadesComprobantes;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.Comprobante;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.LineaDocumento;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.Receptor;
@@ -36,16 +35,16 @@ public class ServicioComprobantes {
 
 	private final AperturaSerie apertura;
 
-	private final PropiedadesComprobantes propiedades;
+	private final OseDelColegio ose;
 
 	private final ApplicationEventPublisher eventos;
 
 	public ServicioComprobantes(SerieComprobanteRepository series, ComprobanteRepository comprobantes,
-			AperturaSerie apertura, PropiedadesComprobantes propiedades, ApplicationEventPublisher eventos) {
+			AperturaSerie apertura, OseDelColegio ose, ApplicationEventPublisher eventos) {
 		this.series = series;
 		this.comprobantes = comprobantes;
 		this.apertura = apertura;
-		this.propiedades = propiedades;
+		this.ose = ose;
 		this.eventos = eventos;
 	}
 
@@ -57,7 +56,7 @@ public class ServicioComprobantes {
 		// Hibernate deja el UPDATE para el flush: debe salir ANTES del INSERT del comprobante (trigger en MySQL).
 		series.saveAndFlush(serie);
 		Comprobante comprobante = comprobantes.save(Comprobante.emitir(serie, numero, fecha, receptor,
-				propiedades.afectacionIgv(), lineas));
+				ose.actual().afectacion(), lineas));
 		eventos.publishEvent(new ComprobanteEmitido(comprobante.getId(), comprobante.getColegioId()));
 		return comprobante;
 	}
@@ -69,7 +68,7 @@ public class ServicioComprobantes {
 	public Comprobante emitirNotaCredito(Comprobante original, String motivo, LocalDate fecha) {
 		Objects.requireNonNull(original, "original");
 		String serieNota = serieNotaDe(original);
-		SerieComprobante serie = bloquear(TipoComprobante.NOTA_CREDITO, serieNota);
+		SerieComprobante serie = bloquear(TipoComprobante.NOTA_CREDITO, serieNota, original.getProveedor());
 		int numero = serie.siguiente();
 		series.saveAndFlush(serie);
 		Comprobante nota = comprobantes.save(Comprobante.notaDeCredito(serie, numero, fecha, original, motivo));
@@ -110,26 +109,29 @@ public class ServicioComprobantes {
 
 	/** BC01 para una boleta, FC01 para una factura (la letra del comprobante que se anula). */
 	public String serieNotaDe(Comprobante original) {
-		return switch (original.getTipo()) {
-			case BOLETA -> propiedades.serieNotaBoleta();
-			case FACTURA -> propiedades.serieNotaFactura();
-			case NOTA_CREDITO -> throw new IllegalArgumentException("Una nota de crédito no se anula con otra");
-		};
+		// Sprint 8, tanda 2: con una serie del MISMO proveedor que el comprobante (el colegio pudo cambiar de OSE).
+		return ose.serieNotaPara(original.getProveedor(), original.getTipo());
 	}
 
 	/** El proveedor configurado (para la marca «simulado» del impreso). */
 	public boolean simulado() {
-		return propiedades.proveedor() == pe.edu.virgenmaria.cuentasclaras.comprobantes.model.ProveedorComprobantes.SIMULADO;
+		return ose.actual().simulado();
 	}
 
 	private SerieComprobante bloquear(TipoComprobante tipo) {
-		return bloquear(tipo, propiedades.serieDe(tipo));
+		return bloquear(tipo, ose.actual().serieDe(tipo));
 	}
 
 	private SerieComprobante bloquear(TipoComprobante tipo, String serie) {
+		return bloquear(tipo, serie, null);
+	}
+
+	/** {@code proveedor}: el de la serie si hay que abrirla ({@code null}: el del OSE de hoy). */
+	private SerieComprobante bloquear(TipoComprobante tipo, String serie,
+			pe.edu.virgenmaria.cuentasclaras.comprobantes.model.ProveedorComprobantes proveedor) {
 		return series.bloquear(serie).orElseGet(() -> {
 			try {
-				apertura.crearSiFalta(tipo, serie);
+				apertura.crearSiFalta(tipo, serie, proveedor);
 			}
 			catch (DataIntegrityViolationException otraLaCreo) {
 				// Otro cobro la creó a la vez: se usa esa.

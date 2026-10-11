@@ -93,7 +93,7 @@ public class AlertasCaja implements AlertasRevision {
 
 	private final PropiedadesCaja propiedades;
 
-	private final pe.edu.virgenmaria.cuentasclaras.comprobantes.config.PropiedadesComprobantes seriesConfiguradas;
+	private final pe.edu.virgenmaria.cuentasclaras.comprobantes.service.OseDelColegio oseDelColegio;
 
 	private final pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService auditoria;
 
@@ -107,11 +107,11 @@ public class AlertasCaja implements AlertasRevision {
 			PagoRepository pagos, AnulacionPagoRepository anulaciones, VerificacionBancariaRepository verificaciones,
 			SolicitudCambioRepository solicitudes, SerieComprobanteRepository series, ComprobanteRepository comprobantes,
 			NombresUsuarios nombres, PropiedadesCaja propiedades,
-			pe.edu.virgenmaria.cuentasclaras.comprobantes.config.PropiedadesComprobantes seriesConfiguradas,
+			pe.edu.virgenmaria.cuentasclaras.comprobantes.service.OseDelColegio oseDelColegio,
 			pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService auditoria, Clock reloj, CalendarioHabil calendario, SemillasMuestreo semillas) {
 		this.semillas = semillas;
 		this.calendario = calendario;
-		this.seriesConfiguradas = seriesConfiguradas;
+		this.oseDelColegio = oseDelColegio;
 		this.auditoria = auditoria;
 		this.cajas = cajas;
 		this.cierres = cierres;
@@ -240,8 +240,9 @@ public class AlertasCaja implements AlertasRevision {
 	}
 
 	private void huecosEnSeries(List<AlertaRevision> alertas) {
-		java.util.Set<String> configuradas = java.util.Set.of(seriesConfiguradas.serieBoleta(),
-				seriesConfiguradas.serieFactura(), seriesConfiguradas.serieNotaBoleta(), seriesConfiguradas.serieNotaFactura());
+		// Sprint 8, tanda 2: las del entorno y las de todos los conectores OSE que tuvo el colegio (un cambio de OSE no es
+		// una serie «fuera del sistema»).
+		java.util.Set<String> configuradas = oseDelColegio.seriesConocidas();
 		for (SerieComprobante serie : series.findAll()) {
 			if (!configuradas.contains(serie.getSerie())) {
 				alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Existe la serie " + serie.getSerie() + " con "

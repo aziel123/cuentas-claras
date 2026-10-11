@@ -23,6 +23,8 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM primera_direccion");
 		// Sprint 8, tanda 1 (V28): la primera Promotoría apunta al titular y al operador; el logo, a su colegio.
 		jdbc.update("DELETE FROM primera_promotoria");
+		// Sprint 8, tanda 2 (V29): los conectores apuntan a su solicitud y a su colegio.
+		jdbc.update("DELETE FROM conector_colegio");
 		jdbc.update("DELETE FROM colegio_logo");
 		jdbc.update("UPDATE usuario SET estado_solicitud_id = NULL WHERE estado_solicitud_id IS NOT NULL");
 		// Sprint 7, tanda 1 (V24): el registro de respaldos (técnico, sin colegio; en MySQL solo lo escribe cc_respaldo).

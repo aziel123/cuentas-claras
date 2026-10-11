@@ -123,6 +123,35 @@ public final class ClaveFirma {
 		return "configuracion_colegio:" + id(colegioId) + ":" + Objects.requireNonNull(clave, "clave") + ":" + version;
 	}
 
+	/**
+	 * Sprint 8, tanda 2 (sección 3.6): quien propone un conector firma su propuesta (la clave pública opaca del conector,
+	 * que aún no tiene id). trg_conector_colegio_nace la exige: con la clave de cc_app nadie propone a nombre de otro.
+	 */
+	public static String conectorPropuesto(String clavePublica) {
+		return "conector_colegio:" + java.util.UUID.fromString(Objects.requireNonNull(clavePublica, "clavePublica")) + ":PROPUESTO";
+	}
+
+	/** Sprint 8, tanda 2: quien rechaza el cambio de un conector lo firma (trg_conector_colegio_estado). */
+	public static String conectorRechazado(Long conectorId) {
+		return "conector_colegio:" + id(conectorId) + ":RECHAZADO";
+	}
+
+	/**
+	 * Sprint 8, tanda 2 (sección 3.5): Promotoría acepta que el colegio empieza sin deudas anteriores (no hay lote de saldo
+	 * inicial). La firma es el registro: única por colegio y clave, de solo inserción.
+	 */
+	public static String colegioSinSaldoInicial(Long colegioId) {
+		return "colegio:" + id(colegioId) + ":SIN_SALDO_INICIAL";
+	}
+
+	/**
+	 * Sprint 8, tanda 2 (sección 3.5): Promotoría acepta usar el comprobante simulado (o el de pruebas del OSE) y emitir su
+	 * comprobante legal aparte.
+	 */
+	public static String colegioOseSimulado(Long colegioId) {
+		return "colegio:" + id(colegioId) + ":OSE_SIMULADO";
+	}
+
 	private static Long id(Long id) {
 		return Objects.requireNonNull(id, "id");
 	}

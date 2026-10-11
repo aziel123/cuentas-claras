@@ -34,12 +34,16 @@ public class ConsultaComprobantes {
 
 	private final PropiedadesComprobantes propiedades;
 
+	private final OseDelColegio ose;
+
 	private final Clock reloj;
 
 	/** Sprint 7, tanda 2: el adelanto lo escribe sistema.ose. */
 	private final AdelantosEnvio adelantos;
 
-	public ConsultaComprobantes(ComprobanteRepository comprobantes, PropiedadesComprobantes propiedades, Clock reloj, AdelantosEnvio adelantos) {
+	public ConsultaComprobantes(ComprobanteRepository comprobantes, PropiedadesComprobantes propiedades, Clock reloj,
+			AdelantosEnvio adelantos, OseDelColegio ose) {
+		this.ose = ose;
 		this.adelantos = adelantos;
 		this.comprobantes = comprobantes;
 		this.propiedades = propiedades;
@@ -77,7 +81,7 @@ public class ConsultaComprobantes {
 						EnumSet.of(EstadoEnvio.ACEPTADO, EstadoEnvio.OBSERVADO), hoy.atStartOfDay(),
 						hoy.plusDays(1).atStartOfDay())
 				.stream().map(c -> fila(c, plazo, null)).toList();
-		return new BandejaComprobantes(hoy, plazo, propiedades.proveedor() == ProveedorComprobantes.SIMULADO, rechazados,
+		return new BandejaComprobantes(hoy, plazo, ose.actual().simulado(), rechazados,
 				porVencer, pendientes, enviados, aceptadosHoy);
 	}
 

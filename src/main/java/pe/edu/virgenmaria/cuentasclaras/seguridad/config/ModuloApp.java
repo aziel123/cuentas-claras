@@ -59,6 +59,12 @@ public enum ModuloApp {
 	PUESTA_EN_MARCHA("Puesta en marcha", "Lo que falta para que el colegio empiece a cobrar, y el paso a producción.",
 			"Sprint 8", true, "/puesta-en-marcha", new String[] { "/puesta-en-marcha", "/puesta-en-marcha/**" },
 			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+	// Sprint 8, tanda 2 (sección 3.6): los conectores del colegio (OSE, pasarela, cuenta bancaria y recaudación). Proponer
+	// es de Promotoría o Administración y aprobar, de otra persona de Promotoría o Dirección (en la bandeja); Dirección
+	// los ve. Los servicios lo exigen también con @PreAuthorize.
+	CONECTORES("Conectores", "Adónde entra el dinero del colegio y quién emite sus boletas: cada cambio lo aprueba otra "
+			+ "persona.", "Sprint 8", true, "/conectores", new String[] { "/conectores", "/conectores/**" },
+			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 	COLEGIO("Colegio", "Años escolares, grados y secciones.", "Sprint 2", true, "/colegio",
 			new String[] { "/colegio", "/colegio/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 	ALUMNOS("Alumnos y apoderados", "Fichas de alumnos y familias, y matrícula en cada año.", "Sprint 2", true,
@@ -152,6 +158,12 @@ public enum ModuloApp {
 	public static final String RUTAS_WEBHOOK = "/webhooks/**";
 
 	public static final String RUTA_WEBHOOK_PASARELA = "/webhooks/pasarela/*/*";
+
+	/**
+	 * Sprint 8, tanda 2 (sección 3.6, E15): el aviso de la pasarela de UN conector del colegio, por su clave pública opaca
+	 * (un UUID, no el id del colegio). La firma se valida con el secreto de ESE conector.
+	 */
+	public static final String RUTA_WEBHOOK_PASARELA_CONECTOR = "/webhooks/pasarela/*";
 
 	/** Sprint 5: avisos de estado de WhatsApp (POST firmado) y su verificación (GET con hub.challenge). */
 	public static final String RUTA_WEBHOOK_WHATSAPP = "/webhooks/whatsapp/*";

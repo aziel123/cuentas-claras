@@ -58,9 +58,13 @@ public class ConsultaRecaudacion {
 
 	private final PropiedadesRecaudacion propiedades;
 
+	/** Sprint 8, tanda 2: el banco y la modalidad del conector del colegio (o, sin conector, del entorno). */
+	private final RecaudacionDelColegio delColegio;
+
 	public ConsultaRecaudacion(LoteRecaudacionRepository lotes, LineaRecaudacionRepository lineas,
 			ArchivoCargadoRepository archivos, PagoRepository pagos, SolicitudCambioRepository solicitudes,
-			AuditoriaService auditoria, PropiedadesRecaudacion propiedades) {
+			AuditoriaService auditoria, PropiedadesRecaudacion propiedades, RecaudacionDelColegio delColegio) {
+		this.delColegio = delColegio;
 		this.lotes = lotes;
 		this.lineas = lineas;
 		this.archivos = archivos;
@@ -80,7 +84,7 @@ public class ConsultaRecaudacion {
 				.toList();
 		return new RecaudacionLista(recientes.stream().filter(l -> l.estado().equals(EstadoLote.CARGADO.name())).toList(),
 				recientes.stream().filter(l -> !l.estado().equals(EstadoLote.CARGADO.name())).toList(), excepciones,
-				propiedades.banco().etiqueta(), propiedades.modalidad() == pe.edu.virgenmaria.cuentasclaras.recaudacion
+				delColegio.banco().etiqueta(), delColegio.modalidad() == pe.edu.virgenmaria.cuentasclaras.recaudacion
 						.model.ModalidadRecaudacion.CON_BASE_DE_DEUDAS ? "Con base de deudas" : "Solo con el código del "
 								+ "alumno");
 	}

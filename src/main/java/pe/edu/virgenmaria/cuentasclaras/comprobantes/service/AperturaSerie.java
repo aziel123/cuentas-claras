@@ -3,7 +3,6 @@ package pe.edu.virgenmaria.cuentasclaras.comprobantes.service;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import pe.edu.virgenmaria.cuentasclaras.comprobantes.config.PropiedadesComprobantes;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.SerieComprobante;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.repository.SerieComprobanteRepository;
@@ -20,23 +19,31 @@ public class AperturaSerie {
 
 	private final SerieComprobanteRepository series;
 
-	private final PropiedadesComprobantes propiedades;
+	private final OseDelColegio ose;
 
-	public AperturaSerie(SerieComprobanteRepository series, PropiedadesComprobantes propiedades) {
+	public AperturaSerie(SerieComprobanteRepository series, OseDelColegio ose) {
 		this.series = series;
-		this.propiedades = propiedades;
+		this.ose = ose;
 	}
 
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void crearSiFalta(TipoComprobante tipo) {
-		crearSiFalta(tipo, propiedades.serieDe(tipo));
+		crearSiFalta(tipo, ose.actual().serieDe(tipo));
 	}
 
 	/** Para las series de notas de crédito (BC01, FC01), que dependen de la letra del comprobante que anulan. */
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void crearSiFalta(TipoComprobante tipo, String serie) {
+		crearSiFalta(tipo, serie, null);
+	}
+
+	/** Sprint 8, tanda 2: con el proveedor indicado (la nota de un comprobante de otro OSE); {@code null}, el de hoy. */
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public void crearSiFalta(TipoComprobante tipo, String serie,
+			pe.edu.virgenmaria.cuentasclaras.comprobantes.model.ProveedorComprobantes proveedor) {
 		if (!series.existsBySerie(serie)) {
-			series.save(SerieComprobante.nueva(tipo, serie, propiedades.proveedor()));
+			// Sprint 8, tanda 2: con el proveedor del OSE del colegio (su conector vigente o, sin conector, el del entorno).
+			series.save(SerieComprobante.nueva(tipo, serie, proveedor == null ? ose.actual().proveedor() : proveedor));
 		}
 	}
 }

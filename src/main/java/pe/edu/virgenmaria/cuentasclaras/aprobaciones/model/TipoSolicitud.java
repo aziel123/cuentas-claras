@@ -36,7 +36,11 @@ public enum TipoSolicitud {
 	// Correcciones del sprint 7 (observación de QA): desactivar o reactivar una cuenta con Promotoría o Dirección. Lo pide
 	// Promotoría; lo aprueba OTRA persona de Promotoría o Dirección (nunca quien lo pidió ni el titular). En MySQL,
 	// trg_usuario_identidad lo exige; el colegio nunca queda sin Promotoría activa.
-	ESTADO_CUENTA("Desactivar o reactivar una cuenta de Promotoría o Dirección");
+	ESTADO_CUENTA("Desactivar o reactivar una cuenta de Promotoría o Dirección"),
+	// Sprint 8, tanda 2 (sección 3.6, E12): cambiar un conector del colegio (OSE, pasarela, cuenta bancaria o recaudación)
+	// es cambiar adónde entra el dinero. Lo propone Administración o Promotoría; lo aprueba OTRA persona de Promotoría o
+	// Dirección con su firma; si mueve dinero, una Promotoría participa. En MySQL lo exige trg_conector_colegio_estado.
+	CAMBIO_CONECTOR("Cambio de conector (adónde entra el dinero)");
 
 	private final String etiqueta;
 

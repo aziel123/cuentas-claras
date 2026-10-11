@@ -260,6 +260,14 @@ GRANT UPDATE (nombre, razon_social, direccion, correo_institucional, estado, pro
 -- Logo: se inserta y se cambia cuál está vigente; el contenido, su huella y sus medidas no cambian (1143). Nunca DELETE.
 GRANT INSERT, UPDATE (vigente, actualizado_en, version) ON cuentasclaras.colegio_logo TO 'cc_negocio';
 
+-- ===================== Sprint 8 · tanda 2 (V29): conectores por colegio =====================
+-- Los conectores se proponen (INSERT) y cambian de estado; tipo, proveedor, modo, configuración, secreto cifrado, su pista,
+-- la versión de la clave, la clave pública y quién lo propuso NO cambian (1143). Nunca DELETE. Qué transición vale lo
+-- decide trg_conector_colegio_estado (solicitud CAMBIO_CONECTOR aprobada y firmada por otra persona). La rotación de la
+-- clave maestra (java -jar ... recifrar-conectores) la hace cc_migrador.
+GRANT INSERT, UPDATE (estado, vigente, solicitud_id, resuelto_por, resuelto_en, prueba_ok, prueba_en, prueba_detalle,
+    actualizado_en, version) ON cuentasclaras.conector_colegio TO 'cc_negocio';
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se

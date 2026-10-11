@@ -66,7 +66,24 @@ public class EmisorNubefact implements EmisorElectronico {
 
 	/** Con el constructor del cliente que se quiera (las pruebas de contrato usan {@code MockRestServiceServer}). */
 	EmisorNubefact(PropiedadesComprobantes propiedades, RestClient.Builder constructor) {
-		this.cuenta = propiedades.nubefact();
+		this(propiedades.nubefact(), constructor);
+	}
+
+	/**
+	 * Sprint 8, tanda 2 (H4): el emisor de la cuenta de Nubefact de UN colegio (su conector OSE vigente: su ruta y su
+	 * token), con las mismas reglas que el del entorno (ruta https de la lista cerrada y token obligatorio).
+	 */
+	public static EmisorNubefact paraCuenta(PropiedadesComprobantes.Nubefact cuenta) {
+		return new EmisorNubefact(cuenta, RestClient.builder().requestFactory(fabrica(cuenta)));
+	}
+
+	/** Lo mismo, con el constructor del cliente que se quiera (pruebas). */
+	static EmisorNubefact paraCuenta(PropiedadesComprobantes.Nubefact cuenta, RestClient.Builder constructor) {
+		return new EmisorNubefact(cuenta, constructor);
+	}
+
+	private EmisorNubefact(PropiedadesComprobantes.Nubefact cuenta, RestClient.Builder constructor) {
+		this.cuenta = cuenta;
 		if (!VerificadorConfiguracion.rutaPermitida(cuenta.ruta(), cuenta.dominiosPermitidos())
 				|| cuenta.token() == null || cuenta.token().isBlank()) {
 			throw new IllegalStateException("Nubefact necesita una ruta https de un dominio permitido y su token.");

@@ -59,6 +59,12 @@ public class CuentasDePrueba implements InitializingBean, org.springframework.bo
 
 	private final pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository colegios;
 
+	@org.springframework.beans.factory.annotation.Autowired
+	private org.springframework.beans.factory.ObjectProvider<pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion> firma;
+
+	@org.springframework.beans.factory.annotation.Autowired
+	private org.springframework.transaction.PlatformTransactionManager transacciones;
+
 	private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
 	public CuentasDePrueba(UsuarioRepository usuarios, PasswordEncoder codificador, ServicioUsuarios servicio,
@@ -172,7 +178,32 @@ public class CuentasDePrueba implements InitializingBean, org.springframework.bo
 					java.util.EnumSet.of(Rol.CAJA));
 		}
 		ponerSesion(promotor);
-		produccion.getObject().pasar();
+		pasarAProduccion(colegioId, promotor);
+	}
+
+	/**
+	 * Sprint 8, tanda 2: la aplicación ya exige la lista de verificación COMPLETA para pasar a producción (respaldo al día,
+	 * conectores, planes...), que en el job mysql no existe. La base exige lo suyo (trg_colegio_cambio: una Promotoría
+	 * activa con su firma, una Dirección y una Caja activas): aquí se cumple eso, por el mismo camino de la base que usa
+	 * {@code PasoAProduccion} (la firma de la sesión de la Promotoría y el cambio de estado con cc_app). La regla de la lista
+	 * la prueban {@code PasoAProduccionTest} (H2) y {@code AuditoriaSprint8MySqlTest}.
+	 */
+	public void pasarAProduccion(long colegioId, Usuario promotor) {
+		SecurityContext anterior = SecurityContextHolder.getContext();
+		try {
+			ponerSesion(promotor);
+			new org.springframework.transaction.support.TransactionTemplate(transacciones).executeWithoutResult(t -> {
+				firma.getObject().firmar(pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma
+						.colegioProduccion(colegioId));
+				var colegio = colegios.findById(colegioId).orElseThrow();
+				colegio.pasarAProduccion(promotor.getNombreUsuario(), java.time.LocalDateTime.now(java.time.Clock.system(
+						pe.edu.virgenmaria.cuentasclaras.comun.config.ConfiguracionTiempo.ZONA_LIMA)));
+				colegios.saveAndFlush(colegio);
+			});
+		}
+		finally {
+			SecurityContextHolder.setContext(anterior);
+		}
 	}
 
 	/** La instancia de MySQL real, o {@code null} con H2. */

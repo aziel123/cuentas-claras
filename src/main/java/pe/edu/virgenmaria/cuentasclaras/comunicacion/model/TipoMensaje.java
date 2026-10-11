@@ -26,7 +26,10 @@ public enum TipoMensaje {
 	// Sprint 6 · tanda 2: al personal de Promotoría (y de Dirección, las anulaciones por aprobar). Los crea solo
 	// sistema.panel (trg_mensaje_nace).
 	RESUMEN_DIARIO("Resumen del día", false),
-	ALERTA_PROMOTORIA("Alerta para Promotoría", false);
+	ALERTA_PROMOTORIA("Alerta para Promotoría", false),
+	// Sprint 8 · tanda 2: a TODA la Promotoría y al correo externo de control, en la misma transacción del cambio.
+	CONECTOR_VIGENTE("Cambio de conector del colegio", false),
+	COLEGIO_EN_PRODUCCION("Colegio en producción", false);
 
 	private final String etiqueta;
 

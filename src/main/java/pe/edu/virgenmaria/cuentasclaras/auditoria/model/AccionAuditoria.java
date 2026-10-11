@@ -341,6 +341,20 @@ public enum AccionAuditoria {
 	/** Dirección aprobó la versión vigente del aviso de privacidad del colegio. */
 	PRIVACIDAD_COLEGIO_APROBADA("Aprobó el aviso de privacidad del colegio", false),
 
+	// Sprint 8, tanda 2 (puesta en marcha y conectores)
+	/** Se resalta: alguien propuso cambiar un conector del colegio (OSE, pasarela, cuenta bancaria o recaudación). */
+	CONECTOR_PROPUESTO("Propuso cambiar un conector del colegio", true),
+	/** Se probó la conexión de un conector propuesto (con su resultado; nunca el secreto). */
+	CONECTOR_PROBADO("Probó la conexión de un conector propuesto", false),
+	/** Se resalta: un conector entró en vigencia (cambió adónde entra el dinero o quién emite las boletas). */
+	CONECTOR_VIGENTE("Un conector del colegio entró en vigencia", true),
+	/** Se resalta: se rechazó el cambio de un conector. */
+	CONECTOR_RECHAZADO("Rechazó el cambio de un conector del colegio", true),
+	/** Se resalta: Promotoría firmó que el colegio empieza sin deudas anteriores (sin lote de saldo inicial). */
+	COLEGIO_SIN_SALDO_INICIAL("Firmó que el colegio empieza sin deudas anteriores", true),
+	/** Se resalta: Promotoría firmó que usa el comprobante simulado y emite su comprobante legal aparte. */
+	COLEGIO_OSE_SIMULADO_ACEPTADO("Firmó que usa el comprobante simulado y emite el legal aparte", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

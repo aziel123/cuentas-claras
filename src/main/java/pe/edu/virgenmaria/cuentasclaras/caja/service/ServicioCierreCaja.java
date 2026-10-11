@@ -78,7 +78,9 @@ public class ServicioCierreCaja {
 
 	public ServicioCierreCaja(CajaDiariaRepository cajas, CierreCajaRepository cierres, DepositoCajaRepository depositos,
 			LibroCaja libro, RegistroSolicitudes solicitudes, AuditoriaService auditoria, NombresUsuarios nombres,
-			PropiedadesCaja propiedades, ApplicationEventPublisher eventos, Clock reloj) {
+			PropiedadesCaja propiedades, ApplicationEventPublisher eventos, Clock reloj,
+			pe.edu.virgenmaria.cuentasclaras.conectores.service.ConectoresColegio conectores) {
+		this.conectores = conectores;
 		this.cajas = cajas;
 		this.cierres = cierres;
 		this.depositos = depositos;
@@ -309,10 +311,24 @@ public class ServicioCierreCaja {
 		return cajas.abiertasHasta(cajera, hoy).stream().findFirst();
 	}
 
+	/**
+	 * Dónde se deposita el efectivo. Sprint 8, tanda 2 (sección 3.6): la cuenta del conector CUENTA_BANCARIA vigente del
+	 * colegio (la misma del extracto que se concilia; cambiarla lo aprueba otra persona y avisa a toda la Promotoría). Sin
+	 * conector, la lista del entorno ({@code cuentasclaras.caja.cuentas-deposito}; en una instalación COMPARTIDA el
+	 * verificador no la admite).
+	 */
 	List<String> cuentas() {
+		var conector = conectores.vigente(pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector.CUENTA_BANCARIA);
+		if (conector.isPresent()) {
+			var cuenta = conector.get().configuracionDe(
+					pe.edu.virgenmaria.cuentasclaras.conectores.dto.ConfiguracionConector.CuentaBancaria.class);
+			return List.of(conector.get().proveedor().etiqueta() + " " + cuenta.numero());
+		}
 		return Arrays.stream(propiedades.cuentasDeposito().split(";")).map(String::strip).filter(s -> !s.isEmpty())
 				.toList();
 	}
+
+	private final pe.edu.virgenmaria.cuentasclaras.conectores.service.ConectoresColegio conectores;
 
 	private LocalDate hoy() {
 		return LocalDate.now(reloj);

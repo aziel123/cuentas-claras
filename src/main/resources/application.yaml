@@ -101,6 +101,15 @@ cuentasclaras:
     operadores: ${CC_OPERADORES:}
     max-colegios: 25                 # decisión 138: tope de una instalación compartida
     max-alumnos: 8000
+  conectores:
+    # Sprint 8, tanda 2 (sección 3.6, decisión 118): los secretos de los conectores de cada colegio (token del OSE, llaves
+    # de la pasarela) van cifrados con AES-256-GCM; la clave maestra (32 bytes en base64) vive en el gestor de secretos.
+    # Obligatoria en una instalación COMPARTIDA. Rotación: CC_CLAVE_CONECTORES nueva con su versión, la anterior en
+    # CC_CLAVE_CONECTORES_ANTERIOR y «java -jar cuentas-claras.jar recifrar-conectores» con cc_migrador.
+    clave: ${CC_CLAVE_CONECTORES:}
+    clave-version: ${CC_CLAVE_CONECTORES_VERSION:1}
+    clave-anterior: ${CC_CLAVE_CONECTORES_ANTERIOR:}
+    aviso-cambio-dias: 7             # la alerta CRÍTICA de un cambio de conector queda 7 días en «Para revisar»
   colegio:
     logo-max-subida: 1MB             # PNG o JPEG; se reescribe como PNG de 400 px y 200 KB como máximo
     logo-max-lado: 400

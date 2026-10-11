@@ -7,7 +7,10 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
--- Versión de la migración V28 (sprint 8, tanda 1): 80 triggers y 6 funciones. Nuevos: trg_colegio_nace, trg_colegio_cambio,
+-- Versión de la migración V29 (sprint 8, tanda 2): 82 triggers y 6 funciones. Nuevos: trg_conector_colegio_nace (un
+-- conector nace PROPUESTO, por Promotoría o Administración con su firma) y trg_conector_colegio_estado (entra en vigencia
+-- solo con su CAMBIO_CONECTOR aprobada y firmada por otra persona, con una Promotoría de por medio si mueve dinero).
+-- Versión anterior (V28, sprint 8, tanda 1): 80 triggers y 6 funciones. Nuevos: trg_colegio_nace, trg_colegio_cambio,
 -- trg_primera_promotoria_nace, trg_configuracion_colegio_registro y trg_configuracion_colegio_cambio, y las funciones
 -- cc_operador_activo y cc_colegio_en_produccion. Versión nueva de trg_usuario_nace, trg_usuario_rol_alta (el operador de
 -- la plataforma y la primera Promotoría), trg_pago_registro y trg_mensaje_nace (nada de dinero ni recordatorios en un
@@ -2258,6 +2261,87 @@ BEGIN
                 AND cc_firma_valida((SELECT c.id FROM colegio c WHERE c.tipo = 'PLATAFORMA'),
                     CONCAT('configuracion_colegio:', NEW.colegio_id, ':', NEW.clave, ':', NEW.version), NEW.actualizado_por))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la configuracion del colegio la cambia el operador con su firma';
+    END IF;
+END$$
+
+-- Sprint 8 · tanda 2 (V29, sección 3.6): un conector nace PROPUESTO, sin solicitud ni resolución, propuesto por una
+-- persona activa de Promotoría o Administración de su colegio con la firma de SU sesión (con la clave de cc_app nadie
+-- propone a nombre de otra persona: así la regla «una Promotoría participa» no se cumple con un nombre escrito a mano).
+DROP TRIGGER IF EXISTS trg_conector_colegio_nace$$
+CREATE TRIGGER trg_conector_colegio_nace BEFORE INSERT ON conector_colegio FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> 'PROPUESTO') OR NEW.vigente IS NOT NULL OR NEW.solicitud_id IS NOT NULL
+            OR NEW.resuelto_por IS NOT NULL OR NEW.resuelto_en IS NOT NULL
+            OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.propuesto_por AND u.activo
+                  AND u.apoderado_id IS NULL AND r.rol IN ('PROMOTOR', 'ADMINISTRACION'))
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('conector_colegio:', NEW.clave_publica, ':PROPUESTO'),
+                NEW.propuesto_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un conector nace propuesto por Promotoria o Administracion de su colegio, con su firma';
+    END IF;
+END$$
+
+-- Cambiar adónde entra el dinero (sección 3.6, E12): un PROPUESTO entra en vigencia solo con SU CAMBIO_CONECTOR aprobada
+-- y firmada (en esta misma transacción: 5 minutos) por OTRA persona activa de Promotoría o Dirección, con la prueba de
+-- conexión correcta; en la pasarela, la cuenta bancaria y la recaudación, con una Promotoría entre quien propone y quien
+-- aprueba. Un VIGENTE solo pasa a REEMPLAZADO cuando otro del mismo tipo, aprobado y firmado, entra en su lugar; un
+-- PROPUESTO se RECHAZA con la firma de quien rechaza; nada más cambia de estado. Solo un PROPUESTO cambia sin cambiar de
+-- estado (su prueba de conexión y, una vez, el enlace con su solicitud). Tipo, proveedor, modo, configuración, secreto y
+-- quién propuso no cambian (GRANT por columna: 1143). La rotación de la clave maestra (recifrar-conectores, con
+-- cc_migrador) solo cambia el secreto cifrado y su versión, hacia una versión mayor.
+DROP TRIGGER IF EXISTS trg_conector_colegio_estado$$
+CREATE TRIGGER trg_conector_colegio_estado BEFORE UPDATE ON conector_colegio FOR EACH ROW
+BEGIN
+    DECLARE v_rotacion BOOLEAN DEFAULT SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_migrador'
+        AND NEW.estado <=> OLD.estado AND NEW.vigente <=> OLD.vigente AND NEW.solicitud_id <=> OLD.solicitud_id
+        AND NEW.resuelto_por <=> OLD.resuelto_por AND NEW.resuelto_en <=> OLD.resuelto_en
+        AND NEW.prueba_ok <=> OLD.prueba_ok AND NEW.prueba_en <=> OLD.prueba_en
+        AND NEW.prueba_detalle <=> OLD.prueba_detalle AND NEW.tipo <=> OLD.tipo AND NEW.proveedor <=> OLD.proveedor
+        AND NEW.modo <=> OLD.modo AND NEW.configuracion <=> OLD.configuracion AND NEW.clave_publica <=> OLD.clave_publica
+        AND NEW.propuesto_por <=> OLD.propuesto_por AND NEW.secreto_pista <=> OLD.secreto_pista
+        AND OLD.secreto_cifrado IS NOT NULL AND NEW.secreto_cifrado IS NOT NULL
+        AND COALESCE(NEW.clave_version > OLD.clave_version, FALSE);
+    IF NOT v_rotacion THEN
+        IF OLD.estado = 'PROPUESTO' AND NEW.estado <=> 'VIGENTE' THEN
+            IF NOT (COALESCE(NEW.prueba_ok, FALSE) AND NEW.resuelto_por IS NOT NULL
+                    AND NOT (NEW.resuelto_por <=> OLD.propuesto_por) AND NEW.solicitud_id <=> OLD.solicitud_id
+                    AND cc_solicitud_firmada(NEW.solicitud_id)
+                    AND cc_firma_valida(NEW.colegio_id, CONCAT('solicitud_cambio:', NEW.solicitud_id, ':APROBADA'),
+                        NEW.resuelto_por)
+                    AND EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id
+                        AND s.colegio_id = NEW.colegio_id AND s.tipo = 'CAMBIO_CONECTOR' AND s.entidad = 'conector_colegio'
+                        AND s.entidad_id = NEW.id AND s.solicitado_por = OLD.propuesto_por
+                        AND s.resuelto_por = NEW.resuelto_por)
+                    AND EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                        WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.resuelto_por AND u.activo
+                          AND r.rol IN ('PROMOTOR', 'DIRECTOR'))
+                    AND (NEW.tipo = 'OSE' OR EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                        WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario IN (OLD.propuesto_por, NEW.resuelto_por)
+                          AND u.activo AND r.rol = 'PROMOTOR'))) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el conector entra en vigencia con su solicitud aprobada y firmada por otra persona';
+            END IF;
+        ELSEIF OLD.estado = 'VIGENTE' AND NEW.estado <=> 'REEMPLAZADO' THEN
+            IF NOT (NEW.solicitud_id <=> OLD.solicitud_id) OR NOT (NEW.resuelto_por <=> OLD.resuelto_por)
+                    OR NOT (NEW.resuelto_en <=> OLD.resuelto_en) OR NOT (NEW.prueba_ok <=> OLD.prueba_ok)
+                    OR NOT EXISTS (SELECT 1 FROM conector_colegio c WHERE c.colegio_id = OLD.colegio_id
+                        AND c.tipo = OLD.tipo AND c.estado = 'PROPUESTO' AND c.id <> OLD.id
+                        AND cc_solicitud_firmada(c.solicitud_id)) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un conector vigente solo se reemplaza por otro aprobado';
+            END IF;
+        ELSEIF OLD.estado = 'PROPUESTO' AND NEW.estado <=> 'RECHAZADO' THEN
+            IF NOT (NEW.solicitud_id <=> OLD.solicitud_id) OR NEW.resuelto_por IS NULL
+                    OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('conector_colegio:', NEW.id, ':RECHAZADO'),
+                        NEW.resuelto_por) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el rechazo del conector lleva la firma de quien rechaza';
+            END IF;
+        ELSEIF NOT (NEW.estado <=> OLD.estado) OR OLD.estado <> 'PROPUESTO' THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: transicion de conector no permitida';
+        ELSEIF NOT (NEW.solicitud_id <=> OLD.solicitud_id) AND (OLD.solicitud_id IS NOT NULL
+                OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id
+                    AND s.colegio_id = NEW.colegio_id AND s.tipo = 'CAMBIO_CONECTOR' AND s.entidad = 'conector_colegio'
+                    AND s.entidad_id = NEW.id AND s.solicitado_por = OLD.propuesto_por)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el conector se enlaza una vez con SU solicitud de cambio';
+        END IF;
     END IF;
 END$$
 DELIMITER ;

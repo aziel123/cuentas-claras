@@ -390,7 +390,24 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			sinBorrado("colegio_logo"), columna("UPDATE colegio_logo SET sha256 = sha256 WHERE 1 = 0", "colegio_logo"),
 			// Sprint 8, tanda 1 (E9): un pago de un colegio que no está en producción (el colegio 0) lo rechaza
 			// trg_pago_registro antes que la FK (1644).
-			trigger(VerificadorPermisosBaseDatos.PAGO_EN_PREPARACION_IMPOSIBLE, "trg_pago_registro (versión del sprint 8)"));
+			trigger(VerificadorPermisosBaseDatos.PAGO_EN_PREPARACION_IMPOSIBLE, "trg_pago_registro (versión del sprint 8)"),
+			// Sprint 8, tanda 2 (E12, E14): un conector no se borra (1142), no cambia su configuración, su secreto ni quién
+			// lo propuso (1143) y no nace VIGENTE (trg_conector_colegio_nace: 1644).
+			sinBorrado("conector_colegio"),
+			columna("UPDATE conector_colegio SET secreto_cifrado = secreto_cifrado WHERE 1 = 0", "conector_colegio"),
+			columna("UPDATE conector_colegio SET configuracion = configuracion WHERE 1 = 0", "conector_colegio"),
+			columna("UPDATE conector_colegio SET propuesto_por = propuesto_por WHERE 1 = 0", "conector_colegio"),
+			trigger(VerificadorPermisosBaseDatos.CONECTOR_VIGENTE_IMPOSIBLE, "trg_conector_colegio_nace"));
+
+	/**
+	 * Sprint 8, tanda 2 (E12): un conector del colegio 0 que nace VIGENTE, sin solicitud ni firma (lo rechaza
+	 * trg_conector_colegio_nace antes que la FK: 1644).
+	 */
+	static final String CONECTOR_VIGENTE_IMPOSIBLE = "INSERT INTO conector_colegio (colegio_id, tipo, proveedor, modo, "
+			+ "configuracion, clave_publica, estado, vigente, propuesto_por, resuelto_por, resuelto_en, prueba_ok, creado_en, "
+			+ "creado_por, actualizado_en) VALUES (0, 'CUENTA_BANCARIA', 'BCP', 'REAL', '{}', "
+			+ "'00000000-0000-4000-8000-000000000000', 'VIGENTE', TRUE, 'verificador', 'otro.verificador', NOW(6), TRUE, "
+			+ "NOW(6), 'verificador', NOW(6))";
 
 	/** Sprint 8, tanda 1: un colegio creado por cc_app (sin GRANT: 1142). */
 	static final String COLEGIO_IMPOSIBLE = "INSERT INTO colegio (nombre, tipo, estado, activo, creado_por, actualizado_en) "
@@ -489,7 +506,12 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			sinBorrado("colegio"), sinBorrado("primera_promotoria"), soloInsercion("primera_promotoria"),
 			sinBorrado("configuracion_colegio"), sinBorrado("colegio_logo"),
 			columna("UPDATE colegio SET tipo = tipo WHERE 1 = 0", "colegio"),
-			columna("UPDATE configuracion_colegio SET clave = clave WHERE 1 = 0", "configuracion_colegio"));
+			columna("UPDATE configuracion_colegio SET clave = clave WHERE 1 = 0", "configuracion_colegio"),
+			// Sprint 8, tanda 2 (E12, E14): tampoco con cc_sistema nace un conector VIGENTE (1644), se borra (1142) ni cambia
+			// su secreto (1143).
+			trigger(VerificadorPermisosBaseDatos.CONECTOR_VIGENTE_IMPOSIBLE, "trg_conector_colegio_nace"),
+			sinBorrado("conector_colegio"),
+			columna("UPDATE conector_colegio SET secreto_cifrado = secreto_cifrado WHERE 1 = 0", "conector_colegio"));
 
 	/** 1142 (o 1143): solo cc_sistema la escribe. */
 	private static SentenciaProhibida soloSistema(String sql, String riesgo) {
@@ -575,7 +597,9 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_usuario_rol_alta", "trg_usuario_rol_baja",
 			// Sprint 8, tanda 1 (V28).
 			"trg_colegio_nace", "trg_colegio_cambio", "trg_primera_promotoria_nace", "trg_configuracion_colegio_registro",
-			"trg_configuracion_colegio_cambio");
+			"trg_configuracion_colegio_cambio",
+			// Sprint 8, tanda 2 (V29).
+			"trg_conector_colegio_nace", "trg_conector_colegio_estado");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -1003,6 +1027,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		LOG.info("Permisos del respaldo verificados: la aplicación no registra, edita ni borra respaldos.");
 		LOG.info("Permisos de la Ley 29733 verificados: nadie edita ni borra el registro de quién vio datos personales, ni "
 				+ "cambia el derecho de un pedido sobre datos personales.");
+		LOG.info("Permisos y triggers de los conectores por colegio verificados: nadie borra un conector, cambia su secreto "
+				+ "o su configuración, ni lo pone en vigencia sin la aprobación firmada de otra persona.");
 		return escribe;
 	}
 

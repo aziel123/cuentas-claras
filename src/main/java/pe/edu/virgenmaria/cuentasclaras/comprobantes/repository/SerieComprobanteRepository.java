@@ -19,6 +19,9 @@ public interface SerieComprobanteRepository extends Repository<SerieComprobante,
 
 	boolean existsBySerie(String serie);
 
+	/** Sprint 8, tanda 2: la serie (si ya existe en el colegio) para validar un conector OSE antes de su vigencia. */
+	Optional<SerieComprobante> findBySerie(String serie);
+
 	/** Bloquea la serie para tomar el número siguiente: dos cobros a la vez no toman el mismo número. */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select s from SerieComprobante s where s.serie = :serie")

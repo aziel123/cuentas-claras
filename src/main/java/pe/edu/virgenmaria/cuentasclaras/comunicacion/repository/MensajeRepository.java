@@ -59,6 +59,9 @@ public interface MensajeRepository extends Repository<Mensaje, Long> {
 
 	long countByProveedor(ProveedorMensajeria proveedor);
 
+	/** Sprint 8, tanda 2 (puesta en marcha): si a alguna de esas cuentas ya le salió un mensaje (enviado o entregado). */
+	boolean existsByUsuarioIdInAndEstadoIn(Collection<Long> usuarios, Collection<EstadoMensaje> estados);
+
 	/** QA-S5-4: si ya existe el recordatorio de una familia, tipo y fecha de vencimiento (la clave termina en la fecha). */
 	boolean existsByTipoAndFamiliaIdAndClaveEndingWith(TipoMensaje tipo, Long familiaId, String fin);
 

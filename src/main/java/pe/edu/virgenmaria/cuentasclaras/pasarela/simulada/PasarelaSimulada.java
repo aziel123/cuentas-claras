@@ -107,10 +107,23 @@ public class PasarelaSimulada implements PasarelaPagos {
 
 	@Override
 	public AvisoPasarela verificarAviso(byte[] cuerpo, Map<String, String> cabeceras) {
+		return verificar(cuerpo, cabeceras, secreto);
+	}
+
+	/** Sprint 8, tanda 2 (E15): con el secreto de los avisos del conector del colegio. */
+	@Override
+	public AvisoPasarela verificarAviso(byte[] cuerpo, Map<String, String> cabeceras, String secretoDelConector) {
+		if (secretoDelConector == null || secretoDelConector.length() < 16) {
+			throw new AvisoNoAutenticoException("el conector no tiene secreto de avisos");
+		}
+		return verificar(cuerpo, cabeceras, secretoDelConector.getBytes(StandardCharsets.UTF_8));
+	}
+
+	private AvisoPasarela verificar(byte[] cuerpo, Map<String, String> cabeceras, byte[] clave) {
 		String firma = cabeceras == null ? null : cabeceras.entrySet().stream()
 				.filter(c -> CABECERA_FIRMA.equalsIgnoreCase(c.getKey())).map(Map.Entry::getValue).findFirst().orElse(null);
 		if (firma == null || !MessageDigest.isEqual(firma.strip().toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8),
-				firmar(cuerpo).getBytes(StandardCharsets.UTF_8))) {
+				firmar(cuerpo, clave).getBytes(StandardCharsets.UTF_8))) {
 			throw new AvisoNoAutenticoException("firma del aviso no válida");
 		}
 		Map<String, String> campos = leer(cuerpo);
@@ -254,9 +267,22 @@ public class PasarelaSimulada implements PasarelaPagos {
 
 	/** HMAC-SHA256 del cuerpo con el secreto, en hexadecimal. */
 	public String firmar(byte[] cuerpo) {
+		return firmar(cuerpo, secreto);
+	}
+
+	/**
+	 * Sprint 8, tanda 2: el mismo aviso firmado con el secreto de los avisos del conector del colegio (como lo firmaría la
+	 * pasarela configurada con ese secreto).
+	 */
+	public AvisoFirmado firmadoCon(AvisoFirmado aviso, String secretoDelConector) {
+		byte[] clave = Objects.requireNonNull(secretoDelConector, "secreto").getBytes(StandardCharsets.UTF_8);
+		return new AvisoFirmado(aviso.cuerpo(), Map.of(CABECERA_FIRMA, firmar(aviso.cuerpo(), clave)));
+	}
+
+	private static String firmar(byte[] cuerpo, byte[] clave) {
 		try {
 			Mac mac = Mac.getInstance("HmacSHA256");
-			mac.init(new SecretKeySpec(secreto, "HmacSHA256"));
+			mac.init(new SecretKeySpec(clave, "HmacSHA256"));
 			return HexFormat.of().formatHex(mac.doFinal(cuerpo == null ? new byte[0] : cuerpo));
 		}
 		catch (GeneralSecurityException e) {

@@ -40,12 +40,27 @@
 		</table>
 	</section>
 
+	<section class="tarjeta" th:if="${puedePasar}" aria-labelledby="titulo-aceptos">
+		<h2 id="titulo-aceptos">Lo que firma la Promotoría</h2>
+		<p class="secundario">Dos pasos de la lista se pueden cumplir con tu firma, si así es el colegio. Quedan resaltados en la
+			bitácora y no se deshacen.</p>
+		<form method="post" th:action="@{/puesta-en-marcha/sin-saldo-inicial}" class="acciones acciones-izquierda" data-acepto="sin-saldo-inicial">
+			<button type="submit" class="btn btn-secundario">Firmar: el colegio empieza sin deudas anteriores</button>
+		</form>
+		<form method="post" th:action="@{/puesta-en-marcha/ose-simulado}" class="acciones acciones-izquierda" data-acepto="ose-simulado">
+			<button type="submit" class="btn btn-secundario">Firmar: uso el comprobante simulado y emito el legal aparte</button>
+		</form>
+	</section>
+
 	<section class="tarjeta" th:if="${lista.enPreparacion() and puedePasar}" aria-labelledby="titulo-produccion">
 		<h2 id="titulo-produccion">Pasar a producción</h2>
-		<p class="secundario">Solo la Promotoría, con la firma de su sesión. Hace falta al menos una Dirección y una Caja activas.
-			No tiene vuelta atrás: desde ese momento se registran pagos y salen los avisos a las familias.</p>
-		<p class="secundario" th:unless="${lista.completa()}" th:text="|Faltan ${lista.pendientes()} paso(s) obligatorio(s). Puedes pasar a producción con el equipo y los datos listos; lo demás se completa después.|">Faltan pasos</p>
-		<form method="post" th:action="@{/puesta-en-marcha/produccion}">
+		<p class="secundario">Solo la Promotoría, con la firma de su sesión y la lista obligatoria completa. No tiene vuelta
+			atrás: desde ese momento se registran pagos y salen los avisos a las familias. Toda la Promotoría y el correo externo
+			de control reciben un aviso.</p>
+		<th:block th:unless="${lista.completa()}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', |Faltan ${lista.pendientes()} paso(s) obligatorio(s): ${pendientes}.|)}"></div>
+		</th:block>
+		<form method="post" th:action="@{/puesta-en-marcha/produccion}" th:if="${lista.completa()}">
 			<button type="submit" class="btn btn-primario">Pasar el colegio a producción</button>
 		</form>
 	</section>

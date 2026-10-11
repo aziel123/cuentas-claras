@@ -7,6 +7,8 @@
 -- cc_negocio, solo INSERT) y lo purga el DBA a los 2 años (docs/operacion/mysql-usuarios.md).
 -- Sprint 8, tanda 1 (V28): sin usuarios nuevos. El operador de la plataforma usa cc_app (sus pantallas) y cc_sistema (el
 -- alta del colegio y la identidad), como cualquier persona.
+-- Sprint 8, tanda 2 (V29): sin usuarios nuevos. Los conectores de cada colegio los escribe cc_app (por el rol cc_negocio);
+-- la rotación de la clave maestra de sus secretos (java -jar ... recifrar-conectores) la hace cc_migrador, como migrar.
 -- En un MySQL administrado (Cloud SQL, RDS): este archivo, 02 y 03 los aplica el administrador del servicio. Los cuatro
 -- usuarios se crean AQUÍ, por SQL, nunca desde la consola del servicio: la consola les da su rol de administrador
 -- (cloudsqlsuperuser en Cloud SQL) y el verificador de prod no arranca (ve un rol de más). La marca
