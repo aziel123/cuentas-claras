@@ -24,8 +24,9 @@ public class LogoColegio extends BaseEntity {
 
 	public static final int MAX_BYTES = 204_800;
 
+	// Como archivo_cargado (LONGBLOB): sin columnDefinition, Hibernate valida otro tipo de BLOB en MySQL.
 	@Lob
-	@Column(nullable = false, updatable = false)
+	@Column(nullable = false, updatable = false, columnDefinition = "MEDIUMBLOB")
 	private byte[] contenido;
 
 	@Column(nullable = false, updatable = false, length = 64)

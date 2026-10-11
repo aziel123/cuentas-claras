@@ -5,3 +5,5 @@ mvnw text eol=lf
 Dockerfile text eol=lf
 docker-compose.yml text eol=lf
 *.xlsx binary
+# La lista de tablas vigiladas la lee respaldar.sh dentro de Linux (con CRLF, ninguna línea pasa su filtro).
+scripts/respaldo/*.txt text eol=lf

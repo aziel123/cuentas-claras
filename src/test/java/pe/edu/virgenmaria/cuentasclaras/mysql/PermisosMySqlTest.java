@@ -3321,7 +3321,9 @@ class PermisosMySqlTest {
 		java.util.Optional<Long> deHoy = fotoDeHoy();
 		org.junit.jupiter.api.Assumptions.assumeTrue(deHoy.isPresent(), "hoy no corresponde resumen (domingo o feriado)");
 		Long foto = deHoy.get();
-		String texto = jdbc.queryForObject("SELECT parametros FROM resumen_diario WHERE id = ?", String.class, foto);
+		// Sprint 8, tanda 1 (plantillas _v2): el mensaje lleva el nombre del colegio delante del texto de su foto.
+		String texto = jdbc.queryForObject("SELECT CONCAT(c.nombre, CHAR(10 USING utf8mb4), r.parametros) FROM resumen_diario r "
+				+ "JOIN colegio c ON c.id = r.colegio_id WHERE r.id = ?", String.class, foto);
 		Usuario cajera = guardar("caja.p7." + sufijo, Rol.CAJA);
 		Usuario promotora = guardar("promo.p7." + sufijo, Rol.PROMOTOR);
 		Usuario directora = guardar("dir.p7." + sufijo, Rol.DIRECTOR);

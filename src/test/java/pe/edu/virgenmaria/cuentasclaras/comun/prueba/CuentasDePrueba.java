@@ -106,7 +106,7 @@ public class CuentasDePrueba implements InitializingBean, org.springframework.bo
 		try {
 			int indice = 0;
 			for (var colegio : colegios.findByTipoOrderByIdAsc(pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoColegio.COLEGIO)) {
-				if (!colegio.enProduccion()) {
+				if (!colegio.enProduccion() && nacioFueraDelAlta(colegio.getId())) {
 					ponerEnMarcha(colegio.getId(), RUCS.get(indice % RUCS.size()));
 				}
 				indice++;
@@ -115,6 +115,17 @@ public class CuentasDePrueba implements InitializingBean, org.springframework.bo
 		finally {
 			SecurityContextHolder.setContext(anterior);
 		}
+	}
+
+	/**
+	 * Un colegio en preparación se pone en marcha aquí solo si no nació por el alta de la plataforma: el colegio 1 de una
+	 * base nueva (V28) o uno que el job insertó por SQL, como el DBA. Los que un paso anterior del job dio de alta por la
+	 * plataforma (creados por un operador) y dejó a propósito en preparación (AuditoriaSprint8MySqlTest, con o sin su
+	 * primera Promotoría) se quedan como los dejó su prueba.
+	 */
+	private boolean nacioFueraDelAlta(long colegioId) {
+		String creadoPor = jdbc.queryForObject("SELECT creado_por FROM colegio WHERE id = ?", String.class, colegioId);
+		return creadoPor == null || creadoPor.startsWith("migracion.");
 	}
 
 	private boolean conPermisosYTriggers() {
@@ -142,6 +153,8 @@ public class CuentasDePrueba implements InitializingBean, org.springframework.bo
 			servicioAlta.completarAlta(colegioId, new pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.AltaTitular
 					.DatosTitular(nombre, "Nombre de " + nombre, UsuariosDePrueba.celular(nombre), null));
 		}
+		// Desde aquí, el operador ya no crea cuentas en ese colegio (trg_usuario_nace): sin su sesión.
+		SecurityContextHolder.clearContext();
 		// El titular «activa» su cuenta: elige la clave de las pruebas (por la ruta de identidad, como la activación).
 		pe.edu.virgenmaria.cuentasclaras.comun.basedatos.RutaConexion.identidad(() -> ContextoColegio.en(colegioId, () -> {
 			Usuario titular = usuarios.findByNombreUsuario(nombre).orElseThrow();

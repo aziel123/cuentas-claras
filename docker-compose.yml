@@ -79,9 +79,11 @@ services:
       # La base está en el mismo equipo, en la red interna de Docker: aquí no se exige TLS (en un servidor real, sí).
       CC_EXIGIR_TLS_BD: "false"
       AUDITORIA_CLAVE_HMAC: ${AUDITORIA_CLAVE_HMAC:?Define AUDITORIA_CLAVE_HMAC en .env}
-      CC_PROMOTOR_USUARIO: ${CC_PROMOTOR_USUARIO:-}
-      CC_PROMOTOR_NOMBRE: ${CC_PROMOTOR_NOMBRE:-}
-      CC_PROMOTOR_CLAVE: ${CC_PROMOTOR_CLAVE:-}
+      # Sprint 8, tanda 1: el nombre comercial (obligatorio en prod) y los operadores de la plataforma, que dan de alta el
+      # colegio desde /plataforma (ya no hay primer usuario por variables: CC_PROMOTOR_* se retiró).
+      CC_MARCA_NOMBRE: ${CC_MARCA_NOMBRE:?Define CC_MARCA_NOMBRE en .env (sprint 8, nombre comercial)}
+      CC_OPERADORES: ${CC_OPERADORES:?Define CC_OPERADORES en .env (sprint 8, operadores de la plataforma)}
+      CC_INSTALACION: ${CC_INSTALACION:-DEDICADA}
       # Sprint 7: alertas técnicas por correo al responsable técnico (necesitan también el correo de salida SMTP).
       CC_OPERADOR_CORREO: ${CC_OPERADOR_CORREO:-}
 

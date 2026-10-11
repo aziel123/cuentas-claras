@@ -5,6 +5,13 @@
 -- 02-permisos-tablas.sql.
 -- Sprint 7, tanda 3 (V26): sin usuarios nuevos. El registro de quién ve datos personales lo escribe cc_app (por el rol
 -- cc_negocio, solo INSERT) y lo purga el DBA a los 2 años (docs/operacion/mysql-usuarios.md).
+-- Sprint 8, tanda 1 (V28): sin usuarios nuevos. El operador de la plataforma usa cc_app (sus pantallas) y cc_sistema (el
+-- alta del colegio y la identidad), como cualquier persona.
+-- En un MySQL administrado (Cloud SQL, RDS): este archivo, 02 y 03 los aplica el administrador del servicio. Los cuatro
+-- usuarios se crean AQUÍ, por SQL, nunca desde la consola del servicio: la consola les da su rol de administrador
+-- (cloudsqlsuperuser en Cloud SQL) y el verificador de prod no arranca (ve un rol de más). La marca
+-- log_bin_trust_function_creators (03 crea funciones con el binlog activo) se pone en la configuración de la instancia
+-- (--database-flags), no con SET PERSIST (exige SUPER, que un servicio administrado no da).
 CREATE DATABASE IF NOT EXISTS cuentasclaras CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- Migrador: solo lo usa Flyway (java -jar ... migrar) y aplica 03-triggers.sql. Puede crear y cambiar tablas.

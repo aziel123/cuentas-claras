@@ -1235,3 +1235,136 @@ Rutas relativas a `C:/Users/amedina/cuentas-claras/cuentas-claras/`:
   - `comprobantes/config/VerificadorSeries`;
   - `comunicacion/model/PlantillaMensaje` (búsqueda de textos);
   - `aprobaciones/model/TipoSolicitud`.
+
+## Tanda 1 · Implementación
+
+> Implementada el 10 y 11 de octubre de 2026 en la rama `claude/sprint-8-lista-para-vender` (agente `backend-spring`). V28,
+> **80 triggers y 9 funciones con huella (89 huellas)**, como pedía la sección 6.3. Verificado con `./mvnw -B verify` (también
+> con `-Duser.timezone=America/Los_Angeles`) y con los jobs `mysql` y `respaldo` del CI reproducidos completos en
+> contenedores desechables `mysql:8`. Resultados: al final de esta sección.
+
+### Qué se hizo
+**Base (V28, `02` y `03`).**
+- `colegio` con tipo, estado, ficha, titular, contrato, aviso de privacidad y paso a producción; la fila `PLATAFORMA`;
+  `primera_promotoria`; `colegio_logo`; `configuracion_colegio` escrita por el operador; el rol `OPERADOR_PLATAFORMA`.
+- `02`: los GRANT de la sección 6.2 (la ficha y el estado a `cc_negocio`; el INSERT y la ficha en preparación, la
+  primera Promotoría y la configuración a `cc_sistema`; el logo con UPDATE solo de `vigente`).
+- `03`: las funciones `cc_operador_activo` y `cc_colegio_en_produccion`; los 5 triggers nuevos (`trg_colegio_nace`,
+  `trg_colegio_cambio`, `trg_primera_promotoria_nace`, `trg_configuracion_colegio_registro` y `_cambio`); versiones nuevas
+  de `trg_usuario_nace`, `trg_usuario_rol_alta`, `trg_usuario_contacto`, `trg_pago_registro`, `trg_mensaje_nace` y
+  `trg_serie_comprobante_nace`. `trg_enlace_activacion_nace` no cambió: el enlace del titular (mensaje de su colegio,
+  `PERSONAL`) ya pasaba.
+- `VerificadorPermisosBaseDatos`: 80 triggers; las sentencias imposibles nuevas de la sección 6.4 (con `cc_app`: crear un
+  colegio o una primera Promotoría, 1142; cambiar el RUC o el tipo, 1143; un pago del colegio 0, 1644 de
+  `trg_pago_registro`; con `cc_sistema`: un colegio que nace en producción, una primera Promotoría o el correo de control
+  sin firma, 1644); y la verificación de la plataforma (una sola fila `PLATAFORMA`, solo operadores en ella, ningún
+  operador fuera; línea «Plataforma verificada: N operadores, M colegios (P en producción)»).
+
+**Plataforma (paquetes `plataforma` y `puestaenmarcha`, nuevos).**
+- `ModuloApp.PLATAFORMA` (`/plataforma/**`, solo el operador), `PUESTA_EN_MARCHA` y `MARCA_COLEGIO`; `/inicio` lleva al
+  operador a `/plataforma`. El operador no tiene ninguna otra ruta: `OperadorSinDatosTest` recorre todas las rutas de la
+  aplicación que no son públicas ni de `/plataforma` (más de 200; la prueba falla si son menos) con el operador en sesión
+  y un colegio con familias: todas responden 403, salvo `/` e `/inicio` (302 a `/plataforma`), su cambio de clave (200) y
+  el logo de su sesión (404: la plataforma no tiene logo). Ninguna respuesta muestra un nombre o un documento de una
+  familia.
+- `AltaColegio` con las cuatro transacciones de la sección 3.3 (`EjecucionPlataforma` = la ruta de identidad con el
+  contexto del operador), `completarAlta`, `reenviarEnlaceTitular`, `corregirFicha` y `registrarCorreoControl`;
+  `ValidadorRuc`; el puerto `seguridad.service.identidad.AltaTitular`; `ColegiosDeLaPlataforma` (lista y ficha con
+  sí/no y conteos); las pantallas `/plataforma`, `/plataforma/colegios/nuevo`, la ficha y `/plataforma/bitacora`.
+- `InicializadorOperadores` (prod, piloto y demo): sincroniza `CC_OPERADORES` como `sistema.plataforma`, con el enlace
+  al correo y sin clave en el entorno. `InicializadorPromotor` y `CC_PROMOTOR_*`/`CC_COLEGIO_ID` se eliminaron (si siguen
+  en el entorno, el log avisa). `DatosDemoDev` crea el usuario `operador` (dev).
+- Activación del titular: escribe el DNI del contrato y ve «Tu colegio y tu cuenta de Promotoría los creó el operador X
+  el …».
+- Estados: `ServicioCobro` y `/caja` rechazan cobrar en preparación (la base también); `RecorridoColegios.activos()`
+  excluye la plataforma, `enProduccion()` excluye los colegios en preparación (recordatorios, resumen diario, avisos a
+  Promotoría, muestra semanal, reemplazos y recálculo) y `conPlataforma()` (solo el despacho de mensajes: los enlaces de
+  los operadores). `PasoAProduccion` (`POST /puesta-en-marcha/produccion`, Promotoría, con su firma) y
+  `EstadoPuestaEnMarcha` (lista calculada de los datos).
+
+**Marca.** `comun.marca.Marca` (`CC_MARCA_NOMBRE`, obligatorio en prod) y `MarcaAdvice`; layout, ingreso, aviso,
+correos (`«{colegio} vía {marca}»` en el remitente) y asuntos de `AlertasTecnicas` con `${marca.nombre}`. Plantillas
+`_v2`: todas empiezan con `{{1}}` = el nombre del colegio, que antepone siempre `CreadorMensajes`; los 16 sitios con
+«Colegio Virgen María» fijo (las plantillas, el texto a la pasarela «Pago {colegio} · …» y el aviso de privacidad) pasan
+a ser variables. `MarcaUnicaTest`, `MarcaWebTest` y `PlantillasConColegioTest`. Aviso de privacidad del colegio
+(`/familia/privacidad`) y su aprobación por Dirección (`POST /colegio/privacidad/aprobar`); `/privacidad`, genérico del
+proveedor. Logo (`LogosColegio`: PNG o JPEG por bytes mágicos, 1 MB, tope de 4000 px leído de la cabecera, reescrito como
+PNG de 400 px y 200 KB como máximo, SHA-256; `GET /marca/logo` con `nosniff` y CSP) y la pantalla `/colegio/marca`
+(Promotoría). La boleta muestra el logo, la razón social, el RUC y la dirección del emisor (H8).
+
+**MySQL real en las pruebas.** En una base nueva, V28 deja al colegio 1 (sin cuentas) en preparación. `CuentasDePrueba`
+pone en marcha cada colegio así por el camino legítimo antes de las pruebas: un operador (creado por
+`sistema.plataforma`) completa la ficha y da de alta la primera Promotoría con su firma; la Promotoría da la primera
+Dirección y una Caja y lo pasa a producción con su firma. `AuditoriaSprint8MySqlTest` cubre E3, E5, E6, E7, E9, E10,
+E11, E16, E29 y E30 y el alta de punta a punta con los permisos mínimos.
+
+### Desviaciones del diseño
+1. **`colegio_logo.sha256` es `VARCHAR(64)`** (el diseño decía `CHAR(64)`): Hibernate valida `varchar` contra el `String`.
+   `contenido` sigue siendo `MEDIUMBLOB`, con `columnDefinition = "MEDIUMBLOB"` en la entidad (como `archivo_cargado`):
+   sin eso, el job `mysql` no validaba el esquema (lo encontró la reproducción en MySQL real).
+2. **`colegio.actualizado_en` lleva `DEFAULT CURRENT_TIMESTAMP(6)`**: el alta de un colegio por el DBA (y las pruebas
+   que insertan un colegio por SQL) no la escriben.
+3. **`ck_colegio_niveles`**: la expresión del diseño admitía niveles repetidos y no admitía «PRIMARIA,SECUNDARIA» sin
+   Inicial. La de V28 admite cualquier subconjunto no vacío, en el orden del catálogo y sin repetir.
+4. **La firma de la primera Promotoría lleva el número de intento** (`primera_promotoria:{colegio}:{n}`): la firma es
+   única por colegio y clave (`uk_firma_operacion`), y «Completar alta» tiene que poder firmar de nuevo.
+   `trg_primera_promotoria_nace` exige la del último intento.
+5. **El correo de control firma la versión que tendrá la fila** (`configuracion_colegio:{colegio}:{clave}:{version}`: 0
+   al registrarla, la actual más uno al cambiarla). El diseño firmaba `:0` en el registro y la versión actual en el
+   cambio: las dos claves coincidían en el primer cambio.
+6. **Versión nueva de `trg_usuario_contacto`** (no estaba en la tabla de la sección 6.3): «reenviar el enlace al titular»
+   cambia su celular o correo, que el trigger solo dejaba cambiar con una solicitud aprobada. Ahora admite ese cambio
+   solo con `cc_sistema`, para el titular de la primera Promotoría de un colegio en preparación, con la cuenta sin
+   activar y con la firma de un operador activo (`titular_contacto:{colegio}:{usuario}:{version}`). Son 6 triggers con
+   versión nueva en lugar de 5; el total sigue siendo 80.
+7. **`trg_mensaje_nace` compara el resumen diario con el nombre del colegio delante** (plantillas `_v2`: el mensaje
+   guarda `{colegio}\n{texto de la foto}`; la foto de `resumen_diario` no cambió).
+8. **El paso a producción en esta tanda exige el equipo (Dirección y Caja activas) y los datos de la boleta** (razón
+   social, RUC y dirección), no la lista completa: la lista de la tanda 1 tiene los 7 puntos que ya se pueden calcular
+   (datos, titular activado, equipo, año y secciones, alumnos, correo de control y aviso de privacidad). La tanda 2 agrega
+   pensiones, saldo inicial, conectores, WhatsApp y respaldo, y exige la lista completa. La pantalla
+   `/puesta-en-marcha` y `PasoAProduccion` se adelantaron a esta tanda porque el paso a producción es parte de «estados
+   del colegio».
+9. **`/familia/privacidad`** en lugar de `/portal/privacidad` (el portal de las familias vive en `/familia/**`; así no
+   cambia la matriz).
+10. **`VerificadorConfiguracion` de esta tanda:** `CC_MARCA_NOMBRE` obligatorio en prod y el aviso por las variables
+    retiradas. Las reglas de una instalación COMPARTIDA (secretos de conectores en el entorno, `CC_CLAVE_CONECTORES`)
+    quedan para la tanda 2, con los conectores. En una DEDICADA, el alta de un segundo colegio la rechaza `AltaColegio`
+    (no el arranque).
+11. **En las pruebas (H2) y en `dev`, el colegio 1 queda en producción** (`TokenDeSesionDePrueba` y `DatosDemoDev`), como
+    una instalación que ya opera; en MySQL real lo pone en marcha `CuentasDePrueba` por el alta. `application-test.yaml` y
+    `application-dev.yaml` usan una instalación COMPARTIDA (las pruebas dan de alta colegios junto al 1).
+12. **El ingreso (`/login`) y las páginas de error llevan solo la marca** (decisión 125). Las vistas de los
+    `@ExceptionHandler` no reciben los `@ModelAttribute` de los advices: el layout usa `${marca?.nombre}`.
+13. **CI:** el paso «M4» (E8) arranca prod con otra lista en `CC_OPERADORES`, comprueba que el operador quitado queda
+    inactivo y que `cc_sistema` ya no crea un colegio a su nombre (1644); antes, con el operador activo, sí lo crea (no es
+    un falso positivo). `CC_MARCA_NOMBRE` va en el entorno de los jobs `mysql` y `respaldo`, y
+    `restaurar-y-verificar.sh` lo pasa al arrancar prod sobre la copia.
+
+### Riesgos y pendientes de la tanda
+- En MySQL real, `CuentasDePrueba` pone en marcha solo los colegios que no nacieron por el alta (los de la migración o
+  insertados por SQL, como el DBA); los que una prueba dio de alta por la plataforma y dejó en preparación se quedan así
+  (lo encontró la reproducción: el paso 11 del job, en otra JVM, intentaba ponerlos en marcha de nuevo).
+- `.gitattributes` fija LF para `scripts/respaldo/*.txt`: con CRLF (una copia de trabajo en Windows), `respaldar.sh` no
+  leía ninguna tabla vigilada. En el runner de Linux no pasaba; en una instalación preparada desde Windows, sí.
+- `RutasIdorTest` crea el colegio B por el alta (el diseño pedía «un tercer colegio creado por el alta»: es el segundo,
+  creado por el alta; el resultado buscado, que un colegio del alta esté en el recorrido, se cumple).
+- El operador ve la fecha de la última actividad de cada colegio (`ConsultaAuditoriaService.ultimaActividadDe`, solo la
+  fecha del último evento, nunca su contenido).
+- Lo que el operador puede seguir haciendo en un colegio en producción es solo ver su ficha y su lista (la base lo
+  exige: `trg_colegio_cambio`); el correo de control sí lo puede cambiar en producción, con su firma (H10).
+
+### Resultados de la verificación
+- `./mvnw -B verify`: **2290 pruebas, 0 fallos, 0 errores, 129 omitidas** (las de MySQL real, que corren en el job
+  `mysql`); BUILD SUCCESS. Con `-DargLine=-Duser.timezone=America/Los_Angeles`: **2290, 0 fallos, 0 errores, 129 omitidas**, BUILD SUCCESS.
+- Job `mysql` del CI reproducido completo en contenedores desechables `mysql:8` (base nueva): los 21 pasos en OK, del 3
+  (usuarios) al 22 (M4). Fase 1: 2 pruebas; fase 2 (`PermisosMySqlTest` con los permisos mínimos): 90, 0 fallos (7
+  omitidas por la fecha); `AuditoriaSprint8MySqlTest`: 9 de 9; correcciones del sprint 6: 3; sprint 7, tanda 2: 12; QA
+  del sprint 7: 5; S7-A1: 1; estado de cuentas: 4; S7-M1: 2 + 2; fase 2b: 7. Arranque real en prod por TLS: «Huellas de
+  los 80 triggers y las 9 funciones verificadas» y «Plataforma verificada: 1 operadores, 2 colegios (2 en producción)»;
+  M2, M3 y M4 en OK.
+- Job `respaldo` reproducido completo: los 17 pasos en OK (respaldo cifrado, E29, restauración real con la cadena HMAC
+  y prod arrancando sobre la copia, E30, E31, E32, QA-S7-1, simulacro semanal, S7-M1 y destino simulado).
+- La reproducción encontró y se corrigió en esta tanda: el `MEDIUMBLOB` del logo (desviación 1), el texto del resumen
+  diario en dos pruebas de MySQL (desviación 7), la puesta en marcha de las pruebas y los saltos de línea de la lista de
+  tablas vigiladas (riesgos).

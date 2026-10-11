@@ -43,12 +43,15 @@ Abre **http://localhost:8080**.
 
 Para dejarlo corriendo en segundo plano, usa `docker compose up -d --build`. Para ver los mensajes, usa `docker compose logs -f app`.
 
-## 5. Primer ingreso
-- Usuario: el de `CC_PROMOTOR_USUARIO` (por defecto `promotora`).
-- Clave: la de `CC_PROMOTOR_CLAVE`.
-- La plataforma te pide **cambiar la clave** y luego volver a ingresar.
-
-Después de ese primer ingreso puedes borrar la línea `CC_PROMOTOR_CLAVE` del `.env`: ya no se usa.
+## 5. Primer ingreso (sprint 8: el alta del colegio desde la plataforma)
+- Al arrancar, cada operador de `CC_OPERADORES` recibe en su correo un enlace para elegir su clave (con la mensajería
+  real; en una base de prueba, el enlace sale en el registro de mensajes). Ya no hay primer usuario por variables:
+  `CC_PROMOTOR_*` se retiró.
+- El operador entra a **/plataforma**, da de alta el colegio (RUC, razón social, niveles y año escolar) y su primera
+  Promotoría con el celular o el correo del titular. Al titular le llega su enlace; al activarlo escribe su DNI.
+- El colegio nace **en preparación** (no se registran pagos). Cuando tenga Dirección y Caja, la Promotoría lo pasa a
+  producción desde «Puesta en marcha».
+- Una instalación que ya tenía usuarios (sprints anteriores) queda en producción al migrar a V28: no hay que hacer nada.
 
 ## 6. Primeros pasos para probar el flujo completo
 Muchas acciones necesitan **dos personas distintas** (quien pide no aprueba), así que crea varios usuarios:

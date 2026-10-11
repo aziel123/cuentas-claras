@@ -88,7 +88,10 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `llamada_control` | INSERT | **Solo inserción** (sprint 6, tanda 3): el resultado de la llamada de control semanal. **Sprint 7, tanda 2:** lleva la firma de la sesión de quien la registra y el segundo intento exige un «No contesta» de hace una hora con la hora de la BASE (`registrada_bd`, la pone el trigger). Desde V23 la registra una persona activa de Promotoría (Dirección, solo con la semana delegada y marcando `por_delegacion`), para el lunes de la semana en curso (hora de Lima), a una familia de la muestra congelada que no fue reemplazada, y el segundo intento solo tras un «No contesta» (trigger `trg_llamada_control_registro`); no se corrige ni se borra (1142) |
 | `muestra_llamada` | Ninguno (sprint 7: solo `cc_sistema`, INSERT) | **Solo inserción** (correcciones del sprint 6, V23): la muestra congelada de la semana. **Sprint 7, tanda 2 (E10):** la fija solo `sistema.panel` con `cc_sistema` (el lunes a las 00:10 o en la primera consulta de la semana), para la semana en curso, con familias que pagaron en efectivo o tienen deuda vencida; un reemplazo solo de quien no contestó dos veces (trigger `trg_muestra_llamada_registro`) |
 | `delegacion_llamada` | INSERT | **Solo inserción** (V23): Promotoría delega a Dirección las llamadas de la semana en curso (trigger `trg_delegacion_llamada_registro`) |
-| `configuracion_colegio` | Ninguno (solo el SELECT general) | La escribe solo el DBA (V23, QA-S6-6): `resumen_correo_externo` y, desde V25, `huella_correo_externo`, por colegio. INSERT, UPDATE y DELETE dan 1142 |
+| `configuracion_colegio` | Ninguno (solo el SELECT general) | `resumen_correo_externo` y, desde V25, `huella_correo_externo`, por colegio: el correo externo de control. **Sprint 8, tanda 1 (V28):** ya no la escribe solo el DBA: la registra el operador de la plataforma con `cc_sistema` (INSERT y UPDATE de `valor`, `actualizado_por`, `actualizado_en` y `version`) y la firma de su sesión (`trg_configuracion_colegio_registro` y `trg_configuracion_colegio_cambio`). Con `cc_app`: 1142; nadie la borra |
+| `colegio` | UPDATE **solo** de `nombre, razon_social, direccion, correo_institucional, estado, produccion_desde, produccion_por, aviso_privacidad_*, actualizado_en, version` | **Sprint 8, tanda 1 (V28):** la ficha de un colegio en producción y su paso a producción (Promotoría, con su firma, con Dirección y Caja activas: `trg_colegio_cambio`). El RUC, el tipo y el creador no cambian con `cc_app` (1143). `cc_sistema` (el operador) tiene además INSERT (el alta, solo en preparación y por un operador activo: `trg_colegio_nace`) y el UPDATE de la ficha completa con el RUC, **solo en preparación**. Nadie borra un colegio (1142) |
+| `primera_promotoria` | Ninguno (solo `cc_sistema`, INSERT) | **Sprint 8, tanda 1 (V28):** la primera Promotoría de cada colegio, una sola vez (UNIQUE). La crea un operador activo con la firma de su sesión (`primera_promotoria:{colegio}:{intento}`, 5 minutos) en un colegio en preparación cuya única cuenta es la del titular (`trg_primera_promotoria_nace`); el primer PROMOTOR de un colegio exige esta fila (`trg_usuario_rol_alta`). Solo inserción |
+| `colegio_logo` | INSERT y UPDATE **solo** de `vigente, actualizado_en, version` | **Sprint 8, tanda 1 (V28):** el logo del colegio, un PNG que la aplicación reescribe (400 px y 200 KB como máximo). Uno vigente por colegio; el contenido y su SHA-256 no cambian (1143); no se borra (1142) |
 | `semilla_muestreo`, `huella_bitacora`, `huella_hora`, `liquidacion_pasarela`, `liquidacion_linea`, `evento_pasarela`, `mensaje` (envío) | Sprint 7, tanda 2: solo `cc_sistema` | Los escriben solo los procesos (`sistema.muestreo`, `sistema.auditoria`, `sistema.pasarela`, `sistema.mensajeria`). `cc_app` sigue insertando los mensajes que nacen con un pago (el outbox) pero no los marca enviados ni entregados (1142) |
 
 ## Triggers (paso 3, después de los permisos)
@@ -98,6 +101,20 @@ Los aplica `cc_migrador` (no van en Flyway: H2 no los soporta):
 mysql -u root -p -e "SET PERSIST log_bin_trust_function_creators = 1"
 mysql -h <host> -u cc_migrador -p cuentasclaras < scripts/mysql/03-triggers.sql
 ```
+**MySQL administrado (Cloud SQL, RDS; sprint 8, H13):** `SET PERSIST` exige SUPER, que el servicio no da: la marca
+`log_bin_trust_function_creators` se pone en la configuración de la instancia (en Cloud SQL,
+`--database-flags=log_bin_trust_function_creators=on`; en RDS, un grupo de parámetros). Los usuarios `cc_*` se crean con
+`01-usuarios.sql`, por SQL, nunca desde la consola del servicio (la consola les da su rol de administrador y el
+verificador de prod no arranca).
+
+**Sprint 8, tanda 1 (V28): 80 triggers y 9 funciones con huella (89).** Nuevos: `trg_colegio_nace` y `trg_colegio_cambio`
+(quién crea un colegio y quién lo pasa a producción), `trg_primera_promotoria_nace` y los dos de `configuracion_colegio`;
+funciones `cc_operador_activo` y `cc_colegio_en_produccion`. Versiones nuevas: `trg_usuario_nace` y `trg_usuario_rol_alta`
+(el operador vive solo en el colegio de plataforma y solo crea la primera cuenta de un colegio; el primer PROMOTOR exige su
+`primera_promotoria`), `trg_usuario_contacto` (el operador corrige el contacto del titular antes de la activación, con su
+firma), `trg_pago_registro` (en un colegio en preparación no hay pagos), `trg_mensaje_nace` (ni recordatorios; y el
+resumen lleva el nombre del colegio delante) y `trg_serie_comprobante_nace` (dos sedes con el mismo RUC no comparten
+serie). Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
 - Un plan fuera de BORRADOR no cambia montos, fechas ni editores; un plan cerrado no cambia de estado.
 - Planes y lotes nacen en BORRADOR; un lote confirmado o descartado no cambia.
 - Las líneas solo se agregan o se quitan con su lote en preparación.
@@ -296,7 +313,9 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
 | `DB_MIGRADOR_USUARIO`, `DB_MIGRADOR_CLAVE` | `cc_migrador` y su clave. **Solo** para `java -jar cuentas-claras.jar migrar`, nunca en el entorno de la aplicación |
 | `AUDITORIA_CLAVE_HMAC` | Clave de la cadena de auditoría, de 32 caracteres o más. Custodia: `custodia-clave-auditoria.md` |
 | `CC_PROXIES_INTERNOS` | Expresión regular con las IP de tus proxies inversos. Solo de ellos se acepta la cabecera X-Forwarded-For. Por defecto: loopback y redes privadas (10.x, 172.16-31.x, 192.168.x) |
-| `CC_COLEGIO_ID`, `CC_PROMOTOR_USUARIO`, `CC_PROMOTOR_NOMBRE`, `CC_PROMOTOR_CLAVE` | Primer PROMOTOR, solo si no hay usuarios. Retira `CC_PROMOTOR_CLAVE` después del primer ingreso |
+| `CC_MARCA_NOMBRE` | Sprint 8, tanda 1: el nombre comercial del producto. Obligatorio en prod |
+| `CC_OPERADORES` | Sprint 8, tanda 1: los operadores de la plataforma (`usuario:correo,...`); dan de alta cada colegio y su primera Promotoría desde `/plataforma`. Reemplaza a `CC_COLEGIO_ID` y `CC_PROMOTOR_*`, que se retiraron (si siguen en el entorno, el log avisa) |
+| `CC_INSTALACION` | `DEDICADA` (por defecto, un colegio) o `COMPARTIDA` |
 
 ## Cómo comprobarlo
 Conectado como `cc_app`, estas sentencias deben fallar con **ERROR 1142** (comando denegado):
