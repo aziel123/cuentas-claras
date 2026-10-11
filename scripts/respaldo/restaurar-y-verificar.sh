@@ -292,6 +292,7 @@ if [ "$arrancar" = "si" ]; then
 	SPRING_PROFILES_ACTIVE=prod DB_URL="$url" DB_USUARIO=cc_app DB_CLAVE="$clave_app" AUDITORIA_CLAVE_HMAC="$clave_hmac" \
 		DB_SISTEMA_USUARIO=cc_sistema DB_SISTEMA_CLAVE="$clave_sistema" CC_EXIGIR_TLS_BD=false \
 		MENSAJERIA_CORREO_PROVEEDOR=SMTP CORREO_REMITENTE="restauracion@cuentasclaras.invalid" SPRING_MAIL_HOST=127.0.0.1 \
+		CC_MARCA_NOMBRE="${CC_MARCA_NOMBRE:-Simulacro de restauracion}" \
 		CUENTASCLARAS_TAREAS_ACTIVAS=false java -jar "$jar" --server.port="$puerto_app" > "$trabajo/app.log" 2>&1 &
 	pid_app=$!
 	arranco=no

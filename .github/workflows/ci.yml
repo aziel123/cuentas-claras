@@ -84,6 +84,8 @@ jobs:
       CC_MYSQL_CLAVE_SISTEMA: "sistema-solo-ci-1"
       CC_MYSQL_CLAVE_RESPALDO: "respaldo-solo-ci-1"
       MYSQL_ADMIN: "mysql --protocol=TCP -h 127.0.0.1 -P 3306 -uroot -proot-ci"
+      # Sprint 8, tanda 1 (decisión 122): en prod el nombre comercial es obligatorio (VerificadorConfiguracion).
+      CC_MARCA_NOMBRE: "Cuentas Claras CI"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -111,7 +113,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V27): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V28): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -133,12 +135,16 @@ jobs:
 
       - name: "Sprint 5, tanda 2: un segundo colegio (con año en curso) para la renovación de matrícula"
         run: |
-          # cc_app no crea colegios: lo hace el administrador, como el alta de un colegio real (nombre en ASCII: el
-          # cliente mysql no siempre envía UTF-8).
+          # cc_app no crea colegios: aquí lo hace el administrador (nombre en ASCII: el cliente mysql no siempre envía
+          # UTF-8). Sprint 8, tanda 1: nace en preparación, como el colegio 1 de una base nueva; las pruebas los ponen en
+          # marcha por el alta (operador, firma, primera Promotoría, Dirección, Caja y paso a producción: CuentasDePrueba).
           $MYSQL_ADMIN cuentasclaras -e "INSERT INTO colegio (nombre) VALUES ('Colegio de renovacion CI')"
 
       - name: "Fase 2: la aplicación funciona con los permisos mínimos de cc_app"
         run: ./mvnw -B test -Dtest=PermisosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 8, tanda 1: alta de colegios por el operador; cc_app y cc_sistema no crean colegios ni Promotorías, no cobran en preparación ni cambian el estado (E3, E5 a E7, E9 a E11, E16, E29 y E30)"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint8MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint6MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
@@ -505,9 +511,33 @@ jobs:
           comprobar_sistema 1142 "DELETE FROM primera_direccion WHERE 1 = 0"
           directora=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT MIN(u.id) FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id WHERE r.rol = 'DIRECTOR' AND u.activo")
           comprobar_sistema 1644 "UPDATE usuario SET activo = FALSE, desactivado_en = NOW(6), desactivado_por = 'ci' WHERE id = ${directora}"
-          # Huellas (H7): cc_app ve las de los 75 triggers y las 7 funciones con huellas_objetos().
+          # Sprint 8, tanda 1 (V28, sección 6.4). cc_app no crea colegios, primeras Promotorías ni el correo de control
+          # (1142), no cambia el RUC ni el tipo de un colegio (1143) ni borra un colegio o un logo (1142); un pago del colegio
+          # 0 (que no está en producción) lo rechaza trg_pago_registro antes que la FK (1644).
+          comprobar 1142 "INSERT INTO colegio (nombre, tipo, estado, activo, creado_por, actualizado_en) VALUES ('ci', 'COLEGIO', 'PREPARACION', TRUE, 'ci', NOW(6))"
+          comprobar 1143 "UPDATE colegio SET ruc = ruc WHERE 1 = 0"
+          comprobar 1143 "UPDATE colegio SET tipo = tipo WHERE 1 = 0"
+          comprobar 1142 "DELETE FROM colegio WHERE 1 = 0"
+          comprobar 1142 "INSERT INTO primera_promotoria (colegio_id, usuario_id, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, NOW(6), 'ci', NOW(6))"
+          comprobar 1142 "DELETE FROM colegio_logo WHERE 1 = 0"
+          comprobar 1143 "UPDATE colegio_logo SET sha256 = sha256 WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, comprobante_id, medio, total, recibido, vuelto, origen, clave_idempotencia, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'ci', '2000-01-01', 0, 'EFECTIVO', 1, 1, 0, 'CAJA', 'ci-preparacion', 'VIGENTE', NOW(6), 'ci', NOW(6))"
+          # Con cc_sistema: un colegio que nace en producción (o sin operador), una primera Promotoría sin la firma del
+          # operador y el correo de control sin su firma (1644); nada de eso se borra (1142).
+          comprobar_sistema 1644 "INSERT INTO colegio (nombre, tipo, estado, activo, creado_por, actualizado_en, produccion_desde, produccion_por) VALUES ('ci', 'COLEGIO', 'PRODUCCION', TRUE, 'sistema.ci', NOW(6), NOW(6), 'sistema.ci')"
+          comprobar_sistema 1644 "INSERT INTO primera_promotoria (colegio_id, usuario_id, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, NOW(6), 'ci', NOW(6))"
+          comprobar_sistema 1644 "INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en, creado_por) VALUES (0, 'huella_correo_externo', 'ci@x.pe', NOW(6), 'ci')"
+          comprobar_sistema 1142 "DELETE FROM colegio WHERE 1 = 0"
+          comprobar_sistema 1142 "DELETE FROM primera_promotoria WHERE 1 = 0"
+          comprobar_sistema 1142 "UPDATE primera_promotoria SET version = version WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE configuracion_colegio SET clave = clave WHERE 1 = 0"
+          # Exactamente un colegio PLATAFORMA y, en él, solo operadores.
+          plataformas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM colegio WHERE tipo = 'PLATAFORMA'")
+          [ "$plataformas" = "1" ] || { echo "ERROR: hay $plataformas colegios PLATAFORMA"; exit 1; }
+          # Huellas (H7): cc_app ve las de los 80 triggers y las 9 funciones con huellas_objetos() (sprint 8, tanda 1).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
-          [ "$objetos" = "$((esperados + 7))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
+          [ "$objetos" = "$((esperados + 9))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
+          [ "$esperados" = "80" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 1 del sprint 8 deja 80"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -523,6 +553,8 @@ jobs:
           MENSAJERIA_CORREO_PROVEEDOR: SMTP
           CORREO_REMITENTE: "avisos@ci.cuentasclaras.pe"
           SPRING_MAIL_HOST: "127.0.0.1"
+          # Sprint 8, tanda 1 (decisión 112): el operador de la plataforma sale del despliegue (sin clave en el entorno).
+          CC_OPERADORES: "operador.ci:operador.ci@ci.cuentasclaras.pe"
         run: |
           DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" \
             java -jar target/cuentas-claras-*.jar --server.port=18080 > prod.log 2>&1 &
@@ -548,7 +580,12 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 75 triggers y las 7 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 80 triggers y las 9 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          # Sprint 8, tanda 1 (sección 6.4): un solo colegio PLATAFORMA, solo con operadores; el de CC_OPERADORES existe.
+          grep -q "Plataforma verificada: " prod.log || { cat prod.log; exit 1; }
+          grep -q "Operadores de la plataforma sincronizados: 1 en la lista" prod.log || { cat prod.log; exit 1; }
+          activo=$($MYSQL_ADMIN cuentasclaras -N -e "SELECT COUNT(*) FROM usuario u JOIN colegio c ON c.id = u.colegio_id JOIN usuario_rol r ON r.usuario_id = u.id WHERE u.nombre_usuario = 'operador.ci' AND u.activo AND c.tipo = 'PLATAFORMA' AND r.rol = 'OPERADOR_PLATAFORMA'")
+          [ "$activo" = "1" ] || { echo "ERROR: el operador de CC_OPERADORES no quedó activo en la plataforma"; exit 1; }
           grep -q "Privilegios verificados: cc_app y cc_sistema tienen solo los de 02-permisos-tablas.sql, sin roles anidados" prod.log || { cat prod.log; exit 1; }
           grep -q "Conexiones a MySQL cifradas (TLS) verificadas" prod.log || { cat prod.log; exit 1; }
           # Sprint 7, tanda 3 (V26, Ley 29733).
@@ -656,6 +693,8 @@ jobs:
           MENSAJERIA_CORREO_PROVEEDOR: SMTP
           CORREO_REMITENTE: "avisos@ci.cuentasclaras.pe"
           SPRING_MAIL_HOST: "127.0.0.1"
+          # El mismo operador que el arranque anterior (el paso M4 lo quita de la lista).
+          CC_OPERADORES: "operador.ci:operador.ci@ci.cuentasclaras.pe"
         run: |
           migrador() {
             mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras "$@"
@@ -702,6 +741,40 @@ jobs:
           kill "$PID_APP"
           echo "OK: restaurados 02 y 03, prod vuelve a arrancar"
 
+      - name: "M4 (E8): un operador quitado de CC_OPERADORES queda inactivo y ya no crea colegios (1644)"
+        env:
+          SPRING_PROFILES_ACTIVE: prod
+          DB_URL: "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&sslMode=REQUIRED"
+          DB_SISTEMA_USUARIO: cc_sistema
+          DB_SISTEMA_CLAVE: ${{ env.CC_MYSQL_CLAVE_SISTEMA }}
+          AUDITORIA_CLAVE_HMAC: "clave-hmac-del-job-de-integracion-continua-0001"
+          MENSAJERIA_CORREO_PROVEEDOR: SMTP
+          CORREO_REMITENTE: "avisos@ci.cuentasclaras.pe"
+          SPRING_MAIL_HOST: "127.0.0.1"
+          CC_OPERADORES: "otro.operador.ci:otro.operador.ci@ci.cuentasclaras.pe"
+        run: |
+          # Antes (con operador.ci activo), cc_sistema SÍ crea un colegio en preparación a su nombre: el control de abajo
+          # no es un falso positivo.
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_sistema -p"${CC_MYSQL_CLAVE_SISTEMA}" cuentasclaras \
+            -e "INSERT INTO colegio (nombre, tipo, estado, activo, creado_por, actualizado_en) VALUES ('Colegio M4 antes', 'COLEGIO', 'PREPARACION', TRUE, 'operador.ci', NOW(6))"
+          DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" java -jar target/cuentas-claras-*.jar --server.port=18088 > prod-m4.log 2>&1 &
+          PID_APP=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:18088/actuator/health | grep -q UP && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:18088/actuator/health | grep -q UP || { cat prod-m4.log; exit 1; }
+          kill "$PID_APP"
+          grep -q "1 creados, 0 reactivados, 1 desactivados" prod-m4.log || { cat prod-m4.log; exit 1; }
+          activo=$($MYSQL_ADMIN cuentasclaras -N -e "SELECT activo FROM usuario WHERE nombre_usuario = 'operador.ci'")
+          [ "$activo" = "0" ] || { echo "ERROR: operador.ci sigue activo"; exit 1; }
+          if salida=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_sistema -p"${CC_MYSQL_CLAVE_SISTEMA}" cuentasclaras \
+              -e "INSERT INTO colegio (nombre, tipo, estado, activo, creado_por, actualizado_en) VALUES ('Colegio M4 despues', 'COLEGIO', 'PREPARACION', TRUE, 'operador.ci', NOW(6))" 2>&1); then
+            echo "ERROR: un operador desactivado creó un colegio"; exit 1
+          fi
+          echo "$salida" | grep -q "ERROR 1644" || { echo "Error inesperado: $salida"; exit 1; }
+          echo "OK (M4): quitado de CC_OPERADORES, operador.ci quedó inactivo y ya no crea colegios"
+
   respaldo:
     name: Respaldo cifrado, restauración real y ataques E29 a E32
     runs-on: ubuntu-latest
@@ -739,6 +812,7 @@ jobs:
       CC_MYSQL_CLAVE_SISTEMA: "sistema-solo-ci-2"
       CC_MYSQL_CLAVE_RESPALDO: "respaldo-solo-ci-2"
       MYSQL_ADMIN: "mysql --protocol=TCP -h 127.0.0.1 -P 3306 -uroot -proot-ci"
+      CC_MARCA_NOMBRE: "Cuentas Claras CI"
       # El respaldo (scripts/respaldo/respaldar.sh) como en el servidor: cc_respaldo y dos destinatarios age.
       RESPALDO_DB_HOST: "127.0.0.1"
       RESPALDO_DB_PUERTO: "3306"
@@ -778,7 +852,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V27, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V28, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \
