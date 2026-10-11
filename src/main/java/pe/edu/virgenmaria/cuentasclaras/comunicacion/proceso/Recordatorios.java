@@ -55,7 +55,7 @@ public class Recordatorios {
 			return;
 		}
 		LocalDate hoy = LocalDate.now(reloj);
-		PasadaPorColegios.recorrer(LOG, "Los recordatorios", colegios.activos(), colegio -> enColegio(colegio, hoy));
+		PasadaPorColegios.recorrer(LOG, "Los recordatorios", colegios.enProduccion(), colegio -> enColegio(colegio, hoy));
 	}
 
 	/** @return cuántos mensajes quedaron preparados en el colegio */

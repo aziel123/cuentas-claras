@@ -7,7 +7,12 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
--- Versión de la migración V27 (correcciones del sprint 7): 75 triggers y 4 funciones. Nuevos: trg_solicitud_cambio_nace
+-- Versión de la migración V28 (sprint 8, tanda 1): 80 triggers y 6 funciones. Nuevos: trg_colegio_nace, trg_colegio_cambio,
+-- trg_primera_promotoria_nace, trg_configuracion_colegio_registro y trg_configuracion_colegio_cambio, y las funciones
+-- cc_operador_activo y cc_colegio_en_produccion. Versión nueva de trg_usuario_nace, trg_usuario_rol_alta (el operador de
+-- la plataforma y la primera Promotoría), trg_pago_registro y trg_mensaje_nace (nada de dinero ni recordatorios en un
+-- colegio en preparación) y trg_serie_comprobante_nace (dos sedes con el mismo RUC no comparten serie).
+-- Versión anterior (V27, correcciones del sprint 7): 75 triggers y 4 funciones. Nuevos: trg_solicitud_cambio_nace
 -- (una solicitud nace PENDIENTE: una APROBADA solo existe si su aprobador la firmó), trg_resolucion_respaldo_registro
 -- (QA-S7-1) y la función cc_solicitud_firmada. Versión nueva de las operaciones de dinero que pasan a un estado aprobado o
 -- anulado (S7-A1): cada una exige SU solicitud aprobada y firmada.
@@ -77,6 +82,18 @@ CREATE FUNCTION cc_solicitud_firmada(p_solicitud BIGINT) RETURNS BOOLEAN NOT DET
         JOIN usuario u ON u.id = f.usuario_id AND u.colegio_id = s.colegio_id
         WHERE s.id = p_solicitud AND s.estado = 'APROBADA' AND u.nombre_usuario = s.resuelto_por
           AND s.resuelto_por <> s.solicitado_por)$$
+
+-- Sprint 8, tanda 1 (sección 3.2): ¿es un operador activo de la plataforma? Una cuenta activa del colegio PLATAFORMA con
+-- el rol OPERADOR_PLATAFORMA. Quitarlo de CC_OPERADORES lo desactiva, y desde ese momento ya no crea colegios.
+DROP FUNCTION IF EXISTS cc_operador_activo$$
+CREATE FUNCTION cc_operador_activo(p_nombre VARCHAR(60)) RETURNS BOOLEAN NOT DETERMINISTIC READS SQL DATA
+    RETURN EXISTS (SELECT 1 FROM usuario u JOIN colegio c ON c.id = u.colegio_id JOIN usuario_rol r ON r.usuario_id = u.id
+        WHERE u.nombre_usuario = p_nombre AND u.activo AND c.tipo = 'PLATAFORMA' AND r.rol = 'OPERADOR_PLATAFORMA')$$
+
+-- Sprint 8, tanda 1 (sección 3.4): ¿el colegio ya está en producción? En preparación no hay dinero ni avisos de cobro.
+DROP FUNCTION IF EXISTS cc_colegio_en_produccion$$
+CREATE FUNCTION cc_colegio_en_produccion(p_colegio BIGINT) RETURNS BOOLEAN NOT DETERMINISTIC READS SQL DATA
+    RETURN EXISTS (SELECT 1 FROM colegio c WHERE c.id = p_colegio AND c.tipo = 'COLEGIO' AND c.estado = 'PRODUCCION')$$
 
 -- Un plan nace en BORRADOR (nadie inserta un plan ya aprobado).
 DROP TRIGGER IF EXISTS trg_plan_pension_nace_borrador$$
@@ -212,12 +229,17 @@ BEGIN
     END IF;
 END$$
 
--- Series: nacen en 0 y solo avanzan de uno en uno.
+-- Series: nacen en 0 y solo avanzan de uno en uno. Sprint 8, tanda 1 (H9, decisión 124): dos colegios (sedes) con el
+-- mismo RUC no usan la misma serie: ante SUNAT el correlativo es por RUC y serie.
 DROP TRIGGER IF EXISTS trg_serie_comprobante_nace$$
 CREATE TRIGGER trg_serie_comprobante_nace BEFORE INSERT ON serie_comprobante FOR EACH ROW
 BEGIN
     IF NOT (NEW.ultimo_numero <=> 0) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una serie nace en 0';
+    END IF;
+    IF EXISTS (SELECT 1 FROM serie_comprobante s JOIN colegio o ON o.id = s.colegio_id JOIN colegio n ON n.id = NEW.colegio_id
+            WHERE s.serie = NEW.serie AND s.colegio_id <> NEW.colegio_id AND n.ruc IS NOT NULL AND o.ruc = n.ruc) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: otra sede con el mismo RUC ya usa esta serie';
     END IF;
 END$$
 
@@ -316,6 +338,11 @@ END$$
 DROP TRIGGER IF EXISTS trg_pago_registro$$
 CREATE TRIGGER trg_pago_registro BEFORE INSERT ON pago FOR EACH ROW
 BEGIN
+    -- Sprint 8, tanda 1 (sección 3.4, E9): en un colegio en preparación no se registra dinero. Va primero: así la
+    -- inserción imposible del verificador (colegio 0) llega aquí.
+    IF NOT cc_colegio_en_produccion(NEW.colegio_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio todavia no esta en produccion: no se registran pagos';
+    END IF;
     -- Sprint 7, tanda 2 (E1): con la clave de cc_app nadie registra un pago como sistema.*.
     IF NEW.creado_por LIKE 'sistema.%' AND NOT cc_es_sistema() THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo cc_sistema firma como sistema';
@@ -1075,6 +1102,11 @@ BEGIN
     IF NEW.creado_por LIKE 'sistema.%' AND NOT cc_es_sistema() THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo cc_sistema firma como sistema';
     END IF;
+    -- Sprint 8, tanda 1 (sección 3.4, E30): un colegio en preparación no manda recordatorios ni renovaciones.
+    IF NEW.tipo IN ('RECORDATORIO_VENCIMIENTO', 'CUOTA_VENCIDA', 'RENOVACION_MATRICULA')
+            AND NOT cc_colegio_en_produccion(NEW.colegio_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio todavia no esta en produccion: sin recordatorios de cobro';
+    END IF;
     IF NEW.destinatario_tipo = 'APODERADO' AND NEW.tipo <> 'CONTACTO_CAMBIADO' AND NOT EXISTS (SELECT 1 FROM apoderado a
             WHERE a.id = NEW.apoderado_id AND a.colegio_id = NEW.colegio_id
             AND ((NEW.canal = 'WHATSAPP' AND a.telefono_whatsapp = NEW.destino)
@@ -1126,10 +1158,13 @@ BEGIN
     END IF;
     -- El resumen es de una foto de ESTE colegio y va a una persona PROMOTOR activa (o al correo externo del DBA).
     -- Correcciones del sprint 6 (S6-M1): y lleva EXACTAMENTE el texto guardado en la foto (que su trigger comprobó contra
-    -- las cifras): un resumen con cifras inventadas no nace, aunque apunte a una foto verdadera.
+    -- las cifras): un resumen con cifras inventadas no nace, aunque apunte a una foto verdadera. Sprint 8, tanda 1
+    -- (plantillas v2): todo mensaje empieza con el nombre de SU colegio como primer parámetro, delante de la foto.
     IF NEW.tipo = 'RESUMEN_DIARIO' AND (NOT (NEW.entidad <=> 'resumen_diario') OR NOT EXISTS (SELECT 1
-            FROM resumen_diario r WHERE r.id = NEW.entidad_id AND r.colegio_id = NEW.colegio_id
-            AND r.parametros IS NOT NULL AND CAST(r.parametros AS BINARY) = CAST(NEW.parametros AS BINARY))) THEN
+            FROM resumen_diario r JOIN colegio c ON c.id = r.colegio_id
+            WHERE r.id = NEW.entidad_id AND r.colegio_id = NEW.colegio_id
+            AND r.parametros IS NOT NULL
+            AND CAST(CONCAT(c.nombre, '\n', r.parametros) AS BINARY) = CAST(NEW.parametros AS BINARY))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el resumen apunta a su foto y lleva su texto';
     END IF;
     -- S6-A1: a una cuenta del PERSONAL (sin apoderado_id), nunca a una cuenta enlazada a un apoderado.
@@ -1670,11 +1705,24 @@ END$$
 --      UPDATE, o si tiene algún rol del personal;
 --   b) la solicitud es MÁS NUEVA que la anterior (no se reusa una aprobada antigua) y el celular y el correo nuevos son
 --      EXACTAMENTE los que se aprobaron en ella (datos.telefono y datos.correo; vacío = sin ese canal).
+-- Sprint 8, tanda 1 (sección 3.3): única excepción, el titular de la primera Promotoría ANTES de activar su cuenta (la
+-- clave sigue por cambiar), en un colegio en preparación: el operador corrige su celular o correo con cc_sistema y la
+-- firma de su sesión en el colegio de plataforma (titular_contacto:{colegio}:{usuario}:{version de la cuenta}).
 DROP TRIGGER IF EXISTS trg_usuario_contacto$$
 CREATE TRIGGER trg_usuario_contacto BEFORE UPDATE ON usuario FOR EACH ROW
 BEGIN
     DECLARE v_roles_personal BOOLEAN;
+    DECLARE v_titular_sin_activar BOOLEAN;
     SET v_roles_personal = EXISTS (SELECT 1 FROM usuario_rol r WHERE r.usuario_id = NEW.id AND r.rol <> 'APODERADO');
+    SET v_titular_sin_activar = cc_es_sistema() AND OLD.debe_cambiar_clave AND NEW.debe_cambiar_clave
+        AND NEW.contacto_solicitud_id <=> OLD.contacto_solicitud_id
+        AND EXISTS (SELECT 1 FROM primera_promotoria p JOIN colegio c ON c.id = p.colegio_id
+            JOIN firma_operacion f ON f.colegio_id = p.plataforma_id
+                AND f.clave = CONCAT('titular_contacto:', p.colegio_id, ':', p.usuario_id, ':', OLD.version)
+            JOIN usuario o ON o.id = f.usuario_id AND o.id = p.operador_id
+            WHERE p.usuario_id = NEW.id AND p.colegio_id = NEW.colegio_id AND c.estado = 'PREPARACION'
+              AND cc_operador_activo(o.nombre_usuario)
+              AND f.firmada_bd >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE);
     IF OLD.apoderado_id IS NOT NULL AND NEW.apoderado_id IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una cuenta de apoderado no se desenlaza de su apoderado';
     END IF;
@@ -1684,6 +1732,7 @@ BEGIN
     IF (OLD.apoderado_id IS NULL OR NEW.apoderado_id IS NULL OR v_roles_personal)
             AND (NOT (NEW.telefono_whatsapp <=> OLD.telefono_whatsapp) OR NOT (NEW.correo <=> OLD.correo)
                 OR NOT (NEW.contacto_solicitud_id <=> OLD.contacto_solicitud_id))
+            AND NOT v_titular_sin_activar
             AND (NEW.contacto_solicitud_id IS NULL OR NEW.contacto_solicitud_id <= COALESCE(OLD.contacto_solicitud_id, 0)
                 OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.contacto_solicitud_id
                     AND s.colegio_id = NEW.colegio_id AND s.tipo = 'CAMBIO_CONTACTO_PERSONAL' AND s.entidad = 'usuario'
@@ -1959,6 +2008,9 @@ END$$
 
 -- H1 (E4): una cuenta la crea solo cc_sistema: activa, sin intentos ni bloqueo, sin solicitud de roles ni de contacto, y
 -- con la clave por cambiar (la del apoderado, con su enlace).
+-- Sprint 8, tanda 1 (sección 3.2, E3 y E7): en el colegio PLATAFORMA solo nacen cuentas sin apoderado creadas por
+-- sistema.plataforma (CC_OPERADORES); y un operador activo solo crea la PRIMERA cuenta de un colegio en preparación (el
+-- titular de la primera Promotoría). Después del alta, el operador ya no crea cuentas en ese colegio.
 DROP TRIGGER IF EXISTS trg_usuario_nace$$
 CREATE TRIGGER trg_usuario_nace BEFORE INSERT ON usuario FOR EACH ROW
 BEGIN
@@ -1969,6 +2021,15 @@ BEGIN
             OR NEW.roles_solicitud_id IS NOT NULL OR NEW.contacto_solicitud_id IS NOT NULL
             OR (NEW.apoderado_id IS NULL AND NOT (NEW.debe_cambiar_clave <=> TRUE)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una cuenta nace activa, sin bloqueo y con la clave por cambiar';
+    END IF;
+    IF EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id AND c.tipo = 'PLATAFORMA')
+            AND (NEW.apoderado_id IS NOT NULL OR NOT (NEW.creado_por <=> 'sistema.plataforma')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: en la plataforma solo nacen operadores, creados por sistema.plataforma';
+    END IF;
+    IF cc_operador_activo(NEW.creado_por) AND NOT (
+            EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id AND c.tipo = 'COLEGIO' AND c.estado = 'PREPARACION')
+            AND NOT EXISTS (SELECT 1 FROM usuario u WHERE u.colegio_id = NEW.colegio_id)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el operador solo crea la primera cuenta de un colegio en preparacion';
     END IF;
 END$$
 
@@ -2018,13 +2079,17 @@ END$$
 -- en cuentas de apoderado y los del personal solo en cuentas del personal; sin combinaciones prohibidas (quien cobra no
 -- aprueba); PROMOTOR y DIRECTOR solo con SU CAMBIO_ROLES aprobada y firmada por quien la aprobó (datos.roles, separados
 -- por comas, es el conjunto final). Excepciones de arranque (sin otra persona que pueda aprobar): el primer PROMOTOR de
--- un colegio sin Promotoría activa y el primer DIRECTOR de un colegio sin Dirección activa y con una sola Promotoría.
+-- un colegio (sprint 8, tanda 1, H7: con SU fila de primera_promotoria, escrita por un operador con su firma hace 5
+-- minutos o menos; ya no basta «sin Promotoría activa») y el primer DIRECTOR de un colegio sin Dirección activa y con una
+-- sola Promotoría. Sprint 8 (E7): OPERADOR_PLATAFORMA solo en el colegio PLATAFORMA, solo y sin otro rol; en ese colegio
+-- no hay ningún otro rol.
 DROP TRIGGER IF EXISTS trg_usuario_rol_alta$$
 CREATE TRIGGER trg_usuario_rol_alta BEFORE INSERT ON usuario_rol FOR EACH ROW
 BEGIN
     DECLARE v_colegio BIGINT;
     DECLARE v_apoderado BIGINT;
     DECLARE v_solicitud BIGINT;
+    DECLARE v_plataforma BOOLEAN;
     IF NOT cc_es_sistema() THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los roles los cambia solo cc_sistema';
     END IF;
@@ -2032,6 +2097,15 @@ BEGIN
       FROM usuario u WHERE u.id = NEW.usuario_id;
     IF v_colegio IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la cuenta del rol no existe';
+    END IF;
+    SET v_plataforma = EXISTS (SELECT 1 FROM colegio c WHERE c.id = v_colegio AND c.tipo = 'PLATAFORMA');
+    IF NEW.rol = 'OPERADOR_PLATAFORMA' AND (NOT v_plataforma
+            OR EXISTS (SELECT 1 FROM usuario_rol r WHERE r.usuario_id = NEW.usuario_id)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el operador vive solo en el colegio de plataforma y sin otro rol';
+    END IF;
+    IF NEW.rol <> 'OPERADOR_PLATAFORMA' AND (v_plataforma
+            OR EXISTS (SELECT 1 FROM usuario_rol r WHERE r.usuario_id = NEW.usuario_id AND r.rol = 'OPERADOR_PLATAFORMA')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: en la plataforma no hay roles de colegio';
     END IF;
     IF NOT ((NEW.rol <=> 'APODERADO') <=> (v_apoderado IS NOT NULL)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: APODERADO solo en cuentas de apoderado';
@@ -2044,8 +2118,9 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: combinacion de roles prohibida (quien cobra no aprueba)';
     END IF;
     IF NEW.rol IN ('PROMOTOR', 'DIRECTOR')
-            AND NOT (NEW.rol = 'PROMOTOR' AND NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r
-                ON r.usuario_id = u.id WHERE u.colegio_id = v_colegio AND u.activo AND r.rol = 'PROMOTOR'))
+            AND NOT (NEW.rol = 'PROMOTOR' AND EXISTS (SELECT 1 FROM primera_promotoria p WHERE p.colegio_id = v_colegio
+                AND p.usuario_id = NEW.usuario_id
+                AND p.creado_en >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE))
             AND NOT (NEW.rol = 'DIRECTOR' AND NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r
                 ON r.usuario_id = u.id WHERE u.colegio_id = v_colegio AND u.activo AND r.rol = 'DIRECTOR')
                 AND (SELECT COUNT(*) FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
@@ -2088,4 +2163,98 @@ BEGIN
     END IF;
 END$$
 
+DELIMITER ;
+
+-- ===================== Sprint 8 · tanda 1 (V28): plataforma, alta de colegios y correo de control =====================
+-- (Las funciones cc_operador_activo y cc_colegio_en_produccion están al principio de este archivo. Las versiones nuevas de
+-- trg_usuario_nace, trg_usuario_rol_alta, trg_pago_registro, trg_mensaje_nace y trg_serie_comprobante_nace quedaron en su
+-- lugar, marcadas con «Sprint 8, tanda 1».)
+DELIMITER $$
+
+-- Un colegio lo crea el operador (cc_sistema, por EjecucionPlataforma), en preparación. Con cc_app, nunca. El DBA (otro
+-- usuario) conserva su camino documentado (docs/operacion/mysql-usuarios.md); lo delata la bitácora sin COLEGIO_CREADO.
+DROP TRIGGER IF EXISTS trg_colegio_nace$$
+CREATE TRIGGER trg_colegio_nace BEFORE INSERT ON colegio FOR EACH ROW
+BEGIN
+    IF SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_app' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un colegio lo crea solo el operador de la plataforma';
+    END IF;
+    IF cc_es_sistema() AND (NOT (NEW.tipo <=> 'COLEGIO') OR NOT (NEW.estado <=> 'PREPARACION')
+            OR NEW.produccion_desde IS NOT NULL OR NOT cc_operador_activo(NEW.creado_por)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio nace en preparacion y lo crea un operador activo';
+    END IF;
+END$$
+
+-- Ficha y estado. cc_sistema (el operador): solo la ficha de un colegio en preparación. cc_app (Promotoría): la ficha y
+-- el paso a producción con su firma, con Dirección y Caja activas. Nadie vuelve a preparación ni cambia el RUC de un
+-- colegio en producción; el tipo y el creador no cambian.
+DROP TRIGGER IF EXISTS trg_colegio_cambio$$
+CREATE TRIGGER trg_colegio_cambio BEFORE UPDATE ON colegio FOR EACH ROW
+BEGIN
+    DECLARE v_quien VARCHAR(60) DEFAULT SUBSTRING_INDEX(SESSION_USER(), '@', 1);
+    IF v_quien IN ('cc_app', 'cc_sistema') THEN
+        IF NOT (NEW.tipo <=> OLD.tipo) OR NOT (NEW.creado_por <=> OLD.creado_por)
+                OR NOT (NEW.plataforma_unica <=> OLD.plataforma_unica) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el tipo y el creador del colegio no cambian';
+        END IF;
+        IF OLD.estado = 'PRODUCCION' AND (NOT (NEW.estado <=> 'PRODUCCION') OR NOT (NEW.ruc <=> OLD.ruc)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un colegio en produccion no vuelve atras ni cambia su RUC';
+        END IF;
+        IF v_quien = 'cc_sistema' AND (OLD.estado = 'PRODUCCION' OR NOT (NEW.estado <=> OLD.estado)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el operador solo cambia la ficha de un colegio en preparacion';
+        END IF;
+        IF OLD.estado = 'PREPARACION' AND NEW.estado = 'PRODUCCION' AND NOT (
+                EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id WHERE u.colegio_id = NEW.id
+                    AND u.activo AND r.rol = 'PROMOTOR' AND u.nombre_usuario = NEW.produccion_por)
+                AND cc_firma_valida(NEW.id, CONCAT('colegio:', NEW.id, ':PRODUCCION'), NEW.produccion_por)
+                AND EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id WHERE u.colegio_id = NEW.id
+                    AND u.activo AND r.rol = 'DIRECTOR')
+                AND EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id WHERE u.colegio_id = NEW.id
+                    AND u.activo AND r.rol = 'CAJA')) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: a produccion lo pasa la Promotoria con su firma, con Direccion y Caja activas';
+        END IF;
+    END IF;
+END$$
+
+-- H7. La primera Promotoría: un operador activo, con su firma de hace 5 minutos o menos (en el colegio de plataforma), en
+-- un colegio en preparación cuya única cuenta es la del titular. Una vez por colegio (UNIQUE).
+DROP TRIGGER IF EXISTS trg_primera_promotoria_nace$$
+CREATE TRIGGER trg_primera_promotoria_nace BEFORE INSERT ON primera_promotoria FOR EACH ROW
+BEGIN
+    IF NOT cc_es_sistema() OR NOT cc_operador_activo(NEW.creado_por)
+            OR NOT EXISTS (SELECT 1 FROM usuario o WHERE o.id = NEW.operador_id AND o.colegio_id = NEW.plataforma_id
+                AND o.nombre_usuario = NEW.creado_por)
+            OR NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id AND c.tipo = 'COLEGIO'
+                AND c.estado = 'PREPARACION')
+            OR NOT EXISTS (SELECT 1 FROM usuario u WHERE u.id = NEW.usuario_id AND u.colegio_id = NEW.colegio_id
+                AND u.apoderado_id IS NULL)
+            OR NOT ((SELECT COUNT(*) FROM usuario u WHERE u.colegio_id = NEW.colegio_id) <=> 1)
+            OR NOT cc_firma_valida(NEW.plataforma_id, CONCAT('primera_promotoria:', NEW.colegio_id), NEW.creado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la primera Promotoria la crea un operador con su firma, antes de cualquier otra cuenta';
+    END IF;
+END$$
+
+-- H10. El correo externo de control: con cc_sistema, solo un operador activo con su firma (en el colegio de plataforma).
+-- cc_app no tiene GRANT (1142). El DBA conserva su camino.
+DROP TRIGGER IF EXISTS trg_configuracion_colegio_registro$$
+CREATE TRIGGER trg_configuracion_colegio_registro BEFORE INSERT ON configuracion_colegio FOR EACH ROW
+BEGIN
+    IF SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_app' OR (cc_es_sistema() AND NOT (cc_operador_activo(NEW.creado_por)
+            AND cc_firma_valida((SELECT c.id FROM colegio c WHERE c.tipo = 'PLATAFORMA'),
+                CONCAT('configuracion_colegio:', NEW.colegio_id, ':', NEW.clave, ':0'), NEW.creado_por))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la configuracion del colegio la registra el operador con su firma';
+    END IF;
+END$$
+
+DROP TRIGGER IF EXISTS trg_configuracion_colegio_cambio$$
+CREATE TRIGGER trg_configuracion_colegio_cambio BEFORE UPDATE ON configuracion_colegio FOR EACH ROW
+BEGIN
+    IF NOT (NEW.colegio_id <=> OLD.colegio_id) OR NOT (NEW.clave <=> OLD.clave)
+            OR SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_app'
+            OR (cc_es_sistema() AND NOT (cc_operador_activo(NEW.actualizado_por)
+                AND cc_firma_valida((SELECT c.id FROM colegio c WHERE c.tipo = 'PLATAFORMA'),
+                    CONCAT('configuracion_colegio:', NEW.colegio_id, ':', NEW.clave, ':', OLD.version), NEW.actualizado_por))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la configuracion del colegio la cambia el operador con su firma';
+    END IF;
+END$$
 DELIMITER ;

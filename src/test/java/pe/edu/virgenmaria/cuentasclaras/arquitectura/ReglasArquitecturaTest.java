@@ -72,7 +72,6 @@ class ReglasArquitecturaTest {
 	/** Únicas clases que pueden ver todos los colegios (se crean en la tanda 2). */
 	private static final Set<String> AUTORIZADAS_COMO_SISTEMA = Set.of(
 			BASE + ".seguridad.service.ServicioDetallesUsuario",
-			BASE + ".seguridad.inicial.InicializadorPromotor",
 			BASE + ".seguridad.inicial.DatosDemoDev",
 			// Sprint 7, tanda 2: al arrancar cierra las sesiones de la base de todos los colegios (REINICIO).
 			BASE + ".seguridad.service.sesion.SesionesFirmadas");
@@ -918,7 +917,9 @@ class ReglasArquitecturaTest {
 	/** Actuar como sistema (sin persona detrás) solo desde los procesos: nunca desde un controlador ni un servicio web. */
 	@ArchTest
 	static final ArchRule ejecucionComoSistemaSoloEnProcesos = noClasses()
-			.that().resideOutsideOfPackages(BASE + "..proceso..", BASE + ".comun.sistema..", BASE + ".comun.muestreo..")
+			.that().resideOutsideOfPackages(BASE + "..proceso..", BASE + ".comun.sistema..", BASE + ".comun.muestreo..",
+					// Sprint 8, tanda 1: los operadores los sincroniza sistema.plataforma al arrancar (CC_OPERADORES).
+					BASE + ".plataforma.inicial..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".comun.sistema.EjecucionComoSistema")
 			.because("un actor de sistema salta los permisos de las personas: solo lo usan las tareas, los procesos y la "
 					+ "semilla del muestreo (sistema.muestreo, sprint 7)");
@@ -941,13 +942,45 @@ class ReglasArquitecturaTest {
 	 */
 	@ArchTest
 	static final ArchRule ejecucionIdentidadSoloEnLasClasesDeIdentidad = noClasses()
-			.that().resideOutsideOfPackages(BASE + ".seguridad.service..", BASE + ".seguridad.inicial..")
+			.that().resideOutsideOfPackages(BASE + ".seguridad.service..", BASE + ".seguridad.inicial..",
+					// Sprint 8, tanda 1: el operador escribe el colegio, el año inicial y el correo de control con cc_sistema
+					// (EjecucionPlataforma) y el inicializador de operadores crea sus cuentas.
+					BASE + ".plataforma.service..", BASE + ".plataforma.inicial..")
 			.and().doNotHaveFullyQualifiedName(BASE + ".alumnos.service.ServicioAccesoApoderados")
 			.and().doNotHaveFullyQualifiedName(BASE + ".alumnos.inicial.DatosDemoApoderadoDev")
 			.and().doNotHaveFullyQualifiedName(BASE + ".aprobaciones.service.BandejaAprobaciones")
 			.should().dependOnClassesThat()
 			.haveFullyQualifiedName(BASE + ".seguridad.service.identidad.EjecucionIdentidad")
 			.because("la conexión de cc_sistema escribe cuentas, claves, roles y sesiones: solo desde la identidad");
+
+	/**
+	 * Sprint 8, tanda 1 (sección 3.2, E1): la plataforma no toca los datos de los colegios. Solo depende del colegio (ficha,
+	 * año y logo), del puerto de identidad {@code AltaTitular}, de la lista de verificación (conteos), de la configuración
+	 * del colegio (el correo de control), de la auditoría y de comun.
+	 */
+	@ArchTest
+	static final ArchRule plataformaNoDependeDeDatosDeColegios = noClasses()
+			.that().resideInAPackage(BASE + ".plataforma..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".alumnos..", BASE + ".familias..", BASE + ".caja..",
+					BASE + ".cobranza..", BASE + ".comprobantes..", BASE + ".conciliacion..", BASE + ".recaudacion..",
+					BASE + ".matricula..", BASE + ".panel..", BASE + ".privacidad..", BASE + ".pasarela..",
+					BASE + ".comunicacion.service..", BASE + ".comunicacion.proceso..", BASE + ".comunicacion.proveedor..",
+					BASE + ".comunicacion.web..", BASE + ".comunicacion.dto..")
+			.because("el operador de la plataforma nunca ve datos de las familias de un colegio");
+
+	/** Sprint 8, tanda 1: nadie depende de la plataforma (solo el operador entra ahí). */
+	@ArchTest
+	static final ArchRule nadieDependeDeLaPlataforma = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".plataforma..")
+			.should().dependOnClassesThat().resideInAPackage(BASE + ".plataforma..")
+			.because("la plataforma es del operador; los colegios no la conocen");
+
+	/** Sprint 8, tanda 1: la ruta de cc_sistema con el contexto del operador solo la usa plataforma.service. */
+	@ArchTest
+	static final ArchRule ejecucionPlataformaSoloEnPlataforma = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".plataforma.service..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".plataforma.service.EjecucionPlataforma")
+			.because("el operador escribe con cc_sistema solo lo que el alta necesita");
 
 	/** Sprint 7, tanda 2 (sección 3.4): quien resuelve una aprobación firma con su sesión (en MySQL, sin firma: 1644). */
 	@ArchTest
@@ -969,6 +1002,9 @@ class ReglasArquitecturaTest {
 			.or().haveFullyQualifiedName(BASE + ".caja.service.ServicioVerificacionBancaria")
 			.or().haveFullyQualifiedName(BASE + ".panel.service.LlamadasControl")
 			.or().haveFullyQualifiedName(BASE + ".operacion.service.ResolucionesRespaldo")
+			// Sprint 8, tanda 1: el operador firma la primera Promotoría y el correo de control; Promotoría, la producción.
+			.or().haveFullyQualifiedName(BASE + ".plataforma.service.AltaColegio")
+			.or().haveFullyQualifiedName(BASE + ".puestaenmarcha.service.PasoAProduccion")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".seguridad.service.sesion.FirmaSesion")
 			.because("cada aprobación de una persona lleva la firma de su sesión (sección 3.4 del sprint 7)");
 

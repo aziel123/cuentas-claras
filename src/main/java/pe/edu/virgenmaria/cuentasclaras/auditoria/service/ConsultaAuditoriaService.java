@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
  * Los intentos de ingreso con usuarios inexistentes no tienen colegio y no aparecen aquí.
  */
 @Service
-@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
+@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR','OPERADOR_PLATAFORMA')")
 public class ConsultaAuditoriaService {
 
 	public static final int TAMANO_PAGINA = 50;
@@ -51,6 +51,18 @@ public class ConsultaAuditoriaService {
 	public ConsultaAuditoriaService(EventoAuditoriaRepository eventos, Clock reloj) {
 		this.eventos = eventos;
 		this.reloj = reloj;
+	}
+
+	/**
+	 * Sprint 8, tanda 1: cuándo fue el último evento de un colegio (la «última actividad» que ve el operador; solo la
+	 * fecha, nunca el contenido). Vacío si no hay eventos.
+	 */
+	@Transactional(readOnly = true)
+	public java.util.Optional<LocalDateTime> ultimaActividadDe(Long colegioId) {
+		if (colegioId == null || colegioId <= 0) {
+			return java.util.Optional.empty();
+		}
+		return eventos.findFirstByColegioIdOrderBySecuenciaDesc(colegioId).map(EventoAuditoria::getOcurridoEn);
 	}
 
 	/** Rango por defecto: los últimos 7 días, hasta hoy (hora de Lima). */

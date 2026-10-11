@@ -12,13 +12,15 @@
 			<div>
 				<h1 id="titulo-activar">Activa tu cuenta</h1>
 				<p class="secundario" th:text="|Hola, ${vista.nombreCompleto}. Elige tu clave: nadie más la conoce, ni el colegio.|">Hola</p>
+				<p class="secundario" th:if="${vista.titular}" data-creado-por
+					th:text="|Tu colegio y tu cuenta de Promotoría los creó el operador ${vista.creadoPor} el ${#temporals.format(vista.creadoEn, 'dd/MM/yyyy HH:mm')}. Si no lo esperabas, no actives la cuenta y avisa al proveedor.|">Creado por</p>
 			</div>
 			<th:block th:if="${error != null}">
 				<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
 			</th:block>
 			<form class="formulario" method="post" th:action="@{/activar/{c}/{t}(c=${colegio},t=${token})}">
 				<div class="campo">
-					<label for="documento" th:text="${vista.personal} ? 'Tu nombre de usuario' : 'Tu número de documento'">Tu número de documento</label>
+					<label for="documento" th:text="${vista.titular} ? 'Tu DNI (el del contrato)' : (${vista.personal} ? 'Tu nombre de usuario' : 'Tu número de documento')">Tu número de documento</label>
 					<input type="text" class="input" id="documento" name="documento" autocomplete="username"
 						maxlength="60" required autofocus>
 				</div>

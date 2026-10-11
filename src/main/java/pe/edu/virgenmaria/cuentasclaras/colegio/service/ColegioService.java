@@ -69,6 +69,19 @@ public class ColegioService {
 				c.getRuc(), c.getDireccion(), colegioId.equals(ContextoColegio.actual()) && logos.existsByVigenteTrue()));
 	}
 
+	/** Sprint 8, tanda 1 (sección 3.4): si el colegio ya está en producción (en preparación no se registra dinero). */
+	public boolean enProduccion(Long colegioId) {
+		return colegioId != null && colegios.findById(colegioId).map(Colegio::enProduccion).orElse(false);
+	}
+
+	/** Sprint 8, tanda 1 (E9): la aplicación tampoco cobra en un colegio en preparación (en MySQL, trg_pago_registro). */
+	public void exigirEnProduccion(Long colegioId) {
+		if (!enProduccion(colegioId)) {
+			throw new pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException("El colegio todavía no está en "
+					+ "producción: no se registran pagos. La Promotoría lo pasa a producción desde «Puesta en marcha».");
+		}
+	}
+
 	/** La fila PLATAFORMA (V28): ahí viven los operadores. */
 	public Colegio plataforma() {
 		return colegios.findFirstByTipo(TipoColegio.PLATAFORMA)

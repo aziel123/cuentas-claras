@@ -96,6 +96,29 @@ public final class ClaveFirma {
 		return "respaldo:" + id(respaldoId) + ":RESUELTO";
 	}
 
+	/** Sprint 8, tanda 1 (sección 3.3): el operador firma, en el colegio de plataforma, la primera Promotoría de ESE colegio. */
+	public static String primeraPromotoria(Long colegioId) {
+		return "primera_promotoria:" + id(colegioId);
+	}
+
+	/** Sprint 8, tanda 1 (sección 3.3): el operador corrige el contacto del titular (la cuenta, con su versión actual). */
+	public static String titularContacto(Long colegioId, Long usuarioId, long version) {
+		return "titular_contacto:" + id(colegioId) + ":" + id(usuarioId) + ":" + version;
+	}
+
+	/** Sprint 8, tanda 1 (sección 3.4): Promotoría pasa su colegio a producción. */
+	public static String colegioProduccion(Long colegioId) {
+		return "colegio:" + id(colegioId) + ":PRODUCCION";
+	}
+
+	/**
+	 * Sprint 8, tanda 1 (H10): el operador registra ({@code version} 0) o cambia (la versión actual de la fila) el correo
+	 * externo de control de ese colegio, firmando en el colegio de plataforma.
+	 */
+	public static String configuracionColegio(Long colegioId, String clave, long version) {
+		return "configuracion_colegio:" + id(colegioId) + ":" + Objects.requireNonNull(clave, "clave") + ":" + version;
+	}
+
 	private static Long id(Long id) {
 		return Objects.requireNonNull(id, "id");
 	}

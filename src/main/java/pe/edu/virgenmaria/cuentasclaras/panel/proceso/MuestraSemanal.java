@@ -52,7 +52,7 @@ public class MuestraSemanal implements FijadorMuestra {
 	@Scheduled(cron = "${cuentasclaras.panel.muestra-semanal:0 10 0 * * MON}", zone = ConfiguracionTiempo.ZONA)
 	public void ejecutar() {
 		LocalDate semana = LocalDate.now(reloj).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-		PasadaPorColegios.recorrer(LOG, "La muestra de la semana", colegios.activos(), colegio -> {
+		PasadaPorColegios.recorrer(LOG, "La muestra de la semana", colegios.enProduccion(), colegio -> {
 			int familias = asegurar(colegio, semana).size();
 			LOG.info("Muestra de la llamada de control de la semana del {} fijada en el colegio {}: {} familia(s).",
 					semana, colegio, familias);

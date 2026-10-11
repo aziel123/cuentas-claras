@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Dar de alta un colegio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="plataforma-nuevo">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Plataforma</p>
+			<h1>Dar de alta un colegio</h1>
+			<p class="secundario">Los datos salen del contrato firmado. El colegio nace en preparación: no cobra hasta que su
+				Promotoría lo pase a producción. Al titular le llega un enlace para activar su cuenta; al activarla confirma su DNI.</p>
+		</div>
+	</div>
+
+	<section class="tarjeta" aria-label="Datos del colegio">
+		<th:block th:if="${error != null}">
+			<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+		</th:block>
+
+		<form class="formulario" th:action="@{/plataforma/colegios/nuevo}" th:object="${solicitud}" method="post"
+			enctype="multipart/form-data">
+			<h2>Colegio</h2>
+			<div th:replace="~{fragments/componentes :: campo('nombre', 'Nombre comercial', 'Como lo conocen las familias.', 'off')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('razonSocial', 'Razón social', 'La del RUC: va en cada boleta.', 'off')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('ruc', 'RUC', '11 dígitos que empiezan con 10 o 20.', 'off')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('direccion', 'Dirección fiscal', null, 'off')}"></div>
+			<div class="campo">
+				<label for="correoInstitucional">Correo institucional</label>
+				<input type="email" class="input" th:field="*{correoInstitucional}" autocomplete="off"
+					th:classappend="${#fields.hasErrors('correoInstitucional')} ? 'input-con-error'">
+				<p class="error" th:if="${#fields.hasErrors('correoInstitucional')}" th:errors="*{correoInstitucional}">Error</p>
+			</div>
+			<fieldset class="campo grupo-opciones">
+				<legend>Niveles que ofrece</legend>
+				<label class="opcion" th:each="n : ${niveles}">
+					<input type="checkbox" th:field="*{niveles}" th:value="${n}">
+					<span th:text="${n.etiqueta()}">Inicial</span>
+				</label>
+				<p class="error" th:if="${#fields.hasErrors('niveles')}" th:errors="*{niveles}">Error</p>
+			</fieldset>
+			<div class="campo">
+				<label for="logo">Logo (opcional)</label>
+				<input type="file" class="input" id="logo" name="logo" accept="image/png,image/jpeg" aria-describedby="logo-ayuda">
+				<p class="ayuda" id="logo-ayuda">PNG o JPEG de hasta 1 MB. Se reescala a 400 px.</p>
+			</div>
+			<div th:replace="~{fragments/componentes :: campo('contratoCodigo', 'Código del contrato', 'Enlaza la ficha con el contrato firmado.', 'off')}"></div>
+
+			<h2>Año escolar inicial</h2>
+			<div class="campo">
+				<label for="anio">Año</label>
+				<input type="number" class="input" th:field="*{anio}" min="2000" max="2100" inputmode="numeric"
+					th:classappend="${#fields.hasErrors('anio')} ? 'input-con-error'">
+				<p class="error" th:if="${#fields.hasErrors('anio')}" th:errors="*{anio}">Error</p>
+			</div>
+			<div class="campo">
+				<label for="inicioClases">Inicio de clases</label>
+				<input type="date" class="input" th:field="*{inicioClases}" th:classappend="${#fields.hasErrors('inicioClases')} ? 'input-con-error'">
+				<p class="error" th:if="${#fields.hasErrors('inicioClases')}" th:errors="*{inicioClases}">Error</p>
+			</div>
+			<div class="campo">
+				<label for="finClases">Fin de clases</label>
+				<input type="date" class="input" th:field="*{finClases}" th:classappend="${#fields.hasErrors('finClases')} ? 'input-con-error'">
+				<p class="error" th:if="${#fields.hasErrors('finClases')}" th:errors="*{finClases}">Error</p>
+			</div>
+
+			<h2>Titular del contrato (primera Promotoría)</h2>
+			<div th:replace="~{fragments/componentes :: campo('titularNombre', 'Nombre completo', null, 'off')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('titularDocumento', 'DNI', 'Lo confirma al activar su cuenta.', 'off')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('titularUsuario', 'Usuario con el que ingresará',
+				'Minúsculas, sin espacios ni tildes. Por ejemplo: maria.torres', 'off')}"></div>
+			<div class="campo">
+				<label for="titularTelefono">Celular con WhatsApp</label>
+				<input type="tel" class="input" th:field="*{titularTelefono}" autocomplete="off" inputmode="tel"
+					aria-describedby="titular-telefono-ayuda" th:classappend="${#fields.hasErrors('titularTelefono')} ? 'input-con-error'">
+				<p class="ayuda" id="titular-telefono-ayuda">Ahí le llega el enlace para activar su cuenta (vence en 48 horas). Si no tiene WhatsApp, escribe su correo. Nadie más ve el enlace.</p>
+				<p class="error" th:if="${#fields.hasErrors('titularTelefono')}" th:errors="*{titularTelefono}">Error</p>
+			</div>
+			<div class="campo">
+				<label for="titularCorreo">Correo del titular</label>
+				<input type="email" class="input" th:field="*{titularCorreo}" autocomplete="off"
+					th:classappend="${#fields.hasErrors('titularCorreo')} ? 'input-con-error'">
+				<p class="error" th:if="${#fields.hasErrors('titularCorreo')}" th:errors="*{titularCorreo}">Error</p>
+			</div>
+
+			<div class="acciones">
+				<a class="btn btn-secundario" th:href="@{/plataforma}">Cancelar</a>
+				<button th:replace="~{fragments/componentes :: boton('Dar de alta el colegio', 'primario')}"></button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

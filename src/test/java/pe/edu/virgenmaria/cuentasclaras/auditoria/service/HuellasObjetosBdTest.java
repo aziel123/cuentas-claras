@@ -22,17 +22,20 @@ class HuellasObjetosBdTest {
 	}
 
 	@Test
-	void sonLos75TriggersYLas7FuncionesDeLosScripts() {
+	void sonLos80TriggersYLas9FuncionesDeLosScripts() {
 		Map<String, String> esperadas = HuellasObjetosBd.esperadas();
 
 		// Correcciones del sprint 7 (V27): 75 triggers (trg_solicitud_cambio_nace y trg_resolucion_respaldo_registro) y 7
-		// funciones (cc_solicitud_firmada en 03 y permisos_objetos en 02).
-		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(75)
+		// funciones (cc_solicitud_firmada en 03 y permisos_objetos en 02). Sprint 8, tanda 1 (V28): 80 triggers (el colegio
+		// nace y cambia, la primera Promotoría y el correo externo de control) y 9 funciones (cc_operador_activo y
+		// cc_colegio_en_produccion): 89 huellas.
+		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(80)
 				.isEqualTo(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
-		assertThat(esperadas).hasSize(82).containsKeys("cc_contacto_normal", "cc_es_sistema", "cc_firma_valida",
-				"cc_solicitud_firmada", "triggers_instalados", "huellas_objetos", "permisos_objetos",
-				"trg_usuario_rol_alta", "trg_firma_operacion_nace", "trg_solicitud_cambio_nace",
-				"trg_resolucion_respaldo_registro");
+		assertThat(esperadas).hasSize(89).containsKeys("cc_contacto_normal", "cc_es_sistema", "cc_firma_valida",
+				"cc_solicitud_firmada", "cc_operador_activo", "cc_colegio_en_produccion", "triggers_instalados",
+				"huellas_objetos", "permisos_objetos", "trg_usuario_rol_alta", "trg_firma_operacion_nace",
+				"trg_solicitud_cambio_nace", "trg_resolucion_respaldo_registro", "trg_colegio_nace", "trg_colegio_cambio",
+				"trg_primera_promotoria_nace", "trg_configuracion_colegio_registro", "trg_configuracion_colegio_cambio");
 		assertThat(esperadas.values()).allMatch(h -> h.matches("[0-9a-f]{64}"));
 	}
 

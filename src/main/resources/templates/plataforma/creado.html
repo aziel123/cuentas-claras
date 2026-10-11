@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Colegio dado de alta', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="plataforma-creado">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Plataforma</p>
+			<h1 th:text="${creado.nombre}">Colegio</h1>
+		</div>
+	</div>
+
+	<th:block th:if="${creado.completo()}">
+		<div th:replace="~{fragments/componentes :: alerta('exito', |Listo: el colegio quedó en preparación. El enlace de activación de ${creado.titularUsuario} se envió por ${creado.titularCanal} a ${creado.titularDestino}; vence en 48 horas y nadie más lo ve. Al activarlo, el titular confirma su DNI y elige su clave.|)}"></div>
+	</th:block>
+	<th:block th:unless="${creado.completo()}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${creado.pendiente})}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-siguiente">
+		<h2 id="titulo-siguiente">Qué sigue</h2>
+		<ol>
+			<li>En la reunión de puesta en marcha, el titular abre su enlace, escribe su DNI y elige su clave.</li>
+			<li>La Promotoría crea las cuentas de Dirección y Caja (personas distintas), el año y las secciones, y registra a
+				los alumnos.</li>
+			<li>Tú registras el correo externo de control (el contador o un tercero de confianza del contrato) desde la ficha.</li>
+			<li>Con el equipo listo, la Promotoría pasa el colegio a producción con la firma de su sesión. Hasta entonces no se
+				registran pagos.</li>
+		</ol>
+		<div class="acciones">
+			<a class="btn btn-primario" th:href="@{/plataforma/colegios/{id}(id=${creado.colegioId})}">Ver la ficha del colegio</a>
+			<a class="btn btn-secundario" th:href="@{/plataforma}">Volver a la lista</a>
+		</div>
+	</section>
+</main>
+</body>
+</html>

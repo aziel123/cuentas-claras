@@ -38,8 +38,3 @@ cuentasclaras:
   # se aplican a cuotas (quedan por revisar como «no es dinero real»).
   entorno:
     nombre: PILOTO
-  inicial:
-    colegio-id: ${CC_COLEGIO_ID:1}
-    promotor-usuario: ${CC_PROMOTOR_USUARIO:}
-    promotor-nombre: ${CC_PROMOTOR_NOMBRE:}
-    promotor-clave: ${CC_PROMOTOR_CLAVE:}

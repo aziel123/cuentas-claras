@@ -64,6 +64,9 @@ public class DatosDemoDev implements ApplicationRunner {
 
 	static final UsuarioDemo PROMOTOR_COLEGIO_B = new UsuarioDemo("promotor.b", "Promotor del Colegio B", Rol.PROMOTOR);
 
+	/** Sprint 8, tanda 1: el operador de la plataforma (vive en el colegio PLATAFORMA; da de alta colegios). */
+	static final UsuarioDemo OPERADOR = new UsuarioDemo("operador", "Operador de la plataforma", Rol.OPERADOR_PLATAFORMA);
+
 	/** Cajera del colegio B (sprint 3): para ver que no encuentra familias ni pagos del colegio principal. */
 	static final UsuarioDemo CAJA_COLEGIO_B = new UsuarioDemo("caja.b", "Cajera del Colegio B", Rol.CAJA);
 
@@ -117,6 +120,8 @@ public class DatosDemoDev implements ApplicationRunner {
 		USUARIOS_COLEGIO_PRINCIPAL.forEach(u -> crear(COLEGIO_PRINCIPAL, u));
 		crear(colegioB, PROMOTOR_COLEGIO_B);
 		crear(colegioB, CAJA_COLEGIO_B);
+		colegios.findFirstByTipo(pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoColegio.PLATAFORMA)
+				.ifPresent(p -> crear(p.getId(), OPERADOR));
 		LOG.info("Usuarios de demostración creados: {} y {} (en {}). Clave: la de cuentasclaras.demo.clave (CC_DEMO_CLAVE).",
 				USUARIOS_COLEGIO_PRINCIPAL.stream().map(UsuarioDemo::nombreUsuario).toList(),
 				List.of(PROMOTOR_COLEGIO_B.nombreUsuario(), CAJA_COLEGIO_B.nombreUsuario()), NOMBRE_COLEGIO_B);

@@ -53,6 +53,7 @@ import pe.edu.virgenmaria.cuentasclaras.comprobantes.service.AperturaSerie;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador;
 
@@ -297,6 +298,8 @@ public class ServicioCobro {
 	 */
 	public Long cobrar(CobroRequest solicitud) {
 		Objects.requireNonNull(solicitud, "solicitud");
+		// Sprint 8, tanda 1 (E9): en un colegio en preparación no se registra dinero (en MySQL, trg_pago_registro).
+		colegios.exigirEnProduccion(ContextoColegio.actual());
 		String cajero = SesionCaja.usuario();
 		LocalDate hoy = hoy();
 		prepararCajaYSerie(cajero, hoy, solicitud.comprobante());

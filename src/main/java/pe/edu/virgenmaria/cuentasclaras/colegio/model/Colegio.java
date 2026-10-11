@@ -37,6 +37,9 @@ import java.util.stream.Collectors;
 @Entity
 @Table(name = "colegio")
 @EntityListeners(AuditingEntityListener.class)
+// Solo las columnas que cambian: cada conexión de MySQL tiene GRANT sobre columnas distintas (el operador con cc_sistema,
+// la Promotoría con cc_app) y un UPDATE de toda la fila daría 1143.
+@org.hibernate.annotations.DynamicUpdate
 public class Colegio {
 
 	public static final int MAX_NOMBRE = 150;
@@ -51,7 +54,7 @@ public class Colegio {
 	@Column(length = 11)
 	private String ruc;
 
-	@Column(nullable = false)
+	@Column(nullable = false, updatable = false)
 	private boolean activo = true;
 
 	@Column(name = "creado_en", nullable = false, insertable = false, updatable = false)

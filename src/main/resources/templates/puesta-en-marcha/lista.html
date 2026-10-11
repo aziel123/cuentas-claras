@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Puesta en marcha', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="puesta-en-marcha">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Puesta en marcha</p>
+			<h1 th:text="${lista.nombre}">Colegio</h1>
+			<p class="secundario" th:if="${lista.enPreparacion()}">El colegio está <strong>en preparación</strong>: todavía no se registran
+				pagos ni salen recordatorios de cobro. Completa la lista y la Promotoría lo pasa a producción.</p>
+			<p class="secundario" th:unless="${lista.enPreparacion()}">El colegio está <strong>en producción</strong>. Esta lista
+				es la salud de su configuración.</p>
+		</div>
+		<span th:replace="~{fragments/componentes :: badge(${lista.estado.etiqueta()}, ${lista.enPreparacion()} ? 'alerta' : 'exito')}"></span>
+	</div>
+
+	<th:block th:if="${exito != null}">
+		<div th:replace="~{fragments/componentes :: alerta('exito', ${exito})}"></div>
+	</th:block>
+	<th:block th:if="${error != null}">
+		<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-lista">
+		<h2 id="titulo-lista">Lista de verificación</h2>
+		<table class="tabla">
+			<caption class="solo-lectores">Pasos de la puesta en marcha y su estado.</caption>
+			<thead><tr><th scope="col">Paso</th><th scope="col">Estado</th><th scope="col">Detalle</th></tr></thead>
+			<tbody>
+				<tr th:each="p : ${lista.puntos}" th:data-paso="${p.clave}">
+					<td data-etiqueta="Paso">
+						<a th:if="${p.enlace != null}" th:href="@{${p.enlace}}" th:text="${p.paso}">Paso</a>
+						<span th:unless="${p.enlace != null}" th:text="${p.paso}">Paso</span>
+					</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${p.estado.etiqueta()},
+						${p.hecho()} ? 'exito' : (${p.obligatorio()} ? 'alerta' : 'neutro'))}"></span></td>
+					<td data-etiqueta="Detalle" th:text="${p.conteo}">Detalle</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" th:if="${lista.enPreparacion() and puedePasar}" aria-labelledby="titulo-produccion">
+		<h2 id="titulo-produccion">Pasar a producción</h2>
+		<p class="secundario">Solo la Promotoría, con la firma de su sesión. Hace falta al menos una Dirección y una Caja activas.
+			No tiene vuelta atrás: desde ese momento se registran pagos y salen los avisos a las familias.</p>
+		<p class="secundario" th:unless="${lista.completa()}" th:text="|Faltan ${lista.pendientes()} paso(s) obligatorio(s). Puedes pasar a producción con el equipo y los datos listos; lo demás se completa después.|">Faltan pasos</p>
+		<form method="post" th:action="@{/puesta-en-marcha/produccion}">
+			<button type="submit" class="btn btn-primario">Pasar el colegio a producción</button>
+		</form>
+	</section>
+</main>
+</body>
+</html>

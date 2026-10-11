@@ -377,7 +377,43 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					Set.of(MYSQL_COMANDO_DENEGADO, MYSQL_COLUMNA_DENEGADA), "la resolución de una alerta de respaldo se podría reescribir."),
 			// Correcciones del sprint 7: la marca de la primera Dirección de un colegio la escribe solo cc_sistema (1142).
 			soloSistema(VerificadorPermisosBaseDatos.PRIMERA_DIRECCION_IMPOSIBLE,
-					"la aplicación podría gastar o fabricar la excepción de la primera Dirección de un colegio."));
+					"la aplicación podría gastar o fabricar la excepción de la primera Dirección de un colegio."),
+			// Sprint 8, tanda 1 (E5): con cc_app no se crea un colegio ni una primera Promotoría (1142), no se cambia el RUC
+			// de un colegio (1143) ni se borra un colegio o un logo (1142); el contenido del logo no cambia (1143).
+			soloSistema(VerificadorPermisosBaseDatos.COLEGIO_IMPOSIBLE,
+					"la aplicación podría dar de alta colegios (solo el operador, con cc_sistema)."),
+			columna("UPDATE colegio SET ruc = ruc WHERE 1 = 0", "colegio"),
+			columna("UPDATE colegio SET tipo = tipo WHERE 1 = 0", "colegio"),
+			sinBorrado("colegio"),
+			soloSistema(VerificadorPermisosBaseDatos.PRIMERA_PROMOTORIA_IMPOSIBLE,
+					"la aplicación podría fabricar la primera Promotoría de un colegio."),
+			sinBorrado("colegio_logo"), columna("UPDATE colegio_logo SET sha256 = sha256 WHERE 1 = 0", "colegio_logo"),
+			// Sprint 8, tanda 1 (E9): un pago de un colegio que no está en producción (el colegio 0) lo rechaza
+			// trg_pago_registro antes que la FK (1644).
+			trigger(VerificadorPermisosBaseDatos.PAGO_EN_PREPARACION_IMPOSIBLE, "trg_pago_registro (versión del sprint 8)"));
+
+	/** Sprint 8, tanda 1: un colegio creado por cc_app (sin GRANT: 1142). */
+	static final String COLEGIO_IMPOSIBLE = "INSERT INTO colegio (nombre, tipo, estado, activo, creado_por, actualizado_en) "
+			+ "VALUES ('verificador', 'COLEGIO', 'PREPARACION', TRUE, 'verificador', NOW(6))";
+
+	/** Sprint 8, tanda 1: un colegio ya en PRODUCCION creado por cc_sistema sin un operador (1644). */
+	static final String COLEGIO_SISTEMA_IMPOSIBLE = "INSERT INTO colegio (nombre, tipo, estado, activo, creado_por, "
+			+ "actualizado_en, produccion_desde, produccion_por) VALUES ('verificador', 'COLEGIO', 'PRODUCCION', TRUE, "
+			+ "'sistema.verificador', NOW(6), NOW(6), 'sistema.verificador')";
+
+	/** Sprint 8, tanda 1: la primera Promotoría del colegio 0 (cc_app: 1142; cc_sistema sin firma: 1644). */
+	static final String PRIMERA_PROMOTORIA_IMPOSIBLE = "INSERT INTO primera_promotoria (colegio_id, usuario_id, operador_id, "
+			+ "plataforma_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, NOW(6), 'verificador', NOW(6))";
+
+	/** Sprint 8, tanda 1 (E9): un pago de caja del colegio 0, que no está en producción (1644 antes que la FK). */
+	static final String PAGO_EN_PREPARACION_IMPOSIBLE = "INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, "
+			+ "fecha, comprobante_id, medio, total, recibido, vuelto, origen, clave_idempotencia, estado, creado_en, "
+			+ "creado_por, actualizado_en) VALUES (0, 0, 0, 'verificador', '2000-01-01', 0, 'EFECTIVO', 1, 1, 0, 'CAJA', "
+			+ "'verificador-preparacion', 'VIGENTE', NOW(6), 'verificador', NOW(6))";
+
+	/** Sprint 8, tanda 1: el correo externo del colegio 0 escrito por cc_sistema sin la firma de un operador (1644). */
+	static final String CONFIGURACION_SISTEMA_IMPOSIBLE = "INSERT INTO configuracion_colegio (colegio_id, clave, valor, "
+			+ "creado_en, creado_por) VALUES (0, 'huella_correo_externo', 'verificador@x.pe', NOW(6), 'verificador')";
 
 	/** Correcciones del sprint 7 (S7-A1): una solicitud ya APROBADA del colegio 0 (la rechaza trg_solicitud_cambio_nace). */
 	static final String SOLICITUD_APROBADA_IMPOSIBLE = "INSERT INTO solicitud_cambio (colegio_id, tipo, entidad, entidad_id, "
@@ -442,7 +478,18 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			trigger(VerificadorPermisosBaseDatos.MUESTRA_IMPOSIBLE, "trg_muestra_llamada_registro (versión del sprint 7)"),
 			// Correcciones del sprint 7: la primera Dirección y la resolución de un respaldo no se editan ni se borran.
 			sinBorrado("primera_direccion"), soloInsercion("primera_direccion"), sinBorrado("resolucion_respaldo"),
-			trigger(VerificadorPermisosBaseDatos.SOLICITUD_APROBADA_IMPOSIBLE, "trg_solicitud_cambio_nace"));
+			trigger(VerificadorPermisosBaseDatos.SOLICITUD_APROBADA_IMPOSIBLE, "trg_solicitud_cambio_nace"),
+			// Sprint 8, tanda 1 (E5, E6, E9): con cc_sistema, un colegio nace solo en preparación y por un operador activo
+			// (1644), la primera Promotoría exige la firma del operador (1644), el correo externo de control también (1644),
+			// nada de eso se borra (1142) y el estado del colegio no lo cambia el operador (lo prueba la fase 2).
+			trigger(VerificadorPermisosBaseDatos.COLEGIO_SISTEMA_IMPOSIBLE, "trg_colegio_nace"),
+			trigger(VerificadorPermisosBaseDatos.PRIMERA_PROMOTORIA_IMPOSIBLE, "trg_primera_promotoria_nace"),
+			trigger(VerificadorPermisosBaseDatos.CONFIGURACION_SISTEMA_IMPOSIBLE, "trg_configuracion_colegio_registro"),
+			trigger(VerificadorPermisosBaseDatos.PAGO_EN_PREPARACION_IMPOSIBLE, "trg_pago_registro (versión del sprint 8)"),
+			sinBorrado("colegio"), sinBorrado("primera_promotoria"), soloInsercion("primera_promotoria"),
+			sinBorrado("configuracion_colegio"), sinBorrado("colegio_logo"),
+			columna("UPDATE colegio SET tipo = tipo WHERE 1 = 0", "colegio"),
+			columna("UPDATE configuracion_colegio SET clave = clave WHERE 1 = 0", "configuracion_colegio"));
 
 	/** 1142 (o 1143): solo cc_sistema la escribe. */
 	private static SentenciaProhibida soloSistema(String sql, String riesgo) {
@@ -525,7 +572,10 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_llamada_control_registro", "trg_muestra_llamada_registro", "trg_delegacion_llamada_registro",
 			"trg_respaldo_registro", "trg_resolucion_respaldo_registro", "trg_firma_operacion_nace", "trg_sesion_usuario_nace", "trg_sesion_usuario_cierre",
 			"trg_evento_auditoria_actor", "trg_semilla_muestreo_registro", "trg_usuario_nace", "trg_usuario_identidad",
-			"trg_usuario_rol_alta", "trg_usuario_rol_baja");
+			"trg_usuario_rol_alta", "trg_usuario_rol_baja",
+			// Sprint 8, tanda 1 (V28).
+			"trg_colegio_nace", "trg_colegio_cambio", "trg_primera_promotoria_nace", "trg_configuracion_colegio_registro",
+			"trg_configuracion_colegio_cambio");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -624,7 +674,50 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		}
 		verificarPrivilegios();
 		verificarTls();
+		verificarPlataforma();
 		avisarConfiguracionVieja();
+	}
+
+	static final String SQL_PLATAFORMAS = "SELECT COUNT(*) FROM colegio WHERE tipo = 'PLATAFORMA'";
+
+	static final String SQL_ROLES_EN_PLATAFORMA = "SELECT COUNT(*) FROM usuario_rol r JOIN usuario u ON u.id = r.usuario_id "
+			+ "JOIN colegio c ON c.id = u.colegio_id WHERE c.tipo = 'PLATAFORMA' AND r.rol <> 'OPERADOR_PLATAFORMA'";
+
+	static final String SQL_OPERADORES_FUERA = "SELECT COUNT(*) FROM usuario_rol r JOIN usuario u ON u.id = r.usuario_id "
+			+ "JOIN colegio c ON c.id = u.colegio_id WHERE c.tipo <> 'PLATAFORMA' AND r.rol = 'OPERADOR_PLATAFORMA'";
+
+	static final String SQL_OPERADORES = "SELECT COUNT(*) FROM usuario_rol r JOIN usuario u ON u.id = r.usuario_id "
+			+ "WHERE u.activo AND r.rol = 'OPERADOR_PLATAFORMA'";
+
+	static final String SQL_COLEGIOS = "SELECT COUNT(*), COALESCE(SUM(CASE WHEN estado = 'PRODUCCION' THEN 1 ELSE 0 END), 0) "
+			+ "FROM colegio WHERE tipo = 'COLEGIO'";
+
+	/**
+	 * Sprint 8, tanda 1 (sección 6.4): hay exactamente un colegio PLATAFORMA, ninguna cuenta de ese colegio tiene un rol
+	 * distinto de OPERADOR_PLATAFORMA y ningún operador vive fuera de él. Si no, prod no arranca.
+	 */
+	public void verificarPlataforma() {
+		Integer plataformas = jdbc.queryForObject(SQL_PLATAFORMAS, Integer.class);
+		if (plataformas == null || plataformas != 1) {
+			throw new IllegalStateException("La base tiene " + plataformas + " colegios de tipo PLATAFORMA y debe tener "
+					+ "exactamente uno (migración V28). Revisa docs/operacion/mysql-usuarios.md.");
+		}
+		Integer rolesDeMas = jdbc.queryForObject(SQL_ROLES_EN_PLATAFORMA, Integer.class);
+		if (rolesDeMas != null && rolesDeMas > 0) {
+			throw new IllegalStateException("El colegio de plataforma tiene " + rolesDeMas + " rol(es) de colegio: ahí solo "
+					+ "viven operadores (OPERADOR_PLATAFORMA). Es un incidente (docs/operacion/incidente-auditoria.md).");
+		}
+		Integer fuera = jdbc.queryForObject(SQL_OPERADORES_FUERA, Integer.class);
+		if (fuera != null && fuera > 0) {
+			throw new IllegalStateException("Hay " + fuera + " cuenta(s) de operador fuera del colegio de plataforma: un "
+					+ "operador nunca pertenece a un colegio. Es un incidente (docs/operacion/incidente-auditoria.md).");
+		}
+		Integer operadores = jdbc.queryForObject(SQL_OPERADORES, Integer.class);
+		java.util.Map<String, Object> colegios = jdbc.queryForMap(SQL_COLEGIOS);
+		java.util.Iterator<Object> valores = colegios.values().iterator();
+		Object total = valores.next();
+		Object enProduccion = valores.next();
+		LOG.info("Plataforma verificada: {} operadores, {} colegios ({} en producción).", operadores, total, enProduccion);
 	}
 
 	/**

@@ -126,7 +126,7 @@ public class DespachoMensajes {
 
 	@Scheduled(fixedDelayString = "${cuentasclaras.mensajeria.envio-cada:30s}", initialDelayString = "20s")
 	public void despachar() {
-		PasadaPorColegios.recorrer(LOG, "El envío de mensajes", colegios.activos(), this::despacharColegio);
+		PasadaPorColegios.recorrer(LOG, "El envío de mensajes", colegios.conPlataforma(), this::despacharColegio);
 	}
 
 	/** Una pasada del outbox en un colegio (la usan la tarea programada y las pruebas). @return cuántos salieron */

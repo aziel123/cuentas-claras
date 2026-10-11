@@ -33,14 +33,22 @@ public class CajaController {
 
 	private final ServicioAnulacionPagos anulaciones;
 
-	public CajaController(ServicioCobro cobro, ServicioAnulacionPagos anulaciones) {
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios;
+
+	public CajaController(ServicioCobro cobro, ServicioAnulacionPagos anulaciones,
+			pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios) {
 		this.cobro = cobro;
 		this.anulaciones = anulaciones;
+		this.colegios = colegios;
 	}
 
 	@GetMapping("/caja")
 	@RegistraAcceso(TipoAcceso.BUSQUEDA)
-	public String buscar(@RequestParam(name = "q", required = false) String texto, Model model) {
+	public String buscar(@RequestParam(name = "q", required = false) String texto,
+			@org.springframework.security.core.annotation.AuthenticationPrincipal
+			pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado usuario, Model model) {
+		// Sprint 8, tanda 1 (sección 3.4): en un colegio en preparación la caja avisa que todavía no cobra.
+		model.addAttribute("enPreparacion", usuario != null && !colegios.enProduccion(usuario.colegioId()));
 		var busqueda = cobro.buscar(texto);
 		model.addAttribute("busqueda", busqueda);
 		AccesoMostrado.filas(busqueda.resultados().size());

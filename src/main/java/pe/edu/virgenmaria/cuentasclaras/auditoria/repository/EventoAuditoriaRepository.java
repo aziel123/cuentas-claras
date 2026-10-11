@@ -12,6 +12,7 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.model.EventoAuditoria;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Bitácora de auditoría. Extiende {@link Repository} (no {@code JpaRepository}) para exponer
@@ -88,4 +89,7 @@ public interface EventoAuditoriaRepository extends Repository<EventoAuditoria, L
 
 	/** Lote de la cadena en orden, para verificar la integridad. */
 	List<EventoAuditoria> findBySecuenciaGreaterThanOrderBySecuenciaAsc(long secuencia, Limit limite);
+
+	/** Sprint 8, tanda 1: el último evento de un colegio (su «última actividad»). */
+	Optional<EventoAuditoria> findFirstByColegioIdOrderBySecuenciaDesc(Long colegioId);
 }
