@@ -1,25 +1,37 @@
 package pe.edu.virgenmaria.cuentasclaras.privacidad.web;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.privacidad.config.PropiedadesPrivacidad;
 import pe.edu.virgenmaria.cuentasclaras.privacidad.dto.FiltroAccesos;
 import pe.edu.virgenmaria.cuentasclaras.privacidad.service.AccesosDatosPersonales;
+import pe.edu.virgenmaria.cuentasclaras.privacidad.service.AprobacionAvisoPrivacidad;
 import pe.edu.virgenmaria.cuentasclaras.privacidad.service.DatosConPlazoVencido;
 import pe.edu.virgenmaria.cuentasclaras.privacidad.service.MisDatos;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 
 import java.time.LocalDate;
 
 /**
  * Ley 29733 (sprint 7, tanda 3; sección 13). Sin lógica: delega en los servicios, que exigen el rol.
  * <ul>
- *   <li>{@code GET /privacidad}: aviso de privacidad (público, versión vigente).</li>
+ *   <li>{@code GET /privacidad}: el aviso genérico del proveedor como encargado (público; no nombra a ningún colegio:
+ *       decisión 125).</li>
+ *   <li>{@code GET /familia/privacidad}: el aviso del colegio de la sesión como responsable (apoderado). El diseño lo
+ *       llamaba {@code /portal/privacidad}; va bajo {@code /familia/**} para no tocar la matriz.</li>
+ *   <li>{@code GET /colegio/privacidad}: el estado de la aprobación del aviso en el colegio; {@code POST
+ *       /colegio/privacidad/aprobar}: Dirección aprueba la versión vigente (sprint 8, tanda 1).</li>
  *   <li>{@code GET /familia/mis-datos}: los datos de la familia en sesión (apoderado; nunca recibe un id).</li>
  *   <li>{@code GET /auditoria/accesos}: quién vio datos personales, por persona y fechas (Promotoría).</li>
  *   <li>{@code GET /auditoria/datos-vencidos}: contactos de familias que se fueron sin deuda hace más del plazo
@@ -37,20 +49,59 @@ public class PrivacidadController {
 
 	private final PropiedadesPrivacidad propiedades;
 
+	private final ColegioService colegios;
+
+	private final AprobacionAvisoPrivacidad aprobacion;
+
 	public PrivacidadController(MisDatos misDatos, AccesosDatosPersonales accesos, DatosConPlazoVencido vencidos,
-			PropiedadesPrivacidad propiedades) {
+			PropiedadesPrivacidad propiedades, ColegioService colegios, AprobacionAvisoPrivacidad aprobacion) {
 		this.misDatos = misDatos;
 		this.accesos = accesos;
 		this.vencidos = vencidos;
 		this.propiedades = propiedades;
+		this.colegios = colegios;
+		this.aprobacion = aprobacion;
+	}
+
+	private void datosDelAviso(Model model) {
+		model.addAttribute("version", propiedades.versionAviso());
+		model.addAttribute("plazoAcceso", propiedades.plazoAccesoDiasHabiles());
+		model.addAttribute("plazoOtros", propiedades.plazoOtrosDiasHabiles());
 	}
 
 	@GetMapping("/privacidad")
 	public String aviso(Model model) {
-		model.addAttribute("version", propiedades.versionAviso());
-		model.addAttribute("plazoAcceso", propiedades.plazoAccesoDiasHabiles());
-		model.addAttribute("plazoOtros", propiedades.plazoOtrosDiasHabiles());
+		datosDelAviso(model);
 		return "privacidad/aviso";
+	}
+
+	@GetMapping("/familia/privacidad")
+	public String avisoDeMiColegio(@AuthenticationPrincipal UsuarioAutenticado usuario, Model model) {
+		datosDelAviso(model);
+		model.addAttribute("responsable", colegios.marcaDe(usuario.colegioId()).orElse(null));
+		return "privacidad/aviso-colegio";
+	}
+
+	@GetMapping("/colegio/privacidad")
+	public String avisoDelColegio(@AuthenticationPrincipal UsuarioAutenticado usuario, Model model) {
+		datosDelAviso(model);
+		model.addAttribute("responsable", colegios.marcaDe(usuario.colegioId()).orElse(null));
+		model.addAttribute("estado", aprobacion.estado());
+		model.addAttribute("puedeAprobar", usuario.roles().contains(Rol.DIRECTOR));
+		return "privacidad/colegio";
+	}
+
+	@PostMapping("/colegio/privacidad/aprobar")
+	public String aprobar(RedirectAttributes mensajes) {
+		try {
+			var estado = aprobacion.aprobar();
+			mensajes.addFlashAttribute("exito", "Listo: la versión " + estado.versionVigente()
+					+ " del aviso de privacidad quedó aprobada para este colegio.");
+		}
+		catch (ReglaNegocioException e) {
+			mensajes.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/colegio/privacidad";
 	}
 
 	@GetMapping("/familia/mis-datos")

@@ -59,6 +59,15 @@ public class CorreoSmtp implements ProveedorCorreo {
 
 	@Override
 	public ResultadoEnvio enviar(String destino, String asunto, String cuerpo) {
+		return enviar(null, destino, asunto, cuerpo);
+	}
+
+	/**
+	 * Sprint 8, tanda 1: con el nombre visible del remitente («{colegio} vía {marca}») delante de la dirección
+	 * configurada ({@code "Nombre" <remitente>}). Spring lo codifica (RFC 2047) al construir el mensaje.
+	 */
+	@Override
+	public ResultadoEnvio enviar(String remitenteNombre, String destino, String asunto, String cuerpo) {
 		if (destino == null || !destino.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
 			return ResultadoEnvio.definitivo("El correo no es válido.");
 		}
@@ -66,7 +75,7 @@ public class CorreoSmtp implements ProveedorCorreo {
 			return ResultadoEnvio.definitivo("Fuera de producción solo se escribe a los correos de prueba.");
 		}
 		SimpleMailMessage correo = new SimpleMailMessage();
-		correo.setFrom(cuenta.remitente());
+		correo.setFrom(remitente(remitenteNombre));
 		correo.setTo(destino);
 		correo.setSubject(asunto);
 		correo.setText(cuerpo);
@@ -85,5 +94,11 @@ public class CorreoSmtp implements ProveedorCorreo {
 			LOG.warn("No se pudo enviar un correo: {}", e.getClass().getSimpleName());
 			return ResultadoEnvio.reintentable("Sin respuesta del servidor de correo (" + e.getClass().getSimpleName() + ").");
 		}
+	}
+
+	/** {@code "Nombre" <remitente>} si hay nombre (sin comillas ni saltos, que romperían la cabecera); si no, la dirección. */
+	String remitente(String nombre) {
+		String visible = nombre == null ? "" : nombre.replaceAll("[\"\\\\\\r\\n<>]", " ").strip();
+		return visible.isEmpty() ? cuenta.remitente() : "\"" + visible + "\" <" + cuenta.remitente() + ">";
 	}
 }

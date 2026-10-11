@@ -142,7 +142,7 @@ class ServicioUsuariosTest {
 				+ "WHERE usuario_id = ?", creado.id())).containsEntry("tipo", "ACTIVACION_CUENTA")
 				.containsEntry("canal", "WHATSAPP").containsEntry("destinatario_tipo", "USUARIO")
 				.containsEntry("destino", UsuariosDePrueba.celular("lucia.ramos")).containsEntry("estado", "PENDIENTE")
-				.containsEntry("parametros", "");
+				.containsEntry("parametros", "Colegio Virgen María");
 	}
 
 	@Test

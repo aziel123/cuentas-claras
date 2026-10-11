@@ -12,8 +12,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Sprint 5 (G15, INDECOPI y Ley 29571): ninguna plantilla menciona lo académico (evaluaciones, notas, exámenes,
- * libretas, certificados, constancias) ni amenaza con consecuencias; todas llevan el nombre del colegio o del sistema y
- * sus parámetros {{1}}..{{n}} completos.
+ * libretas, certificados, constancias) ni amenaza con consecuencias; sus parámetros {{1}}..{{n}} están completos.
+ * Sprint 8, tanda 1 (decisiones 120 a 122): todas son {@code _v2}, empiezan con {{1}} = el nombre del colegio y no
+ * llevan la marca ni el nombre de ningún colegio fijos.
  */
 class PlantillasMensajeTest {
 
@@ -30,9 +31,22 @@ class PlantillasMensajeTest {
 		for (PlantillaMensaje plantilla : PlantillaMensaje.values()) {
 			String texto = sinTildes(plantilla.texto() + " " + plantilla.asunto());
 			assertThat(PROHIBIDAS).as(plantilla.name()).noneMatch(texto::contains);
-			assertThat(plantilla.texto()).as(plantilla.name()).containsAnyOf("Colegio Virgen María", "Cuentas Claras");
-			assertThat(plantilla.nombreMeta()).as(plantilla.name()).matches("cc_[a-z_]+");
+			assertThat(plantilla.nombreMeta()).as(plantilla.name()).matches("cc_[a-z_]+_v2");
 		}
+	}
+
+	/** Decisiones 120 a 122: ni la marca ni un colegio fijos; {{1}} = el colegio, siempre al inicio. */
+	@Test
+	void todasEmpiezanConElNombreDelColegioYNoLlevanLaMarcaNiUnColegioFijos() {
+		for (PlantillaMensaje plantilla : PlantillaMensaje.values()) {
+			assertThat(plantilla.texto()).as(plantilla.name()).startsWith(PlantillaMensaje.MARCADOR_COLEGIO)
+					.doesNotContain("Cuentas Claras", "Virgen María");
+			assertThat(plantilla.asunto()).as(plantilla.name()).doesNotContain("Cuentas Claras", "Virgen María");
+			assertThat(plantilla.parametros()).as(plantilla.name()).isGreaterThanOrEqualTo(1);
+			assertThat(plantilla.parametrosPropios()).as(plantilla.name()).isEqualTo(plantilla.parametros() - 1);
+		}
+		assertThat(PlantillaMensaje.PAGO_REGISTRADO.componer(List.of("Colegio Los Álamos", "S/ 450.00", "Pensión de marzo",
+				"B001-1", "02/10/2026", "Efectivo", "Lucía R."))).startsWith("Colegio Los Álamos: registramos su pago");
 	}
 
 	@Test
@@ -67,7 +81,8 @@ class PlantillasMensajeTest {
 			assertThat(plantilla.botonPortal()).as(plantilla.name()).isFalse();
 			assertThat(plantilla.texto()).as(plantilla.name()).doesNotContain("http", "/activar", "/verificar", "enlace");
 		}
-		// Correcciones del sprint 6: 12 (los resultados de las llamadas de control, S6-M2).
-		assertThat(PlantillaMensaje.RESUMEN_DIARIO.parametros()).isEqualTo(12);
+		// Correcciones del sprint 6: 12 propios (los resultados de las llamadas de control, S6-M2) más el colegio (v2).
+		assertThat(PlantillaMensaje.RESUMEN_DIARIO.parametrosPropios()).isEqualTo(12);
+		assertThat(PlantillaMensaje.RESUMEN_DIARIO.parametros()).isEqualTo(13);
 	}
 }

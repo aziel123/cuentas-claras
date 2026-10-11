@@ -56,17 +56,19 @@ class WhatsAppCloudApiContratoTest {
 				.andExpect(jsonPath("$.messaging_product").value("whatsapp"))
 				.andExpect(jsonPath("$.to").value("51987654321"))
 				.andExpect(jsonPath("$.type").value("template"))
-				.andExpect(jsonPath("$.template.name").value("cc_activacion"))
+				.andExpect(jsonPath("$.template.name").value("cc_activacion_v2"))
 				.andExpect(jsonPath("$.template.language.code").value("es"))
 				.andExpect(jsonPath("$.template.components[0].type").value("body"))
-				.andExpect(jsonPath("$.template.components[0].parameters[0].text").value("07/10 a las 10:40"))
+				// Sprint 8, tanda 1 (plantillas v2): {{1}} es el nombre del colegio; el vencimiento pasa a {{2}}.
+				.andExpect(jsonPath("$.template.components[0].parameters[0].text").value("Colegio Los Álamos"))
+				.andExpect(jsonPath("$.template.components[0].parameters[1].text").value("07/10 a las 10:40"))
 				.andExpect(jsonPath("$.template.components[1].type").value("button"))
 				.andExpect(jsonPath("$.template.components[1].sub_type").value("url"))
 				.andExpect(jsonPath("$.template.components[1].parameters[0].text").value("1/token-de-prueba"))
 				.andRespond(withSuccess("{\"messages\":[{\"id\":\"wamid.HBgL\"}]}", MediaType.APPLICATION_JSON));
 
-		ResultadoEnvio r = c.api().enviar(PlantillaMensaje.ACTIVACION, "+51987654321", List.of("07/10 a las 10:40"),
-				"/activar/1/token-de-prueba");
+		ResultadoEnvio r = c.api().enviar(PlantillaMensaje.ACTIVACION, "+51987654321",
+				List.of("Colegio Los Álamos", "07/10 a las 10:40"), "/activar/1/token-de-prueba");
 
 		assertThat(r.aceptado()).isTrue();
 		assertThat(r.proveedor()).isEqualTo(ProveedorMensajeria.WHATSAPP_CLOUD);

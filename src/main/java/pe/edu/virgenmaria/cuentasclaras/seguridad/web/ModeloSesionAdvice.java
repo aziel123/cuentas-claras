@@ -5,6 +5,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.MarcaColegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.marca.Marca;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.ModuloApp;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
@@ -59,5 +60,18 @@ public class ModeloSesionAdvice {
 	@ModelAttribute("nombreInstitucional")
 	public String nombreInstitucional() {
 		return marca.nombre();
+	}
+
+	/**
+	 * Sprint 8, tanda 1 (decisión 123): la marca del colegio de la sesión (nombre, razón social, RUC, dirección y si tiene
+	 * logo), para la cabecera y las pantallas que la muestran. {@code null} sin sesión: las páginas públicas no nombran a
+	 * ningún colegio.
+	 */
+	@ModelAttribute("marcaColegio")
+	public MarcaColegio marcaColegio(@AuthenticationPrincipal UsuarioAutenticado usuario) {
+		if (usuario == null) {
+			return null;
+		}
+		return colegios.marcaDe(usuario.colegioId()).orElse(null);
 	}
 }

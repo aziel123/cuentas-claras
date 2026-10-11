@@ -7,7 +7,8 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title th:text="${titulo} + ' · Cuentas Claras'">Cuentas Claras</title>
+	<!--/* Sprint 8, tanda 1 (decisión 120): la marca del producto sale de ${marca.nombre} (CC_MARCA_NOMBRE), nunca fija. */-->
+	<title th:text="|${titulo} · ${marca.nombre}|">Título</title>
 	<!--/* Sprint 4: una página que espera una confirmación se recarga sola (sin JavaScript en línea, por la CSP). */-->
 	<meta th:if="${recargarCada != null}" http-equiv="refresh" th:content="${recargarCada}">
 	<link rel="stylesheet" th:href="@{/css/tokens.css}">
@@ -19,10 +20,13 @@
 	<header class="barra">
 		<div class="barra-in">
 			<a class="marca" th:href="@{/inicio}">
-				<span class="monograma" aria-hidden="true">VM</span>
+				<!--/* Sprint 8, tanda 1 (decisión 123): el logo del colegio de la sesión si lo subió; si no, el monograma.
+				     Los colores no cambian por colegio (contraste AA). */-->
+				<img class="logo-colegio" th:if="${marcaColegio != null and marcaColegio.conLogo}" th:src="@{/marca/logo}" alt="">
+				<span class="monograma" aria-hidden="true" th:unless="${marcaColegio != null and marcaColegio.conLogo}">VM</span>
 				<span class="marca-texto">
-					<strong th:text="${usuarioActual != null} ? ${usuarioActual.colegio} : ${nombreInstitucional}">Colegio Virgen María</strong>
-					<small>Plataforma Cuentas Claras</small>
+					<strong th:text="${usuarioActual != null} ? ${usuarioActual.colegio} : ${nombreInstitucional}">Nombre del colegio</strong>
+					<small th:text="|Plataforma ${marca.nombre}|">Plataforma</small>
 				</span>
 			</a>
 			<div class="sesion" th:if="${usuarioActual != null}">
@@ -64,15 +68,16 @@
 		<main id="contenido" class="contenido" th:replace="${contenido}">Contenido</main>
 	</div>
 
-	<footer class="pie">Cuentas Claras · gestión escolar transparente</footer>
+	<footer class="pie" th:text="|${marca.nombre} · gestión escolar transparente|">Pie</footer>
 </body>
 </html>
 
+<!--/* Sprint 8, tanda 1 (decisión 125): las páginas públicas llevan solo la marca del producto; no nombran a ningún colegio. */-->
 <html lang="es" xmlns:th="http://www.thymeleaf.org" th:fragment="publica(titulo, contenido)">
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title th:text="${titulo} + ' · Cuentas Claras'">Cuentas Claras</title>
+	<title th:text="|${titulo} · ${marca.nombre}|">Título</title>
 	<link rel="stylesheet" th:href="@{/css/tokens.css}">
 	<link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
@@ -83,14 +88,14 @@
 			<span class="marca">
 				<span class="monograma" aria-hidden="true">VM</span>
 				<span class="marca-texto">
-					<strong th:text="${nombreInstitucional} ?: 'Cuentas Claras'">Colegio Virgen María</strong>
-					<small>Plataforma Cuentas Claras</small>
+					<strong th:text="${nombreInstitucional} ?: ${marca.nombre}">Marca</strong>
+					<small th:text="|Plataforma ${marca.nombre}|">Plataforma</small>
 				</span>
 			</span>
 		</div>
 	</header>
 	<main id="contenido" class="contenido-publico" th:replace="${contenido}">Contenido</main>
-	<footer class="pie">Cuentas Claras · gestión escolar transparente</footer>
+	<footer class="pie" th:text="|${marca.nombre} · gestión escolar transparente|">Pie</footer>
 </body>
 </html>
 

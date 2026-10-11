@@ -48,14 +48,14 @@ public class HuellasEnviadas implements EnviosHuella {
 				huellaId, EnumSet.of(EstadoMensaje.ENVIADO, EstadoMensaje.ENTREGADO, EstadoMensaje.LEIDO));
 	}
 
-	/** Los parámetros de la plantilla HUELLA: fecha, secuencia, código, ... */
+	/** Los parámetros de la plantilla HUELLA (v2): colegio, fecha, secuencia, código, ... */
 	static HuellaEnviada leer(Mensaje mensaje) {
 		List<String> p = mensaje.parametrosLista();
-		if (p.size() < 3) {
+		if (p.size() < 4) {
 			return null;
 		}
 		try {
-			return new HuellaEnviada(LocalDate.parse(p.get(0), FECHA), Long.parseLong(p.get(1)), p.get(2));
+			return new HuellaEnviada(LocalDate.parse(p.get(1), FECHA), Long.parseLong(p.get(2)), p.get(3));
 		}
 		catch (NumberFormatException | DateTimeParseException e) {
 			return null;

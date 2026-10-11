@@ -14,6 +14,7 @@ import org.springframework.scheduling.support.ScheduledMethodRunnable;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.EstadoCadena;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.config.ConfiguracionTiempo;
+import pe.edu.virgenmaria.cuentasclaras.comun.marca.Marca;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.Latidos;
 import pe.edu.virgenmaria.cuentasclaras.operacion.config.PropiedadesMonitoreo;
@@ -196,7 +197,7 @@ class AlertasTecnicasTest {
 
 	private AlertasTecnicas alertas(PropiedadesMonitoreo propiedades) {
 		return new AlertasTecnicas(estado(propiedades), errores, propiedades, proveedor(correo), "avisos@colegio.pe",
-				reloj);
+				reloj, Marca.porDefecto());
 	}
 
 	private EstadoTecnico estado(PropiedadesMonitoreo propiedades) {

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<!--/* Sprint 8, tanda 1 (sección 3.7, paso 11 de la puesta en marcha): el estado del aviso de privacidad en el colegio
+     («aprobado por X el …») y, solo para Dirección, el botón para aprobar la versión vigente. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Aviso de privacidad', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="colegio-privacidad">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Colegio</p>
+			<h1>Aviso de privacidad del colegio</h1>
+			<p class="secundario">Las familias lo ven en su portal. Dirección aprueba cada versión: el colegio es el responsable
+				de los datos de sus familias y el proveedor del sistema, el encargado.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-estado" th:with="e=${estado}">
+		<h2 id="titulo-estado">Estado</h2>
+		<dl class="datos">
+			<div><dt>Versión vigente</dt><dd th:text="${e.versionVigente}" data-version-vigente>2027-01</dd></div>
+			<div>
+				<dt>Aprobación</dt>
+				<dd data-aprobacion>
+					<th:block th:if="${e.aprobado()}">
+						<span class="badge badge-exito">Aprobado</span>
+						por <strong th:text="${e.aprobadoPor}">director</strong>
+						el <span th:text="${#temporals.format(e.aprobadoEn, 'dd/MM/yyyy HH:mm')}">01/02/2027 10:00</span>.
+					</th:block>
+					<th:block th:if="${e.desactualizado()}">
+						<span class="badge badge-alerta">Versión anterior</span>
+						Se aprobó la versión <span th:text="${e.versionAprobada}">2026-01</span> por
+						<strong th:text="${e.aprobadoPor}">director</strong>
+						el <span th:text="${#temporals.format(e.aprobadoEn, 'dd/MM/yyyy HH:mm')}">01/02/2026 10:00</span>;
+						falta aprobar la vigente.
+					</th:block>
+					<th:block th:if="${e.versionAprobada == null}">
+						<span class="badge badge-peligro">Pendiente</span>
+						Dirección todavía no aprueba el aviso de este colegio.
+					</th:block>
+				</dd>
+			</div>
+		</dl>
+		<form th:if="${puedeAprobar and !e.aprobado()}" th:action="@{/colegio/privacidad/aprobar}" method="post" class="fila">
+			<button type="submit" class="btn btn-primario">Aprobar la versión vigente</button>
+		</form>
+		<p class="ayuda" th:if="${!puedeAprobar and !e.aprobado()}">Solo Dirección puede aprobarlo.</p>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-texto">
+		<h2 id="titulo-texto">Texto que ven las familias</h2>
+		<p class="secundario">Versión <span th:text="${version}">2027-01</span>.</p>
+		<th:block th:replace="~{privacidad/fragmentos :: textoAviso(${responsable})}"></th:block>
+		<p class="fila"><a class="btn btn-texto" th:href="@{/colegio}">Volver al colegio</a></p>
+	</section>
+</main>
+</body>
+</html>

@@ -236,7 +236,8 @@ class LlamadasControlTest {
 				+ "tipo = 'ALERTA_PROMOTORIA' AND clave LIKE ?", "ALERTA:LLAMADA_NO_CONFIRMA:LC:" + id + ":U%");
 		assertThat(mensajes).singleElement().satisfies(m -> {
 			assertThat(m).containsEntry("usuario_id", promotora.getId());
-			assertThat((String) m.get("parametros")).isEqualTo("Una familia no confirma lo registrado\n19/04/2027")
+			assertThat((String) m.get("parametros"))
+					.isEqualTo("Colegio Virgen María\nUna familia no confirma lo registrado\n19/04/2027")
 					.doesNotContain(NOTA, "Quispe");
 		});
 	}

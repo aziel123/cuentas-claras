@@ -17,6 +17,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.repository.PagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoVisibleCuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
@@ -100,10 +101,14 @@ public class ServicioPagoEnLinea {
 
 	private final Clock reloj;
 
+	/** Sprint 8, tanda 1 (H5): la descripción de la orden lleva el nombre del colegio que cobra, nunca uno fijo. */
+	private final ColegioService colegios;
+
 	public ServicioPagoEnLinea(SesionApoderado sesion, AlumnoRepository alumnos, CuotaRepository cuotas,
 			PagoRepository pagos, OrdenPagoRepository ordenes, OrdenPagoCuotaRepository cuotasDeOrden, Pasarelas pasarelas,
 			ProcesadorPagosEnLinea procesador, AuditoriaService auditoria, PropiedadesPasarela propiedades,
-			PlatformTransactionManager transacciones, Clock reloj) {
+			PlatformTransactionManager transacciones, Clock reloj, ColegioService colegios) {
+		this.colegios = colegios;
 		this.sesion = sesion;
 		this.alumnos = alumnos;
 		this.cuotas = cuotas;
@@ -268,7 +273,7 @@ public class ServicioPagoEnLinea {
 		try {
 			creada = pasarela.crearOrden(new SolicitudOrden(orden.getReferencia(), orden.getMonto(),
 					orden.getMonto().movePointRight(2).longValueExact(), orden.getMoneda(),
-					"Pago Colegio Virgen María · " + orden.getReferencia(), orden.getVenceEn(),
+					"Pago " + colegios.nombreParaMensajes(colegioId) + " · " + orden.getReferencia(), orden.getVenceEn(),
 					"/familia/pagos/" + orden.getReferencia(), colegioId));
 		}
 		catch (RuntimeException e) {

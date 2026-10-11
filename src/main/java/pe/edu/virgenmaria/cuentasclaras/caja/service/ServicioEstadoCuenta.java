@@ -148,8 +148,8 @@ public class ServicioEstadoCuenta {
 				: comprobantes.findById(comprobante.getModificaId()).orElse(null);
 		boolean devolucion = anulado != null && anulaciones.existsByNotaCreditoIdAndTipo(comprobante.getId(),
 				TipoAnulacion.DEVOLUCION);
-		return ServicioCobro.imprimibleDe(comprobante, pago, colegios.nombreDe(comprobante.getColegioId()), nombres,
-				anulado, devolucion);
+		return ServicioCobro.imprimibleDe(comprobante, pago, colegios.marcaDe(comprobante.getColegioId()).orElseThrow(),
+				nombres, anulado, devolucion);
 	}
 
 	private static boolean esAdministracion() {

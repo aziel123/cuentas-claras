@@ -1,5 +1,7 @@
 package pe.edu.virgenmaria.cuentasclaras.comun.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.boot.context.event.ApplicationEnvironmentPreparedEvent;
 import org.springframework.context.ApplicationListener;
@@ -35,11 +37,16 @@ import java.util.function.Function;
  *   <li>sprint 7, tanda 2: en {@code prod} o {@code piloto}, sin el segundo usuario de base ({@code cc_sistema}) o con el
  *       mismo usuario para las personas y para los procesos;</li>
  *   <li>sprint 7, tanda 3 (decisión 103): con la cookie {@code __Host-} sin {@code Secure} (el navegador la rechaza y
- *       nadie podría ingresar) o, en {@code prod} o {@code piloto} con {@code Secure}, con una cookie sin ese prefijo.</li>
+ *       nadie podría ingresar) o, en {@code prod} o {@code piloto} con {@code Secure}, con una cookie sin ese prefijo;</li>
+ *   <li>sprint 8, tanda 1 (decisión 120): en {@code prod}, sin el nombre comercial ({@code CC_MARCA_NOMBRE}). Las
+ *       variables del promotor inicial ({@code CC_PROMOTOR_*} y {@code CC_COLEGIO_ID}) ya no se usan: si siguen
+ *       definidas, solo se avisa.</li>
  * </ul>
  */
 @Component
 public class VerificadorConfiguracion implements InitializingBean {
+
+	private static final Logger LOG = LoggerFactory.getLogger(VerificadorConfiguracion.class);
 
 	static final Set<String> PERFILES_DE_DESARROLLO = Set.of("dev", "test");
 
@@ -124,6 +131,16 @@ public class VerificadorConfiguracion implements InitializingBean {
 
 	static final String PREFIJO_HOST = "__Host-";
 
+	/** Sprint 8, tanda 1 (decisión 120): el nombre comercial del producto; en prod es obligatorio. */
+	static final String MARCA_NOMBRE = "cuentasclaras.marca.nombre";
+
+	/**
+	 * Sprint 8, tanda 1 (sección 3.3): el colegio y su primera Promotoría se dan de alta desde /plataforma; estas
+	 * variables ya no se leen. Si siguen definidas, solo se avisa (no se falla).
+	 */
+	static final List<String> VARIABLES_RETIRADAS = List.of("CC_PROMOTOR_USUARIO", "CC_PROMOTOR_NOMBRE",
+			"CC_PROMOTOR_CLAVE", "CC_COLEGIO_ID");
+
 	/** Donde puede existir la mensajería simulada (los beans tienen el mismo {@code @Profile}). */
 	static final Set<String> PERFILES_MENSAJERIA_SIMULADA = Set.of("dev", "test", "piloto");
 
@@ -190,12 +207,32 @@ public class VerificadorConfiguracion implements InitializingBean {
 					+ "define AUDITORIA_CLAVE_HMAC con la clave del gestor de secretos.");
 		}
 		boolean prod = activos.contains("prod");
+		verificarMarca(prod, propiedad);
 		verificarPasarela(activos, prod, propiedad);
 		verificarComprobantes(prod, propiedad);
 		verificarMensajeria(activos, prod, propiedad);
 		verificarRespaldos(prod, propiedad);
 		verificarBaseDatos(despliegue == 1, propiedad);
 		verificarCookie(despliegue == 1, propiedad);
+		variablesRetiradas(propiedad).forEach(v -> LOG.warn("La variable {} ya no se usa: el colegio y su primera "
+				+ "Promotoría se dan de alta desde /plataforma. Retírala del entorno.", v));
+	}
+
+	/**
+	 * Sprint 8, tanda 1 (decisión 120): en producción el nombre comercial ({@code CC_MARCA_NOMBRE}) es obligatorio: cada
+	 * instalación dice qué producto es; sin él no arranca. Fuera de prod vale el nombre por defecto de {@code Marca}.
+	 */
+	private static void verificarMarca(boolean prod, Function<String, String> propiedad) {
+		if (prod && vacio(propiedad.apply(MARCA_NOMBRE))) {
+			throw new IllegalStateException("Falta el nombre comercial del producto: en producción define CC_MARCA_NOMBRE "
+					+ "(cuentasclaras.marca.nombre) con el nombre con el que se vende la plataforma. De él salen el título, "
+					+ "la cabecera, el pie, los asuntos de los correos y los mensajes a las familias.");
+		}
+	}
+
+	/** Las variables retiradas que siguen definidas en el entorno (para avisar; no es un error). */
+	static List<String> variablesRetiradas(Function<String, String> propiedad) {
+		return VARIABLES_RETIRADAS.stream().filter(v -> !vacio(propiedad.apply(v))).toList();
 	}
 
 	/**

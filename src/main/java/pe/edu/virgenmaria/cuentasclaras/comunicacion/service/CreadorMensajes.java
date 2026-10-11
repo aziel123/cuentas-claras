@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Apoderado;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
+import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.CanalMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.DestinatarioTipo;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.Mensaje;
@@ -30,6 +32,9 @@ import java.util.Optional;
  *       contacto lo haya aprobado otra persona ({@code contacto_solicitud_id}). Ese canal se omite (y queda en el log).</li>
  *   <li>La clave es idempotente ({@code PAGO_REGISTRADO:pago:15:APODERADO:7:WHATSAPP}): una clave repetida no crea otro.</li>
  *   <li>Guarda con {@code saveAndFlush}: el INSERT llega a la base (y a su trigger) antes que lo que sigue.</li>
+ *   <li>Sprint 8, tanda 1 (plantillas {@code _v2}, decisión 121): antepone SIEMPRE el nombre del colegio en contexto
+ *       ({@link ColegioService#nombreParaMensajes}) como primer parámetro guardado. Los servicios arman solo los
+ *       parámetros propios de la plantilla; ningún mensaje de un colegio sale con el nombre de otro.</li>
  * </ul>
  */
 @Component
@@ -44,11 +49,14 @@ public class CreadorMensajes {
 
 	private final ObjectProvider<ProveedorWhatsApp> whatsapp;
 
+	private final ColegioService colegios;
+
 	public CreadorMensajes(MensajeRepository mensajes, UsuarioRepository usuarios,
-			ObjectProvider<ProveedorWhatsApp> whatsapp) {
+			ObjectProvider<ProveedorWhatsApp> whatsapp, ColegioService colegios) {
 		this.mensajes = mensajes;
 		this.usuarios = usuarios;
 		this.whatsapp = whatsapp;
+		this.colegios = colegios;
 	}
 
 	/** Personal: WhatsApp si hay celular; si el conector de WhatsApp está apagado y hay correo, solo correo. */
@@ -187,7 +195,8 @@ public class CreadorMensajes {
 		if (correo == null) {
 			return Optional.empty();
 		}
-		Contenido contenido = new Contenido(original.getTipo(), original.getPlantilla(), original.parametrosLista(),
+		// El original ya lleva el nombre del colegio delante: se quita para que guardar() lo anteponga una sola vez.
+		Contenido contenido = new Contenido(original.getTipo(), original.getPlantilla(), sinNombreDelColegio(original),
 				original.getEntidad(), original.getEntidadId());
 		String clave = original.getClave().replaceFirst(":WHATSAPP", ":CORREO");
 		if (mensajes.findByClave(clave).isPresent()) {
@@ -261,7 +270,24 @@ public class CreadorMensajes {
 			return existente;
 		}
 		return Optional.of(mensajes.saveAndFlush(Mensaje.nuevo(clave, contenido.tipo(), contenido.plantilla(), para,
-				contenido.parametros(), contenido.entidad(), contenido.entidadId(), respaldoDe, null)));
+				conNombreDelColegio(contenido.parametros()), contenido.entidad(), contenido.entidadId(), respaldoDe,
+				null)));
+	}
+
+	/** {{1}} de toda plantilla: el nombre del colegio en contexto (sin saltos de línea: es un solo parámetro). */
+	private List<String> conNombreDelColegio(List<String> propios) {
+		String nombre = colegios.nombreParaMensajes(ContextoColegio.actual()).replace('\n', ' ').replace('\r', ' ')
+				.strip();
+		List<String> parametros = new ArrayList<>(propios.size() + 1);
+		parametros.add(nombre);
+		parametros.addAll(propios);
+		return parametros;
+	}
+
+	/** Los parámetros propios de un mensaje guardado (sin el nombre del colegio que va delante). */
+	static List<String> sinNombreDelColegio(Mensaje mensaje) {
+		List<String> guardados = mensaje.parametrosLista();
+		return guardados.isEmpty() ? guardados : guardados.subList(1, guardados.size());
 	}
 
 	static String clave(Contenido contenido, String destinatario, Long id, CanalMensaje canal, String sufijo) {

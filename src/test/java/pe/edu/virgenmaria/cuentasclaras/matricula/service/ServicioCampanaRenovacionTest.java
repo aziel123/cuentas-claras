@@ -93,7 +93,7 @@ class ServicioCampanaRenovacionTest {
 				+ "WHERE tipo = 'RENOVACION_MATRICULA'");
 		assertThat(invitaciones).hasSize(2).allSatisfy(m -> assertThat(m.get("apoderado_id")).isEqualTo(d.rosa()));
 		assertThat(invitaciones).extracting(m -> (String) m.get("parametros"))
-				.anySatisfy(p -> assertThat(p).startsWith("Mateo\n6.° Primaria\n2027\n31/01/2027"))
+				.anySatisfy(p -> assertThat(p).startsWith("Colegio Virgen María\nMateo\n6.° Primaria\n2027\n31/01/2027"))
 				.allSatisfy(p -> assertThat(p).doesNotContain("Quispe"));
 		assertThat(EscenarioEscolar.ultimoEvento(jdbc, "RENOVACION_CAMPANA_ABIERTA")).containsEntry("valor_nuevo",
 				"2 propuestas; responden hasta el 31/01/2027");
@@ -135,7 +135,8 @@ class ServicioCampanaRenovacionTest {
 		List<Map<String, Object>> avisos = jdbc.queryForList("SELECT canal, parametros FROM mensaje "
 				+ "WHERE tipo = 'RENOVACION_REGISTRADA' AND entidad_id = ? ORDER BY canal", renovacion);
 		assertThat(avisos).extracting(m -> m.get("canal")).containsExactly("CORREO", "WHATSAPP");
-		assertThat((String) avisos.getFirst().get("parametros")).startsWith("Mateo\ncontinúa en 6.° Primaria\n2027");
+		assertThat((String) avisos.getFirst().get("parametros"))
+				.startsWith("Colegio Virgen María\nMateo\ncontinúa en 6.° Primaria\n2027");
 		assertThat(EscenarioEscolar.ultimoEvento(jdbc, "RENOVACION_PRESENCIAL"))
 				.containsEntry("nombre_usuario", "administracion").containsEntry("valor_nuevo", "CONFIRMADA");
 		assertThat(pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria.RENOVACION_PRESENCIAL

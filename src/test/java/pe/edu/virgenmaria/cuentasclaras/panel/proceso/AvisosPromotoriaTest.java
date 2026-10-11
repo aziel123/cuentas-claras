@@ -142,7 +142,8 @@ class AvisosPromotoriaTest {
 		assertThat(alertasDe("CAJA_SIN_CERRAR")).singleElement().satisfies(m -> {
 			assertThat(m).containsEntry("usuario_id", promotora.getId()).containsEntry("canal", "WHATSAPP")
 					.containsEntry("creado_por", "sistema.panel").containsEntry("plantilla", "ALERTA_PROMOTORIA");
-			assertThat((String) m.get("parametros")).isEqualTo("Una caja de un día anterior sigue abierta\n15/04/2027")
+			assertThat((String) m.get("parametros"))
+					.isEqualTo("Colegio Virgen María\nUna caja de un día anterior sigue abierta\n15/04/2027")
 					.doesNotContain("Nombre de", "no hizo su cierre");
 		});
 		// Dirección no recibe las de caja (solo la anulación por aprobar).
@@ -161,7 +162,7 @@ class AvisosPromotoriaTest {
 		a(JUEVES, 19, 15);
 		avisos.enColegio(1L, JUEVES);
 		assertThat(alertasDe("CIERRE_NO_REALIZADO")).singleElement().satisfies(m -> assertThat((String) m.get("parametros"))
-				.isEqualTo("Una caja no se cerró a la hora límite\n19:00"));
+				.isEqualTo("Colegio Virgen María\nUna caja no se cerró a la hora límite\n19:00"));
 	}
 
 	/**
@@ -184,7 +185,7 @@ class AvisosPromotoriaTest {
 		assertThat(anulacion).extracting(m -> m.get("usuario_id")).containsExactlyInAnyOrder(promotora.getId(),
 				directora.getId()).doesNotContain(padrino.getId());
 		assertThat(anulacion).allSatisfy(m -> assertThat((String) m.get("parametros"))
-				.isEqualTo("Anulación de pago por aprobar\nS/ 350.00"));
+				.isEqualTo("Colegio Virgen María\nAnulación de pago por aprobar\nS/ 350.00"));
 	}
 
 	/**

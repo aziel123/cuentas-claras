@@ -87,7 +87,7 @@ cuentasclaras:
     # Sprint 8, tanda 1 (sección 3.7, decisión 122): el ÚNICO lugar del nombre comercial del producto. En prod es
     # obligatorio (VerificadorConfiguracion). La empresa proveedora (razón social, RUC y soporte) va en el contrato y en el
     # aviso de privacidad.
-    nombre: ${CC_MARCA_NOMBRE:Cuentas Claras}
+    nombre: ${CC_MARCA_NOMBRE:}   # vacío = el valor por defecto de Marca (solo dev y test)
     empresa: ${CC_MARCA_EMPRESA:}
     ruc-empresa: ${CC_MARCA_RUC:}
     soporte-correo: ${CC_MARCA_SOPORTE_CORREO:}

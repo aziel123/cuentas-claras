@@ -23,6 +23,7 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.service.HuellasDiarias;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.VerificadorIntegridadAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.FuenteDatosEnrutada;
 import pe.edu.virgenmaria.cuentasclaras.comun.config.ConfiguracionTiempo;
+import pe.edu.virgenmaria.cuentasclaras.comun.marca.Marca;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.Latidos;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ObservadorLatidos;
@@ -216,7 +217,7 @@ class MonitoreoBordesTest {
 		PropiedadesMonitoreo propiedades = propiedades(true);
 		doThrow(new MailSendException("SMTP caído")).doNothing().when(correo).send(any(SimpleMailMessage.class));
 		AlertasTecnicas alertas = new AlertasTecnicas(estado(fuenteQueResponde(), propiedades), errores, propiedades,
-				proveedor(correo), "avisos@colegio.pe", reloj);
+				proveedor(correo), "avisos@colegio.pe", reloj, Marca.porDefecto());
 
 		alertas.revisar();
 		reloj.avanzar(Duration.ofMinutes(5));
@@ -229,7 +230,7 @@ class MonitoreoBordesTest {
 	void noDebeRepetirAntesDeUnaHoraUnaAlertaQueSiSalio() {
 		PropiedadesMonitoreo propiedades = propiedades(true);
 		AlertasTecnicas alertas = new AlertasTecnicas(estado(fuenteQueResponde(), propiedades), errores, propiedades,
-				proveedor(correo), "avisos@colegio.pe", reloj);
+				proveedor(correo), "avisos@colegio.pe", reloj, Marca.porDefecto());
 
 		alertas.revisar();
 		reloj.avanzar(Duration.ofMinutes(59));
@@ -253,7 +254,7 @@ class MonitoreoBordesTest {
 		PropiedadesMonitoreo propiedades = propiedades(false);
 
 		List<AlertasTecnicas.AlertaTecnica> detectadas = new AlertasTecnicas(estado(fuenteQueResponde(), propiedades),
-				errores, propiedades, proveedor(correo), "avisos@colegio.pe", reloj).detectar(
+				errores, propiedades, proveedor(correo), "avisos@colegio.pe", reloj, Marca.porDefecto()).detectar(
 						estado(fuenteQueResponde(), propiedades).foto());
 
 		assertThat(detectadas).anySatisfy(a -> {
@@ -273,7 +274,7 @@ class MonitoreoBordesTest {
 		String huella = huellaDe(evento);
 		errores.registrar(huella, "0a1b2c3d4e5f");
 		AlertasTecnicas alertas = new AlertasTecnicas(estado(fuenteQueResponde(), propiedades), errores, propiedades,
-				proveedor(correo), "avisos@colegio.pe", reloj);
+				proveedor(correo), "avisos@colegio.pe", reloj, Marca.porDefecto());
 
 		alertas.revisar();
 

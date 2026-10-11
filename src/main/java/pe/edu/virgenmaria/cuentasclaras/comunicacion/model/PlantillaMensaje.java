@@ -10,74 +10,84 @@ import java.util.regex.Pattern;
  * parámetros los arma el sistema desde el pago, la anulación o el descuento. El nombre es el de la plantilla aprobada
  * por Meta (categoría «utility»); el texto es el mismo para el correo. Ninguna menciona evaluaciones, notas, exámenes,
  * libretas ni constancias, ni amenaza con consecuencias (INDECOPI; lo revisa {@code PlantillasMensajeTest}).
+ * <p>
+ * Sprint 8, tanda 1 (sección 3.7, decisiones 120 a 122): las plantillas {@code _v2} no llevan la marca ni el nombre de
+ * ningún colegio fijos. TODAS empiezan con {@code {{1}}} = el nombre del colegio que escribe (para el colegio de
+ * plataforma, la marca del producto). Ese primer parámetro lo antepone SIEMPRE {@code CreadorMensajes} al guardar el
+ * mensaje: los servicios que piden un mensaje arman solo los parámetros propios ({@code {{2}}} en adelante). La marca
+ * del producto va en el nombre visible del número de WhatsApp Business y en el remitente del correo, nunca en el texto.
  */
 public enum PlantillaMensaje {
 
-	PAGO_REGISTRADO("cc_pago_registrado", "Registramos su pago", 6, true,
-			"Colegio Virgen María: registramos su pago de {{1}} por {{2}}. Comprobante {{3}} del {{4}}, {{5}}, registrado "
-					+ "por {{6}}. Si no reconoce este pago, avísenos desde el portal."),
-	PAGO_ANULADO("cc_pago_anulado", "Se anuló un pago", 5, true,
-			"Colegio Virgen María: se anuló el pago {{1}} de {{2}} ({{3}}). Motivo: {{4}}. Aprobó: {{5}}. Si usted no lo "
+	PAGO_REGISTRADO("cc_pago_registrado_v2", "Registramos su pago", 7, true,
+			"{{1}}: registramos su pago de {{2}} por {{3}}. Comprobante {{4}} del {{5}}, {{6}}, registrado "
+					+ "por {{7}}. Si no reconoce este pago, avísenos desde el portal."),
+	PAGO_ANULADO("cc_pago_anulado_v2", "Se anuló un pago", 6, true,
+			"{{1}}: se anuló el pago {{2}} de {{3}} ({{4}}). Motivo: {{5}}. Aprobó: {{6}}. Si usted no lo "
 					+ "pidió, avísenos desde el portal."),
-	DESCUENTO_APROBADO("cc_descuento_aprobado", "Se aprobó un descuento", 3, true,
-			"Colegio Virgen María: se aprobó un descuento de {{1}} en {{2}}. Aprobó: {{3}}. Si usted no lo solicitó, "
+	DESCUENTO_APROBADO("cc_descuento_aprobado_v2", "Se aprobó un descuento", 4, true,
+			"{{1}}: se aprobó un descuento de {{2}} en {{3}}. Aprobó: {{4}}. Si usted no lo solicitó, "
 					+ "avísenos desde el portal."),
-	ACTIVACION("cc_activacion", "Activa tu acceso a Cuentas Claras", 1, true,
-			"Colegio Virgen María: para activar su acceso a Cuentas Claras use este enlace (vence el {{1}}). Nadie del "
+	ACTIVACION("cc_activacion_v2", "Activa tu acceso", 2, true,
+			"{{1}}: para activar su acceso al portal use este enlace (vence el {{2}}). Nadie del "
 					+ "colegio se lo pedirá."),
-	CONTACTO_CAMBIADO("cc_contacto_cambiado", "Cambió su contacto en el colegio", 1, false,
-			"Colegio Virgen María: este {{1}} dejó de recibir los avisos de pagos del colegio porque se registró otro. Si "
+	CONTACTO_CAMBIADO("cc_contacto_cambiado_v2", "Cambió su contacto en el colegio", 2, false,
+			"{{1}}: este {{2}} dejó de recibir los avisos de pagos del colegio porque se registró otro. Si "
 					+ "usted no lo pidió, avísenos en el colegio o desde el portal."),
-	HUELLA("cc_huella", "Huella diaria de la bitácora", 5, false,
-			"Cuentas Claras: huella del {{1}}: evento {{2}}, código {{3}}. Huella anterior: {{4}}. Bitácora verificada: {{5}}. "
+	HUELLA("cc_huella_v2", "Huella diaria de la bitácora", 6, false,
+			"{{1}}: huella del {{2}}: evento {{3}}, código {{4}}. Huella anterior: {{5}}. Bitácora verificada: {{6}}. "
 					+ "Guarde este mensaje y compárelo con el de ayer."),
 	// Sprint 5 · tanda 2: renovación de matrícula y respuesta a los avisos de la familia.
-	RENOVACION("cc_renovacion", "Confirme si su hijo continúa el próximo año", 4, true,
-			"Colegio Virgen María: confirme en el portal si {{1}} continúa en {{2}} el {{3}}. Puede responder hasta el "
-					+ "{{4}}. Si no responde, no se genera ningún cobro."),
-	RENOVACION_REGISTRADA("cc_renovacion_registrada", "Registramos su respuesta sobre el próximo año", 3, true,
-			"Colegio Virgen María: registramos en el colegio que {{1}} {{2}} el {{3}}. Si usted no lo pidió, avísenos "
+	RENOVACION("cc_renovacion_v2", "Confirme si su hijo continúa el próximo año", 5, true,
+			"{{1}}: confirme en el portal si {{2}} continúa en {{3}} el {{4}}. Puede responder hasta el "
+					+ "{{5}}. Si no responde, no se genera ningún cobro."),
+	RENOVACION_REGISTRADA("cc_renovacion_registrada_v2", "Registramos su respuesta sobre el próximo año", 4, true,
+			"{{1}}: registramos en el colegio que {{2}} {{3}} el {{4}}. Si usted no lo pidió, avísenos "
 					+ "desde el portal."),
-	AVISO_ATENDIDO("cc_aviso_atendido", "Respondimos su aviso", 1, true,
-			"Colegio Virgen María: respondimos el aviso que nos envió el {{1}}. Vea la respuesta en el portal."),
+	AVISO_ATENDIDO("cc_aviso_atendido_v2", "Respondimos su aviso", 2, true,
+			"{{1}}: respondimos el aviso que nos envió el {{2}}. Vea la respuesta en el portal."),
 	// Sprint 5 · tanda 3: recordatorios (decisión 44). Sin mencionar lo académico ni amenazar (INDECOPI).
-	RECORDATORIO("cc_recordatorio", "Recordatorio de vencimiento", 4, true,
-			"Colegio Virgen María: le recordamos que {{1}} vence el {{2}} ({{3}}). Puede pagar en línea, en el banco con "
-					+ "el código {{4}} o en caja. Si ya pagó, ignore este mensaje."),
-	CUOTA_VENCIDA("cc_cuota_vencida", "Tiene un pago pendiente", 3, true,
-			"Colegio Virgen María: {{1}} venció el {{2}} ({{3}}). Puede pagar en línea, en el banco o en caja. Si ya pagó, "
+	RECORDATORIO("cc_recordatorio_v2", "Recordatorio de vencimiento", 5, true,
+			"{{1}}: le recordamos que {{2}} vence el {{3}} ({{4}}). Puede pagar en línea, en el banco con "
+					+ "el código {{5}} o en caja. Si ya pagó, ignore este mensaje."),
+	CUOTA_VENCIDA("cc_cuota_vencida_v2", "Tiene un pago pendiente", 4, true,
+			"{{1}}: {{2}} venció el {{3}} ({{4}}). Puede pagar en línea, en el banco o en caja. Si ya pagó, "
 					+ "ignore este mensaje."),
 	// Correcciones del sprint 5 (S5-A1 y S5-M3).
-	VERIFICACION("cc_verificacion", "Confirme su contacto en el colegio", 2, true,
-			"Colegio Virgen María: confirme que este {{1}} es suyo para recibir los avisos de pagos del colegio. Use este "
-					+ "enlace (vence el {{2}}). Si usted no lo pidió, no lo use y avísenos."),
-	APODERADO_AGREGADO("cc_apoderado_agregado", "Se agregó un apoderado a su familia", 2, true,
-			"Colegio Virgen María: se registró a {{1}} como apoderado(a) de su familia, con el contacto {{2}}. Si no lo "
+	VERIFICACION("cc_verificacion_v2", "Confirme su contacto en el colegio", 3, true,
+			"{{1}}: confirme que este {{2}} es suyo para recibir los avisos de pagos del colegio. Use este "
+					+ "enlace (vence el {{3}}). Si usted no lo pidió, no lo use y avísenos."),
+	APODERADO_AGREGADO("cc_apoderado_agregado_v2", "Se agregó un apoderado a su familia", 3, true,
+			"{{1}}: se registró a {{2}} como apoderado(a) de su familia, con el contacto {{3}}. Si no lo "
 					+ "reconoce, avísenos desde el portal."),
-	CONTACTO_POR_VERIFICAR("cc_contacto_por_verificar", "Se registró un contacto nuevo en su familia", 3, true,
-			"Colegio Virgen María: se registró el {{1}} {{2}} para {{3}}. Recibirá los avisos cuando lo confirme. Si no lo "
+	CONTACTO_POR_VERIFICAR("cc_contacto_por_verificar_v2", "Se registró un contacto nuevo en su familia", 4, true,
+			"{{1}}: se registró el {{2}} {{3}} para {{4}}. Recibirá los avisos cuando lo confirme. Si no lo "
 					+ "reconoce, avísenos desde el portal."),
-	FERIADO_PROPUESTO("cc_feriado_propuesto", "Día no laborable por aprobar", 3, false,
-			"Cuentas Claras: {{1}} propuso el {{2}} como día no laborable ({{3}}). No cuenta hasta que lo apruebe otra "
+	FERIADO_PROPUESTO("cc_feriado_propuesto_v2", "Día no laborable por aprobar", 4, false,
+			"{{1}}: {{2}} propuso el {{3}} como día no laborable ({{4}}). No cuenta hasta que lo apruebe otra "
 					+ "persona de Promotoría o Dirección."),
 	// Sprint 6 · tanda 2 (sección 12.2): al personal, SOLO cifras, tipos fijos y la huella; nunca nombres de familias, de
 	// alumnos ni de cajeras, ni texto escrito por una persona. Sin enlaces que aprueben (P9): sin botón.
-	// Correcciones del sprint 6: {{6}} dice también los cierres con diferencia desde el resumen anterior (S6-M3) y {{12}}
-	// los resultados de las llamadas de control de la semana (S6-M2).
-	RESUMEN_DIARIO("cc_resumen_diario", "Resumen del día", 12, false,
-			"Cuentas Claras · {{1}}. Cobrado hoy: {{2}} en {{3}} pagos ({{4}} digital). Efectivo: {{5}}. Cajas: {{6}}. "
-					+ "Cobrado en el mes: {{7}}. Vencido por cobrar: {{8}}. Por aprobar: {{9}}. Alertas críticas: {{10}}. "
-					+ "Huella 19:00: {{11}}. Llamadas de control: {{12}}. Si algo no te cuadra, revisa el panel."),
-	ALERTA_PROMOTORIA("cc_alerta_promotoria", "Alerta en Cuentas Claras", 2, false,
-			"Cuentas Claras: {{1}} ({{2}}). Revísalo en el sistema."),
-	ALERTA_MAS("cc_alerta_mas", "Más alertas en Cuentas Claras", 1, false,
-			"Cuentas Claras: hoy hay {{1}} alertas más. Revísalas en el panel."),
+	// Correcciones del sprint 6: {{7}} dice también los cierres con diferencia desde el resumen anterior (S6-M3) y {{13}}
+	// los resultados de las llamadas de control de la semana (S6-M2). La foto resumen_diario.parametros guarda solo los 12
+	// propios ({{2}} a {{13}}); el mensaje lleva delante el nombre del colegio (trg_mensaje_nace lo compara así).
+	RESUMEN_DIARIO("cc_resumen_diario_v2", "Resumen del día", 13, false,
+			"{{1}} · {{2}}. Cobrado hoy: {{3}} en {{4}} pagos ({{5}} digital). Efectivo: {{6}}. Cajas: {{7}}. "
+					+ "Cobrado en el mes: {{8}}. Vencido por cobrar: {{9}}. Por aprobar: {{10}}. Alertas críticas: {{11}}. "
+					+ "Huella 19:00: {{12}}. Llamadas de control: {{13}}. Si algo no te cuadra, revisa el panel."),
+	ALERTA_PROMOTORIA("cc_alerta_promotoria_v2", "Alerta del colegio", 3, false,
+			"{{1}}: {{2}} ({{3}}). Revísalo en el sistema."),
+	ALERTA_MAS("cc_alerta_mas_v2", "Más alertas del colegio", 2, false,
+			"{{1}}: hoy hay {{2}} alertas más. Revísalas en el panel."),
 	// P6: aviso al contacto ANTERIOR de alguien del personal (tipo CONTACTO_CAMBIADO).
-	CONTACTO_PERSONAL_CAMBIADO("cc_contacto_personal_cambiado", "Cambió tu contacto en Cuentas Claras", 1, false,
-			"Cuentas Claras: este {{1}} dejó de recibir los mensajes de tu cuenta porque se registró otro. Si no lo "
+	CONTACTO_PERSONAL_CAMBIADO("cc_contacto_personal_cambiado_v2", "Cambió el contacto de tu cuenta", 2, false,
+			"{{1}}: este {{2}} dejó de recibir los mensajes de tu cuenta porque se registró otro. Si no lo "
 					+ "pediste, avisa hoy a Promotoría.");
 
 	private static final Pattern MARCADOR = Pattern.compile("\\{\\{(\\d+)}}");
+
+	/** El marcador con el que empieza toda plantilla: el nombre del colegio. */
+	public static final String MARCADOR_COLEGIO = "{{1}}";
 
 	private final String nombreMeta;
 
@@ -106,8 +116,14 @@ public enum PlantillaMensaje {
 		return asunto;
 	}
 
+	/** Cuántos parámetros lleva, contando el primero (el nombre del colegio). */
 	public int parametros() {
 		return parametros;
+	}
+
+	/** Los parámetros propios de la plantilla, sin el nombre del colegio que antepone {@code CreadorMensajes}. */
+	public int parametrosPropios() {
+		return parametros - 1;
 	}
 
 	/** Lleva el botón con enlace (al portal, o el de activación con su sufijo). */

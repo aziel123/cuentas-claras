@@ -12,9 +12,15 @@
 	<article class="comprobante-hoja" aria-labelledby="titulo-comprobante">
 		<p class="marca-simulado" th:if="${c.simulado}">COMPROBANTE SIMULADO · SIN VALOR TRIBUTARIO</p>
 		<header class="comprobante-cabecera">
-			<div>
-				<strong class="bloque" th:text="${c.colegio}">Colegio Virgen María</strong>
-				<span class="secundario bloque">Servicios educativos</span>
+			<div class="comprobante-emisor" data-emisor>
+				<img class="comprobante-logo" th:if="${c.emisor.conLogo}" th:src="@{/marca/logo}" alt="">
+				<div>
+					<strong class="bloque" th:text="${c.emisor.titulo()}">Colegio Virgen María</strong>
+					<span class="secundario bloque" th:if="${c.emisor.muestraNombreAparte()}" th:text="${c.emisor.nombre}">Colegio</span>
+					<span class="secundario bloque num" th:if="${c.emisor.ruc != null}" th:text="|RUC ${c.emisor.ruc}|">RUC 20131312955</span>
+					<span class="secundario bloque" th:if="${c.emisor.direccion != null}" th:text="${c.emisor.direccion}">Dirección</span>
+					<span class="secundario bloque">Servicios educativos</span>
+				</div>
 			</div>
 			<div class="comprobante-numero">
 				<h1 id="titulo-comprobante" th:text="${c.tipo}">Boleta de venta electrónica</h1>

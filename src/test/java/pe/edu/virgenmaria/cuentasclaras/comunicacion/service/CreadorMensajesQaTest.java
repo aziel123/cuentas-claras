@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Apoderado;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Familia;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.CanalMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.DestinatarioTipo;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.Mensaje;
@@ -34,6 +35,11 @@ class CreadorMensajesQaTest {
 
 	private final UsuarioRepository usuarios = mock(UsuarioRepository.class);
 
+	// Sprint 8, tanda 1: el nombre del colegio en contexto va delante de todo parámetro guardado (plantillas v2).
+	private final ColegioService colegios = mock(ColegioService.class);
+
+	private static final String COLEGIO = "Colegio Los Álamos";
+
 	@SuppressWarnings("unchecked")
 	private final ObjectProvider<ProveedorWhatsApp> whatsapp = mock(ObjectProvider.class);
 
@@ -47,7 +53,8 @@ class CreadorMensajesQaTest {
 
 	@BeforeEach
 	void preparar() {
-		creador = new CreadorMensajes(mensajes, usuarios, whatsapp);
+		creador = new CreadorMensajes(mensajes, usuarios, whatsapp, colegios);
+		when(colegios.nombreParaMensajes(any())).thenReturn(COLEGIO);
 		when(whatsapp.getIfAvailable()).thenReturn(mock(ProveedorWhatsApp.class));
 		when(mensajes.findByClave(anyString())).thenAnswer(i -> Optional.ofNullable(guardados.get(i.<String>getArgument(0))));
 		when(mensajes.saveAndFlush(any(Mensaje.class))).thenAnswer(i -> {
@@ -120,7 +127,8 @@ class CreadorMensajesQaTest {
 			assertThat(m.getDestinatarioTipo()).isEqualTo(DestinatarioTipo.APODERADO);
 			assertThat(m.getApoderadoId()).isEqualTo(3L);
 			assertThat(m.getClave()).isEqualTo("PAGO_REGISTRADO:pago:15:APODERADO:3:CORREO");
-			assertThat(m.parametrosLista()).containsExactlyElementsOf(PAGO.parametros());
+			assertThat(m.parametrosLista()).hasSize(PAGO.parametros().size() + 1).startsWith(COLEGIO)
+					.endsWith(PAGO.parametros().toArray(String[]::new));
 		});
 		// Una sola vez.
 		assertThat(creador.respaldo(whatsappFallido, rosa, null)).isEmpty();

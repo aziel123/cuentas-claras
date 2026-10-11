@@ -171,8 +171,10 @@ class VerificadorConfiguracionTest {
 	}
 
 	/** Sprint 7, tanda 2: prod y piloto usan dos usuarios de base (cc_app y cc_sistema). */
+	// Sprint 8, tanda 1: toda configuración de despliegue de las pruebas lleva también la marca (en prod es obligatoria).
 	private static final java.util.Map<String, String> DOS_USUARIOS = java.util.Map.of(VerificadorConfiguracion.DB_USUARIO,
-			"cc_app", VerificadorConfiguracion.DB_SISTEMA_USUARIO, "cc_sistema");
+			"cc_app", VerificadorConfiguracion.DB_SISTEMA_USUARIO, "cc_sistema", VerificadorConfiguracion.MARCA_NOMBRE,
+			"Colegio al Día");
 
 	private static java.util.Map<String, String> config(String... pares) {
 		java.util.Map<String, String> mapa = new java.util.HashMap<>();
@@ -324,5 +326,34 @@ class VerificadorConfiguracionTest {
 				.isInstanceOf(IllegalStateException.class).hasMessageContaining("permitir-real-fuera-de-prod");
 		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" },
 				config(VerificadorConfiguracion.COMPROBANTES, "OTRO"))).isInstanceOf(IllegalStateException.class);
+	}
+
+	// Sprint 8, tanda 1 (decisión 120): la marca es obligatoria en prod; las variables del promotor inicial solo avisan.
+
+	@Test
+	void enProduccionLaMarcaEsObligatoria() {
+		for (String sinMarca : new String[] { null, "", "   " }) {
+			java.util.Map<String, String> conf = config();
+			conf.put(VerificadorConfiguracion.MARCA_NOMBRE, sinMarca);
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, conf)).as("'" + sinMarca + "'")
+					.isInstanceOf(IllegalStateException.class).hasMessageContaining("CC_MARCA_NOMBRE");
+		}
+		// Fuera de prod vale el nombre por defecto de Marca.
+		java.util.Map<String, String> piloto = sinCorreo(VerificadorConfiguracion.WHATSAPP, "SIMULADO",
+				VerificadorConfiguracion.CORREO, "SIMULADO");
+		piloto.remove(VerificadorConfiguracion.MARCA_NOMBRE);
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" }, piloto))
+				.doesNotThrowAnyException();
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "dev" }, CLAVE_DEV)).doesNotThrowAnyException();
+	}
+
+	@Test
+	void lasVariablesDelPromotorInicialYaNoSeUsanYSoloAvisan() {
+		java.util.Map<String, String> conf = config("CC_PROMOTOR_USUARIO", "promotor", "CC_PROMOTOR_NOMBRE", "Ana",
+				"CC_PROMOTOR_CLAVE", "una-clave", "CC_COLEGIO_ID", "1");
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, conf)).doesNotThrowAnyException();
+		org.assertj.core.api.Assertions.assertThat(VerificadorConfiguracion.variablesRetiradas(conf::get))
+				.containsExactly("CC_PROMOTOR_USUARIO", "CC_PROMOTOR_NOMBRE", "CC_PROMOTOR_CLAVE", "CC_COLEGIO_ID");
+		org.assertj.core.api.Assertions.assertThat(VerificadorConfiguracion.variablesRetiradas(config()::get)).isEmpty();
 	}
 }

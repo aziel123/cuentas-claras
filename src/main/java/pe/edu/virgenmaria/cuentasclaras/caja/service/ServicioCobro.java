@@ -23,6 +23,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.dto.CobroRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.ComprobanteImprimible;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.ConfirmacionPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CuentaFamilia;
+import pe.edu.virgenmaria.cuentasclaras.caja.dto.EmisorVista;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.LineaComprobanteVista;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.PagosDelDia;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.ResultadoBusqueda;
@@ -46,6 +47,7 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoVisibleCuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.MarcaColegio;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.Comprobante;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.ProveedorComprobantes;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante;
@@ -398,13 +400,19 @@ public class ServicioCobro {
 	@Transactional(readOnly = true)
 	public ComprobanteImprimible imprimible(Long pagoId) {
 		Pago pago = pagoPropio(pagoId);
-		return imprimibleDe(pago.getComprobante(), pago, colegios.nombreDe(pago.getColegioId()), nombres, null, false);
+		return imprimibleDe(pago.getComprobante(), pago, colegios.marcaDe(pago.getColegioId()).orElseThrow(), nombres,
+				null, false);
 	}
 
-	/** El impreso de un comprobante (de su pago, si tiene) o de una nota de crédito (con el comprobante que anula). */
-	static ComprobanteImprimible imprimibleDe(Comprobante c, Pago pago, String colegio, NombresUsuarios nombres,
+	/**
+	 * El impreso de un comprobante (de su pago, si tiene) o de una nota de crédito (con el comprobante que anula). El
+	 * emisor sale de la marca del colegio (H8): razón social, RUC, dirección y logo.
+	 */
+	static ComprobanteImprimible imprimibleDe(Comprobante c, Pago pago, MarcaColegio marca, NombresUsuarios nombres,
 			Comprobante anulado, boolean firmaRecepcion) {
-		return new ComprobanteImprimible(pago == null ? null : pago.getId(), colegio, c.getTipo().etiqueta(),
+		EmisorVista emisor = new EmisorVista(marca.nombre(), marca.razonSocial(), marca.ruc(), marca.direccion(),
+				marca.conLogo());
+		return new ComprobanteImprimible(pago == null ? null : pago.getId(), emisor, c.getTipo().etiqueta(),
 				c.numeroCompleto(), c.getFechaEmision(), pago == null ? c.getCreadoEn() : pago.getCreadoEn(),
 				c.getReceptor().nombre(), c.getReceptor().documentoTexto(), lineas(c), c.getTotal(), c.getMoneda(),
 				c.getAfectacionIgv().etiqueta(), pago == null ? null : pago.getMedio().etiqueta(),
