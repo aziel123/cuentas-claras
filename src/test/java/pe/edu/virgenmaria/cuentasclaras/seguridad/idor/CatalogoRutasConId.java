@@ -20,7 +20,9 @@ final class CatalogoRutasConId {
 	enum Recurso {
 		ALUMNO, FAMILIA, APODERADO, MATRICULA, ANIO, SECCION, PLAN, CUOTA, PAGO, COMPROBANTE, CAJA, DEPOSITO, ANULACION,
 		SOLICITUD, AVISO, RENOVACION, ORDEN, REFERENCIA_ORDEN, FERIADO, MENSAJE, EXTRACTO, CUENTA, MOVIMIENTO, PARTIDA,
-		CIERRE_MENSUAL, LOTE_SALDO, LINEA_SALDO, LOTE_RECAUDACION, LINEA_RECAUDACION, USUARIO, VERSION, PUBLICO
+		CIERRE_MENSUAL, LOTE_SALDO, LINEA_SALDO, LOTE_RECAUDACION, LINEA_RECAUDACION, USUARIO, VERSION, PUBLICO,
+		/** Sprint 8, tanda 1: un colegio, en las rutas del operador de la plataforma (ve la ficha de cualquiera: es su función). */
+		COLEGIO
 	}
 
 	static final Map<String, Map<String, Recurso>> CATALOGO = new LinkedHashMap<>();
@@ -189,6 +191,14 @@ final class CatalogoRutasConId {
 		r("POST /familia/algo-no-cuadra", "pagoId", Recurso.PAGO, "cuotaId", Recurso.CUOTA);
 		r("POST /familia/pagar", "cuotaIds", Recurso.CUOTA);
 		r("POST /familia/pagar/revisar", "cuotaIds", Recurso.CUOTA);
+
+		// Sprint 8, tanda 1: la plataforma (solo el operador; ve la ficha y la lista de cualquier colegio, nunca sus datos:
+		// lo prueba OperadorSinDatosTest).
+		r("GET /plataforma/colegios/{id:\\d+}", "id", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/ficha", "id", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/completar", "id", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/titular", "id", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/correo-control", "id", Recurso.COLEGIO);
 	}
 
 	private CatalogoRutasConId() {

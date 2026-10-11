@@ -19,8 +19,12 @@ class ColegioRepositoryTest {
 
 	@Test
 	void laMigracionInicialDebeCrearAlColegioVirgenMariaActivo() {
-		assertThat(colegioRepository.findByActivoTrueOrderByIdAsc())
+		// Sprint 8, tanda 1: V28 agrega la fila PLATAFORMA (los operadores), que no es un colegio cliente.
+		assertThat(colegioRepository.findByTipoAndActivoTrueOrderByIdAsc(
+				pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoColegio.COLEGIO))
 				.extracting(Colegio::getNombre)
 				.containsExactly("Colegio Virgen María");
+		assertThat(colegioRepository.findFirstByTipo(pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoColegio.PLATAFORMA))
+				.hasValueSatisfying(p -> assertThat(p.enProduccion()).isTrue());
 	}
 }

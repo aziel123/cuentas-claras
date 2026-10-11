@@ -98,6 +98,10 @@ public class TokenDeSesionDePrueba implements TokenDeSesion {
 				jdbc.execute("ALTER TABLE usuario ALTER COLUMN id RESTART WITH " + Math.max(PRIMER_ID_REAL,
 						maximo == null ? 0 : maximo + 1));
 			}
+			// Sprint 8, tanda 1: V28 deja en preparación al colegio 1 de una base sin cuentas. Las pruebas en H2 lo usan como
+			// un colegio que ya opera (en MySQL real lo pasa a producción CuentasDePrueba, por el alta y con firma).
+			jdbc.update("UPDATE colegio SET estado = 'PRODUCCION', produccion_desde = CURRENT_TIMESTAMP, "
+					+ "produccion_por = 'prueba' WHERE id = 1 AND estado = 'PREPARACION'");
 		}
 	}
 

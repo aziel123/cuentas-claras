@@ -77,6 +77,10 @@ class MatrizPermisosTest {
 			if (modulo == ModuloApp.MI_CONTACTO && modulo.permite(rol)) {
 				esperado = 404;
 			}
+			// Sprint 8, tanda 1: el operador no tiene inicio de colegio: /inicio lo lleva a /plataforma.
+			if (rol == Rol.OPERADOR_PLATAFORMA && modulo == ModuloApp.INICIO) {
+				esperado = 302;
+			}
 			if (estado != esperado) {
 				errores.add(rol + " en " + modulo.ruta() + ": esperaba " + esperado + " y recibió " + estado);
 			}
@@ -410,7 +414,9 @@ class MatrizPermisosTest {
 	}
 
 	private static boolean estaCubierta(String ruta) {
-		if (Arrays.asList(ModuloApp.RUTAS_PUBLICAS).contains(ruta) || ModuloApp.RUTA_CAMBIAR_CLAVE.equals(ruta)) {
+		// Sprint 8, tanda 1: el logo del colegio de la sesión (cualquier persona con sesión; no es un módulo del menú).
+		if (Arrays.asList(ModuloApp.RUTAS_PUBLICAS).contains(ruta) || ModuloApp.RUTA_CAMBIAR_CLAVE.equals(ruta)
+				|| ModuloApp.RUTA_LOGO.equals(ruta)) {
 			return true;
 		}
 		PathContainer camino = PathContainer.parsePath(ruta);

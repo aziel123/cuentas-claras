@@ -200,12 +200,13 @@ class AvisosPromotoriaTest {
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ? AND plantilla = "
 				+ "'ALERTA_PROMOTORIA'", Long.class, promotora.getId())).isEqualTo(10);
 		assertThat(jdbc.queryForList("SELECT parametros FROM mensaje WHERE usuario_id = ? AND plantilla = 'ALERTA_MAS'",
-				String.class, promotora.getId())).containsExactly("2");
+				String.class, promotora.getId())).containsExactly("Colegio Virgen María\n2");
 		// Otra pasada el mismo día: la ATENCIÓN nueva se retiene y sale su propio «1 más»; la CRÍTICA sale igual.
 		a(JUEVES, 9, 15);
 		publicar(JUEVES, List.of(new Aviso(TipoAviso.CIERRE_NO_REALIZADO, "T13"), new Aviso(TipoAviso.OTRA_CRITICA, "C1")));
 		assertThat(jdbc.queryForList("SELECT parametros FROM mensaje WHERE usuario_id = ? AND plantilla = 'ALERTA_MAS' "
-				+ "ORDER BY id", String.class, promotora.getId())).containsExactly("2", "1");
+				+ "ORDER BY id", String.class, promotora.getId())).containsExactly("Colegio Virgen María\n2",
+				"Colegio Virgen María\n1");
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ? AND clave LIKE "
 				+ "'ALERTA:OTRA_CRITICA:C1:%'", Long.class, promotora.getId())).isEqualTo(1);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ?", Long.class, promotora.getId()))

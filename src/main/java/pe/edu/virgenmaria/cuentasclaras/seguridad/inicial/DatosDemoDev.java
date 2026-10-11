@@ -122,6 +122,12 @@ public class DatosDemoDev implements ApplicationRunner {
 		crear(colegioB, CAJA_COLEGIO_B);
 		colegios.findFirstByTipo(pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoColegio.PLATAFORMA)
 				.ifPresent(p -> crear(p.getId(), OPERADOR));
+		// Sprint 8, tanda 1: V28 deja en preparación al colegio de una base sin cuentas; en la demostración ya opera (H2 en
+		// memoria, sin triggers: en una base real lo pasa a producción su Promotoría con su firma).
+		colegios.findById(COLEGIO_PRINCIPAL).filter(c -> !c.enProduccion()).ifPresent(c -> {
+			c.pasarAProduccion("promotor", LocalDateTime.now(reloj));
+			colegios.save(c);
+		});
 		LOG.info("Usuarios de demostración creados: {} y {} (en {}). Clave: la de cuentasclaras.demo.clave (CC_DEMO_CLAVE).",
 				USUARIOS_COLEGIO_PRINCIPAL.stream().map(UsuarioDemo::nombreUsuario).toList(),
 				List.of(PROMOTOR_COLEGIO_B.nombreUsuario(), CAJA_COLEGIO_B.nombreUsuario()), NOMBRE_COLEGIO_B);

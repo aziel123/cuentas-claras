@@ -1717,12 +1717,11 @@ BEGIN
     SET v_titular_sin_activar = cc_es_sistema() AND OLD.debe_cambiar_clave AND NEW.debe_cambiar_clave
         AND NEW.contacto_solicitud_id <=> OLD.contacto_solicitud_id
         AND EXISTS (SELECT 1 FROM primera_promotoria p JOIN colegio c ON c.id = p.colegio_id
-            JOIN firma_operacion f ON f.colegio_id = p.plataforma_id
-                AND f.clave = CONCAT('titular_contacto:', p.colegio_id, ':', p.usuario_id, ':', OLD.version)
-            JOIN usuario o ON o.id = f.usuario_id AND o.id = p.operador_id
-            WHERE p.usuario_id = NEW.id AND p.colegio_id = NEW.colegio_id AND c.estado = 'PREPARACION'
-              AND cc_operador_activo(o.nombre_usuario)
-              AND f.firmada_bd >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE);
+            JOIN usuario o ON o.colegio_id = p.plataforma_id
+            WHERE p.usuario_id = NEW.id AND p.colegio_id = NEW.colegio_id AND p.plataforma_id IS NOT NULL
+              AND c.estado = 'PREPARACION' AND cc_operador_activo(o.nombre_usuario)
+              AND cc_firma_valida(p.plataforma_id, CONCAT('titular_contacto:', p.colegio_id, ':', p.usuario_id, ':',
+                  OLD.version), o.nombre_usuario));
     IF OLD.apoderado_id IS NOT NULL AND NEW.apoderado_id IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una cuenta de apoderado no se desenlaza de su apoderado';
     END IF;
@@ -2217,7 +2216,9 @@ BEGIN
 END$$
 
 -- H7. La primera Promotoría: un operador activo, con su firma de hace 5 minutos o menos (en el colegio de plataforma), en
--- un colegio en preparación cuya única cuenta es la del titular. Una vez por colegio (UNIQUE).
+-- un colegio en preparación cuya única cuenta es la del titular. Una vez por colegio (UNIQUE). La firma lleva el número de
+-- intento (primera_promotoria:{colegio}:{n}; la firma es única por clave y «Completar alta» firma de nuevo): vale la del
+-- último intento.
 DROP TRIGGER IF EXISTS trg_primera_promotoria_nace$$
 CREATE TRIGGER trg_primera_promotoria_nace BEFORE INSERT ON primera_promotoria FOR EACH ROW
 BEGIN
@@ -2229,7 +2230,9 @@ BEGIN
             OR NOT EXISTS (SELECT 1 FROM usuario u WHERE u.id = NEW.usuario_id AND u.colegio_id = NEW.colegio_id
                 AND u.apoderado_id IS NULL)
             OR NOT ((SELECT COUNT(*) FROM usuario u WHERE u.colegio_id = NEW.colegio_id) <=> 1)
-            OR NOT cc_firma_valida(NEW.plataforma_id, CONCAT('primera_promotoria:', NEW.colegio_id), NEW.creado_por) THEN
+            OR NOT cc_firma_valida(NEW.plataforma_id, CONCAT('primera_promotoria:', NEW.colegio_id, ':',
+                (SELECT COUNT(*) FROM firma_operacion f WHERE f.colegio_id = NEW.plataforma_id
+                    AND f.clave LIKE CONCAT('primera_promotoria:', NEW.colegio_id, ':%'))), NEW.creado_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la primera Promotoria la crea un operador con su firma, antes de cualquier otra cuenta';
     END IF;
 END$$
@@ -2253,7 +2256,7 @@ BEGIN
             OR SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_app'
             OR (cc_es_sistema() AND NOT (cc_operador_activo(NEW.actualizado_por)
                 AND cc_firma_valida((SELECT c.id FROM colegio c WHERE c.tipo = 'PLATAFORMA'),
-                    CONCAT('configuracion_colegio:', NEW.colegio_id, ':', NEW.clave, ':', OLD.version), NEW.actualizado_por))) THEN
+                    CONCAT('configuracion_colegio:', NEW.colegio_id, ':', NEW.clave, ':', NEW.version), NEW.actualizado_por))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la configuracion del colegio la cambia el operador con su firma';
     END IF;
 END$$

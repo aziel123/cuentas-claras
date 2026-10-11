@@ -10,6 +10,9 @@ spring:
       maximum-pool-size: 50
 
 cuentasclaras:
+  plataforma:
+    # Sprint 8, tanda 1: las pruebas dan de alta colegios nuevos junto al colegio 1 (instalación compartida).
+    instalacion: COMPARTIDA
   mensajeria:
     whatsapp:
       proveedor: SIMULADO

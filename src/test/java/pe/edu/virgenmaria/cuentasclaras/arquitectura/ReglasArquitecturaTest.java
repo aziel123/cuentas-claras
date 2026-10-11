@@ -239,7 +239,9 @@ class ReglasArquitecturaTest {
 
 	private static final Map<String, String> EXPRESIONES_EXIGIDAS = Map.ofEntries(
 			Map.entry(BASE + ".seguridad.service.ServicioUsuarios", "hasAnyRole('PROMOTOR','DIRECTOR')"),
-			Map.entry(BASE + ".auditoria.service.ConsultaAuditoriaService", "hasAnyRole('PROMOTOR','DIRECTOR')"),
+			// Sprint 8, tanda 1: el operador lee la bitácora de SU colegio (la plataforma) y la última actividad de cada colegio.
+			Map.entry(BASE + ".auditoria.service.ConsultaAuditoriaService",
+					"hasAnyRole('PROMOTOR','DIRECTOR','OPERADOR_PLATAFORMA')"),
 			Map.entry(BASE + ".auditoria.service.ConsultaAuditoriaService#paraRevisar", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".auditoria.service.VerificadorIntegridadAuditoria#verificar", "hasRole('PROMOTOR')"),
 			// Sprint 2: Promotoría consulta; Dirección y Administración registran y corrigen.

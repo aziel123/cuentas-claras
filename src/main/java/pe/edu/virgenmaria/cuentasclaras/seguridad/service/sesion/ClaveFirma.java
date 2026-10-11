@@ -96,9 +96,13 @@ public final class ClaveFirma {
 		return "respaldo:" + id(respaldoId) + ":RESUELTO";
 	}
 
-	/** Sprint 8, tanda 1 (sección 3.3): el operador firma, en el colegio de plataforma, la primera Promotoría de ESE colegio. */
-	public static String primeraPromotoria(Long colegioId) {
-		return "primera_promotoria:" + id(colegioId);
+	/**
+	 * Sprint 8, tanda 1 (sección 3.3): el operador firma, en el colegio de plataforma, la primera Promotoría de ESE colegio.
+	 * {@code intento}: cuántas firmas de la primera Promotoría de ese colegio hay antes de esta, más uno (la firma es única
+	 * por clave y «Completar alta» firma de nuevo; el trigger exige la del último intento).
+	 */
+	public static String primeraPromotoria(Long colegioId, long intento) {
+		return "primera_promotoria:" + id(colegioId) + ":" + intento;
 	}
 
 	/** Sprint 8, tanda 1 (sección 3.3): el operador corrige el contacto del titular (la cuenta, con su versión actual). */
@@ -112,7 +116,7 @@ public final class ClaveFirma {
 	}
 
 	/**
-	 * Sprint 8, tanda 1 (H10): el operador registra ({@code version} 0) o cambia (la versión actual de la fila) el correo
+	 * Sprint 8, tanda 1 (H10): el operador registra ({@code version} 0) o cambia (la versión que tendrá la fila) el correo
 	 * externo de control de ese colegio, firmando en el colegio de plataforma.
 	 */
 	public static String configuracionColegio(Long colegioId, String clave, long version) {

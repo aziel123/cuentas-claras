@@ -27,10 +27,21 @@ class MarcaWebTest {
 	private Marca marca;
 
 	@Test
+	void conOtraMarcaNingunaPaginaPublicaDiceLaAnterior() throws Exception {
+		assertThat(marca.nombre()).isEqualTo("Colegio al Día");
+		for (String ruta : new String[] { "/login", "/privacidad" }) {
+			MvcResult resultado = mvc.perform(get(ruta)).andReturn();
+			String html = resultado.getResponse().getContentAsString();
+			assertThat(html).as(ruta).isNotBlank().doesNotContain("Cuentas Claras").contains("Colegio al Día");
+		}
+	}
+
+	@Test
 	@ComoUsuario(roles = Rol.CAJA, nombreCompleto = "Lucía Ramos")
 	void conOtraMarcaNingunaPaginaDiceLaAnterior() throws Exception {
 		assertThat(marca.nombre()).isEqualTo("Colegio al Día");
-		for (String ruta : new String[] { "/login", "/privacidad", "/inicio", "/error" }) {
+		// (La página de error no se renderiza con MockMvc; la cubre la del ingreso: el mismo fragmento «publica».)
+		for (String ruta : new String[] { "/inicio" }) {
 			MvcResult resultado = mvc.perform(get(ruta)).andReturn();
 			String html = resultado.getResponse().getContentAsString();
 			assertThat(html).as(ruta).isNotBlank().doesNotContain("Cuentas Claras").contains("Colegio al Día");

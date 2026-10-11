@@ -125,7 +125,7 @@ class AvisosPromotoriaBordesTest {
 		publicar(martes, List.of(faltante));
 		assertThat(jdbc.queryForList("SELECT parametros FROM mensaje WHERE usuario_id = ? AND plantilla = "
 				+ "'ALERTA_PROMOTORIA'", String.class, promotora.getId()))
-				.containsExactly("Cierre de caja con diferencia\n-S/ 50.00");
+				.containsExactly("Colegio Virgen María\nCierre de caja con diferencia\n-S/ 50.00");
 	}
 
 	@Test
@@ -140,7 +140,7 @@ class AvisosPromotoriaBordesTest {
 		publicar(lunes, atenciones("D", 12));
 		assertThat(alertasDe(promotora, "ALERTA_PROMOTORIA")).isEqualTo(10);
 		assertThat(jdbc.queryForList("SELECT parametros FROM mensaje WHERE usuario_id = ? AND plantilla = 'ALERTA_MAS'",
-				String.class, promotora.getId())).containsExactly("2");
+				String.class, promotora.getId())).containsExactly("Colegio Virgen María\n2");
 	}
 
 	@Test

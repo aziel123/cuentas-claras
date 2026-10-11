@@ -15,6 +15,7 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Colegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoColegio;
+import pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoColegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.LogosColegio;
@@ -75,6 +76,10 @@ public class AltaColegio {
 
 	private final ConfiguracionColegioRepository configuracion;
 
+	private final pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraPromotoriaRepository primeras;
+
+	private final pe.edu.virgenmaria.cuentasclaras.seguridad.repository.FirmaOperacionRepository firmas;
+
 	private final AltaTitular titulares;
 
 	private final LogosColegio logos;
@@ -94,7 +99,11 @@ public class AltaColegio {
 	public AltaColegio(ColegioRepository colegios, UsuarioRepository usuarios, AnioEscolarRepository anios,
 			ConfiguracionColegioRepository configuracion, AltaTitular titulares, LogosColegio logos,
 			EjecucionPlataforma plataforma, FirmaSesion firma, AuditoriaService auditoria, PropiedadesPlataforma propiedades,
-			PlatformTransactionManager transacciones, Clock reloj) {
+			PlatformTransactionManager transacciones, Clock reloj,
+			pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraPromotoriaRepository primeras,
+			pe.edu.virgenmaria.cuentasclaras.seguridad.repository.FirmaOperacionRepository firmas) {
+		this.primeras = primeras;
+		this.firmas = firmas;
 		this.colegios = colegios;
 		this.usuarios = usuarios;
 		this.anios = anios;
@@ -117,16 +126,15 @@ public class AltaColegio {
 				datos.titularTelefono(), datos.titularCorreo()), operador);
 		AnioEscolar anioInicial = AnioEscolar.nuevo(datos.anio(), true, datos.inicioClases(), datos.finClases());
 		String documento = datos.titularDocumento().strip().toUpperCase(Locale.ROOT);
+		// Sección 3.1: una instalación DEDICADA tiene un solo colegio (el que ya opera, con cuentas).
+		List<Colegio> existentes = transaccion.execute(t -> colegios.findByTipoOrderByIdAsc(TipoColegio.COLEGIO));
+		if (!propiedades.compartida() && existentes.stream().anyMatch(c -> usuariosDe(c) > 0)) {
+			throw new ReglaNegocioException("Esta instalación es DEDICADA (un solo colegio). Para dar de alta otro colegio, "
+					+ "despliega una instalación compartida (CC_INSTALACION=COMPARTIDA).");
+		}
 		// 1. El colegio, en preparación.
 		Long colegioId = plataforma.como(() -> {
-			if (!propiedades.compartida() && colegios.findByTipoOrderByIdAsc(
-					pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoColegio.COLEGIO).stream()
-					.anyMatch(c -> !c.getNombre().isBlank() && usuariosDe(c) > 0)) {
-				throw new ReglaNegocioException("Esta instalación es DEDICADA (un solo colegio). Para dar de alta otro colegio, "
-						+ "despliega una instalación compartida (CC_INSTALACION=COMPARTIDA).");
-			}
-			if (colegios.findByTipoOrderByIdAsc(pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoColegio.COLEGIO).size()
-					>= propiedades.maxColegios()) {
+			if (colegios.findByTipoOrderByIdAsc(TipoColegio.COLEGIO).size() >= propiedades.maxColegios()) {
 				throw new ReglaNegocioException("Esta instalación ya tiene " + propiedades.maxColegios() + " colegios (decisión "
 						+ "138): el siguiente va en otra instalación.");
 			}
@@ -241,10 +249,11 @@ public class AltaColegio {
 					+ "confianza del colegio, nunca del operador.");
 		}
 		List<String> claves = List.of(ConfiguracionColegio.HUELLA_CORREO_EXTERNO, ConfiguracionColegio.RESUMEN_CORREO_EXTERNO);
-		// La firma de cada fila (con su versión actual, o 0 si no existe), en el colegio de plataforma.
+		// La firma de cada fila, en el colegio de plataforma.
 		transaccion.executeWithoutResult(t -> {
 			for (String clave : claves) {
-				long version = configuracion.findByColegioIdAndClave(colegioId, clave).map(ConfiguracionColegio::getVersion)
+				// Una fila nueva firma la versión 0; un cambio, la versión que tendrá la fila (la actual más uno).
+				long version = configuracion.findByColegioIdAndClave(colegioId, clave).map(f -> f.getVersion() + 1)
 						.orElse(0L);
 				firma.firmar(ClaveFirma.configuracionColegio(colegioId, clave, version));
 			}
@@ -277,7 +286,14 @@ public class AltaColegio {
 	}
 
 	private TitularCreado firmarYCrearTitular(long colegioId, DatosTitular titular, OperadorFirmante operador) {
-		transaccion.executeWithoutResult(t -> firma.firmar(ClaveFirma.primeraPromotoria(colegioId)));
+		// Antes de firmar: un colegio con su primera Promotoría no tiene otra (la firma sería inútil).
+		if (Boolean.TRUE.equals(ContextoColegio.en(colegioId, () -> transaccion.execute(t -> primeras.existsByIdNotNull())))) {
+			throw new ReglaNegocioException("Este colegio ya tiene su primera Promotoría: no se crea otra. Las cuentas "
+					+ "siguientes las crea la Promotoría del colegio.");
+		}
+		// La firma, en el colegio de plataforma, con el número de intento (única por clave; el trigger exige la última).
+		transaccion.executeWithoutResult(t -> firma.firmar(ClaveFirma.primeraPromotoria(colegioId,
+				firmas.countByClaveStartingWith("primera_promotoria:" + colegioId + ":") + 1)));
 		return titulares.crearPrimeraPromotoria(colegioId, titular, operador);
 	}
 
@@ -309,7 +325,7 @@ public class AltaColegio {
 	}
 
 	private long usuariosDe(Colegio colegio) {
-		return ContextoColegio.en(colegio.getId(), () -> usuarios.count());
+		return ContextoColegio.en(colegio.getId(), () -> transaccion.execute(t -> usuarios.count()));
 	}
 
 	/** El operador en sesión, como firmante: su cuenta en el colegio de plataforma. */

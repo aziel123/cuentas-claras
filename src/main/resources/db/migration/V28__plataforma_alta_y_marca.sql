@@ -41,7 +41,7 @@ ALTER TABLE colegio ADD CONSTRAINT ck_colegio_titular CHECK (titular_documento I
 UPDATE colegio SET estado = 'PRODUCCION', produccion_desde = CURRENT_TIMESTAMP(6), produccion_por = 'migracion.v28'
  WHERE EXISTS (SELECT 1 FROM usuario u WHERE u.colegio_id = colegio.id);
 UPDATE colegio SET actualizado_en = CURRENT_TIMESTAMP(6);
-ALTER TABLE colegio MODIFY actualizado_en DATETIME(6) NOT NULL;
+ALTER TABLE colegio MODIFY actualizado_en DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6);
 
 -- El colegio de plataforma: ahí viven los operadores (rol OPERADOR_PLATAFORMA). Nunca tiene familias ni dinero.
 INSERT INTO colegio (nombre, tipo, plataforma_unica, estado, activo, creado_por, actualizado_en, produccion_desde,

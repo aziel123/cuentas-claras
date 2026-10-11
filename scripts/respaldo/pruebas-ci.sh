@@ -165,7 +165,7 @@ faltan-filas-sigue)
 			-p"$clave_respaldo" cuentasclaras -e "INSERT INTO respaldo (inicio, fin, archivo, sha256, bytes, version_esquema,
 			secuencia_antes, hash_antes, secuencia_despues, hash_despues, conteos, destino, comparacion, diferencias,
 			creado_en, creado_por) VALUES (UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR,
-			'cc-20000101-000000.sql.gz.age', REPEAT('a', 64), 1, '27', $1, '$2', $1, '$2', '{}', 'cirespaldos', 'IGUAL',
+			'cc-20000101-000000.sql.gz.age', REPEAT('a', 64), 1, '28', $1, '$2', $1, '$2', '{}', 'cirespaldos', 'IGUAL',
 			NULL, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, 'cc_respaldo')" 2> /tmp/cc-respaldo-igual.err; then
 		echo "ERROR: cc_respaldo registró IGUAL con la alerta sin resolver"; exit 1
 	fi

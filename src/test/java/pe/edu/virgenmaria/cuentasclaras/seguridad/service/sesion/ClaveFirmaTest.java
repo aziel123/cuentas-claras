@@ -54,7 +54,7 @@ class ClaveFirmaTest {
 				ClaveFirma.avisoFamilia(1L), ClaveFirma.renovacion(1L, EstadoSolicitud.APROBADA),
 				ClaveFirma.verificacionPago(1L, 1), ClaveFirma.verificacionDeposito(1L, 1),
 				ClaveFirma.llamadaControl(LocalDate.of(2026, 10, 5), 1L, 1), ClaveFirma.delegacionLlamada(LocalDate.of(2026, 10, 5)),
-				ClaveFirma.respaldoResuelto(1L), ClaveFirma.primeraPromotoria(1L), ClaveFirma.colegioProduccion(1L),
+				ClaveFirma.respaldoResuelto(1L), ClaveFirma.primeraPromotoria(1L, 1), ClaveFirma.colegioProduccion(1L),
 				ClaveFirma.configuracionColegio(1L, "huella_correo_externo", 0), ClaveFirma.titularContacto(1L, 1L, 0))
 				.forEach(clave -> {
 					// El CHECK de V25 (firma_operacion.clave) y el largo de la columna.

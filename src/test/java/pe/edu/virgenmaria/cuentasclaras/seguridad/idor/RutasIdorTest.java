@@ -130,6 +130,9 @@ class RutasIdorTest {
 	private ColegioRepository colegios;
 
 	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.plataforma.service.AltaColegio alta;
+
+	@Autowired
 	private PasswordEncoder codificador;
 
 	@Autowired
@@ -168,7 +171,14 @@ class RutasIdorTest {
 	@Test
 	void ningunaRutaConIdDevuelveDatosDeOtroColegio() throws Exception {
 		Datos a = prepararColegioA();
-		long colegioB = colegios.save(new Colegio("Colegio de Prueba B")).getId();
+		// Sprint 8, tanda 1: el colegio B lo da de alta el operador desde la plataforma (no la semilla).
+		SecurityContextHolder.clearContext();
+		UsuariosDePrueba.iniciarSesion(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioPlataforma.operador(usuarios,
+				codificador, colegios, "operador.idor"));
+		long colegioB = alta.crear(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioPlataforma.alta("Colegio de Prueba B",
+				pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioPlataforma.RUC_B, "titular.idor.b", "45678950",
+				"987650050"), null, null).colegioId();
+		SecurityContextHolder.clearContext();
 		Map<Rol, RequestPostProcessor> personasB = new EnumMap<>(Rol.class);
 		for (Rol rol : List.of(Rol.PROMOTOR, Rol.DIRECTOR, Rol.ADMINISTRACION, Rol.CAJA, Rol.DOCENTE)) {
 			personasB.put(rol, UsuariosDePrueba.como(UsuariosDePrueba.guardar(usuarios, codificador, colegioB,
@@ -187,6 +197,9 @@ class RutasIdorTest {
 			}
 			String camino = ruta.concreta(valores(clasificacion, a.ids()));
 			for (Rol rol : RutasDeLaAplicacion.roles(camino)) {
+				if (rol == Rol.OPERADOR_PLATAFORMA) {
+					continue; // ve la ficha de cualquier colegio (es su función), nunca sus datos: OperadorSinDatosTest
+				}
 				pedidos++;
 				revisar(ruta, camino, clasificacion, a.ids(), personasB.get(rol), rol.name(), a.marcas(), errores);
 			}
@@ -398,6 +411,7 @@ class RutasIdorTest {
 		}
 
 		Map<Recurso, String> ids = new EnumMap<>(Recurso.class);
+		ids.put(Recurso.COLEGIO, "1");
 		ids.put(Recurso.ALUMNO, f.mateo().toString());
 		ids.put(Recurso.FAMILIA, f.quispe().toString());
 		ids.put(Recurso.APODERADO, f.rosa().toString());

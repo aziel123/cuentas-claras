@@ -9,4 +9,7 @@ public interface FirmaOperacionRepository extends Repository<FirmaOperacion, Lon
 	FirmaOperacion saveAndFlush(FirmaOperacion firma);
 
 	boolean existsByClave(String clave);
+
+	/** Sprint 8, tanda 1: cuántas firmas del colegio en contexto empiezan así (los intentos de la primera Promotoría). */
+	long countByClaveStartingWith(String prefijo);
 }

@@ -36,14 +36,14 @@ public final class ReglasSegregacion {
 			throw new ReglaNegocioException(
 					"Dirección no puede combinarse con Administración: quien registra descuentos no los aprueba.");
 		}
+		if (roles.contains(Rol.APODERADO) && roles.size() > 1) {
+			throw new ReglaNegocioException(
+					"Apoderado no puede combinarse con roles del personal. Crea una cuenta aparte para cada función.");
+		}
 		// Sprint 8, tanda 1: el operador de la plataforma no es de ningún colegio; solo y sin otro rol.
 		if (roles.contains(Rol.OPERADOR_PLATAFORMA) && roles.size() > 1) {
 			throw new ReglaNegocioException(
 					"El operador de la plataforma no se combina con ningún rol de un colegio.");
-		}
-		if (roles.contains(Rol.APODERADO) && roles.size() > 1) {
-			throw new ReglaNegocioException(
-					"Apoderado no puede combinarse con roles del personal. Crea una cuenta aparte para cada función.");
 		}
 	}
 

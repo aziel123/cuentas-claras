@@ -61,6 +61,12 @@ public class LogosColegio {
 		return logos.findByVigenteTrue();
 	}
 
+	/** El PNG vigente del colegio en contexto (para servirlo: sin exponer la entidad al controlador). */
+	@Transactional(readOnly = true)
+	public Optional<byte[]> pngVigente() {
+		return logos.findByVigenteTrue().map(LogoColegio::getContenido);
+	}
+
 	/**
 	 * Valida, reescribe y guarda el logo como el vigente del colegio en contexto (el anterior queda reemplazado). Debe
 	 * llamarse con una transacción abierta (la del alta o la de la pantalla de marca).

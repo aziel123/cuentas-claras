@@ -77,8 +77,7 @@ public class MarcaColegioController {
 	 */
 	@GetMapping(ModuloApp.RUTA_LOGO)
 	public ResponseEntity<byte[]> logo() {
-		return logos.vigente().map(logo -> {
-			byte[] png = logo.getContenido();
+		return logos.pngVigente().map(png -> {
 			return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).contentLength(png.length)
 					.header("X-Content-Type-Options", "nosniff")
 					.header("Content-Security-Policy", "default-src 'none'")
