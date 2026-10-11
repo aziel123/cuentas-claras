@@ -30,11 +30,14 @@ import java.sql.SQLException;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Sprint 8, tanda 1 (sección 12, filas que dicen «MySQL») contra MySQL 8 real, con los permisos mínimos de 02 y los
+ * Sprint 8, tandas 1 y 2 (sección 12, filas que dicen «MySQL») contra MySQL 8 real, con los permisos mínimos de 02 y los
  * triggers de 03: el alta de un colegio por el operador funciona de punta a punta, y con la clave de cc_app o de
  * cc_sistema no se crea un colegio, una primera Promotoría ni un operador por fuera, no se cobra en un colegio en
  * preparación, no se pasa a producción sin la firma de la Promotoría y Dirección y Caja, no se vuelve atrás ni se cambia
- * el RUC, y dos sedes con el mismo RUC no comparten serie. Corre después de la fase 2 del job mysql
+ * el RUC, y dos sedes con el mismo RUC no comparten serie. Tanda 2 (E10, E12 y E14): a producción no se pasa sin la lista
+ * completa; un conector nace propuesto con la firma de quien propone, entra en vigencia solo con su CAMBIO_CONECTOR aprobada
+ * y firmada por otra persona (con una Promotoría de por medio si mueve dinero) y no se edita ni se borra; el flujo completo
+ * (proponer, probar, aprobar, reemplazar y rechazar) funciona con los permisos mínimos. Corre después de la fase 2 del job mysql
  * ({@code CC_PRUEBA_MYSQL=true}). Usa nombres únicos y no limpia.
  */
 @SpringBootTest
@@ -73,6 +76,15 @@ class AuditoriaSprint8MySqlTest {
 
 	@Autowired
 	private PlatformTransactionManager transacciones;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.conectores.service.PropuestaConector propuesta;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones bandeja;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comun.prueba.CuentasDePrueba cuentasDePrueba;
 
 	@AfterEach
 	void limpiar() {
@@ -273,10 +285,173 @@ class AuditoriaSprint8MySqlTest {
 		UsuariosDePrueba.iniciarSesion(promotora);
 		servicioUsuarios.cambiarRoles(docente.getId(), new pe.edu.virgenmaria.cuentasclaras.seguridad.dto.CambiarRolesRequest(
 				java.util.EnumSet.of(Rol.DIRECTOR), "Primera Dirección del colegio nuevo"));
+		// Tanda 2: la aplicación exige la lista de verificación completa (aquí faltan pensiones, alumnos, conectores...).
 		UsuariosDePrueba.iniciarSesion(promotora);
-		paso.pasar();
+		org.assertj.core.api.Assertions.assertThatThrownBy(paso::pasar)
+				.isInstanceOf(pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException.class)
+				.hasMessageContaining("completa la lista de verificación");
+		assertThat(jdbc.queryForObject("SELECT estado FROM colegio WHERE id = ?", String.class, creado.colegioId()))
+				.isEqualTo("PREPARACION");
+		// La base exige su parte (la firma de la Promotoría, Dirección y Caja): con ellas, pasa.
+		cuentasDePrueba.pasarAProduccion(creado.colegioId(), promotora);
 		assertThat(jdbc.queryForObject("SELECT estado FROM colegio WHERE id = ?", String.class, creado.colegioId()))
 				.isEqualTo("PRODUCCION");
+	}
+
+	// ------------------------------------------------------------------ tanda 2: conectores (E12 y E14)
+
+	private static pe.edu.virgenmaria.cuentasclaras.conectores.dto.PropuestaConectorRequest recaudacion(String abono) {
+		return new pe.edu.virgenmaria.cuentasclaras.conectores.dto.PropuestaConectorRequest(
+				pe.edu.virgenmaria.cuentasclaras.conectores.model.ProveedorConector.GENERICO,
+				pe.edu.virgenmaria.cuentasclaras.conectores.model.ModoConector.REAL, null, null, null, null, null, null, null,
+				null, null, null, null, "SIN_BASE", "RECAUDACION CC", abono, null, null,
+				"Recaudación por código de alumno en el banco");
+	}
+
+	private Long proponer(Usuario quien, pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector tipo,
+			pe.edu.virgenmaria.cuentasclaras.conectores.dto.PropuestaConectorRequest pedido) {
+		UsuariosDePrueba.iniciarSesion(quien);
+		try {
+			Long id = propuesta.proponer(tipo, pedido);
+			UsuariosDePrueba.iniciarSesion(quien);
+			propuesta.probar(id);
+			return id;
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+	}
+
+	private Long solicitudDe(Long conector) {
+		return jdbc.queryForObject("SELECT solicitud_id FROM conector_colegio WHERE id = ?", Long.class, conector);
+	}
+
+	private String estadoConector(Long conector) {
+		return jdbc.queryForObject("SELECT estado FROM conector_colegio WHERE id = ?", String.class, conector);
+	}
+
+	/**
+	 * E12 con los permisos mínimos: Administración propone (con su firma), prueba la conexión, y la aprueba la Promotoría
+	 * (Dirección sola no puede: mueve dinero); la segunda reemplaza a la primera; un rechazo lleva su firma. Avisa a la
+	 * Promotoría y al correo externo de control (trg_mensaje_nace lo admite). Un secreto de pasarela se guarda cifrado.
+	 */
+	@Test
+	void e12CambioDeConectorConPermisosMinimos() {
+		ColegioConEquipoMySql.Equipo equipo = ColegioConEquipoMySql.crear(sufijo, EscenarioPlataforma.RUC_A, "987652001", alta,
+				servicioUsuarios, usuarios, codificador, colegios);
+		var tipo = pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector.RECAUDACION;
+
+		Long primera = proponer(equipo.administracion(), tipo, recaudacion("POR_LOTE"));
+		assertThat(estadoConector(primera)).isEqualTo("PROPUESTO");
+		assertThat(jdbc.queryForObject("SELECT prueba_ok FROM conector_colegio WHERE id = ?", Boolean.class, primera)).isTrue();
+		// Dirección sola no la aprueba (la aplicación; la base también: e12SinPromotoriaLaBaseNoLoPoneEnVigencia).
+		UsuariosDePrueba.iniciarSesion(equipo.directora());
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> bandeja.aprobar(solicitudDe(primera), null))
+				.hasMessageContaining("Promotoría");
+		UsuariosDePrueba.iniciarSesion(equipo.promotora());
+		bandeja.aprobar(solicitudDe(primera), null);
+		SecurityContextHolder.clearContext();
+		assertThat(estadoConector(primera)).isEqualTo("VIGENTE");
+		assertThat(jdbc.queryForList("SELECT destinatario_tipo FROM mensaje WHERE tipo = 'CONECTOR_VIGENTE' AND entidad_id = ?",
+				String.class, primera)).contains("USUARIO", "EXTERNO");
+
+		Long segunda = proponer(equipo.administracion(), tipo, recaudacion("POR_PAGO"));
+		UsuariosDePrueba.iniciarSesion(equipo.promotora());
+		bandeja.aprobar(solicitudDe(segunda), null);
+		SecurityContextHolder.clearContext();
+		assertThat(estadoConector(primera)).isEqualTo("REEMPLAZADO");
+		assertThat(estadoConector(segunda)).isEqualTo("VIGENTE");
+
+		// Un secreto de pasarela: cifrado (VARBINARY) y su propuesta rechazada con la firma de quien rechaza.
+		Long pasarela = proponer(equipo.administracion(), pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector.PASARELA,
+				new pe.edu.virgenmaria.cuentasclaras.conectores.dto.PropuestaConectorRequest(
+						pe.edu.virgenmaria.cuentasclaras.conectores.model.ProveedorConector.SIMULADO,
+						pe.edu.virgenmaria.cuentasclaras.conectores.model.ModoConector.SIMULADO, null, null, null, null, null,
+						null, null, java.util.List.of("YAPE"), "1500.00", null, null, null, null, null, null,
+						"secreto-de-avisos-mysql-0123456789", "Pasarela simulada para mostrar el pago en línea"));
+		byte[] cifrado = jdbc.queryForObject("SELECT secreto_cifrado FROM conector_colegio WHERE id = ?", byte[].class, pasarela);
+		assertThat(new String(cifrado, java.nio.charset.StandardCharsets.ISO_8859_1)).doesNotContain("secreto-de-avisos");
+		UsuariosDePrueba.iniciarSesion(equipo.directora());
+		bandeja.rechazar(solicitudDe(pasarela), "Todavía no contratamos la pasarela del colegio");
+		SecurityContextHolder.clearContext();
+		assertThat(estadoConector(pasarela)).isEqualTo("RECHAZADO");
+	}
+
+	/**
+	 * E12 en la base: un conector no nace VIGENTE ni a nombre de otra persona (sin su firma), un PROPUESTO no entra en
+	 * vigencia sin su solicitud aprobada y firmada, sin una Promotoría de por medio (aunque Dirección haya firmado), un
+	 * VIGENTE no se reemplaza solo ni cambia, y un rechazo exige la firma de quien rechaza.
+	 */
+	@Test
+	void e12ConectorVigenteSinSolicitudFirmadaFalla() {
+		ColegioConEquipoMySql.Equipo equipo = ColegioConEquipoMySql.crear(sufijo, EscenarioPlataforma.RUC_B, "987652011", alta,
+				servicioUsuarios, usuarios, codificador, colegios);
+		long colegio = equipo.colegioId();
+		String insertar = "INSERT INTO conector_colegio (colegio_id, tipo, proveedor, modo, configuracion, clave_publica, "
+				+ "estado, vigente, propuesto_por, resuelto_por, resuelto_en, prueba_ok, creado_en, creado_por, actualizado_en) "
+				+ "VALUES (?, 'CUENTA_BANCARIA', 'BCP', 'REAL', '{}', ?, ?, ?, ?, ?, ?, ?, NOW(6), ?, NOW(6))";
+		// Nace VIGENTE: 1644. Nace PROPUESTO a nombre de la Promotoría sin su firma: 1644.
+		assertThat(codigoAl(() -> jdbc.update(insertar, colegio, java.util.UUID.randomUUID().toString(), "VIGENTE", true,
+				equipo.administracion().getNombreUsuario(), equipo.promotora().getNombreUsuario(),
+				java.time.LocalDateTime.now(), true, equipo.administracion().getNombreUsuario()))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update(insertar, colegio, java.util.UUID.randomUUID().toString(), "PROPUESTO", null,
+				equipo.promotora().getNombreUsuario(), null, null, null, equipo.promotora().getNombreUsuario())))
+				.isEqualTo(1644);
+
+		var tipo = pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector.RECAUDACION;
+		Long propuesto = proponer(equipo.administracion(), tipo, recaudacion("POR_LOTE"));
+		String aVigente = "UPDATE conector_colegio SET estado = 'VIGENTE', vigente = TRUE, resuelto_por = ?, "
+				+ "resuelto_en = NOW(6) WHERE id = ?";
+		// Sin la solicitud aprobada: 1644 (con cc_app y con cc_sistema).
+		assertThat(codigoAl(() -> jdbc.update(aVigente, equipo.promotora().getNombreUsuario(), propuesto))).isEqualTo(1644);
+		assertThat(codigoAl(() -> sistema().update(aVigente, equipo.promotora().getNombreUsuario(), propuesto)))
+				.isIn(1143, 1644);
+		// Con la solicitud aprobada y firmada por Dirección, pero sin Promotoría de por medio (mueve dinero): 1644.
+		Long solicitud = solicitudDe(propuesto);
+		Integer sinPromotoria = new TransactionTemplate(transacciones).execute(t -> {
+			UsuariosDePrueba.iniciarSesion(equipo.directora());
+			firma.firmar(pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma.solicitud(solicitud,
+					pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.EstadoSolicitud.APROBADA));
+			jdbc.update("UPDATE solicitud_cambio SET estado = 'APROBADA', pendiente = NULL, resuelto_por = ?, "
+					+ "resuelto_en = NOW(6) WHERE id = ?", equipo.directora().getNombreUsuario(), solicitud);
+			Integer codigo = codigoAl(() -> jdbc.update(aVigente, equipo.directora().getNombreUsuario(), propuesto));
+			t.setRollbackOnly();
+			return codigo;
+		});
+		SecurityContextHolder.clearContext();
+		assertThat(sinPromotoria).isEqualTo(1644);
+		assertThat(estadoConector(propuesto)).isEqualTo("PROPUESTO");
+		// Enlazar otra solicitud o rechazar sin firma: 1644.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE conector_colegio SET solicitud_id = (SELECT MIN(id) FROM solicitud_cambio "
+				+ "WHERE colegio_id = ?) WHERE id = ?", colegio, propuesto))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE conector_colegio SET estado = 'RECHAZADO', resuelto_por = ?, "
+				+ "resuelto_en = NOW(6) WHERE id = ?", equipo.directora().getNombreUsuario(), propuesto))).isEqualTo(1644);
+		// La prueba de conexión de un PROPUESTO sí se puede registrar (con cc_app).
+		jdbc.update("UPDATE conector_colegio SET prueba_detalle = 'Probado otra vez' WHERE id = ?", propuesto);
+
+		// Un VIGENTE no cambia ni se reemplaza solo.
+		UsuariosDePrueba.iniciarSesion(equipo.promotora());
+		bandeja.aprobar(solicitud, null);
+		SecurityContextHolder.clearContext();
+		assertThat(estadoConector(propuesto)).isEqualTo("VIGENTE");
+		assertThat(codigoAl(() -> jdbc.update("UPDATE conector_colegio SET resuelto_por = 'otra.persona' WHERE id = ?",
+				propuesto))).isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE conector_colegio SET estado = 'REEMPLAZADO', vigente = NULL WHERE id = ?",
+				propuesto))).isEqualTo(1644);
+	}
+
+	/** E14: un conector no se borra (1142) ni cambia su configuración, su secreto o quién lo propuso (1143). */
+	@Test
+	void e14ElConectorNoSeEdita() {
+		assertThat(codigoAl(() -> jdbc.update("DELETE FROM conector_colegio WHERE 1 = 0"))).isEqualTo(1142);
+		for (String columna : new String[] { "secreto_cifrado", "configuracion", "propuesto_por", "tipo", "proveedor", "modo",
+				"clave_publica", "clave_version", "secreto_pista" }) {
+			assertThat(codigoAl(() -> jdbc.update("UPDATE conector_colegio SET " + columna + " = " + columna + " WHERE 1 = 0")))
+					.as(columna).isEqualTo(1143);
+			assertThat(codigoAl(() -> sistema().update("UPDATE conector_colegio SET " + columna + " = " + columna
+					+ " WHERE 1 = 0"))).as("cc_sistema " + columna).isEqualTo(1143);
+		}
+		assertThat(codigoAl(() -> sistema().update("DELETE FROM conector_colegio WHERE 1 = 0"))).isEqualTo(1142);
 	}
 
 	/** E11: un colegio en producción no vuelve a preparación ni cambia su RUC (ni la Promotoría ni el operador). */

@@ -62,7 +62,7 @@ jobs:
   mysql:
     name: Migraciones, permisos y arranque en MySQL 8
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     services:
       mysql:
         image: mysql:8
@@ -86,6 +86,9 @@ jobs:
       MYSQL_ADMIN: "mysql --protocol=TCP -h 127.0.0.1 -P 3306 -uroot -proot-ci"
       # Sprint 8, tanda 1 (decisión 122): en prod el nombre comercial es obligatorio (VerificadorConfiguracion).
       CC_MARCA_NOMBRE: "Cuentas Claras CI"
+      # Sprint 8, tanda 2 (decisión 118): la clave de los secretos de los conectores SOLO de este job (32 bytes en base64,
+      # no es la de desarrollo). Las pruebas cifran con ella y prod arranca verificando que los descifra todos.
+      CC_CLAVE_CONECTORES: "Y2ktY29uZWN0b3Jlcy1zb2xvLWRlbC1qb2ItbXlzcWw="
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -113,7 +116,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V28): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V29): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -143,7 +146,7 @@ jobs:
       - name: "Fase 2: la aplicación funciona con los permisos mínimos de cc_app"
         run: ./mvnw -B test -Dtest=PermisosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
-      - name: "Sprint 8, tanda 1: alta de colegios por el operador; cc_app y cc_sistema no crean colegios ni Promotorías, no cobran en preparación ni cambian el estado (E3, E5 a E7, E9 a E11, E16, E29 y E30)"
+      - name: "Sprint 8: alta de colegios por el operador; cc_app y cc_sistema no crean colegios ni Promotorías, no cobran en preparación ni cambian el estado (E3, E5 a E7, E9 a E11, E16, E29 y E30); los conectores entran en vigencia solo con la aprobación firmada de otra persona y no se editan (E12 y E14)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint8MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
@@ -531,13 +534,25 @@ jobs:
           comprobar_sistema 1142 "DELETE FROM primera_promotoria WHERE 1 = 0"
           comprobar_sistema 1142 "UPDATE primera_promotoria SET version = version WHERE 1 = 0"
           comprobar_sistema 1143 "UPDATE configuracion_colegio SET clave = clave WHERE 1 = 0"
+          # Sprint 8, tanda 2 (V29, E12 y E14): un conector no se borra (1142), no cambia su configuración, su secreto, su
+          # clave pública ni quién lo propuso (1143) y no nace VIGENTE (trg_conector_colegio_nace, 1644; con cc_app y con
+          # cc_sistema).
+          conector_vigente="INSERT INTO conector_colegio (colegio_id, tipo, proveedor, modo, configuracion, clave_publica, estado, vigente, propuesto_por, resuelto_por, resuelto_en, prueba_ok, creado_en, creado_por, actualizado_en) VALUES (0, 'CUENTA_BANCARIA', 'BCP', 'REAL', '{}', '00000000-0000-4000-8000-000000000000', 'VIGENTE', TRUE, 'ci', 'ci.otro', NOW(6), TRUE, NOW(6), 'ci', NOW(6))"
+          comprobar 1142 "DELETE FROM conector_colegio WHERE 1 = 0"
+          for columna in secreto_cifrado configuracion propuesto_por clave_publica tipo proveedor modo clave_version; do
+            comprobar 1143 "UPDATE conector_colegio SET $columna = $columna WHERE 1 = 0"
+          done
+          comprobar 1644 "$conector_vigente"
+          comprobar_sistema 1644 "$conector_vigente"
+          comprobar_sistema 1142 "DELETE FROM conector_colegio WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE conector_colegio SET secreto_cifrado = secreto_cifrado WHERE 1 = 0"
           # Exactamente un colegio PLATAFORMA y, en él, solo operadores.
           plataformas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM colegio WHERE tipo = 'PLATAFORMA'")
           [ "$plataformas" = "1" ] || { echo "ERROR: hay $plataformas colegios PLATAFORMA"; exit 1; }
-          # Huellas (H7): cc_app ve las de los 80 triggers y las 9 funciones con huellas_objetos() (sprint 8, tanda 1).
+          # Huellas (H7): cc_app ve las de los 82 triggers y las 9 funciones con huellas_objetos() (sprint 8, tanda 2).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
           [ "$objetos" = "$((esperados + 9))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
-          [ "$esperados" = "80" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 1 del sprint 8 deja 80"; exit 1; }
+          [ "$esperados" = "82" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 2 del sprint 8 deja 82"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -580,7 +595,11 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 80 triggers y las 9 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 82 triggers y las 9 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          # Sprint 8, tanda 2 (sección 3.6): los conectores (GRANT por columna y triggers) y la clave que descifra todos
+          # sus secretos (los que dejaron las pruebas, cifrados con CC_CLAVE_CONECTORES).
+          grep -q "Permisos y triggers de los conectores por colegio verificados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Secretos de los conectores verificados: " prod.log || { cat prod.log; exit 1; }
           # Sprint 8, tanda 1 (sección 6.4): un solo colegio PLATAFORMA, solo con operadores; el de CC_OPERADORES existe.
           grep -q "Plataforma verificada: " prod.log || { cat prod.log; exit 1; }
           grep -q "Operadores de la plataforma sincronizados: 1 en la lista" prod.log || { cat prod.log; exit 1; }
@@ -649,6 +668,13 @@ jobs:
             echo "ERROR: la aplicación arrancó con el mismo usuario en los dos pools"; exit 1
           fi
           grep -q "no pueden ser el mismo usuario" prod-mismo-usuario.log || { cat prod-mismo-usuario.log; exit 1; }
+          # Sprint 8, tanda 2 (secciones 3.1 y 3.6): una instalación COMPARTIDA con el token de Nubefact en el entorno no
+          # arranca (los secretos son de cada colegio, en sus conectores).
+          if CC_INSTALACION=COMPARTIDA NUBEFACT_TOKEN="un-token-del-entorno" DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" \
+               timeout 120 java -jar target/cuentas-claras-*.jar --server.port=18089 > prod-compartida-token.log 2>&1; then
+            echo "ERROR: una instalación COMPARTIDA arrancó con NUBEFACT_TOKEN en el entorno"; exit 1
+          fi
+          grep -q "no lleva secretos de conectores" prod-compartida-token.log || { cat prod-compartida-token.log; exit 1; }
           # E9: un privilegio de más (TRIGGER sobre el esquema) no deja arrancar; 02 lo quita.
           $MYSQL_ADMIN -e "GRANT TRIGGER ON cuentasclaras.* TO 'cc_app'@'%'"
           if DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" timeout 120 \
@@ -775,6 +801,65 @@ jobs:
           echo "$salida" | grep -q "ERROR 1644" || { echo "Error inesperado: $salida"; exit 1; }
           echo "OK (M4): quitado de CC_OPERADORES, operador.ci quedó inactivo y ya no crea colegios"
 
+      - name: "Sprint 8, tanda 2 (decisión 118): rotación de la clave de los conectores con cc_migrador; prod arranca con la nueva y no con la anterior"
+        env:
+          SPRING_PROFILES_ACTIVE: prod
+          DB_URL: "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&sslMode=REQUIRED"
+          DB_SISTEMA_USUARIO: cc_sistema
+          DB_SISTEMA_CLAVE: ${{ env.CC_MYSQL_CLAVE_SISTEMA }}
+          AUDITORIA_CLAVE_HMAC: "clave-hmac-del-job-de-integracion-continua-0001"
+          MENSAJERIA_CORREO_PROVEEDOR: SMTP
+          CORREO_REMITENTE: "avisos@ci.cuentasclaras.pe"
+          SPRING_MAIL_HOST: "127.0.0.1"
+          CC_OPERADORES: "otro.operador.ci:otro.operador.ci@ci.cuentasclaras.pe"
+          CLAVE_NUEVA: "Y2ktY29uZWN0b3Jlcy1yb3RhZGEtdjItZGVsLWpvYiE="
+        run: |
+          app() {
+            mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "$1"
+          }
+          antes=$(app "SELECT COUNT(*) FROM conector_colegio WHERE secreto_cifrado IS NOT NULL AND clave_version = 1")
+          [ "$antes" -ge 1 ] || { echo "ERROR: las pruebas no dejaron secretos de conectores para rotar"; exit 1; }
+          # cc_migrador solo cambia el secreto y su versión (hacia arriba): ni el estado ni una versión menor (1644).
+          for sql in "UPDATE conector_colegio SET estado = 'VIGENTE', vigente = TRUE WHERE secreto_cifrado IS NOT NULL AND estado = 'RECHAZADO'" \
+                     "UPDATE conector_colegio SET clave_version = 0 WHERE secreto_cifrado IS NOT NULL"; do
+            if salida=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras -e "$sql" 2>&1); then
+              echo "ERROR: cc_migrador pudo ejecutar: $sql"; exit 1
+            fi
+            echo "$salida" | grep -q "ERROR 1644\|ERROR 3819" || { echo "Error inesperado: $salida"; exit 1; }
+            echo "OK cc_migrador: $sql"
+          done
+          # Con cc_app, el secreto no cambia (1143) aunque alguien tenga la clave nueva.
+          if salida=$(app "UPDATE conector_colegio SET clave_version = 2 WHERE 1 = 0" 2>&1); then
+            echo "ERROR: cc_app pudo cambiar la versión de la clave"; exit 1
+          fi
+          echo "$salida" | grep -q "ERROR 1143" || { echo "Error inesperado: $salida"; exit 1; }
+          # La rotación: con cc_migrador, la clave nueva (versión 2) y la anterior.
+          DB_URL="${CC_MYSQL_URL}" DB_MIGRADOR_USUARIO=cc_migrador DB_MIGRADOR_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" \
+            CC_CLAVE_CONECTORES_ANTERIOR="${CC_CLAVE_CONECTORES}" CC_CLAVE_CONECTORES="${CLAVE_NUEVA}" \
+            CC_CLAVE_CONECTORES_VERSION=2 java -jar target/cuentas-claras-*.jar recifrar-conectores > recifrar.log 2>&1 \
+            || { cat recifrar.log; exit 1; }
+          grep -q "Secretos de los conectores cifrados de nuevo: $antes de la versión 1 a la 2" recifrar.log || { cat recifrar.log; exit 1; }
+          [ "$(app "SELECT COUNT(*) FROM conector_colegio WHERE secreto_cifrado IS NOT NULL AND clave_version = 1")" = "0" ] \
+            || { echo "ERROR: quedaron secretos en la versión 1"; exit 1; }
+          # Con la clave anterior (versión 1), prod no arranca: no descifra los secretos rotados.
+          if DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" timeout 120 \
+               java -jar target/cuentas-claras-*.jar --server.port=18090 > prod-clave-vieja.log 2>&1; then
+            echo "ERROR: prod arrancó con la clave anterior de los conectores"; exit 1
+          fi
+          grep -q "no descifra $antes secreto" prod-clave-vieja.log || { cat prod-clave-vieja.log; exit 1; }
+          # Con la nueva (versión 2), arranca y los verifica.
+          CC_CLAVE_CONECTORES="${CLAVE_NUEVA}" CC_CLAVE_CONECTORES_VERSION=2 DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" \
+            java -jar target/cuentas-claras-*.jar --server.port=18091 > prod-clave-nueva.log 2>&1 &
+          PID_APP=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:18091/actuator/health | grep -q UP && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:18091/actuator/health | grep -q UP || { cat prod-clave-nueva.log; exit 1; }
+          kill "$PID_APP"
+          grep -q "Secretos de los conectores verificados: $antes con la clave versión 2" prod-clave-nueva.log || { cat prod-clave-nueva.log; exit 1; }
+          echo "OK: rotación de la clave de los conectores con cc_migrador; prod arranca con la nueva y no con la anterior"
+
   respaldo:
     name: Respaldo cifrado, restauración real y ataques E29 a E32
     runs-on: ubuntu-latest
@@ -831,6 +916,9 @@ jobs:
       RESTAURAR_DB_ADMIN: "root"
       RESTAURAR_DB_ADMIN_CLAVE: "root-restauracion-ci"
       MYSQL_RESTAURACION: "mysql --protocol=TCP -h 127.0.0.1 -P 3308 -uroot -proot-restauracion-ci"
+      # Sprint 8, tanda 2: la clave de los secretos de los conectores (la de este job); el arranque de prod sobre la copia
+      # verifica que los descifra.
+      CC_CLAVE_CONECTORES: "Y2ktY29uZWN0b3Jlcy1kZWwtam9iLXJlc3BhbGRvLTE="
       # La clave HMAC con la que las pruebas sellaron la bitácora (perfil test): la verificación recalcula toda la cadena.
       CLAVE_HMAC_PRUEBAS: "clave-hmac-de-pruebas-no-usar-en-produccion-0001"
     steps:
@@ -852,7 +940,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V28, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V29, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \

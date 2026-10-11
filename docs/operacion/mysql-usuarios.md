@@ -115,6 +115,26 @@ funciones `cc_operador_activo` y `cc_colegio_en_produccion`. Versiones nuevas: `
 firma), `trg_pago_registro` (en un colegio en preparación no hay pagos), `trg_mensaje_nace` (ni recordatorios; y el
 resumen lleva el nombre del colegio delante) y `trg_serie_comprobante_nace` (dos sedes con el mismo RUC no comparten
 serie). Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
+
+**Sprint 8, tanda 2 (V29): 82 triggers y 9 funciones con huella (91).** Nuevos: `trg_conector_colegio_nace` (un conector
+nace PROPUESTO, por una persona activa de Promotoría o Administración de su colegio y con la firma de su sesión) y
+`trg_conector_colegio_estado` (entra en vigencia solo con su `CAMBIO_CONECTOR` aprobada y firmada por otra persona de
+Promotoría o Dirección, con la prueba de conexión correcta y, si mueve dinero, con una Promotoría de por medio; un vigente
+solo se reemplaza por otro aprobado; un rechazo lleva su firma). `02` da a `cc_negocio` el INSERT y el UPDATE por columna de
+`conector_colegio` (sin DELETE; tipo, proveedor, configuración, secreto y quién lo propuso no cambian: 1143). Una base
+existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
+
+**Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
+van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
+custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra
+todos los secretos guardados («Secretos de los conectores verificados: N con la clave versión V»). **Rotación**, con la
+aplicación detenida:
+1. `CC_CLAVE_CONECTORES` = la nueva, `CC_CLAVE_CONECTORES_VERSION` = la siguiente y `CC_CLAVE_CONECTORES_ANTERIOR` = la de
+   antes.
+2. `java -jar cuentas-claras.jar recifrar-conectores` con `DB_URL`, `DB_MIGRADOR_USUARIO` y `DB_MIGRADOR_CLAVE` (como
+   `migrar`): vuelve a cifrar en una transacción cada secreto de la versión anterior; si uno no se descifra, no cambia
+   ninguno. `trg_conector_colegio_estado` solo deja a `cc_migrador` cambiar el secreto y su versión, hacia arriba.
+3. Arrancar con la nueva (sin la anterior). La clave anterior se destruye con un acta.
 - Un plan fuera de BORRADOR no cambia montos, fechas ni editores; un plan cerrado no cambia de estado.
 - Planes y lotes nacen en BORRADOR; un lote confirmado o descartado no cambia.
 - Las líneas solo se agregan o se quitan con su lote en preparación.
