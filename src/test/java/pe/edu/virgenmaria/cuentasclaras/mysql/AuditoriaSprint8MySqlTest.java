@@ -26,6 +26,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.sql.SQLException;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -38,7 +39,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * completa; un conector nace propuesto con la firma de quien propone, entra en vigencia solo con su CAMBIO_CONECTOR aprobada
  * y firmada por otra persona (con una Promotoría de por medio si mueve dinero) y no se edita ni se borra; el flujo completo
  * (proponer, probar, aprobar, reemplazar y rechazar) funciona con los permisos mínimos. Corre después de la fase 2 del job mysql
- * ({@code CC_PRUEBA_MYSQL=true}). Usa nombres únicos y no limpia.
+ * ({@code CC_PRUEBA_MYSQL=true}). Tanda 3 (E25): «faltan filas» por colegio con las claves de cc_respaldo y cc_app. Usa
+ * nombres únicos y no limpia.
  */
 @SpringBootTest
 @ActiveProfiles({ "test", "mysql" })
@@ -483,6 +485,93 @@ class AuditoriaSprint8MySqlTest {
 	}
 
 	/** El titular activa su cuenta (la clave de las pruebas), por la ruta de identidad, como la activación. */
+	/**
+	 * Sprint 8, tanda 3 (V30, E25): «faltan filas» por colegio con las claves reales de cc_respaldo y cc_app. Un FALTAN_FILAS
+	 * dice de qué colegios (sin colegios o con uno que no existe, 1644); mientras la falta de un colegio siga abierta, un
+	 * IGUAL se rechaza (1644); la Promotoría de OTRO colegio no la resuelve ni con la firma de su sesión (1644) y la del
+	 * colegio afectado sí; resuelta, el IGUAL se acepta. Deja la base sin alertas abiertas.
+	 */
+	@Test
+	void e25FaltanFilasPorColegio() throws Exception {
+		String clave = System.getenv("CC_MYSQL_CLAVE_RESPALDO");
+		String url = System.getenv("CC_MYSQL_URL");
+		org.junit.jupiter.api.Assumptions.assumeTrue(clave != null && url != null, "sin la clave de cc_respaldo del job");
+		long colegioA = 1L;
+		Long colegioB = jdbc.queryForObject("SELECT MIN(u.colegio_id) FROM usuario u JOIN usuario_rol r ON r.usuario_id = "
+				+ "u.id JOIN colegio c ON c.id = u.colegio_id WHERE c.tipo = 'COLEGIO' AND c.estado = 'PRODUCCION' AND "
+				+ "u.colegio_id <> 1 AND u.activo AND u.apoderado_id IS NULL AND r.rol = 'PROMOTOR'", Long.class);
+		assertThat(colegioB).as("otro colegio en producción con Promotoría").isNotNull();
+		try (java.sql.Connection respaldo = java.sql.DriverManager.getConnection(url, "cc_respaldo", clave)) {
+			assertThat(registroRespaldo(respaldo, "FALTAN_FILAS", null)).as("sin colegios").contains("de que colegios");
+			assertThat(registroRespaldo(respaldo, "FALTAN_FILAS", "[" + colegioB + ",999999]"))
+					.as("un colegio que no existe").contains("de que colegios");
+			assertThat(registroRespaldo(respaldo, "FALTAN_FILAS", "[" + plataforma() + "]")).as("la plataforma")
+					.contains("de que colegios");
+			assertThat(registroRespaldo(respaldo, "FALTAN_FILAS", "[" + colegioB + "]")).isEqualTo("(sin error)");
+			assertThat(registroRespaldo(respaldo, "IGUAL", null)).as("con la falta del B abierta")
+					.contains("filas faltantes sin resolver");
+			Long id = jdbc.queryForObject("SELECT MAX(id) FROM respaldo", Long.class);
+
+			// La Promotoría del colegio A (no afectado), con la firma de su sesión: 1644.
+			Usuario promotoraA = promotoriaDe(colegioA);
+			Usuario promotoraB = promotoriaDe(colegioB);
+			UsuariosDePrueba.iniciarSesion(promotoraA);
+			String mensaje = mensajeDe(() -> new TransactionTemplate(transacciones).executeWithoutResult(t -> {
+				firma.firmar(pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma.respaldoResuelto(id,
+						colegioA));
+				jdbc.update("INSERT INTO resolucion_respaldo (respaldo_id, colegio_id, usuario_id, motivo, creado_en, "
+						+ "creado_por) VALUES (?, ?, ?, 'Revisado con el responsable tecnico', NOW(6), ?)", id, colegioA,
+						promotoraA.getId(), promotoraA.getNombreUsuario());
+			}));
+			SecurityContextHolder.clearContext();
+			assertThat(mensaje).contains("filas faltantes de ese colegio");
+
+			// La del B, por el servicio: sí.
+			UsuariosDePrueba.iniciarSesion(promotoraB);
+			resolucionesRespaldo.resolver("Revisado con el responsable técnico (prueba E25 del job mysql)");
+			SecurityContextHolder.clearContext();
+			assertThat(jdbc.queryForList("SELECT colegio_id FROM resolucion_respaldo WHERE respaldo_id = ?", Long.class,
+					id)).containsExactly(colegioB);
+			assertThat(registroRespaldo(respaldo, "IGUAL", null)).as("resuelta").isEqualTo("(sin error)");
+		}
+	}
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.operacion.service.ResolucionesRespaldo resolucionesRespaldo;
+
+	/** Registra un respaldo como cc_respaldo, con las anclas de la bitácora de este momento; devuelve el error o «(sin error)». */
+	private String registroRespaldo(java.sql.Connection respaldo, String comparacion, String colegios) {
+		Map<String, Object> ancla = jdbc.queryForMap("SELECT ultima_secuencia, ultimo_hash FROM auditoria_cadena WHERE id = 1");
+		String archivo = "cc-19990101-" + String.format("%06d", Math.floorMod(System.nanoTime(), 1_000_000)) + ".sql.gz.age";
+		try (java.sql.PreparedStatement sentencia = respaldo.prepareStatement("INSERT INTO respaldo (inicio, fin, archivo, "
+				+ "sha256, bytes, version_esquema, secuencia_antes, hash_antes, secuencia_despues, hash_despues, conteos, "
+				+ "destino, comparacion, diferencias, colegios_faltan, creado_en, creado_por) VALUES (UTC_TIMESTAMP(6) - "
+				+ "INTERVAL 5 HOUR, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, ?, REPEAT('a', 64), 1, '30', ?, ?, ?, ?, '{}', "
+				+ "'cirespaldos', ?, ?, ?, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, 'cc_respaldo')")) {
+			sentencia.setString(1, archivo);
+			sentencia.setLong(2, ((Number) ancla.get("ultima_secuencia")).longValue());
+			sentencia.setString(3, (String) ancla.get("ultimo_hash"));
+			sentencia.setLong(4, ((Number) ancla.get("ultima_secuencia")).longValue());
+			sentencia.setString(5, (String) ancla.get("ultimo_hash"));
+			sentencia.setString(6, comparacion);
+			sentencia.setString(7, "FALTAN_FILAS".equals(comparacion) ? "pago (faltan 1) [colegio x] (prueba E25)" : null);
+			sentencia.setString(8, colegios);
+			sentencia.executeUpdate();
+			return "(sin error)";
+		}
+		catch (SQLException e) {
+			return e.getErrorCode() + " " + e.getMessage();
+		}
+	}
+
+	private Usuario promotoriaDe(long colegio) {
+		Long id = jdbc.queryForObject("SELECT MIN(u.id) FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id "
+				+ "WHERE u.colegio_id = ? AND u.activo AND u.apoderado_id IS NULL AND r.rol = 'PROMOTOR'", Long.class, colegio);
+		assertThat(id).as("una Promotoría activa en el colegio " + colegio).isNotNull();
+		return pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio.en(colegio,
+				() -> usuarios.findById(id).orElseThrow());
+	}
+
 	private Usuario activar(long colegioId, String nombre) {
 		return pe.edu.virgenmaria.cuentasclaras.comun.basedatos.RutaConexion.identidad(() -> pe.edu.virgenmaria.cuentasclaras
 				.comun.multicolegio.ContextoColegio.en(colegioId, () -> {

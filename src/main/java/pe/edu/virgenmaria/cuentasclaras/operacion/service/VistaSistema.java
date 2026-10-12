@@ -9,7 +9,7 @@ import java.util.List;
 public record VistaSistema(String respaldo, String respaldoDetalle, boolean respaldoAlDia, boolean faltanFilas,
 		boolean respaldoExigido, boolean alertasEncendidas, boolean tareasActivas, List<Proceso> procesos,
 		List<ErrorDeHoy> errores, boolean bitacoraAlDia, String disco, boolean discoBajo, boolean baseResponde,
-		boolean poolAgotado, String version) {
+		boolean poolAgotado, String version, String custodios) {
 
 	public record Proceso(String nombre, String programacion, String ultimoExito, boolean atrasado, boolean critico) {
 	}

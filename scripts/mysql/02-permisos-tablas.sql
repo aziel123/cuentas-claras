@@ -268,6 +268,11 @@ GRANT INSERT, UPDATE (vigente, actualizado_en, version) ON cuentasclaras.colegio
 GRANT INSERT, UPDATE (estado, vigente, solicitud_id, resuelto_por, resuelto_en, prueba_ok, prueba_en, prueba_detalle,
     actualizado_en, version) ON cuentasclaras.conector_colegio TO 'cc_negocio';
 
+-- ===================== Sprint 8 · tanda 3 (V30): «faltan filas» por colegio =====================
+-- Sin GRANT nuevos: cc_respaldo ya inserta en respaldo (la columna colegios_faltan entra con su INSERT) y cc_app (por
+-- cc_negocio) ya inserta en resolucion_respaldo. Por colegio lo deciden trg_respaldo_registro y
+-- trg_resolucion_respaldo_registro.
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se

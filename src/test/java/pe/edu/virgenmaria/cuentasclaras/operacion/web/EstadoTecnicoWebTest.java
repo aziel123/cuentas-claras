@@ -65,6 +65,17 @@ class EstadoTecnicoWebTest {
 		mvc.perform(get("/panel/sistema")).andExpect(status().is3xxRedirection());
 	}
 
+	/**
+	 * Sprint 8, tanda 3 (E24, decisiones 129 y 130): en una instalación COMPARTIDA (la de las pruebas) el respaldo y la clave
+	 * de la bitácora los custodia la plataforma, nunca la Promotoría de un colegio (el respaldo tiene datos de todos).
+	 */
+	@Test
+	void muestraQuienCustodiaElRespaldo() throws Exception {
+		mvc.perform(get("/panel/sistema").with(UsuariosDePrueba.como(Rol.PROMOTOR))).andExpect(status().isOk())
+				.andExpect(content().string(allOf(containsString("Custodios del respaldo: la plataforma"),
+						not(containsString("Custodios del respaldo: Promotoría")))));
+	}
+
 	@Test
 	void conUnRespaldoDeHoyLaPromotoraLoVeYElVigilanteRecibeOk() throws Exception {
 		mvc.perform(get("/salud/respaldo")).andExpect(status().isOk()).andExpect(content().string("ATRASADO"))

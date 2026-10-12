@@ -15,6 +15,7 @@ import pe.edu.virgenmaria.cuentasclaras.operacion.model.ComparacionRespaldo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.model.ResolucionRespaldo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.model.Respaldo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.repository.ResolucionRespaldoRepository;
+import pe.edu.virgenmaria.cuentasclaras.operacion.salud.PendientesRespaldo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.repository.RespaldoRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
@@ -25,6 +26,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -39,7 +41,10 @@ import java.util.Locale;
  *   <li>sobre el ÚLTIMO respaldo con FALTAN_FILAS: cierra esa alerta y las anteriores;</li>
  *   <li>queda en la bitácora (resaltado) con las diferencias y el motivo, en la misma transacción.</li>
  * </ul>
- * La alerta es de toda la base (como el respaldo): la resuelve Promotoría de cualquier colegio de la instalación.
+ * Sprint 8, tanda 3 (V30, decisión 131): la alerta es POR COLEGIO. El respaldo dice qué colegios tienen filas faltantes
+ * ({@code colegios_faltan}) y la Promotoría de cada uno resuelve la suya, con la firma {@code respaldo:{id}:{colegio}:RESUELTO}
+ * (la de otro colegio la rechaza {@code trg_resolucion_respaldo_registro}). Un FALTAN_FILAS anterior a V30 (sin colegios)
+ * sigue siendo de toda la base: lo resuelve la Promotoría de cualquier colegio, como en el sprint 7.
  */
 @Service
 public class ResolucionesRespaldo {
@@ -76,12 +81,18 @@ public class ResolucionesRespaldo {
 	public String resolver(String motivo) {
 		UsuarioAutenticado persona = persona();
 		String texto = Motivo.exigir(motivo);
-		Respaldo respaldo = respaldos.findFirstByComparacionOrderByIdDesc(ComparacionRespaldo.FALTAN_FILAS)
+		// Sprint 8, tanda 3 (V30): el último respaldo con FALTAN_FILAS que nombra a SU colegio (o uno de toda la base,
+		// anterior a V30). Resolverlo cierra la falta de su colegio en ese respaldo y en los anteriores; la de los demás
+		// colegios la resuelve la Promotoría de cada uno.
+		Long colegioId = persona.colegioId();
+		List<Respaldo> faltantes = respaldos.conComparacion(ComparacionRespaldo.FALTAN_FILAS, true, Respaldo.DESTINO_SIMULADO);
+		List<ResolucionRespaldo> hechas = faltantes.isEmpty() ? List.of()
+				: respaldos.resolucionesDesde(faltantes.stream().map(Respaldo::getId).min(Long::compare).orElseThrow());
+		Respaldo ultimo = faltantes.stream().filter(r -> r.afectaA(colegioId)).findFirst()
 				.orElseThrow(() -> new ReglaNegocioException("No hay ninguna alerta de filas faltantes que resolver."));
-		if (resoluciones.findFirstByOrderByRespaldoIdDesc().filter(r -> r.getRespaldoId() >= respaldo.getId())
-				.isPresent()) {
-			throw new ReglaNegocioException("La alerta del respaldo " + respaldo.getArchivo() + " ya se resolvió.");
-		}
+		Respaldo respaldo = PendientesRespaldo.porResolverDe(colegioId, faltantes, hechas)
+				.orElseThrow(() -> new ReglaNegocioException("La alerta del respaldo " + ultimo.getArchivo()
+						+ " ya se resolvió."));
 		Usuario usuario = usuarios.findById(persona.usuarioId())
 				.orElseThrow(() -> new AccessDeniedException("Se requiere una cuenta del personal"));
 		String operador = propiedades.operadorCorreo() == null ? "" : propiedades.operadorCorreo().strip();
@@ -90,13 +101,14 @@ public class ResolucionesRespaldo {
 			throw new ReglaNegocioException("Tu cuenta recibe las alertas técnicas de los respaldos (eres su operador): la "
 					+ "resuelve otra persona de Promotoría.");
 		}
-		firma.firmar(ClaveFirma.respaldoResuelto(respaldo.getId()));
+		firma.firmar(ClaveFirma.respaldoResuelto(respaldo.getId(), colegioId));
 		LocalDateTime ahora = LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS);
-		resoluciones.saveAndFlush(ResolucionRespaldo.de(respaldo, persona.colegioId(), persona.usuarioId(),
+		resoluciones.saveAndFlush(ResolucionRespaldo.de(respaldo, colegioId, persona.usuarioId(),
 				persona.getUsername(), texto, ahora));
 		auditoria.registrar(AccionAuditoria.RESPALDO_FALTAN_FILAS_RESUELTO, "respaldo", respaldo.getId().toString(),
 				ComparacionRespaldo.FALTAN_FILAS.name(), "RESUELTO", "Respaldo " + respaldo.getArchivo() + " (del "
-						+ respaldo.getFin().toLocalDate() + "): " + respaldo.getDiferencias() + ". Resuelta por "
+						+ respaldo.getFin().toLocalDate() + "): " + PendientesRespaldo.diferenciasDe(colegioId,
+								respaldo.getDiferencias()) + ". Resuelta por "
 						+ persona.getUsername() + ". Motivo: " + texto);
 		return respaldo.getArchivo();
 	}

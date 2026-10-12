@@ -148,9 +148,13 @@ class AlertasTecnicasTest {
 		when(reciente.getComparacion())
 				.thenReturn(pe.edu.virgenmaria.cuentasclaras.operacion.model.ComparacionRespaldo.FALTAN_FILAS);
 		when(respaldos.findFirstByOrderByIdDesc()).thenReturn(Optional.of(reciente));
-		// Correcciones del sprint 7 (QA-S7-1): la alerta sale mientras ese respaldo siga sin resolver.
-		when(respaldos.sinResolver(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean(),
-				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(java.util.List.of(reciente));
+		// Correcciones del sprint 7 (QA-S7-1): la alerta sale mientras ese respaldo siga sin resolver (sprint 8, tanda 3: uno
+		// anterior a V30, de toda la base, sin ninguna resolución).
+		when(reciente.getId()).thenReturn(7L);
+		when(reciente.deTodaLaBase()).thenReturn(true);
+		when(reciente.afectaA(org.mockito.ArgumentMatchers.any())).thenReturn(true);
+		when(respaldos.conComparacion(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean(),
+				org.mockito.ArgumentMatchers.any())).thenReturn(java.util.List.of(reciente));
 
 		assertThat(alertas(propiedades).detectar(estado(propiedades).foto()))
 				.anySatisfy(a -> assertThat(a.tipo()).isEqualTo("FALTAN_FILAS"))

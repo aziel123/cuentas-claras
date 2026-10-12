@@ -3,6 +3,8 @@ package pe.edu.virgenmaria.cuentasclaras.operacion.service;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import pe.edu.virgenmaria.cuentasclaras.comun.config.ConfiguracionTiempo;
+import pe.edu.virgenmaria.cuentasclaras.comun.config.PropiedadesPlataforma;
+import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.operacion.config.PropiedadesMonitoreo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.salud.EstadoRespaldo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.salud.EstadoTecnico;
@@ -28,17 +30,35 @@ public class ServicioEstadoTecnico {
 
 	private final PropiedadesMonitoreo propiedades;
 
+	private final PropiedadesPlataforma plataforma;
+
 	private final Clock reloj;
 
-	public ServicioEstadoTecnico(EstadoTecnico estado, PropiedadesMonitoreo propiedades, Clock reloj) {
+	public ServicioEstadoTecnico(EstadoTecnico estado, PropiedadesMonitoreo propiedades, PropiedadesPlataforma plataforma,
+			Clock reloj) {
 		this.estado = estado;
 		this.propiedades = propiedades;
+		this.plataforma = plataforma;
 		this.reloj = reloj;
+	}
+
+	/**
+	 * Sprint 8, tanda 3 (sección 3.8, decisiones 129 y 130; E24): quién puede abrir el respaldo y custodia la clave de la
+	 * bitácora. En una instalación COMPARTIDA, la plataforma (2 custodios del proveedor): ningún colegio recibe la clave de
+	 * un respaldo con datos de otros. En una DEDICADA, la Promotoría y el responsable técnico, como en el sprint 7.
+	 */
+	public String custodios() {
+		return plataforma.compartida()
+				? "Custodios del respaldo: la plataforma (el responsable técnico y un segundo custodio del proveedor). "
+						+ "Tu colegio comprueba su bitácora con la huella diaria y con la verificación trimestral."
+				: "Custodios del respaldo: Promotoría y el responsable técnico (cada uno con su clave).";
 	}
 
 	@PreAuthorize("hasRole('PROMOTOR')")
 	public VistaSistema vista() {
-		FotoTecnica foto = estado.foto();
+		// Sprint 8, tanda 3 (V30): «Faltan filas» de SU colegio.
+		Long colegio = ContextoColegio.actual();
+		FotoTecnica foto = estado.foto(colegio != null && colegio > 0 ? colegio : null);
 		EstadoRespaldo r = foto.respaldo();
 		String respaldo;
 		String detalle;
@@ -69,7 +89,7 @@ public class ServicioEstadoTecnico {
 						e.ultimoIdPeticion() == null ? "—" : e.ultimoIdPeticion())).toList(),
 				foto.bitacoraAlDia(), foto.discoLibre() == null ? "No se pudo leer" : foto.discoLibre() + " % libre",
 				foto.discoLibre() != null && foto.discoLibre() < propiedades.discoMinimoPorcentaje(), foto.baseResponde(),
-				foto.poolAgotado(), foto.version());
+				foto.poolAgotado(), foto.version(), custodios());
 	}
 
 	/** {@code OK}, {@code ATRASADO} o {@code REVISAR}, sin fechas ni datos (ruta pública para el vigilante externo). */

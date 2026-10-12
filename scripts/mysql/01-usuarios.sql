@@ -14,6 +14,10 @@
 -- (cloudsqlsuperuser en Cloud SQL) y el verificador de prod no arranca (ve un rol de más). La marca
 -- log_bin_trust_function_creators (03 crea funciones con el binlog activo) se pone en la configuración de la instancia
 -- (--database-flags), no con SET PERSIST (exige SUPER, que un servicio administrado no da).
+-- Sprint 8, tanda 3 (V30, despliegue en Google Cloud): sin usuarios nuevos. En Cloud SQL lo corre deploy/gcp/
+-- preparar-base.sh como root del servicio, desde el contenedor de herramientas de la VM, con las claves pasadas por la
+-- entrada estándar (nunca guardadas en la VM). El TLS lo exige la instancia (ssl_mode=ENCRYPTED_ONLY): aquí no hay
+-- REQUIRE SSL para que la instalación local en Docker siga funcionando sin certificados.
 CREATE DATABASE IF NOT EXISTS cuentasclaras CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- Migrador: solo lo usa Flyway (java -jar ... migrar) y aplica 03-triggers.sql. Puede crear y cambiar tablas.

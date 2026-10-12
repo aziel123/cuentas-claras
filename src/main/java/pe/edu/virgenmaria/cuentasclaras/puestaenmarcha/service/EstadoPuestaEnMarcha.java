@@ -266,7 +266,7 @@ public class EstadoPuestaEnMarcha {
 						: "Dirección aprueba la versión vigente", "/colegio/privacidad"));
 
 		// 12. Respaldo de la instalación verificado y al día.
-		EstadoRespaldo respaldo = estadoTecnico.respaldo();
+		EstadoRespaldo respaldo = estadoTecnico.respaldo(colegio.getId());
 		boolean alDia = respaldo.existe() && respaldo.alDia() && !respaldo.faltanFilas();
 		puntos.add(new PuntoLista(RESPALDO, "Respaldo", estado(alDia), !respaldo.existe() ? "Todavía no hay un respaldo "
 				+ "de la instalación" : respaldo.faltanFilas() ? "El último respaldo encontró filas faltantes"

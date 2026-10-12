@@ -16,7 +16,6 @@ import org.springframework.scheduling.support.CronExpression;
 import org.springframework.scheduling.support.ScheduledMethodRunnable;
 import org.springframework.stereotype.Service;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.EstadoCadena;
-import org.springframework.data.domain.Limit;
 import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.FuenteDatosEnrutada;
 import pe.edu.virgenmaria.cuentasclaras.comun.config.ConfiguracionTiempo;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.Latidos;
@@ -24,6 +23,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ObservadorLatidos;
 import pe.edu.virgenmaria.cuentasclaras.operacion.config.PropiedadesMonitoreo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.log.ContadorErrores;
 import pe.edu.virgenmaria.cuentasclaras.operacion.model.ComparacionRespaldo;
+import pe.edu.virgenmaria.cuentasclaras.operacion.model.ResolucionRespaldo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.model.Respaldo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.repository.RespaldoRepository;
 
@@ -130,17 +130,37 @@ public class EstadoTecnico {
 		this.reloj = reloj;
 	}
 
-	/** Todo el estado técnico ahora. */
+	/** Todo el estado técnico ahora, con el respaldo de toda la instalación (vigilante y alertas técnicas). */
 	public FotoTecnica foto() {
+		return foto(null);
+	}
+
+	/**
+	 * Todo el estado técnico ahora. Sprint 8, tanda 3: con un colegio, la alerta «Faltan filas» es la de ESE colegio (lo que
+	 * ve su Promotoría en {@code /panel/sistema}); sin colegio, la de toda la instalación.
+	 */
+	public FotoTecnica foto(Long colegioId) {
 		List<EstadoProceso> procesos = procesos();
 		boolean baseResponde = baseResponde();
-		return new FotoTecnica(reloj.instant(), baseResponde ? respaldo() : EstadoRespaldo.ninguno(),
+		return new FotoTecnica(reloj.instant(), baseResponde ? respaldo(colegioId) : EstadoRespaldo.ninguno(),
 				!procesos.isEmpty(), procesos, errores.deHoy(), baseResponde && bitacoraAlDia(), discoLibre(),
 				baseResponde, poolAgotado(), alertasEncendidas(), version());
 	}
 
-	/** El último respaldo que cuenta. En prod el destino simulado no cuenta (y la base tampoco lo admite). */
+	/** El último respaldo que cuenta, con la alerta de cualquier colegio de la instalación (el vigilante externo). */
 	public EstadoRespaldo respaldo() {
+		return respaldo(null);
+	}
+
+	/**
+	 * El último respaldo que cuenta. En prod el destino simulado no cuenta (y la base tampoco lo admite).
+	 * <p>
+	 * Correcciones del sprint 7 (QA-S7-1): la alerta sigue mientras haya un respaldo con FALTAN_FILAS sin resolver, aunque
+	 * el último diga IGUAL (un segundo respaldo no borra la evidencia del panel ni del vigilante). Sprint 8, tanda 3 (V30):
+	 * por colegio. Con {@code colegioId}, solo cuenta una falta de ESE colegio (o de toda la base) que su Promotoría no
+	 * resolvió, y las diferencias que se muestran son las suyas; sin colegio, cualquiera que siga abierta.
+	 */
+	public EstadoRespaldo respaldo(Long colegioId) {
 		Optional<Respaldo> ultimo = propiedades.aceptarRespaldoSimulado() ? respaldos.findFirstByOrderByIdDesc()
 				: respaldos.findFirstByDestinoNotOrderByIdDesc(Respaldo.DESTINO_SIMULADO);
 		if (ultimo.isEmpty()) {
@@ -149,19 +169,24 @@ public class EstadoTecnico {
 		Respaldo r = ultimo.get();
 		LocalDateTime limite = LocalDateTime.now(reloj.withZone(ConfiguracionTiempo.ZONA_LIMA))
 				.minusHours(propiedades.respaldoMaxHoras());
-		// Correcciones del sprint 7 (QA-S7-1): la alerta sigue mientras haya un respaldo con FALTAN_FILAS sin resolver,
-		// aunque el último diga IGUAL (un segundo respaldo no borra la evidencia del panel ni del vigilante).
-		Optional<Respaldo> pendiente = respaldos.sinResolver(ComparacionRespaldo.FALTAN_FILAS,
-				propiedades.aceptarRespaldoSimulado(), Respaldo.DESTINO_SIMULADO, Limit.of(1)).stream().findFirst();
+		List<Respaldo> faltantes = respaldos.conComparacion(ComparacionRespaldo.FALTAN_FILAS,
+				propiedades.aceptarRespaldoSimulado(), Respaldo.DESTINO_SIMULADO);
+		List<ResolucionRespaldo> resoluciones = faltantes.isEmpty() ? List.of()
+				: respaldos.resolucionesDesde(faltantes.stream().map(Respaldo::getId).min(Long::compare).orElseThrow());
+		Optional<Respaldo> pendiente = colegioId == null ? PendientesRespaldo.abiertoMasNuevo(faltantes, resoluciones)
+				: PendientesRespaldo.abiertoDe(colegioId, faltantes, resoluciones);
 		if (pendiente.isPresent()) {
 			Respaldo p = pendiente.get();
 			return new EstadoRespaldo(true, r.getFin(), r.getDestino(), r.getArchivo(), ComparacionRespaldo.FALTAN_FILAS,
-					p.getDiferencias(), r.getFin().isAfter(limite), p.getId(), p.getArchivo());
+					PendientesRespaldo.diferenciasDe(colegioId, p.getDiferencias()), r.getFin().isAfter(limite), p.getId(),
+					p.getArchivo());
 		}
 		if (r.getComparacion() == ComparacionRespaldo.FALTAN_FILAS) {
-			// El último respaldo encontró filas faltantes, pero Promotoría ya lo resolvió con motivo: no es alerta.
+			// El último respaldo encontró filas faltantes, pero ya se resolvió (o no es de este colegio): no es alerta.
 			return new EstadoRespaldo(true, r.getFin(), r.getDestino(), r.getArchivo(), ComparacionRespaldo.IGUAL,
-					RESUELTA + r.getDiferencias(), r.getFin().isAfter(limite));
+					colegioId != null && !r.afectaA(colegioId) ? null
+							: RESUELTA + PendientesRespaldo.diferenciasDe(colegioId, r.getDiferencias()),
+					r.getFin().isAfter(limite));
 		}
 		return new EstadoRespaldo(true, r.getFin(), r.getDestino(), r.getArchivo(), r.getComparacion(),
 				r.getDiferencias(), r.getFin().isAfter(limite));

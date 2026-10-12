@@ -2,12 +2,17 @@
 --   mysql -h <host> -u cc_migrador -p cuentasclaras < scripts/mysql/03-triggers.sql
 -- Requisito (una vez, como administrador, porque el binlog está activo):
 --   SET PERSIST log_bin_trust_function_creators = 1;
+-- En un MySQL administrado (Cloud SQL, RDS) eso exige SUPER, que el servicio no da (H13 del sprint 8): la marca se pone
+-- en la configuración de la instancia (Cloud SQL: --database-flags=log_bin_trust_function_creators=on, sin reinicio).
 -- No van en Flyway: H2 (desarrollo y pruebas) no los soporta. La aplicación en prod NO ARRANCA si falta alguno:
 -- VerificadorPermisosBaseDatos compara la función cuentasclaras.triggers_instalados() (02-permisos-tablas.sql) con la lista
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
--- Versión de la migración V29 (sprint 8, tanda 2): 82 triggers y 6 funciones. Nuevos: trg_conector_colegio_nace (un
+-- Versión de la migración V30 (sprint 8, tanda 3): 82 triggers y 6 funciones. Sin triggers nuevos: versión nueva de
+-- trg_respaldo_registro y trg_resolucion_respaldo_registro («faltan filas» por colegio: el respaldo dice qué colegios
+-- tienen filas faltantes y la Promotoría de cada uno resuelve la suya, con su firma).
+-- Versión anterior (V29, sprint 8, tanda 2): 82 triggers y 6 funciones. Nuevos: trg_conector_colegio_nace (un
 -- conector nace PROPUESTO, por Promotoría o Administración con su firma) y trg_conector_colegio_estado (entra en vigencia
 -- solo con su CAMBIO_CONECTOR aprobada y firmada por otra persona, con una Promotoría de por medio si mueve dinero).
 -- Versión anterior (V28, sprint 8, tanda 1): 80 triggers y 6 funciones. Nuevos: trg_colegio_nace, trg_colegio_cambio,
@@ -1910,28 +1915,47 @@ BEGIN
                   WHERE e.secuencia = r.secuencia_despues AND e.hash = r.hash_despues)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el ancla del respaldo anterior ya no esta: el registro debe decir FALTAN_FILAS';
     END IF;
-    -- Correcciones del sprint 7 (QA-S7-1): mientras haya un respaldo con FALTAN_FILAS sin resolver (ninguna resolución en
-    -- él ni en uno posterior), cada respaldo nuevo dice FALTAN_FILAS. Un segundo respaldo no borra la alerta.
+    -- Sprint 8, tanda 3 (V30): un FALTAN_FILAS dice qué colegios tienen filas faltantes (arreglo JSON de ids de colegios
+    -- de tipo COLEGIO, cada uno una vez). Lo de la plataforma, el ancla y las tablas sin colegio los nombra a todos.
+    IF NEW.comparacion <=> 'FALTAN_FILAS' AND (NEW.colegios_faltan IS NULL
+            OR JSON_LENGTH(NEW.colegios_faltan) < 1
+            OR JSON_LENGTH(NEW.colegios_faltan) <> (SELECT COUNT(*) FROM colegio k WHERE k.tipo = 'COLEGIO'
+                AND JSON_CONTAINS(NEW.colegios_faltan, CAST(k.id AS JSON)))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el respaldo con filas faltantes debe decir de que colegios';
+    END IF;
+    -- Correcciones del sprint 7 (QA-S7-1) y sprint 8, tanda 3 (V30): mientras un colegio tenga una falta sin resolver
+    -- (ninguna resolución de ESE colegio en ese respaldo ni en uno posterior), cada respaldo nuevo dice FALTAN_FILAS. Un
+    -- FALTAN_FILAS anterior a V30 (sin colegios) es de toda la base: lo cierra cualquier resolución posterior.
     IF NOT (NEW.comparacion <=> 'FALTAN_FILAS') AND EXISTS (SELECT 1 FROM respaldo r WHERE r.comparacion = 'FALTAN_FILAS'
-            AND NOT EXISTS (SELECT 1 FROM resolucion_respaldo s WHERE s.respaldo_id >= r.id)) THEN
+            AND ((r.colegios_faltan IS NULL
+                    AND NOT EXISTS (SELECT 1 FROM resolucion_respaldo s WHERE s.respaldo_id >= r.id))
+                OR EXISTS (SELECT 1 FROM colegio k WHERE r.colegios_faltan IS NOT NULL
+                    AND JSON_CONTAINS(r.colegios_faltan, CAST(k.id AS JSON))
+                    AND NOT EXISTS (SELECT 1 FROM resolucion_respaldo s WHERE s.respaldo_id >= r.id
+                        AND s.colegio_id = k.id)))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: hay filas faltantes sin resolver: el registro debe decir FALTAN_FILAS';
     END IF;
 END$$
 
 -- Correcciones del sprint 7 (QA-S7-1): la alerta «Faltan filas» la resuelve una PERSONA de Promotoría activa de su
--- colegio (nunca cc_respaldo ni sistema.*), con motivo y la firma de su sesión, sobre el ÚLTIMO respaldo con FALTAN_FILAS.
--- Queda además en la bitácora (RESPALDO_FALTAN_FILAS_RESUELTO).
+-- colegio (nunca cc_respaldo ni sistema.*), con motivo y la firma de su sesión. Queda además en la bitácora
+-- (RESPALDO_FALTAN_FILAS_RESUELTO). Sprint 8, tanda 3 (V30): POR COLEGIO. Se resuelve el ÚLTIMO respaldo con FALTAN_FILAS
+-- que nombra a ESE colegio (o uno anterior a V30, de toda la base), y la firma es respaldo:{id}:{colegio}:RESUELTO: la
+-- Promotoría de otro colegio no resuelve la falta de este.
 DROP TRIGGER IF EXISTS trg_resolucion_respaldo_registro$$
 CREATE TRIGGER trg_resolucion_respaldo_registro BEFORE INSERT ON resolucion_respaldo FOR EACH ROW
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM respaldo r WHERE r.id = NEW.respaldo_id AND r.comparacion = 'FALTAN_FILAS'
-            AND NOT EXISTS (SELECT 1 FROM respaldo x WHERE x.comparacion = 'FALTAN_FILAS' AND x.id > r.id)) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: se resuelve el ultimo respaldo con filas faltantes';
+            AND (r.colegios_faltan IS NULL OR JSON_CONTAINS(r.colegios_faltan, CAST(NEW.colegio_id AS JSON)))
+            AND NOT EXISTS (SELECT 1 FROM respaldo x WHERE x.comparacion = 'FALTAN_FILAS' AND x.id > r.id
+                AND (x.colegios_faltan IS NULL OR JSON_CONTAINS(x.colegios_faltan, CAST(NEW.colegio_id AS JSON))))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: se resuelve el ultimo respaldo con filas faltantes de ese colegio';
     END IF;
     IF cc_es_sistema() OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol p ON p.usuario_id = u.id
             WHERE u.id = NEW.usuario_id AND u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.creado_por
               AND u.activo AND u.apoderado_id IS NULL AND p.rol = 'PROMOTOR')
-            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('respaldo:', NEW.respaldo_id, ':RESUELTO'), NEW.creado_por) THEN
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('respaldo:', NEW.respaldo_id, ':', NEW.colegio_id, ':RESUELTO'),
+                NEW.creado_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resuelve Promotoria con la firma de su sesion';
     END IF;
 END$$

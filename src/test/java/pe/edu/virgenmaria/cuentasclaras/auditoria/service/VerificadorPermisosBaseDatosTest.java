@@ -610,7 +610,8 @@ class VerificadorPermisosBaseDatosTest {
 		// Sprint 7, tanda 1 (V24): 64 con el registro de respaldos; tanda 2 (V25): 73 con identidad, sesiones y firmas;
 		// correcciones (V27): 75 con el nacimiento de las solicitudes y la resolución de las alertas de respaldo.
 		// Sprint 8, tanda 1 (V28): 80 con el colegio (nace y cambia), la primera Promotoría y el correo externo de control;
-		// tanda 2 (V29): 82 con los conectores (nacen propuestos y cambian de estado con la aprobación firmada).
+		// tanda 2 (V29): 82 con los conectores (nacen propuestos y cambian de estado con la aprobación firmada); tanda 3 (V30):
+		// los mismos 82 (los dos del respaldo cambian de versión).
 		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(82);
 	}
 

@@ -91,9 +91,12 @@ public final class ClaveFirma {
 		return "delegacion_llamada:" + Objects.requireNonNull(semana, "semana");
 	}
 
-	/** Correcciones del sprint 7 (QA-S7-1): Promotoría resuelve la alerta «Faltan filas» de ese respaldo. */
-	public static String respaldoResuelto(Long respaldoId) {
-		return "respaldo:" + id(respaldoId) + ":RESUELTO";
+	/**
+	 * Correcciones del sprint 7 (QA-S7-1): Promotoría resuelve la alerta «Faltan filas» de ese respaldo. Sprint 8, tanda 3
+	 * (V30): la de SU colegio ({@code respaldo:{id}:{colegio}:RESUELTO}).
+	 */
+	public static String respaldoResuelto(Long respaldoId, Long colegioId) {
+		return "respaldo:" + id(respaldoId) + ":" + id(colegioId) + ":RESUELTO";
 	}
 
 	/**

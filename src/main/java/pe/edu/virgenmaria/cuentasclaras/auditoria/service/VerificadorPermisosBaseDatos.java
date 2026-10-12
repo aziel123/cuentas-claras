@@ -598,7 +598,9 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			// Sprint 8, tanda 1 (V28).
 			"trg_colegio_nace", "trg_colegio_cambio", "trg_primera_promotoria_nace", "trg_configuracion_colegio_registro",
 			"trg_configuracion_colegio_cambio",
-			// Sprint 8, tanda 2 (V29).
+			// Sprint 8, tanda 2 (V29). Tanda 3 (V30): sin triggers nuevos; trg_respaldo_registro y
+			// trg_resolucion_respaldo_registro cambian de versión («faltan filas» por colegio) y su huella la comprueba
+			// verificarHuellas contra la de 03 empaquetado.
 			"trg_conector_colegio_nace", "trg_conector_colegio_estado");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";

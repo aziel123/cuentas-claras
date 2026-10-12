@@ -116,7 +116,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V29): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V30): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -146,7 +146,7 @@ jobs:
       - name: "Fase 2: la aplicación funciona con los permisos mínimos de cc_app"
         run: ./mvnw -B test -Dtest=PermisosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
-      - name: "Sprint 8: alta de colegios por el operador; cc_app y cc_sistema no crean colegios ni Promotorías, no cobran en preparación ni cambian el estado (E3, E5 a E7, E9 a E11, E16, E29 y E30); los conectores entran en vigencia solo con la aprobación firmada de otra persona y no se editan (E12 y E14)"
+      - name: "Sprint 8: alta de colegios por el operador; cc_app y cc_sistema no crean colegios ni Promotorías, no cobran en preparación ni cambian el estado (E3, E5 a E7, E9 a E11, E16, E29 y E30); los conectores entran en vigencia solo con la aprobación firmada de otra persona y no se editan (E12 y E14); «faltan filas» por colegio con cc_respaldo (E25)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint8MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
@@ -861,7 +861,7 @@ jobs:
           echo "OK: rotación de la clave de los conectores con cc_migrador; prod arranca con la nueva y no con la anterior"
 
   respaldo:
-    name: Respaldo cifrado, restauración real y ataques E29 a E32
+    name: Respaldo cifrado, restauración real, ataques E29 a E32 y «faltan filas» por colegio
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -940,7 +940,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V29, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V30, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \
@@ -999,6 +999,15 @@ jobs:
 
       - name: "QA-S7-1: resuelta, el respaldo siguiente vuelve a IGUAL"
         run: sh scripts/respaldo/pruebas-ci.sh resuelto
+
+      - name: "Sprint 8, tanda 3 (E25 y E28): un DBA borra un pago de UN colegio: el respaldo avisa solo a ese colegio"
+        run: sh scripts/respaldo/pruebas-ci.sh faltan-filas-por-colegio
+
+      - name: "Sprint 8, tanda 3 (E25): la Promotoría de otro colegio no la resuelve (1644) y la del colegio afectado sí"
+        run: CC_PRUEBA_RESOLUCION_POR_COLEGIO=true ./mvnw -B test -Dtest=ResolucionRespaldoPorColegioMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 8, tanda 3: resuelta por su colegio, el respaldo siguiente vuelve a IGUAL"
+        run: sh scripts/respaldo/pruebas-ci.sh resuelto-por-colegio
 
       - name: "Destino simulado: solo con la fila del DBA (nunca en prod); sin ella, la base no lo registra (1644)"
         run: sh scripts/respaldo/pruebas-ci.sh simulado
