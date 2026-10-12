@@ -1,0 +1,16 @@
+# Sprint 8, tanda 3 (E26): reglas de gitleaks del CI (paso «secretos»). Las de gitleaks por defecto, más una lista CERRADA
+# de valores de prueba que parecen secretos pero son inventados (pruebas de los conectores del sprint 8). Nunca se excluye
+# una carpeta entera: un secreto real en una prueba también se detecta.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Valores inventados de las pruebas de los conectores (no son credenciales)"
+regexTarget = "match"
+regexes = [
+  '''secreto-avisos-colegio-[ab]-0123456789''',
+  '''tok_1234567890abcdefXYZ9''',
+  '''sk_test_abcdefghijklmnop''',
+  '''sk_live_1234567890abcd''',
+  '''whsec_0123456789abcdef''',
+]

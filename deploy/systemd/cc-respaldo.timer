@@ -1,0 +1,10 @@
+# Cuentas Claras · el respaldo a las 02:30 de Lima (decisión 88: RPO de 24 h; Cloud SQL hace el suyo a las 02:00).
+[Unit]
+Description=Cuentas Claras: respaldo diario a las 02:30 (Lima)
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 America/Lima
+Persistent=true
+
+[Install]
+WantedBy=timers.target

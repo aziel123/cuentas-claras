@@ -1,0 +1,14 @@
+# Cuentas Claras · respaldo diario cifrado (sprint 7; sprint 8, tanda 3: en la VM de Google Cloud). Corre
+# scripts/respaldo/respaldar.sh como cc_respaldo, por TLS a Cloud SQL, en el contenedor de herramientas. Salida 3 =
+# «faltan filas» (alerta crítica): el servicio queda en falla y el vigilante externo lo ve en /salud/respaldo.
+[Unit]
+Description=Cuentas Claras: respaldo diario cifrado con age
+Requires=docker.service
+After=docker.service cc-secretos.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker run --rm --env-file /etc/cc/respaldo.env -v /etc/cc/certs:/certs:ro \
+    -v /opt/cuentas-claras/scripts:/scripts:ro cc-herramientas:local sh /scripts/respaldo/respaldar.sh
+# Sin acceso de red más allá del contenedor ni privilegios: el servicio solo lanza el contenedor.
+NoNewPrivileges=yes

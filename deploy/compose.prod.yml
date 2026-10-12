@@ -1,0 +1,66 @@
+# Cuentas Claras · una instalación en la VM de Google Cloud (sprint 8, tanda 3; docs/operacion/despliegue-gcp.md, sección
+# 7 del diseño). La aplicación (imagen de GHCR por DIGEST, nunca «latest») detrás de Caddy (TLS automático). La base es
+# Cloud SQL para MySQL 8.4 por IP privada y TLS (sslMode=VERIFY_CA, el certificado de su autoridad en /etc/cc/certs).
+#
+# Uso (lo hace deploy/desplegar.sh; aquí, para referencia):
+#   docker compose -f compose.prod.yml --env-file /etc/cc/imagen.env up -d
+# /etc/cc/imagen.env:  CC_IMAGEN=ghcr.io/<organización>/cuentas-claras@sha256:<digest>
+# /etc/cc/app.env:     variables de la aplicación (permisos 600, dueño root). Lo arma deploy/vm/cargar-secretos.sh con
+#                      Secret Manager y /etc/cc/instalacion.env. Nunca lleva las claves de root ni de cc_migrador.
+# /etc/cc/caddy.env:   CC_DOMINIO_APP y CC_ACME_CORREO (sin secretos).
+name: cuentas-claras
+
+services:
+  app:
+    image: ${CC_IMAGEN:?Define CC_IMAGEN (ghcr.io/...@sha256:...) en /etc/cc/imagen.env}
+    restart: unless-stopped
+    env_file:
+      - /etc/cc/app.env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      TZ: America/Lima
+      # La JVM usa hasta el 75 % del límite del contenedor.
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75"
+    # Endurecimiento (sección 7.1): sistema de archivos de solo lectura (Tomcat escribe en /tmp, en memoria), sin
+    # capacidades ni escalada de privilegios, con el usuario sin privilegios del Dockerfile (uid 10001).
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1400m
+    volumes:
+      - /etc/cc/certs:/certs:ro
+    # 8080 NO se publica: solo Caddy lo alcanza por la red de Docker.
+    networks: [cc]
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  caddy:
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    restart: unless-stopped
+    env_file:
+      - /etc/cc/caddy.env
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_datos:/data
+      - caddy_config:/config
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt:
+      - no-new-privileges:true
+    networks: [cc]
+    depends_on: [app]
+
+networks:
+  cc: {}
+
+volumes:
+  caddy_datos: {}
+  caddy_config: {}

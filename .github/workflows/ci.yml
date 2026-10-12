@@ -59,6 +59,107 @@ jobs:
           grep -q "BLOQUEA (CRÍTICA o ALTA con arreglo): log4j-core 2.14.1" muestra.txt || { cat muestra.txt; exit 1; }
           echo "OK: la muestra vulnerable no pasa (Log4Shell detectado)"
 
+  secretos:
+    name: Ningún secreto en el repositorio (gitleaks, E26)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      # Sprint 8, tanda 3 (E26): gitleaks (imagen oficial fijada por digest) sobre TODA la historia de git. Las reglas
+      # son las de gitleaks más una lista cerrada de valores inventados de las pruebas (.gitleaks.toml).
+      - name: "gitleaks sobre la historia del repositorio"
+        run: |
+          docker run --rm -v "$PWD:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
+            git /repo --no-banner --redact --config /repo/.gitleaks.toml
+
+      - name: "E26: la revisión SÍ falla con un secreto de muestra (un token de GitHub inventado, generado aquí)"
+        run: |
+          mkdir -p /tmp/muestra-secreto
+          echo "GITHUB_TOKEN=ghp_$(head -c 400 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 36)" > /tmp/muestra-secreto/app.env
+          if docker run --rm -v /tmp/muestra-secreto:/muestra -v "$PWD/.gitleaks.toml:/gitleaks.toml:ro" \
+              ghcr.io/gitleaks/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
+              dir /muestra --no-banner --redact --config /gitleaks.toml; then
+            echo "ERROR: gitleaks no detectó el token de muestra"; exit 1
+          fi
+          echo "OK: un secreto de muestra no pasa"
+
+  demo:
+    name: "Demo (perfil demo): sin salida a internet, franja DEMO, «Crear mi demo» y no arranca con secretos (E20 a E22)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Construir la imagen (el mismo Dockerfile del despliegue)
+        run: docker build -q -t cuentas-claras:ci .
+
+      - name: Arrancar la demo en una red de Docker SIN SALIDA (internal true), como en deploy/compose.demo.yml
+        run: |
+          docker network create --internal cc-demo-interna
+          # Por http (sin Caddy): la cookie sin «Secure» (en la VM va por https con __Host-CCSESION).
+          docker run -d --name cc-demo --network cc-demo-interna --read-only --tmpfs /tmp \
+            -e SPRING_PROFILES_ACTIVE=demo -e CC_MARCA_NOMBRE="Cuentas Claras CI" \
+            -e SERVER_SERVLET_SESSION_COOKIE_SECURE=false -e CC_COOKIE_SESION=CCSESION cuentas-claras:ci
+          for i in $(seq 1 90); do
+            docker exec cc-demo curl -sf http://127.0.0.1:8080/actuator/health/readiness | grep -q UP && break
+            sleep 2
+          done
+          docker exec cc-demo curl -sf http://127.0.0.1:8080/actuator/health/readiness | grep -q UP || { docker logs cc-demo; exit 1; }
+          docker logs cc-demo 2>&1 | grep -q "Demo: salida a internet bloqueada" || { docker logs cc-demo; exit 1; }
+          echo "OK: la demo arrancó con H2 en memoria y la salida de la aplicación bloqueada"
+
+      - name: "E20: desde el contenedor de la demo, internet no responde (ni por nombre ni por IP)"
+        run: |
+          if docker exec cc-demo curl -sS --max-time 15 -o /dev/null https://graph.facebook.com; then
+            echo "ERROR: la demo llegó a graph.facebook.com"; exit 1
+          fi
+          if docker exec cc-demo bash -c 'timeout 10 bash -c "exec 3<>/dev/tcp/142.250.0.1/443"' 2>/dev/null; then
+            echo "ERROR: la demo abrió una conexión a internet por IP"; exit 1
+          fi
+          echo "OK (E20): sin salida a internet"
+
+      - name: "La franja dice DEMO y «Crear mi demo» devuelve un colegio con 6 cuentas (la cajera es Lucía Ramos)"
+        run: |
+          docker exec cc-demo curl -s -c /tmp/c -o /tmp/demo.html http://127.0.0.1:8080/demo
+          docker exec cc-demo grep -q "DEMO · Datos ficticios" /tmp/demo.html
+          docker exec cc-demo curl -s -I http://127.0.0.1:8080/demo | grep -qi "^X-Robots-Tag: noindex"
+          token=$(docker exec cc-demo grep -o 'name="_csrf" value="[^"]*"' /tmp/demo.html | sed 's/.*value="//; s/"$//')
+          docker exec cc-demo curl -s -b /tmp/c -c /tmp/c -o /tmp/creada.html --data-urlencode "_csrf=$token" \
+            http://127.0.0.1:8080/demo
+          test "$(docker exec cc-demo grep -c "Entrar como" /tmp/creada.html)" = "6" \
+            || { docker exec cc-demo cat /tmp/creada.html; docker logs cc-demo; exit 1; }
+          docker exec cc-demo grep -q "Lucía Ramos" /tmp/creada.html
+          docker exec cc-demo grep -q "data-clave-demo" /tmp/creada.html
+          echo "OK: franja DEMO, sin indexar y un colegio ficticio con 6 cuentas"
+
+      - name: "E20 y E21: con un secreto en el entorno, una base real o junto a prod, la demo NO arranca"
+        run: |
+          no_arranca() {
+            if timeout 180 docker run --rm --network cc-demo-interna -e SPRING_PROFILES_ACTIVE="$1" -e "$2" cuentas-claras:ci \
+                > demo-no.log 2>&1; then
+              echo "ERROR: la demo arrancó con $1 y $2"; exit 1
+            fi
+            grep -q "$3" demo-no.log || { cat demo-no.log; exit 1; }
+            echo "OK: con $2 ($1) no arranca: $3"
+          }
+          no_arranca demo "NUBEFACT_TOKEN=un-token-real" "no lleva secretos"
+          no_arranca demo "DB_URL=jdbc:mysql://10.0.0.5:3306/cuentasclaras" "no lleva secretos"
+          no_arranca demo "SPRING_DATASOURCE_URL=jdbc:mysql://10.0.0.5:3306/cuentasclaras" "H2 en memoria"
+          no_arranca demo "AUDITORIA_CLAVE_HMAC=una-clave-de-una-instalacion-real-0001" "no lleva secretos"
+          no_arranca demo "MENSAJERIA_WHATSAPP_PROVEEDOR=WHATSAPP_CLOUD" "proveedores son simulados"
+          no_arranca demo,prod "CC_MARCA_NOMBRE=x" "no se combina"
+          rm -f demo-no.log
+
+      - name: Borrar el contenedor y la red de la demo
+        if: always()
+        run: |
+          docker rm -f cc-demo || true
+          docker network rm cc-demo-interna || true
+
   mysql:
     name: Migraciones, permisos y arranque en MySQL 8
     runs-on: ubuntu-latest
@@ -1011,3 +1112,32 @@ jobs:
 
       - name: "Destino simulado: solo con la fila del DBA (nunca en prod); sin ella, la base no lo registra (1644)"
         run: sh scripts/respaldo/pruebas-ci.sh simulado
+
+  imagen:
+    name: Imagen en GHCR por el SHA del commit, con su SBOM (solo main)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [verificar, dependencias, secretos, demo, mysql, respaldo]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Sprint 8, tanda 3 (decisión 134): la imagen se construye UNA vez aquí y se despliega por su digest (nunca
+      # «latest»). La etiqueta es el SHA del commit; el SBOM y la procedencia van como atestaciones de la imagen.
+      - name: Construir y publicar en GHCR (etiqueta = SHA del commit) con SBOM y procedencia
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          imagen="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker buildx create --use --name cc-constructor > /dev/null
+          docker buildx build --push --sbom=true --provenance=mode=max \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            -t "$imagen:$GITHUB_SHA" .
+          digest=$(docker buildx imagetools inspect "$imagen:$GITHUB_SHA" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "Imagen para desplegar: $imagen@$digest" | tee -a "$GITHUB_STEP_SUMMARY"
+          docker logout ghcr.io

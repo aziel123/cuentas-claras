@@ -102,5 +102,28 @@ services:
       preparar-bd:
         condition: service_completed_successfully
 
+  # Sprint 8, tanda 3 (sección 8): la DEMO en tu PC, aparte de la instalación (otro contenedor, otra base: H2 en memoria).
+  # Solo con el perfil «demo» de Compose:  docker compose --profile demo up --build demo  →  http://localhost:8081/demo
+  # Sin ninguna clave ni variable de la base (si tuviera una, no arranca). En el servidor va en una red SIN salida a
+  # internet (deploy/compose.demo.yml); aquí, para probarla en local, publica su puerto.
+  demo:
+    profiles: [demo]
+    image: cuentas-claras:local
+    build: .
+    restart: "no"
+    environment:
+      SPRING_PROFILES_ACTIVE: demo
+      CC_MARCA_NOMBRE: ${CC_MARCA_NOMBRE:-Cuentas Claras}
+      CC_URL_PUBLICA: http://localhost:${PUERTO_DEMO:-8081}
+      # Por http en tu PC: la cookie sin «Secure» (en el servidor, https con __Host-CCSESION).
+      SERVER_SERVLET_SESSION_COOKIE_SECURE: "false"
+      CC_COOKIE_SESION: "CCSESION"
+      TZ: America/Lima
+    read_only: true
+    tmpfs:
+      - /tmp
+    ports:
+      - "127.0.0.1:${PUERTO_DEMO:-8081}:8080"
+
 volumes:
   datos-mysql:

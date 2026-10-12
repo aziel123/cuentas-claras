@@ -25,6 +25,26 @@ updates:
       timezone: America/Lima
     labels: [dependencias]
 
+  # Sprint 8, tanda 3: la imagen base del contenedor de herramientas (respaldos, 01/02/03 y el paso 0) y la de Caddy de los
+  # compose de la VM, también fijadas por digest.
+  - package-ecosystem: docker
+    directory: /deploy/herramientas
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/Lima
+    labels: [dependencias]
+
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: America/Lima
+    labels: [dependencias]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

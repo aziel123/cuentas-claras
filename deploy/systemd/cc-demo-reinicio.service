@@ -1,0 +1,10 @@
+# Cuentas Claras · la demo se borra cada noche (sprint 8, tanda 3; sección 8.1): reiniciar la aplicación vacía la base H2
+# en memoria y todos los colegios ficticios. Solo en la VM de la demo.
+[Unit]
+Description=Cuentas Claras: reinicio nocturno de la demo (borra los colegios ficticios)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker compose -f /opt/cuentas-claras/deploy/compose.demo.yml --env-file /etc/cc/imagen.env restart app
