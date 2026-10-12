@@ -1527,3 +1527,159 @@ anterior y sí con la nueva). Job `respaldo`: su `CC_CLAVE_CONECTORES` y V1–V2
   sesión de la base se abre antes, por la ruta de identidad) y una prueba que enlazaba la solicitud que ya tenía el conector.
   Los contenedores (`cc-s8t2-ci-*`) se borraron al terminar y los archivos que dejan los pasos del CI se movieron fuera del
   repositorio.
+
+## Tanda 3 · Implementación
+
+> Implementada el 12 de octubre de 2026 en la rama `claude/sprint-8-lista-para-vender` (agente `backend-spring`). V30,
+> **82 triggers y 9 funciones con huella (91 huellas)**, como pedía la sección 6.3. Verificado con `./mvnw -B verify` (también
+> con `-Duser.timezone=America/Los_Angeles`) y con los jobs `mysql`, `respaldo` y `demo` del CI reproducidos completos en
+> contenedores desechables. **Nada se ejecutó contra Google Cloud** (no hay cuenta ni autorización): los scripts de `deploy/`
+> se validaron en su sintaxis y el «paso 0» se simuló en local. Resultados: al final de esta sección.
+
+### Qué se hizo
+**«Faltan filas» por colegio (V30, `03`, `respaldar.sh`; secciones 3.8 y 6.3, decisión 131).**
+- V30: `respaldo.colegios_faltan` (arreglo JSON de ids, solo con FALTAN_FILAS: `ck_respaldo_colegios_faltan`) y una
+  resolución por respaldo y colegio (`uk_resolucion_respaldo_colegio`).
+- `03`: versiones nuevas de `trg_respaldo_registro` (un FALTAN_FILAS nombra a colegios de tipo COLEGIO, cada uno una vez; un
+  IGUAL se rechaza mientras un colegio tenga su falta sin resolver en ese respaldo o en uno posterior) y de
+  `trg_resolucion_respaldo_registro` (se resuelve el ÚLTIMO respaldo que nombra a ESE colegio, la Promotoría activa de ese
+  colegio, con la firma `respaldo:{id}:{colegio}:RESUELTO`). Siguen 82 triggers y 91 huellas; `02` sin GRANT nuevos.
+- `respaldar.sh` cuenta por colegio las tablas vigiladas con `colegio_id` (bloques `colegios` y `base_colegios` del
+  manifiesto, `"tabla@colegio"`); las tablas sin colegio, el ancla de la bitácora y las filas del colegio de plataforma
+  nombran a todos los colegios; cada diferencia lleva su colegio (`pago (faltan 1) [colegio 2]`) y los colegios con la falta
+  sin resolver siguen en `colegios_faltan` (con su línea base) hasta que su Promotoría la resuelve.
+- Aplicación: `PendientesRespaldo` decide qué falta sigue abierta y para quién. La Promotoría ve en `/panel/sistema`, en
+  «Para revisar» y en la lista de puesta en marcha SOLO la de su colegio (las diferencias de otros colegios no se muestran) y
+  la resuelve con su firma; el vigilante (`/salud/respaldo`) y el correo técnico ven cualquier falta abierta.
+  `/panel/sistema` dice quién custodia el respaldo según la instalación (E24).
+
+**Demo (perfil `demo`; sección 8, decisiones 126 y 127).**
+- `GET /demo`, `POST /demo`, `GET /demo/guia`, `GET /demo/ejemplos/{archivo}` y `GET /robots.txt`, públicas SOLO en el
+  perfil demo (`ModuloApp.RUTAS_DEMO`). `DemoColegios` crea por visitante un colegio ficticio en producción, como
+  `sistema.demo` (`ActorSistema.DEMO`): 5 cuentas del personal (la cajera es **Lucía Ramos**) y la del apoderado, con un
+  prefijo y una clave aleatorios (la clave se muestra una vez, no se guarda en la sesión), 40 familias ficticias, planes
+  aprobados por otra persona (montos de ejemplo: S/ 380, 450 y 480, matrícula S/ 350), el saldo inicial enviado, tres cobros
+  de hoy de Lucía (efectivo y Yape, con su boleta y el aviso a la familia), un descuento por hermanos aprobado y una
+  devolución pendiente. Logo genérico dibujado (sin fuentes). `LimiteDemos`: 3 por conexión y 50 al día.
+- **Nunca envía mensajes reales ni cobra, en capas:** `VerificadorConfiguracion` no deja arrancar la demo con una base que no
+  sea H2 en memoria, con un proveedor real (OSE, pasarela, WhatsApp, correo) o un servidor de correo, con una variable
+  secreta en el entorno (`DB_*`, `AUDITORIA_CLAVE_HMAC`, `CC_CLAVE_CONECTORES`, tokens, `RESPALDO_*`…), combinada con prod,
+  piloto o dev, ni sin `cuentasclaras.entorno.nombre: DEMO`; `SecretosAleatoriosDemo` (EnvironmentPostProcessor) genera al
+  azar la clave HMAC, la de los conectores y el secreto de la pasarela simulada; `SalidaBloqueadaDemo` bloquea el
+  `RestClient.Builder`, el correo y la salida de la JVM (proxy inexistente); la red sin salida va en
+  `deploy/compose.demo.yml` y la prueba el job `demo` del CI.
+- Franja «DEMO · Datos ficticios…» en todas las páginas con el enlace al recorrido, título «[DEMO]», boleta
+  «DEMO · SIN VALOR», `X-Robots-Tag: noindex, nofollow`, «Entrar como …» con el usuario ya escrito, «Crea tu demo» en el
+  ingreso. La importación solo acepta los dos archivos de ejemplo, por su SHA-256 (`ArchivosPermitidosImportacion`, E22).
+  El colegio de V1 se llama «Colegio sin uso de la demo».
+
+**Despliegue en Google Cloud, Santiago (sección 7, decisiones 110 y 133 a 135).** `deploy/`: `compose.prod.yml` (la
+aplicación por digest, solo lectura, sin capacidades, 1.4 GB; Caddy fijado por digest), `compose.demo.yml` (red `internal`),
+`Caddyfile`, el contenedor de herramientas (solo paquetes de Ubuntu), `gcp/crear-infra.sh` (gcloud idempotente: APIs, VPC,
+IAP, acceso privado, Cloud SQL para MySQL 8.4 con la marca y TLS obligatorio, IP estática, cuenta de servicio que solo lee
+SUS secretos, Secret Manager, VM e2-small), `gcp/preparar-base.sh` (usuarios con `01` como root y POR SQL, certificado de la
+autoridad para `VERIFY_CA`, `/etc/cc`, systemd), `desplegar.sh` (respaldo previo, detener, `migrar`, `02`, `03`, arrancar y
+leer el verificador; las claves de root y `cc_migrador` nunca en la VM), `vm/*` y `systemd/*` (secretos al arrancar,
+respaldo 02:30, reinicio de la demo 03:00). **Paso 0:** `gcp/paso-0.sh` (el job `mysql` completo contra una instancia de
+prueba con `scripts/ci/correr-job.py`, las comprobaciones de la sección 6.6, un respaldo con su restauración y el arranque
+de prod con TLS obligatorio). Guía y costo en `docs/operacion/despliegue-gcp.md`.
+
+**CI.** Jobs nuevos: `demo` (sin salida, franja, «Crear mi demo» con 6 cuentas y no arranca con secretos, una base real o
+junto a prod), `secretos` (gitleaks fijado por digest sobre toda la historia, con `.gitleaks.toml` y una muestra que debe
+fallar) e `imagen` (solo en `main`: GHCR por el SHA del commit con SBOM y procedencia). Job `mysql`: V1–V30 y E25 en
+`AuditoriaSprint8MySqlTest`. Job `respaldo`: V1–V30, `faltan-filas-por-colegio`, `ResolucionRespaldoPorColegioMySqlTest` y
+`resuelto-por-colegio`. `Dockerfile` con las imágenes base por digest; Dependabot para `deploy/`.
+
+**Documentos (sección 13).** `docs/entrega/terminos-de-servicio.md` y `contrato-encargo-tratamiento-datos.md` (Ley 29733),
+marcados «a revisar por un abogado»; `docs/entrega/plantillas-whatsapp-meta.md` (las 21 plantillas `_v2` con el colegio en
+`{{1}}`, listas para Meta; `PlantillasMetaDocTest`); `docs/operacion/despliegue-gcp.md`, `acta-paso-0-cloud-sql.md`,
+`acta-verificacion-trimestral.md`, `alta-de-un-colegio.md`, `suscripcion.md`; `docs/ventas/guia-demo.md`; los manuales de
+Promotoría, Administración y del responsable técnico; `mysql-usuarios.md`, `respaldos.md` y `estado-del-proyecto.md`.
+
+### Desviaciones del diseño
+1. **V30 no conserva el nombre `uk_resolucion_respaldo`:** el índice nuevo es `uk_resolucion_respaldo_colegio` y se crea
+   antes de quitar el anterior (MySQL no deja quitar el índice de una FK sin otro). Además, la FK al respaldo se quita y se
+   vuelve a crear: H2 la apoyaba en el índice único anterior y lo conservaba (seguía exigiendo una resolución por respaldo;
+   lo encontró `ResolucionRespaldoTest`). V30 agrega `ck_respaldo_colegios_faltan` (solo con FALTAN_FILAS y con formato de
+   arreglo), que el diseño no tenía.
+2. **`trg_respaldo_registro` exige además que un FALTAN_FILAS diga de qué colegios** (ids de colegios de tipo COLEGIO, cada
+   uno una vez); sin eso, cc_respaldo podría registrar una falta que nadie puede resolver. Las tablas sin colegio, el ancla
+   de la bitácora y las filas del colegio de plataforma nombran a TODOS los colegios (el diseño solo decía «las que no tienen
+   `colegio_id`, como hoy»). Un FALTAN_FILAS anterior a V30 (sin colegios) sigue siendo «de toda la base».
+3. **Las diferencias llevan su colegio** (`pago (faltan 1) [colegio 2]`) y la aplicación muestra a cada Promotoría solo las
+   de su colegio y las de toda la instalación (las de otros colegios, solo cuántas). Los conteos por colegio van en el
+   manifiesto (`colegios` y `base_colegios`), no en la columna `respaldo.conteos` (4000 caracteres no alcanzan para 25
+   colegios).
+4. **La demo no reutiliza `AltaColegio` ni parametriza `DatosDemoColegioDev`:** el alta exige un operador con la firma de su
+   sesión, y los datos de dev mueven el reloj de toda la aplicación un día atrás (imposible con varios visitantes a la vez).
+   `DemoColegios` crea el colegio en producción como `sistema.demo` y carga los datos con clases propias de la demo
+   (`FamiliasDemo`, `PensionesDemo`, `CajaDemo`, `CuentasDemo`, `AccesoApoderadoDemo`), con los mismos servicios y reglas
+   del colegio; dev conserva los suyos. Por lo mismo, **los pagos de la demo son los de hoy** (no 30 días de historia) y **no
+   trae la conciliación en rojo ni las llamadas de control**: el paso 6 del recorrido es la bitácora (la conciliación se
+   muestra en una reunión con un extracto de ejemplo; `docs/ventas/guia-demo.md`).
+5. **`SalidaBloqueadaDemo`** reemplaza el `RestClient.Builder` y el `JavaMailSender` de la aplicación y además pone un proxy
+   inexistente como selector por defecto de la JVM: los adaptadores reales construyen su cliente con `RestClient.builder()`
+   estático, así que el bean solo no los cubría (igual nunca se crean en la demo: el verificador rechaza un proveedor real).
+   Las claves al azar las genera un `EnvironmentPostProcessor` (`SecretosAleatoriosDemo`, en `META-INF/spring.factories`).
+   El verificador admite `demo` con `test` (las pruebas) y lo rechaza con `dev`, `prod` y `piloto`.
+6. **Paso 0 con IP pública autorizada solo para la máquina que lo corre** (el diseño decía IP privada y una VM): así lo corre el
+   responsable técnico desde Cloud Shell sin crear una VM; la conexión por IP privada la comprueba el primer `desplegar.sh`,
+   que lee las mismas líneas del verificador. La instancia empieza admitiendo conexiones sin TLS (el job del CI las usa) y
+   al final pasa a `ENCRYPTED_ONLY`, donde se prueba que sin TLS no conecta y que prod arranca con `VERIFY_CA`.
+7. **La guía se llama `docs/operacion/despliegue-gcp.md`** (el diseño decía `despliegue.md`), como pidió el usuario. Sin
+   Terraform: scripts de `gcloud` idempotentes (decisión 135).
+8. **El evento `DESPLIEGUE` en la bitácora no se implementó:** el digest desplegado queda en `/etc/cc/desplegado.txt` de la VM
+   y en el resumen del job `imagen` del CI.
+9. **Las plantillas de WhatsApp para Meta** no estaban asignadas a la tanda 3 (las `_v2` se hicieron en el código en la
+   tanda 1); se preparó el documento para enviarlas porque el usuario lo pidió, con una prueba que lo mantiene igual al
+   código.
+10. **Los pasos 4 y 6 del plan de la tanda** (desplegar la compartida y la demo en el dominio, el primer respaldo real, el
+    vigilante, la medición con 10 colegios y la auditoría completa) no se hicieron: no hay cuenta de Google Cloud ni
+    autorización para crear recursos, y QA y la auditoría van al final del sprint.
+
+### Riesgos y pendientes de la tanda
+- **Nada se probó en Google Cloud.** Los scripts de `deploy/` pasaron `sh -n` y shellcheck, los compose `docker compose config`,
+  el Caddyfile `caddy validate` y la imagen y el job `demo`, Docker real; las opciones de `gcloud` salen de la documentación
+  y pueden haber cambiado. El job `mysql` se corrió también contra un MySQL 8.4 que imita a Cloud SQL (un administrador sin
+  SUPER, FILE ni privilegios dinámicos salvo ROLE_ADMIN y los de DEFINER, y la marca de las funciones en la configuración
+  del servidor), pero eso no reemplaza al paso 0: lo confirma el acta.
+- **Un recorte de la bitácora (o una fila borrada de una tabla sin colegio o del colegio de plataforma) obliga a cada
+  Promotoría de la instalación a resolver su alerta.** Un colegio sin Promotoría activa (por ejemplo, uno en preparación cuyo
+  titular no activó su cuenta) no puede resolverla y el respaldo seguirá diciendo FALTAN_FILAS para él. Es intencional (cada
+  colegio debe enterarse), pero el operador debe acompañar a esos colegios.
+- **La demo carga sus datos con la fecha de hoy:** se probó en marzo, octubre, diciembre y enero (`DemoFechasTest`), no en
+  cada día del año. Crear una demo tarda unos segundos (40 familias y sus planes); el límite es 50 al día.
+- **El selector de proxy de la demo es de toda la JVM** (solo deja lo local): en las pruebas con el perfil `demo` queda
+  instalado para el resto de la corrida, sin efecto sobre las demás (no salen a internet).
+- **GHCR:** si el paquete queda privado, la VM necesita un token de solo lectura en Secret Manager (`ghcr-lectura`);
+  `desplegar.sh` lo usa si existe.
+- Las plantillas legales son un esquema para el abogado, y los precios de la guía, de agregadores (a confirmar con la
+  calculadora de Google Cloud).
+
+### Resultados de la verificación
+- `./mvnw -B verify`: **2370 pruebas, 0 fallos, 0 errores, 135 omitidas** (las de MySQL real, que corren en los jobs `mysql` y
+  `respaldo`); BUILD SUCCESS. Con `-DargLine=-Duser.timezone=America/Los_Angeles` (también `verify`): **2370, 0 fallos,
+  0 errores, 135 omitidas**, BUILD SUCCESS. La tanda 2 cerró con 2339: 31 pruebas nuevas (2 de ellas de MySQL real).
+- Job `mysql` del CI reproducido completo con `scripts/ci/correr-job.py` en contenedores desechables (`mysql:8`, que hoy es
+  8.4, y el contenedor de herramientas del repositorio): los 22 pasos en OK, del 2 (empaquetar) al 23 (rotación). Fase 1: 2;
+  fase 2 (`PermisosMySqlTest`): 91, 0 fallos (7 omitidas por la fecha); `AuditoriaSprint8MySqlTest`: 13 de 13 (E25 nueva);
+  sprint 6: 3; sprint 7, tanda 2: 12; QA del sprint 7: 5; S7-A1: 1; estado de cuentas: 4; S7-M1: 2 + 2; fase 2b: 7. Arranque
+  real en prod por TLS con «Huellas de los 82 triggers y las 9 funciones verificadas»; M2, M3, M4 y la rotación en OK.
+- **El mismo job contra un MySQL 8.4 que imita a Cloud SQL** (simulación local del paso 0): administrador sin SUPER, FILE ni
+  privilegios dinámicos salvo ROLE_ADMIN, SET_ANY_DEFINER y ALLOW_NONEXISTENT_DEFINER; la marca de las funciones en la
+  configuración del servidor y sin `SET PERSIST` (`--quitar`): los 22 pasos en OK. Además, `huellas_objetos()` = 91,
+  `permisos_objetos()` sin error, ningún `cc_*` con un rol de más y `SET PERSIST` rechazado a ese administrador.
+- Job `respaldo` reproducido completo: los 21 pasos en OK (respaldo cifrado, E29, restauración real con la cadena HMAC y prod
+  sobre la copia, E31, E30 con `colegios_faltan = [1]`, E32 con todos los colegios `[1,3,4]`, QA-S7-1, simulacro semanal,
+  S7-M1, la resolución de cada colegio afectado, `faltan-filas-por-colegio` con `[3]` y el 1644 sin colegios,
+  `ResolucionRespaldoPorColegioMySqlTest`, `resuelto-por-colegio` y el destino simulado).
+- Job `demo` reproducido con Docker real: imagen con las bases fijadas por digest, arranque en una red `internal`, sin salida
+  (por nombre ni por IP), franja DEMO, `X-Robots-Tag`, «Crear mi demo» con 6 cuentas y Lucía Ramos, y no arranca con
+  `NUBEFACT_TOKEN`, `DB_URL`, `SPRING_DATASOURCE_URL`, `AUDITORIA_CLAVE_HMAC`, WhatsApp real ni junto a prod. Job `secretos`:
+  gitleaks sobre la historia sin hallazgos (con `.gitleaks.toml`) y la muestra detectada.
+- `deploy/`: `sh -n` y shellcheck (sin advertencias), `docker compose config` de los dos compose, `caddy validate` del
+  Caddyfile y la imagen de herramientas construida. **Ningún comando de `gcloud` se ejecutó.**
+- La reproducción encontró y se corrigió en esta tanda: el índice único que H2 conservaba en V30, el cálculo del vigilante en
+  dos pruebas, la variable de WhatsApp que el perfil demo pisaba (el CI usa `CUENTASCLARAS_…`), un contenedor que quedaba vivo
+  en la prueba «no arranca» y la Promotoría de otro colegio que ya había resuelto su falta. Los contenedores (`cc-s8t3-ci-*`,
+  `cc-demo*`) y la red se borraron al terminar; los registros quedaron fuera del repositorio.
