@@ -31,7 +31,12 @@ public enum ActorSistema {
 	 * Sprint 8, tanda 1 (sección 3.2): sincroniza los operadores de la plataforma con {@code CC_OPERADORES} al arrancar
 	 * (crea al que falta y le envía su enlace; desactiva al que ya no está) y registra los eventos de la plataforma.
 	 */
-	PLATAFORMA("sistema.plataforma");
+	PLATAFORMA("sistema.plataforma"),
+	/**
+	 * Sprint 8, tanda 3 (sección 8.2): solo en el perfil {@code demo}. Crea el colegio ficticio de cada visitante de la demo
+	 * («Crear mi demo») y lo deja en producción con sus cuentas y sus datos de ejemplo.
+	 */
+	DEMO("sistema.demo");
 
 	/** Prefijo reservado: ninguna persona puede tener un nombre de usuario que empiece así. */
 	public static final String PREFIJO_RESERVADO = "sistema";

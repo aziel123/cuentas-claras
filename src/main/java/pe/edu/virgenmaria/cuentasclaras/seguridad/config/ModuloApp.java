@@ -152,6 +152,13 @@ public enum ModuloApp {
 			"/login/demasiados-intentos" };
 
 	/**
+	 * Sprint 8, tanda 3 (sección 8.2): las páginas públicas de la demo («Crear mi demo», el recorrido guiado, los archivos de
+	 * ejemplo y robots.txt). {@code ConfiguracionSeguridad} las abre SOLO en el perfil {@code demo}; en los demás perfiles
+	 * no existen (se niegan como cualquier ruta fuera de la matriz).
+	 */
+	public static final String[] RUTAS_DEMO = { "/demo", "/demo/guia", "/demo/ejemplos/*", "/robots.txt" };
+
+	/**
 	 * Sprint 4: avisos (webhooks) de la pasarela. Sin sesión ni CSRF, SOLO por POST y en una cadena de seguridad aparte:
 	 * cada aviso se autentica con su firma y nunca registra dinero por sí mismo (se consulta a la pasarela).
 	 */

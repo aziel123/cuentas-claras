@@ -11,6 +11,8 @@
 
 	<article class="comprobante-hoja" aria-labelledby="titulo-comprobante">
 		<p class="marca-simulado" th:if="${c.simulado}">COMPROBANTE SIMULADO · SIN VALOR TRIBUTARIO</p>
+		<!--/* Sprint 8, tanda 3 (sección 8.3): en la demo, toda boleta dice que no tiene valor. */-->
+		<p class="marca-simulado" th:if="${entornoDemo == true}" data-demo-sin-valor>DEMO · SIN VALOR</p>
 		<header class="comprobante-cabecera">
 			<div class="comprobante-emisor" data-emisor>
 				<img class="comprobante-logo" th:if="${c.emisor.conLogo}" th:src="@{/marca/logo}" alt="">

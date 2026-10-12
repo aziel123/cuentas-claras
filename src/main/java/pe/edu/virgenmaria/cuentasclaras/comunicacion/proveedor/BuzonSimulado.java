@@ -18,13 +18,14 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Lo que «enviaron» los proveedores SIMULADOS (sprint 5): nadie lo recibe. Solo existe en dev, test y piloto (regla
- * ArchUnit) y vive en memoria (los últimos {@value #MAXIMO}). Las pruebas leen aquí el enlace de activación que habría
- * llegado al titular y pueden programar fallas del proveedor. En dev, además, el enlace de activación sale en el log
- * para poder probar el flujo en local (nunca en el piloto ni en prod).
+ * Lo que «enviaron» los proveedores SIMULADOS (sprint 5): nadie lo recibe. Solo existe en dev, test, piloto y demo
+ * (regla ArchUnit) y vive en memoria (los últimos {@value #MAXIMO}). Las pruebas leen aquí el enlace de activación que
+ * habría llegado al titular y pueden programar fallas del proveedor. En dev, además, el enlace de activación sale en el
+ * log para poder probar el flujo en local; en la demo (sprint 8, tanda 3), también, para que el equipo de ventas active
+ * su cuenta de operador (la demo no tiene correo real ni datos reales). Nunca en el piloto ni en prod.
  */
 @Component
-@Profile({ "dev", "test", "piloto" })
+@Profile({ "dev", "test", "piloto", "demo" })
 public class BuzonSimulado {
 
 	private static final Logger LOG = LoggerFactory.getLogger(BuzonSimulado.class);
@@ -43,7 +44,8 @@ public class BuzonSimulado {
 	private final boolean registrarEnlacesEnLog;
 
 	public BuzonSimulado(Environment entorno) {
-		this.registrarEnlacesEnLog = Arrays.asList(entorno.getActiveProfiles()).contains("dev");
+		this.registrarEnlacesEnLog = Arrays.asList(entorno.getActiveProfiles()).contains("dev")
+				|| Arrays.asList(entorno.getActiveProfiles()).contains("demo");
 	}
 
 	/** Recibe un envío: la respuesta programada (si hay) o ACEPTADO con un id simulado. */
@@ -60,7 +62,7 @@ public class BuzonSimulado {
 		}
 		if (registrarEnlacesEnLog && sufijoBoton != null) {
 			// Sprint 7 (logs sin datos personales): sin el destino (celular o correo); solo el canal y el id simulado.
-			LOG.info("[dev] Enlace de activación simulado ({}, {}): {}", canal, id, sufijoBoton);
+			LOG.info("[dev/demo] Enlace de activación simulado ({}, {}): {}", canal, id, sufijoBoton);
 		}
 		return ResultadoEnvio.aceptado(ProveedorMensajeria.SIMULADO, id);
 	}

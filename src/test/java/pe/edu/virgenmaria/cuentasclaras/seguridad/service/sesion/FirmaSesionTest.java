@@ -110,6 +110,6 @@ class FirmaSesionTest {
 		PersonaDemo demo = new PersonaDemo(mock(UsuarioRepository.class), mock(SesionesFirmadas.class),
 				mock(org.springframework.transaction.PlatformTransactionManager.class), Clock.systemUTC(), prod);
 		assertThatThrownBy(() -> demo.como(1L, "promotor", () -> null)).isInstanceOf(IllegalStateException.class)
-				.hasMessageContaining("dev y test");
+				.hasMessageContaining("dev, test y demo");
 	}
 }

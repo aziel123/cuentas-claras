@@ -8,7 +8,8 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<!--/* Sprint 8, tanda 1 (decisión 120): la marca del producto sale de ${marca?.nombre} (CC_MARCA_NOMBRE), nunca fija. */-->
-	<title th:text="|${titulo} · ${marca?.nombre}|">Título</title>
+	<!--/* Sprint 8, tanda 3 (sección 8.3): en la demo el título empieza con «[DEMO]». */-->
+	<title th:text="|${entornoDemo == true ? '[DEMO] ' : ''}${titulo} · ${marca?.nombre}|">Título</title>
 	<!--/* Sprint 4: una página que espera una confirmación se recarga sola (sin JavaScript en línea, por la CSP). */-->
 	<meta th:if="${recargarCada != null}" http-equiv="refresh" th:content="${recargarCada}">
 	<link rel="stylesheet" th:href="@{/css/tokens.css}">
@@ -16,7 +17,8 @@
 </head>
 <body>
 	<a class="saltar" href="#contenido">Saltar al contenido</a>
-	<div class="franja-entorno" role="status" th:if="${franjaEntorno != null}" th:text="${franjaEntorno}">PILOTO</div>
+	<div class="franja-entorno" role="status" th:if="${franjaEntorno != null}"><span th:text="${franjaEntorno}">PILOTO</span>
+		<a class="franja-enlace" th:if="${entornoDemo == true}" th:href="@{/demo/guia}">Ver el recorrido guiado</a></div>
 	<header class="barra">
 		<div class="barra-in">
 			<a class="marca" th:href="@{/inicio}">
@@ -77,12 +79,14 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title th:text="|${titulo} · ${marca?.nombre}|">Título</title>
+	<!--/* Sprint 8, tanda 3 (sección 8.3): en la demo el título empieza con «[DEMO]». */-->
+	<title th:text="|${entornoDemo == true ? '[DEMO] ' : ''}${titulo} · ${marca?.nombre}|">Título</title>
 	<link rel="stylesheet" th:href="@{/css/tokens.css}">
 	<link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
 <body class="publica">
-	<div class="franja-entorno" role="status" th:if="${franjaEntorno != null}" th:text="${franjaEntorno}">PILOTO</div>
+	<div class="franja-entorno" role="status" th:if="${franjaEntorno != null}"><span th:text="${franjaEntorno}">PILOTO</span>
+		<a class="franja-enlace" th:if="${entornoDemo == true}" th:href="@{/demo/guia}">Ver el recorrido guiado</a></div>
 	<header class="barra">
 		<div class="barra-in">
 			<span class="marca">

@@ -49,7 +49,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@code /familia/pasarela-simulada/{referencia}} (página con la franja «SIMULADOR · NO ES DINERO REAL»).
  */
 @Component
-@Profile({ "dev", "test", "piloto" })
+@Profile({ "dev", "test", "piloto", "demo" })
 @ConditionalOnProperty(name = "cuentasclaras.pasarela.proveedor", havingValue = "SIMULADA")
 public class PasarelaSimulada implements PasarelaPagos {
 

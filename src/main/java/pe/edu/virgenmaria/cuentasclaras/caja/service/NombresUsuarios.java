@@ -35,6 +35,7 @@ public class NombresUsuarios {
 					case PANEL -> "Panel del colegio (automático)";
 					case MUESTREO -> "Muestreo al azar (automático)";
 					case PLATAFORMA -> "Plataforma (automático)";
+					case DEMO -> "Demostración (automático)";
 				};
 			}
 		}

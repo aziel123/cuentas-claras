@@ -47,6 +47,11 @@ import java.util.function.Function;
  *       de conectores en el entorno ({@code NUBEFACT_TOKEN}, {@code PASARELA_LLAVE_SECRETA},
  *       {@code PASARELA_WEBHOOK_USUARIO}, {@code PASARELA_WEBHOOK_CLAVE}) o con un OSE o una pasarela reales en el entorno
  *       (los de cada colegio van en sus conectores).</li>
+ *   <li>sprint 8, tanda 3 (sección 8.3, E20 y E21): con el perfil {@code demo}, combinado con {@code prod}, {@code piloto}
+ *       o {@code dev}; con una base que no es H2 en memoria; con un proveedor que no es simulado (OSE, pasarela, WhatsApp
+ *       o correo) o un servidor de correo; con cualquier variable secreta conocida definida en el entorno (base de
+ *       datos, claves, tokens, respaldos); o sin la marca del entorno {@code DEMO} (la franja). La demo nunca envía un
+ *       mensaje real ni cobra.</li>
  * </ul>
  */
 @Component
@@ -60,7 +65,23 @@ public class VerificadorConfiguracion implements InitializingBean {
 	static final Set<String> PERFILES_DE_DESPLIEGUE = Set.of("prod", "piloto");
 
 	/** Donde puede existir la pasarela simulada (el bean tiene el mismo {@code @Profile}). */
-	static final Set<String> PERFILES_PASARELA_SIMULADA = Set.of("dev", "test", "piloto");
+	static final Set<String> PERFILES_PASARELA_SIMULADA = Set.of("dev", "test", "piloto", "demo");
+
+	/** Sprint 8, tanda 3: el entorno de demostración (H2 en memoria, sin salida, se borra cada noche). */
+	static final String DEMO = "demo";
+
+	static final String DB_URL = "spring.datasource.url";
+
+	/**
+	 * Sprint 8, tanda 3 (sección 8.3): variables del entorno que la demo NO puede tener definidas. Si alguna está, alguien
+	 * la desplegó con la configuración de una instalación real: no arranca.
+	 */
+	static final List<String> SECRETOS_PROHIBIDOS_EN_DEMO = List.of("DB_URL", "DB_USUARIO", "DB_CLAVE", "DB_SISTEMA_USUARIO",
+			"DB_SISTEMA_CLAVE", "DB_MIGRADOR_CLAVE", "AUDITORIA_CLAVE_HMAC", "CC_CLAVE_CONECTORES",
+			"CC_CLAVE_CONECTORES_ANTERIOR", "NUBEFACT_RUTA", "NUBEFACT_TOKEN", "WHATSAPP_TOKEN", "WHATSAPP_SECRETO_APP",
+			"WHATSAPP_NUMERO_ID", "PASARELA_LLAVE_SECRETA", "PASARELA_WEBHOOK_USUARIO", "PASARELA_WEBHOOK_CLAVE",
+			"PASARELA_SIMULADA_SECRETO", "SPRING_MAIL_HOST", "SPRING_MAIL_USERNAME", "SPRING_MAIL_PASSWORD",
+			"RESPALDO_DB_CLAVE", "RESPALDO_AGE_DESTINATARIOS", "RESPALDO_DESTINO", "CC_PROMOTOR_CLAVE");
 
 	/** Las claves de dev y test lo llevan en el texto; ninguna clave real debe llevarlo. */
 	static final String MARCA_CLAVE_DE_DESARROLLO = "no-usar-en-produccion";
@@ -165,7 +186,7 @@ public class VerificadorConfiguracion implements InitializingBean {
 			CULQI_WEBHOOK_CLAVE);
 
 	/** Donde puede existir la mensajería simulada (los beans tienen el mismo {@code @Profile}). */
-	static final Set<String> PERFILES_MENSAJERIA_SIMULADA = Set.of("dev", "test", "piloto");
+	static final Set<String> PERFILES_MENSAJERIA_SIMULADA = Set.of("dev", "test", "piloto", "demo");
 
 	/** Lista cerrada por defecto si no se configura otra. */
 	static final String DOMINIOS_NUBEFACT_POR_DEFECTO = "api.nubefact.com";
@@ -230,6 +251,7 @@ public class VerificadorConfiguracion implements InitializingBean {
 					+ "define AUDITORIA_CLAVE_HMAC con la clave del gestor de secretos.");
 		}
 		boolean prod = activos.contains("prod");
+		verificarDemo(activos, propiedad);
 		verificarMarca(prod, propiedad);
 		verificarPasarela(activos, prod, propiedad);
 		verificarComprobantes(prod, propiedad);
@@ -240,6 +262,50 @@ public class VerificadorConfiguracion implements InitializingBean {
 		verificarInstalacion(desarrollo, despliegue == 1, propiedad);
 		variablesRetiradas(propiedad).forEach(v -> LOG.warn("La variable {} ya no se usa: el colegio y su primera "
 				+ "Promotoría se dan de alta desde /plataforma. Retírala del entorno.", v));
+	}
+
+	/**
+	 * Sprint 8, tanda 3 (sección 8.3, E20 y E21): la demo nunca envía mensajes reales, nunca cobra y nunca toca una base
+	 * real. Se comprueba la configuración y el entorno (la red sin salida y {@code SalidaBloqueadaDemo} son las otras capas).
+	 */
+	static void verificarDemo(List<String> activos, Function<String, String> propiedad) {
+		if (!activos.contains(DEMO)) {
+			return;
+		}
+		if (activos.stream().anyMatch(p -> PERFILES_DE_DESPLIEGUE.contains(p) || p.equals("dev"))) {
+			throw new IllegalStateException("El perfil demo no se combina con " + String.join(",", activos) + ": la demo es "
+					+ "una instalación aparte, con datos ficticios en memoria, y nunca usa la base ni la configuración de prod, "
+					+ "del piloto ni de desarrollo.");
+		}
+		String url = propiedad.apply(DB_URL);
+		if (url == null || !url.strip().startsWith("jdbc:h2:mem:")) {
+			throw new IllegalStateException("La demo solo arranca con H2 en memoria (jdbc:h2:mem:): con otra base podría "
+					+ "escribir en una base real. Quita DB_URL y spring.datasource.url.");
+		}
+		List<String> definidas = SECRETOS_PROHIBIDOS_EN_DEMO.stream().filter(v -> !vacio(propiedad.apply(v))).toList();
+		if (!definidas.isEmpty()) {
+			throw new IllegalStateException("La demo no lleva secretos ni credenciales en el entorno (" + String.join(", ",
+					definidas) + "): sus claves se generan al azar al arrancar y no tiene base, OSE, pasarela, WhatsApp, "
+					+ "correo ni respaldos reales. Quítalas: ¿la estás desplegando con el archivo de una instalación real?");
+		}
+		String comprobantes = mayusculas(propiedad.apply(COMPROBANTES));
+		String pasarela = mayusculas(propiedad.apply(PASARELA));
+		String whatsapp = mayusculas(propiedad.apply(WHATSAPP));
+		String correo = mayusculas(propiedad.apply(CORREO));
+		if ((comprobantes != null && !comprobantes.equals("SIMULADO"))
+				|| (pasarela != null && !pasarela.equals("NINGUNA") && !pasarela.equals("SIMULADA"))
+				|| (whatsapp != null && !whatsapp.equals("NINGUNO") && !whatsapp.equals("SIMULADO"))
+				|| (correo != null && !correo.equals("NINGUNO") && !correo.equals("SIMULADO"))
+				|| !vacio(propiedad.apply(SMTP_HOST))) {
+			throw new IllegalStateException("En la demo todos los proveedores son simulados (comprobante SIMULADO, pasarela "
+					+ "NINGUNA o SIMULADA, WhatsApp y correo NINGUNO o SIMULADO, sin servidor de correo): nunca envía un "
+					+ "mensaje real ni cobra.");
+		}
+		String entorno = propiedad.apply(ENTORNO);
+		if (entorno == null || !PropiedadesEntorno.DEMO.equalsIgnoreCase(entorno.strip())) {
+			throw new IllegalStateException("La demo exige la marca del entorno DEMO (cuentasclaras.entorno.nombre: DEMO): "
+					+ "todas las páginas dicen que los datos son ficticios y que nada se envía ni se cobra.");
+		}
 	}
 
 	/**

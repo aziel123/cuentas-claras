@@ -7,6 +7,7 @@ import org.springframework.boot.security.autoconfigure.web.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -111,13 +112,19 @@ public class ConfiguracionSeguridad {
 	public SecurityFilterChain cadenaDeSeguridad(HttpSecurity http, ManejadorIngresoExitoso manejadorIngresoExitoso,
 			ManejadorFalloIngreso manejadorFalloIngreso, ManejadorAccesoDenegado manejadorAccesoDenegado,
 			SessionRegistry registroSesiones, ServicioCierreSesion cierreSesion, LimiteIngresos limiteIngresos,
-			PropiedadesSesion propiedadesSesion, Clock reloj,
+			PropiedadesSesion propiedadesSesion, Clock reloj, Environment entorno,
 			@Value("${server.servlet.session.cookie.name:JSESSIONID}") String cookieSesion) throws Exception {
+		boolean demo = entorno.matchesProfiles("demo");
 		http
 			.authorizeHttpRequests(auth -> {
 				auth.dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.ERROR).permitAll()
 					.requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll()
-					.requestMatchers(ModuloApp.RUTAS_PUBLICAS).permitAll()
+					.requestMatchers(ModuloApp.RUTAS_PUBLICAS).permitAll();
+				// Sprint 8, tanda 3 (sección 8.2): las páginas públicas de la demo existen SOLO en el perfil demo.
+				if (demo) {
+					auth.requestMatchers(ModuloApp.RUTAS_DEMO).permitAll();
+				}
+				auth
 					.requestMatchers(ModuloApp.RUTA_CAMBIAR_CLAVE).authenticated()
 					// Sprint 8, tanda 1: el logo del colegio de la sesión, para cualquier persona con sesión.
 					.requestMatchers(HttpMethod.GET, ModuloApp.RUTA_LOGO).authenticated();

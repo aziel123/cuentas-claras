@@ -107,6 +107,8 @@ class ReglasArquitecturaTest {
 	static final ArchRule soloLosConectoresHacenPeticionesSalientes = noClasses()
 			.that().doNotHaveFullyQualifiedName(BASE + ".comprobantes.service.EmisorNubefact")
 			.and().doNotHaveFullyQualifiedName(BASE + ".comunicacion.proveedor.WhatsAppCloudApi")
+			// Sprint 8, tanda 3: en la demo, el RestClient.Builder que FALLA siempre (bloquea la salida, no la hace).
+			.and().doNotHaveFullyQualifiedName(BASE + ".comun.demo.SalidaBloqueadaDemo")
 			.and().resideInAPackage(BASE + "..")
 			.should().dependOnClassesThat().resideInAnyPackage("org.springframework.web.client..", "java.net.http..",
 					"org.springframework.web.reactive.function.client..")
@@ -539,11 +541,11 @@ class ReglasArquitecturaTest {
 							&& clase.getSimpleName().endsWith("Simulado");
 				}
 			})
-			.should(new ArchCondition<>("estar anotadas con @Profile({\"dev\", \"test\", \"piloto\"})") {
+			.should(new ArchCondition<>("estar anotadas con @Profile({\"dev\", \"test\", \"piloto\", \"demo\"})") {
 				@Override
 				public void check(JavaClass clase, ConditionEvents eventos) {
 					boolean ok = clase.tryGetAnnotationOfType(org.springframework.context.annotation.Profile.class)
-							.map(p -> Set.of(p.value()).equals(Set.of("dev", "test", "piloto"))).orElse(false);
+							.map(p -> Set.of(p.value()).equals(Set.of("dev", "test", "piloto", "demo"))).orElse(false);
 					if (!ok) {
 						eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " no está limitada a dev, test y "
 								+ "piloto"));
@@ -642,6 +644,33 @@ class ReglasArquitecturaTest {
 				}
 			})
 			.because("el cambio se aplica en la misma transacción que la aprobación y su auditoría");
+
+	/**
+	 * Sprint 8, tanda 3 (sección 8): lo de la demo (crear colegios ficticios con cuentas y datos, la salida bloqueada, las
+	 * páginas públicas) existe SOLO en el perfil demo: en prod, piloto o dev no hay «Crear mi demo».
+	 */
+	@ArchTest
+	static final ArchRule loDeLaDemoSoloEnElPerfilDemo = classes()
+			.that(new DescribedPredicate<JavaClass>("son beans de la demo") {
+				@Override
+				public boolean test(JavaClass clase) {
+					boolean bean = clase.isMetaAnnotatedWith(org.springframework.stereotype.Component.class)
+							|| clase.isAnnotatedWith(org.springframework.context.annotation.Configuration.class);
+					return bean && (clase.getPackageName().startsWith(BASE + ".demo")
+							|| clase.getSimpleName().endsWith("Demo") && !clase.getSimpleName().equals("PersonaDemo"));
+				}
+			})
+			.should(new ArchCondition<>("estar anotadas con @Profile(\"demo\")") {
+				@Override
+				public void check(JavaClass clase, ConditionEvents eventos) {
+					boolean ok = clase.tryGetAnnotationOfType(org.springframework.context.annotation.Profile.class)
+							.map(p -> Set.of(p.value()).equals(Set.of("demo"))).orElse(false);
+					if (!ok) {
+						eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " no está limitada al perfil demo"));
+					}
+				}
+			})
+			.because("la demo crea colegios y cuentas sin una persona detrás: nunca debe existir fuera de la demo");
 
 	/** RegistroAlumnos no tiene @PreAuthorize: solo lo usan los servicios protegidos de alumnos y la demo de dev. */
 	@ArchTest
@@ -955,6 +984,8 @@ class ReglasArquitecturaTest {
 					BASE + ".plataforma.service..", BASE + ".plataforma.inicial..")
 			.and().doNotHaveFullyQualifiedName(BASE + ".alumnos.service.ServicioAccesoApoderados")
 			.and().doNotHaveFullyQualifiedName(BASE + ".alumnos.inicial.DatosDemoApoderadoDev")
+			// Sprint 8, tanda 3: la cuenta del apoderado del colegio ficticio de cada visitante (solo perfil demo).
+			.and().doNotHaveFullyQualifiedName(BASE + ".alumnos.inicial.AccesoApoderadoDemo")
 			.and().doNotHaveFullyQualifiedName(BASE + ".aprobaciones.service.BandejaAprobaciones")
 			.should().dependOnClassesThat()
 			.haveFullyQualifiedName(BASE + ".seguridad.service.identidad.EjecucionIdentidad")
@@ -1026,11 +1057,11 @@ class ReglasArquitecturaTest {
 							|| clase.getName().equals(BASE + ".pasarela.web.SimuladorPasarelaController");
 				}
 			})
-			.should(new ArchCondition<>("estar anotadas con @Profile({\"dev\", \"test\", \"piloto\"})") {
+			.should(new ArchCondition<>("estar anotadas con @Profile({\"dev\", \"test\", \"piloto\", \"demo\"})") {
 				@Override
 				public void check(JavaClass clase, ConditionEvents eventos) {
 					boolean ok = clase.tryGetAnnotationOfType(org.springframework.context.annotation.Profile.class)
-							.map(p -> Set.of(p.value()).equals(Set.of("dev", "test", "piloto"))).orElse(false);
+							.map(p -> Set.of(p.value()).equals(Set.of("dev", "test", "piloto", "demo"))).orElse(false);
 					if (!ok) {
 						eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " no está limitada a dev, test y "
 								+ "piloto"));

@@ -22,7 +22,7 @@ import java.util.Set;
  * papel de la página alojada por la pasarela: el apoderado elige cómo «paga» y vuelve a nuestra página de estado.
  */
 @Controller
-@Profile({ "dev", "test", "piloto" })
+@Profile({ "dev", "test", "piloto", "demo" })
 @ConditionalOnProperty(name = "cuentasclaras.pasarela.proveedor", havingValue = "SIMULADA")
 public class SimuladorPasarelaController {
 

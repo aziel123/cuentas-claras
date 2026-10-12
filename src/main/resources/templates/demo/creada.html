@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<!--/* Sprint 8, tanda 3 (sección 8.2): la demo recién creada. La clave se muestra UNA sola vez (no se guarda en la sesión). */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: publica('Tu demo está lista', ~{::main})}">
+<body>
+<main id="contenido" class="contenido-publico">
+	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-creada" data-pantalla="demo-creada">
+		<div>
+			<p class="etiqueta">Demo lista</p>
+			<h1 id="titulo-creada" th:text="${demo.colegio}">Colegio Demostración N.° 1</h1>
+			<p class="secundario">Es tu colegio ficticio: nadie más lo ve. Se borra esta noche a las 3:00.</p>
+		</div>
+
+		<div class="clave-temporal" data-clave-demo>
+			<p>La clave de todas tus cuentas (anótala: no se vuelve a mostrar):</p>
+			<p class="clave-temporal-valor num" th:text="${demo.clave}">abcd-efgh-jkmn</p>
+		</div>
+
+		<table class="tabla" data-cuentas-demo>
+			<caption class="solo-lectores">Cuentas de tu demo</caption>
+			<thead>
+				<tr><th scope="col">Rol</th><th scope="col">Usuario</th><th scope="col">Persona (ficticia)</th><th scope="col"><span class="solo-lectores">Entrar</span></th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="c : ${demo.cuentas}">
+					<td th:text="${c.rol}">Caja</td>
+					<td class="num" th:text="${c.usuario}">d7f3.caja</td>
+					<td th:text="${c.nombre}">Lucía Ramos</td>
+					<td><a class="btn btn-secundario btn-chico" th:href="@{/login(usuario=${c.usuario})}"
+						th:text="|Entrar como ${c.rol}|">Entrar</a></td>
+				</tr>
+			</tbody>
+		</table>
+
+		<p class="ayuda">Cada cuenta abre su propia sesión: puedes entrar como Caja en una ventana y como Promotoría en otra
+			(usa una ventana privada para la segunda).</p>
+		<p><a class="btn btn-primario" th:href="@{/demo/guia}">Ver el recorrido de 6 pasos</a></p>
+	</section>
+</main>
+</body>
+</html>

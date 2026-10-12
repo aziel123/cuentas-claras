@@ -14,7 +14,7 @@ import pe.edu.virgenmaria.cuentasclaras.pasarela.service.ServicioPagoEnLinea;
  * ({@link RecepcionAvisos}): desde ahí, todo es igual que con una pasarela real (firma, bandeja idempotente y consulta).
  */
 @Service
-@Profile({ "dev", "test", "piloto" })
+@Profile({ "dev", "test", "piloto", "demo" })
 @ConditionalOnProperty(name = "cuentasclaras.pasarela.proveedor", havingValue = "SIMULADA")
 @PreAuthorize("hasRole('APODERADO')")
 public class SimuladorPagos {
