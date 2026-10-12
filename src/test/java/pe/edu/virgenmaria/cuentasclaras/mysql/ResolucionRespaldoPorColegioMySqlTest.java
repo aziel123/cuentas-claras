@@ -74,10 +74,11 @@ class ResolucionRespaldoPorColegioMySqlTest {
 		Usuario promotoraA = promotoria(colegioA);
 		Usuario promotoraB = promotoria(colegioB);
 
-		// B, por el servicio: para su colegio no hay nada que resolver.
+		// B, por el servicio: para su colegio no hay nada que resolver (no tuvo faltas, o ya resolvió las suyas, como las del
+		// recorte de la bitácora de E32 que nombraba a todos).
 		UsuariosDePrueba.iniciarSesion(promotoraB);
 		assertThatThrownBy(() -> resoluciones.resolver(MOTIVO)).isInstanceOf(ReglaNegocioException.class)
-				.hasMessageContaining("No hay ninguna alerta");
+				.satisfies(e -> assertThat(e.getMessage()).containsAnyOf("No hay ninguna alerta", "ya se resolvió"));
 		// B, con la clave de cc_app y la firma de SU sesión: la base lo rechaza (su colegio no está en colegios_faltan).
 		Integer codigo = codigoAl(() -> new TransactionTemplate(transacciones).executeWithoutResult(t -> {
 			firma.firmar(ClaveFirma.respaldoResuelto(respaldo, colegioB));
