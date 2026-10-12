@@ -107,6 +107,20 @@ mysql -h <host> -u cc_migrador -p cuentasclaras < scripts/mysql/03-triggers.sql
 `01-usuarios.sql`, por SQL, nunca desde la consola del servicio (la consola les da su rol de administrador y el
 verificador de prod no arranca).
 
+**Google Cloud (sprint 8, tanda 3):** todo esto lo hacen los scripts de `deploy/` (guía completa en
+[despliegue-gcp.md](despliegue-gcp.md)):
+- `deploy/gcp/crear-infra.sh` crea la instancia con la marca `log_bin_trust_function_creators=on`, TLS obligatorio
+  (`ENCRYPTED_ONLY`), solo IP privada, respaldos y PITR de 7 días, y deja las claves de MySQL (al azar) en Secret Manager;
+- `deploy/gcp/preparar-base.sh` corre `01` **como root y por SQL** desde el contenedor de herramientas de la VM (las claves
+  viajan por la entrada estándar de SSH y la VM no guarda las de root ni de `cc_migrador`) y comprueba que ningún `cc_*` tenga
+  un rol distinto de `cc_negocio`;
+- `deploy/desplegar.sh` corre `migrar` (con `cc_migrador`), `02` (como root) y `03` (como `cc_migrador`), en ese orden y con
+  la aplicación detenida, y no deja la aplicación arriba si el verificador no dice sus líneas;
+- la aplicación se conecta por IP privada con `sslMode=VERIFY_CA` y el certificado de la autoridad de la instancia (H14:
+  sin Cloud SQL Auth Proxy, que dejaría la sesión de MySQL sin `Ssl_cipher`);
+- el **paso 0** (`deploy/gcp/paso-0.sh`) corre el job `mysql` del CI completo contra una instancia de prueba antes de todo
+  ([acta-paso-0-cloud-sql.md](acta-paso-0-cloud-sql.md)).
+
 **Sprint 8, tanda 1 (V28): 80 triggers y 9 funciones con huella (89).** Nuevos: `trg_colegio_nace` y `trg_colegio_cambio`
 (quién crea un colegio y quién lo pasa a producción), `trg_primera_promotoria_nace` y los dos de `configuracion_colegio`;
 funciones `cc_operador_activo` y `cc_colegio_en_produccion`. Versiones nuevas: `trg_usuario_nace` y `trg_usuario_rol_alta`
@@ -241,6 +255,12 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
 `huella_correo_externo` a `configuracion_colegio` si V25 no lo hizo (más de un colegio) y confirma que `DB_URL` pide TLS.
 
 ## Respaldos (sprint 7, tanda 1)
+- **Sprint 8, tanda 3 (V30): «faltan filas» por colegio.** `respaldar.sh` cuenta por colegio las tablas vigiladas con
+  `colegio_id` y el registro dice en `colegios_faltan` (arreglo JSON) qué colegios tienen filas faltantes; las tablas sin
+  colegio, el ancla de la bitácora y las filas del colegio de plataforma nombran a todos. `trg_respaldo_registro` rechaza un
+  FALTAN_FILAS sin colegios (o con uno que no existe) y un IGUAL mientras un colegio tenga su falta sin resolver;
+  `trg_resolucion_respaldo_registro` exige que la resuelva la Promotoría de ESE colegio, sobre el último respaldo que lo
+  nombra, con la firma `respaldo:{id}:{colegio}:RESUELTO`. Sin GRANT nuevos (82 triggers y 91 huellas, como en la tanda 2).
 - La tabla `respaldo` (V24) la escribe **solo** `cc_respaldo` (GRANT de INSERT y `trg_respaldo_registro`, que exige
   `SESSION_USER()` = `cc_respaldo`, que se registre al terminar y que las anclas sean eventos reales de la bitácora).
   `cc_app` solo la lee: 1142 al insertar, editar o borrar. `cc_respaldo` tampoco edita ni borra (1142).

@@ -11,6 +11,15 @@ Sprint 7 (sección 15 de `docs/arquitectura/sprint-7-endurecimiento.md`). Aquí 
 | [Acta del simulacro de restauración](../operacion/acta-simulacro-restauracion.md) | Se llena en cada simulacro presencial mensual | **Sí**: el primer simulacro presencial, firmado (anexo D) |
 | [Incidente de datos personales](../operacion/incidente-datos-personales.md) | Qué hacer si se exponen datos personales, con la notificación a la Autoridad en 48 horas (a confirmar por el asesor legal) | Se entrega; no hace falta llenarla |
 
+## Sprint 8 · documentos para vender la plataforma a otros colegios
+| Documento | Para qué sirve | Estado |
+|---|---|---|
+| [Términos de servicio](terminos-de-servicio.md) | Contrato entre el proveedor y cada colegio | **Borrador: a revisar por un abogado** antes del primer contrato |
+| [Contrato de encargo de tratamiento de datos](contrato-encargo-tratamiento-datos.md) | Ley 29733: el colegio es el responsable y el proveedor, el encargado (anexo A de los términos) | **Borrador: a revisar por un abogado** |
+| [Plantillas de WhatsApp para Meta](plantillas-whatsapp-meta.md) | Las 21 plantillas `_v2` (con el nombre del colegio como variable), listas para enviar a Meta | Listas; el nombre comercial sigue siendo provisional (no va en las plantillas) |
+| [Suscripción](../operacion/suscripcion.md) | Cómo se cobra a cada colegio: fuera del sistema | Decisión 128 |
+| [Alta de un colegio](../operacion/alta-de-un-colegio.md) · [Guía de la demo](../ventas/guia-demo.md) | Para el operador de la plataforma y para ventas | — |
+
 ## Lo que pide el acta para firmar (resumen)
 - [ ] CI en verde de la versión entregada, con los jobs `mysql` y `respaldo` (anexo B).
 - [ ] Auditoría del sprint 7 **sin hallazgos críticos ni altos abiertos** (anexo C).

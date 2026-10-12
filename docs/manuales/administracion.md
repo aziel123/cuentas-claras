@@ -26,6 +26,17 @@
 - **Una página de error:** anota el código de error y avisa al responsable técnico.
 - **A quién avisar:** Promotoría y Dirección. **No toques:** el archivo original del banco ni las cajas de otra persona.
 
+## Puesta en marcha y conectores (sprint 8)
+- En `/puesta-en-marcha` ves lo que falta para que el colegio empiece a cobrar. A ti te tocan, sobre todo, el año y las
+  secciones, los planes de pensiones (que aprueba otra persona), la importación de alumnos y el saldo inicial.
+- **Conectores** (`/conectores`): puedes **proponer** el OSE (comprobantes), la cuenta bancaria, el pago en línea o la
+  recaudación, y «Probar conexión» antes de enviar. **No los apruebas tú**: los aprueba otra persona de Promotoría o
+  Dirección en su bandeja, con su firma; en lo que mueve dinero, una Promotoría participa. Los secretos (el token del OSE, la
+  llave de la pasarela) los escribes enteros cada vez y nadie los vuelve a ver: la pantalla solo muestra sus 4 últimos
+  caracteres.
+- Cuando un conector entra en vigencia, se avisa a toda la Promotoría y al correo externo de control. Es a propósito:
+  cambiar la cuenta adonde entra el dinero nunca pasa en silencio.
+
 ## Dónde ver el video
 | Video 3 · El extracto de cada mañana |
 |---|

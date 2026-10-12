@@ -30,6 +30,24 @@
 
 **Tus dos claves, solo tuyas:** la clave de la bitácora y la llave para abrir los respaldos. Guárdalas fuera del sistema, en sobre cerrado o gestor personal. Nunca por chat ni correo.
 
+## Puesta en marcha, conectores y paso a producción (sprint 8)
+- **Al empezar**, el operador de la plataforma crea tu colegio y tu cuenta en una reunión contigo: activas tu cuenta con
+  **tu DNI** (el del contrato) y ves quién la creó. Desde ahí el operador ya no puede entrar a tu colegio.
+- **`/puesta-en-marcha`** te dice qué falta para cobrar: tu equipo (una Dirección y al menos una Caja, personas distintas de
+  ti), año y secciones, pensiones aprobadas, alumnos, saldo inicial, comprobantes, cuenta bancaria, mensajes, correo de
+  control, aviso de privacidad y respaldo. Nada se marca a mano: la lista lo calcula.
+- **Pasar a producción** lo haces tú, con la firma de tu sesión, cuando la lista está completa. No hay vuelta atrás: desde
+  ahí se registran pagos y salen los avisos a las familias. Antes, nadie puede cobrar (lo impide también la base).
+- **Conectores** (`/conectores`): adónde entra el dinero (cuenta bancaria, pago en línea, recaudación) y quién emite las
+  boletas (OSE). Cada cambio lo propone una persona y lo aprueba **otra** con su firma, y en lo que mueve dinero **una
+  Promotoría participa**. Cuando un conector cambia, te llega un aviso a ti (y a toda la Promotoría) y al correo externo de
+  control, y queda una alerta crítica 7 días: **si no lo reconoces, avisa hoy al contador y revisa la conciliación.**
+- **Marca del colegio** (`/colegio/marca`): razón social, dirección y logo que ven las familias en su portal y en las boletas.
+- **Respaldos en una instalación compartida:** la clave del respaldo y de la bitácora las custodia la plataforma (2
+  personas). Tú compruebas tu bitácora con la huella diaria por WhatsApp y una vez por trimestre eliges 3 huellas que el
+  operador busca contigo en un respaldo restaurado ([acta](../operacion/acta-verificacion-trimestral.md)). Si
+  `/panel/sistema` dice «Faltan filas», es de TU colegio: revisa con el responsable técnico y resuélvelo con motivo.
+
 ## Dónde ver el video
 | Video 5 · El panel y el resumen | Video 6 · La llamada de control | Video 4 · Aprobar desde el celular |
 |---|---|---|

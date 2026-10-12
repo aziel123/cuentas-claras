@@ -53,6 +53,22 @@ Detalle en `docs/operacion/`: [respaldos.md](../operacion/respaldos.md), [monito
 
 **Datos personales.** El registro de accesos se guarda 2 años y lo purga el DBA con un script revisado, nunca la aplicación (plazo a confirmar por el asesor legal). La anonimización de los contactos del reporte «Datos con plazo vencido» es manual por ahora: se coordina con Promotoría y queda en un acta.
 
+## La plataforma en Google Cloud (sprint 8)
+- **Despliegue:** todo con los scripts de `deploy/` y la guía [despliegue-gcp.md](../operacion/despliegue-gcp.md): la
+  infraestructura (`crear-infra.sh`), la base (`preparar-base.sh`, usuarios con `01` por SQL, nunca desde la consola) y cada
+  versión (`desplegar.sh <digest>`). Las claves viven solo en Secret Manager; las de root y `cc_migrador` nunca están en la
+  VM. Antes de todo, el **paso 0** contra una instancia de prueba ([acta](../operacion/acta-paso-0-cloud-sql.md)).
+- **Operador de la plataforma** (`CC_OPERADORES`): da de alta los colegios desde `/plataforma`
+  ([alta-de-un-colegio.md](../operacion/alta-de-un-colegio.md)) y no ve los datos de ninguna familia. Agregar o quitar un
+  operador es cambiar la lista y desplegar.
+- **Instalación compartida:** eres uno de los **2 custodios** de la clave del respaldo y de la clave HMAC (decisiones 129
+  y 130). «Faltan filas» es por colegio: cada Promotoría resuelve la de su colegio; tú ves todas en el correo técnico y en
+  el vigilante. Una vez por trimestre, la verificación de la bitácora con cada Promotoría
+  ([acta](../operacion/acta-verificacion-trimestral.md)).
+- **Demo** (`demo.<dominio>`): otra VM, sin base, sin secretos y sin salida a internet; se borra cada noche. Si arranca con
+  una variable secreta o una base real, no arranca (a propósito).
+- **Suscripción:** se cobra fuera de la plataforma ([suscripcion.md](../operacion/suscripcion.md)).
+
 ## Dónde ver el video
 | Video 9 · Si algo no cuadra en el colegio |
 |---|

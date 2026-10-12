@@ -114,6 +114,8 @@ jobs:
 
       - name: "E20: desde el contenedor de la demo, internet no responde (ni por nombre ni por IP)"
         run: |
+          # Primero, que la demo esté corriendo (si no, «no responde» sería un falso positivo).
+          docker exec cc-demo true
           if docker exec cc-demo curl -sS --max-time 15 -o /dev/null https://graph.facebook.com; then
             echo "ERROR: la demo llegó a graph.facebook.com"; exit 1
           fi
@@ -139,10 +141,12 @@ jobs:
       - name: "E20 y E21: con un secreto en el entorno, una base real o junto a prod, la demo NO arranca"
         run: |
           no_arranca() {
-            if timeout 180 docker run --rm --network cc-demo-interna -e SPRING_PROFILES_ACTIVE="$1" -e "$2" cuentas-claras:ci \
-                > demo-no.log 2>&1; then
+            # Si arrancara, «timeout» corta el cliente y el contenedor se borra igual (por su nombre).
+            if timeout 180 docker run --rm --name cc-demo-no --network cc-demo-interna -e SPRING_PROFILES_ACTIVE="$1" \
+                -e "$2" cuentas-claras:ci > demo-no.log 2>&1; then
               echo "ERROR: la demo arrancó con $1 y $2"; exit 1
             fi
+            docker rm -f cc-demo-no > /dev/null 2>&1 || true
             grep -q "$3" demo-no.log || { cat demo-no.log; exit 1; }
             echo "OK: con $2 ($1) no arranca: $3"
           }
@@ -150,14 +154,14 @@ jobs:
           no_arranca demo "DB_URL=jdbc:mysql://10.0.0.5:3306/cuentasclaras" "no lleva secretos"
           no_arranca demo "SPRING_DATASOURCE_URL=jdbc:mysql://10.0.0.5:3306/cuentasclaras" "H2 en memoria"
           no_arranca demo "AUDITORIA_CLAVE_HMAC=una-clave-de-una-instalacion-real-0001" "no lleva secretos"
-          no_arranca demo "MENSAJERIA_WHATSAPP_PROVEEDOR=WHATSAPP_CLOUD" "proveedores son simulados"
+          no_arranca demo "CUENTASCLARAS_MENSAJERIA_WHATSAPP_PROVEEDOR=WHATSAPP_CLOUD" "proveedores son simulados"
           no_arranca demo,prod "CC_MARCA_NOMBRE=x" "no se combina"
           rm -f demo-no.log
 
       - name: Borrar el contenedor y la red de la demo
         if: always()
         run: |
-          docker rm -f cc-demo || true
+          docker rm -f cc-demo cc-demo-no || true
           docker network rm cc-demo-interna || true
 
   mysql:
