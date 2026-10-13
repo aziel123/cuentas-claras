@@ -254,9 +254,10 @@ GRANT INSERT ON cuentasclaras.resolucion_respaldo TO 'cc_negocio';
 -- colegio: la ficha de un colegio en producción y el paso a producción los hace la Promotoría (cc_app, por el rol); el RUC,
 -- el tipo, el creador y los datos del titular NO (1143). Nunca INSERT ni DELETE con cc_app. Lo que puede cada conexión lo
 -- decide trg_colegio_cambio.
+-- Correcciones del sprint 8 (S8-M5): y quién firmó el último cambio de la ficha (actualizado_por).
 GRANT UPDATE (nombre, razon_social, direccion, correo_institucional, estado, produccion_desde, produccion_por,
-    aviso_privacidad_version, aviso_privacidad_aprobado_por, aviso_privacidad_aprobado_en, actualizado_en, version)
-    ON cuentasclaras.colegio TO 'cc_negocio';
+    aviso_privacidad_version, aviso_privacidad_aprobado_por, aviso_privacidad_aprobado_en, actualizado_por, actualizado_en,
+    version) ON cuentasclaras.colegio TO 'cc_negocio';
 -- Logo: se inserta y se cambia cuál está vigente; el contenido, su huella y sus medidas no cambian (1143). Nunca DELETE.
 GRANT INSERT, UPDATE (vigente, actualizado_en, version) ON cuentasclaras.colegio_logo TO 'cc_negocio';
 
@@ -287,13 +288,21 @@ GRANT INSERT ON cuentasclaras.primera_direccion TO 'cc_sistema'@'%';
 --    columnas se suman a las del rol.
 GRANT INSERT ON cuentasclaras.colegio TO 'cc_sistema'@'%';
 GRANT UPDATE (nombre, razon_social, ruc, direccion, correo_institucional, niveles, titular_nombre, titular_documento,
-    contrato_codigo, actualizado_en, version) ON cuentasclaras.colegio TO 'cc_sistema'@'%';
+    contrato_codigo, actualizado_por, actualizado_en, version) ON cuentasclaras.colegio TO 'cc_sistema'@'%';
 --    La primera Promotoría: solo inserción y solo cc_sistema (como primera_direccion).
 GRANT INSERT ON cuentasclaras.primera_promotoria TO 'cc_sistema'@'%';
 --    H10. configuracion_colegio deja de ser «solo el DBA»: la escribe el operador con cc_sistema y su firma (triggers
 --    trg_configuracion_colegio_*). cc_app sigue sin GRANT (1142). El colegio y la clave no cambian (1143).
 GRANT INSERT, UPDATE (valor, actualizado_por, actualizado_en, version) ON cuentasclaras.configuracion_colegio
     TO 'cc_sistema'@'%';
+--    Correcciones del sprint 8 (V31). S8-A1: el cambio del contacto del titular (lo propone un operador y lo aplica OTRO);
+--    S8-A2: el cambio del correo externo de control de un colegio en producción (lo propone el operador y lo aprueba la
+--    Promotoría por la ruta de identidad). Solo cc_sistema; lo inmutable (contactos, correos, motivo, quién propuso) no
+--    cambia (1143) y nada se borra. Qué transición vale lo deciden trg_cambio_contacto_titular_* y trg_cambio_correo_control_*.
+GRANT INSERT, UPDATE (estado, pendiente, resuelto_por, resuelto_en, actualizado_en, version)
+    ON cuentasclaras.cambio_contacto_titular TO 'cc_sistema'@'%';
+GRANT INSERT, UPDATE (estado, pendiente, resuelto_por, resuelto_en, actualizado_en, version)
+    ON cuentasclaras.cambio_correo_control TO 'cc_sistema'@'%';
 --    Escrituras que solo hace un proceso: con cc_app, 1142.
 GRANT INSERT ON cuentasclaras.semilla_muestreo TO 'cc_sistema'@'%';               -- sistema.muestreo, solo inserción
 GRANT INSERT ON cuentasclaras.muestra_llamada TO 'cc_sistema'@'%';                -- sistema.panel, solo inserción

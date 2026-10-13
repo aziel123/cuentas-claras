@@ -104,7 +104,7 @@ arrancar)
 		exit 1
 	fi
 	logs=$(docker compose -f "$compose" --env-file /etc/cc/imagen.env logs app 2>&1)
-	for linea in "Huellas de los 82 triggers y las 9 funciones verificadas" "Privilegios verificados" \
+	for linea in "Huellas de los 86 triggers y las 10 funciones verificadas" "Privilegios verificados" \
 			"Conexiones a MySQL cifradas (TLS) verificadas" "Plataforma verificada" "Triggers verificados"; do
 		if ! echo "$logs" | grep -q "$linea"; then
 			docker compose -f "$compose" --env-file /etc/cc/imagen.env stop app
@@ -133,8 +133,16 @@ demo)
 	systemctl daemon-reload
 	systemctl enable --now cc-demo-reinicio.timer
 	# Sin salida: desde el contenedor de la aplicación, internet no responde (la red es internal).
+	# Correcciones del sprint 8 (S8-B1): con bash (el sh de la imagen es dash, que no tiene /dev/tcp: el chequeo nunca
+	# fallaba). Primero el control positivo: la misma prueba SÍ conecta con la propia aplicación (127.0.0.1:8080); si no,
+	# la prueba no sirve (por ejemplo, la imagen ya no trae bash) y el despliegue se detiene.
+	if ! docker compose -f "$compose" --env-file /etc/cc/imagen.env exec -T app \
+			bash -c 'timeout 10 bash -c "exec 3<>/dev/tcp/127.0.0.1/8080"' 2> /dev/null; then
+		echo "ERROR: la prueba de salida no funciona en el contenedor (¿falta bash?): no se puede confirmar que la demo no sale a internet." >&2
+		exit 1
+	fi
 	if docker compose -f "$compose" --env-file /etc/cc/imagen.env exec -T app \
-			sh -c 'exec 3<>/dev/tcp/142.250.0.1/443' 2> /dev/null; then
+			bash -c 'timeout 10 bash -c "exec 3<>/dev/tcp/142.250.0.1/443"' 2> /dev/null; then
 		echo "ERROR: la aplicación de la demo tiene salida a internet." >&2
 		exit 1
 	fi

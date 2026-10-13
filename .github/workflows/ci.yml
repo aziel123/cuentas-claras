@@ -70,17 +70,32 @@ jobs:
 
       # Sprint 8, tanda 3 (E26): gitleaks (imagen oficial fijada por digest) sobre TODA la historia de git. Las reglas
       # son las de gitleaks más una lista cerrada de valores inventados de las pruebas (.gitleaks.toml).
-      - name: "gitleaks sobre la historia del repositorio"
+      # Correcciones del sprint 8 (S8-B2): la configuración NO se toma del propio PR (que podría agregar a la lista blanca
+      # el secreto que trae): en un PR se usa la de la rama destino (main); en main, la de main. Además .gitleaks.toml y
+      # .github/ tienen dueño en CODEOWNERS (la revisión del dueño es obligatoria con la protección de la rama).
+      - name: "gitleaks sobre la historia del repositorio (configuración de la rama destino)"
+        env:
+          RAMA_BASE: ${{ github.base_ref }}
         run: |
-          docker run --rm -v "$PWD:/repo" \
+          mkdir -p /tmp/gitleaks
+          if [ -n "$RAMA_BASE" ]; then
+            git fetch --no-tags --depth=1 origin "$RAMA_BASE"
+            git show "origin/$RAMA_BASE:.gitleaks.toml" > /tmp/gitleaks/gitleaks.toml
+            if ! git diff --quiet "origin/$RAMA_BASE" HEAD -- .gitleaks.toml; then
+              echo "AVISO: este PR cambia .gitleaks.toml; se revisa con la de $RAMA_BASE (el cambio lo aprueba su dueño)."
+            fi
+          else
+            cp .gitleaks.toml /tmp/gitleaks/gitleaks.toml
+          fi
+          docker run --rm -v "$PWD:/repo" -v /tmp/gitleaks:/config:ro \
             ghcr.io/gitleaks/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
-            git /repo --no-banner --redact --config /repo/.gitleaks.toml
+            git /repo --no-banner --redact --config /config/gitleaks.toml
 
       - name: "E26: la revisión SÍ falla con un secreto de muestra (un token de GitHub inventado, generado aquí)"
         run: |
           mkdir -p /tmp/muestra-secreto
           echo "GITHUB_TOKEN=ghp_$(head -c 400 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 36)" > /tmp/muestra-secreto/app.env
-          if docker run --rm -v /tmp/muestra-secreto:/muestra -v "$PWD/.gitleaks.toml:/gitleaks.toml:ro" \
+          if docker run --rm -v /tmp/muestra-secreto:/muestra -v /tmp/gitleaks/gitleaks.toml:/gitleaks.toml:ro \
               ghcr.io/gitleaks/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
               dir /muestra --no-banner --redact --config /gitleaks.toml; then
             echo "ERROR: gitleaks no detectó el token de muestra"; exit 1
@@ -116,6 +131,9 @@ jobs:
         run: |
           # Primero, que la demo esté corriendo (si no, «no responde» sería un falso positivo).
           docker exec cc-demo true
+          # Correcciones del sprint 8 (S8-B1): control positivo de la prueba por /dev/tcp (con bash; dash no lo tiene).
+          docker exec cc-demo bash -c 'timeout 10 bash -c "exec 3<>/dev/tcp/127.0.0.1/8080"' \
+            || { echo "ERROR: la prueba por /dev/tcp no funciona en el contenedor"; exit 1; }
           if docker exec cc-demo curl -sS --max-time 15 -o /dev/null https://graph.facebook.com; then
             echo "ERROR: la demo llegó a graph.facebook.com"; exit 1
           fi
@@ -221,7 +239,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V30): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V31): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -651,13 +669,29 @@ jobs:
           comprobar_sistema 1644 "$conector_vigente"
           comprobar_sistema 1142 "DELETE FROM conector_colegio WHERE 1 = 0"
           comprobar_sistema 1143 "UPDATE conector_colegio SET secreto_cifrado = secreto_cifrado WHERE 1 = 0"
+          # Correcciones del sprint 8 (V31). S8-A1 y S8-A2: el cambio del contacto del titular y el del correo de control
+          # solo los escribe cc_sistema (1142 con cc_app), con la firma de un operador activo (1644 sin ella), no se borran
+          # (1142) y lo propuesto no cambia (1143). S8-M2: una orden de pago en línea del colegio 0 (que no está en
+          # producción) la rechaza trg_orden_pago_nace (1644); QA-S8-4: un mensaje a una familia del colegio 0, trg_mensaje_nace.
+          cambio_contacto="INSERT INTO cambio_contacto_titular (colegio_id, usuario_id, telefono_nuevo, motivo, estado, pendiente, propuesto_por, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, '+51999999999', 'ci de permisos', 'PROPUESTO', TRUE, 'ci', 0, 0, NOW(6), 'ci', NOW(6))"
+          cambio_correo="INSERT INTO cambio_correo_control (colegio_id, correo_nuevo, motivo, estado, pendiente, propuesto_por, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) VALUES (0, 'ci@x.pe', 'ci de permisos', 'PROPUESTO', TRUE, 'ci', 0, 0, NOW(6), 'ci', NOW(6))"
+          comprobar 1142 "$cambio_contacto"
+          comprobar 1142 "$cambio_correo"
+          comprobar_sistema 1644 "$cambio_contacto"
+          comprobar_sistema 1644 "$cambio_correo"
+          comprobar_sistema 1142 "DELETE FROM cambio_contacto_titular WHERE 1 = 0"
+          comprobar_sistema 1142 "DELETE FROM cambio_correo_control WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE cambio_contacto_titular SET telefono_nuevo = telefono_nuevo WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE cambio_correo_control SET correo_nuevo = correo_nuevo WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO orden_pago (colegio_id, referencia, familia_id, apoderado_id, proveedor, monto, moneda, comprobante_tipo, clave_idempotencia, vence_en, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'ci', 0, 0, 'CULQI', 1, 'PEN', 'BOLETA', 'ci-preparacion', NOW(6), 'CREADA', NOW(6), 'ci', NOW(6))"
+          comprobar 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'ci-familia', 'PAGO_REGISTRADO', 'CORREO', 'APODERADO', 'x@y.pe', 'PAGO_REGISTRADO', '', 'PENDIENTE', NOW(6), 'ci', NOW(6))"
           # Exactamente un colegio PLATAFORMA y, en él, solo operadores.
           plataformas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM colegio WHERE tipo = 'PLATAFORMA'")
           [ "$plataformas" = "1" ] || { echo "ERROR: hay $plataformas colegios PLATAFORMA"; exit 1; }
-          # Huellas (H7): cc_app ve las de los 82 triggers y las 9 funciones con huellas_objetos() (sprint 8, tanda 2).
+          # Huellas (H7): cc_app ve las de los 86 triggers y las 10 funciones con huellas_objetos() (correcciones del sprint 8).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
-          [ "$objetos" = "$((esperados + 9))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
-          [ "$esperados" = "82" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 2 del sprint 8 deja 82"; exit 1; }
+          [ "$objetos" = "$((esperados + 10))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
+          [ "$esperados" = "86" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y las correcciones del sprint 8 dejan 86"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -700,7 +734,7 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 82 triggers y las 9 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 86 triggers y las 10 funciones verificadas" prod.log || { cat prod.log; exit 1; }
           # Sprint 8, tanda 2 (sección 3.6): los conectores (GRANT por columna y triggers) y la clave que descifra todos
           # sus secretos (los que dejaron las pruebas, cifrados con CC_CLAVE_CONECTORES).
           grep -q "Permisos y triggers de los conectores por colegio verificados" prod.log || { cat prod.log; exit 1; }
@@ -1045,7 +1079,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V30, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V31, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \

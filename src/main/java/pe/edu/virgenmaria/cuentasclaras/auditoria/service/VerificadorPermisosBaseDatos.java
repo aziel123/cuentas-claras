@@ -397,7 +397,33 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			columna("UPDATE conector_colegio SET secreto_cifrado = secreto_cifrado WHERE 1 = 0", "conector_colegio"),
 			columna("UPDATE conector_colegio SET configuracion = configuracion WHERE 1 = 0", "conector_colegio"),
 			columna("UPDATE conector_colegio SET propuesto_por = propuesto_por WHERE 1 = 0", "conector_colegio"),
-			trigger(VerificadorPermisosBaseDatos.CONECTOR_VIGENTE_IMPOSIBLE, "trg_conector_colegio_nace"));
+			trigger(VerificadorPermisosBaseDatos.CONECTOR_VIGENTE_IMPOSIBLE, "trg_conector_colegio_nace"),
+			// Correcciones del sprint 8 (S8-A1 y S8-A2): los cambios del contacto del titular y del correo de control los
+			// escribe solo cc_sistema (1142). S8-M2: una orden de pago en línea de un colegio que no está en producción (el
+			// colegio 0) la rechaza trg_orden_pago_nace antes que la FK (1644).
+			soloSistema(VerificadorPermisosBaseDatos.CAMBIO_CONTACTO_IMPOSIBLE,
+					"la aplicación podría proponer o aplicar el cambio del contacto del titular de un colegio."),
+			soloSistema(VerificadorPermisosBaseDatos.CAMBIO_CORREO_IMPOSIBLE,
+					"la aplicación podría proponer el cambio del correo de control de un colegio."),
+			trigger(VerificadorPermisosBaseDatos.ORDEN_EN_PREPARACION_IMPOSIBLE, "trg_orden_pago_nace (versión de V31)"));
+
+	/** Correcciones del sprint 8 (S8-A1): un cambio del contacto del titular del colegio 0, sin firma (1142 o 1644). */
+	static final String CAMBIO_CONTACTO_IMPOSIBLE = "INSERT INTO cambio_contacto_titular (colegio_id, usuario_id, "
+			+ "telefono_nuevo, motivo, estado, pendiente, propuesto_por, operador_id, plataforma_id, creado_en, creado_por, "
+			+ "actualizado_en) VALUES (0, 0, '+51999999999', 'verificador de permisos', 'PROPUESTO', TRUE, 'verificador', 0, 0, "
+			+ "NOW(6), 'verificador', NOW(6))";
+
+	/** Correcciones del sprint 8 (S8-A2): un cambio del correo de control del colegio 0, sin firma (1142 o 1644). */
+	static final String CAMBIO_CORREO_IMPOSIBLE = "INSERT INTO cambio_correo_control (colegio_id, correo_nuevo, motivo, "
+			+ "estado, pendiente, propuesto_por, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) VALUES (0, "
+			+ "'verificador@x.pe', 'verificador de permisos', 'PROPUESTO', TRUE, 'verificador', 0, 0, NOW(6), 'verificador', "
+			+ "NOW(6))";
+
+	/** Correcciones del sprint 8 (S8-M2): una orden de pago en línea (real) del colegio 0, que no está en producción. */
+	static final String ORDEN_EN_PREPARACION_IMPOSIBLE = "INSERT INTO orden_pago (colegio_id, referencia, familia_id, "
+			+ "apoderado_id, proveedor, monto, moneda, comprobante_tipo, clave_idempotencia, vence_en, estado, creado_en, "
+			+ "creado_por, actualizado_en) VALUES (0, 'verificador', 0, 0, 'CULQI', 1, 'PEN', 'BOLETA', 'verificador', NOW(6), "
+			+ "'CREADA', NOW(6), 'verificador', NOW(6))";
 
 	/**
 	 * Sprint 8, tanda 2 (E12): un conector del colegio 0 que nace VIGENTE, sin solicitud ni firma (lo rechaza
@@ -511,7 +537,16 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			// su secreto (1143).
 			trigger(VerificadorPermisosBaseDatos.CONECTOR_VIGENTE_IMPOSIBLE, "trg_conector_colegio_nace"),
 			sinBorrado("conector_colegio"),
-			columna("UPDATE conector_colegio SET secreto_cifrado = secreto_cifrado WHERE 1 = 0", "conector_colegio"));
+			columna("UPDATE conector_colegio SET secreto_cifrado = secreto_cifrado WHERE 1 = 0", "conector_colegio"),
+			// Correcciones del sprint 8 (S8-A1 y S8-A2): con cc_sistema, el cambio del contacto del titular y el del correo
+			// de control nacen solo con la firma de un operador activo (1644), no se borran (1142) y lo que se propuso no
+			// cambia (1143).
+			trigger(VerificadorPermisosBaseDatos.CAMBIO_CONTACTO_IMPOSIBLE, "trg_cambio_contacto_titular_nace"),
+			trigger(VerificadorPermisosBaseDatos.CAMBIO_CORREO_IMPOSIBLE, "trg_cambio_correo_control_nace"),
+			sinBorrado("cambio_contacto_titular"), sinBorrado("cambio_correo_control"),
+			columna("UPDATE cambio_contacto_titular SET telefono_nuevo = telefono_nuevo WHERE 1 = 0",
+					"cambio_contacto_titular"),
+			columna("UPDATE cambio_correo_control SET correo_nuevo = correo_nuevo WHERE 1 = 0", "cambio_correo_control"));
 
 	/** 1142 (o 1143): solo cc_sistema la escribe. */
 	private static SentenciaProhibida soloSistema(String sql, String riesgo) {
@@ -601,7 +636,10 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			// Sprint 8, tanda 2 (V29). Tanda 3 (V30): sin triggers nuevos; trg_respaldo_registro y
 			// trg_resolucion_respaldo_registro cambian de versión («faltan filas» por colegio) y su huella la comprueba
 			// verificarHuellas contra la de 03 empaquetado.
-			"trg_conector_colegio_nace", "trg_conector_colegio_estado");
+			"trg_conector_colegio_nace", "trg_conector_colegio_estado",
+			// Correcciones del sprint 8 (V31).
+			"trg_cambio_contacto_titular_nace", "trg_cambio_contacto_titular_estado", "trg_cambio_correo_control_nace",
+			"trg_cambio_correo_control_estado");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 

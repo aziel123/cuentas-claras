@@ -138,6 +138,22 @@ solo se reemplaza por otro aprobado; un rechazo lleva su firma). `02` da a `cc_n
 `conector_colegio` (sin DELETE; tipo, proveedor, configuración, secreto y quién lo propuso no cambian: 1143). Una base
 existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
 
+**Correcciones del sprint 8 (V31): 86 triggers y 10 funciones con huella (96).** Nuevos: `trg_cambio_contacto_titular_nace`
+y `_estado` (el contacto del titular, antes de que active su cuenta, lo propone un operador y lo aplica OTRO, cada uno con su
+firma), `trg_cambio_correo_control_nace` y `_estado` (en un colegio en producción el correo externo de control lo propone el
+operador y lo aprueba una Promotoría del colegio con su firma) y la función `cc_cuenta_activada` (la cuenta usó un enlace o
+abrió una sesión). Versiones nuevas: `trg_colegio_cambio` (toda corrección de la ficha lleva la firma de quien la cambia; el
+operador, solo antes de que el titular active su cuenta; el DNI del titular no cambia después de crear su cuenta),
+`trg_usuario_contacto` (el cambio del titular sale de un `cambio_contacto_titular` APLICADO; al reactivar un operador, su
+correo pasa a ser el de la lista), `trg_configuracion_colegio_registro` y `_cambio` (en producción, solo con el cambio
+aprobado por la Promotoría), `trg_orden_pago_nace` (sin pago en línea en preparación), `trg_mensaje_nace` (ningún mensaje a
+las familias en preparación; los avisos del alta van también al correo institucional) y `trg_conector_colegio_estado` (una
+Promotoría participa también en el OSE; en producción, un OSE que ya fue REAL no vuelve a SIMULADO). `02` da a `cc_sistema`
+el INSERT y el UPDATE por columna de `cambio_contacto_titular` y `cambio_correo_control` (cc_app: 1142) y suma
+`actualizado_por` a las columnas de `colegio`. Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación
+detenida; no hay usuarios nuevos. En una instalación COMPARTIDA, quita del entorno `CAJA_CUENTAS_DEPOSITO` y las variables de
+recaudación y conciliación (`CUENTASCLARAS_RECAUDACION_*`, `CUENTASCLARAS_CONCILIACION_*`): son de cada colegio (S8-B5).
+
 **Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
 van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
 custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra
