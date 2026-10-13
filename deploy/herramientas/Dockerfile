@@ -4,7 +4,7 @@
 # Solo paquetes de Ubuntu (sin binarios de otras fuentes): cliente mysql, mysqldump, age, rclone, el JDK 21 (./mvnw y
 # java -jar … migrar o verificar-respaldo), socat (reenvía 127.0.0.1:3306 a la base del paso 0) y python3 con yaml.
 # La imagen base va fijada por digest (Dependabot la actualiza).
-FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+FROM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
