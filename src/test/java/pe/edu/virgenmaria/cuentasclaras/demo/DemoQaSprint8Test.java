@@ -1,6 +1,5 @@
 package pe.edu.virgenmaria.cuentasclaras.demo;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -153,8 +152,6 @@ class DemoQaSprint8Test {
 	}
 
 	@Test
-	@Disabled("QA-S8-9: la familia de la cuenta «apoderado» de la demo no tiene ningún pago, boleta ni aviso: quien entra "
-			+ "como padre no ve el WhatsApp de su pago ni una boleta «DEMO · SIN VALOR» (el guion de venta del estudio)")
 	void debeTenerLaFamiliaDelApoderadoDeLaDemoUnPagoConSuBoletaYSuAviso() throws Exception {
 		Demo demo = crearDemo("192.0.2.82");
 		Long familia = familiaDelApoderado(demo);
@@ -196,8 +193,6 @@ class DemoQaSprint8Test {
 	}
 
 	@Test
-	@Disabled("QA-S8-7: en la demo, un conector propuesto guarda el token real que escriba el visitante (cifrado); el "
-			+ "diseño (sección 8.3, punto 2) dice que la demo descarta el secreto sin guardarlo")
 	void debeDescartarElTokenRealQueUnVisitantePropongaEnConectores() throws Exception {
 		Demo demo = crearDemo("192.0.2.83");
 		MockHttpSession administracion = ingresar(demo.usuario("administracion"), demo.clave());

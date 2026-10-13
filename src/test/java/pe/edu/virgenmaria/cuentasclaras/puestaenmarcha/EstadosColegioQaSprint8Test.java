@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.puestaenmarcha;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -111,9 +110,6 @@ class EstadosColegioQaSprint8Test {
 	}
 
 	@Test
-	@Disabled("S8-M2 (auditoría): el pago en línea no comprueba que el colegio esté en producción: una familia paga con la pasarela "
-			+ "en un colegio en preparación y la aplicación registra el pago (en MySQL lo rechaza trg_pago_registro después "
-			+ "de que la pasarela ya cobró)")
 	void debeRechazarElPagoEnLineaDeUnaFamiliaEnUnColegioEnPreparacion() {
 		EscenarioCaja.Familias f = EscenarioCaja.preparar(estructura, alumnos, planes, jdbc);
 		colegioEnPreparacion();
@@ -135,8 +131,6 @@ class EstadosColegioQaSprint8Test {
 	}
 
 	@Test
-	@Disabled("QA-S8-4: la campaña de renovación se abre en un colegio en preparación y crea las invitaciones "
-			+ "RENOVACION_MATRICULA a las familias (en MySQL, trg_mensaje_nace la rechaza con un error 1644)")
 	void debeImpedirInvitacionesDeRenovacionALasFamiliasEnUnColegioEnPreparacion() {
 		EscenarioRenovacion.Datos d = EscenarioRenovacion.preparar(estructura, alumnos, planes, jdbc, true);
 		colegioEnPreparacion();

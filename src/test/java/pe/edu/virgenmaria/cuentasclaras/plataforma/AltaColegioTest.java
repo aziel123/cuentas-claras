@@ -155,7 +155,12 @@ class AltaColegioTest {
 				.containsEntry("nombre", "Colegio Ficha Corregida").containsEntry("ruc", EscenarioPlataforma.RUC_D)
 				.containsEntry("niveles", "INICIAL");
 
-		ColegioCreado reenviado = alta.reenviarEnlaceTitular(creado.colegioId(), new ContactoTitularRequest("987650006", null));
+		// S8-A1: el contacto lo propone un operador y lo aplica OTRO.
+		Long cambio = alta.proponerContactoTitular(creado.colegioId(), new ContactoTitularRequest("987650006", null,
+				"El titular corrigió su celular por teléfono"));
+		UsuariosDePrueba.iniciarSesion(EscenarioPlataforma.operador(usuarios, codificador, colegios, "operador.alta2"));
+		ColegioCreado reenviado = alta.aplicarContactoTitular(creado.colegioId(), cambio);
+		UsuariosDePrueba.iniciarSesion(operador);
 		assertThat(reenviado.titularDestino()).startsWith("WhatsApp");
 		assertThat(jdbc.queryForObject("SELECT telefono_whatsapp FROM usuario WHERE colegio_id = ?", String.class,
 				creado.colegioId())).isEqualTo("+51987650006");

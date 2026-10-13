@@ -413,6 +413,24 @@ class RutasIdorTest {
 
 		Map<Recurso, String> ids = new EnumMap<>(Recurso.class);
 		ids.put(Recurso.COLEGIO, "1");
+		// Correcciones del sprint 8: un logo, un cambio del contacto del titular (no del colegio 1: es del operador) y un
+		// cambio del correo de control propuestos en el colegio A.
+		jdbc.update("INSERT INTO colegio_logo (colegio_id, contenido, sha256, bytes, ancho, alto, vigente, creado_en, "
+				+ "creado_por, actualizado_en) VALUES (1, X'89504E47', REPEAT('a', 64), 4, 1, 1, NULL, CURRENT_TIMESTAMP, "
+				+ "'promotoria', CURRENT_TIMESTAMP)");
+		ids.put(Recurso.LOGO, texto("SELECT MAX(id) FROM colegio_logo WHERE colegio_id = 1"));
+		ids.put(Recurso.CAMBIO_CONTACTO, "999999");
+		jdbc.execute("SET REFERENTIAL_INTEGRITY FALSE");
+		try {
+			jdbc.update("INSERT INTO cambio_correo_control (colegio_id, correo_anterior, correo_nuevo, motivo, estado, "
+					+ "pendiente, propuesto_por, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) VALUES "
+					+ "(1, NULL, 'otro@x.pe', 'Motivo de la prueba IDOR', 'PROPUESTO', TRUE, 'operador.idor', 0, 0, "
+					+ "CURRENT_TIMESTAMP, 'operador.idor', CURRENT_TIMESTAMP)");
+		}
+		finally {
+			jdbc.execute("SET REFERENTIAL_INTEGRITY TRUE");
+		}
+		ids.put(Recurso.CAMBIO_CORREO, texto("SELECT MAX(id) FROM cambio_correo_control WHERE colegio_id = 1"));
 		// Sprint 8, tanda 2: un conector propuesto del colegio A (el colegio B no lo ve ni lo prueba: 404).
 		jdbc.update("INSERT INTO conector_colegio (colegio_id, tipo, proveedor, modo, configuracion, clave_publica, estado, "
 				+ "propuesto_por, creado_en, creado_por, actualizado_en) VALUES (1, 'CUENTA_BANCARIA', 'BCP', 'REAL', "

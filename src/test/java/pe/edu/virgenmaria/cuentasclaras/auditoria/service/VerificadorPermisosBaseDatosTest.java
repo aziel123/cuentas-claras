@@ -260,7 +260,7 @@ class VerificadorPermisosBaseDatosTest {
 	/** Sprint 7, tanda 2: lo que solo escribe cc_sistema (a cc_app le falta el GRANT: 1142). */
 	private static final java.util.regex.Pattern SOLO_SISTEMA = java.util.regex.Pattern.compile(
 			"^INSERT INTO (usuario|usuario_rol|sesion_usuario|semilla_muestreo|muestra_llamada|resumen_diario|primera_direccion|"
-			+ "colegio|primera_promotoria) ");
+			+ "colegio|primera_promotoria|cambio_contacto_titular|cambio_correo_control) ");
 
 	private static JdbcTemplate mysqlQueDeniega() {
 		JdbcTemplate mysql = mock(JdbcTemplate.class);
@@ -612,7 +612,7 @@ class VerificadorPermisosBaseDatosTest {
 		// Sprint 8, tanda 1 (V28): 80 con el colegio (nace y cambia), la primera Promotoría y el correo externo de control;
 		// tanda 2 (V29): 82 con los conectores (nacen propuestos y cambian de estado con la aprobación firmada); tanda 3 (V30):
 		// los mismos 82 (los dos del respaldo cambian de versión).
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(82);
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(86);
 	}
 
 	/**

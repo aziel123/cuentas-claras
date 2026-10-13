@@ -416,7 +416,7 @@ class MatrizPermisosTest {
 	private static boolean estaCubierta(String ruta) {
 		// Sprint 8, tanda 1: el logo del colegio de la sesión (cualquier persona con sesión; no es un módulo del menú).
 		if (Arrays.asList(ModuloApp.RUTAS_PUBLICAS).contains(ruta) || ModuloApp.RUTA_CAMBIAR_CLAVE.equals(ruta)
-				|| ModuloApp.RUTA_LOGO.equals(ruta)) {
+				|| ModuloApp.RUTA_LOGO.equals(ruta) || ruta.startsWith(ModuloApp.RUTA_LOGO + "/")) {
 			return true;
 		}
 		PathContainer camino = PathContainer.parsePath(ruta);

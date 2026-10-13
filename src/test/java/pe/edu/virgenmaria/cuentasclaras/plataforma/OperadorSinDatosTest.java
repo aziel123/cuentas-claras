@@ -179,8 +179,9 @@ class OperadorSinDatosTest {
 		if (camino.equals(ModuloApp.RUTA_CAMBIAR_CLAVE)) {
 			return 200;
 		}
-		if (camino.equals(ModuloApp.RUTA_LOGO)) {
-			return 404; // la plataforma no tiene logo; nunca el de un colegio
+		if (camino.equals(ModuloApp.RUTA_LOGO) || camino.startsWith(ModuloApp.RUTA_LOGO + "/")) {
+			// La plataforma no tiene logo; nunca el de un colegio (correcciones del sprint 8: tampoco el de un comprobante).
+			return 404;
 		}
 		return 403;
 	}

@@ -77,7 +77,9 @@ class ReglasArquitecturaTest {
 			BASE + ".seguridad.service.sesion.SesionesFirmadas",
 			// Sprint 8, tanda 2 (E15): el aviso de una pasarela trae solo la clave pública opaca de su conector; esta clase
 			// busca ESE conector (por su clave exacta) y nada más.
-			BASE + ".conectores.service.BusquedaPorClavePublica");
+			BASE + ".conectores.service.BusquedaPorClavePublica",
+			// Correcciones del sprint 8 (QA-S8-6): las series que ya usan las OTRAS sedes con el mismo RUC (solo sus nombres).
+			BASE + ".comprobantes.service.SeriesDeOtrasSedes");
 
 	/** Única clase que puede usar JDBC directo: comprueba los permisos de MySQL (paso 9). */
 	private static final String VERIFICADOR_PERMISOS = BASE + ".auditoria.service.VerificadorPermisosBaseDatos";
@@ -987,6 +989,9 @@ class ReglasArquitecturaTest {
 			// Sprint 8, tanda 3: la cuenta del apoderado del colegio ficticio de cada visitante (solo perfil demo).
 			.and().doNotHaveFullyQualifiedName(BASE + ".alumnos.inicial.AccesoApoderadoDemo")
 			.and().doNotHaveFullyQualifiedName(BASE + ".aprobaciones.service.BandejaAprobaciones")
+			// Correcciones del sprint 8 (S8-A2): la Promotoría aprueba el correo de control (configuracion_colegio y
+			// cambio_correo_control, exclusivas de cc_sistema) con su contexto.
+			.and().doNotHaveFullyQualifiedName(BASE + ".puestaenmarcha.service.CorreoDeControl")
 			.should().dependOnClassesThat()
 			.haveFullyQualifiedName(BASE + ".seguridad.service.identidad.EjecucionIdentidad")
 			.because("la conexión de cc_sistema escribe cuentas, claves, roles y sesiones: solo desde la identidad");

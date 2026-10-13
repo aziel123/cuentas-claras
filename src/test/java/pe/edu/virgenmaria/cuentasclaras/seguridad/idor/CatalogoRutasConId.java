@@ -26,7 +26,13 @@ final class CatalogoRutasConId {
 		/** Sprint 8, tanda 2: un conector del colegio (OSE, pasarela, cuenta bancaria o recaudación). */
 		CONECTOR,
 		/** Sprint 8, tanda 2: el tipo de conector que se propone (no es un registro: la propuesta es del colegio en sesión). */
-		TIPO_CONECTOR
+		TIPO_CONECTOR,
+		/** Correcciones del sprint 8 (S8-B4): el logo con que se emitió un comprobante. */
+		LOGO,
+		/** Correcciones del sprint 8 (S8-A1): el cambio del contacto del titular (rutas del operador). */
+		CAMBIO_CONTACTO,
+		/** Correcciones del sprint 8 (S8-A2): el cambio del correo de control que aprueba la Promotoría. */
+		CAMBIO_CORREO
 	}
 
 	static final Map<String, Map<String, Recurso>> CATALOGO = new LinkedHashMap<>();
@@ -205,6 +211,16 @@ final class CatalogoRutasConId {
 		r("POST /plataforma/colegios/{id:\\d+}/ficha", "id", Recurso.COLEGIO);
 		r("POST /plataforma/colegios/{id:\\d+}/completar", "id", Recurso.COLEGIO);
 		r("POST /plataforma/colegios/{id:\\d+}/titular", "id", Recurso.COLEGIO);
+		// Correcciones del sprint 8 (S8-A1): reenviar el enlace y resolver el cambio del contacto del titular (operador).
+		r("POST /plataforma/colegios/{id:\\d+}/titular/reenviar", "id", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/titular/{cambio:\\d+}/aplicar", "id", Recurso.COLEGIO, "cambio",
+				Recurso.CAMBIO_CONTACTO);
+		r("POST /plataforma/colegios/{id:\\d+}/titular/{cambio:\\d+}/rechazar", "id", Recurso.COLEGIO, "cambio",
+				Recurso.CAMBIO_CONTACTO);
+		// Correcciones del sprint 8 (S8-A2 y S8-B4): el correo de control que aprueba la Promotoría y el logo emitido.
+		r("POST /puesta-en-marcha/correo-control/{id}/aprobar", "id", Recurso.CAMBIO_CORREO);
+		r("POST /puesta-en-marcha/correo-control/{id}/rechazar", "id", Recurso.CAMBIO_CORREO);
+		r("GET /marca/logo/{id:[0-9]+}", "id", Recurso.LOGO);
 		r("POST /plataforma/colegios/{id:\\d+}/correo-control", "id", Recurso.COLEGIO);
 		// Sprint 8, tanda 2: los conectores del colegio (proponer un tipo y probar uno propuesto).
 		r("POST /conectores/{tipo:[a-z-]{3,20}}", "tipo", Recurso.TIPO_CONECTOR);

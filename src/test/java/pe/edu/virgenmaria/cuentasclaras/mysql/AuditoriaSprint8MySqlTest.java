@@ -135,10 +135,19 @@ class AuditoriaSprint8MySqlTest {
 		assertThat(jdbc.queryForList("SELECT accion FROM evento_auditoria WHERE colegio_id = ?", String.class,
 				creado.colegioId())).contains("PRIMERA_PROMOTORIA_CREADA", "COLEGIO_CREADO");
 
-		// Corregir el contacto del titular antes de la activación: con la firma del operador (trg_usuario_contacto).
-		alta.reenviarEnlaceTitular(creado.colegioId(), new ContactoTitularRequest("987651002", null));
+		// Correcciones del sprint 8 (S8-A1): el contacto del titular lo propone un operador y lo aplica OTRO, con aviso al
+		// celular anterior y al correo institucional (trg_cambio_contacto_titular_*, trg_usuario_contacto, trg_mensaje_nace).
+		Long cambio = alta.proponerContactoTitular(creado.colegioId(), new ContactoTitularRequest("987651002", null,
+				"El titular corrigió su celular por videollamada"));
+		UsuariosDePrueba.iniciarSesion(EscenarioPlataforma.operador(usuarios, codificador, colegios, "operador.s8b"));
+		alta.aplicarContactoTitular(creado.colegioId(), cambio);
+		UsuariosDePrueba.iniciarSesion(operador());
 		assertThat(jdbc.queryForObject("SELECT telefono_whatsapp FROM usuario WHERE colegio_id = ?", String.class,
 				creado.colegioId())).isEqualTo("+51987651002");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE colegio_id = ? AND tipo = 'AVISO_ALTA' "
+				+ "AND destino IN ('+51987651001', ?)", Long.class, creado.colegioId(), jdbc.queryForObject(
+						"SELECT correo_institucional FROM colegio WHERE id = ?", String.class, creado.colegioId())))
+				.isEqualTo(2L);
 		// Sin la firma, cc_sistema no cambia ese contacto (1644).
 		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET telefono_whatsapp = '+51987651003' WHERE colegio_id = ?",
 				creado.colegioId()))).isEqualTo(1644);
@@ -261,6 +270,16 @@ class AuditoriaSprint8MySqlTest {
 				+ "destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (?, ?, "
 				+ "'RECORDATORIO_VENCIMIENTO', 'CORREO', 'APODERADO', 'x@y.pe', 'RECORDATORIO', '', 'PENDIENTE', NOW(6), 'x', "
 				+ "NOW(6))", creado.colegioId(), "e30-" + sufijo))).contains("sin recordatorios de cobro");
+		// Correcciones del sprint 8 (QA-S8-4): ningún mensaje a las familias en preparación (ni un aviso de pago).
+		assertThat(mensajeDe(() -> jdbc.update("INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, "
+				+ "destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (?, ?, "
+				+ "'PAGO_REGISTRADO', 'CORREO', 'APODERADO', 'x@y.pe', 'PAGO_REGISTRADO', '', 'PENDIENTE', NOW(6), 'x', "
+				+ "NOW(6))", creado.colegioId(), "qa-s8-4-" + sufijo))).contains("mensajes a las familias");
+		// S8-M2: tampoco una orden de pago en línea.
+		assertThat(mensajeDe(() -> jdbc.update("INSERT INTO orden_pago (colegio_id, referencia, familia_id, apoderado_id, "
+				+ "proveedor, monto, moneda, comprobante_tipo, clave_idempotencia, vence_en, estado, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (?, ?, 0, 0, 'CULQI', 1, 'PEN', 'BOLETA', ?, NOW(6), 'CREADA', NOW(6), 'x', "
+				+ "NOW(6))", creado.colegioId(), "S8M2" + sufijo, "s8-m2-" + sufijo))).contains("sin pagos en linea");
 	}
 
 	/**
@@ -534,6 +553,242 @@ class AuditoriaSprint8MySqlTest {
 					id)).containsExactly(colegioB);
 			assertThat(registroRespaldo(respaldo, "IGUAL", null)).as("resuelta").isEqualTo("(sin error)");
 		}
+	}
+
+	// ------------------------------------------------------------------ correcciones del sprint 8 (V31)
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.CorreoDeControl correoDeControl;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioMarcaColegio marcaColegio;
+
+	/** Firma {@code clave} con la sesión de {@code quien} (en su colegio), en su propia transacción. */
+	private void firmar(Usuario quien, String clave) {
+		UsuariosDePrueba.iniciarSesion(quien);
+		new TransactionTemplate(transacciones).executeWithoutResult(t -> firma.firmar(clave));
+	}
+
+	/**
+	 * S8-A1 en la base: el cambio del contacto del titular no lo escribe cc_app (1142); con cc_sistema, no nace sin la firma
+	 * del operador (1644), no lo aplica el mismo operador que lo propuso ni otro sin su firma (1644), y sin un cambio APLICADO
+	 * la cuenta del titular no cambia de contacto (1644). El DNI del titular no cambia (1644) y la ficha no cambia sin la
+	 * firma del operador (S8-M5, 1644).
+	 */
+	@Test
+	void s8a1ElContactoDelTitularExigeDosOperadoresYElDniNoCambia() {
+		ColegioCreado creado = colegioNuevo(EscenarioPlataforma.RUC_A, "987651101");
+		long colegio = creado.colegioId();
+		Long titular = jdbc.queryForObject("SELECT id FROM usuario WHERE colegio_id = ?", Long.class, colegio);
+		Usuario operador = operador();
+		String insertar = "INSERT INTO cambio_contacto_titular (colegio_id, usuario_id, telefono_anterior, telefono_nuevo, "
+				+ "motivo, estado, pendiente, propuesto_por, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) "
+				+ "VALUES (?, ?, '+51987651101', '+51987651199', 'Motivo de la prueba de MySQL', 'PROPUESTO', TRUE, "
+				+ "'operador.s8', ?, ?, NOW(6), 'operador.s8', NOW(6))";
+		assertThat(codigoAl(() -> jdbc.update(insertar, colegio, titular, operador.getId(), plataforma()))).isEqualTo(1142);
+		assertThat(codigoAl(() -> sistema().update(insertar, colegio, titular, operador.getId(), plataforma())))
+				.isEqualTo(1644);
+		// Con la firma del operador (intento 1), nace.
+		firmar(operador, pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma
+				.cambioContactoTitularPropuesto(colegio, titular, 1));
+		sistema().update(insertar, colegio, titular, operador.getId(), plataforma());
+		Long cambio = jdbc.queryForObject("SELECT id FROM cambio_contacto_titular WHERE usuario_id = ?", Long.class, titular);
+		String aplicar = "UPDATE cambio_contacto_titular SET estado = 'APLICADO', pendiente = NULL, resuelto_por = ?, "
+				+ "resuelto_en = NOW(6) WHERE id = ?";
+		// El mismo operador, con su firma: 1644 (o el CHECK). Otro operador sin firma: 1644.
+		firmar(operador, pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma.cambioContactoTitular(cambio,
+				pe.edu.virgenmaria.cuentasclaras.seguridad.model.CambioContactoTitular.Estado.APLICADO));
+		assertThat(codigoAl(() -> sistema().update(aplicar, "operador.s8", cambio))).isIn(1644, 3819);
+		Usuario otro = EscenarioPlataforma.operador(usuarios, codificador, colegios, "operador.s8b");
+		assertThat(codigoAl(() -> sistema().update(aplicar, otro.getNombreUsuario(), cambio))).isEqualTo(1644);
+		// Sin un cambio aplicado, la cuenta del titular no cambia de contacto.
+		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET telefono_whatsapp = '+51987651199' WHERE id = ?",
+				titular))).isEqualTo(1644);
+		// Lo inmutable del cambio no cambia (1143) y no se borra (1142).
+		assertThat(codigoAl(() -> sistema().update("UPDATE cambio_contacto_titular SET telefono_nuevo = telefono_nuevo "
+				+ "WHERE 1 = 0"))).isEqualTo(1143);
+		assertThat(codigoAl(() -> sistema().update("DELETE FROM cambio_contacto_titular WHERE 1 = 0"))).isEqualTo(1142);
+		SecurityContextHolder.clearContext();
+
+		// El DNI del titular no cambia (S8-A1) y la ficha no cambia sin la firma del operador (S8-M5).
+		assertThat(mensajeDe(() -> sistema().update("UPDATE colegio SET titular_documento = '11111111', actualizado_por = "
+				+ "'operador.s8' WHERE id = ?", colegio))).contains("DNI del titular no cambia");
+		assertThat(mensajeDe(() -> sistema().update("UPDATE colegio SET nombre = 'Sin firma', actualizado_por = "
+				+ "'operador.s8' WHERE id = ?", colegio))).contains("la ficha la cambia el operador con su firma");
+		// Con la aplicación (firma del operador), sí.
+		UsuariosDePrueba.iniciarSesion(operador);
+		String institucional = jdbc.queryForObject("SELECT correo_institucional FROM colegio WHERE id = ?", String.class,
+				colegio);
+		alta.corregirFicha(colegio, new pe.edu.virgenmaria.cuentasclaras.plataforma.dto.FichaColegioRequest(
+				"Colegio S8 corregido " + sufijo, "Asociación corregida S.A.C.", EscenarioPlataforma.RUC_A,
+				"Av. Corregida 1, Lima", institucional, java.util.EnumSet.of(
+						pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel.PRIMARIA), "CT-corr",
+				jdbc.queryForObject("SELECT titular_nombre FROM colegio WHERE id = ?", String.class, colegio),
+				jdbc.queryForObject("SELECT titular_documento FROM colegio WHERE id = ?", String.class, colegio)));
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT actualizado_por FROM colegio WHERE id = ?", String.class, colegio))
+				.isEqualTo("operador.s8");
+	}
+
+	/**
+	 * QA-S8-3 y S8-M5 en la base: una cuenta que ya abrió una sesión (activada) no recibe un cambio de contacto del operador
+	 * aunque vuelva a «deber cambiar su clave» (1644), y el operador ya no cambia la ficha de ese colegio aunque firme (1644);
+	 * la Promotoría sí, con su firma (y sin ella, 1644).
+	 */
+	@Test
+	void qas83YS8m5ElTitularActivadoNoSeTocaYLaFichaLaFirmaLaPromotoria() {
+		ColegioCreado creado = colegioNuevo(EscenarioPlataforma.RUC_B, "987651111");
+		long colegio = creado.colegioId();
+		String nombre = jdbc.queryForObject("SELECT nombre_usuario FROM usuario WHERE colegio_id = ?", String.class, colegio);
+		Usuario titular = activar(colegio, nombre);
+		// Abre una sesión: la cuenta queda activada (cc_cuenta_activada), aunque después le restablezcan la clave.
+		UsuariosDePrueba.iniciarSesion(titular);
+		tokens.actual();
+		SecurityContextHolder.clearContext();
+		sistema().update("UPDATE usuario SET debe_cambiar_clave = TRUE WHERE id = ?", titular.getId());
+
+		Usuario operador = operador();
+		firmar(operador, pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma
+				.cambioContactoTitularPropuesto(colegio, titular.getId(), 1));
+		assertThat(mensajeDe(() -> sistema().update("INSERT INTO cambio_contacto_titular (colegio_id, usuario_id, "
+				+ "telefono_anterior, telefono_nuevo, motivo, estado, pendiente, propuesto_por, operador_id, plataforma_id, "
+				+ "creado_en, creado_por, actualizado_en) VALUES (?, ?, '+51987651111', '+51987651199', 'Motivo de la prueba', "
+				+ "'PROPUESTO', TRUE, 'operador.s8', ?, ?, NOW(6), 'operador.s8', NOW(6))", colegio, titular.getId(),
+				operador.getId(), plataforma()))).contains("antes de la activacion");
+		// La aplicación también lo rechaza.
+		UsuariosDePrueba.iniciarSesion(operador);
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> alta.proponerContactoTitular(colegio,
+				new ContactoTitularRequest("987651199", null, "Motivo de la prueba de MySQL")))
+				.hasMessageContaining("ya activó");
+		// El operador, con su firma de la versión actual, ya no cambia la ficha (el titular activó su cuenta).
+		Long version = jdbc.queryForObject("SELECT version FROM colegio WHERE id = ?", Long.class, colegio);
+		firmar(operador, pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma.fichaColegio(colegio, version));
+		assertThat(mensajeDe(() -> sistema().update("UPDATE colegio SET direccion = 'Av. del operador', actualizado_por = "
+				+ "'operador.s8' WHERE id = ?", colegio))).contains("antes de que el titular active su cuenta");
+		SecurityContextHolder.clearContext();
+		// La Promotoría: sin su firma, 1644; con ella (por la aplicación), sí.
+		assertThat(mensajeDe(() -> jdbc.update("UPDATE colegio SET direccion = 'Av. sin firma', actualizado_por = ? "
+				+ "WHERE id = ?", nombre, colegio))).contains("la Promotoria del colegio con su firma");
+		UsuariosDePrueba.iniciarSesion(titular);
+		String institucional = jdbc.queryForObject("SELECT correo_institucional FROM colegio WHERE id = ?", String.class,
+				colegio);
+		marcaColegio.cambiar(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.MarcaColegioRequest(
+				jdbc.queryForObject("SELECT nombre FROM colegio WHERE id = ?", String.class, colegio),
+				"Razón social de la Promotoría S.A.C.", "Av. de la Promotoría 9, Lima", institucional), null, null);
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT actualizado_por FROM colegio WHERE id = ?", String.class, colegio))
+				.isEqualTo(nombre);
+	}
+
+	/**
+	 * S8-A2 en la base: en un colegio EN PRODUCCIÓN el operador no cambia el correo de control aunque firme (1644); lo
+	 * propone (cambio_correo_control, que cc_app no escribe: 1142) y lo aprueba la Promotoría con su firma; sin ella,
+	 * cc_sistema no lo aprueba (1644).
+	 */
+	@Test
+	void s8a2EnProduccionElCorreoDeControlLoApruebaLaPromotoria() {
+		ColegioConEquipoMySql.Equipo equipo = ColegioConEquipoMySql.crear(sufijo + "k", EscenarioPlataforma.RUC_C, "987652101",
+				alta, servicioUsuarios, usuarios, codificador, colegios);
+		long colegio = equipo.colegioId();
+		cuentasDePrueba.pasarAProduccion(colegio, equipo.promotora());
+		SecurityContextHolder.clearContext();
+		String anterior = jdbc.queryForObject("SELECT valor FROM configuracion_colegio WHERE colegio_id = ? AND clave = "
+				+ "'huella_correo_externo'", String.class, colegio);
+		Long versionFila = jdbc.queryForObject("SELECT version FROM configuracion_colegio WHERE colegio_id = ? AND clave = "
+				+ "'huella_correo_externo'", Long.class, colegio);
+
+		// El operador, con su firma de la fila: 1644 (el colegio está en producción).
+		Usuario operador = operador();
+		firmar(operador, pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma.configuracionColegio(colegio,
+				"huella_correo_externo", versionFila + 1));
+		assertThat(mensajeDe(() -> sistema().update("UPDATE configuracion_colegio SET valor = 'operador@propio.pe', "
+				+ "actualizado_por = 'operador.s8', actualizado_en = NOW(6), version = version + 1 WHERE colegio_id = ? "
+				+ "AND clave = 'huella_correo_externo'", colegio))).contains("la cambia el operador con su firma");
+		// cc_app no escribe la propuesta.
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO cambio_correo_control (colegio_id, correo_nuevo, motivo, estado, "
+				+ "pendiente, propuesto_por, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) VALUES (?, "
+				+ "'x@y.pe', 'Motivo de la prueba', 'PROPUESTO', TRUE, 'operador.s8', ?, ?, NOW(6), 'operador.s8', NOW(6))",
+				colegio, operador.getId(), plataforma()))).isEqualTo(1142);
+
+		// La aplicación: el operador propone (con aviso), la Promotoría aprueba con su firma.
+		UsuariosDePrueba.iniciarSesion(operador);
+		assertThat(alta.registrarCorreoControl(colegio, "nuevo.contador." + sufijo + "@estudio.pe",
+				"Adenda del contrato: cambio de contador")).isFalse();
+		SecurityContextHolder.clearContext();
+		Long cambio = jdbc.queryForObject("SELECT id FROM cambio_correo_control WHERE colegio_id = ?", Long.class, colegio);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE colegio_id = ? AND tipo = 'CORREO_CONTROL' AND "
+				+ "destino = ?", Long.class, colegio, anterior)).isEqualTo(1L);
+		// cc_sistema sin la firma de la Promotoría: 1644.
+		assertThat(codigoAl(() -> sistema().update("UPDATE cambio_correo_control SET estado = 'APROBADO', pendiente = NULL, "
+				+ "resuelto_por = ?, resuelto_en = NOW(6) WHERE id = ?", equipo.promotora().getNombreUsuario(), cambio)))
+				.isEqualTo(1644);
+		UsuariosDePrueba.iniciarSesion(equipo.promotora());
+		correoDeControl.aprobar(cambio);
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForList("SELECT valor FROM configuracion_colegio WHERE colegio_id = ?", String.class, colegio))
+				.containsOnly("nuevo.contador." + sufijo + "@estudio.pe");
+		assertThat(codigoAl(() -> sistema().update("UPDATE cambio_correo_control SET correo_nuevo = correo_nuevo "
+				+ "WHERE 1 = 0"))).isEqualTo(1143);
+	}
+
+	/** S8-M4 en la base: un OSE entra en vigencia solo con una Promotoría de por medio (aunque Dirección haya firmado). */
+	@Test
+	void s8m4ElOseTambienExigeUnaPromotoria() {
+		ColegioConEquipoMySql.Equipo equipo = ColegioConEquipoMySql.crear(sufijo + "o", EscenarioPlataforma.RUC_D, "987652111",
+				alta, servicioUsuarios, usuarios, codificador, colegios);
+		var tipo = pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector.OSE;
+		String serie = String.format("%03d", Math.floorMod(sufijo.hashCode(), 1000));
+		Long propuesto = proponer(equipo.administracion(), tipo, new pe.edu.virgenmaria.cuentasclaras.conectores.dto
+				.PropuestaConectorRequest(pe.edu.virgenmaria.cuentasclaras.conectores.model.ProveedorConector.SIMULADO,
+						pe.edu.virgenmaria.cuentasclaras.conectores.model.ModoConector.SIMULADO, null, "B" + serie, "F" + serie,
+						"BC" + serie.substring(1), "FC" + serie.substring(1), "INAFECTO", null, null, null, null, null, null,
+						null, null, null, null, "Comprobante simulado mientras llega el contrato del OSE"));
+		Long solicitud = solicitudDe(propuesto);
+		UsuariosDePrueba.iniciarSesion(equipo.directora());
+		tokens.actual();
+		Integer sinPromotoria = new TransactionTemplate(transacciones).execute(t -> {
+			UsuariosDePrueba.iniciarSesion(equipo.directora());
+			firma.firmar(pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma.solicitud(solicitud,
+					pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.EstadoSolicitud.APROBADA));
+			jdbc.update("UPDATE solicitud_cambio SET estado = 'APROBADA', pendiente = NULL, resuelto_por = ?, "
+					+ "resuelto_en = NOW(6) WHERE id = ?", equipo.directora().getNombreUsuario(), solicitud);
+			Integer codigo = codigoAl(() -> jdbc.update("UPDATE conector_colegio SET estado = 'VIGENTE', vigente = TRUE, "
+					+ "resuelto_por = ?, resuelto_en = NOW(6) WHERE id = ?", equipo.directora().getNombreUsuario(), propuesto));
+			t.setRollbackOnly();
+			return codigo;
+		});
+		SecurityContextHolder.clearContext();
+		assertThat(sinPromotoria).isEqualTo(1644);
+		// Con la Promotoría (por la bandeja), sí.
+		UsuariosDePrueba.iniciarSesion(equipo.promotora());
+		bandeja.aprobar(solicitud, null);
+		SecurityContextHolder.clearContext();
+		assertThat(estadoConector(propuesto)).isEqualTo("VIGENTE");
+	}
+
+	/**
+	 * S8-M1 en la base: al REACTIVAR una cuenta de la plataforma (un operador que vuelve a CC_OPERADORES), cc_sistema le
+	 * pone el correo de la lista; el correo de un operador activo o de una cuenta de un colegio no cambia así (1644).
+	 */
+	@Test
+	void s8m1ElCorreoDelOperadorCambiaSoloAlReactivarlo() {
+		Usuario volvio = EscenarioPlataforma.operador(usuarios, codificador, colegios, "operador.m1." + sufijo);
+		JdbcTemplate sistema = sistema();
+		assertThat(codigoAl(() -> sistema.update("UPDATE usuario SET correo = 'otro@x.pe' WHERE id = ?", volvio.getId())))
+				.isEqualTo(1644);
+		sistema.update("UPDATE usuario SET activo = FALSE, desactivado_en = NOW(6), desactivado_por = 'sistema.plataforma' "
+				+ "WHERE id = ?", volvio.getId());
+		sistema.update("UPDATE usuario SET activo = TRUE, desactivado_en = NULL, desactivado_por = NULL, "
+				+ "correo = 'nueva.persona@proveedor.pe' WHERE id = ?", volvio.getId());
+		assertThat(jdbc.queryForObject("SELECT correo FROM usuario WHERE id = ?", String.class, volvio.getId()))
+				.isEqualTo("nueva.persona@proveedor.pe");
+		// En un colegio, reactivar no cambia el contacto del personal.
+		Usuario docente = UsuariosDePrueba.guardar(usuarios, codificador, 1L, "docente.m1." + sufijo, UsuariosDePrueba.CLAVE,
+				false, Rol.DOCENTE);
+		sistema.update("UPDATE usuario SET activo = FALSE, desactivado_en = NOW(6), desactivado_por = 'x' WHERE id = ?",
+				docente.getId());
+		assertThat(codigoAl(() -> sistema.update("UPDATE usuario SET activo = TRUE, desactivado_en = NULL, "
+				+ "desactivado_por = NULL, correo = 'otro@x.pe' WHERE id = ?", docente.getId()))).isEqualTo(1644);
 	}
 
 	@Autowired

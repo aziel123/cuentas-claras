@@ -57,6 +57,8 @@ class CreadorMensajesTest {
 	void preparar() {
 		creador = new CreadorMensajes(mensajes, usuarios, whatsapp, colegios);
 		when(colegios.nombreParaMensajes(any())).thenReturn(COLEGIO);
+		// Correcciones del sprint 8 (QA-S8-4): a las familias solo se les escribe con el colegio en producción.
+		when(colegios.enProduccion(any())).thenReturn(true);
 		when(whatsapp.getIfAvailable()).thenReturn(mock(ProveedorWhatsApp.class));
 		when(mensajes.findByClave(anyString())).thenAnswer(i -> Optional.ofNullable(guardados.get(i.<String>getArgument(0))));
 		when(mensajes.saveAndFlush(any(Mensaje.class))).thenAnswer(i -> {
@@ -85,6 +87,21 @@ class CreadorMensajesTest {
 			when(a.getContactoAprobadoCorreo()).thenReturn(correo);
 		}
 		return a;
+	}
+
+	/**
+	 * Correcciones del sprint 8 (QA-S8-4 y S8-M2): en un colegio en preparación no se crea ningún mensaje a una familia
+	 * (ni aviso, ni verificación, ni respaldo por correo); al personal, sí.
+	 */
+	@Test
+	void unColegioEnPreparacionNoEscribeALasFamilias() {
+		when(colegios.enProduccion(any())).thenReturn(false);
+		Apoderado rosa = apoderado(3, "+51987654321", "rosa@correo.pe", null);
+
+		assertThat(creador.paraApoderado(rosa, PAGO, true, null)).isEmpty();
+		assertThat(creador.verificacion(rosa, CanalMensaje.WHATSAPP, "+51987654321", PAGO, null)).isEmpty();
+		assertThat(creador.alContactoAnterior(rosa, CanalMensaje.CORREO, "rosa@correo.pe", PAGO)).isEmpty();
+		assertThat(guardados).isEmpty();
 	}
 
 	@Test

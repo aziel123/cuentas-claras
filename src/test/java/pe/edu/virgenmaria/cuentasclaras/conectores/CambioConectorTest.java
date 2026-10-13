@@ -122,10 +122,21 @@ class CambioConectorTest {
 		LimpiezaBaseDatos.limpiar(jdbc);
 	}
 
+	/**
+	 * Una cuenta del colegio 1 (RUC 20600000013) en ese banco: S8-M3, con su titular, el RUC del colegio y un CCI de ESE
+	 * banco con sus dígitos de control.
+	 */
 	static PropuestaConectorRequest cuenta(ProveedorConector banco, String numero) {
+		return cuenta(banco, numero, "20600000013");
+	}
+
+	static PropuestaConectorRequest cuenta(ProveedorConector banco, String numero, String ruc) {
+		String entidad = pe.edu.virgenmaria.cuentasclaras.conectores.service.CuentaInterbancaria.ENTIDADES
+				.getOrDefault(banco, "038");
+		String cuenta = ("000000000000" + numero).substring(("000000000000" + numero).length() - 12);
 		return new PropuestaConectorRequest(banco, ModoConector.REAL, null, null, null, null, null, null, null, null, null,
-				numero, "00219100" + numero.substring(numero.length() - 12), null, null, null, null, null,
-				"Cuenta del colegio para depositar el efectivo");
+				numero, pe.edu.virgenmaria.cuentasclaras.conectores.service.CuentaInterbancaria.con(entidad, "191", cuenta),
+				"Colegio Uno S.A.C.", ruc, null, null, null, null, null, "Cuenta del colegio para depositar el efectivo");
 	}
 
 	static PropuestaConectorRequest oseNubefact(String token) {
@@ -202,15 +213,73 @@ class CambioConectorTest {
 		assertThat(estado(id)).isEqualTo("VIGENTE");
 	}
 
+	/** Correcciones del sprint 8 (S8-M4): también en el OSE participa una Promotoría (Dirección sola ya no lo aprueba). */
 	@Test
-	void elOsePuedeAprobarloDireccion() {
+	void elOseTambienExigeUnaPromotoria() {
 		Long id = proponer(administracion, TipoConector.OSE, new PropuestaConectorRequest(ProveedorConector.SIMULADO,
 				ModoConector.SIMULADO, null, "B003", "F003", "BC03", "FC03", "EXONERADO", null, null, null, null, null, null,
 				null, null, null, null, "Seguimos con el comprobante simulado"));
 		probar(administracion, id);
-		aprobar(directora, id);
 
+		assertThatThrownBy(() -> aprobar(directora, id)).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("Promotoría").hasMessageContaining("boletas");
+		assertThat(estado(id)).isEqualTo("PROPUESTO");
+		aprobar(promotora, id);
 		assertThat(estado(id)).isEqualTo("VIGENTE");
+	}
+
+	/** S8-M4: en producción, un OSE que ya fue REAL no vuelve al comprobante simulado (la aplicación y trg_conector_colegio_estado). */
+	@Test
+	void enProduccionElOseRealNoVuelveASimulado() {
+		jdbc.update("INSERT INTO conector_colegio (colegio_id, tipo, proveedor, modo, configuracion, clave_publica, estado, "
+				+ "vigente, propuesto_por, resuelto_por, resuelto_en, prueba_ok, creado_en, creado_por, actualizado_en) VALUES "
+				+ "(1, 'OSE', 'NUBEFACT', 'REAL', ?, ?, 'VIGENTE', TRUE, 'a.prueba', 'b.prueba', NOW(), TRUE, NOW(), "
+				+ "'a.prueba', NOW())", new pe.edu.virgenmaria.cuentasclaras.conectores.dto.ConfiguracionConector.Ose(
+						"https://api.nubefact.com/api/v1/x", "20600000013", "B004", "F004", "BC04", "FC04", "INAFECTO").aJson(),
+				java.util.UUID.randomUUID().toString());
+
+		assertThatThrownBy(() -> proponer(administracion, TipoConector.OSE, new PropuestaConectorRequest(
+				ProveedorConector.SIMULADO, ModoConector.SIMULADO, null, "B005", "F005", "BC05", "FC05", "INAFECTO", null, null,
+				null, null, null, null, null, null, null, null, "Volver al simulado para ahorrar"))).isInstanceOf(
+						ReglaNegocioException.class).hasMessageContaining("no vuelve al comprobante simulado");
+	}
+
+	/**
+	 * Correcciones del sprint 8 (S8-M3): la cuenta es del colegio (su RUC) y el CCI es del banco, con sus dígitos de
+	 * control; quien aprueba ve el número y el CCI completos (solo en la bandeja), y el aviso dice el banco y si la cuenta es
+	 * distinta de la anterior. Nada de eso va completo a la bitácora ni a los mensajes.
+	 */
+	@Test
+	void laCuentaEsDelColegioConSuCciYQuienApruebaLaVeCompleta() throws Exception {
+		assertThatThrownBy(() -> proponer(promotora, TipoConector.CUENTA_BANCARIA, cuenta(ProveedorConector.BCP,
+				"1912345678901", "20100070970"))).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("debe ser el del colegio");
+		PropuestaConectorRequest bien = cuenta(ProveedorConector.BCP, "1912345678901");
+		PropuestaConectorRequest otroBanco = new PropuestaConectorRequest(ProveedorConector.BBVA, ModoConector.REAL, null,
+				null, null, null, null, null, null, null, null, bien.numeroCuenta(), bien.cci(), bien.titularCuenta(),
+				bien.rucTitular(), null, null, null, null, null, bien.motivo());
+		assertThatThrownBy(() -> proponer(promotora, TipoConector.CUENTA_BANCARIA, otroBanco))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("no es de BBVA");
+		char[] malo = bien.cci().toCharArray();
+		malo[10] = malo[10] == '9' ? '0' : (char) (malo[10] + 1);
+		PropuestaConectorRequest malCopiado = new PropuestaConectorRequest(ProveedorConector.BCP, ModoConector.REAL, null,
+				null, null, null, null, null, null, null, null, bien.numeroCuenta(), new String(malo), bien.titularCuenta(),
+				bien.rucTitular(), null, null, null, null, null, bien.motivo());
+		assertThatThrownBy(() -> proponer(promotora, TipoConector.CUENTA_BANCARIA, malCopiado))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("dígitos de control");
+
+		Long primera = proponer(promotora, TipoConector.CUENTA_BANCARIA, bien);
+		probar(promotora, primera);
+		mvc.perform(get("/aprobaciones/" + solicitudDe(primera)).with(UsuariosDePrueba.como(directora)))
+				.andExpect(status().isOk())
+				.andExpect(content().string(org.hamcrest.Matchers.containsString("1912345678901")))
+				.andExpect(content().string(org.hamcrest.Matchers.containsString(bien.cci())))
+				.andExpect(content().string(org.hamcrest.Matchers.containsString("20600000013")));
+		aprobar(directora, primera);
+		assertThat(jdbc.queryForObject("SELECT parametros FROM mensaje WHERE tipo = 'CONECTOR_VIGENTE' AND entidad_id = ? "
+				+ "AND destinatario_tipo = 'EXTERNO'", String.class, primera)).contains("BCP", "la primera del colegio")
+				.doesNotContain("1912345678901");
+		assertThat(EscenarioEscolar.todaLaBitacora(jdbc)).doesNotContain("1912345678901").doesNotContain(bien.cci());
 	}
 
 	@Test
@@ -237,8 +306,8 @@ class CambioConectorTest {
 				"EXTERNO:contador@estudio.pe");
 		String texto = jdbc.queryForObject("SELECT parametros FROM mensaje WHERE tipo = 'CONECTOR_VIGENTE' AND entidad_id = ? "
 				+ "AND destinatario_tipo = 'EXTERNO'", String.class, segunda);
-		assertThat(texto).contains("cuenta que termina en 5006", "administracion.con", "promotora2.con")
-				.doesNotContain("2003004005006");
+		assertThat(texto).contains("Interbank que termina en 5006", "DISTINTA de la anterior", "BCP que terminaba en 8901",
+				"administracion.con", "promotora2.con").doesNotContain("2003004005006");
 		// Bitácora resaltada, sin el número completo.
 		assertThat(EscenarioEscolar.ultimoEvento(jdbc, "CONECTOR_VIGENTE")).containsEntry("entidad_id", segunda.toString());
 		// Alerta CRÍTICA en «Para revisar» (las dos entradas en vigencia de esta semana).
@@ -305,7 +374,8 @@ class CambioConectorTest {
 		mvc.perform(get("/conectores").with(UsuariosDePrueba.como(directora))).andExpect(status().isOk());
 		mvc.perform(post("/conectores/cuenta-bancaria").with(csrf()).with(UsuariosDePrueba.como(promotora))
 				.param("proveedor", "BCP").param("modo", "REAL").param("numeroCuenta", "191-2345678-9-01")
-				.param("cci", "00219100234567890112").param("motivo", "Cuenta corriente del colegio en soles"))
+				.param("cci", cuenta(ProveedorConector.BCP, "1912345678901").cci()).param("titularCuenta", "Colegio Uno S.A.C.")
+				.param("rucTitular", "20600000013").param("motivo", "Cuenta corriente del colegio en soles"))
 				.andExpect(redirectedUrl("/conectores"));
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM conector_colegio WHERE estado = 'PROPUESTO'", Long.class))
 				.isEqualTo(1L);

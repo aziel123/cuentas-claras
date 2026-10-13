@@ -96,7 +96,7 @@ class ConectorOseTest {
 
 	@Test
 	void unOseRealNoReutilizaSeriesDelSimulado() {
-		ConectorOse adaptador = new ConectorOse(ose, series);
+		ConectorOse adaptador = adaptador(ose);
 		when(series.findBySerie(any())).thenReturn(Optional.empty());
 		when(series.findBySerie("B002")).thenReturn(Optional.of(SerieComprobante.nueva(TipoComprobante.BOLETA, "B002",
 				ProveedorComprobantes.SIMULADO)));
@@ -116,7 +116,7 @@ class ConectorOseTest {
 		when(responde.consultar(any(), any(), anyInt())).thenReturn(new ResultadoEnvio(EstadoEnvio.PENDIENTE,
 				"No existe", null, null, "24", null));
 		doReturn(responde).when(probado).nubefactDe(any());
-		ConectorOse adaptador = new ConectorOse(probado, series);
+		ConectorOse adaptador = adaptador(probado);
 
 		assertThat(adaptador.probar(nubefact()).ok()).isTrue();
 
@@ -138,6 +138,34 @@ class ConectorOseTest {
 						"https://servidor-propio.example.com/ose", "20600000013", "B002", "F002", "BC02", "FC02", "INAFECTO"),
 				Map.of(ConectorVigente.TOKEN, "token-de-pruebas-0123456789"));
 
-		assertThat(new ConectorOse(ose, series).probar(hacia).ok()).isFalse();
+		assertThat(adaptador(ose).probar(hacia).ok()).isFalse();
+	}
+
+	/** Correcciones del sprint 8: el adaptador con el colegio 3 (RUC 20600000013) y sin otras sedes con su RUC. */
+	private ConectorOse adaptador(OseDelColegio delColegio) {
+		pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository colegios = mock(
+				pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository.class);
+		when(colegios.findById(3L)).thenReturn(Optional.of(pe.edu.virgenmaria.cuentasclaras.colegio.model.Colegio
+				.enPreparacion("Colegio 3", "Colegio 3 S.A.C.", "20600000013", "Av. 1", "c@3.pe",
+						java.util.EnumSet.of(pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel.PRIMARIA), "Titular", "45678900",
+						null)));
+		return new ConectorOse(delColegio, series, mock(SeriesDeOtrasSedes.class), colegios);
+	}
+
+	/** S8-M4: la prueba de conexión comprueba el RUC del emisor: el del colegio y, si Nubefact lo informa, el mismo. */
+	@Test
+	void laPruebaRechazaUnRucEmisorQueNoEsElDelColegioOUnaCuentaDeOtroRuc() {
+		OseDelColegio probado = spy(ose);
+		EmisorElectronico otraCuenta = mock(EmisorElectronico.class);
+		when(otraCuenta.consultar(any(), any(), anyInt())).thenReturn(new ResultadoEnvio(EstadoEnvio.ACEPTADO,
+				"{\"cadena_para_codigo_qr\": \"20100070970 | 03 | B002 | 1 | 0.00 | 450.00\"}", null, null, "0", null));
+		doReturn(otraCuenta).when(probado).nubefactDe(any());
+
+		assertThat(adaptador(probado).probar(nubefact()).detalle()).contains("OTRO RUC");
+
+		ConectorVigente deOtroRuc = new ConectorVigente(7L, 0L, 3L, TipoConector.OSE, ProveedorConector.SIMULADO,
+				ModoConector.SIMULADO, "0f0e0d0c-0b0a-4908-8706-050403020103", new ConfiguracionConector.Ose(null,
+						"20600000021", "B002", "F002", "BC02", "FC02", "INAFECTO"), Map.of());
+		assertThat(adaptador(probado).probar(deOtroRuc).ok()).isFalse();
 	}
 }

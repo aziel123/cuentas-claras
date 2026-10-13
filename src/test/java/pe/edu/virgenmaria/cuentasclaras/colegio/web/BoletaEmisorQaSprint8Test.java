@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.colegio.web;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -120,8 +119,6 @@ class BoletaEmisorQaSprint8Test {
 	}
 
 	@Test
-	@Disabled("QA-S8-5: la boleta reimpresa toma la razón social, la dirección y el logo ACTUALES del colegio, no los de "
-			+ "su emisión: un comprobante ya entregado cambia de emisor si Promotoría cambia la marca")
 	void debeConservarEnLaBoletaReimpresaElEmisorConQueSeEmitio() throws Exception {
 		mvc.perform(ficha("Colegio Uno S.A.C.", "Jr. Emisión 100, Lima")).andExpect(flash().attributeExists("exito"));
 		Long pagoId = cobrarMarzo();

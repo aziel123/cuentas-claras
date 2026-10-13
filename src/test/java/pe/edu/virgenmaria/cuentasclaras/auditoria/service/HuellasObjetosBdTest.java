@@ -29,11 +29,11 @@ class HuellasObjetosBdTest {
 		// funciones (cc_solicitud_firmada en 03 y permisos_objetos en 02). Sprint 8, tanda 1 (V28): 80 triggers (el colegio
 		// nace y cambia, la primera Promotoría y el correo externo de control) y 9 funciones (cc_operador_activo y
 		// cc_colegio_en_produccion): 89 huellas. Tanda 2 (V29): 82 triggers (los conectores nacen propuestos y cambian de
-		// estado con la aprobación firmada): 91 huellas. Tanda 3 (V30): las mismas 91 (versión nueva de trg_respaldo_registro y
+		// estado con la aprobación firmada): 91 huellas. Correcciones (V31): 86 triggers y cc_cuenta_activada: 96 huellas. Tanda 3 (V30): las mismas 91 (versión nueva de trg_respaldo_registro y
 		// trg_resolucion_respaldo_registro: «faltan filas» por colegio).
-		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(82)
+		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(86)
 				.isEqualTo(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
-		assertThat(esperadas).hasSize(91).containsKeys("trg_conector_colegio_nace", "trg_conector_colegio_estado","cc_contacto_normal", "cc_es_sistema", "cc_firma_valida",
+		assertThat(esperadas).hasSize(96).containsKeys("trg_conector_colegio_nace", "trg_conector_colegio_estado","cc_contacto_normal", "cc_es_sistema", "cc_firma_valida",
 				"cc_solicitud_firmada", "cc_operador_activo", "cc_colegio_en_produccion", "triggers_instalados",
 				"huellas_objetos", "permisos_objetos", "trg_usuario_rol_alta", "trg_firma_operacion_nace",
 				"trg_solicitud_cambio_nace", "trg_resolucion_respaldo_registro", "trg_colegio_nace", "trg_colegio_cambio",

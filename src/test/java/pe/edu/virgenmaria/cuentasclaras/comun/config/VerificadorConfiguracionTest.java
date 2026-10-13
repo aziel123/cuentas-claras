@@ -387,6 +387,29 @@ class VerificadorConfiguracionTest {
 				.doesNotThrowAnyException();
 	}
 
+	/**
+	 * Correcciones del sprint 8 (S8-B5): en una COMPARTIDA desplegada, la cuenta de depósito y la recaudación son de cada
+	 * colegio (sus conectores): el entorno no las trae. Con los valores por defecto (sin configurar) arranca; en una
+	 * DEDICADA, el entorno sigue valiendo.
+	 */
+	@Test
+	void unaCompartidaConLaCuentaDeDepositoOLaRecaudacionEnElEntornoNoArranca() {
+		String[][] casos = { { "cuentasclaras.caja.cuentas-deposito", "BCP Soles 191-1234567-0-12" },
+				{ "cuentasclaras.recaudacion.banco", "BCP" }, { "cuentasclaras.recaudacion.modalidad", "SIN_BASE" },
+				{ "cuentasclaras.conciliacion.patron-abono-recaudacion", "RECAUD" },
+				{ "cuentasclaras.conciliacion.abono-recaudacion", "POR_PAGO" } };
+		for (String[] caso : casos) {
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, compartida(caso[0],
+					caso[1]))).as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[0]);
+			assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, config(caso[0], caso[1])))
+					.as("dedicada " + caso[0]).doesNotThrowAnyException();
+		}
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, compartida(
+				"cuentasclaras.caja.cuentas-deposito", "", "cuentasclaras.recaudacion.banco", "GENERICO",
+				"cuentasclaras.recaudacion.modalidad", "CON_BASE_DE_DEUDAS", "cuentasclaras.conciliacion.abono-recaudacion",
+				"POR_LOTE"))).doesNotThrowAnyException();
+	}
+
 	@Test
 	void unaCompartidaExigeLaClaveDeLosConectoresYOperadores() {
 		java.util.Map<String, String> sinClave = compartida();

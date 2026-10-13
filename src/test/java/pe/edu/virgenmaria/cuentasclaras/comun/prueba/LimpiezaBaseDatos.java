@@ -25,6 +25,11 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM primera_promotoria");
 		// Sprint 8, tanda 2 (V29): los conectores apuntan a su solicitud y a su colegio.
 		jdbc.update("DELETE FROM conector_colegio");
+		// Correcciones del sprint 8 (V31): los cambios del contacto del titular y del correo de control; la foto del emisor
+		// de cada comprobante apunta a su logo.
+		jdbc.update("DELETE FROM cambio_contacto_titular");
+		jdbc.update("DELETE FROM cambio_correo_control");
+		jdbc.update("UPDATE comprobante SET emisor_logo_id = NULL WHERE emisor_logo_id IS NOT NULL");
 		jdbc.update("DELETE FROM colegio_logo");
 		jdbc.update("UPDATE usuario SET estado_solicitud_id = NULL WHERE estado_solicitud_id IS NOT NULL");
 		// Sprint 7, tanda 1 (V24): el registro de respaldos (técnico, sin colegio; en MySQL solo lo escribe cc_respaldo).
@@ -137,7 +142,7 @@ public final class LimpiezaBaseDatos {
 				+ "CURRENT_TIMESTAMP), produccion_por = COALESCE(produccion_por, 'prueba'), ruc = NULL, razon_social = NULL, "
 				+ "direccion = NULL, correo_institucional = NULL, titular_nombre = NULL, titular_documento = NULL, "
 				+ "contrato_codigo = NULL, aviso_privacidad_version = NULL, aviso_privacidad_aprobado_por = NULL, "
-				+ "aviso_privacidad_aprobado_en = NULL WHERE id = 1");
+				+ "aviso_privacidad_aprobado_en = NULL, actualizado_por = NULL WHERE id = 1");
 		jdbc.update("DELETE FROM configuracion_bd");
 	}
 }

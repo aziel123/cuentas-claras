@@ -55,6 +55,8 @@ class CreadorMensajesQaTest {
 	void preparar() {
 		creador = new CreadorMensajes(mensajes, usuarios, whatsapp, colegios);
 		when(colegios.nombreParaMensajes(any())).thenReturn(COLEGIO);
+		// Correcciones del sprint 8 (QA-S8-4): a las familias solo se les escribe con el colegio en producción.
+		when(colegios.enProduccion(any())).thenReturn(true);
 		when(whatsapp.getIfAvailable()).thenReturn(mock(ProveedorWhatsApp.class));
 		when(mensajes.findByClave(anyString())).thenAnswer(i -> Optional.ofNullable(guardados.get(i.<String>getArgument(0))));
 		when(mensajes.saveAndFlush(any(Mensaje.class))).thenAnswer(i -> {

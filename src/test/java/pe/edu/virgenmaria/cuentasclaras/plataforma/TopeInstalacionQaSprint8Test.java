@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.plataforma;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -83,8 +82,6 @@ class TopeInstalacionQaSprint8Test {
 	}
 
 	@Test
-	@Disabled("QA-S8-8: cuentasclaras.plataforma.max-alumnos (8,000, decisión 138) no se aplica en ninguna parte: el "
-			+ "alta sigue aunque la instalación ya pasó su tope de alumnos")
 	void debeRechazarElAltaCuandoLaInstalacionYaLlegoAlTopeDeAlumnos() {
 		EscenarioCaja.preparar(estructura, alumnos, planes, jdbc);
 		SecurityContextHolder.clearContext();

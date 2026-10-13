@@ -3970,8 +3970,9 @@ class PermisosMySqlTest {
 			ids[i] = propuestaConector.proponer(tipo, new pe.edu.virgenmaria.cuentasclaras.conectores.dto.PropuestaConectorRequest(
 					pe.edu.virgenmaria.cuentasclaras.conectores.model.ProveedorConector.BCP,
 					pe.edu.virgenmaria.cuentasclaras.conectores.model.ModoConector.REAL, null, null, null, null, null, null, null,
-					null, null, "19100" + i + "1234567", "002191000" + i + "1234567012", null, null, null, null, null,
-					"Cuenta corriente del colegio en soles"));
+					null, null, "19100" + i + "1234567", pe.edu.virgenmaria.cuentasclaras.conectores.service.CuentaInterbancaria
+							.con("002", "191", "000" + i + "12345678"), "Colegio de conectores S.A.C.", "20600000030", null,
+					null, null, null, null, "Cuenta corriente del colegio en soles"));
 			UsuariosDePrueba.iniciarSesion(equipo.promotora());
 			assertThat(propuestaConector.probar(ids[i]).ok()).isTrue();
 			Long solicitud = jdbc.queryForObject("SELECT solicitud_id FROM conector_colegio WHERE id = ?", Long.class, ids[i]);

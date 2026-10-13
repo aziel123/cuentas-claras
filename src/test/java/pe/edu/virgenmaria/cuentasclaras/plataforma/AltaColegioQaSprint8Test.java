@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.plataforma;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -163,18 +162,23 @@ class AltaColegioQaSprint8Test {
 		assertThat(contar("SELECT COUNT(*) FROM colegio")).isEqualTo(antes);
 	}
 
+	/**
+	 * QA-S8-1 (corregido): el logo se valida ANTES de crear nada. Un logo hostil ya no deja un colegio a medias sin su año
+	 * escolar: el alta se rechaza entera, sin colegio, sin firma y sin cuenta, y el operador la repite con otro archivo.
+	 */
 	@Test
-	@Disabled("QA-S8-1: un logo hostil en el alta revierte también el año escolar inicial (misma transacción 4) y "
-			+ "«Completar alta» ya no lo reintenta: el colegio queda sin año escolar")
-	void debeConservarElAnioEscolarCuandoElLogoDelAltaEsRechazado() {
-		ColegioCreado creado = alta.crear(EscenarioPlataforma.alta("Colegio Logo Hostil", EscenarioPlataforma.RUC_C,
-				"titular.logohostil", "45670005", "987650105"), SVG_CON_SCRIPT.getBytes(StandardCharsets.UTF_8), "logo.png");
+	void debeRechazarElLogoHostilAntesDeCrearNadaParaNoDejarElColegioSinSuAnioEscolar() {
+		long colegiosAntes = contar("SELECT COUNT(*) FROM colegio");
+		long aniosAntes = contar("SELECT COUNT(*) FROM anio_escolar");
 
-		// El logo no se guarda (correcto) ...
-		assertThat(contar("SELECT COUNT(*) FROM colegio_logo WHERE colegio_id = ?", creado.colegioId())).isZero();
-		// ... pero el año escolar inicial, que nada tiene que ver con el logo, debe existir.
-		assertThat(contar("SELECT COUNT(*) FROM anio_escolar WHERE colegio_id = ? AND anio = 2027", creado.colegioId()))
-				.isEqualTo(1L);
+		assertThatThrownBy(() -> alta.crear(EscenarioPlataforma.alta("Colegio Logo Hostil", EscenarioPlataforma.RUC_C,
+				"titular.logohostil", "45670005", "987650105"), SVG_CON_SCRIPT.getBytes(StandardCharsets.UTF_8), "logo.png"))
+				.isInstanceOf(ReglaNegocioException.class);
+
+		assertThat(contar("SELECT COUNT(*) FROM colegio")).isEqualTo(colegiosAntes);
+		assertThat(contar("SELECT COUNT(*) FROM anio_escolar")).isEqualTo(aniosAntes);
+		assertThat(contar("SELECT COUNT(*) FROM firma_operacion WHERE clave LIKE 'primera_promotoria:%'")).isZero();
+		assertThat(contar("SELECT COUNT(*) FROM usuario WHERE nombre_usuario = 'titular.logohostil'")).isZero();
 	}
 
 	// ------------------------------------------------------------------ «Completar alta» y primera Promotoría
@@ -213,8 +217,6 @@ class AltaColegioQaSprint8Test {
 	}
 
 	@Test
-	@Disabled("QA-S8-2: «Completar alta» en un colegio sin DNI del titular (fila de V1 o creada por el DBA) crea la "
-			+ "primera Promotoría y su activación pide el nombre de usuario, no el DNI del contrato")
 	void debeExigirElDniDelTitularAntesDeCompletarElAltaDeUnColegioSinFicha() {
 		jdbc.update("INSERT INTO colegio (nombre) VALUES ('Colegio Creado por el DBA')");
 		long colegio = contar("SELECT MAX(id) FROM colegio WHERE tipo = 'COLEGIO'");
@@ -226,58 +228,86 @@ class AltaColegioQaSprint8Test {
 
 	// ------------------------------------------------------------------ el contacto y el DNI del titular
 
+	/** S8-A1: el cambio del contacto del titular lo propone este operador y lo aplica OTRO (con su propia sesión). */
+	private void cambiarContacto(long colegio, String celular) {
+		alta.proponerContactoTitular(colegio, new ContactoTitularRequest(celular, null,
+				"El titular llamó: su celular del contrato tenía un dígito mal escrito"));
+		Long cambio = contar("SELECT MAX(id) FROM cambio_contacto_titular WHERE colegio_id = ?", colegio);
+		UsuariosDePrueba.iniciarSesion(EscenarioPlataforma.operador(usuarios, codificador, colegios, "operador2.qa8"));
+		try {
+			alta.aplicarContactoTitular(colegio, cambio);
+		}
+		finally {
+			UsuariosDePrueba.iniciarSesion(operador);
+		}
+	}
+
 	@Test
-	@Disabled("S8-A1 (auditoría): corregir el contacto del titular no avisa al correo institucional del colegio (sección 3.3): el "
-			+ "operador puede redirigir el enlace de la primera Promotoría sin que el colegio se entere")
 	void debeAvisarAlCorreoInstitucionalCuandoElOperadorCorrigeElContactoDelTitular() {
 		ColegioCreado creado = altaCompleta("Colegio Aviso", EscenarioPlataforma.RUC_A, "titular.aviso", "45670011",
 				"987650111");
 		String institucional = jdbc.queryForObject("SELECT correo_institucional FROM colegio WHERE id = ?", String.class,
 				creado.colegioId());
 
-		alta.reenviarEnlaceTitular(creado.colegioId(), new ContactoTitularRequest("987650112", null));
+		cambiarContacto(creado.colegioId(), "987650112");
 
 		assertThat(contar("SELECT COUNT(*) FROM mensaje WHERE colegio_id = ? AND LOWER(destino) = LOWER(?)",
 				creado.colegioId(), institucional)).as("aviso al correo institucional").isGreaterThan(0L);
+		assertThat(jdbc.queryForObject("SELECT telefono_whatsapp FROM usuario WHERE colegio_id = ?", String.class,
+				creado.colegioId())).isEqualTo("+51987650112");
 	}
 
 	@Test
-	@Disabled("S8-A1 (auditoría): corregir el contacto del titular no avisa al contacto anterior (sección 3.3): el celular original "
-			+ "del titular no se entera de que su enlace se envió a otro número")
 	void debeAvisarAlContactoAnteriorCuandoElOperadorCorrigeElContactoDelTitular() {
 		ColegioCreado creado = altaCompleta("Colegio Anterior", EscenarioPlataforma.RUC_B, "titular.anterior", "45670013",
 				"987650113");
 		long antes = contar("SELECT COUNT(*) FROM mensaje WHERE colegio_id = ? AND destino = '+51987650113'",
 				creado.colegioId());
 
-		alta.reenviarEnlaceTitular(creado.colegioId(), new ContactoTitularRequest("987650114", null));
+		cambiarContacto(creado.colegioId(), "987650114");
 
 		assertThat(contar("SELECT COUNT(*) FROM mensaje WHERE colegio_id = ? AND destino = '+51987650113'",
 				creado.colegioId())).as("aviso al celular anterior").isGreaterThan(antes);
+		assertThat(contar("SELECT COUNT(*) FROM mensaje WHERE colegio_id = ? AND destino = '+51987650113' "
+				+ "AND tipo = 'AVISO_ALTA'", creado.colegioId())).isEqualTo(1L);
 	}
 
+	/** S8-A1 (corregido): un solo operador no cambia el contacto del titular; quien lo propone no lo aplica. */
 	@Test
-	@Disabled("S8-A1 (auditoría): el operador cambia el DNI del titular en la ficha antes de la activación sin aviso a nadie: con "
-			+ "el contacto corregido, activa él mismo la primera Promotoría")
-	void debeAvisarAlCorreoInstitucionalCuandoElOperadorCambiaElDniDelTitularAntesDeLaActivacion() {
+	void debeRechazarQueElMismoOperadorApliqueElContactoQuePropuso() {
+		ColegioCreado creado = altaCompleta("Colegio Solo", EscenarioPlataforma.RUC_D, "titular.solo", "45670017",
+				"987650119");
+		alta.proponerContactoTitular(creado.colegioId(), new ContactoTitularRequest("987650199", null,
+				"Celular del contrato mal escrito según el titular"));
+		Long cambio = contar("SELECT MAX(id) FROM cambio_contacto_titular WHERE colegio_id = ?", creado.colegioId());
+
+		assertThatThrownBy(() -> alta.aplicarContactoTitular(creado.colegioId(), cambio))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("otro operador");
+		assertThat(jdbc.queryForObject("SELECT telefono_whatsapp FROM usuario WHERE colegio_id = ?", String.class,
+				creado.colegioId())).isEqualTo("+51987650119");
+	}
+
+	/**
+	 * S8-A1 (corregido): el DNI del titular no cambia después de crear su cuenta (la QA esperaba al menos un aviso; la
+	 * corrección pedida es más estricta: el cambio se rechaza).
+	 */
+	@Test
+	void debeRechazarQueElOperadorCambieElDniDelTitularAntesDeLaActivacion() {
 		ColegioCreado creado = altaCompleta("Colegio Dni", EscenarioPlataforma.RUC_C, "titular.dni", "45670015",
 				"987650115");
 		String institucional = jdbc.queryForObject("SELECT correo_institucional FROM colegio WHERE id = ?", String.class,
 				creado.colegioId());
 
-		alta.corregirFicha(creado.colegioId(), new FichaColegioRequest("Colegio Dni", "Asociación Colegio Dni S.A.C.",
-				EscenarioPlataforma.RUC_C, "Av. Los Educadores 123, Lima", institucional,
-				EnumSet.of(Nivel.PRIMARIA, Nivel.SECUNDARIA), "CT-titular.dni", "Titular Colegio Dni", "09999999"));
+		assertThatThrownBy(() -> alta.corregirFicha(creado.colegioId(), new FichaColegioRequest("Colegio Dni",
+				"Asociación Colegio Dni S.A.C.", EscenarioPlataforma.RUC_C, "Av. Los Educadores 123, Lima", institucional,
+				EnumSet.of(Nivel.PRIMARIA, Nivel.SECUNDARIA), "CT-titular.dni", "Titular Colegio Dni", "09999999")))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("DNI del titular no cambia");
 
 		assertThat(jdbc.queryForObject("SELECT titular_documento FROM colegio WHERE id = ?", String.class,
-				creado.colegioId())).isEqualTo("09999999");
-		assertThat(contar("SELECT COUNT(*) FROM mensaje WHERE colegio_id = ? AND LOWER(destino) = LOWER(?)",
-				creado.colegioId(), institucional)).as("aviso al correo institucional del cambio de DNI").isGreaterThan(0L);
+				creado.colegioId())).isEqualTo("45670015");
 	}
 
 	@Test
-	@Disabled("QA-S8-3 (otro camino que S8-A1, después de la activación): «reenviar el enlace» decide «sin activar» por debe_cambiar_clave: si otra Promotoría restablece "
-			+ "el acceso del titular que ya activó, el operador puede mandar su enlace a otro celular y tomar la cuenta")
 	void debeRechazarQueElOperadorRedirijaElEnlaceDeUnTitularQueYaActivoSuCuenta() throws Exception {
 		ColegioCreado creado = altaCompleta("Colegio Activado", EscenarioPlataforma.RUC_D, "titular.activado", "45670016",
 				"987650116");
@@ -295,8 +325,12 @@ class AltaColegioQaSprint8Test {
 		SecurityContextHolder.clearContext();
 
 		UsuariosDePrueba.iniciarSesion(operador);
-		assertThatThrownBy(() -> alta.reenviarEnlaceTitular(creado.colegioId(), new ContactoTitularRequest("987650117",
-				null))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("ya activó");
+		// QA-S8-3: «sin activar» ya no sale de debe_cambiar_clave (que el restablecimiento vuelve a pedir).
+		assertThatThrownBy(() -> alta.proponerContactoTitular(creado.colegioId(), new ContactoTitularRequest("987650117",
+				null, "Pidió cambiar su celular después de activar"))).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("ya activó");
+		assertThatThrownBy(() -> alta.reenviarEnlaceTitular(creado.colegioId())).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("ya activó");
 		assertThat(jdbc.queryForObject("SELECT telefono_whatsapp FROM usuario WHERE id = ?", String.class, titular))
 				.isEqualTo("+51987650116");
 	}

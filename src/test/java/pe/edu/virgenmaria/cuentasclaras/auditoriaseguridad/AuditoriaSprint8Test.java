@@ -45,6 +45,7 @@ import pe.edu.virgenmaria.cuentasclaras.plataforma.dto.ContactoTitularRequest;
 import pe.edu.virgenmaria.cuentasclaras.plataforma.dto.FichaColegioRequest;
 import pe.edu.virgenmaria.cuentasclaras.plataforma.inicial.InicializadorOperadores;
 import pe.edu.virgenmaria.cuentasclaras.plataforma.service.AltaColegio;
+import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.CorreoDeControl;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
@@ -70,9 +71,9 @@ import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.efecti
 import static pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.como;
 
 /**
- * Auditoría de seguridad y antifraude del sprint 8 («Lista para vender»), rama auditoria/sprint-8. Cada prueba
- * REPRODUCE un hallazgo: pasa mientras el hallazgo exista (documenta el comportamiento actual). Cuando se corrija, la
- * prueba debe fallar y cambiarse por la que exige el comportamiento correcto (lo dice cada una).
+ * Auditoría de seguridad y antifraude del sprint 8 («Lista para vender»). Cada prueba reproducía un hallazgo; con las
+ * correcciones del sprint 8 (docs/arquitectura/sprint-8-correcciones.md) se INVIRTIERON: ahora exigen el comportamiento
+ * correcto y fallan si el hallazgo vuelve.
  * Solo H2 (sin triggers): los hallazgos son de la aplicación. Donde MySQL cambia el resultado, lo dice la prueba.
  */
 @PruebaIntegracion
@@ -151,6 +152,9 @@ class AuditoriaSprint8Test {
 	@Autowired
 	private ServicioPlanesPension planes;
 
+	@Autowired
+	private CorreoDeControl correoDeControl;
+
 	@BeforeEach
 	void preparar() {
 		SecurityContextHolder.clearContext();
@@ -170,99 +174,115 @@ class AuditoriaSprint8Test {
 	// S8-A1. El operador se queda con la primera Promotoría de un colegio, sin que nadie se entere.
 
 	/**
-	 * HALLAZGO S8-A1. El operador da de alta el colegio con el celular real del titular. Antes de que el titular active su
-	 * cuenta: (1) cambia el DNI del titular en la ficha (corregirFicha acepta titular_documento en preparación) y (2)
-	 * cambia el contacto del titular a SU propio celular (reenviarEnlaceTitular). El enlace llega al operador, que activa
-	 * la cuenta con el DNI que él mismo escribió y queda como Promotoría del colegio. El diseño (sección 3.3 y E4) exigía
-	 * avisar al contacto ANTERIOR y al correo institucional del colegio: ninguno de los dos recibe nada.
-	 * Corregido cuando: el contacto anterior y el correo institucional reciben un aviso, y el DNI del titular no cambia
-	 * mientras exista una primera Promotoría sin activar (o el cambio también avisa).
+	 * S8-A1 (CORREGIDO; antes reproducía el hallazgo). El operador intenta quedarse con la primera Promotoría: (1) cambiar el
+	 * DNI del titular en la ficha se rechaza (el DNI no cambia después de crear su cuenta); (2) cambiar el contacto del
+	 * titular a su propio celular él solo, tampoco: lo propone y lo debe aplicar OTRO operador; (3) cuando otro operador lo
+	 * aplica, en la misma transacción se avisa al celular ANTERIOR del titular, al correo institucional y al correo externo
+	 * de control. Y aunque el enlace llegue a otro celular, la activación sigue pidiendo el DNI del contrato.
 	 */
 	@Test
-	void s8a1ElOperadorSeQuedaConLaPromotoriaDelColegioSinAvisoAlTitularNiAlColegio() throws Exception {
+	void s8a1ElOperadorYaNoSeQuedaConLaPromotoriaNiCambiaElContactoEnSilencio() throws Exception {
 		Usuario operador = EscenarioPlataforma.operador(usuarios, codificador, colegios, "operador.toma");
 		UsuariosDePrueba.iniciarSesion(operador);
 		ColegioCreado creado = alta.crear(EscenarioPlataforma.alta("Colegio Toma", EscenarioPlataforma.RUC_D,
 				"titular.toma", "45678941", "987650041"), null, null);
 		long colegio = creado.colegioId();
-		String correoInstitucional = "contacto@titular-toma.edu.pe";
+		String correoInstitucional = jdbc.queryForObject("SELECT correo_institucional FROM colegio WHERE id = ?",
+				String.class, colegio);
+		alta.registrarCorreoControl(colegio, "contador.toma@estudio.pe");
 
-		// (1) El DNI del titular pasa a ser uno que el operador elige.
-		alta.corregirFicha(colegio, new FichaColegioRequest("Colegio Toma", "Asociación Colegio Toma S.A.C.",
-				EscenarioPlataforma.RUC_D, "Av. Los Educadores 123, Lima", correoInstitucional,
-				EnumSet.of(Nivel.PRIMARIA, Nivel.SECUNDARIA), "CT-titular.toma", "Titular Colegio Toma", "11111111"));
-		// (2) El enlace va al celular del operador.
-		alta.reenviarEnlaceTitular(colegio, new ContactoTitularRequest("987650099", null));
+		// (1) El DNI del titular no cambia.
+		assertThatThrownBy(() -> alta.corregirFicha(colegio, new FichaColegioRequest("Colegio Toma",
+				"Asociación Colegio Toma S.A.C.", EscenarioPlataforma.RUC_D, "Av. Los Educadores 123, Lima",
+				correoInstitucional, EnumSet.of(Nivel.PRIMARIA, Nivel.SECUNDARIA), "CT-titular.toma", "Titular Colegio Toma",
+				"11111111"))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("DNI del titular no cambia");
+		assertThat(jdbc.queryForObject("SELECT titular_documento FROM colegio WHERE id = ?", String.class, colegio))
+				.isEqualTo("45678941");
+
+		// (2) Él solo no redirige el enlace: lo propone, pero no lo puede aplicar.
+		Long cambio = alta.proponerContactoTitular(colegio, new ContactoTitularRequest("987650099", null,
+				"El titular pidió cambiar su celular (llamada)"));
+		assertThatThrownBy(() -> alta.aplicarContactoTitular(colegio, cambio)).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("otro operador");
+		assertThat(jdbc.queryForObject("SELECT telefono_whatsapp FROM usuario WHERE colegio_id = ?", String.class, colegio))
+				.isEqualTo("+51987650041");
+
+		// (3) Con un segundo operador sí, y todos se enteran en la misma transacción.
+		UsuariosDePrueba.iniciarSesion(EscenarioPlataforma.operador(usuarios, codificador, colegios, "operador.segundo"));
+		alta.aplicarContactoTitular(colegio, cambio);
 		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForList("SELECT DISTINCT tipo FROM mensaje WHERE colegio_id = ? AND destino LIKE ?",
+				String.class, colegio, "%987650041")).contains("ACTIVACION_CUENTA", "AVISO_ALTA");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE destino = ? AND tipo = 'AVISO_ALTA'", Long.class,
+				correoInstitucional)).isPositive();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE destino = 'contador.toma@estudio.pe' "
+				+ "AND tipo = 'AVISO_ALTA'", Long.class)).isPositive();
 
+		// El enlace llega al celular nuevo, pero sin el DNI del contrato no se activa la cuenta.
 		String ruta = EnlacesDePrueba.recibido(despacho, buzon, colegio, "+51987650099");
 		mvc.perform(post(ruta).with(csrf()).param("documento", "11111111").param("clave", "la clave larga del operador")
-				.param("confirmacion", "la clave larga del operador")).andExpect(redirectedUrl("/login?cuenta-activada"));
-
-		// El operador ya es la Promotoría activa del colegio (su única cuenta): crea Dirección y Caja, importa alumnos y
-		// lo pasa a producción.
+				.param("confirmacion", "la clave larga del operador")).andExpect(redirectedUrl(ruta));
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id "
-				+ "WHERE u.colegio_id = ? AND u.activo AND NOT u.debe_cambiar_clave AND r.rol = 'PROMOTOR' "
-				+ "AND u.telefono_whatsapp = '+51987650099'", Long.class, colegio)).isEqualTo(1);
-		// Nadie se enteró: al celular del titular real solo le llegó su enlace (ya anulado), nunca un aviso del cambio...
-		assertThat(jdbc.queryForList("SELECT DISTINCT tipo FROM mensaje WHERE colegio_id = ? AND destino LIKE ?",
-				String.class, colegio, "%987650041")).containsOnly("ACTIVACION_CUENTA");
-		// ... y al correo institucional del colegio no le llegó nada.
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE destino = ?", Long.class, correoInstitucional))
-				.isZero();
+				+ "WHERE u.colegio_id = ? AND NOT u.debe_cambiar_clave AND r.rol = 'PROMOTOR'", Long.class, colegio)).isZero();
 	}
 
 	// S8-A2. El operador cambia el correo externo de control de un colegio EN PRODUCCIÓN y recibe sus montos.
 
 	/**
-	 * HALLAZGO S8-A2. El correo externo de control es el testigo independiente del colegio (recibe la huella de la bitácora
-	 * y el resumen diario, con montos). El operador lo cambia en un colegio en PRODUCCIÓN por un correo suyo (solo se
-	 * rechaza el correo exacto de su cuenta de operador): ni la Promotoría ni el correo anterior reciben aviso (el diseño,
-	 * sección 4, decía «el cambio avisa a la Promotoría y al correo anterior»). Desde esa noche el operador recibe el
-	 * resumen del día del colegio, con lo cobrado, el efectivo y la deuda vencida: lo que la decisión 113 le prohíbe ver.
-	 * Corregido cuando: en producción el cambio lo aprueba la Promotoría (o al menos la avisa a ella y al correo anterior
-	 * antes de surtir efecto).
+	 * S8-A2 (CORREGIDO; antes reproducía el hallazgo). En un colegio en PRODUCCIÓN el operador solo PROPONE el correo
+	 * externo de control: el correo anterior y toda la Promotoría reciben el aviso antes de que surta efecto, el resumen de
+	 * esa noche sigue yendo al contador, y el correo cambia recién cuando una Promotoría del colegio lo aprueba con su firma.
 	 */
 	@Test
-	void s8a2ElOperadorSeQuedaConElCorreoDeControlDeUnColegioEnProduccionYRecibeSusMontos() {
+	void s8a2ElOperadorSoloProponeElCorreoDeControlYLaPromotoriaLoAprueba() {
 		Usuario promotora = UsuariosDePrueba.guardar(usuarios, codificador, 1L, "promotora.s8", UsuariosDePrueba.CLAVE,
 				false, Rol.PROMOTOR);
 		jdbc.update("INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en, creado_por) VALUES "
 				+ "(1, 'huella_correo_externo', 'contador@estudio.pe', CURRENT_TIMESTAMP, 'operador.inicial'), "
 				+ "(1, 'resumen_correo_externo', 'contador@estudio.pe', CURRENT_TIMESTAMP, 'operador.inicial')");
 		assertThat(colegioService.enProduccion(1L)).isTrue();
-		long mensajesAntes = jdbc.queryForObject("SELECT COUNT(*) FROM mensaje", Long.class);
 
 		Usuario operador = EscenarioPlataforma.operador(usuarios, codificador, colegios, "operador.correo");
 		UsuariosDePrueba.iniciarSesion(operador);
-		alta.registrarCorreoControl(1L, "operador.personal@correo-propio.pe");
+		assertThatThrownBy(() -> alta.registrarCorreoControl(1L, "operador.personal@correo-propio.pe"))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("motivo");
+		boolean registrado = alta.registrarCorreoControl(1L, "operador.personal@correo-propio.pe",
+				"Adenda del contrato: el colegio cambió de contador");
 		SecurityContextHolder.clearContext();
 
+		assertThat(registrado).isFalse();
+		assertThat(jdbc.queryForList("SELECT valor FROM configuracion_colegio WHERE colegio_id = 1", String.class))
+				.containsOnly("contador@estudio.pe");
+		// El aviso, antes de que surta efecto: a la Promotoría y al contador.
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE tipo = 'CORREO_CONTROL' AND usuario_id = ?",
+				Long.class, promotora.getId())).isPositive();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE tipo = 'CORREO_CONTROL' "
+				+ "AND destino = 'contador@estudio.pe'", Long.class)).isPositive();
+
+		// Esa noche, el resumen sigue yendo al contador (no al operador).
+		resumen.enColegio(1L, LocalDate.now(reloj));
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE tipo = 'RESUMEN_DIARIO' AND destino = ?",
+				Long.class, "operador.personal@correo-propio.pe")).isZero();
+
+		// Solo la Promotoría (con su firma) lo pone en vigencia.
+		Long propuesta = jdbc.queryForObject("SELECT id FROM cambio_correo_control WHERE colegio_id = 1", Long.class);
+		UsuariosDePrueba.iniciarSesion(promotora);
+		correoDeControl.aprobar(propuesta);
+		SecurityContextHolder.clearContext();
 		assertThat(jdbc.queryForList("SELECT valor FROM configuracion_colegio WHERE colegio_id = 1", String.class))
 				.containsOnly("operador.personal@correo-propio.pe");
-		// Sin aviso a la Promotoría ni al contador.
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje", Long.class)).isEqualTo(mensajesAntes);
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ? OR destino = 'contador@estudio.pe'",
-				Long.class, promotora.getId())).isZero();
-
-		// Esa noche, el resumen del día (con montos) sale al correo del operador.
-		resumen.enColegio(1L, LocalDate.now(reloj));
-		String parametros = jdbc.queryForObject("SELECT parametros FROM mensaje WHERE tipo = 'RESUMEN_DIARIO' AND destino = ?",
-				String.class, "operador.personal@correo-propio.pe");
-		assertThat(parametros).contains("S/");
+		assertThat(jdbc.queryForObject("SELECT actualizado_por FROM configuracion_colegio WHERE colegio_id = 1 "
+				+ "AND clave = 'huella_correo_externo'", String.class)).isEqualTo("promotora.s8");
 	}
 
 	// S8-M1. Un operador que vuelve a CC_OPERADORES recibe el enlace en el correo VIEJO de la cuenta.
 
 	/**
-	 * HALLAZGO S8-M1. CC_OPERADORES dice «usuario:correo», pero al reactivar una cuenta que ya existía el inicializador
-	 * ignora el correo de la lista y manda el enlace de activación al correo guardado en la cuenta. Si se reusa el usuario
-	 * (por ejemplo, «soporte» o «ventas») para otra persona, el enlace le llega a quien se fue de la empresa, que vuelve a
-	 * ser operador (y con S8-A1 puede quedarse con un colegio nuevo).
-	 * Corregido cuando: el enlace va al correo de la lista (o la reactivación con otro correo se rechaza).
+	 * S8-M1 (CORREGIDO; antes reproducía el hallazgo). Al reactivar una cuenta, su correo pasa a ser el de CC_OPERADORES
+	 * (con su evento en la bitácora) y el enlace nuevo va ahí, nunca al correo de quien tuvo antes ese usuario.
 	 */
 	@Test
-	void s8m1AlReactivarUnOperadorElEnlaceVaAlCorreoAnteriorYNoAlDeLaLista() {
+	void s8m1AlReactivarUnOperadorElEnlaceVaAlCorreoDeLaLista() {
 		long plataforma = EscenarioPlataforma.plataformaId(colegios);
 		con("soporte.ops:ex.empleado@personal.pe").sincronizar();
 		con("otro.ops:otro@proveedor.pe").sincronizar();
@@ -272,7 +292,22 @@ class AuditoriaSprint8Test {
 		var destinos = jdbc.queryForList("SELECT m.destino FROM mensaje m JOIN usuario u ON u.id = m.usuario_id "
 				+ "WHERE u.nombre_usuario = 'soporte.ops' AND m.colegio_id = ? AND m.tipo = 'ACTIVACION_CUENTA' ORDER BY m.id",
 				String.class, plataforma);
-		assertThat(destinos).hasSize(2).containsOnly("ex.empleado@personal.pe");
+		assertThat(destinos).containsExactly("ex.empleado@personal.pe", "nueva.persona@proveedor.pe");
+		assertThat(jdbc.queryForObject("SELECT correo FROM usuario WHERE nombre_usuario = 'soporte.ops'", String.class))
+				.isEqualTo("nueva.persona@proveedor.pe");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'OPERADOR_CORREO_ACTUALIZADO'",
+				Long.class)).isEqualTo(1L);
+	}
+
+	/** S8-M1: el correo de un operador ACTIVO no cambia por la lista: no arranca (se quita y se vuelve a agregar). */
+	@Test
+	void s8m1ElCorreoDeUnOperadorActivoNoCambiaPorLaLista() {
+		con("soporte.ops:soporte@proveedor.pe").sincronizar();
+
+		assertThatThrownBy(() -> con("soporte.ops:otra.persona@personal.pe").sincronizar())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("quita al operador");
+		assertThat(jdbc.queryForObject("SELECT correo FROM usuario WHERE nombre_usuario = 'soporte.ops'", String.class))
+				.isEqualTo("soporte@proveedor.pe");
 	}
 
 	private InicializadorOperadores con(String lista) {
@@ -283,34 +318,30 @@ class AuditoriaSprint8Test {
 	// S8-M2. En un colegio en preparación la caja no cobra, pero el pago en línea sí.
 
 	/**
-	 * HALLAZGO S8-M2. La regla «en preparación no hay dinero» (sección 3.4, E9) solo está en la caja
-	 * (ServicioCobro.cobrar). El apoderado de un colegio en preparación (el portal se puede activar antes de producción)
-	 * crea su orden de pago en línea y la pasarela la cobra; en H2 el sistema incluso registra el pago y su boleta. En
-	 * MySQL, trg_pago_registro rechaza el pago DESPUÉS de que la pasarela ya cobró a la familia: dinero cobrado sin pago,
-	 * sin boleta y sin aviso. Igual para la recaudación bancaria (RegistroPagosAutomaticos).
-	 * Corregido cuando: crearOrden (y la aplicación de recaudación) exigen el colegio en producción.
+	 * S8-M2 (CORREGIDO; antes reproducía el hallazgo). En un colegio en preparación tampoco hay pago en línea: crearOrden
+	 * lo rechaza antes de ir a la pasarela (nada se cobra a la familia), como la caja.
 	 */
 	@Test
-	void s8m2EnUnColegioEnPreparacionLaCajaNoCobraPeroElPagoEnLineaSi() {
+	void s8m2EnUnColegioEnPreparacionTampocoHayPagoEnLinea() {
 		Familias f = EscenarioCaja.preparar(estructura, alumnos, planes, jdbc);
 		jdbc.update("UPDATE colegio SET estado = 'PREPARACION', produccion_desde = NULL, produccion_por = NULL WHERE id = 1");
 		assertThat(colegioService.enProduccion(1L)).isFalse();
 		Long marzo = cuota(jdbc, f.mateo(), "PEN-2027-03");
 
-		// La caja: rechazado (el control existe).
+		// La caja: rechazado.
 		como(EscenarioCaja.CAJA);
 		assertThatThrownBy(() -> cobro.cobrar(efectivo(f.quispe(), List.of(marzo), "450.00", "450.00")))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("no se registran pagos");
 
-		// El portal: la orden se crea y la pasarela cobra.
+		// El portal: también rechazado, sin orden ni pago.
 		como(new UsuarioAutenticado(40L, 1L, "rosa.familia", "Rosa", null, true, false, false, EnumSet.of(Rol.APODERADO),
 				f.rosa()));
 		BigDecimal total = pagoEnLinea.revisar(new SeleccionPagoRequest(List.of(marzo))).total();
-		String referencia = pagoEnLinea.crearOrden(new PagoEnLineaRequest(UUID.randomUUID(), List.of(marzo), total, false));
-		assertThat(simulador.simular(referencia, Accion.YAPE)).isEqualTo(RecepcionAvisos.Resultado.ACEPTADO);
+		assertThatThrownBy(() -> pagoEnLinea.crearOrden(new PagoEnLineaRequest(UUID.randomUUID(), List.of(marzo), total,
+				false))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("no recibe pagos en línea");
 
-		assertThat(jdbc.queryForObject("SELECT estado FROM colegio WHERE id = 1", String.class)).isEqualTo("PREPARACION");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM orden_pago WHERE colegio_id = 1", Long.class)).isZero();
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM pago WHERE origen = 'PASARELA' AND colegio_id = 1", Long.class))
-				.as("pago en línea registrado en un colegio en preparación").isEqualTo(1);
+				.isZero();
 	}
 }

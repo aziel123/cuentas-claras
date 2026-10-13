@@ -2,7 +2,6 @@ package pe.edu.virgenmaria.cuentasclaras.conectores;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -127,12 +126,12 @@ class ConectoresQaSprint8Test {
 	}
 
 	/**
-	 * Administración propone y prueba; Dirección (otra persona) aprueba con su firma. El colegio tiene a quién avisar: una
-	 * Promotoría con celular y el correo externo de control.
+	 * Administración propone y prueba; Promotoría (otra persona) aprueba con su firma (S8-M4: una Promotoría participa
+	 * también en el OSE). El colegio tiene a quién avisar: una Promotoría con celular y el correo externo de control.
 	 */
 	private Long proponerProbarYAprobar(long colegio, String sufijo, PropuestaConectorRequest pedido) {
-		UsuariosDePrueba.guardar(usuarios, codificador, colegio, "promotoria." + sufijo, UsuariosDePrueba.CLAVE, false,
-				Rol.PROMOTOR);
+		Usuario promotoria = UsuariosDePrueba.guardar(usuarios, codificador, colegio, "promotoria." + sufijo,
+				UsuariosDePrueba.CLAVE, false, Rol.PROMOTOR);
 		if (jdbc.queryForObject("SELECT COUNT(*) FROM configuracion_colegio WHERE colegio_id = ?", Long.class, colegio) == 0) {
 			jdbc.update("INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en, creado_por) VALUES (?, "
 					+ "'huella_correo_externo', 'contador@estudio.pe', NOW(), 'operador.pruebas')", colegio);
@@ -146,7 +145,7 @@ class ConectoresQaSprint8Test {
 		propuesta.probar(id);
 		SecurityContextHolder.clearContext();
 		Long solicitud = jdbc.queryForObject("SELECT solicitud_id FROM conector_colegio WHERE id = ?", Long.class, id);
-		UsuariosDePrueba.iniciarSesion(direccion);
+		UsuariosDePrueba.iniciarSesion(promotoria);
 		try {
 			bandeja.aprobar(solicitud, null);
 		}
@@ -161,8 +160,6 @@ class ConectoresQaSprint8Test {
 	}
 
 	@Test
-	@Disabled("QA-S8-6: la aprobación del OSE de una sede no revisa las series que ya usa otra sede con el mismo RUC; "
-			+ "solo trg_serie_comprobante_nace (MySQL) lo detecta al abrir la serie, en el primer cobro de la cajera")
 	void debeRechazarAprobarUnOseConUnaSerieQueYaUsaOtraSedeDelMismoRuc() {
 		sedeAEmitioCon("B002");
 		long sedeB = sede("Colegio Sede Norte", RUC_COMPARTIDO);
