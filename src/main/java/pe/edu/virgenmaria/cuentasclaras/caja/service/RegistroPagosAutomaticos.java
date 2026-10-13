@@ -81,8 +81,13 @@ public class RegistroPagosAutomaticos {
 
 	private final AperturaSerie aperturaSerie;
 
+	/** Correcciones del sprint 8 (S8-M2): la recaudación tampoco registra pagos en un colegio en preparación. */
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios;
+
 	public RegistroPagosAutomaticos(CajaDiariaRepository cajas, CuotaRepository cuotas, PagoRepository pagos,
-			FamiliaRepository familias, LibroPagos libro, AperturaCaja aperturaCaja, AperturaSerie aperturaSerie) {
+			FamiliaRepository familias, LibroPagos libro, AperturaCaja aperturaCaja, AperturaSerie aperturaSerie,
+			pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios) {
+		this.colegios = colegios;
 		this.cajas = cajas;
 		this.cuotas = cuotas;
 		this.pagos = pagos;
@@ -193,6 +198,7 @@ public class RegistroPagosAutomaticos {
 		if (canal.getCanal() != CanalCaja.RECAUDACION || !canal.getFecha().equals(pedido.fechaPago())) {
 			throw new IllegalArgumentException("El pago por banco va a la caja RECAUDACION de su fecha de pago");
 		}
+		colegios.exigirEnProduccion(canal.getColegioId());
 		Familia familia = familias.findById(pedido.familiaId())
 				.orElseThrow(() -> new RecursoNoEncontradoException("Familia no encontrada"));
 		return libro.registrarRecaudacion(canal, familia, bloqueadas, pedido.operacion(), pedido.monto(),

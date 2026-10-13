@@ -91,7 +91,24 @@ public enum PlantillaMensaje {
 	// Sprint 8 · tanda 2 (sección 3.4): el colegio pasó a producción (desde ahora se registran pagos).
 	COLEGIO_EN_PRODUCCION("cc_colegio_en_produccion_v2", "El colegio empezó a cobrar", 3, false,
 			"{{1}}: el colegio pasó a producción el {{2}} con la firma de {{3}}. Desde ahora se registran los pagos y "
-					+ "salen los avisos a las familias.");
+					+ "salen los avisos a las familias."),
+	// Correcciones del sprint 8 (S8-A1, S8-A2 y S8-M5): lo que hace el operador de la plataforma en un colegio. Van al
+	// titular, al correo institucional, al correo externo de control y a la Promotoría (tipos AVISO_ALTA y CORREO_CONTROL).
+	ENLACE_TITULAR_REENVIADO("cc_enlace_titular_reenviado_v2", "Se reenvió el enlace del titular", 3, false,
+			"{{1}}: el operador {{2}} de la plataforma reenvió el enlace para activar la cuenta del titular a {{3}}. Si el "
+					+ "titular no lo pidió, avisa hoy al proveedor."),
+	CONTACTO_TITULAR_CORREGIDO("cc_contacto_titular_corregido_v2", "Cambió el contacto del titular", 4, false,
+			"{{1}}: los operadores {{2}} y {{3}} de la plataforma cambiaron el contacto del titular antes de que active su "
+					+ "cuenta: su enlace va ahora a {{4}}. Si el titular no lo pidió, avisa hoy al proveedor."),
+	FICHA_COLEGIO_CORREGIDA("cc_ficha_colegio_corregida_v2", "Se corrigió la ficha del colegio", 3, false,
+			"{{1}}: el operador {{2}} de la plataforma corrigió la ficha del colegio ({{3}}). Si no lo reconoces, avisa hoy "
+					+ "al proveedor."),
+	CORREO_CONTROL_PROPUESTO("cc_correo_control_propuesto_v2", "Se propuso cambiar el correo de control", 3, false,
+			"{{1}}: el operador {{2}} de la plataforma propuso que el correo externo de control sea {{3}}. No cambia hasta "
+					+ "que lo apruebe una persona de Promotoría del colegio. Si no lo reconoces, avisa hoy a la Promotoría."),
+	CORREO_CONTROL_CAMBIADO("cc_correo_control_cambiado_v2", "Cambió el correo de control", 3, false,
+			"{{1}}: el correo externo de control del colegio ahora es {{2}} (lo cambió {{3}}). Desde hoy recibe la huella "
+					+ "de la bitácora y el resumen diario. Si no lo reconoces, avisa hoy a la Promotoría y al proveedor.");
 
 	private static final Pattern MARCADOR = Pattern.compile("\\{\\{(\\d+)}}");
 

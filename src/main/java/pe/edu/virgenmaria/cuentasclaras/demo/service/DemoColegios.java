@@ -157,7 +157,9 @@ public class DemoColegios {
 			deudores.add(new Deudor(f.alumnos().getFirst().dni(), f.alumnos().getFirst().grado().nivel()));
 		}
 		pensiones.cargar(colegioId, prefijo + ".administracion", prefijo + ".direccion", creadas.anio(), hoy, deudores);
-		caja.cargar(colegioId, prefijo, List.of(cobro(lista.get(1)), cobro(lista.get(2)), cobro(lista.get(3))),
+		// QA-S8-9: el primer cobro es de la familia de la cuenta «apoderado»: quien entra como padre ve su pago, su boleta
+		// «DEMO · SIN VALOR» y el aviso que le llegó.
+		caja.cargar(colegioId, prefijo, List.of(cobro(lista.getFirst()), cobro(lista.get(2)), cobro(lista.get(3))),
 				cobro(lista.get(4)), new AlumnoCobro(lista.getFirst().alumnos().get(1).dni(),
 						lista.getFirst().alumnos().get(1).nombres()));
 

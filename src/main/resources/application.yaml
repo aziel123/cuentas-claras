@@ -158,7 +158,10 @@ cuentasclaras:
     hora-limite-cierre: "19:00"      # después, «Caja sin cerrar» en Para revisar (tanda 3)
     permitir-pago-a-cuenta: false    # pagos parciales: desactivados en el piloto
     pago-a-cuenta-minimo: 50.00
-    cuentas-deposito: BCP Soles 191-XXXXXXX-0-XX
+    # Correcciones del sprint 8 (S8-B5): sin cuenta por defecto. En una instalación COMPARTIDA la cuenta es el conector
+    # CUENTA_BANCARIA de cada colegio y el verificador no arranca si el entorno trae una; en una DEDICADA sin conector,
+    # la del entorno (CAJA_CUENTAS_DEPOSITO).
+    cuentas-deposito: ${CAJA_CUENTAS_DEPOSITO:}
     dias-sin-verificar: 1            # pagos digitales o depósitos sin verificar: alerta (tanda 3)
   comprobantes:
     # SIMULADO (sin valor tributario) o NUBEFACT. Nubefact solo con su RUTA y TOKEN (variables de entorno) y, fuera de

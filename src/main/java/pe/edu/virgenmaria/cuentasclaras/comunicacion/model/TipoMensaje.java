@@ -29,7 +29,11 @@ public enum TipoMensaje {
 	ALERTA_PROMOTORIA("Alerta para Promotoría", false),
 	// Sprint 8 · tanda 2: a TODA la Promotoría y al correo externo de control, en la misma transacción del cambio.
 	CONECTOR_VIGENTE("Cambio de conector del colegio", false),
-	COLEGIO_EN_PRODUCCION("Colegio en producción", false);
+	COLEGIO_EN_PRODUCCION("Colegio en producción", false),
+	// Correcciones del sprint 8 (S8-A1, S8-A2 y S8-M5): lo que el operador de la plataforma cambia en un colegio se avisa
+	// al titular, al correo institucional, al correo externo de control y a la Promotoría, en la misma transacción.
+	AVISO_ALTA("Aviso del alta del colegio", false),
+	CORREO_CONTROL("Cambio del correo externo de control", false);
 
 	private final String etiqueta;
 

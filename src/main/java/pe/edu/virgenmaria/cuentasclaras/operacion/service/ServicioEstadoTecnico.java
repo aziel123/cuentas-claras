@@ -94,7 +94,7 @@ public class ServicioEstadoTecnico {
 
 	/** {@code OK}, {@code ATRASADO} o {@code REVISAR}, sin fechas ni datos (ruta pública para el vigilante externo). */
 	public String respaldoParaVigilante() {
-		return estado.respaldo().paraVigilante();
+		return estado.paraVigilante();
 	}
 
 	private String cuando(Instant momento) {

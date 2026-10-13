@@ -120,6 +120,9 @@ public class ServicioRecaudacion {
 
 	private final Clock reloj;
 
+	/** Correcciones del sprint 8 (S8-M2): en un colegio en preparación no se sube la recaudación del banco. */
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios;
+
 	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
 	private final FirmaSesion firmaSesion;
 
@@ -127,8 +130,9 @@ public class ServicioRecaudacion {
 			LineaRecaudacionRepository lineas, AlumnoRepository alumnos, CuotaRepository cuotas, PagoRepository pagos,
 			List<ExportadorBaseDeudas> exportadores, ControlParticipantes participantes, AuditoriaService auditoria,
 			ApplicationEventPublisher eventos, PropiedadesRecaudacion propiedades, Clock reloj, FirmaSesion firmaSesion,
-			RecaudacionDelColegio delColegio) {
+			RecaudacionDelColegio delColegio, pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios) {
 		this.delColegio = delColegio;
+		this.colegios = colegios;
 		this.firmaSesion = firmaSesion;
 		this.lectores = lectores;
 		this.archivos = archivos;
@@ -162,6 +166,7 @@ public class ServicioRecaudacion {
 	@Transactional(readOnly = true)
 	@PreAuthorize("hasRole('ADMINISTRACION')")
 	public VistaPreviaRecaudacion previsualizar(String nombreArchivo, byte[] contenido, long tamanoReal) {
+		exigirProduccion();
 		PrincipalConColegio actor = actor();
 		ValidadorArchivoPlano.exigirTamano(tamanoReal);
 		String nombre = nombreSeguro(nombreArchivo);
@@ -186,6 +191,7 @@ public class ServicioRecaudacion {
 	@Transactional
 	@PreAuthorize("hasRole('ADMINISTRACION')")
 	public Long registrar(VistaPreviaRecaudacion previa, UUID token) {
+		exigirProduccion();
 		if (previa == null) {
 			throw new ReglaNegocioException("No hay una revisión pendiente. Sube el archivo otra vez.");
 		}
@@ -483,5 +489,11 @@ public class ServicioRecaudacion {
 			return principal;
 		}
 		throw new AccessDeniedException("Se requiere un usuario en sesión");
+	}
+
+	private void exigirProduccion() {
+		colegios.exigirEnProduccion(pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio.actual(),
+				"El colegio todavía no está en producción: no se registran pagos del banco. La Promotoría lo pasa a "
+						+ "producción desde «Puesta en marcha».");
 	}
 }

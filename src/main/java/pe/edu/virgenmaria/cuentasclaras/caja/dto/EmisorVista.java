@@ -5,7 +5,11 @@ package pe.edu.virgenmaria.cuentasclaras.caja.dto;
  * colegio, su razón social, su RUC y su dirección (los tres últimos solo si el colegio los registró: sin ellos la boleta
  * sigue saliendo) y si tiene un logo vigente (se sirve en {@code /marca/logo}).
  */
-public record EmisorVista(String nombre, String razonSocial, String ruc, String direccion, boolean conLogo) {
+public record EmisorVista(String nombre, String razonSocial, String ruc, String direccion, boolean conLogo, Long logoId) {
+
+	public EmisorVista(String nombre, String razonSocial, String ruc, String direccion, boolean conLogo) {
+		this(nombre, razonSocial, ruc, direccion, conLogo, null);
+	}
 
 	/** Lo que encabeza la boleta: la razón social si existe; si no, el nombre comercial. */
 	public String titulo() {

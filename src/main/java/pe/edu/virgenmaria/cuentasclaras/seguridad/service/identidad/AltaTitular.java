@@ -5,17 +5,24 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.AvisoPlataforma;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Enmascarar;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Telefono;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.model.CambioContactoTitular;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PrimeraPromotoria;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.PropositoEnlace;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.CambioContactoTitularRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.EnlaceActivacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraPromotoriaRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.SesionUsuarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.EnlacesActivacion;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.EnvioEnlaceSolicitado;
@@ -24,14 +31,15 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioDetallesUsuari
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
  * Sprint 8, tanda 1 (sección 3.3): el puerto con el que la plataforma crea la PRIMERA Promotoría de un colegio nuevo, una
- * sola vez por colegio, y corrige su contacto antes de la activación. Es la transacción 3 del alta: corre con la conexión
- * de {@code cc_sistema} (ruta de identidad) en el colegio nuevo, conservando el {@code SecurityContext} del operador (la
- * bitácora del colegio nuevo dice quién lo creó).
+ * sola vez por colegio. Es la transacción 3 del alta: corre con la conexión de {@code cc_sistema} (ruta de identidad) en el
+ * colegio nuevo, conservando el {@code SecurityContext} del operador (la bitácora del colegio nuevo dice quién lo creó).
  * <ul>
  *   <li>La cuenta nace con una clave al azar ya vencida: solo se activa con el enlace de un solo uso que le llega al
  *       titular (y, al activar, confirma su DNI: {@code ServicioActivacionCuenta}).</li>
@@ -40,6 +48,10 @@ import java.util.Set;
  *       plataforma) y trg_usuario_rol_alta exige esa fila para dar el primer PROMOTOR.</li>
  *   <li>Después de esto, el operador ya no puede crear cuentas en ese colegio (trg_usuario_nace).</li>
  * </ul>
+ * Correcciones del sprint 8 (S8-A1 y QA-S8-3): el operador solo toca al titular mientras su cuenta NUNCA se activó
+ * ({@link #cuentaActivada}: usó un enlace o abrió una sesión). Reenviar el enlace al mismo contacto lo hace un operador y
+ * avisa al titular, al correo institucional y al correo externo de control; cambiar el contacto lo propone un operador y
+ * lo aplica OTRO, con aviso al contacto anterior, al correo institucional y al correo de control en la misma transacción.
  */
 @Component
 @PreAuthorize("hasRole('OPERADOR_PLATAFORMA')")
@@ -63,6 +75,11 @@ public class AltaTitular {
 	public record TitularCreado(Long usuarioId, String nombreUsuario, String canal, String destino) {
 	}
 
+	/** Lo que el operador ve de un cambio por aplicar: los contactos enmascarados, el motivo y quién lo propuso. */
+	public record ContactoPorAplicar(Long id, String anterior, String nuevo, String motivo, String propuestoPor,
+			LocalDateTime propuestoEn) {
+	}
+
 	private final UsuarioRepository usuarios;
 
 	private final PrimeraPromotoriaRepository primeras;
@@ -81,11 +98,21 @@ public class AltaTitular {
 
 	private final EnlacesActivacion enlaces;
 
+	private final EnlaceActivacionRepository enlacesGuardados;
+
+	private final SesionUsuarioRepository sesiones;
+
+	private final CambioContactoTitularRepository cambios;
+
+	private final TransactionTemplate lectura;
+
 	private final Clock reloj;
 
 	public AltaTitular(UsuarioRepository usuarios, PrimeraPromotoriaRepository primeras, ServicioDetallesUsuario detalles,
 			PasswordEncoder codificador, GeneradorClaveTemporal generador, AuditoriaService auditoria,
-			EjecucionIdentidad identidad, ApplicationEventPublisher eventos, EnlacesActivacion enlaces, Clock reloj) {
+			EjecucionIdentidad identidad, ApplicationEventPublisher eventos, EnlacesActivacion enlaces,
+			EnlaceActivacionRepository enlacesGuardados, SesionUsuarioRepository sesiones,
+			CambioContactoTitularRepository cambios, PlatformTransactionManager transacciones, Clock reloj) {
 		this.usuarios = usuarios;
 		this.primeras = primeras;
 		this.detalles = detalles;
@@ -95,6 +122,11 @@ public class AltaTitular {
 		this.identidad = identidad;
 		this.eventos = eventos;
 		this.enlaces = enlaces;
+		this.enlacesGuardados = enlacesGuardados;
+		this.sesiones = sesiones;
+		this.cambios = cambios;
+		this.lectura = new TransactionTemplate(transacciones);
+		this.lectura.setReadOnly(true);
 		this.reloj = reloj;
 	}
 
@@ -164,11 +196,91 @@ public class AltaTitular {
 	}
 
 	/**
-	 * Corrige el celular o el correo del titular y vuelve a enviar su enlace, SOLO mientras la cuenta no esté activada.
-	 * En MySQL, trg_usuario_contacto exige la firma del operador ({@code titular_contacto:{colegio}:{usuario}:{version}}
-	 * en el colegio de plataforma) y que la cuenta sea la del titular, sin activar, de un colegio en preparación.
+	 * Correcciones del sprint 8 (S8-A1): reenvía el enlace al MISMO contacto del titular (por ejemplo, venció). Lo hace un
+	 * operador, solo mientras la cuenta nunca se activó, y avisa en la misma transacción al titular, al correo institucional
+	 * y al correo externo de control (si no hay a quién, no se reenvía). Los enlaces anteriores quedan anulados.
 	 */
-	public TitularCreado corregirContacto(long colegioId, String telefonoWhatsapp, String correo,
+	public TitularCreado reenviarEnlace(long colegioId, OperadorFirmante operador) {
+		return ContextoColegio.en(colegioId, () -> identidad.como(() -> {
+			Usuario titular = titularSinActivar();
+			eventos.publishEvent(new AvisoPlataforma(colegioId, AvisoPlataforma.Tipo.ENLACE_TITULAR_REENVIADO,
+					List.of(operador.nombreUsuario(), destino(titular)), "usuario", titular.getId(),
+					"E" + enlacesGuardados.findByUsuarioIdOrderByIdDesc(titular.getId()).size(), titular.getId(), true, true,
+					false));
+			enlaces.anularVigentes(titular.getId());
+			auditoria.registrar(AccionAuditoria.TITULAR_ENLACE_REENVIADO, "usuario", titular.getId().toString(), null,
+					destino(titular), "El operador " + operador.nombreUsuario() + " reenvió el enlace de activación al titular "
+							+ titular.getNombreUsuario() + " (mismo contacto). Se avisó al titular, al correo institucional y "
+							+ "al correo externo de control.");
+			eventos.publishEvent(new EnvioEnlaceSolicitado(titular.getId(), PropositoEnlace.PERSONAL, null));
+			return new TitularCreado(titular.getId(), titular.getNombreUsuario(), canal(titular), destino(titular));
+		}));
+	}
+
+	/**
+	 * El titular sin activar del colegio y el número que lleva la firma de su próxima propuesta de cambio de contacto. Valida
+	 * ANTES de firmar lo que rechazaría la propuesta (la firma es única por clave: un intento fallido no se repite con la
+	 * misma).
+	 */
+	public IntentoCambio siguienteIntentoDeCambio(long colegioId, String telefonoWhatsapp, String correo, String motivo,
+			OperadorFirmante operador) {
+		String telefono = telefono(telefonoWhatsapp);
+		String nuevoCorreo = correo == null || correo.isBlank() ? null : correo.strip();
+		if (telefono == null && nuevoCorreo == null) {
+			throw new ReglaNegocioException("Escribe el celular (WhatsApp) o el correo del titular.");
+		}
+		if (nuevoCorreo != null && operador.correo() != null && nuevoCorreo.equalsIgnoreCase(operador.correo())) {
+			throw new ReglaNegocioException("Ese correo es tuyo: el enlace debe llegar solo al titular del contrato.");
+		}
+		String texto = motivo == null ? "" : motivo.strip();
+		if (texto.length() < 10 || texto.length() > 500) {
+			throw new ReglaNegocioException("Escribe el motivo del cambio (de 10 a 500 caracteres): por ejemplo, quién lo "
+					+ "pidió y cómo lo confirmaste con el titular.");
+		}
+		return ContextoColegio.en(colegioId, () -> lectura.execute(t -> {
+			Usuario titular = titularSinActivar();
+			if (Objects.equals(telefono, titular.getTelefonoWhatsapp()) && Objects.equals(nuevoCorreo, titular.getCorreo())) {
+				throw new ReglaNegocioException("Ese es el contacto que ya tiene el titular: usa «Reenviar el enlace».");
+			}
+			if (cambios.findFirstByUsuarioIdAndEstado(titular.getId(), CambioContactoTitular.Estado.PROPUESTO).isPresent()) {
+				throw new ReglaNegocioException("Ya hay un cambio del contacto del titular por aplicar: que otro operador lo "
+						+ "aplique o lo rechace antes de proponer otro.");
+			}
+			return new IntentoCambio(titular.getId(), cambios.countByUsuarioId(titular.getId()) + 1);
+		}));
+	}
+
+	/**
+	 * Valida ANTES de firmar que ese operador puede aplicar (o, con {@code aplicar} en falso, rechazar) el cambio: sigue
+	 * PROPUESTO, el titular no activó su cuenta y, para aplicarlo, no lo propuso él.
+	 */
+	public void validarResolucion(long colegioId, long cambioId, OperadorFirmante operador, boolean aplicar) {
+		ContextoColegio.en(colegioId, () -> lectura.executeWithoutResult(t -> {
+			CambioContactoTitular cambio = cambios.findById(cambioId)
+					.orElseThrow(() -> new ReglaNegocioException("Ese cambio del contacto del titular no existe."));
+			if (cambio.getEstado() != CambioContactoTitular.Estado.PROPUESTO) {
+				throw new ReglaNegocioException("Este cambio de contacto ya no está por resolver.");
+			}
+			if (aplicar) {
+				if (Objects.equals(operador.nombreUsuario(), cambio.getPropuestoPor())) {
+					throw new ReglaNegocioException("Tú propusiste este cambio: lo aplica otro operador, con su propia sesión.");
+				}
+				titularSinActivar();
+			}
+		}));
+	}
+
+	/** El titular y el número de la próxima propuesta de cambio de su contacto (la firma lleva los dos). */
+	public record IntentoCambio(Long titularId, long numero) {
+	}
+
+	/**
+	 * Correcciones del sprint 8 (S8-A1): un operador PROPONE cambiar el celular o el correo del titular, que no activó su
+	 * cuenta. Debe llamarse sin transacción abierta y después de firmar
+	 * {@code cambio_contacto_titular:{colegio}:{usuario}:{n}} en el colegio de plataforma (trg_cambio_contacto_titular_nace).
+	 * No cambia nada todavía: lo aplica OTRO operador con {@link #aplicarContacto}.
+	 */
+	public Long proponerContacto(long colegioId, String telefonoWhatsapp, String correo, String motivo,
 			OperadorFirmante operador) {
 		String telefono = telefono(telefonoWhatsapp);
 		String nuevoCorreo = correo == null || correo.isBlank() ? null : correo.strip();
@@ -180,26 +292,106 @@ public class AltaTitular {
 		}
 		return ContextoColegio.en(colegioId, () -> identidad.como(() -> {
 			Usuario titular = titularSinActivar();
+			if (Objects.equals(telefono, titular.getTelefonoWhatsapp()) && Objects.equals(nuevoCorreo, titular.getCorreo())) {
+				throw new ReglaNegocioException("Ese es el contacto que ya tiene el titular: usa «Reenviar el enlace».");
+			}
+			if (cambios.findFirstByUsuarioIdAndEstado(titular.getId(), CambioContactoTitular.Estado.PROPUESTO).isPresent()) {
+				throw new ReglaNegocioException("Ya hay un cambio del contacto del titular por aplicar: que otro operador lo "
+						+ "aplique o lo rechace antes de proponer otro.");
+			}
+			CambioContactoTitular cambio = cambios.saveAndFlush(CambioContactoTitular.propuesto(titular, telefono,
+					nuevoCorreo, motivo, operador.usuarioId(), operador.plataformaId(), operador.nombreUsuario()));
+			auditoria.registrar(AccionAuditoria.TITULAR_CONTACTO_PROPUESTO, "cambio_contacto_titular",
+					cambio.getId().toString(), destino(titular), destinoDe(telefono, nuevoCorreo), "El operador "
+							+ operador.nombreUsuario() + " propuso cambiar el contacto del titular " + titular.getNombreUsuario()
+							+ " antes de la activación. Motivo: " + cambio.getMotivo() + ". Lo aplica otro operador.");
+			return cambio.getId();
+		}));
+	}
+
+	/**
+	 * Correcciones del sprint 8 (S8-A1): OTRO operador aplica el cambio propuesto. En la misma transacción: avisa al
+	 * contacto ANTERIOR del titular (por cada canal que tenía), al correo institucional y al correo externo de control
+	 * (antes de cambiarlo: el aviso va al contacto registrado); cambia el contacto, anula los enlaces vigentes y envía uno
+	 * nuevo. Debe llamarse sin transacción abierta y después de firmar {@code cambio_contacto_titular:{id}:APLICADO}.
+	 */
+	public TitularCreado aplicarContacto(long colegioId, long cambioId, OperadorFirmante operador) {
+		return ContextoColegio.en(colegioId, () -> identidad.como(() -> {
+			CambioContactoTitular cambio = cambios.bloquear(cambioId)
+					.orElseThrow(() -> new ReglaNegocioException("Ese cambio del contacto del titular no existe."));
+			Usuario titular = titularSinActivar();
+			if (!titular.getId().equals(cambio.getUsuarioId())
+					|| !Objects.equals(titular.getTelefonoWhatsapp(), cambio.getTelefonoAnterior())
+					|| !Objects.equals(titular.getCorreo(), cambio.getCorreoAnterior())) {
+				throw new ReglaNegocioException("El contacto del titular ya no es el de la propuesta: recházala y propón otra.");
+			}
+			cambio.aplicar(operador.nombreUsuario(), ahora());
 			String anterior = destino(titular);
-			titular.corregirContactoDelTitular(telefono, nuevoCorreo);
+			String nuevo = destinoDe(cambio.getTelefonoNuevo(), cambio.getCorreoNuevo());
+			eventos.publishEvent(new AvisoPlataforma(colegioId, AvisoPlataforma.Tipo.CONTACTO_TITULAR_CORREGIDO,
+					List.of(cambio.getPropuestoPor(), operador.nombreUsuario(), nuevo), "cambio_contacto_titular",
+					cambio.getId(), null, titular.getId(), true, true, false));
+			// El cambio queda APLICADO antes que la cuenta: trg_usuario_contacto exige esa fila (con su firma).
+			cambios.saveAndFlush(cambio);
+			titular.corregirContactoDelTitular(cambio.getTelefonoNuevo(), cambio.getCorreoNuevo());
 			usuarios.saveAndFlush(titular);
 			enlaces.anularVigentes(titular.getId());
 			auditoria.registrar(AccionAuditoria.TITULAR_CONTACTO_CORREGIDO, "usuario", titular.getId().toString(), anterior,
-					destino(titular), "El operador " + operador.nombreUsuario() + " corrigió el contacto del titular "
-							+ titular.getNombreUsuario() + " antes de la activación y le reenvió su enlace. El contacto anterior "
-							+ "(" + anterior + ") ya no recibe nada. Si el titular no lo pidió, es un incidente.");
+					nuevo, "El operador " + operador.nombreUsuario() + " aplicó el cambio del contacto del titular "
+							+ titular.getNombreUsuario() + " que propuso " + cambio.getPropuestoPor() + " (motivo: "
+							+ cambio.getMotivo() + "). Se avisó al contacto anterior (" + anterior + "), al correo "
+							+ "institucional y al correo externo de control. Si el titular no lo pidió, es un incidente.");
 			eventos.publishEvent(new EnvioEnlaceSolicitado(titular.getId(), PropositoEnlace.PERSONAL, null));
 			return new TitularCreado(titular.getId(), titular.getNombreUsuario(), canal(titular), destino(titular));
 		}));
 	}
 
-	/** El titular (la cuenta de la primera Promotoría del colegio en contexto), todavía sin activar. */
+	/**
+	 * Correcciones del sprint 8 (S8-A1): un operador rechaza (o quien lo propuso retira) el cambio, con su firma
+	 * ({@code cambio_contacto_titular:{id}:RECHAZADO}). Debe llamarse sin transacción abierta.
+	 */
+	public void rechazarContacto(long colegioId, long cambioId, OperadorFirmante operador) {
+		ContextoColegio.en(colegioId, () -> identidad.ejecutar(() -> {
+			CambioContactoTitular cambio = cambios.bloquear(cambioId)
+					.orElseThrow(() -> new ReglaNegocioException("Ese cambio del contacto del titular no existe."));
+			cambio.rechazar(operador.nombreUsuario(), ahora());
+			cambios.saveAndFlush(cambio);
+			auditoria.registrar(AccionAuditoria.TITULAR_CONTACTO_RECHAZADO, "cambio_contacto_titular",
+					cambio.getId().toString(), "PROPUESTO", "RECHAZADO", "El operador " + operador.nombreUsuario()
+							+ " rechazó el cambio del contacto del titular que propuso " + cambio.getPropuestoPor() + ".");
+		}));
+	}
+
+	/** El cambio del contacto del titular por aplicar, si hay (para la ficha del operador: contactos enmascarados). */
+	public Optional<ContactoPorAplicar> contactoPorAplicar(long colegioId) {
+		return ContextoColegio.en(colegioId, () -> lectura.execute(t -> primeras.findFirstByIdNotNull()
+				.flatMap(p -> cambios.findFirstByUsuarioIdAndEstado(p.getUsuarioId(), CambioContactoTitular.Estado.PROPUESTO))
+				.map(c -> new ContactoPorAplicar(c.getId(), destinoDe(c.getTelefonoAnterior(), c.getCorreoAnterior()),
+						destinoDe(c.getTelefonoNuevo(), c.getCorreoNuevo()), c.getMotivo(), c.getPropuestoPor(),
+						c.getCreadoEn()))));
+	}
+
+	/**
+	 * Correcciones del sprint 8 (QA-S8-3): la cuenta se activó alguna vez: usó un enlace de activación o abrió una sesión.
+	 * No se decide por «debe cambiar la clave»: un restablecimiento vuelve a pedirlo, pero la cuenta ya era de su titular.
+	 * trg_usuario_contacto y trg_colegio_cambio usan la misma regla (cc_cuenta_activada). Con el colegio en contexto.
+	 */
+	public boolean cuentaActivada(Long usuarioId) {
+		return enlacesGuardados.existsByUsuarioIdAndUsadoEnIsNotNull(usuarioId) || sesiones.existsByUsuarioId(usuarioId);
+	}
+
+	/** Si el titular del colegio en contexto ya activó su cuenta (sin titular: no). */
+	public boolean titularActivado() {
+		return primeras.findFirstByIdNotNull().map(p -> cuentaActivada(p.getUsuarioId())).orElse(false);
+	}
+
+	/** El titular (la cuenta de la primera Promotoría del colegio en contexto), que NUNCA activó su cuenta. */
 	public Usuario titularSinActivar() {
 		Usuario titular = primeras.findFirstByIdNotNull().flatMap(p -> usuarios.findById(p.getUsuarioId()))
 				.orElseThrow(() -> new ReglaNegocioException("Este colegio todavía no tiene su primera Promotoría: completa el alta."));
-		if (!titular.isDebeCambiarClave()) {
-			throw new ReglaNegocioException("El titular ya activó su cuenta: su contacto lo cambia él desde «Mi celular y "
-					+ "correo», con la aprobación de otra persona.");
+		if (cuentaActivada(titular.getId())) {
+			throw new ReglaNegocioException("El titular ya activó su cuenta: el operador ya no toca su contacto. Lo cambia él "
+					+ "desde «Mi celular y correo», con la aprobación de otra persona.");
 		}
 		return titular;
 	}
@@ -220,8 +412,12 @@ public class AltaTitular {
 	}
 
 	private static String destino(Usuario usuario) {
-		return usuario.getTelefonoWhatsapp() != null ? "WhatsApp " + Enmascarar.telefono(usuario.getTelefonoWhatsapp())
-				: "correo " + Enmascarar.correo(usuario.getCorreo());
+		return destinoDe(usuario.getTelefonoWhatsapp(), usuario.getCorreo());
+	}
+
+	private static String destinoDe(String telefono, String correo) {
+		return telefono != null ? "WhatsApp " + Enmascarar.telefono(telefono)
+				: correo != null ? "correo " + Enmascarar.correo(correo) : "sin contacto";
 	}
 
 	private LocalDateTime ahora() {

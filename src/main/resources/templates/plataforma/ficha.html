@@ -68,19 +68,48 @@
 				<div><dt>Activación</dt><dd th:text="${ficha.titularActivado} ? 'Activó su cuenta con su DNI' : 'Pendiente'">Pendiente</dd></div>
 			</dl>
 			<th:block th:unless="${ficha.titularActivado}">
-				<h3>Corregir el contacto y reenviar el enlace</h3>
-				<p class="secundario">Solo mientras la cuenta no esté activada. Queda en la bitácora del colegio y en la de la plataforma.</p>
-				<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/titular(id=${ficha.id})}" th:object="${contacto}">
-					<div class="campo">
-						<label for="telefonoWhatsapp">Celular con WhatsApp</label>
-						<input type="tel" class="input" th:field="*{telefonoWhatsapp}" inputmode="tel" autocomplete="off">
-					</div>
-					<div class="campo">
-						<label for="correo">Correo del titular</label>
-						<input type="email" class="input" th:field="*{correo}" autocomplete="off">
-					</div>
+				<h3>Reenviar el enlace al mismo contacto</h3>
+				<p class="secundario">Solo mientras la cuenta nunca se haya activado. Se avisa al titular, al correo institucional
+					y al correo externo de control.</p>
+				<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/titular/reenviar(id=${ficha.id})}">
 					<button type="submit" class="btn btn-secundario">Reenviar el enlace</button>
 				</form>
+				<th:block th:if="${ficha.contactoPorAplicar != null}">
+					<h3>Cambio del contacto por aplicar</h3>
+					<dl class="datos">
+						<div><dt>Contacto actual</dt><dd th:text="${ficha.contactoPorAplicar.anterior}">WhatsApp</dd></div>
+						<div><dt>Contacto nuevo</dt><dd th:text="${ficha.contactoPorAplicar.nuevo}">WhatsApp</dd></div>
+						<div><dt>Motivo</dt><dd th:text="${ficha.contactoPorAplicar.motivo}">Motivo</dd></div>
+						<div><dt>Lo propuso</dt><dd th:text="${ficha.contactoPorAplicar.propuestoPor}">operador</dd></div>
+					</dl>
+					<p class="secundario">Lo aplica OTRO operador, con su propia sesión. Al aplicarlo se avisa al contacto anterior,
+						al correo institucional y al correo externo de control.</p>
+					<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/titular/{c}/aplicar(id=${ficha.id},c=${ficha.contactoPorAplicar.id})}">
+						<button type="submit" class="btn btn-secundario">Aplicar el cambio</button>
+					</form>
+					<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/titular/{c}/rechazar(id=${ficha.id},c=${ficha.contactoPorAplicar.id})}">
+						<button type="submit" class="btn btn-texto">Rechazar el cambio</button>
+					</form>
+				</th:block>
+				<th:block th:if="${ficha.contactoPorAplicar == null}">
+					<h3>Proponer otro contacto</h3>
+					<p class="secundario">Si el celular o el correo tenía un error. Lo propones tú y lo aplica otro operador.</p>
+					<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/titular(id=${ficha.id})}" th:object="${contacto}">
+						<div class="campo">
+							<label for="telefonoWhatsapp">Celular con WhatsApp</label>
+							<input type="tel" class="input" th:field="*{telefonoWhatsapp}" inputmode="tel" autocomplete="off">
+						</div>
+						<div class="campo">
+							<label for="correo">Correo del titular</label>
+							<input type="email" class="input" th:field="*{correo}" autocomplete="off">
+						</div>
+						<div class="campo">
+							<label for="motivo">Motivo (quién lo pidió y cómo lo confirmaste)</label>
+							<textarea class="input" th:field="*{motivo}" required minlength="10" maxlength="500"></textarea>
+						</div>
+						<button type="submit" class="btn btn-secundario">Proponer el cambio</button>
+					</form>
+				</th:block>
 			</th:block>
 		</th:block>
 	</section>
@@ -90,10 +119,17 @@
 		<p class="secundario">El contador o un tercero de confianza del contrato: recibe el resumen diario y la huella de la
 			bitácora del colegio. Se registra con la firma de tu sesión.</p>
 		<p th:if="${ficha.correoControl != null}" th:text="|Registrado: ${ficha.correoControl}|">Registrado</p>
+		<p class="secundario" th:unless="${ficha.enPreparacion()}">En producción solo lo propones: lo aprueba la Promotoría
+			del colegio con su firma, y se avisa al correo anterior y a toda la Promotoría antes de que cambie.</p>
+		<p th:if="${ficha.correoControlPorAprobar != null}" th:text="|Por aprobar por la Promotoría: ${ficha.correoControlPorAprobar}|">Por aprobar</p>
 		<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/correo-control(id=${ficha.id})}" th:object="${correoControl}">
 			<div class="campo">
 				<label for="correo-control">Correo</label>
 				<input type="email" class="input" id="correo-control" th:field="*{correo}" autocomplete="off" required maxlength="100">
+			</div>
+			<div class="campo" th:unless="${ficha.enPreparacion()}">
+				<label for="motivo-correo">Motivo (por ejemplo, la adenda del contrato)</label>
+				<textarea class="input" id="motivo-correo" th:field="*{motivo}" minlength="10" maxlength="500"></textarea>
 			</div>
 			<button type="submit" class="btn btn-secundario" th:text="${ficha.correoControl != null} ? 'Cambiar el correo de control' : 'Registrar el correo de control'">Registrar</button>
 		</form>
@@ -113,7 +149,9 @@
 			</dl>
 			<p class="secundario">En producción, la ficha la cambia la Promotoría del colegio.</p>
 		</th:block>
-		<form class="formulario" th:if="${ficha.enPreparacion()}" method="post" th:action="@{/plataforma/colegios/{id}/ficha(id=${ficha.id})}" th:object="${fichaForm}">
+		<p class="secundario" th:if="${ficha.enPreparacion() and ficha.titularActivado}">El titular ya activó su cuenta: la ficha
+			la corrige la Promotoría del colegio desde «Marca del colegio», con su firma.</p>
+		<form class="formulario" th:if="${ficha.enPreparacion() and !ficha.titularActivado}" method="post" th:action="@{/plataforma/colegios/{id}/ficha(id=${ficha.id})}" th:object="${fichaForm}">
 			<div th:replace="~{fragments/componentes :: campo('nombre', 'Nombre comercial', null, 'off')}"></div>
 			<div th:replace="~{fragments/componentes :: campo('razonSocial', 'Razón social', null, 'off')}"></div>
 			<div th:replace="~{fragments/componentes :: campo('ruc', 'RUC', null, 'off')}"></div>
@@ -131,7 +169,7 @@
 			</fieldset>
 			<div th:replace="~{fragments/componentes :: campo('contratoCodigo', 'Código del contrato', null, 'off')}"></div>
 			<div th:replace="~{fragments/componentes :: campo('titularNombre', 'Nombre del titular', null, 'off')}"></div>
-			<div th:replace="~{fragments/componentes :: campo('titularDocumento', 'DNI del titular', 'Vuelve a escribirlo para corregirlo.', 'off')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('titularDocumento', 'DNI del titular', 'Vuelve a escribirlo. No cambia después de crear la cuenta del titular.', 'off')}"></div>
 			<button type="submit" class="btn btn-secundario">Corregir la ficha</button>
 		</form>
 	</section>

@@ -127,7 +127,7 @@ public class ConfiguracionSeguridad {
 				auth
 					.requestMatchers(ModuloApp.RUTA_CAMBIAR_CLAVE).authenticated()
 					// Sprint 8, tanda 1: el logo del colegio de la sesión, para cualquier persona con sesión.
-					.requestMatchers(HttpMethod.GET, ModuloApp.RUTA_LOGO).authenticated();
+					.requestMatchers(HttpMethod.GET, ModuloApp.RUTA_LOGO, ModuloApp.RUTA_LOGO_EMITIDO).authenticated();
 				for (ModuloApp modulo : ModuloApp.values()) {
 					auth.requestMatchers(modulo.patrones()).hasAnyRole(modulo.nombresDeRoles());
 				}

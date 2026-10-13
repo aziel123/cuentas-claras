@@ -108,9 +108,38 @@ public final class ClaveFirma {
 		return "primera_promotoria:" + id(colegioId) + ":" + intento;
 	}
 
-	/** Sprint 8, tanda 1 (sección 3.3): el operador corrige el contacto del titular (la cuenta, con su versión actual). */
-	public static String titularContacto(Long colegioId, Long usuarioId, long version) {
-		return "titular_contacto:" + id(colegioId) + ":" + id(usuarioId) + ":" + version;
+	/**
+	 * Correcciones del sprint 8 (S8-A1): un operador PROPONE cambiar el contacto del titular de ese colegio, sin activar.
+	 * {@code intento}: cuántos cambios tuvo ese titular antes de este, más uno (la firma es única por clave).
+	 */
+	public static String cambioContactoTitularPropuesto(Long colegioId, Long usuarioId, long intento) {
+		return "cambio_contacto_titular:" + id(colegioId) + ":" + id(usuarioId) + ":" + intento;
+	}
+
+	/** Correcciones del sprint 8 (S8-A1): OTRO operador aplica (APLICADO) o un operador rechaza (RECHAZADO) ese cambio. */
+	public static String cambioContactoTitular(Long cambioId, Enum<?> estado) {
+		return "cambio_contacto_titular:" + id(cambioId) + ":" + Objects.requireNonNull(estado, "estado").name();
+	}
+
+	/**
+	 * Correcciones del sprint 8 (S8-M5): quien cambia la ficha del colegio (el operador en preparación y antes de que el
+	 * titular active su cuenta; después, la Promotoría) firma la versión actual de la fila (trg_colegio_cambio).
+	 */
+	public static String fichaColegio(Long colegioId, long version) {
+		return "colegio:" + id(colegioId) + ":FICHA:" + version;
+	}
+
+	/**
+	 * Correcciones del sprint 8 (S8-A2): el operador PROPONE cambiar el correo externo de control de un colegio en
+	 * producción. {@code intento}: cuántas propuestas tuvo ese colegio antes de esta, más uno.
+	 */
+	public static String cambioCorreoControlPropuesto(Long colegioId, long intento) {
+		return "cambio_correo_control:" + id(colegioId) + ":" + intento;
+	}
+
+	/** Correcciones del sprint 8 (S8-A2): la Promotoría aprueba (APROBADO) o rechaza (RECHAZADO) ese cambio. */
+	public static String cambioCorreoControl(Long cambioId, Enum<?> estado) {
+		return "cambio_correo_control:" + id(cambioId) + ":" + Objects.requireNonNull(estado, "estado").name();
 	}
 
 	/** Sprint 8, tanda 1 (sección 3.4): Promotoría pasa su colegio a producción. */

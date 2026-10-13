@@ -36,6 +36,11 @@
 | 19 | `cc_contacto_personal_cambiado_v2` | Personal del colegio | 2 | — |
 | 20 | `cc_conector_vigente_v2` | Personal del colegio | 6 | — |
 | 21 | `cc_colegio_en_produccion_v2` | Personal del colegio | 3 | — |
+| 22 | `cc_enlace_titular_reenviado_v2` | Titular, correo institucional y correo de control | 3 | — |
+| 23 | `cc_contacto_titular_corregido_v2` | Titular, correo institucional y correo de control | 4 | — |
+| 24 | `cc_ficha_colegio_corregida_v2` | Titular, correo institucional y correo de control | 3 | — |
+| 25 | `cc_correo_control_propuesto_v2` | Promotoría, correo institucional y correo de control | 3 | — |
+| 26 | `cc_correo_control_cambiado_v2` | Promotoría, correo institucional y correo de control | 3 | — |
 
 ## 1. `cc_pago_registrado_v2` · Registramos su pago
 
@@ -315,6 +320,77 @@
 | `{{1}}` | Colegio San Martín (ejemplo) |
 | `{{2}}` | 01/03/2027 |
 | `{{3}}` | María Elena T. |
+
+## 22. `cc_enlace_titular_reenviado_v2` · Se reenvió el enlace del titular
+
+> Correcciones del sprint 8 (S8-A1). Al titular (a su contacto registrado), al correo institucional del colegio y al correo externo de control, en la misma transacción del reenvío.
+
+```text
+{{1}}: el operador {{2}} de la plataforma reenvió el enlace para activar la cuenta del titular a {{3}}. Si el titular no lo pidió, avisa hoy al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | operador.ana |
+| `{{3}}` | WhatsApp ***-***-041 |
+
+## 23. `cc_contacto_titular_corregido_v2` · Cambió el contacto del titular
+
+> Correcciones del sprint 8 (S8-A1). Lo propone un operador y lo aplica otro. Al contacto ANTERIOR del titular, al correo institucional y al correo externo de control.
+
+```text
+{{1}}: los operadores {{2}} y {{3}} de la plataforma cambiaron el contacto del titular antes de que active su cuenta: su enlace va ahora a {{4}}. Si el titular no lo pidió, avisa hoy al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | operador.ana |
+| `{{3}}` | operador.luis |
+| `{{4}}` | WhatsApp ***-***-112 |
+
+## 24. `cc_ficha_colegio_corregida_v2` · Se corrigió la ficha del colegio
+
+> Correcciones del sprint 8 (S8-M5). Al titular, al correo institucional (el anterior y el nuevo, si cambió) y al correo externo de control.
+
+```text
+{{1}}: el operador {{2}} de la plataforma corrigió la ficha del colegio ({{3}}). Si no lo reconoces, avisa hoy al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | operador.ana |
+| `{{3}}` | razón social y dirección |
+
+## 25. `cc_correo_control_propuesto_v2` · Se propuso cambiar el correo de control
+
+> Correcciones del sprint 8 (S8-A2). En un colegio en producción: a toda la Promotoría, al correo institucional y al correo de control ANTERIOR, antes de que el cambio surta efecto.
+
+```text
+{{1}}: el operador {{2}} de la plataforma propuso que el correo externo de control sea {{3}}. No cambia hasta que lo apruebe una persona de Promotoría del colegio. Si no lo reconoces, avisa hoy a la Promotoría.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | operador.ana |
+| `{{3}}` | c***@estudio-contable.pe |
+
+## 26. `cc_correo_control_cambiado_v2` · Cambió el correo de control
+
+> Correcciones del sprint 8 (S8-A2). A toda la Promotoría, al correo institucional y a los correos de control anterior y nuevo.
+
+```text
+{{1}}: el correo externo de control del colegio ahora es {{2}} (lo cambió {{3}}). Desde hoy recibe la huella de la bitácora y el resumen diario. Si no lo reconoces, avisa hoy a la Promotoría y al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | c***@estudio-contable.pe |
+| `{{3}}` | María Elena T. (Promotoría) |
 
 ## Después de la aprobación
 1. Anotar en `docs/estado-del-proyecto.md` la fecha de aprobación de cada plantilla.

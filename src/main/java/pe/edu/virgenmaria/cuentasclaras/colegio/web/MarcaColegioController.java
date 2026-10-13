@@ -86,4 +86,15 @@ public class MarcaColegioController {
 					.body(png);
 		}).orElseGet(() -> ResponseEntity.notFound().build());
 	}
+
+	/** Correcciones del sprint 8 (S8-B4): el logo con que se emitió un comprobante, del colegio de la sesión (si no, 404). */
+	@GetMapping("/marca/logo/{id:[0-9]+}")
+	public ResponseEntity<byte[]> logoEmitido(@org.springframework.web.bind.annotation.PathVariable Long id) {
+		return logos.png(id).map(png -> ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).contentLength(png.length)
+				.header("X-Content-Type-Options", "nosniff")
+				.header("Content-Security-Policy", "default-src 'none'")
+				.header(HttpHeaders.CACHE_CONTROL, "private, max-age=86400")
+				.header("Content-Disposition", "inline; filename=\"logo.png\"")
+				.body(png)).orElseGet(() -> ResponseEntity.notFound().build());
+	}
 }

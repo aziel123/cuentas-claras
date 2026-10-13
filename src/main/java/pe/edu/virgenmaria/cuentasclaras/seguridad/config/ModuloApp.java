@@ -187,6 +187,9 @@ public enum ModuloApp {
 	 */
 	public static final String RUTA_LOGO = "/marca/logo";
 
+	/** Correcciones del sprint 8 (S8-B4): el logo con que se emitió un comprobante ({@code /marca/logo/{id}}). */
+	public static final String RUTA_LOGO_EMITIDO = "/marca/logo/*";
+
 	private static final String PREFIJO_ROL = "ROLE_";
 
 	private final String etiqueta;

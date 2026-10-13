@@ -13,4 +13,7 @@ public interface LogoColegioRepository extends Repository<LogoColegio, Long> {
 	Optional<LogoColegio> findByVigenteTrue();
 
 	boolean existsByVigenteTrue();
+
+	/** Correcciones del sprint 8 (S8-B4): un logo por su id (el de la foto de un comprobante), del colegio en contexto. */
+	Optional<LogoColegio> findById(Long id);
 }

@@ -18,6 +18,9 @@ server:
       internal-proxies: ${CC_PROXIES_INTERNOS:10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|127\.\d+\.\d+\.\d+|0:0:0:0:0:0:0:1|::1}
 
 cuentasclaras:
+  caja:
+    # La cuenta de ejemplo de los colegios ficticios de la demo (sin conector CUENTA_BANCARIA).
+    cuentas-deposito: BCP Soles 191-XXXXXXX-0-XX
   entorno:
     nombre: DEMO                     # la franja «DEMO · Datos ficticios...» en todas las páginas (obligatoria)
   plataforma:

@@ -103,10 +103,10 @@ public class PlataformaController {
 					ficha.titularNombre(), ""));
 		}
 		if (!model.containsAttribute("contacto")) {
-			model.addAttribute("contacto", new ContactoTitularRequest("", ""));
+			model.addAttribute("contacto", new ContactoTitularRequest("", "", ""));
 		}
 		if (!model.containsAttribute("correoControl")) {
-			model.addAttribute("correoControl", new CorreoControlRequest(""));
+			model.addAttribute("correoControl", new CorreoControlRequest("", ""));
 		}
 		return "plataforma/ficha";
 	}
@@ -144,21 +144,61 @@ public class PlataformaController {
 		}
 	}
 
-	@PostMapping("/colegios/{id:\\d+}/titular")
-	public String titular(@PathVariable Long id, @Valid @ModelAttribute("contacto") ContactoTitularRequest contacto,
-			BindingResult validacion, Model model, RedirectAttributes avisos) {
-		if (validacion.hasErrors()) {
-			avisos.addFlashAttribute("error", Formularios.primerError(validacion));
-			return "redirect:/plataforma/colegios/" + id;
-		}
+	/** S8-A1: reenviar el enlace al MISMO contacto del titular (con aviso al titular y al colegio). */
+	@PostMapping("/colegios/{id:\\d+}/titular/reenviar")
+	public String reenviar(@PathVariable Long id, Model model, RedirectAttributes avisos) {
 		try {
-			model.addAttribute("creado", alta.reenviarEnlaceTitular(id, contacto));
+			model.addAttribute("creado", alta.reenviarEnlaceTitular(id));
 			return "plataforma/creado";
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());
 			return "redirect:/plataforma/colegios/" + id;
 		}
+	}
+
+	/** S8-A1: proponer otro contacto del titular (lo aplica otro operador). */
+	@PostMapping("/colegios/{id:\\d+}/titular")
+	public String titular(@PathVariable Long id, @Valid @ModelAttribute("contacto") ContactoTitularRequest contacto,
+			BindingResult validacion, RedirectAttributes avisos) {
+		if (validacion.hasErrors()) {
+			avisos.addFlashAttribute("error", Formularios.primerError(validacion));
+			return "redirect:/plataforma/colegios/" + id;
+		}
+		try {
+			alta.proponerContactoTitular(id, contacto);
+			avisos.addFlashAttribute("exito", "Listo: propusiste el cambio del contacto del titular. Lo aplica otro operador, "
+					+ "con su propia sesión.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/plataforma/colegios/" + id;
+	}
+
+	@PostMapping("/colegios/{id:\\d+}/titular/{cambio:\\d+}/aplicar")
+	public String aplicarContacto(@PathVariable Long id, @PathVariable Long cambio, Model model,
+			RedirectAttributes avisos) {
+		try {
+			model.addAttribute("creado", alta.aplicarContactoTitular(id, cambio));
+			return "plataforma/creado";
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+			return "redirect:/plataforma/colegios/" + id;
+		}
+	}
+
+	@PostMapping("/colegios/{id:\\d+}/titular/{cambio:\\d+}/rechazar")
+	public String rechazarContacto(@PathVariable Long id, @PathVariable Long cambio, RedirectAttributes avisos) {
+		try {
+			alta.rechazarContactoTitular(id, cambio);
+			avisos.addFlashAttribute("exito", "Listo: el cambio del contacto del titular quedó rechazado.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/plataforma/colegios/" + id;
 	}
 
 	@PostMapping("/colegios/{id:\\d+}/correo-control")
@@ -169,9 +209,12 @@ public class PlataformaController {
 			return "redirect:/plataforma/colegios/" + id;
 		}
 		try {
-			alta.registrarCorreoControl(id, correo.correo());
-			avisos.addFlashAttribute("exito", "Listo: el correo externo de control quedó registrado. Recibirá el resumen "
-					+ "diario y la huella de la bitácora del colegio.");
+			boolean registrado = alta.registrarCorreoControl(id, correo.correo(), correo.motivo());
+			avisos.addFlashAttribute("exito", registrado
+					? "Listo: el correo externo de control quedó registrado. Recibirá el resumen diario y la huella de la "
+							+ "bitácora del colegio. Se avisó al correo anterior, al institucional y a la Promotoría."
+					: "Listo: propusiste el correo externo de control. Cambia cuando lo apruebe una persona de Promotoría del "
+							+ "colegio; ya se le avisó, y también al correo anterior.");
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());

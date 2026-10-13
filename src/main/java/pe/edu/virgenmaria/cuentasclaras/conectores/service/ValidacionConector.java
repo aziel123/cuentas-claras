@@ -50,7 +50,7 @@ final class ValidacionConector {
 		return switch (tipo) {
 			case OSE -> ose(p, rucColegio);
 			case PASARELA -> pasarela(p);
-			case CUENTA_BANCARIA -> cuentaBancaria(p);
+			case CUENTA_BANCARIA -> cuentaBancaria(p, rucColegio);
 			case RECAUDACION -> recaudacion(p);
 		};
 	}
@@ -172,16 +172,31 @@ final class ValidacionConector {
 		return new ConfiguracionConector.Pasarela(llave, List.copyOf(medios), maximo);
 	}
 
-	private static ConfiguracionConector.CuentaBancaria cuentaBancaria(PropuestaConectorRequest p) {
+	/**
+	 * Correcciones del sprint 8 (S8-M3): la cuenta es del COLEGIO (su titular con el RUC del colegio) y el CCI es del banco
+	 * elegido, con sus dígitos de control correctos.
+	 */
+	private static ConfiguracionConector.CuentaBancaria cuentaBancaria(PropuestaConectorRequest p, String rucColegio) {
 		String numero = digitos(p.numeroCuenta());
 		if (!numero.matches("[0-9]{10,20}")) {
 			throw new ReglaNegocioException("Escribe el número de la cuenta (de 10 a 20 dígitos; los guiones no cuentan).");
 		}
 		String cci = digitos(p.cci());
-		if (!cci.matches("[0-9]{20}")) {
-			throw new ReglaNegocioException("El CCI tiene 20 dígitos.");
+		CuentaInterbancaria.validar(cci, p.proveedor());
+		String titular = vacio(p.titularCuenta()) ? "" : p.titularCuenta().strip();
+		if (titular.length() < 3 || titular.length() > 150) {
+			throw new ReglaNegocioException("Escribe el titular de la cuenta tal como figura en el banco (la razón social del "
+					+ "colegio).");
 		}
-		return new ConfiguracionConector.CuentaBancaria(numero, cci, "PEN");
+		if (rucColegio == null || rucColegio.isBlank()) {
+			throw new ReglaNegocioException("Primero completa el RUC del colegio: la cuenta debe estar a su nombre.");
+		}
+		String ruc = digitos(p.rucTitular());
+		if (!ruc.equals(rucColegio)) {
+			throw new ReglaNegocioException("El RUC del titular de la cuenta debe ser el del colegio (" + rucColegio + "): el "
+					+ "dinero de las familias entra solo a una cuenta del colegio, nunca a la de una persona o empresa.");
+		}
+		return new ConfiguracionConector.CuentaBancaria(numero, cci, "PEN", titular, ruc);
 	}
 
 	private static ConfiguracionConector.Recaudacion recaudacion(PropuestaConectorRequest p) {

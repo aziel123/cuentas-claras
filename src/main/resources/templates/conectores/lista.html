@@ -6,7 +6,7 @@
 		<div>
 			<h1>Conectores del colegio</h1>
 			<p class="secundario">Adónde entra el dinero del colegio y quién emite sus boletas. Cambiar un conector lo propone una
-				persona y lo aprueba otra de Promotoría o Dirección con su firma; si mueve dinero, participa una Promotoría. Toda la
+				persona y lo aprueba otra de Promotoría o Dirección con su firma; en todos participa una Promotoría. Toda la
 				Promotoría y el correo externo de control reciben un aviso.</p>
 		</div>
 	</div>
@@ -113,6 +113,8 @@
 				<th:block th:if="${s.tipo == 'CUENTA_BANCARIA'}">
 					<div class="campo"><label for="numero-cuenta">Número de cuenta (soles)</label><input class="input" id="numero-cuenta" name="numeroCuenta" inputmode="numeric" autocomplete="off" required></div>
 					<div class="campo"><label for="cci">CCI (20 dígitos)</label><input class="input" id="cci" name="cci" inputmode="numeric" autocomplete="off" required></div>
+					<div class="campo"><label for="titular-cuenta">Titular de la cuenta (como figura en el banco)</label><input class="input" id="titular-cuenta" name="titularCuenta" autocomplete="off" required maxlength="150"></div>
+					<div class="campo"><label for="ruc-titular">RUC del titular (el del colegio)</label><input class="input" id="ruc-titular" name="rucTitular" inputmode="numeric" autocomplete="off" required maxlength="11"></div>
 				</th:block>
 
 				<th:block th:if="${s.tipo == 'RECAUDACION'}">

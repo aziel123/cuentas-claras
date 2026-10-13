@@ -24,6 +24,7 @@ import pe.edu.virgenmaria.cuentasclaras.conectores.dto.ConfiguracionConector;
 import pe.edu.virgenmaria.cuentasclaras.conectores.dto.PropuestaConectorRequest;
 import pe.edu.virgenmaria.cuentasclaras.conectores.model.ConectorColegio;
 import pe.edu.virgenmaria.cuentasclaras.conectores.model.EstadoConector;
+import pe.edu.virgenmaria.cuentasclaras.conectores.model.ModoConector;
 import pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector;
 import pe.edu.virgenmaria.cuentasclaras.conectores.repository.ConectorColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.conectores.service.AdaptadorConector.ResultadoPrueba;
@@ -78,9 +79,13 @@ public class PropuestaConector {
 
 	private final TransactionTemplate transaccion;
 
+	private final pe.edu.virgenmaria.cuentasclaras.comun.config.PropiedadesEntorno entorno;
+
 	public PropuestaConector(ConectorColegioRepository conectores, SecretosConectores secretos, ConectoresColegio vigentes,
 			RegistroSolicitudes solicitudes, FirmaSesion firma, AuditoriaService auditoria, ColegioRepository colegios,
-			List<AdaptadorConector> adaptadores, Clock reloj, PlatformTransactionManager transacciones) {
+			List<AdaptadorConector> adaptadores, Clock reloj, PlatformTransactionManager transacciones,
+			pe.edu.virgenmaria.cuentasclaras.comun.config.PropiedadesEntorno entorno) {
+		this.entorno = entorno;
 		this.conectores = conectores;
 		this.secretos = secretos;
 		this.vigentes = vigentes;
@@ -104,7 +109,15 @@ public class PropuestaConector {
 					+ "aprobación: que otra persona lo apruebe o lo rechace antes de proponer otro.");
 		}
 		ConfiguracionConector configuracion = ValidacionConector.configuracion(tipo, pedido, colegio.getRuc());
-		Map<String, String> claros = ValidacionConector.secretos(tipo, pedido);
+		Optional<ConectorColegio> vigente = conectores.findFirstByTipoAndEstado(tipo, EstadoConector.VIGENTE);
+		if (colegio.enProduccion() && tipo == TipoConector.OSE && pedido.modo() != ModoConector.REAL
+				&& ManejadorCambioConector.huboReal(conectores.findByTipoOrderByIdDesc(tipo))) {
+			throw new ReglaNegocioException("El colegio ya emite comprobantes reales: en producción el OSE no vuelve al "
+					+ "comprobante simulado ni al de pruebas.");
+		}
+		// QA-S8-7: en la demo nadie guarda un secreto real (un visitante podría escribir el token de su OSE): se descarta.
+		boolean descartar = entorno.demo();
+		Map<String, String> claros = descartar ? Map.of() : ValidacionConector.secretos(tipo, pedido);
 		String clavePublica = UUID.randomUUID().toString();
 		byte[] cifrado = claros.isEmpty() ? null : secretos.cifrar(claros, colegioId, tipo.name(), clavePublica);
 		String pista = claros.isEmpty() ? null : SecretosConectores.pista(ValidacionConector.principal(claros));
@@ -114,7 +127,7 @@ public class PropuestaConector {
 		ConectorColegio conector = conectores.saveAndFlush(ConectorColegio.propuesto(tipo, pedido.proveedor(),
 				pedido.modo(), configuracion.aJson(), clavePublica, cifrado, pista,
 				cifrado == null ? null : secretos.version(), quien.getUsername()));
-		Optional<ConectorColegio> actual = conectores.findFirstByTipoAndEstado(tipo, EstadoConector.VIGENTE);
+		Optional<ConectorColegio> actual = vigente;
 		Map<String, String> datos = new LinkedHashMap<>();
 		datos.put("tipo", tipo.name());
 		datos.put("proveedor", pedido.proveedor().name());
@@ -131,8 +144,8 @@ public class PropuestaConector {
 				actual.map(a -> descripcion(a)).orElse("sin conector"), descripcion(conector),
 				quien.nombreCompleto() + " propuso cambiar " + tipo.descripcion() + ": " + configuracion.resumen()
 						+ (pista == null ? "" : " (secreto que termina en " + pista + ")") + ". Motivo: " + pedido.motivo()
-						+ ". Debe aprobarlo otra persona de Promotoría o Dirección" + (tipo.mueveDinero()
-								? ", con una Promotoría de por medio." : "."));
+						+ ". Debe aprobarlo otra persona de Promotoría o Dirección, con una Promotoría de por medio."
+						+ (descartar ? " (Demo: el secreto escrito se descartó; aquí nada se conecta de verdad.)" : ""));
 		return conector.getId();
 	}
 

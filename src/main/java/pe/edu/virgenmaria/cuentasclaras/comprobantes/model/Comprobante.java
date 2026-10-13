@@ -87,6 +87,23 @@ public class Comprobante extends BaseEntity {
 	@Column(name = "motivo_nota", updatable = false, length = 250)
 	private String motivoNota;
 
+	// Correcciones del sprint 8 (S8-B4 y QA-S8-5): la foto del emisor al emitirse. La reimpresión muestra ESTE emisor,
+	// aunque después cambie la marca del colegio. No cambian (sin GRANT de UPDATE).
+	@Column(name = "emisor_nombre", updatable = false, length = 150)
+	private String emisorNombre;
+
+	@Column(name = "emisor_razon_social", updatable = false, length = 150)
+	private String emisorRazonSocial;
+
+	@Column(name = "emisor_ruc", updatable = false, length = 11)
+	private String emisorRuc;
+
+	@Column(name = "emisor_direccion", updatable = false, length = 200)
+	private String emisorDireccion;
+
+	@Column(name = "emisor_logo_id", updatable = false)
+	private Long emisorLogoId;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, updatable = false, length = 20)
 	private ProveedorComprobantes proveedor;
@@ -433,6 +450,43 @@ public class Comprobante extends BaseEntity {
 
 	public Long getModificaId() {
 		return modificaId;
+	}
+
+	/** S8-B4: fija la foto del emisor (solo antes de guardarse por primera vez). */
+	public void fotografiarEmisor(String nombre, String razonSocial, String ruc, String direccion, Long logoId) {
+		if (getId() != null) {
+			throw new IllegalStateException("La foto del emisor se toma al emitir el comprobante");
+		}
+		this.emisorNombre = nombre;
+		this.emisorRazonSocial = razonSocial;
+		this.emisorRuc = ruc;
+		this.emisorDireccion = direccion;
+		this.emisorLogoId = logoId;
+	}
+
+	/** Si el comprobante tiene la foto de su emisor (todos desde V31, que completó los anteriores). */
+	public boolean conFotoDelEmisor() {
+		return emisorNombre != null;
+	}
+
+	public String getEmisorNombre() {
+		return emisorNombre;
+	}
+
+	public String getEmisorRazonSocial() {
+		return emisorRazonSocial;
+	}
+
+	public String getEmisorRuc() {
+		return emisorRuc;
+	}
+
+	public String getEmisorDireccion() {
+		return emisorDireccion;
+	}
+
+	public Long getEmisorLogoId() {
+		return emisorLogoId;
 	}
 
 	public String getMotivoNota() {

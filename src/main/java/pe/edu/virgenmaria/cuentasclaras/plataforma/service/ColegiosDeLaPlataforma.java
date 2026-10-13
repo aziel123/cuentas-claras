@@ -1,5 +1,9 @@
 package pe.edu.virgenmaria.cuentasclaras.plataforma.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.CambioCorreoControl;
+import pe.edu.virgenmaria.cuentasclaras.comunicacion.repository.CambioCorreoControlRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.AltaTitular;
+
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -49,11 +53,18 @@ public class ColegiosDeLaPlataforma {
 
 	private final ConsultaAuditoriaService bitacora;
 
+	private final AltaTitular titulares;
+
+	private final CambioCorreoControlRepository cambiosCorreo;
+
 	private final TransactionTemplate lectura;
 
 	public ColegiosDeLaPlataforma(ColegioRepository colegios, UsuarioRepository usuarios,
 			PrimeraPromotoriaRepository primeras, LogoColegioRepository logos, ConfiguracionColegioRepository configuracion,
-			EstadoPuestaEnMarcha estado, ConsultaAuditoriaService bitacora, PlatformTransactionManager transacciones) {
+			EstadoPuestaEnMarcha estado, ConsultaAuditoriaService bitacora, AltaTitular titulares,
+			CambioCorreoControlRepository cambiosCorreo, PlatformTransactionManager transacciones) {
+		this.titulares = titulares;
+		this.cambiosCorreo = cambiosCorreo;
 		this.colegios = colegios;
 		this.usuarios = usuarios;
 		this.primeras = primeras;
@@ -70,7 +81,7 @@ public class ColegiosDeLaPlataforma {
 		return lista.stream().map(c -> ContextoColegio.en(c.getId(), () -> lectura.execute(t -> {
 			Optional<Usuario> titular = titular();
 			return new ResumenColegio(c.getId(), c.getNombre(), c.getRuc(), c.getEstado(), titular.isPresent(),
-					titular.map(u -> !u.isDebeCambiarClave()).orElse(false), usuarios.count(),
+					titular.map(u -> titulares.cuentaActivada(u.getId())).orElse(false), usuarios.count(),
 					bitacora.ultimaActividadDe(c.getId()).orElse(null));
 		}))).toList();
 	}
@@ -81,7 +92,8 @@ public class ColegiosDeLaPlataforma {
 			throw new RecursoNoEncontradoException("Colegio no encontrado");
 		}
 		List<PuntoLista> lista = estado.paraOperador(colegioId).puntos();
-		return ContextoColegio.en(colegioId, () -> lectura.execute(t -> {
+		AltaTitular.ContactoPorAplicar porAplicar = titulares.contactoPorAplicar(colegioId).orElse(null);
+		FichaPlataforma ficha = ContextoColegio.en(colegioId, () -> lectura.execute(t -> {
 			Optional<Usuario> titular = titular();
 			String correoControl = configuracion.findByColegioIdAndClave(colegioId, ConfiguracionColegio.HUELLA_CORREO_EXTERNO)
 					.map(ConfiguracionColegio::getValor).map(Enmascarar::correo).orElse(null);
@@ -90,11 +102,18 @@ public class ColegiosDeLaPlataforma {
 					colegio.getContratoCodigo(), colegio.getTitularNombre(),
 					colegio.getTitularDocumento() == null ? null : Enmascarar.documento("DNI", colegio.getTitularDocumento()),
 					titular.map(Usuario::getNombreUsuario).orElse(null), titular.map(ColegiosDeLaPlataforma::destino).orElse(null),
-					titular.map(u -> !u.isDebeCambiarClave()).orElse(false), logos.existsByVigenteTrue(), correoControl,
-					colegio.getCreadoEn(), colegio.getCreadoPor(), colegio.getProduccionDesde(),
+					titular.map(u -> titulares.cuentaActivada(u.getId())).orElse(false), logos.existsByVigenteTrue(),
+					correoControl, colegio.getCreadoEn(), colegio.getCreadoPor(), colegio.getProduccionDesde(),
 					lista.stream().map(p -> new FichaPlataforma.PuntoLista(p.paso(), p.hecho(), p.obligatorio(), p.conteo()))
-							.toList());
+							.toList(), null,
+					cambiosCorreo.findFirstByEstado(CambioCorreoControl.Estado.PROPUESTO)
+							.map(c -> Enmascarar.correo(c.getCorreoNuevo())).orElse(null));
 		}));
+		return new FichaPlataforma(ficha.id(), ficha.nombre(), ficha.razonSocial(), ficha.ruc(), ficha.direccion(),
+				ficha.correoInstitucional(), ficha.niveles(), ficha.estado(), ficha.contratoCodigo(), ficha.titularNombre(),
+				ficha.titularDocumentoEnmascarado(), ficha.titularUsuario(), ficha.titularDestino(), ficha.titularActivado(),
+				ficha.conLogo(), ficha.correoControl(), ficha.creadoEn(), ficha.creadoPor(), ficha.produccionDesde(),
+				ficha.lista(), porAplicar, ficha.correoControlPorAprobar());
 	}
 
 	private Optional<Usuario> titular() {

@@ -43,6 +43,41 @@ public final class PendientesRespaldo {
 				.filter(r -> abierto(r, resoluciones)).findFirst();
 	}
 
+	/**
+	 * Correcciones del sprint 8 (S8-B6): el respaldo abierto más nuevo que el VIGILANTE debe marcar como REVISAR. Una falta
+	 * de toda la base, o de un colegio que puede resolverla ({@code resoluble}: en producción, siempre tiene una Promotoría
+	 * activa), lo marca mientras siga abierta. La de un colegio que todavía no puede resolverla (en preparación, quizá sin
+	 * su titular activado) lo marca solo mientras es NUEVA: desde que apareció hasta {@code nuevaDesde} (el plazo del
+	 * respaldo). Después sigue en el correo técnico y en el panel de su colegio, pero el vigilante no queda en REVISAR para
+	 * siempre por una falta que nadie puede cerrar.
+	 */
+	public static Optional<Respaldo> abiertoParaVigilante(List<Respaldo> faltantes, List<ResolucionRespaldo> resoluciones,
+			java.util.function.Predicate<Long> resoluble, java.time.LocalDateTime nuevaDesde) {
+		for (Respaldo r : faltantes.stream().sorted(Comparator.comparing(Respaldo::getId).reversed()).toList()) {
+			if (!abierto(r, resoluciones)) {
+				continue;
+			}
+			if (r.deTodaLaBase()) {
+				return Optional.of(r);
+			}
+			for (Long colegio : r.colegiosConFaltantes()) {
+				if (resuelto(r, colegio, resoluciones)) {
+					continue;
+				}
+				if (resoluble.test(colegio)) {
+					return Optional.of(r);
+				}
+				Optional<java.time.LocalDateTime> primera = faltantes.stream()
+						.filter(x -> x.afectaA(colegio) && !resuelto(x, colegio, resoluciones)).map(Respaldo::getFin)
+						.filter(java.util.Objects::nonNull).min(Comparator.naturalOrder());
+				if (primera.map(f -> f.isAfter(nuevaDesde)).orElse(true)) {
+					return Optional.of(r);
+				}
+			}
+		}
+		return Optional.empty();
+	}
+
 	/** El respaldo más nuevo con una falta de ESE colegio sin resolver (lo que ve su Promotoría). */
 	public static Optional<Respaldo> abiertoDe(Long colegioId, List<Respaldo> faltantes,
 			List<ResolucionRespaldo> resoluciones) {

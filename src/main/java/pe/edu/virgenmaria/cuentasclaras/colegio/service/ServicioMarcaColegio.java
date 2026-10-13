@@ -34,10 +34,14 @@ public class ServicioMarcaColegio {
 
 	private final AuditoriaService auditoria;
 
-	public ServicioMarcaColegio(ColegioRepository colegios, LogosColegio logos, AuditoriaService auditoria) {
+	private final pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion firma;
+
+	public ServicioMarcaColegio(ColegioRepository colegios, LogosColegio logos, AuditoriaService auditoria,
+			pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion firma) {
 		this.colegios = colegios;
 		this.logos = logos;
 		this.auditoria = auditoria;
+		this.firma = firma;
 	}
 
 	/** La ficha y el logo vigente del colegio de la sesión. */
@@ -81,6 +85,11 @@ public class ServicioMarcaColegio {
 			throw new ReglaNegocioException("No hay cambios que guardar: la ficha es la misma y no elegiste un logo.");
 		}
 		if (!antes.isEmpty()) {
+			// S8-M5: la Promotoría firma el cambio de la ficha (trg_colegio_cambio exige su firma de la versión anterior).
+			firma.firmar(pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma.fichaColegio(colegio.getId(),
+					colegio.getVersion()));
+			colegio.firmarCambioDeFicha(org.springframework.security.core.context.SecurityContextHolder.getContext()
+					.getAuthentication().getName());
 			colegios.saveAndFlush(colegio);
 			auditoria.registrar(AccionAuditoria.MARCA_COLEGIO_CAMBIADA, "colegio", id, String.join(" · ", antes),
 					String.join(" · ", despues), "Promotoría corrigió la ficha del colegio (" + antes.size()

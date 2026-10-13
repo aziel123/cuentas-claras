@@ -25,6 +25,9 @@ public interface SesionUsuarioRepository extends Repository<SesionUsuario, Long>
 	@Query("select s from SesionUsuario s where s.usuarioId = :usuarioId and s.cerradaEn is null order by s.id")
 	List<SesionUsuario> bloquearAbiertasDe(@Param("usuarioId") Long usuarioId);
 
+	/** Correcciones del sprint 8 (QA-S8-3): si la persona abrió alguna vez una sesión (su cuenta ya se activó). */
+	boolean existsByUsuarioId(Long usuarioId);
+
 	/** Todas las abiertas (al arrancar se cierran: las sesiones HTTP anteriores ya no existen). */
 	@Query("select s from SesionUsuario s where s.cerradaEn is null order by s.id")
 	List<SesionUsuario> abiertas();

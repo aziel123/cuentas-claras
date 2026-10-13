@@ -16,6 +16,7 @@ import pe.edu.virgenmaria.cuentasclaras.conectores.dto.ConectorVigente;
 import pe.edu.virgenmaria.cuentasclaras.conectores.dto.ConfiguracionConector;
 import pe.edu.virgenmaria.cuentasclaras.conectores.model.ConectorColegio;
 import pe.edu.virgenmaria.cuentasclaras.conectores.model.EstadoConector;
+import pe.edu.virgenmaria.cuentasclaras.conectores.model.ModoConector;
 import pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector;
 import pe.edu.virgenmaria.cuentasclaras.conectores.repository.ConectorColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
@@ -68,9 +69,13 @@ public class ManejadorCambioConector implements ManejadorSolicitud {
 
 	private final Clock reloj;
 
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios;
+
 	public ManejadorCambioConector(ConectorColegioRepository conectores, ConectoresColegio vigentes,
 			List<AdaptadorConector> adaptadores, UsuarioRepository usuarios, FirmaSesion firma, AuditoriaService auditoria,
-			ApplicationEventPublisher eventos, Clock reloj) {
+			ApplicationEventPublisher eventos, Clock reloj,
+			pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios) {
+		this.colegios = colegios;
 		this.conectores = conectores;
 		this.vigentes = vigentes;
 		this.adaptadores = List.copyOf(adaptadores);
@@ -104,10 +109,14 @@ public class ManejadorCambioConector implements ManejadorSolicitud {
 					+ "(«Probar conexión» en Conectores).");
 		}
 		TipoConector tipo = conector.getTipo();
-		if (tipo.mueveDinero() && !esPromotoria(conector.getPropuestoPor()) && !esPromotoria(aprobador)) {
-			throw new ReglaNegocioException("Cambiar " + tipo.descripcion() + " cambia adónde entra el dinero del colegio: "
-					+ "debe aprobarlo una persona de Promotoría (lo propuso alguien que no es de Promotoría).");
+		// S8-M4: una Promotoría participa en TODO conector (también el OSE: quién emite las boletas del colegio).
+		if (!esPromotoria(conector.getPropuestoPor()) && !esPromotoria(aprobador)) {
+			throw new ReglaNegocioException("Cambiar " + tipo.descripcion() + (tipo.mueveDinero()
+					? " cambia adónde entra el dinero del colegio" : " cambia quién emite las boletas del colegio")
+					+ ": debe aprobarlo una persona de Promotoría (lo propuso alguien que no es de Promotoría).");
 		}
+		exigirSinVolverASimulado(conector, huboReal(conectores.findByTipoOrderByIdDesc(tipo)),
+				colegios.enProduccion(conector.getColegioId()));
 		ConectorVigente candidato = vigentes.descifradoParaPrueba(conector);
 		adaptadores.stream().filter(a -> a.tipo() == tipo && a.admite(conector.getProveedor()))
 				.forEach(a -> a.validarAntesDeVigencia(candidato));
@@ -132,8 +141,8 @@ public class ManejadorCambioConector implements ManejadorSolicitud {
 						+ ". Propuso " + conector.getPropuestoPor() + " y aprobó " + aprobador + " (solicitud "
 						+ solicitud.getId() + "). Se avisó a toda la Promotoría y al correo externo de control.");
 		eventos.publishEvent(new ConectorEnVigencia(conector.getColegioId(), conector.getId(), tipo,
-				conector.getProveedor().etiqueta(), detalleAviso(tipo, configuracion, conector), conector.getPropuestoPor(),
-				aprobador, ahora));
+				conector.getProveedor().etiqueta(), detalleAviso(tipo, configuracion, conector, anterior.orElse(null)),
+				conector.getPropuestoPor(), aprobador, ahora));
 	}
 
 	@Override
@@ -162,16 +171,29 @@ public class ManejadorCambioConector implements ManejadorSolicitud {
 		lineas.add("Nuevo: " + c.getProveedor().etiqueta() + " (" + c.getModo().etiqueta().toLowerCase() + "). "
 				+ configuracion.resumen() + (c.getSecretoPista() == null ? "" : ". Secreto que termina en "
 						+ c.getSecretoPista()));
+		// S8-M3: quien aprueba ve la cuenta COMPLETA (para confirmarla con el banco). Solo en esta pantalla: la bitácora,
+		// los avisos y los logs llevan la terminación.
+		if (configuracion instanceof ConfiguracionConector.CuentaBancaria cuenta) {
+			lineas.add("Número de cuenta completo: " + cuenta.numero() + " · CCI completo: " + cuenta.cci());
+			lineas.add("Titular de la cuenta: " + (cuenta.titular() == null ? "(sin registrar)" : cuenta.titular())
+					+ " · RUC " + (cuenta.rucTitular() == null ? "(sin registrar)" : cuenta.rucTitular()));
+			conectores.findFirstByTipoAndEstado(c.getTipo(), EstadoConector.VIGENTE).ifPresent(v -> {
+				ConfiguracionConector.CuentaBancaria antes = (ConfiguracionConector.CuentaBancaria) ConfiguracionConector
+						.deJson(v.getTipo(), v.getConfiguracion());
+				lineas.add(java.util.Objects.equals(antes.numero(), cuenta.numero())
+						? "Es la MISMA cuenta que la vigente."
+						: "Es una cuenta DISTINTA de la vigente (" + v.getProveedor().etiqueta() + ", termina en "
+								+ ConfiguracionConector.CuentaBancaria.terminacion(antes.numero()) + ").");
+			});
+		}
 		conectores.findFirstByTipoAndEstado(c.getTipo(), EstadoConector.VIGENTE).ifPresentOrElse(
 				v -> lineas.add("Reemplaza a: " + v.getProveedor().etiqueta() + ". "
 						+ ConfiguracionConector.deJson(v.getTipo(), v.getConfiguracion()).resumen()),
 				() -> lineas.add("Hoy el colegio no tiene este conector."));
 		lineas.add("Prueba de conexión: " + (Boolean.TRUE.equals(c.getPruebaOk()) ? "correcta" : c.getPruebaOk() == null
 				? "todavía no se probó" : "falló") + (c.getPruebaDetalle() == null ? "" : " (" + c.getPruebaDetalle() + ")"));
-		if (c.getTipo().mueveDinero()) {
-			lineas.add("Una Promotoría debe participar: " + (esPromotoria(c.getPropuestoPor())
-					? "lo propuso Promotoría." : "como no lo propuso Promotoría, debe aprobarlo Promotoría."));
-		}
+		lineas.add("Una Promotoría debe participar: " + (esPromotoria(c.getPropuestoPor())
+				? "lo propuso Promotoría." : "como no lo propuso Promotoría, debe aprobarlo Promotoría."));
 		return lineas;
 	}
 
@@ -180,21 +202,55 @@ public class ManejadorCambioConector implements ManejadorSolicitud {
 		return conectores.findById(solicitud.getEntidadId()).map(c -> c.getTipo().mueveDinero()
 				? "Esto cambia adónde entra el dinero del colegio. Antes de aprobar, confirma el número con el banco o el "
 						+ "proveedor (no con quien lo propuso). Se avisará a toda la Promotoría y al correo externo de control."
-				: "Esto cambia quién emite las boletas del colegio. Confirma la cuenta del OSE con tu contador. Se avisará "
-						+ "a toda la Promotoría y al correo externo de control.").orElse(null);
+				: "Esto cambia quién emite las boletas del colegio. Confirma la cuenta del OSE con tu contador. Debe "
+						+ "participar una Promotoría. Se avisará a toda la Promotoría y al correo externo de control.")
+				.orElse(null);
 	}
 
-	/** Lo que dice el aviso a la Promotoría: el número de la cuenta enmascarado y nunca un secreto. */
-	private static String detalleAviso(TipoConector tipo, ConfiguracionConector configuracion, ConectorColegio conector) {
+	/**
+	 * Lo que dice el aviso a la Promotoría: el número de la cuenta enmascarado y nunca un secreto. S8-M3: en la cuenta
+	 * bancaria, si es distinta de la anterior (el banco va en el aviso como proveedor).
+	 */
+	private static String detalleAviso(TipoConector tipo, ConfiguracionConector configuracion, ConectorColegio conector,
+			ConectorColegio anterior) {
 		return switch (configuracion) {
-			case ConfiguracionConector.CuentaBancaria cuenta -> "cuenta que termina en "
-					+ ConfiguracionConector.CuentaBancaria.terminacion(cuenta.numero());
+			case ConfiguracionConector.CuentaBancaria cuenta -> "cuenta de " + conector.getProveedor().etiqueta()
+					+ " que termina en " + ConfiguracionConector.CuentaBancaria.terminacion(cuenta.numero())
+					+ (anterior == null ? ", la primera del colegio"
+							: mismaCuenta(anterior, cuenta) ? ", la misma de antes" : ", DISTINTA de la anterior (" + anterior
+									.getProveedor().etiqueta() + " que terminaba en " + ConfiguracionConector.CuentaBancaria
+											.terminacion(((ConfiguracionConector.CuentaBancaria) ConfiguracionConector
+													.deJson(anterior.getTipo(), anterior.getConfiguracion())).numero())
+									+ ")");
 			case ConfiguracionConector.Ose ose -> "series " + ose.serieBoleta() + " y " + ose.serieFactura();
 			case ConfiguracionConector.Pasarela pasarela -> conector.getSecretoPista() == null ? "simulada"
 					: "llave que termina en " + conector.getSecretoPista();
 			case ConfiguracionConector.Recaudacion recaudacion -> "SIN_BASE".equals(recaudacion.modalidad())
 					? "sin base de deudas" : "con base de deudas";
 		};
+	}
+
+	private static boolean mismaCuenta(ConectorColegio anterior, ConfiguracionConector.CuentaBancaria cuenta) {
+		ConfiguracionConector.CuentaBancaria antes = (ConfiguracionConector.CuentaBancaria) ConfiguracionConector
+				.deJson(anterior.getTipo(), anterior.getConfiguracion());
+		return java.util.Objects.equals(antes.cci(), cuenta.cci());
+	}
+
+	/**
+	 * S8-M4: en un colegio en producción, un OSE REAL no se cambia por uno SIMULADO (las boletas dejarían de tener valor
+	 * ante SUNAT sin que nadie lo note). También lo exige trg_conector_colegio_estado.
+	 */
+	static void exigirSinVolverASimulado(ConectorColegio nuevo, boolean huboReal, boolean enProduccion) {
+		if (enProduccion && nuevo.getTipo() == TipoConector.OSE && nuevo.getModo() != ModoConector.REAL && huboReal) {
+			throw new ReglaNegocioException("El colegio ya emite comprobantes reales: en producción el OSE no vuelve al "
+					+ "comprobante simulado ni al de pruebas.");
+		}
+	}
+
+	/** Si el colegio ya tuvo un OSE REAL en vigencia (vigente o reemplazado): trg_conector_colegio_estado usa lo mismo. */
+	static boolean huboReal(List<ConectorColegio> delTipo) {
+		return delTipo.stream().anyMatch(c -> c.getTipo() == TipoConector.OSE && c.getModo() == ModoConector.REAL
+				&& (c.getEstado() == EstadoConector.VIGENTE || c.getEstado() == EstadoConector.REEMPLAZADO));
 	}
 
 	private ConectorColegio propuestoDe(SolicitudCambio solicitud) {

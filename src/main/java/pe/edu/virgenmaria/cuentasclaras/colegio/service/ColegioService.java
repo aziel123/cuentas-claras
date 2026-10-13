@@ -82,6 +82,16 @@ public class ColegioService {
 		}
 	}
 
+	/**
+	 * Correcciones del sprint 8 (S8-M2 y QA-S8-4): lo mismo, con el mensaje de quien lo pide (la familia que quiere pagar en
+	 * línea, Administración que sube la recaudación o abre la renovación).
+	 */
+	public void exigirEnProduccion(Long colegioId, String mensaje) {
+		if (!enProduccion(colegioId)) {
+			throw new pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException(mensaje);
+		}
+	}
+
 	/** La fila PLATAFORMA (V28): ahí viven los operadores. */
 	public Colegio plataforma() {
 		return colegios.findFirstByTipo(TipoColegio.PLATAFORMA)

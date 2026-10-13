@@ -27,6 +27,8 @@ public record PropuestaConectorRequest(
 		@Size(max = 12) String montoMaximo,
 		@Size(max = 30, message = "El número de cuenta tiene hasta 30 caracteres") String numeroCuenta,
 		@Size(max = 30, message = "El CCI tiene 20 dígitos") String cci,
+		@Size(max = 150, message = "El titular de la cuenta tiene hasta 150 caracteres") String titularCuenta,
+		@Size(max = 20, message = "El RUC tiene 11 dígitos") String rucTitular,
 		@Size(max = 20) String modalidad,
 		@Size(max = 60, message = "La glosa tiene hasta 60 caracteres") String patronAbono,
 		@Size(max = 10) String abono,
@@ -34,6 +36,23 @@ public record PropuestaConectorRequest(
 		@Size(max = 400, message = "El secreto de los avisos tiene hasta 400 caracteres") String secretoAviso,
 		@NotBlank(message = "Escribe el motivo del cambio") @Size(min = 10, max = 500,
 				message = "El motivo tiene entre 10 y 500 caracteres") String motivo) {
+
+	/** Compatibilidad: sin el titular ni el RUC de la cuenta (los tipos que no son cuenta bancaria no los usan). */
+	public PropuestaConectorRequest(ProveedorConector proveedor, ModoConector modo, String ruta, String serieBoleta,
+			String serieFactura, String serieNotaBoleta, String serieNotaFactura, String afectacionIgv, String llavePublica,
+			List<String> medios, String montoMaximo, String numeroCuenta, String cci, String modalidad, String patronAbono,
+			String abono, String secreto, String secretoAviso, String motivo) {
+		this(proveedor, modo, ruta, serieBoleta, serieFactura, serieNotaBoleta, serieNotaFactura, afectacionIgv,
+				llavePublica, medios, montoMaximo, numeroCuenta, cci, null, null, modalidad, patronAbono, abono, secreto,
+				secretoAviso, motivo);
+	}
+
+	/** Lo mismo, sin los secretos (la demo los descarta: QA-S8-7). */
+	public PropuestaConectorRequest sinSecretos() {
+		return new PropuestaConectorRequest(proveedor, modo, ruta, serieBoleta, serieFactura, serieNotaBoleta,
+				serieNotaFactura, afectacionIgv, llavePublica, medios, montoMaximo, numeroCuenta, cci, titularCuenta,
+				rucTitular, modalidad, patronAbono, abono, null, null, motivo);
+	}
 
 	@Override
 	public String toString() {

@@ -185,6 +185,18 @@ public class VerificadorConfiguracion implements InitializingBean {
 	static final List<String> SECRETOS_DE_CONECTORES = List.of(NUBEFACT_TOKEN, CULQI_LLAVE_SECRETA, CULQI_WEBHOOK_USUARIO,
 			CULQI_WEBHOOK_CLAVE);
 
+	/**
+	 * Correcciones del sprint 8 (S8-B5): lo que en una instalación COMPARTIDA es de cada colegio (su conector
+	 * CUENTA_BANCARIA o RECAUDACION) y por eso no puede venir del entorno de la instancia, con el valor que dejan los
+	 * archivos de configuración (el de «sin configurar»).
+	 */
+	static final Map<String, String> CONECTORES_EN_EL_ENTORNO = Map.of(
+			"cuentasclaras.caja.cuentas-deposito", "",
+			"cuentasclaras.recaudacion.banco", "GENERICO",
+			"cuentasclaras.recaudacion.modalidad", "CON_BASE_DE_DEUDAS",
+			"cuentasclaras.conciliacion.patron-abono-recaudacion", "",
+			"cuentasclaras.conciliacion.abono-recaudacion", "POR_LOTE");
+
 	/** Donde puede existir la mensajería simulada (los beans tienen el mismo {@code @Profile}). */
 	static final Set<String> PERFILES_MENSAJERIA_SIMULADA = Set.of("dev", "test", "piloto", "demo");
 
@@ -350,6 +362,18 @@ public class VerificadorConfiguracion implements InitializingBean {
 					.join(", ", secretos) + "): cada colegio registra los suyos en Conectores, cifrados y aprobados por "
 					+ "otra persona. Quita NUBEFACT_TOKEN, PASARELA_LLAVE_SECRETA, PASARELA_WEBHOOK_USUARIO y "
 					+ "PASARELA_WEBHOOK_CLAVE.");
+		}
+		if (despliegue) {
+			List<String> deColegios = CONECTORES_EN_EL_ENTORNO.entrySet().stream()
+					.filter(e -> !vacio(propiedad.apply(e.getKey()))
+							&& !propiedad.apply(e.getKey()).strip().equalsIgnoreCase(e.getValue()))
+					.map(Map.Entry::getKey).sorted().toList();
+			if (!deColegios.isEmpty()) {
+				throw new IllegalStateException("En una instalación COMPARTIDA la cuenta de depósito y la recaudación son de "
+						+ "cada colegio (sus conectores CUENTA_BANCARIA y RECAUDACION, aprobados por otra persona): el entorno "
+						+ "no las lleva. Quita " + String.join(", ", deColegios) + " (CAJA_CUENTAS_DEPOSITO, "
+						+ "CUENTASCLARAS_RECAUDACION_*, CUENTASCLARAS_CONCILIACION_*).");
+			}
 		}
 		String comprobantes = mayusculas(propiedad.apply(COMPROBANTES));
 		String pasarela = mayusculas(propiedad.apply(PASARELA));

@@ -355,6 +355,22 @@ public enum AccionAuditoria {
 	/** Se resalta: Promotoría firmó que usa el comprobante simulado y emite su comprobante legal aparte. */
 	COLEGIO_OSE_SIMULADO_ACEPTADO("Firmó que usa el comprobante simulado y emite el legal aparte", true),
 
+	// Correcciones del sprint 8 (S8-A1, S8-A2 y S8-M1)
+	/** Se resalta: el operador reenvió el enlace de activación al titular (mismo contacto), con aviso. */
+	TITULAR_ENLACE_REENVIADO("Reenvió el enlace de activación al titular", true),
+	/** Se resalta: un operador propuso cambiar el contacto del titular (lo aplica otro operador). */
+	TITULAR_CONTACTO_PROPUESTO("Propuso cambiar el contacto del titular", true),
+	/** Se resalta: se rechazó el cambio del contacto del titular. */
+	TITULAR_CONTACTO_RECHAZADO("Rechazó el cambio del contacto del titular", true),
+	/** Se resalta: el operador propuso cambiar el correo externo de control de un colegio en producción. */
+	CORREO_CONTROL_PROPUESTO("Propuso cambiar el correo externo de control", true),
+	/** Se resalta: la Promotoría aprobó el cambio del correo externo de control (desde ahora recibe la huella). */
+	CORREO_CONTROL_APROBADO("Aprobó el cambio del correo externo de control", true),
+	/** Se resalta: la Promotoría rechazó el cambio del correo externo de control. */
+	CORREO_CONTROL_RECHAZADO("Rechazó el cambio del correo externo de control", true),
+	/** Se resalta: al reactivar un operador, su correo pasó a ser el de CC_OPERADORES. */
+	OPERADOR_CORREO_ACTUALIZADO("Se actualizó el correo de un operador de la plataforma", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

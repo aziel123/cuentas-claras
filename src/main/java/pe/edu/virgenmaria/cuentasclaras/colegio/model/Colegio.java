@@ -118,6 +118,14 @@ public class Colegio {
 	@Column(name = "actualizado_en", nullable = false)
 	private LocalDateTime actualizadoEn;
 
+	/**
+	 * Correcciones del sprint 8 (S8-M5): quién cambió la ficha por última vez. trg_colegio_cambio exige su firma de la
+	 * versión anterior ({@code colegio:{id}:FICHA:{version}}): el operador en preparación (antes de que el titular active
+	 * su cuenta) o la Promotoría del colegio.
+	 */
+	@Column(name = "actualizado_por", length = 60)
+	private String actualizadoPor;
+
 	@Version
 	@Column(nullable = false)
 	private Long version;
@@ -162,6 +170,11 @@ public class Colegio {
 		this.razonSocial = exigir(razonSocial, "la razón social", 150);
 		this.direccion = exigir(direccion, "la dirección", 200);
 		this.correoInstitucional = exigir(correoInstitucional, "el correo institucional", 150);
+	}
+
+	/** Correcciones del sprint 8 (S8-M5): quien firma el cambio de la ficha (operador o Promotoría). */
+	public void firmarCambioDeFicha(String por) {
+		this.actualizadoPor = Objects.requireNonNull(por, "por");
 	}
 
 	/** Solo en preparación (en producción el RUC no cambia: lo exige la base). */
@@ -328,6 +341,10 @@ public class Colegio {
 
 	public LocalDateTime getActualizadoEn() {
 		return actualizadoEn;
+	}
+
+	public String getActualizadoPor() {
+		return actualizadoPor;
 	}
 
 	public Long getVersion() {

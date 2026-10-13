@@ -18,6 +18,7 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoVisibleCuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
+import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
@@ -203,6 +204,9 @@ public class ServicioPagoEnLinea {
 	 */
 	public String crearOrden(PagoEnLineaRequest pedido) {
 		Objects.requireNonNull(pedido, "pedido");
+		// S8-M2: en un colegio en preparación no hay dinero (la caja tampoco cobra): la pasarela nunca llega a cobrar.
+		colegios.exigirEnProduccion(ContextoColegio.actual(), "El colegio todavía no recibe pagos en línea: empieza a cobrar "
+				+ "cuando termine su puesta en marcha. No se te cobró nada.");
 		PasarelaPagos pasarela = pasarelas.activa();
 		Creada creada = Objects.requireNonNull(escritura.execute(t -> crearEnTransaccion(pedido, pasarela.proveedor())));
 		if (creada.nueva()) {

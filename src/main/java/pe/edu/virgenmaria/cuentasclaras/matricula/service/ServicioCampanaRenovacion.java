@@ -90,11 +90,15 @@ public class ServicioCampanaRenovacion {
 	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
 	private final FirmaSesion firmaSesion;
 
+	/** Correcciones del sprint 8 (QA-S8-4): un colegio en preparación no invita a las familias a renovar. */
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios;
+
 	public ServicioCampanaRenovacion(RenovacionMatriculaRepository renovaciones, MatriculasReservadasRepository reservadas,
 			AnioEscolarRepository anios, SeccionRepository secciones, MatriculaRepository matriculas,
 			PlanPensionRepository planes, CuotaRepository cuotas, AuditoriaService auditoria,
-			ApplicationEventPublisher eventos, Clock reloj, FirmaSesion firmaSesion) {
+			ApplicationEventPublisher eventos, Clock reloj, FirmaSesion firmaSesion, pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios) {
 		this.firmaSesion = firmaSesion;
+		this.colegios = colegios;
 		this.renovaciones = renovaciones;
 		this.reservadas = reservadas;
 		this.anios = anios;
@@ -146,6 +150,9 @@ public class ServicioCampanaRenovacion {
 	 */
 	@PreAuthorize("hasRole('ADMINISTRACION')")
 	public int abrir(Long anioDestinoId, LocalDate venceEn) {
+		colegios.exigirEnProduccion(pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio.actual(),
+				"El colegio todavía no está en producción: la renovación de matrícula (y sus avisos a las familias) se abre "
+						+ "después de la puesta en marcha.");
 		AnioEscolar destino = anios.bloquear(anioDestinoId)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Año escolar no encontrado"));
 		LocalDate hoy = LocalDate.now(reloj);

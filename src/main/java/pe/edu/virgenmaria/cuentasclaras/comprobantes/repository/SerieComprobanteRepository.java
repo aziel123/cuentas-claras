@@ -28,4 +28,12 @@ public interface SerieComprobanteRepository extends Repository<SerieComprobante,
 	Optional<SerieComprobante> bloquear(@Param("serie") String serie);
 
 	List<SerieComprobante> findAll();
+
+	/**
+	 * Correcciones del sprint 8 (QA-S8-6): cuáles de esas series ya existen en esos colegios. Solo con
+	 * {@code ContextoColegio.comoSistema} (otras sedes del mismo RUC): {@code SeriesDeOtrasSedes}.
+	 */
+	@Query("select s.serie from SerieComprobante s where s.serie in :series and s.colegioId in :colegios")
+	List<String> seriesEn(@Param("series") java.util.Collection<String> series,
+			@Param("colegios") java.util.Collection<Long> colegios);
 }

@@ -192,6 +192,40 @@ public class EstadoTecnico {
 				r.getDiferencias(), r.getFin().isAfter(limite));
 	}
 
+	/** Correcciones del sprint 8 (S8-B6): qué colegios pueden resolver su falta (en producción). Opcional en las pruebas. */
+	private pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository colegios;
+
+	@org.springframework.beans.factory.annotation.Autowired(required = false)
+	void setColegios(pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository colegios) {
+		this.colegios = colegios;
+	}
+
+	/**
+	 * Correcciones del sprint 8 (S8-B6): lo que responde {@code /salud/respaldo}. Como {@link #respaldo()}, pero una falta
+	 * de un colegio que todavía no puede resolverla (en preparación) cuenta solo mientras es nueva
+	 * ({@link PendientesRespaldo#abiertoParaVigilante}).
+	 */
+	public String paraVigilante() {
+		Optional<Respaldo> ultimo = propiedades.aceptarRespaldoSimulado() ? respaldos.findFirstByOrderByIdDesc()
+				: respaldos.findFirstByDestinoNotOrderByIdDesc(Respaldo.DESTINO_SIMULADO);
+		if (ultimo.isEmpty()) {
+			return EstadoRespaldo.ninguno().paraVigilante();
+		}
+		LocalDateTime limite = LocalDateTime.now(reloj.withZone(ConfiguracionTiempo.ZONA_LIMA))
+				.minusHours(propiedades.respaldoMaxHoras());
+		List<Respaldo> faltantes = respaldos.conComparacion(ComparacionRespaldo.FALTAN_FILAS,
+				propiedades.aceptarRespaldoSimulado(), Respaldo.DESTINO_SIMULADO);
+		List<ResolucionRespaldo> resoluciones = faltantes.isEmpty() ? List.of()
+				: respaldos.resolucionesDesde(faltantes.stream().map(Respaldo::getId).min(Long::compare).orElseThrow());
+		java.util.function.Predicate<Long> resoluble = colegios == null ? c -> true
+				: c -> colegios.findById(c).map(pe.edu.virgenmaria.cuentasclaras.colegio.model.Colegio::enProduccion)
+						.orElse(false);
+		if (PendientesRespaldo.abiertoParaVigilante(faltantes, resoluciones, resoluble, limite).isPresent()) {
+			return "REVISAR";
+		}
+		return ultimo.get().getFin().isAfter(limite) ? "OK" : "ATRASADO";
+	}
+
 	/** Las diferencias de un respaldo con FALTAN_FILAS cuya alerta ya resolvió Promotoría empiezan así. */
 	public static final String RESUELTA = "Alerta resuelta por Promotoría: ";
 

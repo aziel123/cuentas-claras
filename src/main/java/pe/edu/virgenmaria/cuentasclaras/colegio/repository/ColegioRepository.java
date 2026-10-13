@@ -29,4 +29,7 @@ public interface ColegioRepository extends JpaRepository<Colegio, Long> {
 	Optional<Colegio> findFirstByTipo(TipoColegio tipo);
 
 	Optional<Colegio> findFirstByRucOrderByIdAsc(String ruc);
+
+	/** Correcciones del sprint 8 (QA-S8-6): las OTRAS sedes con el mismo RUC (comparten la numeración ante SUNAT). */
+	List<Colegio> findByRucAndIdNot(String ruc, Long id);
 }

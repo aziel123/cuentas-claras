@@ -61,6 +61,9 @@ public class BandejaAprobaciones {
 	/** Los manejadores exigen una transacción abierta (también {@code tipo()}): se eligen dentro de ella. */
 	private final List<ManejadorSolicitud> manejadores;
 
+	/** Correcciones del sprint 8 (QA-S8-6): comprobaciones antes de abrir la transacción de la aprobación. */
+	private List<ValidacionPrevia> previas = List.of();
+
 	private final ControlParticipantes participantes;
 
 	private final AuditoriaService auditoria;
@@ -72,6 +75,12 @@ public class BandejaAprobaciones {
 	private final EjecucionIdentidad identidad;
 
 	private final TransactionTemplate transaccion;
+
+	/** Las comprobaciones previas de cada tipo (opcionales: las aporta el módulo dueño del dato). */
+	@org.springframework.beans.factory.annotation.Autowired(required = false)
+	void setPrevias(List<ValidacionPrevia> previas) {
+		this.previas = previas == null ? List.of() : List.copyOf(previas);
+	}
 
 	public BandejaAprobaciones(SolicitudCambioRepository solicitudes, List<ManejadorSolicitud> manejadores,
 			ControlParticipantes participantes, AuditoriaService auditoria, Clock reloj, FirmaSesion firma,
@@ -131,7 +140,25 @@ public class BandejaAprobaciones {
 	 * número por cada familia, que debe ser un celular registrado de un apoderado de esa familia.
 	 */
 	public void aprobar(Long id, String comentario, boolean hablo, List<String> telefonos) {
+		validarAntes(id);
 		resolverEnSuRuta(id, () -> aprobarEnTransaccion(id, comentario, hablo, telefonos));
+	}
+
+	/**
+	 * Correcciones del sprint 8 (QA-S8-6): las {@link ValidacionPrevia} del tipo, ANTES de la transacción (necesitan ver
+	 * otros colegios). Si quien llama ya tiene una transacción abierta, no se pueden correr aquí: valen las del manejador y
+	 * las de MySQL.
+	 */
+	private void validarAntes(Long id) {
+		if (previas.isEmpty() || org.springframework.transaction.support.TransactionSynchronizationManager
+				.isActualTransactionActive()) {
+			return;
+		}
+		SolicitudCambio solicitud = transaccion.execute(t -> solicitudes.findById(id).orElse(null));
+		if (solicitud == null || solicitud.getEstado() != EstadoSolicitud.PENDIENTE) {
+			return;
+		}
+		previas.stream().filter(v -> v.tipo() == solicitud.getTipo()).forEach(v -> v.validar(solicitud));
 	}
 
 	private void aprobarEnTransaccion(Long id, String comentario, boolean hablo, List<String> telefonos) {

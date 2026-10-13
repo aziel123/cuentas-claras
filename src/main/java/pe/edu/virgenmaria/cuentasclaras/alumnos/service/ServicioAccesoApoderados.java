@@ -78,12 +78,16 @@ public class ServicioAccesoApoderados {
 
 	private final SesionesFirmadas sesionesFirmadas;
 
+	/** Correcciones del sprint 8 (S8-M2 y QA-S8-4): un colegio en preparación no envía enlaces a las familias. */
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios;
+
 	public ServicioAccesoApoderados(ApoderadoRepository apoderados, UsuarioRepository usuarios,
 			ServicioDetallesUsuario detalles, PasswordEncoder codificador, GeneradorClaveTemporal generador,
 			PropiedadesSeguridad propiedades, AuditoriaService auditoria, PlatformTransactionManager transacciones,
 			Clock reloj, pe.edu.virgenmaria.cuentasclaras.seguridad.service.SesionesUsuario sesiones,
 			EnlacesActivacion enlaces, org.springframework.context.ApplicationEventPublisher eventos,
-			EjecucionIdentidad identidad, SesionesFirmadas sesionesFirmadas) {
+			EjecucionIdentidad identidad, SesionesFirmadas sesionesFirmadas, pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios) {
+		this.colegios = colegios;
 		this.identidad = identidad;
 		this.sesionesFirmadas = sesionesFirmadas;
 		this.eventos = eventos;
@@ -120,6 +124,9 @@ public class ServicioAccesoApoderados {
 	 * nombre se busca antes en toda la plataforma.
 	 */
 	public AccesoEnviado darAcceso(Long apoderadoId) {
+		colegios.exigirEnProduccion(pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio.actual(),
+				"El colegio todavía no está en producción: el portal de las familias se activa después de la puesta en "
+						+ "marcha (antes ningún mensaje sale a las familias).");
 		Apoderado apoderado = transaccion.execute(t -> apoderados.findById(apoderadoId).filter(Apoderado::isActivo)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Apoderado no encontrado")));
 		String nombreUsuario = apoderado.getDocumento().numero().toLowerCase(Locale.ROOT);
@@ -167,6 +174,9 @@ public class ServicioAccesoApoderados {
 	 */
 	@PreAuthorize("hasRole('PROMOTOR')")
 	public AccesoEnviado restablecerAcceso(Long apoderadoId) {
+		colegios.exigirEnProduccion(pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio.actual(),
+				"El colegio todavía no está en producción: el portal de las familias se activa después de la puesta en "
+						+ "marcha (antes ningún mensaje sale a las familias).");
 		AccesoEnviado creado = identidad.como(() -> {
 			Usuario usuario = usuarios.findByApoderadoId(apoderadoId)
 					.orElseThrow(() -> new ReglaNegocioException("Este apoderado no tiene cuenta en línea."));

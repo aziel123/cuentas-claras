@@ -13,6 +13,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Enmascarar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
 import pe.edu.virgenmaria.cuentasclaras.comun.config.PropiedadesPlataforma;
 import pe.edu.virgenmaria.cuentasclaras.comun.config.PropiedadesPlataforma.Operador;
@@ -120,6 +121,13 @@ public class InicializadorOperadores implements ApplicationRunner {
 					reactivar(actual, operador);
 					reactivados.add(operador.nombreUsuario());
 				}
+				else if (!operador.correo().equalsIgnoreCase(String.valueOf(actual.getCorreo()))) {
+					// S8-M1: el correo de una cuenta ACTIVA no cambia por la lista (un enlace no se manda a otro correo
+					// en silencio). Se quita de CC_OPERADORES, se despliega y se vuelve a agregar con el correo nuevo.
+					throw new IllegalStateException("CC_OPERADORES dice que el correo de " + operador.nombreUsuario()
+							+ " es otro que el de su cuenta activa. Para cambiarlo: quita al operador de la lista, despliega "
+							+ "(su cuenta se desactiva) y vuelve a agregarlo con el correo nuevo (le llega un enlace nuevo).");
+				}
 			}
 			for (Usuario existente : existentes) {
 				if (lista.stream().noneMatch(o -> o.nombreUsuario().equals(existente.getNombreUsuario()))) {
@@ -157,6 +165,15 @@ public class InicializadorOperadores implements ApplicationRunner {
 	private void reactivar(Usuario operador, Operador datos) {
 		identidad.ejecutar(() -> {
 			Usuario cuenta = usuarios.findById(operador.getId()).orElseThrow();
+			// S8-M1: el enlace va al correo de la lista, nunca al que tenía la cuenta (quizá de otra persona).
+			String correoAnterior = cuenta.getCorreo();
+			if (!datos.correo().equalsIgnoreCase(String.valueOf(correoAnterior))) {
+				cuenta.cambiarCorreoAlReactivar(datos.correo());
+				auditoria.registrar(AccionAuditoria.OPERADOR_CORREO_ACTUALIZADO, "usuario", cuenta.getId().toString(),
+						correoAnterior == null ? null : Enmascarar.correo(correoAnterior), Enmascarar.correo(datos.correo()),
+						"Al volver a CC_OPERADORES, el correo del operador " + cuenta.getNombreUsuario() + " pasó a ser el de "
+								+ "la lista: su enlace va ahí y ya no al correo anterior.");
+			}
 			cuenta.reactivar();
 			cuenta.restablecerClave(codificador.encode(generador.generar()), LocalDateTime.now(reloj),
 					LocalDateTime.now(reloj), ActorSistema.PLATAFORMA.usuario());

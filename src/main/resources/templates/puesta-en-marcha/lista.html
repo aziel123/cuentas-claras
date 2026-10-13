@@ -64,6 +64,33 @@
 			<button type="submit" class="btn btn-primario">Pasar el colegio a producción</button>
 		</form>
 	</section>
+	<section class="tarjeta" aria-labelledby="titulo-correo-control">
+		<h2 id="titulo-correo-control">Correo externo de control</h2>
+		<p class="secundario">El contador o un tercero de confianza del contrato: recibe la huella de la bitácora y el resumen
+			diario. Lo registra el operador de la plataforma; con el colegio en producción, un cambio lo aprueba la Promotoría.</p>
+		<p th:text="${correoControl.actual() != null} ? |Actual: ${correoControl.actual()}| : 'Todavía no hay correo de control.'">Actual</p>
+		<th:block th:if="${correoControl.propuesta().isPresent()}" th:with="p=${correoControl.propuesta().get()}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', 'El operador de la plataforma propuso cambiar el correo de control. No cambia hasta que lo apruebe una persona de Promotoría.')}"></div>
+			<dl class="datos">
+				<div><dt>Correo nuevo</dt><dd th:text="${p.nuevo()}">correo</dd></div>
+				<div><dt>Correo anterior</dt><dd th:text="${p.anterior() != null} ? ${p.anterior()} : '—'">correo</dd></div>
+				<div><dt>Motivo</dt><dd th:text="${p.motivo()}">motivo</dd></div>
+				<div><dt>Lo propuso</dt><dd th:text="${p.propuestoPor()}">operador</dd></div>
+			</dl>
+			<th:block th:if="${puedePasar}">
+				<form class="formulario" method="post" th:action="@{/puesta-en-marcha/correo-control/{id}/aprobar(id=${p.id()})}">
+					<button type="submit" class="btn btn-primario">Aprobar el correo nuevo</button>
+				</form>
+				<form class="formulario" method="post" th:action="@{/puesta-en-marcha/correo-control/{id}/rechazar(id=${p.id()})}">
+					<div class="campo">
+						<label for="motivo-rechazo">Motivo del rechazo</label>
+						<textarea class="input" id="motivo-rechazo" name="motivo" required minlength="10" maxlength="500"></textarea>
+					</div>
+					<button type="submit" class="btn btn-secundario">Rechazar el cambio</button>
+				</form>
+			</th:block>
+		</th:block>
+	</section>
 </main>
 </body>
 </html>

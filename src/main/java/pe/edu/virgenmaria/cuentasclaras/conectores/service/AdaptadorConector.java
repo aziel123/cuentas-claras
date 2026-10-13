@@ -28,6 +28,14 @@ public interface AdaptadorConector {
 		// nada que validar
 	}
 
+	/**
+	 * Correcciones del sprint 8 (QA-S8-6): lo que el módulo exige antes de aprobar y necesita ver OTROS colegios (por
+	 * ejemplo, las series de las otras sedes con el mismo RUC). Corre sin transacción abierta, antes de la de la aprobación.
+	 */
+	default void validarFueraDeTransaccion(ConectorVigente candidato) {
+		// nada que validar
+	}
+
 	/** El resultado de una prueba de conexión: sin secretos ni datos personales en el detalle. */
 	record ResultadoPrueba(boolean ok, String detalle) {
 

@@ -17,6 +17,9 @@ server:
         name: CCSESION
 
 cuentasclaras:
+  caja:
+    # La cuenta de ejemplo del colegio de demostración (sin conector CUENTA_BANCARIA).
+    cuentas-deposito: BCP Soles 191-XXXXXXX-0-XX
   plataforma:
     # Sprint 8, tanda 1: en local el operador («operador») puede dar de alta colegios junto a los de demostración.
     instalacion: COMPARTIDA

@@ -54,4 +54,11 @@ public interface ConectorColegioRepository extends Repository<ConectorColegio, L
 
 	/** Los conectores con secreto, para verificar al arrancar que la clave maestra los descifra. */
 	List<ConectorColegio> findBySecretoPistaIsNotNullOrClaveVersionIsNotNull();
+
+	/**
+	 * Correcciones del sprint 8 (QA-S8-6): los conectores de un tipo y estado de esos colegios. Solo con
+	 * {@code ContextoColegio.comoSistema} (las otras sedes del mismo RUC).
+	 */
+	List<ConectorColegio> findByTipoAndEstadoAndColegioIdIn(TipoConector tipo, EstadoConector estado,
+			java.util.Collection<Long> colegios);
 }

@@ -410,8 +410,11 @@ public class ServicioCobro {
 	 */
 	static ComprobanteImprimible imprimibleDe(Comprobante c, Pago pago, MarcaColegio marca, NombresUsuarios nombres,
 			Comprobante anulado, boolean firmaRecepcion) {
-		EmisorVista emisor = new EmisorVista(marca.nombre(), marca.razonSocial(), marca.ruc(), marca.direccion(),
-				marca.conLogo());
+		// S8-B4 y QA-S8-5: el emisor de la foto del comprobante (el de su emisión), no la marca de hoy.
+		EmisorVista emisor = c.conFotoDelEmisor()
+				? new EmisorVista(c.getEmisorNombre(), c.getEmisorRazonSocial(), c.getEmisorRuc(), c.getEmisorDireccion(),
+						c.getEmisorLogoId() != null, c.getEmisorLogoId())
+				: new EmisorVista(marca.nombre(), marca.razonSocial(), marca.ruc(), marca.direccion(), marca.conLogo());
 		return new ComprobanteImprimible(pago == null ? null : pago.getId(), emisor, c.getTipo().etiqueta(),
 				c.numeroCompleto(), c.getFechaEmision(), pago == null ? c.getCreadoEn() : pago.getCreadoEn(),
 				c.getReceptor().nombre(), c.getReceptor().documentoTexto(), lineas(c), c.getTotal(), c.getMoneda(),

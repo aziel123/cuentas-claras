@@ -1,12 +1,15 @@
 package pe.edu.virgenmaria.cuentasclaras.comprobantes.service;
 
 import org.springframework.stereotype.Component;
+import pe.edu.virgenmaria.cuentasclaras.colegio.model.Colegio;
+import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.ProveedorComprobantes;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.ResultadoEnvio;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.SerieComprobante;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.repository.SerieComprobanteRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Ruc;
 import pe.edu.virgenmaria.cuentasclaras.conectores.dto.ConectorVigente;
 import pe.edu.virgenmaria.cuentasclaras.conectores.dto.ConfiguracionConector;
 import pe.edu.virgenmaria.cuentasclaras.conectores.model.ProveedorConector;
@@ -32,9 +35,16 @@ public class ConectorOse implements AdaptadorConector {
 
 	private final SerieComprobanteRepository series;
 
-	public ConectorOse(OseDelColegio ose, SerieComprobanteRepository series) {
+	private final SeriesDeOtrasSedes otrasSedes;
+
+	private final ColegioRepository colegios;
+
+	public ConectorOse(OseDelColegio ose, SerieComprobanteRepository series, SeriesDeOtrasSedes otrasSedes,
+			ColegioRepository colegios) {
 		this.ose = ose;
 		this.series = series;
+		this.otrasSedes = otrasSedes;
+		this.colegios = colegios;
 	}
 
 	@Override
@@ -49,10 +59,21 @@ public class ConectorOse implements AdaptadorConector {
 
 	@Override
 	public ResultadoPrueba probar(ConectorVigente candidato) {
+		ConfiguracionConector.Ose configuracion = candidato.configuracionDe(ConfiguracionConector.Ose.class);
+		// S8-M4: el RUC emisor del conector es el del colegio (que pudo cambiar desde la propuesta) y es un RUC válido.
+		String rucColegio = colegios.findById(candidato.colegioId()).map(Colegio::getRuc).orElse(null);
+		if (rucColegio == null || !rucColegio.equals(configuracion.rucEmisor()) || !Ruc.valido(configuracion.rucEmisor())) {
+			return ResultadoPrueba.fallida("El RUC emisor del conector (" + configuracion.rucEmisor() + ") no es el RUC del "
+					+ "colegio: propón el OSE de nuevo con el RUC correcto.");
+		}
+		// QA-S8-6: ninguna serie la usa otra sede con el mismo RUC.
+		List<String> ocupadas = otrasSedes.ocupadas(candidato.colegioId(), configuracion.rucEmisor(), configuracion.series());
+		if (!ocupadas.isEmpty()) {
+			return ResultadoPrueba.fallida("Las series " + ocupadas + " ya las usa otra sede con el mismo RUC.");
+		}
 		if (candidato.proveedor() == ProveedorConector.SIMULADO) {
 			return ResultadoPrueba.correcta("El comprobante simulado no sale del sistema: no tiene valor ante SUNAT.");
 		}
-		ConfiguracionConector.Ose configuracion = candidato.configuracionDe(ConfiguracionConector.Ose.class);
 		EmisorElectronico emisor;
 		try {
 			emisor = ose.nubefactDe(candidato);
@@ -62,7 +83,15 @@ public class ConectorOse implements AdaptadorConector {
 		}
 		try {
 			ResultadoEnvio respuesta = emisor.consultar(TipoComprobante.BOLETA, configuracion.serieBoleta(), 1);
+			// S8-M4: si Nubefact informa el RUC del emisor (la cadena del código QR empieza con él), debe ser el del
+			// colegio: un token de la cuenta de otro RUC no pasa la prueba.
+			String rucInformado = rucDe(respuesta);
+			if (rucInformado != null && !rucInformado.equals(configuracion.rucEmisor())) {
+				return ResultadoPrueba.fallida("La cuenta de Nubefact de esa ruta y ese token emite con OTRO RUC ("
+						+ rucInformado + "), no con el del colegio.");
+			}
 			return ResultadoPrueba.correcta("Nubefact respondió a la consulta de prueba con la cuenta indicada"
+					+ (rucInformado == null ? " (no informó el RUC: confírmalo con tu contador)" : " del RUC " + rucInformado)
 					+ (respuesta == null || respuesta.codigoRespuesta() == null ? "."
 							: " (código " + respuesta.codigoRespuesta() + ")."));
 		}
@@ -70,6 +99,23 @@ public class ConectorOse implements AdaptadorConector {
 			return ResultadoPrueba.fallida("Nubefact no aceptó la conexión con esa ruta y ese token ("
 					+ e.getClass().getSimpleName() + ").");
 		}
+	}
+
+	/** El RUC del emisor que informa la respuesta del OSE (primer campo de la cadena del QR), o {@code null}. */
+	static String rucDe(ResultadoEnvio respuesta) {
+		if (respuesta == null || respuesta.respuesta() == null) {
+			return null;
+		}
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("cadena_para_codigo_qr\\W+((10|20)[0-9]{9})\\s*\\|")
+				.matcher(respuesta.respuesta());
+		return m.find() ? m.group(1) : null;
+	}
+
+	/** QA-S8-6: antes de aprobar, ninguna serie la usa otra sede con el mismo RUC (sin transacción: ve otros colegios). */
+	@Override
+	public void validarFueraDeTransaccion(ConectorVigente candidato) {
+		ConfiguracionConector.Ose configuracion = candidato.configuracionDe(ConfiguracionConector.Ose.class);
+		otrasSedes.exigirLibres(candidato.colegioId(), configuracion.rucEmisor(), configuracion.series());
 	}
 
 	@Override

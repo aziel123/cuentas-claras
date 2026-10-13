@@ -61,6 +61,12 @@ public class LogosColegio {
 		return logos.findByVigenteTrue();
 	}
 
+	/** Correcciones del sprint 8 (S8-B4): el PNG de un logo del colegio en contexto (el de la emisión de un comprobante). */
+	@Transactional(readOnly = true)
+	public Optional<byte[]> png(Long id) {
+		return logos.findById(id).map(LogoColegio::getContenido);
+	}
+
 	/** El PNG vigente del colegio en contexto (para servirlo: sin exponer la entidad al controlador). */
 	@Transactional(readOnly = true)
 	public Optional<byte[]> pngVigente() {
@@ -78,6 +84,25 @@ public class LogosColegio {
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public LogoColegio guardar(byte[] contenido, String nombreOriginal) {
+		ImagenPng png = preparar(contenido);
+		LogoColegio anterior = logos.findByVigenteTrue().orElse(null);
+		if (anterior != null) {
+			// UNIQUE (colegio_id, vigente): el anterior deja de estar vigente ANTES de insertar el nuevo.
+			anterior.reemplazar();
+			logos.saveAndFlush(anterior);
+		}
+		return logos.saveAndFlush(LogoColegio.vigente(png.bytes(), sha256(png.bytes()), png.ancho(), png.alto()));
+	}
+
+	/**
+	 * Correcciones del sprint 8 (QA-S8-1): valida el logo SIN guardarlo (sin transacción), para rechazarlo antes de crear
+	 * nada en el alta. Lanza la misma {@link ReglaNegocioException} que {@link #guardar}.
+	 */
+	public void validar(byte[] contenido, String nombreOriginal) {
+		preparar(contenido);
+	}
+
+	private ImagenPng preparar(byte[] contenido) {
 		if (contenido == null || contenido.length == 0) {
 			throw new ReglaNegocioException("Elige el archivo del logo (PNG o JPEG).");
 		}
@@ -88,14 +113,7 @@ public class LogosColegio {
 		String formato = formatoPorMagia(contenido);
 		exigirQueTermineConLaImagen(contenido, formato);
 		BufferedImage original = decodificar(contenido, formato);
-		ImagenPng png = reescalarYCodificar(original);
-		LogoColegio anterior = logos.findByVigenteTrue().orElse(null);
-		if (anterior != null) {
-			// UNIQUE (colegio_id, vigente): el anterior deja de estar vigente ANTES de insertar el nuevo.
-			anterior.reemplazar();
-			logos.saveAndFlush(anterior);
-		}
-		return logos.saveAndFlush(LogoColegio.vigente(png.bytes(), sha256(png.bytes()), png.ancho(), png.alto()));
+		return reescalarYCodificar(original);
 	}
 
 	// ------------------------------------------------------------------ validación y decodificación

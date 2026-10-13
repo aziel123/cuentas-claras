@@ -27,10 +27,17 @@ public class PruebaCuentaBancaria implements AdaptadorConector {
 	@Override
 	public ResultadoPrueba probar(ConectorVigente candidato) {
 		ConfiguracionConector.CuentaBancaria cuenta = candidato.configuracionDe(ConfiguracionConector.CuentaBancaria.class);
-		if (cuenta.numero() == null || !cuenta.numero().matches("[0-9]{10,20}") || cuenta.cci() == null
-				|| !cuenta.cci().matches("[0-9]{20}")) {
-			return ResultadoPrueba.fallida("El número o el CCI no tienen el formato del banco.");
+		if (cuenta.numero() == null || !cuenta.numero().matches("[0-9]{10,20}")) {
+			return ResultadoPrueba.fallida("El número de la cuenta no tiene el formato del banco.");
 		}
-		return ResultadoPrueba.correcta("Número y CCI con formato correcto. Quien aprueba confirma la cuenta con el banco.");
+		String problema = CuentaInterbancaria.problema(cuenta.cci(), candidato.proveedor());
+		if (problema != null) {
+			return ResultadoPrueba.fallida(problema);
+		}
+		if (cuenta.titular() == null || cuenta.rucTitular() == null) {
+			return ResultadoPrueba.fallida("Falta el titular de la cuenta o su RUC: propón la cuenta de nuevo.");
+		}
+		return ResultadoPrueba.correcta("CCI de " + candidato.proveedor().etiqueta() + " con sus dígitos de control correctos "
+				+ "y a nombre del RUC del colegio. Quien aprueba confirma la cuenta con el banco.");
 	}
 }

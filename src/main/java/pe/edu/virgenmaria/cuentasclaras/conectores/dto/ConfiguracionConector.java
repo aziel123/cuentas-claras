@@ -86,8 +86,17 @@ public sealed interface ConfiguracionConector {
 		}
 	}
 
-	/** Cuenta bancaria: número, CCI (20 dígitos) y moneda (PEN). Reemplaza a {@code caja.cuentas-deposito}. */
-	record CuentaBancaria(String numero, String cci, String moneda) implements ConfiguracionConector {
+	/**
+	 * Cuenta bancaria: número, CCI (20 dígitos) y moneda (PEN). Reemplaza a {@code caja.cuentas-deposito}. Correcciones del
+	 * sprint 8 (S8-M3): el titular de la cuenta (razón social) y su RUC, que debe ser el del colegio. Las filas anteriores
+	 * no los tienen ({@code null}).
+	 */
+	record CuentaBancaria(String numero, String cci, String moneda, String titular, String rucTitular)
+			implements ConfiguracionConector {
+
+		public CuentaBancaria(String numero, String cci, String moneda) {
+			this(numero, cci, moneda, null, null);
+		}
 
 		@Override
 		public TipoConector tipo() {
