@@ -717,7 +717,7 @@ class AuditoriaSprint8MySqlTest {
 		SecurityContextHolder.clearContext();
 		Long cambio = jdbc.queryForObject("SELECT id FROM cambio_correo_control WHERE colegio_id = ?", Long.class, colegio);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE colegio_id = ? AND tipo = 'CORREO_CONTROL' AND "
-				+ "destino = ?", Long.class, colegio, anterior)).isEqualTo(1L);
+				+ "entidad = 'cambio_correo_control' AND destino = ?", Long.class, colegio, anterior)).isEqualTo(1L);
 		// cc_sistema sin la firma de la Promotoría: 1644.
 		assertThat(codigoAl(() -> sistema().update("UPDATE cambio_correo_control SET estado = 'APROBADO', pendiente = NULL, "
 				+ "resuelto_por = ?, resuelto_en = NOW(6) WHERE id = ?", equipo.promotora().getNombreUsuario(), cambio)))

@@ -75,6 +75,16 @@ public class ServicioMarcaColegio {
 		String razonAntes = colegio.getRazonSocial();
 		String direccionAntes = colegio.getDireccion();
 		String correoAntes = colegio.getCorreoInstitucional();
+		if (!Objects.equals(nombreAntes, limpio(datos.nombre())) || !Objects.equals(razonAntes, limpio(datos.razonSocial()))
+				|| !Objects.equals(direccionAntes, limpio(datos.direccion()))
+				|| !Objects.equals(correoAntes, limpio(datos.correoInstitucional()))) {
+			// S8-M5: la Promotoría firma el cambio de la ficha (trg_colegio_cambio exige su firma de la versión anterior).
+			// ANTES de tocar la entidad: el INSERT de la firma hace flush y el UPDATE debe salir ya con quien firma.
+			firma.firmar(pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma.fichaColegio(colegio.getId(),
+					colegio.getVersion()));
+			colegio.firmarCambioDeFicha(org.springframework.security.core.context.SecurityContextHolder.getContext()
+					.getAuthentication().getName());
+		}
 		colegio.corregirFicha(datos.nombre(), datos.razonSocial(), datos.direccion(), datos.correoInstitucional());
 		anotar("nombre", nombreAntes, colegio.getNombre(), antes, despues);
 		anotar("razonSocial", razonAntes, colegio.getRazonSocial(), antes, despues);
@@ -85,11 +95,6 @@ public class ServicioMarcaColegio {
 			throw new ReglaNegocioException("No hay cambios que guardar: la ficha es la misma y no elegiste un logo.");
 		}
 		if (!antes.isEmpty()) {
-			// S8-M5: la Promotoría firma el cambio de la ficha (trg_colegio_cambio exige su firma de la versión anterior).
-			firma.firmar(pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma.fichaColegio(colegio.getId(),
-					colegio.getVersion()));
-			colegio.firmarCambioDeFicha(org.springframework.security.core.context.SecurityContextHolder.getContext()
-					.getAuthentication().getName());
 			colegios.saveAndFlush(colegio);
 			auditoria.registrar(AccionAuditoria.MARCA_COLEGIO_CAMBIADA, "colegio", id, String.join(" · ", antes),
 					String.join(" · ", despues), "Promotoría corrigió la ficha del colegio (" + antes.size()
@@ -111,6 +116,10 @@ public class ServicioMarcaColegio {
 			throw new RecursoNoEncontradoException("Colegio no encontrado");
 		}
 		return colegios.findById(colegioId).orElseThrow(() -> new RecursoNoEncontradoException("Colegio no encontrado"));
+	}
+
+	private static String limpio(String texto) {
+		return texto == null ? null : texto.strip();
 	}
 
 	private static void anotar(String campo, String anterior, String nuevo, List<String> antes, List<String> despues) {
