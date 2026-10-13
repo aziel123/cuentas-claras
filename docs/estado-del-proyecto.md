@@ -1,7 +1,7 @@
 # Estado del proyecto · Cuentas Claras
 
-> Última actualización: 12 de octubre de 2026 (sprint 8 «Lista para vender»: las 3 tandas implementadas; faltan QA,
-> auditoría y sus correcciones).
+> Última actualización: 13 de octubre de 2026 (sprint 8 «Lista para vender»: terminado, auditado y corregido; faltan el
+> paso 0 en Cloud SQL y el despliegue).
 > Resumen para retomar el trabajo: qué está hecho, cómo probarlo y qué hay que decidir con el colegio.
 
 ## Avance
@@ -16,7 +16,7 @@
 | 5 · Familias y matrícula 2027 (avisos por WhatsApp, acceso directo al titular, huella diaria, portal, renovación 2027, feriados, cierre mensual) | ✅ Terminado, auditado y corregido | `claude/sprint-5-familias` | 1694 (más las de MySQL real, que corren en el CI) |
 | 6 · Panel de la promotora (panel, reportes y Excel, resumen diario, alertas y aprobaciones en el celular, contacto del personal, llamada de control) | Implementado en 3 tandas, auditado y corregido (`docs/arquitectura/sprint-6-correcciones.md`, V23, 63 triggers) | `main` (PR #4) | 1883 (92 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
 | 7 · Endurecimiento y entrega (respaldos cifrados y restauración probada, monitoreo, base de datos endurecida, seguridad web, Ley 29733, manuales y capacitación) | ✅ Terminado, auditado y corregido (`docs/arquitectura/sprint-7-correcciones.md`, V24 a V27, 75 triggers) | `claude/sprint-7-endurecimiento` | 2226 (120 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
-| 8 · Lista para vender (plataforma y alta de colegios, marca, puesta en marcha, conectores por colegio, demo, respaldos por colegio, despliegue en Google Cloud, contratos) | Implementado en 3 tandas (`docs/arquitectura/sprint-8-lista-para-vender.md`, V28 a V30, 82 triggers y 91 huellas); **faltan QA, auditoría y sus correcciones**, el paso 0 en Cloud SQL y el despliegue | `claude/sprint-8-lista-para-vender` | 2370 (135 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
+| 8 · Lista para vender (plataforma y alta de colegios, marca, puesta en marcha, conectores por colegio, demo, respaldos por colegio, despliegue en Google Cloud, contratos) | ✅ Terminado, auditado y corregido (`docs/arquitectura/sprint-8-lista-para-vender.md` y `sprint-8-correcciones.md`, V28 a V31, 86 triggers y 96 huellas); faltan el paso 0 en Cloud SQL y el despliegue | `claude/sprint-8-lista-para-vender` | 2438 (140 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
 
 El sprint 4 se implementó en 3 tandas verificadas, cada una con su migración y probada también contra MySQL 8 real, y luego se corrigió todo lo que encontraron la auditoría antifraude y QA:
 
@@ -43,6 +43,7 @@ El sprint 8 va en 3 tandas (`docs/arquitectura/sprint-8-lista-para-vender.md`, c
 | 1 | Colegio de plataforma y operador (sin datos de las familias), alta de un colegio con su primera Promotoría, estados del colegio (en preparación no se cobra), marca del producto en un parámetro y marca del colegio | V28 | 80 | 2290 (129 de MySQL real) |
 | 2 | Conectores por colegio (OSE, pasarela, cuenta bancaria y recaudación) con secretos cifrados y doble control; lista de puesta en marcha de 14 pasos y paso a producción; reglas de la instalación compartida | V29 | 82 | 2339 (133 de MySQL real) |
 | 3 | Demo (un colegio ficticio por visitante, sin salida a internet, se borra cada noche), «faltan filas» por colegio, despliegue en Google Cloud (scripts y paso 0), gitleaks, imagen en GHCR y los documentos (términos, encargo de tratamiento, plantillas de WhatsApp para Meta, guías) | V30 | 82 | 2370 (135 de MySQL real) |
+| Correcciones | La auditoría (S8-A1 y S8-A2, altos: el operador ya no se queda con la primera Promotoría ni con el correo de control; M1 a M5 y B1 a B6) y los 9 hallazgos de QA (`docs/arquitectura/sprint-8-correcciones.md`) | V31 | 86 | 2438 (140 de MySQL real) |
 
 Las ramas están **apiladas**: cada una parte de la anterior y contiene todo su trabajo. La más completa es `claude/sprint-5-familias`. Los sprints 1 a 4 están en revisión en el PR #1 hacia `main` (CI en verde, también el job de MySQL 8). El sprint 5 pasó el CI completo en un PR en borrador que se cerró sin merge; se propone a `main` cuando se una el PR #1.
 
@@ -130,7 +131,7 @@ Diseño e implementación en `docs/arquitectura/sprint-8-lista-para-vender.md`.
   cifrados (AES-256-GCM) que nadie vuelve a ver; cambiar adónde entra el dinero lo propone una persona y lo aprueba otra con
   su firma, y avisa a toda la Promotoría y al correo externo de control.
 - **Marca:** el nombre comercial está en un solo parámetro (`CC_MARCA_NOMBRE`, todavía provisional) y cada colegio tiene la
-  suya (razón social, RUC, dirección y logo) en su portal, sus boletas y sus mensajes. Las 21 plantillas de WhatsApp llevan
+  suya (razón social, RUC, dirección y logo) en su portal, sus boletas y sus mensajes. Las 26 plantillas de WhatsApp llevan
   el nombre del colegio como variable (`docs/entrega/plantillas-whatsapp-meta.md`, listas para Meta).
 - **Demo** (`demo.<dominio>`): cada visitante crea SU colegio ficticio en un minuto, con 40 familias, la caja de hoy de Lucía
   Ramos y una cuenta por rol. Datos ficticios en memoria, franja «DEMO», sin salida a internet, nunca envía mensajes reales ni
@@ -327,8 +328,11 @@ La lista completa está en los documentos de `docs/arquitectura/`, incluidas la 
 - [ ] Asesor legal: confirmar los plazos de la Ley 29733 (20 y 10 días hábiles, 48 horas, 1 y 2 años), redactar el aviso de privacidad y confirmar qué se responde a un pedido de cancelación.
 - [ ] El colegio: inscribir sus bancos de datos y declarar el flujo transfronterizo (Meta y, si aplica, el hosting); nombrar al responsable de los datos personales.
 - [ ] Contratar el almacenamiento de objetos con bloqueo de objetos y generar las dos claves `age` (Promotoría y responsable técnico).
-- [ ] **Sprint 8:** QA (`qa-tester`) y auditoría (`auditor-seguridad-antifraude`) de las 3 tandas y sus correcciones; el PR
-      hacia `main` (CI completo: `mysql`, `respaldo`, `demo`, `secretos` y `dependencias`).
+- [x] **Sprint 8:** QA (`qa-tester`) y auditoría (`auditor-seguridad-antifraude`) de las 3 tandas y sus correcciones
+      (`docs/arquitectura/sprint-8-correcciones.md`).
+- [ ] **Sprint 8:** el PR hacia `main` (CI completo: `mysql`, `respaldo`, `demo`, `secretos` y `dependencias`) y, en GitHub,
+      la protección de `main` con «Require review from Code Owners» (S8-B2).
+- [ ] **Sprint 8:** declarar al menos dos operadores en `CC_OPERADORES` (corregir el contacto de un titular exige dos).
 - [ ] **Sprint 8, paso 0:** crear la cuenta y el proyecto de Google Cloud y correr `deploy/gcp/paso-0.sh` contra una instancia
       de prueba de Cloud SQL ([acta](operacion/acta-paso-0-cloud-sql.md)). Si falla, revisar el proveedor antes de desplegar.
 - [ ] **Sprint 8:** elegir el nombre comercial (decisión 122), comprar el dominio, pedir el nombre visible de WhatsApp y enviar
@@ -340,9 +344,10 @@ La lista completa está en los documentos de `docs/arquitectura/`, incluidas la 
 ## Riesgos conocidos
 - **Sprint 8: nada se probó en Google Cloud** (no había cuenta): los scripts de `deploy/` se validaron en su sintaxis y el job
   `mysql` se reprodujo en MySQL 8.4 local, también con un administrador sin SUPER como el de Cloud SQL. El paso 0 lo confirma.
-- **Sprint 8: el operador de la plataforma controla el alta inicial** de cada colegio (podría crear la primera Promotoría con
-  su propio celular); lo mitigan el DNI del contrato, la activación en la reunión, el aviso al correo institucional y la
-  bitácora del colegio. El DBA de la plataforma sí ve los datos (otra credencial): lo cubren el contrato de encargo, las
+- **Sprint 8: el operador de la plataforma hace el alta inicial** de cada colegio. Desde las correcciones ya no puede quedarse
+  con la primera Promotoría (el DNI del titular no cambia y cambiar su contacto exige un segundo operador, con aviso al
+  contacto anterior, al correo institucional y al de control) ni con el correo de control de un colegio en producción (lo
+  aprueba la Promotoría); dos operadores en colusión siguen siendo un residual (`sprint-8-correcciones.md`). El DBA de la plataforma sí ve los datos (otra credencial): lo cubren el contrato de encargo, las
   claves de root y `cc_migrador` fuera de la VM y los conteos por colegio del respaldo.
 - **Sprint 8: en la instalación compartida** la plataforma custodia la clave HMAC y el respaldo; una caída afecta a todos los
   colegios a la vez; y la demo no tiene los triggers de MySQL (muestra las reglas de la aplicación).
