@@ -33,8 +33,11 @@ public class ServicioCuentasBancarias {
 
 	private final AuditoriaService auditoria;
 
+	private final pe.edu.virgenmaria.cuentasclaras.conectores.service.ConectoresColegio conectores;
+
 	public ServicioCuentasBancarias(CuentaBancariaRepository cuentas, ExtractoBancarioRepository extractos,
-			AuditoriaService auditoria) {
+			AuditoriaService auditoria, pe.edu.virgenmaria.cuentasclaras.conectores.service.ConectoresColegio conectores) {
+		this.conectores = conectores;
 		this.cuentas = cuentas;
 		this.extractos = extractos;
 		this.auditoria = auditoria;
@@ -56,6 +59,19 @@ public class ServicioCuentasBancarias {
 	@PreAuthorize("hasRole('PROMOTOR')")
 	public Long registrar(CuentaRequest pedido) {
 		CuentaBancaria cuenta = CuentaBancaria.registrar(pedido.banco(), pedido.numero(), pedido.alias());
+		// Sprint 8, tanda 2 (sección 3.6): si el colegio tiene su cuenta bancaria en Conectores (aprobada por otra persona),
+		// el extracto que se concilia es el de ESA cuenta: no se registra otra.
+		conectores.vigente(pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector.CUENTA_BANCARIA).ifPresent(c -> {
+			String delConector = c.configuracionDe(
+					pe.edu.virgenmaria.cuentasclaras.conectores.dto.ConfiguracionConector.CuentaBancaria.class).numero();
+			if (!delConector.equals(cuenta.getNumero().replaceAll("[^0-9]", ""))
+					|| !c.proveedor().name().equals(cuenta.getBanco().name())) {
+				throw new ReglaNegocioException("La cuenta que se concilia es la del colegio en Conectores (" + c.proveedor()
+						.etiqueta() + ", termina en " + pe.edu.virgenmaria.cuentasclaras.conectores.dto.ConfiguracionConector
+								.CuentaBancaria.terminacion(delConector) + "). Para conciliar otra, primero cambia la "
+						+ "cuenta del colegio en Conectores (la aprueba otra persona).");
+			}
+		});
 		if (cuentas.existsByBancoAndNumero(cuenta.getBanco(), cuenta.getNumero())) {
 			throw new ReglaNegocioException("Esa cuenta ya está registrada.");
 		}

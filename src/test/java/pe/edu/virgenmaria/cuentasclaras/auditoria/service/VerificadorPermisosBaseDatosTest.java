@@ -259,7 +259,8 @@ class VerificadorPermisosBaseDatosTest {
 	/** Un MySQL bien configurado: DELETE → 1142, UPDATE de columnas inmutables → 1143, INSERT imposible → 1644. */
 	/** Sprint 7, tanda 2: lo que solo escribe cc_sistema (a cc_app le falta el GRANT: 1142). */
 	private static final java.util.regex.Pattern SOLO_SISTEMA = java.util.regex.Pattern.compile(
-			"^INSERT INTO (usuario|usuario_rol|sesion_usuario|semilla_muestreo|muestra_llamada|resumen_diario|primera_direccion) ");
+			"^INSERT INTO (usuario|usuario_rol|sesion_usuario|semilla_muestreo|muestra_llamada|resumen_diario|primera_direccion|"
+			+ "colegio|primera_promotoria|cambio_contacto_titular|cambio_correo_control) ");
 
 	private static JdbcTemplate mysqlQueDeniega() {
 		JdbcTemplate mysql = mock(JdbcTemplate.class);
@@ -281,6 +282,8 @@ class VerificadorPermisosBaseDatosTest {
 				.thenReturn(String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS));
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_PASARELA_SIMULADA, Integer.class)).thenReturn(0);
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_MENSAJERIA_SIMULADA, Integer.class)).thenReturn(0);
+		// Sprint 8, tanda 1: un solo colegio de plataforma, solo con operadores.
+		conPlataformaSana(mysql);
 		// Sprint 7, tanda 2: el usuario, las huellas del jar y solo los privilegios de 02.
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_USUARIO_ACTUAL, String.class)).thenReturn("cc_app@%");
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_HUELLAS, String.class)).thenReturn(huellasJson(Map.of()));
@@ -289,6 +292,36 @@ class VerificadorPermisosBaseDatosTest {
 				"GRANT INSERT, UPDATE (`actualizado_en`, `estado`, `monto_pagado`, `version`) ON `cuentasclaras`.`cuota` TO `cc_app`@`%`",
 				"GRANT `cc_negocio`@`%` TO `cc_app`@`%`"));
 		return mysql;
+	}
+
+	/** Sprint 8, tanda 1 (sección 6.4): exactamente una PLATAFORMA, sin roles de colegio y sin operadores fuera. */
+	static void conPlataformaSana(JdbcTemplate mysql) {
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_PLATAFORMAS, Integer.class)).thenReturn(1);
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_ROLES_EN_PLATAFORMA, Integer.class)).thenReturn(0);
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_OPERADORES_FUERA, Integer.class)).thenReturn(0);
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_OPERADORES, Integer.class)).thenReturn(2);
+		when(mysql.queryForMap(VerificadorPermisosBaseDatos.SQL_COLEGIOS))
+				.thenReturn(new java.util.LinkedHashMap<>(Map.of("c", 3L, "p", 2L)));
+	}
+
+	/**
+	 * Sprint 8, tanda 1: sin el colegio de plataforma, con dos, con un rol de colegio dentro de él o con un operador fuera,
+	 * prod no arranca.
+	 */
+	@Test
+	void sinUnaSolaPlataformaSanaNoArranca() {
+		JdbcTemplate dos = mysqlQueDeniega();
+		when(dos.queryForObject(VerificadorPermisosBaseDatos.SQL_PLATAFORMAS, Integer.class)).thenReturn(2);
+		assertThatThrownBy(() -> completo(dos).afterPropertiesSet()).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("exactamente uno");
+		JdbcTemplate conRoles = mysqlQueDeniega();
+		when(conRoles.queryForObject(VerificadorPermisosBaseDatos.SQL_ROLES_EN_PLATAFORMA, Integer.class)).thenReturn(1);
+		assertThatThrownBy(() -> completo(conRoles).afterPropertiesSet()).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("solo viven operadores");
+		JdbcTemplate fuera = mysqlQueDeniega();
+		when(fuera.queryForObject(VerificadorPermisosBaseDatos.SQL_OPERADORES_FUERA, Integer.class)).thenReturn(1);
+		assertThatThrownBy(() -> completo(fuera).afterPropertiesSet()).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("fuera del colegio de plataforma");
 	}
 
 	/**
@@ -302,7 +335,8 @@ class VerificadorPermisosBaseDatosTest {
 			if (sql.startsWith("INSERT")) {
 				throw denegado(1644);
 			}
-			if (sql.startsWith("UPDATE") && (sql.contains("cuota SET monto") || sql.contains("sesion_usuario SET hash"))) {
+			if (sql.startsWith("UPDATE") && (sql.contains("cuota SET monto") || sql.contains("sesion_usuario SET hash")
+					|| sql.contains("colegio SET tipo") || sql.contains("configuracion_colegio SET clave"))) {
 				throw denegado(1143);
 			}
 			throw denegado(1142);
@@ -575,7 +609,10 @@ class VerificadorPermisosBaseDatosTest {
 		// correcciones del sprint 6 (V23): 63 con la muestra congelada y la delegación de las llamadas.
 		// Sprint 7, tanda 1 (V24): 64 con el registro de respaldos; tanda 2 (V25): 73 con identidad, sesiones y firmas;
 		// correcciones (V27): 75 con el nacimiento de las solicitudes y la resolución de las alertas de respaldo.
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(75);
+		// Sprint 8, tanda 1 (V28): 80 con el colegio (nace y cambia), la primera Promotoría y el correo externo de control;
+		// tanda 2 (V29): 82 con los conectores (nacen propuestos y cambian de estado con la aprobación firmada); tanda 3 (V30):
+		// los mismos 82 (los dos del respaldo cambian de versión).
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(86);
 	}
 
 	/**
@@ -818,6 +855,7 @@ class VerificadorPermisosBaseDatosTest {
 				.thenThrow(denegado(1305));
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_HUELLAS, String.class)).thenThrow(denegado(1305));
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_USUARIO_ACTUAL, String.class)).thenReturn("cc_app@%");
+		conPlataformaSana(mysql);
 		JdbcTemplate sistema = org.mockito.Mockito.mock(JdbcTemplate.class);
 		doThrow(denegado(1142)).when(sistema).update(anyString());
 		when(sistema.queryForObject(VerificadorPermisosBaseDatos.SQL_USUARIO_ACTUAL, String.class)).thenReturn("cc_sistema@%");

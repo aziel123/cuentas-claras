@@ -4,7 +4,7 @@
 <main id="contenido" class="contenido-publico">
 	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-login">
 		<div>
-			<h1 id="titulo-login">Ingresa a Cuentas Claras</h1>
+			<h1 id="titulo-login" th:text="|Ingresa a ${marca.nombre}|">Ingresa</h1>
 			<p class="secundario">Usa el usuario y la clave que te entregó el colegio.</p>
 		</div>
 
@@ -15,8 +15,10 @@
 		<form class="formulario" th:action="@{/login}" method="post">
 			<div class="campo">
 				<label for="usuario">Usuario</label>
+				<!--/* Sprint 8, tanda 3: en la demo, «Entrar como …» deja el usuario escrito (?usuario=...). */-->
 				<input type="text" class="input" id="usuario" name="usuario" autocomplete="username"
-					autocapitalize="none" spellcheck="false" maxlength="60" required autofocus>
+					autocapitalize="none" spellcheck="false" maxlength="60" required autofocus
+					th:value="${entornoDemo == true and param.usuario != null} ? ${param.usuario[0]} : ''">
 			</div>
 			<div class="campo">
 				<label for="clave">Clave</label>
@@ -25,6 +27,8 @@
 			<button type="submit" class="btn btn-primario btn-bloque">Ingresar</button>
 		</form>
 
+		<p class="ayuda" th:if="${entornoDemo == true}" data-crear-demo>¿Todavía no tienes tu colegio de prueba?
+			<a th:href="@{/demo}">Crea tu demo</a>.</p>
 		<p class="ayuda">¿Olvidaste tu clave? Pide a Promotoría o Dirección que te la restablezcan.</p>
 		<p class="ayuda"><a th:href="@{/privacidad}">Aviso de privacidad</a></p>
 	</section>

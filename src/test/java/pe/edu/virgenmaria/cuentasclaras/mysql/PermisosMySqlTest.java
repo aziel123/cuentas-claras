@@ -3321,7 +3321,9 @@ class PermisosMySqlTest {
 		java.util.Optional<Long> deHoy = fotoDeHoy();
 		org.junit.jupiter.api.Assumptions.assumeTrue(deHoy.isPresent(), "hoy no corresponde resumen (domingo o feriado)");
 		Long foto = deHoy.get();
-		String texto = jdbc.queryForObject("SELECT parametros FROM resumen_diario WHERE id = ?", String.class, foto);
+		// Sprint 8, tanda 1 (plantillas _v2): el mensaje lleva el nombre del colegio delante del texto de su foto.
+		String texto = jdbc.queryForObject("SELECT CONCAT(c.nombre, CHAR(10 USING utf8mb4), r.parametros) FROM resumen_diario r "
+				+ "JOIN colegio c ON c.id = r.colegio_id WHERE r.id = ?", String.class, foto);
 		Usuario cajera = guardar("caja.p7." + sufijo, Rol.CAJA);
 		Usuario promotora = guardar("promo.p7." + sufijo, Rol.PROMOTOR);
 		Usuario directora = guardar("dir.p7." + sufijo, Rol.DIRECTOR);
@@ -3939,6 +3941,51 @@ class PermisosMySqlTest {
 		assertThat(mensaje).as("MySQL incluye el DNI en su mensaje").contains(dni).startsWith("Duplicate entry");
 		String enLog = pe.edu.virgenmaria.cuentasclaras.comun.texto.Enmascarar.enTexto(mensaje);
 		assertThat(enLog).doesNotContain(dni).contains("Duplicate entry '********' for key");
+	}
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.plataforma.service.AltaColegio alta;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository colegiosDeLaBase;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.conectores.service.PropuestaConector propuestaConector;
+
+	/**
+	 * Sprint 8, tanda 2 (sección 3.6): la cuenta bancaria de un colegio nuevo con los permisos mínimos. Promotoría la propone
+	 * con su firma (trg_conector_colegio_nace), prueba la conexión, y otra persona (Dirección) la aprueba en la bandeja con
+	 * su firma: la solicitud queda APROBADA con flush ANTES de la vigencia (trg_conector_colegio_estado la exige) y el
+	 * anterior pasa a REEMPLAZADO antes del nuevo (UNIQUE de un vigente). El aviso sale a la Promotoría y al correo externo.
+	 * En un colegio aparte: la cuenta de depósito del colegio 1 no cambia para las demás pruebas.
+	 */
+	@Test
+	void flujoCuentaBancariaDelColegioConPermisosMinimos() {
+		ColegioConEquipoMySql.Equipo equipo = ColegioConEquipoMySql.crear(sufijo, "20600000030", "987653001", alta,
+				servicioUsuarios, usuarios, codificador, colegiosDeLaBase);
+		var tipo = pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector.CUENTA_BANCARIA;
+		Long[] ids = new Long[2];
+		for (int i = 0; i < 2; i++) {
+			UsuariosDePrueba.iniciarSesion(equipo.promotora());
+			ids[i] = propuestaConector.proponer(tipo, new pe.edu.virgenmaria.cuentasclaras.conectores.dto.PropuestaConectorRequest(
+					pe.edu.virgenmaria.cuentasclaras.conectores.model.ProveedorConector.BCP,
+					pe.edu.virgenmaria.cuentasclaras.conectores.model.ModoConector.REAL, null, null, null, null, null, null, null,
+					null, null, "19100" + i + "1234567", pe.edu.virgenmaria.cuentasclaras.conectores.service.CuentaInterbancaria
+							.con("002", "191", "000" + i + "12345678"), "Colegio de conectores S.A.C.", "20600000030", null,
+					null, null, null, null, "Cuenta corriente del colegio en soles"));
+			UsuariosDePrueba.iniciarSesion(equipo.promotora());
+			assertThat(propuestaConector.probar(ids[i]).ok()).isTrue();
+			Long solicitud = jdbc.queryForObject("SELECT solicitud_id FROM conector_colegio WHERE id = ?", Long.class, ids[i]);
+			UsuariosDePrueba.iniciarSesion(equipo.directora());
+			bandeja.aprobar(solicitud, null);
+			SecurityContextHolder.clearContext();
+		}
+		assertThat(jdbc.queryForList("SELECT estado FROM conector_colegio WHERE colegio_id = ? ORDER BY id", String.class,
+				equipo.colegioId())).containsExactly("REEMPLAZADO", "VIGENTE");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE colegio_id = ? AND tipo = 'CONECTOR_VIGENTE' AND "
+				+ "destinatario_tipo = 'EXTERNO'", Long.class, equipo.colegioId())).isEqualTo(2L);
+		assertThat(jdbc.queryForList("SELECT accion FROM evento_auditoria WHERE colegio_id = ? AND accion LIKE 'CONECTOR_%'",
+				String.class, equipo.colegioId())).contains("CONECTOR_PROPUESTO", "CONECTOR_PROBADO", "CONECTOR_VIGENTE");
 	}
 
 	private static String registroRespaldo(String archivo, String fin, long secuencia, String hash, String destino) {

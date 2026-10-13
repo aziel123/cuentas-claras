@@ -77,6 +77,10 @@ class MatrizPermisosTest {
 			if (modulo == ModuloApp.MI_CONTACTO && modulo.permite(rol)) {
 				esperado = 404;
 			}
+			// Sprint 8, tanda 1: el operador no tiene inicio de colegio: /inicio lo lleva a /plataforma.
+			if (rol == Rol.OPERADOR_PLATAFORMA && modulo == ModuloApp.INICIO) {
+				esperado = 302;
+			}
 			if (estado != esperado) {
 				errores.add(rol + " en " + modulo.ruta() + ": esperaba " + esperado + " y recibió " + estado);
 			}
@@ -410,7 +414,9 @@ class MatrizPermisosTest {
 	}
 
 	private static boolean estaCubierta(String ruta) {
-		if (Arrays.asList(ModuloApp.RUTAS_PUBLICAS).contains(ruta) || ModuloApp.RUTA_CAMBIAR_CLAVE.equals(ruta)) {
+		// Sprint 8, tanda 1: el logo del colegio de la sesión (cualquier persona con sesión; no es un módulo del menú).
+		if (Arrays.asList(ModuloApp.RUTAS_PUBLICAS).contains(ruta) || ModuloApp.RUTA_CAMBIAR_CLAVE.equals(ruta)
+				|| ModuloApp.RUTA_LOGO.equals(ruta) || ruta.startsWith(ModuloApp.RUTA_LOGO + "/")) {
 			return true;
 		}
 		PathContainer camino = PathContainer.parsePath(ruta);
@@ -421,6 +427,10 @@ class MatrizPermisosTest {
 		}
 		// Sprint 4: los avisos de la pasarela tienen su propia cadena (sin sesión; solo POST con firma).
 		if (PathPatternParser.defaultInstance.parse(ModuloApp.RUTA_WEBHOOK_PASARELA).matches(camino)) {
+			return true;
+		}
+		// Sprint 8, tanda 2 (E15): el aviso de la pasarela de UN conector (por su clave pública), en la misma cadena.
+		if (PathPatternParser.defaultInstance.parse(ModuloApp.RUTA_WEBHOOK_PASARELA_CONECTOR).matches(camino)) {
 			return true;
 		}
 		// Sprint 5: los avisos de WhatsApp (POST firmado) y su verificación (GET), en la cadena de los webhooks.

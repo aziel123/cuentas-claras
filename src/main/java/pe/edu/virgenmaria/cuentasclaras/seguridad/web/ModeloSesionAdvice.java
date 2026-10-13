@@ -1,11 +1,12 @@
 package pe.edu.virgenmaria.cuentasclaras.seguridad.web;
 
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.dao.DataAccessException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.MarcaColegio;
+import pe.edu.virgenmaria.cuentasclaras.comun.marca.Marca;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.ModuloApp;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
@@ -22,8 +23,11 @@ public class ModeloSesionAdvice {
 
 	private final ColegioService colegios;
 
-	public ModeloSesionAdvice(ColegioService colegios) {
+	private final Marca marca;
+
+	public ModeloSesionAdvice(ColegioService colegios, Marca marca) {
 		this.colegios = colegios;
+		this.marca = marca;
 	}
 
 	@ModelAttribute("usuarioActual")
@@ -49,14 +53,25 @@ public class ModeloSesionAdvice {
 		return request.getRequestURI();
 	}
 
-	/** Nombre para las páginas públicas. Si la base no responde, la página de error igual se muestra. */
+	/**
+	 * Sprint 8, tanda 1 (decisión 125): las páginas públicas (ingreso, errores) llevan la marca del producto, no el nombre
+	 * de un colegio: la lista de clientes no se publica y el ingreso es uno para todos.
+	 */
 	@ModelAttribute("nombreInstitucional")
 	public String nombreInstitucional() {
-		try {
-			return colegios.nombreInstitucional();
+		return marca.nombre();
+	}
+
+	/**
+	 * Sprint 8, tanda 1 (decisión 123): la marca del colegio de la sesión (nombre, razón social, RUC, dirección y si tiene
+	 * logo), para la cabecera y las pantallas que la muestran. {@code null} sin sesión: las páginas públicas no nombran a
+	 * ningún colegio.
+	 */
+	@ModelAttribute("marcaColegio")
+	public MarcaColegio marcaColegio(@AuthenticationPrincipal UsuarioAutenticado usuario) {
+		if (usuario == null) {
+			return null;
 		}
-		catch (DataAccessException e) {
-			return ColegioService.NOMBRE_PLATAFORMA;
-		}
+		return colegios.marcaDe(usuario.colegioId()).orElse(null);
 	}
 }

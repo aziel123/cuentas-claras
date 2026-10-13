@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Ficha del colegio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="plataforma-ficha">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Plataforma</p>
+			<h1 th:text="${ficha.nombre}">Colegio</h1>
+			<p class="secundario" th:text="|Creado el ${#temporals.format(ficha.creadoEn, 'dd/MM/yyyy HH:mm')} por ${ficha.creadoPor}.|">Creado</p>
+		</div>
+		<span th:replace="~{fragments/componentes :: badge(${ficha.estado.etiqueta()}, ${ficha.enPreparacion()} ? 'alerta' : 'exito')}"></span>
+	</div>
+
+	<th:block th:if="${exito != null}">
+		<div th:replace="~{fragments/componentes :: alerta('exito', ${exito})}"></div>
+	</th:block>
+	<th:block th:if="${error != null}">
+		<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-lista">
+		<h2 id="titulo-lista">Puesta en marcha</h2>
+		<p class="secundario">Sí o no y conteos. Las pantallas del colegio son de su Promotoría; aquí no se ven datos de las familias.</p>
+		<table class="tabla">
+			<caption class="solo-lectores">Pasos de la puesta en marcha del colegio.</caption>
+			<thead><tr><th scope="col">Paso</th><th scope="col">Estado</th><th scope="col">Detalle</th></tr></thead>
+			<tbody>
+				<tr th:each="p : ${ficha.lista}">
+					<td data-etiqueta="Paso" th:text="${p.paso}">Paso</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${p.hecho} ? 'Hecho' : (${p.obligatorio} ? 'Pendiente' : 'Opcional'),
+						${p.hecho} ? 'exito' : (${p.obligatorio} ? 'alerta' : 'neutro'))}"></span></td>
+					<td data-etiqueta="Detalle" th:text="${p.conteo}">Detalle</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-titular" th:if="${ficha.enPreparacion()}">
+		<h2 id="titulo-titular">Titular (primera Promotoría)</h2>
+		<th:block th:if="${ficha.titularUsuario == null}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', 'El colegio quedó sin titular (falló el alta). Completa el alta con sus datos: la cuenta se crea una sola vez.')}"></div>
+			<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/completar(id=${ficha.id})}">
+				<div class="campo">
+					<label for="titularNombre">Nombre completo</label>
+					<input type="text" class="input" id="titularNombre" name="titularNombre" th:value="${ficha.titularNombre}" required maxlength="150">
+				</div>
+				<div class="campo">
+					<label for="titularUsuario">Usuario con el que ingresará</label>
+					<input type="text" class="input" id="titularUsuario" name="titularUsuario" required maxlength="60" autocapitalize="none" spellcheck="false">
+				</div>
+				<div class="campo">
+					<label for="titularTelefono">Celular con WhatsApp</label>
+					<input type="tel" class="input" id="titularTelefono" name="titularTelefono" inputmode="tel" maxlength="20">
+				</div>
+				<div class="campo">
+					<label for="titularCorreo">Correo del titular</label>
+					<input type="email" class="input" id="titularCorreo" name="titularCorreo" maxlength="150">
+				</div>
+				<button type="submit" class="btn btn-primario">Completar el alta</button>
+			</form>
+		</th:block>
+		<th:block th:if="${ficha.titularUsuario != null}">
+			<dl class="datos">
+				<div><dt>Usuario</dt><dd th:text="${ficha.titularUsuario}">maria.torres</dd></div>
+				<div><dt>Nombre</dt><dd th:text="${ficha.titularNombre}">Nombre</dd></div>
+				<div><dt>Documento</dt><dd th:text="${ficha.titularDocumentoEnmascarado}">DNI ****1234</dd></div>
+				<div><dt>Enlace enviado a</dt><dd th:text="${ficha.titularDestino}">WhatsApp</dd></div>
+				<div><dt>Activación</dt><dd th:text="${ficha.titularActivado} ? 'Activó su cuenta con su DNI' : 'Pendiente'">Pendiente</dd></div>
+			</dl>
+			<th:block th:unless="${ficha.titularActivado}">
+				<h3>Reenviar el enlace al mismo contacto</h3>
+				<p class="secundario">Solo mientras la cuenta nunca se haya activado. Se avisa al titular, al correo institucional
+					y al correo externo de control.</p>
+				<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/titular/reenviar(id=${ficha.id})}">
+					<button type="submit" class="btn btn-secundario">Reenviar el enlace</button>
+				</form>
+				<th:block th:if="${ficha.contactoPorAplicar != null}">
+					<h3>Cambio del contacto por aplicar</h3>
+					<dl class="datos">
+						<div><dt>Contacto actual</dt><dd th:text="${ficha.contactoPorAplicar.anterior}">WhatsApp</dd></div>
+						<div><dt>Contacto nuevo</dt><dd th:text="${ficha.contactoPorAplicar.nuevo}">WhatsApp</dd></div>
+						<div><dt>Motivo</dt><dd th:text="${ficha.contactoPorAplicar.motivo}">Motivo</dd></div>
+						<div><dt>Lo propuso</dt><dd th:text="${ficha.contactoPorAplicar.propuestoPor}">operador</dd></div>
+					</dl>
+					<p class="secundario">Lo aplica OTRO operador, con su propia sesión. Al aplicarlo se avisa al contacto anterior,
+						al correo institucional y al correo externo de control.</p>
+					<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/titular/{c}/aplicar(id=${ficha.id},c=${ficha.contactoPorAplicar.id})}">
+						<button type="submit" class="btn btn-secundario">Aplicar el cambio</button>
+					</form>
+					<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/titular/{c}/rechazar(id=${ficha.id},c=${ficha.contactoPorAplicar.id})}">
+						<button type="submit" class="btn btn-texto">Rechazar el cambio</button>
+					</form>
+				</th:block>
+				<th:block th:if="${ficha.contactoPorAplicar == null}">
+					<h3>Proponer otro contacto</h3>
+					<p class="secundario">Si el celular o el correo tenía un error. Lo propones tú y lo aplica otro operador.</p>
+					<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/titular(id=${ficha.id})}" th:object="${contacto}">
+						<div class="campo">
+							<label for="telefonoWhatsapp">Celular con WhatsApp</label>
+							<input type="tel" class="input" th:field="*{telefonoWhatsapp}" inputmode="tel" autocomplete="off">
+						</div>
+						<div class="campo">
+							<label for="correo">Correo del titular</label>
+							<input type="email" class="input" th:field="*{correo}" autocomplete="off">
+						</div>
+						<div class="campo">
+							<label for="motivo">Motivo (quién lo pidió y cómo lo confirmaste)</label>
+							<textarea class="input" th:field="*{motivo}" required minlength="10" maxlength="500"></textarea>
+						</div>
+						<button type="submit" class="btn btn-secundario">Proponer el cambio</button>
+					</form>
+				</th:block>
+			</th:block>
+		</th:block>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-correo">
+		<h2 id="titulo-correo">Correo externo de control</h2>
+		<p class="secundario">El contador o un tercero de confianza del contrato: recibe el resumen diario y la huella de la
+			bitácora del colegio. Se registra con la firma de tu sesión.</p>
+		<p th:if="${ficha.correoControl != null}" th:text="|Registrado: ${ficha.correoControl}|">Registrado</p>
+		<p class="secundario" th:unless="${ficha.enPreparacion()}">En producción solo lo propones: lo aprueba la Promotoría
+			del colegio con su firma, y se avisa al correo anterior y a toda la Promotoría antes de que cambie.</p>
+		<p th:if="${ficha.correoControlPorAprobar != null}" th:text="|Por aprobar por la Promotoría: ${ficha.correoControlPorAprobar}|">Por aprobar</p>
+		<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/correo-control(id=${ficha.id})}" th:object="${correoControl}">
+			<div class="campo">
+				<label for="correo-control">Correo</label>
+				<input type="email" class="input" id="correo-control" th:field="*{correo}" autocomplete="off" required maxlength="100">
+			</div>
+			<div class="campo" th:unless="${ficha.enPreparacion()}">
+				<label for="motivo-correo">Motivo (por ejemplo, la adenda del contrato)</label>
+				<textarea class="input" id="motivo-correo" th:field="*{motivo}" minlength="10" maxlength="500"></textarea>
+			</div>
+			<button type="submit" class="btn btn-secundario" th:text="${ficha.correoControl != null} ? 'Cambiar el correo de control' : 'Registrar el correo de control'">Registrar</button>
+		</form>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-ficha">
+		<h2 id="titulo-ficha">Ficha</h2>
+		<th:block th:unless="${ficha.enPreparacion()}">
+			<dl class="datos">
+				<div><dt>Razón social</dt><dd th:text="${ficha.razonSocial}">Razón social</dd></div>
+				<div><dt>RUC</dt><dd class="num" th:text="${ficha.ruc}">RUC</dd></div>
+				<div><dt>Dirección</dt><dd th:text="${ficha.direccion}">Dirección</dd></div>
+				<div><dt>Correo institucional</dt><dd th:text="${ficha.correoInstitucional}">Correo</dd></div>
+				<div><dt>Niveles</dt><dd th:text="${#strings.listJoin(ficha.niveles.![etiqueta()], ', ')}">Niveles</dd></div>
+				<div><dt>Contrato</dt><dd th:text="${ficha.contratoCodigo} ?: '—'">Contrato</dd></div>
+				<div><dt>En producción desde</dt><dd th:text="${ficha.produccionDesde != null} ? ${#temporals.format(ficha.produccionDesde, 'dd/MM/yyyy HH:mm')} : '—'">Fecha</dd></div>
+			</dl>
+			<p class="secundario">En producción, la ficha la cambia la Promotoría del colegio.</p>
+		</th:block>
+		<p class="secundario" th:if="${ficha.enPreparacion() and ficha.titularActivado}">El titular ya activó su cuenta: la ficha
+			la corrige la Promotoría del colegio desde «Marca del colegio», con su firma.</p>
+		<form class="formulario" th:if="${ficha.enPreparacion() and !ficha.titularActivado}" method="post" th:action="@{/plataforma/colegios/{id}/ficha(id=${ficha.id})}" th:object="${fichaForm}">
+			<div th:replace="~{fragments/componentes :: campo('nombre', 'Nombre comercial', null, 'off')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('razonSocial', 'Razón social', null, 'off')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('ruc', 'RUC', null, 'off')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('direccion', 'Dirección fiscal', null, 'off')}"></div>
+			<div class="campo">
+				<label for="correoInstitucional">Correo institucional</label>
+				<input type="email" class="input" th:field="*{correoInstitucional}" autocomplete="off">
+			</div>
+			<fieldset class="campo grupo-opciones">
+				<legend>Niveles que ofrece</legend>
+				<label class="opcion" th:each="n : ${niveles}">
+					<input type="checkbox" th:field="*{niveles}" th:value="${n}">
+					<span th:text="${n.etiqueta()}">Inicial</span>
+				</label>
+			</fieldset>
+			<div th:replace="~{fragments/componentes :: campo('contratoCodigo', 'Código del contrato', null, 'off')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('titularNombre', 'Nombre del titular', null, 'off')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('titularDocumento', 'DNI del titular', 'Vuelve a escribirlo. No cambia después de crear la cuenta del titular.', 'off')}"></div>
+			<button type="submit" class="btn btn-secundario">Corregir la ficha</button>
+		</form>
+	</section>
+
+	<p><a class="btn btn-texto" th:href="@{/plataforma}">Volver a la lista</a></p>
+</main>
+</body>
+</html>

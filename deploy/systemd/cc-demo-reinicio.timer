@@ -1,0 +1,10 @@
+# Cuentas Claras · la demo vuelve a empezar todos los días a las 03:00 de Lima (decisión 126).
+[Unit]
+Description=Cuentas Claras: reinicio de la demo a las 03:00 (Lima)
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 America/Lima
+Persistent=false
+
+[Install]
+WantedBy=timers.target

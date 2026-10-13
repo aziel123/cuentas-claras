@@ -27,7 +27,7 @@ public class RecalculoResumenes {
 
 	@Scheduled(cron = "${cuentasclaras.panel.recalculo:0 15 6 * * *}", zone = ConfiguracionTiempo.ZONA)
 	public void ejecutar() {
-		colegios.enCadaColegio(ActorSistema.PANEL, colegio -> resumenes.registrarCambios());
+		colegios.enCadaColegioEnProduccion(ActorSistema.PANEL, colegio -> resumenes.registrarCambios());
 	}
 
 	/** El recálculo de un colegio (las pruebas lo llaman directamente). @return hallazgos nuevos en la bitácora */

@@ -62,6 +62,25 @@ Lo que hace, en orden (sale con error en el primer paso que falle):
   (`RESPALDO_FALTAN_FILAS_RESUELTO`, resaltado) y en `resolucion_respaldo` (solo inserción). El respaldo siguiente
   vuelve a comparar con el último manifiesto (`IGUAL`).
 
+**Sprint 8, tanda 3 (V30, decisión 131): «faltan filas» por colegio.** En una instalación compartida, la falta de un
+colegio no la resuelve la Promotoría de otro:
+- el manifiesto cuenta por colegio las tablas vigiladas con `colegio_id` (bloque `colegios`, claves `"tabla@colegio"`, y su
+  línea base `base_colegios`); las tablas sin colegio, como antes;
+- cada diferencia dice su colegio (`pago (faltan 1) [colegio 2]`) y el registro guarda `colegios_faltan` (`[2]`). Las tablas
+  sin colegio, el ancla de la bitácora y las filas del colegio de plataforma afectan a **todos** los colegios;
+- cada Promotoría ve en `/panel/sistema` y en «Para revisar» SOLO la falta de su colegio (las de otros colegios no se
+  muestran) y la resuelve con su firma (`respaldo:{id}:{colegio}:RESUELTO`); el vigilante externo y el correo al responsable
+  técnico ven cualquier falta abierta de la instalación;
+- mientras un colegio no resuelva la suya, sigue en `colegios_faltan` de cada respaldo (con su línea base) y la base rechaza
+  un IGUAL; los demás colegios comparan con el último manifiesto.
+En una instalación dedicada (un colegio) es lo mismo que antes. Un respaldo con FALTAN_FILAS anterior a V30 (sin colegios)
+sigue siendo «de toda la base»: lo cierra cualquier resolución posterior.
+
+En una instalación **compartida** los custodios de las claves `age` (y de la clave HMAC) son **2 personas de la plataforma**
+(el responsable técnico y un segundo custodio del proveedor; decisiones 129 y 130): ningún colegio recibe una clave de un
+respaldo con datos de otros. `/panel/sistema` dice «Custodios del respaldo: la plataforma». Cada colegio conserva su huella
+diaria y una verificación trimestral ([acta-verificacion-trimestral.md](acta-verificacion-trimestral.md)).
+
 **Correcciones del sprint 7 (S7-M1): el manifiesto guarda los permisos.** `respaldar.sh` lee `permisos_objetos()` (de `02`,
 como `cc_respaldo`): los roles (también los anidados), los privilegios globales, por esquema, tabla, columna y rutina de
 `cc_app`, `cc_sistema`, `cc_respaldo` y `cc_negocio`, sin hosts ni claves. El simulacro semanal
@@ -137,6 +156,9 @@ clave HMAC de pruebas y arranca prod sobre la copia. Además, los ataques (`scri
 - **E32:** un DBA recorta el final de la bitácora y retrocede el eslabón: el respaldo siguiente lo detecta por el ancla.
 - El destino simulado sin la fila del DBA falla (1644), y sin credenciales del destino o con una sola clave pública el
   respaldo no empieza.
+- **E25 y E28 (sprint 8, tanda 3):** con varios colegios, un DBA borra un pago de UN colegio: el respaldo siguiente avisa solo
+  a ese colegio (`colegios_faltan = [A]`); la Promotoría de otro colegio no lo resuelve (1644) y la del colegio afectado sí;
+  después, IGUAL (`faltan-filas-por-colegio`, `ResolucionRespaldoPorColegioMySqlTest` y `resuelto-por-colegio`).
 
 ## Despliegue (orden nuevo desde el sprint 7)
 1. **Respaldo** (`respaldar.sh`): si falla, no se despliega.

@@ -186,7 +186,7 @@ class DespachoMensajesTest {
 		assertThat(enlace).containsEntry("proposito", "PERSONAL")
 				.containsEntry("hash_token", EnlacesActivacion.hash(EnlacesDePrueba.token(ruta)));
 		assertThat(jdbc.queryForMap("SELECT estado, parametros FROM mensaje WHERE id = ?", enlace.get("mensaje_id")))
-				.containsEntry("estado", "ENVIADO").containsEntry("parametros", "");
+				.containsEntry("estado", "ENVIADO").containsEntry("parametros", "Colegio Virgen María");
 		assertThat(((java.sql.Timestamp) enlace.get("vence_en")).toLocalDateTime())
 				.isEqualTo(LocalDateTime.now(reloj).plusHours(48));
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'ENLACE_ACTIVACION_ENVIADO'")).isEqualTo(1);

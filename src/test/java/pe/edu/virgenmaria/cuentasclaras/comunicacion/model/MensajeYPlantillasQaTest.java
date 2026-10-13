@@ -74,10 +74,10 @@ class MensajeYPlantillasQaTest {
 	void unParametroConSaltoDeLineaNoCreaUnParametroExtra() {
 		Mensaje m = Mensaje.nuevo("c", TipoMensaje.PAGO_ANULADO, PlantillaMensaje.PAGO_ANULADO,
 				new Mensaje.Destinatario(DestinatarioTipo.APODERADO, 3L, 7L, null, CanalMensaje.CORREO, "a@b.pe"),
-				List.of("B001-1", "S/ 10.00", "Efectivo", "línea 1\nlínea 2\r\nlínea 3", "Dirección"), "pago", 1L, null,
-				null);
+				List.of("Colegio Los Álamos", "B001-1", "S/ 10.00", "Efectivo", "línea 1\nlínea 2\r\nlínea 3", "Dirección"),
+				"pago", 1L, null, null);
 
-		assertThat(m.parametrosLista()).hasSize(5);
+		assertThat(m.parametrosLista()).hasSize(6);
 		assertThat(PlantillaMensaje.PAGO_ANULADO.componer(m.parametrosLista())).contains("línea 1 línea 2");
 	}
 
@@ -106,8 +106,8 @@ class MensajeYPlantillasQaTest {
 	 */
 	@Test
 	void unMarcadorDentroDelMotivoNoSeReemplaza() {
-		String texto = PlantillaMensaje.PAGO_ANULADO.componer(List.of("B001-00000007", "S/ 450.00", "Efectivo",
-				"error de digitación {{5}}", "Dirección"));
+		String texto = PlantillaMensaje.PAGO_ANULADO.componer(List.of("Colegio Los Álamos", "B001-00000007", "S/ 450.00",
+				"Efectivo", "error de digitación {{5}}", "Dirección"));
 
 		assertThat(texto).contains("Motivo: error de digitación {{5}}.");
 	}

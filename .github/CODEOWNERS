@@ -1,0 +1,6 @@
+# Correcciones del sprint 8 (S8-B2): lo que decide qué revisa el CI (y qué secretos acepta gitleaks) tiene dueño. Con la
+# protección de main («Require review from Code Owners»), un PR no cambia estas reglas sin la aprobación del dueño.
+/.gitleaks.toml        @aziel123
+/.github/              @aziel123
+/scripts/mysql/        @aziel123
+/deploy/               @aziel123

@@ -1,0 +1,42 @@
+# Sprint 8, tanda 3 (sección 8 del diseño): el entorno de DEMOSTRACIÓN. Una instalación aparte (demo.<dominio>, su propia
+# VM), con H2 EN MEMORIA y sin salida a internet; se reinicia cada noche a las 03:00 (se borra todo). Cada visitante crea
+# SU colegio ficticio en /demo. Nunca envía un mensaje real ni cobra: VerificadorConfiguracion no la deja arrancar con una
+# base real, un proveedor real o un secreto en el entorno, y SalidaBloqueadaDemo bloquea la salida de la aplicación.
+# Las claves (HMAC de la bitácora, conectores y pasarela simulada) se generan AL AZAR al arrancar (SecretosAleatoriosDemo):
+# no van aquí ni en el entorno.
+spring:
+  datasource:
+    url: jdbc:h2:mem:demo;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+
+# Detrás de Caddy (https): se respetan X-Forwarded-For y X-Forwarded-Proto de la red interna de Docker (como en prod).
+server:
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      internal-proxies: ${CC_PROXIES_INTERNOS:10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|127\.\d+\.\d+\.\d+|0:0:0:0:0:0:0:1|::1}
+
+cuentasclaras:
+  caja:
+    # La cuenta de ejemplo de los colegios ficticios de la demo (sin conector CUENTA_BANCARIA).
+    cuentas-deposito: BCP Soles 191-XXXXXXX-0-XX
+  entorno:
+    nombre: DEMO                     # la franja «DEMO · Datos ficticios...» en todas las páginas (obligatoria)
+  plataforma:
+    instalacion: COMPARTIDA          # un colegio ficticio por visitante
+  mensajeria:
+    whatsapp:
+      proveedor: SIMULADO            # se ve en «Mensajes»; no sale a nadie
+    correo:
+      proveedor: SIMULADO
+    url-publica: ${CC_URL_PUBLICA:https://demo.localhost}
+  pasarela:
+    proveedor: SIMULADA              # el pago en línea del apoderado, sin dinero real
+  comprobantes:
+    proveedor: SIMULADO              # boleta «DEMO · SIN VALOR»
+  monitoreo:
+    respaldo-exigido: false          # la demo no tiene respaldos: se borra cada noche
+  demo:
+    por-conexion-al-dia: 3           # decisión 126
+    por-dia: 50

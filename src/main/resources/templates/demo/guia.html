@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<!--/* Sprint 8, tanda 3 (sección 8.2): el recorrido guiado de la demo, en el orden del guion de los anuncios. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: publica('Recorrido guiado', ~{::main})}">
+<body>
+<main id="contenido" class="contenido-publico">
+	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-guia" data-pantalla="demo-guia">
+		<div>
+			<p class="etiqueta">Recorrido guiado · 6 pasos de un minuto</p>
+			<h1 id="titulo-guia">Cómo la plataforma evita que el dinero se pierda</h1>
+			<p class="secundario">Usa las cuentas de tu demo. Si todavía no la tienes, <a th:href="@{/demo}">créala aquí</a>.</p>
+		</div>
+		<ol class="pasos" data-pasos-guia>
+			<li><strong>Cobra como la cajera.</strong> Entra como Caja (Lucía Ramos), busca a una familia por su apellido o DNI,
+				elige una pensión y registra el pago. La boleta sale al momento.</li>
+			<li><strong>El padre recibe un WhatsApp en cada pago.</strong> Entra como Promotoría y abre «Mensajes»: ahí está el
+				aviso que le llegó al apoderado, con el monto y el número de boleta. El padre es el auditor.</li>
+			<li><strong>Cierra la caja a ciegas.</strong> Como Caja, cierra tu caja escribiendo el efectivo que cuentas sin ver
+				lo esperado. Si no cuadra, el sistema lo dice y alguien más lo aprueba.</li>
+			<li><strong>Anular exige otra persona.</strong> Como Dirección o Promotoría, abre «Aprobaciones»: hay un pedido de
+				devolución de la cajera. Quien cobra nunca aprueba su propia anulación.</li>
+			<li><strong>El panel de la promotora.</strong> Como Promotoría, mira lo cobrado hoy, la morosidad y las alertas, también
+				desde el celular.</li>
+			<li><strong>Todo queda en la bitácora.</strong> Como Promotoría, abre «Bitácora de auditoría»: cada cobro, aprobación
+				y anulación con quién, qué y cuándo, y comprueba que nadie la alteró.</li>
+		</ol>
+		<p class="ayuda">La demo muestra las reglas de la aplicación con datos ficticios en memoria. En una instalación real,
+			además, la base de datos rechaza por su cuenta las operaciones prohibidas.</p>
+		<p><a class="btn btn-secundario" th:href="@{/login}">Ir al ingreso</a></p>
+	</section>
+</main>
+</body>
+</html>

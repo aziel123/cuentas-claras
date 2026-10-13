@@ -10,6 +10,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import pe.edu.virgenmaria.cuentasclaras.comun.config.ConfiguracionTiempo;
+import pe.edu.virgenmaria.cuentasclaras.comun.marca.Marca;
 import pe.edu.virgenmaria.cuentasclaras.operacion.config.PropiedadesMonitoreo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.log.ContadorErrores;
 import pe.edu.virgenmaria.cuentasclaras.operacion.log.ContadorErrores.ErrorAgrupado;
@@ -64,19 +65,27 @@ public class AlertasTecnicas {
 
 	private final Clock reloj;
 
+	/** Sprint 8, tanda 1: los asuntos llevan la marca del producto ({@code CC_MARCA_NOMBRE}), no un nombre fijo. */
+	private final Marca marca;
+
 	private final Map<String, Instant> enviadas = new HashMap<>();
 
 	private final Set<String> huellasConocidas = new HashSet<>();
 
 	public AlertasTecnicas(EstadoTecnico estado, ContadorErrores errores, PropiedadesMonitoreo propiedades,
 			ObjectProvider<JavaMailSender> correo, @Value("${cuentasclaras.mensajeria.correo.remitente:}") String remitente,
-			Clock reloj) {
+			Clock reloj, Marca marca) {
 		this.estado = estado;
 		this.errores = errores;
 		this.propiedades = propiedades;
 		this.correo = correo;
 		this.remitente = remitente == null ? "" : remitente.strip();
 		this.reloj = reloj;
+		this.marca = marca;
+	}
+
+	private String asunto(String texto) {
+		return "[" + marca.nombre() + "] " + texto;
 	}
 
 	/** Cada 5 minutos: detecta y avisa lo nuevo (o lo que sigue mal, una vez por hora). */
@@ -88,8 +97,8 @@ public class AlertasTecnicas {
 		}
 		nuevas.forEach(a -> LOG.warn("Alerta técnica {} · {} · {}: {}", a.gravedad(), a.tipo(), a.huella(), a.texto()));
 		long criticas = nuevas.stream().filter(a -> a.gravedad() == Gravedad.CRITICA).count();
-		boolean salio = enviar("[Cuentas Claras] " + nuevas.size() + " alerta(s) técnica(s)"
-				+ (criticas > 0 ? ", " + criticas + " CRÍTICA(S)" : ""),
+		boolean salio = enviar(asunto(nuevas.size() + " alerta(s) técnica(s)"
+				+ (criticas > 0 ? ", " + criticas + " CRÍTICA(S)" : "")),
 				nuevas.stream().map(a -> a.gravedad() + " · " + a.tipo() + " · " + a.huella() + "\n  " + a.texto())
 						.collect(Collectors.joining("\n\n")));
 		// Correcciones del sprint 7 (QA-S7-7): se dan por enviadas SOLO si el correo salió (o si las alertas por correo
@@ -118,7 +127,7 @@ public class AlertasTecnicas {
 		texto.append(abiertas.isEmpty() ? "Sin alertas abiertas."
 				: "Alertas abiertas:\n" + abiertas.stream().map(a -> "- " + a.gravedad() + " · " + a.tipo() + " · " + a.huella())
 						.collect(Collectors.joining("\n")));
-		enviar("[Cuentas Claras] Resumen técnico" + (abiertas.isEmpty() ? "" : ": " + abiertas.size() + " alerta(s) abierta(s)"),
+		enviar(asunto("Resumen técnico" + (abiertas.isEmpty() ? "" : ": " + abiertas.size() + " alerta(s) abierta(s)")),
 				texto.toString());
 	}
 

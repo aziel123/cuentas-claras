@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Puesta en marcha', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="puesta-en-marcha">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Puesta en marcha</p>
+			<h1 th:text="${lista.nombre}">Colegio</h1>
+			<p class="secundario" th:if="${lista.enPreparacion()}">El colegio está <strong>en preparación</strong>: todavía no se registran
+				pagos ni salen recordatorios de cobro. Completa la lista y la Promotoría lo pasa a producción.</p>
+			<p class="secundario" th:unless="${lista.enPreparacion()}">El colegio está <strong>en producción</strong>. Esta lista
+				es la salud de su configuración.</p>
+		</div>
+		<span th:replace="~{fragments/componentes :: badge(${lista.estado.etiqueta()}, ${lista.enPreparacion()} ? 'alerta' : 'exito')}"></span>
+	</div>
+
+	<th:block th:if="${exito != null}">
+		<div th:replace="~{fragments/componentes :: alerta('exito', ${exito})}"></div>
+	</th:block>
+	<th:block th:if="${error != null}">
+		<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-lista">
+		<h2 id="titulo-lista">Lista de verificación</h2>
+		<table class="tabla">
+			<caption class="solo-lectores">Pasos de la puesta en marcha y su estado.</caption>
+			<thead><tr><th scope="col">Paso</th><th scope="col">Estado</th><th scope="col">Detalle</th></tr></thead>
+			<tbody>
+				<tr th:each="p : ${lista.puntos}" th:data-paso="${p.clave}">
+					<td data-etiqueta="Paso">
+						<a th:if="${p.enlace != null}" th:href="@{${p.enlace}}" th:text="${p.paso}">Paso</a>
+						<span th:unless="${p.enlace != null}" th:text="${p.paso}">Paso</span>
+					</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${p.estado.etiqueta()},
+						${p.hecho()} ? 'exito' : (${p.obligatorio()} ? 'alerta' : 'neutro'))}"></span></td>
+					<td data-etiqueta="Detalle" th:text="${p.conteo}">Detalle</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+
+	<section class="tarjeta" th:if="${puedePasar}" aria-labelledby="titulo-aceptos">
+		<h2 id="titulo-aceptos">Lo que firma la Promotoría</h2>
+		<p class="secundario">Dos pasos de la lista se pueden cumplir con tu firma, si así es el colegio. Quedan resaltados en la
+			bitácora y no se deshacen.</p>
+		<form method="post" th:action="@{/puesta-en-marcha/sin-saldo-inicial}" class="acciones acciones-izquierda" data-acepto="sin-saldo-inicial">
+			<button type="submit" class="btn btn-secundario">Firmar: el colegio empieza sin deudas anteriores</button>
+		</form>
+		<form method="post" th:action="@{/puesta-en-marcha/ose-simulado}" class="acciones acciones-izquierda" data-acepto="ose-simulado">
+			<button type="submit" class="btn btn-secundario">Firmar: uso el comprobante simulado y emito el legal aparte</button>
+		</form>
+	</section>
+
+	<section class="tarjeta" th:if="${lista.enPreparacion() and puedePasar}" aria-labelledby="titulo-produccion">
+		<h2 id="titulo-produccion">Pasar a producción</h2>
+		<p class="secundario">Solo la Promotoría, con la firma de su sesión y la lista obligatoria completa. No tiene vuelta
+			atrás: desde ese momento se registran pagos y salen los avisos a las familias. Toda la Promotoría y el correo externo
+			de control reciben un aviso.</p>
+		<th:block th:unless="${lista.completa()}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', |Faltan ${lista.pendientes()} paso(s) obligatorio(s): ${pendientes}.|)}"></div>
+		</th:block>
+		<form method="post" th:action="@{/puesta-en-marcha/produccion}" th:if="${lista.completa()}">
+			<button type="submit" class="btn btn-primario">Pasar el colegio a producción</button>
+		</form>
+	</section>
+	<section class="tarjeta" aria-labelledby="titulo-correo-control">
+		<h2 id="titulo-correo-control">Correo externo de control</h2>
+		<p class="secundario">El contador o un tercero de confianza del contrato: recibe la huella de la bitácora y el resumen
+			diario. Lo registra el operador de la plataforma; con el colegio en producción, un cambio lo aprueba la Promotoría.</p>
+		<p th:text="${correoControl.actual() != null} ? |Actual: ${correoControl.actual()}| : 'Todavía no hay correo de control.'">Actual</p>
+		<th:block th:if="${correoControl.propuesta().isPresent()}" th:with="p=${correoControl.propuesta().get()}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', 'El operador de la plataforma propuso cambiar el correo de control. No cambia hasta que lo apruebe una persona de Promotoría.')}"></div>
+			<dl class="datos">
+				<div><dt>Correo nuevo</dt><dd th:text="${p.nuevo()}">correo</dd></div>
+				<div><dt>Correo anterior</dt><dd th:text="${p.anterior() != null} ? ${p.anterior()} : '—'">correo</dd></div>
+				<div><dt>Motivo</dt><dd th:text="${p.motivo()}">motivo</dd></div>
+				<div><dt>Lo propuso</dt><dd th:text="${p.propuestoPor()}">operador</dd></div>
+			</dl>
+			<th:block th:if="${puedePasar}">
+				<form class="formulario" method="post" th:action="@{/puesta-en-marcha/correo-control/{id}/aprobar(id=${p.id()})}">
+					<button type="submit" class="btn btn-primario">Aprobar el correo nuevo</button>
+				</form>
+				<form class="formulario" method="post" th:action="@{/puesta-en-marcha/correo-control/{id}/rechazar(id=${p.id()})}">
+					<div class="campo">
+						<label for="motivo-rechazo">Motivo del rechazo</label>
+						<textarea class="input" id="motivo-rechazo" name="motivo" required minlength="10" maxlength="500"></textarea>
+					</div>
+					<button type="submit" class="btn btn-secundario">Rechazar el cambio</button>
+				</form>
+			</th:block>
+		</th:block>
+	</section>
+</main>
+</body>
+</html>

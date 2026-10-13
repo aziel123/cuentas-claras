@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Conectores', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="conectores">
+	<div class="cabecera">
+		<div>
+			<h1>Conectores del colegio</h1>
+			<p class="secundario">Adónde entra el dinero del colegio y quién emite sus boletas. Cambiar un conector lo propone una
+				persona y lo aprueba otra de Promotoría o Dirección con su firma; en todos participa una Promotoría. Toda la
+				Promotoría y el correo externo de control reciben un aviso.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${!vista.conClave and vista.puedeProponer}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', 'Esta instalación todavía no tiene la clave de los secretos de los conectores: puedes registrar la cuenta bancaria y la recaudación, pero no un token ni una llave.')}"></div>
+	</th:block>
+
+	<section class="tarjeta" th:each="s : ${vista.porTipo}" th:attr="aria-labelledby=${'titulo-' + s.tipo}" th:data-tipo="${s.tipo}">
+		<h2 th:id="${'titulo-' + s.tipo}" th:text="${s.etiqueta}">Cuenta bancaria</h2>
+		<p class="secundario" th:text="|Define ${s.descripcion}.| + (${s.mueveDinero} ? ' Mueve dinero: una Promotoría debe proponerlo o aprobarlo.' : '')">Define...</p>
+
+		<div th:if="${s.vigente != null}" class="conector-vigente" data-conector="vigente">
+			<p>
+				<span th:replace="~{fragments/componentes :: badge(${s.vigente.estadoEtiqueta}, ${s.vigente.estadoVariante})}"></span>
+				<strong th:text="${s.vigente.proveedor}">BCP</strong>
+				<span th:text="|(${s.vigente.modo})|">(Real)</span>
+			</p>
+			<p th:text="${s.vigente.resumen}">Cuenta en soles que termina en 1234</p>
+			<p class="secundario" th:if="${s.vigente.pista != null}" th:text="|Secreto guardado que termina en ${s.vigente.pista} (nadie lo vuelve a ver).|">Secreto</p>
+			<p class="secundario" th:text="|Propuso ${s.vigente.propuestoPor}; aprobó ${s.vigente.resueltoPor} el ${#temporals.format(s.vigente.resueltoEn, 'dd/MM/yyyy HH:mm')}.|">Propuso…</p>
+		</div>
+		<th:block th:if="${s.vigente == null}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Sin conector vigente', ${s.sinConector})}"></div>
+		</th:block>
+
+		<div th:each="p : ${s.propuestos}" class="conector-propuesto" data-conector="propuesto">
+			<h3>Cambio por aprobar</h3>
+			<p>
+				<span th:replace="~{fragments/componentes :: badge(${p.estadoEtiqueta}, ${p.estadoVariante})}"></span>
+				<strong th:text="${p.proveedor}">Nubefact</strong> <span th:text="|(${p.modo})|">(Real)</span>
+			</p>
+			<p th:text="${p.resumen}">Resumen</p>
+			<p class="secundario" th:if="${p.pista != null}" th:text="|Secreto que termina en ${p.pista}.|">Secreto</p>
+			<p class="secundario" th:text="|Lo propuso ${p.propuestoPor}. Prueba de conexión: | + (${p.pruebaOk == null} ? 'todavía no se probó' : (${p.pruebaOk} ? 'correcta' : 'falló')) + (${p.pruebaDetalle != null} ? ' (' + ${p.pruebaDetalle} + ')' : '') + '.'">Prueba</p>
+			<form th:if="${p.puedeProbar}" method="post" th:action="@{/conectores/{id}/probar(id=${p.id})}">
+				<button th:replace="~{fragments/componentes :: boton('Probar conexión', 'secundario')}">Probar conexión</button>
+			</form>
+			<p class="secundario">Lo aprueba otra persona de Promotoría o Dirección en <a th:href="@{/aprobaciones}">Aprobaciones</a>.</p>
+		</div>
+
+		<details th:if="${vista.puedeProponer and #lists.isEmpty(s.propuestos)}" class="conector-formulario">
+			<summary th:text="${s.vigente == null} ? 'Registrar el conector' : 'Proponer un cambio'">Proponer un cambio</summary>
+			<form method="post" class="formulario formulario-angosto" th:action="@{/conectores/{t}(t=${#strings.toLowerCase(#strings.replace(s.tipo, '_', '-'))})}">
+				<div class="campo">
+					<label th:for="${'proveedor-' + s.tipo}">Proveedor</label>
+					<select class="input" th:id="${'proveedor-' + s.tipo}" name="proveedor" required>
+						<option th:each="pr : ${s.proveedores}" th:value="${pr}" th:text="${pr}">BCP</option>
+					</select>
+				</div>
+				<div class="campo">
+					<label th:for="${'modo-' + s.tipo}">Modo</label>
+					<select class="input" th:id="${'modo-' + s.tipo}" name="modo" required th:aria-describedby="${'modo-ayuda-' + s.tipo}">
+						<option value="REAL">Real</option>
+						<option th:if="${s.tipo == 'OSE' or s.tipo == 'PASARELA'}" value="PRUEBAS">Pruebas del proveedor</option>
+						<option th:if="${s.tipo == 'OSE' or s.tipo == 'PASARELA'}" value="SIMULADO">Simulado (solo con el proveedor simulado)</option>
+					</select>
+					<p class="ayuda" th:id="${'modo-ayuda-' + s.tipo}">Real mueve dinero o tiene valor legal. Pruebas usa la cuenta de pruebas del proveedor.</p>
+				</div>
+
+				<th:block th:if="${s.tipo == 'OSE'}">
+					<div class="campo">
+						<label for="ruta-OSE">Ruta de la API (solo Nubefact)</label>
+						<input class="input" type="url" id="ruta-OSE" name="ruta" autocomplete="off" aria-describedby="ruta-ayuda">
+						<p class="ayuda" id="ruta-ayuda">La que te dio Nubefact para el RUC del colegio (https://api.nubefact.com/...).</p>
+					</div>
+					<div class="campo"><label for="serie-boleta">Serie de boletas</label><input class="input" id="serie-boleta" name="serieBoleta" maxlength="4" required value="B001"></div>
+					<div class="campo"><label for="serie-factura">Serie de facturas</label><input class="input" id="serie-factura" name="serieFactura" maxlength="4" required value="F001"></div>
+					<div class="campo"><label for="serie-nota-boleta">Serie de notas de crédito de boletas</label><input class="input" id="serie-nota-boleta" name="serieNotaBoleta" maxlength="4" required value="BC01"></div>
+					<div class="campo"><label for="serie-nota-factura">Serie de notas de crédito de facturas</label><input class="input" id="serie-nota-factura" name="serieNotaFactura" maxlength="4" required value="FC01"></div>
+					<div class="campo">
+						<label for="afectacion">Afectación al IGV</label>
+						<select class="input" id="afectacion" name="afectacionIgv"><option value="INAFECTO">Inafecto</option><option value="EXONERADO">Exonerado</option></select>
+					</div>
+					<div class="campo">
+						<label for="secreto-OSE">Token del OSE (solo Nubefact)</label>
+						<input class="input" type="password" id="secreto-OSE" name="secreto" autocomplete="off" aria-describedby="secreto-ose-ayuda">
+						<p class="ayuda" id="secreto-ose-ayuda">Se guarda cifrado y nadie lo vuelve a ver: solo sus 4 últimos caracteres.</p>
+					</div>
+				</th:block>
+
+				<th:block th:if="${s.tipo == 'PASARELA'}">
+					<div class="campo"><label for="llave-publica">Llave pública</label><input class="input" id="llave-publica" name="llavePublica" autocomplete="off"></div>
+					<fieldset class="campo">
+						<legend>Medios aceptados</legend>
+						<label><input type="checkbox" name="medios" value="YAPE" checked> Yape</label>
+						<label><input type="checkbox" name="medios" value="PLIN" checked> Plin</label>
+						<label><input type="checkbox" name="medios" value="TARJETA" checked> Tarjeta</label>
+					</fieldset>
+					<div class="campo"><label for="monto-maximo">Monto máximo por pago (S/)</label><input class="input" id="monto-maximo" name="montoMaximo" inputmode="decimal" required value="5000.00"></div>
+					<div class="campo">
+						<label for="secreto-PASARELA">Llave secreta (no la pide el simulado)</label>
+						<input class="input" type="password" id="secreto-PASARELA" name="secreto" autocomplete="off">
+					</div>
+					<div class="campo">
+						<label for="secreto-aviso">Secreto con que la pasarela firma sus avisos</label>
+						<input class="input" type="password" id="secreto-aviso" name="secretoAviso" autocomplete="off" required aria-describedby="secreto-aviso-ayuda">
+						<p class="ayuda" id="secreto-aviso-ayuda">Se guarda cifrado y nadie lo vuelve a ver.</p>
+					</div>
+				</th:block>
+
+				<th:block th:if="${s.tipo == 'CUENTA_BANCARIA'}">
+					<div class="campo"><label for="numero-cuenta">Número de cuenta (soles)</label><input class="input" id="numero-cuenta" name="numeroCuenta" inputmode="numeric" autocomplete="off" required></div>
+					<div class="campo"><label for="cci">CCI (20 dígitos)</label><input class="input" id="cci" name="cci" inputmode="numeric" autocomplete="off" required></div>
+					<div class="campo"><label for="titular-cuenta">Titular de la cuenta (como figura en el banco)</label><input class="input" id="titular-cuenta" name="titularCuenta" autocomplete="off" required maxlength="150"></div>
+					<div class="campo"><label for="ruc-titular">RUC del titular (el del colegio)</label><input class="input" id="ruc-titular" name="rucTitular" inputmode="numeric" autocomplete="off" required maxlength="11"></div>
+				</th:block>
+
+				<th:block th:if="${s.tipo == 'RECAUDACION'}">
+					<div class="campo">
+						<label for="modalidad">Modalidad</label>
+						<select class="input" id="modalidad" name="modalidad"><option value="CON_BASE_DE_DEUDAS">Con base de deudas</option><option value="SIN_BASE">Sin base de deudas</option></select>
+					</div>
+					<div class="campo">
+						<label for="abono">Cómo abona el banco</label>
+						<select class="input" id="abono" name="abono"><option value="POR_LOTE">Por lote (un abono al día)</option><option value="POR_PAGO">Pago por pago</option></select>
+					</div>
+					<div class="campo"><label for="patron-abono">Glosa del abono en el extracto (opcional)</label><input class="input" id="patron-abono" name="patronAbono" maxlength="60" autocomplete="off"></div>
+				</th:block>
+
+				<div class="campo">
+					<label th:for="${'motivo-' + s.tipo}">Motivo del cambio (obligatorio)</label>
+					<textarea class="input" th:id="${'motivo-' + s.tipo}" name="motivo" required minlength="10" maxlength="500"></textarea>
+				</div>
+				<div class="acciones acciones-izquierda">
+					<button th:replace="~{fragments/componentes :: boton('Proponer el cambio', 'secundario')}">Proponer el cambio</button>
+				</div>
+			</form>
+		</details>
+
+		<details th:if="${!#lists.isEmpty(s.historial)}">
+			<summary>Anteriores</summary>
+			<ul class="lista-simple">
+				<li th:each="h : ${s.historial}" th:text="|${h.estadoEtiqueta}: ${h.proveedor} (${h.modo}). ${h.resumen}. Propuso ${h.propuestoPor}.|">Reemplazado</li>
+			</ul>
+		</details>
+	</section>
+</main>
+</body>
+</html>

@@ -5,3 +5,11 @@ mvnw text eol=lf
 Dockerfile text eol=lf
 docker-compose.yml text eol=lf
 *.xlsx binary
+# La lista de tablas vigiladas la lee respaldar.sh dentro de Linux (con CRLF, ninguna línea pasa su filtro).
+scripts/respaldo/*.txt text eol=lf
+# Sprint 8, tanda 3: todo lo de deploy/ corre en la VM Linux (Caddyfile, compose, unidades de systemd, scripts).
+deploy/** text eol=lf
+scripts/ci/*.py text eol=lf
+# QA del sprint 8 (QA-S8-10): PlantillasMetaDocTest compara bloques con «\n»; con CRLF (copia de trabajo en Windows con
+# core.autocrlf=true) falla aunque el documento y el código digan lo mismo.
+docs/entrega/plantillas-whatsapp-meta.md text eol=lf

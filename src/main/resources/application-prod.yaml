@@ -33,9 +33,5 @@ cuentasclaras:
   monitoreo:
     respaldo-exigido: true
     aceptar-respaldo-simulado: false
-  # Primer PROMOTOR: se crea al arrancar SOLO si no hay ningún usuario. Debe cambiar la clave al ingresar.
-  inicial:
-    colegio-id: ${CC_COLEGIO_ID:1}
-    promotor-usuario: ${CC_PROMOTOR_USUARIO:}
-    promotor-nombre: ${CC_PROMOTOR_NOMBRE:}
-    promotor-clave: ${CC_PROMOTOR_CLAVE:}
+  # Sprint 8, tanda 1: ya no hay primer PROMOTOR por variables (CC_PROMOTOR_*): los operadores de CC_OPERADORES dan de alta
+  # cada colegio desde /plataforma, y la marca del producto (CC_MARCA_NOMBRE) es obligatoria.

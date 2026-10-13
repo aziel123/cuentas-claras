@@ -37,8 +37,10 @@
 				'Hazlo solo después de revisar con el responsable técnico qué filas faltaron y por qué. La alerta deja de verse y tu motivo queda en la bitácora.',
 				@{/panel/sistema/respaldo/resolver}, 'Resolver la alerta', true)}"></th:block>
 		</div>
-		<p class="secundario">Cifrado con dos llaves (la tuya y la del responsable técnico) y guardado fuera del servidor. Cada
-			mes se restaura uno contigo, con tu clave de la bitácora.</p>
+		<!--/* Sprint 8, tanda 3 (decisiones 129 y 130, E24): quién custodia el respaldo depende de la instalación. */-->
+		<p class="secundario" data-custodios th:text="${sistema.custodios()}">Custodios del respaldo: Promotoría y el
+			responsable técnico.</p>
+		<p class="secundario">Cifrado con dos llaves y guardado fuera del servidor. Se restaura uno de prueba cada mes.</p>
 	</section>
 
 	<section class="tarjeta panel-bloque" aria-labelledby="titulo-procesos" data-seccion="procesos">

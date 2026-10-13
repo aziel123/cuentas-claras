@@ -29,7 +29,7 @@ class CorreoSmtpContratoTest {
 		JavaMailSender servidor = mock(JavaMailSender.class);
 		CorreoSmtp correo = new CorreoSmtp(servidor, cuenta(false, ""), true);
 
-		ResultadoEnvio r = correo.enviar("rosa@gmail.com", "Registramos su pago", "Colegio Virgen María: registramos...");
+		ResultadoEnvio r = correo.enviar("rosa@gmail.com", "Registramos su pago", "Colegio Los Álamos: registramos...");
 
 		ArgumentCaptor<SimpleMailMessage> enviado = ArgumentCaptor.forClass(SimpleMailMessage.class);
 		verify(servidor).send(enviado.capture());
@@ -37,6 +37,26 @@ class CorreoSmtpContratoTest {
 		assertThat(enviado.getValue().getTo()).containsExactly("rosa@gmail.com");
 		assertThat(r.aceptado()).isTrue();
 		assertThat(r.proveedor()).isEqualTo(ProveedorMensajeria.SMTP);
+	}
+
+	/** Sprint 8, tanda 1 (sección 3.7): el nombre visible del remitente es «{colegio} vía {marca}»; la dirección no cambia. */
+	@Test
+	void elRemitenteVisibleEsElColegioViaLaMarcaYLaDireccionNoCambia() {
+		JavaMailSender servidor = mock(JavaMailSender.class);
+		CorreoSmtp correo = new CorreoSmtp(servidor, cuenta(false, ""), true);
+
+		ResultadoEnvio r = correo.enviar("Colegio Los Álamos vía Colegio al Día", "rosa@gmail.com", "Registramos su pago",
+				"Colegio Los Álamos: registramos...");
+
+		ArgumentCaptor<SimpleMailMessage> enviado = ArgumentCaptor.forClass(SimpleMailMessage.class);
+		verify(servidor).send(enviado.capture());
+		assertThat(enviado.getValue().getFrom())
+				.isEqualTo("\"Colegio Los Álamos vía Colegio al Día\" <avisos@virgenmaria.edu.pe>");
+		assertThat(r.aceptado()).isTrue();
+		// Un nombre con comillas, saltos o < > no rompe la cabecera; sin nombre, solo la dirección.
+		assertThat(correo.remitente("Cole \"X\" <a@b>\r\nBcc: otro@x.pe")).isEqualTo("\"Cole  X   a@b   Bcc: otro@x.pe\" "
+				+ "<avisos@virgenmaria.edu.pe>");
+		assertThat(correo.remitente("  ")).isEqualTo("avisos@virgenmaria.edu.pe");
 	}
 
 	@Test

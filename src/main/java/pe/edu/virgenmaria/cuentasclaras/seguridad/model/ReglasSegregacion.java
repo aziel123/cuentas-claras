@@ -40,6 +40,11 @@ public final class ReglasSegregacion {
 			throw new ReglaNegocioException(
 					"Apoderado no puede combinarse con roles del personal. Crea una cuenta aparte para cada función.");
 		}
+		// Sprint 8, tanda 1: el operador de la plataforma no es de ningún colegio; solo y sin otro rol.
+		if (roles.contains(Rol.OPERADOR_PLATAFORMA) && roles.size() > 1) {
+			throw new ReglaNegocioException(
+					"El operador de la plataforma no se combina con ningún rol de un colegio.");
+		}
 	}
 
 	/** Los roles y, además, el enlace con el apoderado: obligatorio para APODERADO y prohibido para el personal. */

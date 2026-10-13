@@ -47,7 +47,7 @@ public class ResumenDiarioTarea {
 	@Scheduled(cron = "${cuentasclaras.panel.resumen-diario:0 30 19 * * *}", zone = ConfiguracionTiempo.ZONA)
 	public void ejecutar() {
 		LocalDate hoy = LocalDate.now(reloj);
-		PasadaPorColegios.recorrer(LOG, "El resumen diario", colegios.activos(), colegio -> enColegio(colegio, hoy));
+		PasadaPorColegios.recorrer(LOG, "El resumen diario", colegios.enProduccion(), colegio -> enColegio(colegio, hoy));
 	}
 
 	/** El resumen de un día en un colegio (lo llama la tarea programada; las pruebas, directamente). */

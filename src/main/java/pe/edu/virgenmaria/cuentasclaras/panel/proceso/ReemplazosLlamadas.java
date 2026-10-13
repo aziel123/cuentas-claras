@@ -62,7 +62,7 @@ public class ReemplazosLlamadas {
 	@Scheduled(cron = "${cuentasclaras.panel.reemplazos-cada:0 */15 * * * *}", zone = ConfiguracionTiempo.ZONA)
 	public void reintentar() {
 		LocalDate semana = LocalDate.now(reloj).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-		colegios.enCadaColegio(ActorSistema.PANEL, colegio -> {
+		colegios.enCadaColegioEnProduccion(ActorSistema.PANEL, colegio -> {
 			Integer hechos = transaccion.execute(estado -> fijacion.reemplazarPendientes(semana));
 			if (hechos != null && hechos > 0) {
 				LOG.info("Se reemplazaron {} familia(s) de la llamada de control en el colegio {}.", hechos, colegio);

@@ -129,7 +129,8 @@ class AvisosFinancierosTest {
 					.containsEntry("destino", CELULAR_ROSA).containsEntry("estado", "PENDIENTE")
 					.containsEntry("creado_por", "caja");
 			String parametros = (String) m.get("parametros");
-			assertThat(parametros.split("\n")).hasSize(6);
+			// Plantillas v2: el nombre del colegio va delante de los 6 parámetros propios.
+			assertThat(parametros.split("\n")).hasSize(7).startsWith("Colegio Virgen María");
 			assertThat(parametros).contains("S/ 900.00").contains("de Mateo").contains("de Valeria")
 					.contains(comprobante).contains("Efectivo").endsWith("Lucía R.");
 			// Ley 29733: ni el DNI ni el apellido del alumno.
@@ -190,7 +191,8 @@ class AvisosFinancierosTest {
 				+ "WHERE tipo = 'DESCUENTO_APROBADO' AND entidad = 'descuento' AND entidad_id = ?", id);
 		assertThat(avisos).hasSize(2).allSatisfy(m -> {
 			assertThat(m.get("apoderado_id")).isEqualTo(f.rosa());
-			assertThat((String) m.get("parametros")).startsWith("S/ 45.00").contains("de Mateo").endsWith("Dirección");
+			assertThat((String) m.get("parametros")).startsWith("Colegio Virgen María\nS/ 45.00").contains("de Mateo")
+					.endsWith("Dirección");
 		});
 	}
 

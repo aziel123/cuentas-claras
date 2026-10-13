@@ -143,7 +143,7 @@ class ServicioAvisosFamiliaTest {
 		assertThat(jdbc.queryForList("SELECT canal, apoderado_id, parametros FROM mensaje WHERE tipo = 'AVISO_ATENDIDO'"))
 				.singleElement().satisfies(m -> {
 					assertThat(m).containsEntry("canal", "WHATSAPP").containsEntry("apoderado_id", f.rosa());
-					assertThat((String) m.get("parametros")).isEqualTo("02/10/2026");
+					assertThat((String) m.get("parametros")).isEqualTo("Colegio Virgen María\n02/10/2026");
 				});
 		como(rosa);
 		assertThat(avisos.misAvisos()).singleElement().extracting(AvisoVista::respuesta)

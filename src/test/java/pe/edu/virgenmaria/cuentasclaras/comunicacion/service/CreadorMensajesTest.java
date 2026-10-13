@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Apoderado;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Familia;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.CanalMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.DestinatarioTipo;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.Mensaje;
@@ -36,6 +37,11 @@ class CreadorMensajesTest {
 
 	private final UsuarioRepository usuarios = mock(UsuarioRepository.class);
 
+	// Sprint 8, tanda 1: el nombre del colegio en contexto va delante de todo parámetro guardado (plantillas v2).
+	private final ColegioService colegios = mock(ColegioService.class);
+
+	private static final String COLEGIO = "Colegio Los Álamos";
+
 	@SuppressWarnings("unchecked")
 	private final ObjectProvider<ProveedorWhatsApp> whatsapp = mock(ObjectProvider.class);
 
@@ -49,7 +55,10 @@ class CreadorMensajesTest {
 
 	@BeforeEach
 	void preparar() {
-		creador = new CreadorMensajes(mensajes, usuarios, whatsapp);
+		creador = new CreadorMensajes(mensajes, usuarios, whatsapp, colegios);
+		when(colegios.nombreParaMensajes(any())).thenReturn(COLEGIO);
+		// Correcciones del sprint 8 (QA-S8-4): a las familias solo se les escribe con el colegio en producción.
+		when(colegios.enProduccion(any())).thenReturn(true);
 		when(whatsapp.getIfAvailable()).thenReturn(mock(ProveedorWhatsApp.class));
 		when(mensajes.findByClave(anyString())).thenAnswer(i -> Optional.ofNullable(guardados.get(i.<String>getArgument(0))));
 		when(mensajes.saveAndFlush(any(Mensaje.class))).thenAnswer(i -> {
@@ -80,6 +89,21 @@ class CreadorMensajesTest {
 		return a;
 	}
 
+	/**
+	 * Correcciones del sprint 8 (QA-S8-4 y S8-M2): en un colegio en preparación no se crea ningún mensaje a una familia
+	 * (ni aviso, ni verificación, ni respaldo por correo); al personal, sí.
+	 */
+	@Test
+	void unColegioEnPreparacionNoEscribeALasFamilias() {
+		when(colegios.enProduccion(any())).thenReturn(false);
+		Apoderado rosa = apoderado(3, "+51987654321", "rosa@correo.pe", null);
+
+		assertThat(creador.paraApoderado(rosa, PAGO, true, null)).isEmpty();
+		assertThat(creador.verificacion(rosa, CanalMensaje.WHATSAPP, "+51987654321", PAGO, null)).isEmpty();
+		assertThat(creador.alContactoAnterior(rosa, CanalMensaje.CORREO, "rosa@correo.pe", PAGO)).isEmpty();
+		assertThat(guardados).isEmpty();
+	}
+
 	@Test
 	void destinoEsElContactoRegistrado() {
 		List<Mensaje> creados = creador.paraApoderado(apoderado(3, "+51987654321", "rosa@correo.pe", null), PAGO, false,
@@ -92,7 +116,8 @@ class CreadorMensajesTest {
 			assertThat(m.getApoderadoId()).isEqualTo(3L);
 			assertThat(m.getFamiliaId()).isEqualTo(7L);
 			assertThat(m.getClave()).isEqualTo("PAGO_REGISTRADO:pago:15:APODERADO:3:WHATSAPP");
-			assertThat(m.parametrosLista()).containsExactlyElementsOf(PAGO.parametros());
+			assertThat(m.parametrosLista()).hasSize(PAGO.parametros().size() + 1).startsWith(COLEGIO)
+					.endsWith(PAGO.parametros().toArray(String[]::new));
 		});
 		// Ambos canales (anulación y descuento): también al correo registrado.
 		assertThat(creador.paraApoderado(apoderado(4, "+51912345678", "pedro@correo.pe", null), PAGO, true, null))

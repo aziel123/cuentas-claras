@@ -42,7 +42,7 @@ public class AvisosPromotoria {
 	@Scheduled(cron = "${cuentasclaras.panel.avisos-cada:0 */15 7-20 * * *}", zone = ConfiguracionTiempo.ZONA)
 	public void ejecutar() {
 		LocalDate hoy = LocalDate.now(reloj);
-		PasadaPorColegios.recorrer(LOG, "Los avisos a Promotoría", colegios.activos(), colegio -> enColegio(colegio, hoy));
+		PasadaPorColegios.recorrer(LOG, "Los avisos a Promotoría", colegios.enProduccion(), colegio -> enColegio(colegio, hoy));
 	}
 
 	/** Una pasada en un colegio (la tarea programada y las pruebas). @return los avisos publicados */

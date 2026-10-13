@@ -48,8 +48,7 @@ java -jar target/cuentas-claras-*.jar migrar
 # 2. Arrancar la aplicación con cc_app
 SPRING_PROFILES_ACTIVE=prod \
 DB_URL="jdbc:mysql://HOST:3306/cuentasclaras" DB_USUARIO="cc_app" DB_CLAVE="..." \
-AUDITORIA_CLAVE_HMAC="..." \
-CC_PROMOTOR_USUARIO="..." CC_PROMOTOR_NOMBRE="..." CC_PROMOTOR_CLAVE="..." \
+AUDITORIA_CLAVE_HMAC="..." CC_MARCA_NOMBRE="..." CC_OPERADORES="operador:correo@dominio.pe" \
 java -jar target/cuentas-claras-*.jar
 ```
 
@@ -60,8 +59,9 @@ java -jar target/cuentas-claras-*.jar
 | `DB_MIGRADOR_USUARIO`, `DB_MIGRADOR_CLAVE` | Solo para `migrar` | Usuario de Flyway (`cc_migrador`), el único que crea o cambia tablas. **No** van en el entorno de la aplicación |
 | `AUDITORIA_CLAVE_HMAC` | Sí | Sella la bitácora (32 caracteres o más). Custodia: `docs/operacion/custodia-clave-auditoria.md` |
 | `CC_PROXIES_INTERNOS` | No | Expresión regular con las IP de tus proxies inversos; solo de ellos se acepta X-Forwarded-For (por defecto: loopback y redes privadas) |
-| `CC_PROMOTOR_USUARIO`, `CC_PROMOTOR_NOMBRE`, `CC_PROMOTOR_CLAVE` | Solo si no hay usuarios | Crean al primer PROMOTOR, que debe cambiar la clave al ingresar. Luego retira `CC_PROMOTOR_CLAVE` |
-| `CC_COLEGIO_ID` | No (1) | Colegio del primer PROMOTOR |
+| `CC_MARCA_NOMBRE` | Sí (prod) | Sprint 8: el nombre comercial del producto (título, cabecera, correos y mensajes) |
+| `CC_OPERADORES` | Sí, para dar de alta colegios | Sprint 8: `usuario:correo,...`. Cada operador recibe su enlace al correo y da de alta los colegios desde `/plataforma`. Reemplaza a `CC_PROMOTOR_*` y `CC_COLEGIO_ID`, que se retiraron |
+| `CC_INSTALACION` | No (`DEDICADA`) | `DEDICADA` (un colegio) o `COMPARTIDA` (varios colegios en una base) |
 
 - Si la bitácora queda bloqueada, sigue `docs/operacion/incidente-auditoria.md`.
 - El CI tiene un job `mysql` que aplica las migraciones y corre pruebas contra MySQL 8 real con estos mismos permisos.

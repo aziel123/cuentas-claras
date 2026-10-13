@@ -1,6 +1,7 @@
 # Estado del proyecto · Cuentas Claras
 
-> Última actualización: 9 de octubre de 2026 (correcciones del sprint 7: versión 1 terminada).
+> Última actualización: 13 de octubre de 2026 (sprint 8 «Lista para vender»: terminado, auditado y corregido; faltan el
+> paso 0 en Cloud SQL y el despliegue).
 > Resumen para retomar el trabajo: qué está hecho, cómo probarlo y qué hay que decidir con el colegio.
 
 ## Avance
@@ -15,6 +16,7 @@
 | 5 · Familias y matrícula 2027 (avisos por WhatsApp, acceso directo al titular, huella diaria, portal, renovación 2027, feriados, cierre mensual) | ✅ Terminado, auditado y corregido | `claude/sprint-5-familias` | 1694 (más las de MySQL real, que corren en el CI) |
 | 6 · Panel de la promotora (panel, reportes y Excel, resumen diario, alertas y aprobaciones en el celular, contacto del personal, llamada de control) | Implementado en 3 tandas, auditado y corregido (`docs/arquitectura/sprint-6-correcciones.md`, V23, 63 triggers) | `main` (PR #4) | 1883 (92 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
 | 7 · Endurecimiento y entrega (respaldos cifrados y restauración probada, monitoreo, base de datos endurecida, seguridad web, Ley 29733, manuales y capacitación) | ✅ Terminado, auditado y corregido (`docs/arquitectura/sprint-7-correcciones.md`, V24 a V27, 75 triggers) | `claude/sprint-7-endurecimiento` | 2226 (120 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
+| 8 · Lista para vender (plataforma y alta de colegios, marca, puesta en marcha, conectores por colegio, demo, respaldos por colegio, despliegue en Google Cloud, contratos) | ✅ Terminado, auditado y corregido (`docs/arquitectura/sprint-8-lista-para-vender.md` y `sprint-8-correcciones.md`, V28 a V31, 86 triggers y 96 huellas); faltan el paso 0 en Cloud SQL y el despliegue | `claude/sprint-8-lista-para-vender` | 2438 (140 de MySQL real, que se omiten sin `CC_PRUEBA_MYSQL` y corren en el CI) |
 
 El sprint 4 se implementó en 3 tandas verificadas, cada una con su migración y probada también contra MySQL 8 real, y luego se corrigió todo lo que encontraron la auditoría antifraude y QA:
 
@@ -33,6 +35,15 @@ El sprint 7 va en 3 tandas (`docs/arquitectura/sprint-7-endurecimiento.md`, con 
 | 2 | Base de datos endurecida: usuario `cc_sistema` para los procesos y la identidad, firma de sesión en cada aprobación, roles de Promotoría y Dirección solo con solicitud, huellas de triggers y funciones | V25 | 73 | 1971 (105 de MySQL real) |
 | 3 | Seguridad web (cabeceras, cookie `__Host-`, límite de ingresos por conexión, sesión de 10 horas, IDOR, CSRF, archivos hostiles, dependencias), Ley 29733 (registro de accesos, «Mis datos», pedidos con plazo, aviso de privacidad) y documentos de entrega | V26 | 73 | 2035 (107 de MySQL real) |
 | Correcciones | La auditoría (S7-A1: anular un pago sin firma; S7-M1: rol anidado; S7-B1: registro de la caja) y los 8 hallazgos y 2 observaciones de QA (`docs/arquitectura/sprint-7-correcciones.md`) | V27 | 75 | 2226 (120 de MySQL real) |
+
+El sprint 8 va en 3 tandas (`docs/arquitectura/sprint-8-lista-para-vender.md`, con la sección «Implementación» de cada una):
+
+| Tanda | Qué trae | Migración | Triggers | Pruebas al cerrarla |
+|---|---|---|---|---|
+| 1 | Colegio de plataforma y operador (sin datos de las familias), alta de un colegio con su primera Promotoría, estados del colegio (en preparación no se cobra), marca del producto en un parámetro y marca del colegio | V28 | 80 | 2290 (129 de MySQL real) |
+| 2 | Conectores por colegio (OSE, pasarela, cuenta bancaria y recaudación) con secretos cifrados y doble control; lista de puesta en marcha de 14 pasos y paso a producción; reglas de la instalación compartida | V29 | 82 | 2339 (133 de MySQL real) |
+| 3 | Demo (un colegio ficticio por visitante, sin salida a internet, se borra cada noche), «faltan filas» por colegio, despliegue en Google Cloud (scripts y paso 0), gitleaks, imagen en GHCR y los documentos (términos, encargo de tratamiento, plantillas de WhatsApp para Meta, guías) | V30 | 82 | 2370 (135 de MySQL real) |
+| Correcciones | La auditoría (S8-A1 y S8-A2, altos: el operador ya no se queda con la primera Promotoría ni con el correo de control; M1 a M5 y B1 a B6) y los 9 hallazgos de QA (`docs/arquitectura/sprint-8-correcciones.md`) | V31 | 86 | 2438 (140 de MySQL real) |
 
 Las ramas están **apiladas**: cada una parte de la anterior y contiene todo su trabajo. La más completa es `claude/sprint-5-familias`. Los sprints 1 a 4 están en revisión en el PR #1 hacia `main` (CI en verde, también el job de MySQL 8). El sprint 5 pasó el CI completo en un PR en borrador que se cerró sin merge; se propone a `main` cuando se una el PR #1.
 
@@ -109,6 +120,29 @@ Diseño en `docs/arquitectura/sprint-5-familias.md` y correcciones en `sprint-5-
 - **Seguridad web:** HSTS de 1 año, cookie `__Host-CCSESION`, Cross-Origin-Opener-Policy y Cross-Origin-Resource-Policy en toda respuesta; desde una misma conexión, 5 intentos fallidos con un usuario o 20 con cualquiera y esa conexión espera 15 minutos (un tercero ya no bloquea la cuenta de la promotora); la sesión dura como máximo 10 horas; una prueba recorre las 132 rutas con id contra otra familia y otro colegio; todo POST exige CSRF; ninguna dependencia con una vulnerabilidad crítica o alta con arreglo (Tomcat y Jackson subidos a sus parches).
 - **Ley 29733:** queda registrado quién del personal vio datos personales (fichas, búsquedas, morosos, llamada de control, importación y cambios de contacto) y Promotoría lo ve en la ficha de la familia y en «Quién vio datos personales», con alerta si alguien ve más de 50 fichas en un día; las familias ven «Mis datos» en el portal y piden acceso, rectificación, cancelación u oposición por «¿Algo no cuadra?», con plazo y alertas; aviso de privacidad público que la familia acepta al activar su cuenta; reporte de datos con plazo vencido. Los plazos los confirma el asesor legal.
 - **Entrega:** manuales de una página por rol (`docs/manuales/`), guion de 9 videos, plan de capacitación, acta de conformidad y acta del simulacro de restauración (`docs/entrega/` y `docs/operacion/`).
+
+### Lista para vender (sprint 8)
+Diseño e implementación en `docs/arquitectura/sprint-8-lista-para-vender.md`.
+- **Una instalación, varios colegios:** el **operador de la plataforma** da de alta cada colegio con su primera Promotoría,
+  una sola vez, y después no puede entrar ni ver a sus familias (lo exigen la aplicación y la base). El colegio nace en
+  preparación (no puede cobrar) y su Promotoría lo pasa a producción con su firma cuando completa la **lista de puesta en
+  marcha** (14 pasos calculados desde los datos).
+- **Conectores por colegio:** el OSE, la pasarela, la cuenta bancaria y la recaudación de CADA colegio, con los secretos
+  cifrados (AES-256-GCM) que nadie vuelve a ver; cambiar adónde entra el dinero lo propone una persona y lo aprueba otra con
+  su firma, y avisa a toda la Promotoría y al correo externo de control.
+- **Marca:** el nombre comercial está en un solo parámetro (`CC_MARCA_NOMBRE`, todavía provisional) y cada colegio tiene la
+  suya (razón social, RUC, dirección y logo) en su portal, sus boletas y sus mensajes. Las 26 plantillas de WhatsApp llevan
+  el nombre del colegio como variable (`docs/entrega/plantillas-whatsapp-meta.md`, listas para Meta).
+- **Demo** (`demo.<dominio>`): cada visitante crea SU colegio ficticio en un minuto, con 40 familias, la caja de hoy de Lucía
+  Ramos y una cuenta por rol. Datos ficticios en memoria, franja «DEMO», sin salida a internet, nunca envía mensajes reales ni
+  cobra, y se borra cada noche (`docs/ventas/guia-demo.md`).
+- **Respaldos en la instalación compartida:** «faltan filas» por colegio (cada Promotoría ve y resuelve la suya) y los
+  custodios del respaldo y de la clave HMAC son 2 personas de la plataforma, con una verificación trimestral por colegio.
+- **Despliegue en Google Cloud, Santiago:** VM e2-small con Docker y Caddy, Cloud SQL para MySQL 8.4 por IP privada y TLS, los
+  secretos solo en Secret Manager, los usuarios `cc_*` creados por SQL, la imagen por digest. Unos US$ 65-75 al mes por
+  instalación (`docs/operacion/despliegue-gcp.md`). **Todavía no se desplegó:** primero el paso 0 contra Cloud SQL.
+- **Suscripción** fuera del sistema (`docs/operacion/suscripcion.md`) y plantillas de **términos de servicio** y del
+  **contrato de encargo de tratamiento** (Ley 29733), a revisar por un abogado (`docs/entrega/`).
 
 ### Panel de la promotora (sprint 6)
 Diseño en `docs/arquitectura/sprint-6-panel-promotora.md`, con una sección de implementación por tanda (migraciones V21 y
@@ -246,10 +280,45 @@ La lista completa está en los documentos de `docs/arquitectura/`, incluidas la 
 | 106 | Publicación de los videos | Sin listar, en la cuenta del colegio, con datos de demostración |
 | 107 | Soporte después del acta | 30 días, por WhatsApp y correo, en horario escolar |
 
+### Sprint 8 (por confirmar; valores por defecto del diseño, sección 16)
+| # | Tema | Valor actual |
+|---|---|---|
+| 108 | Modelo de instalación | Una compartida para todos los colegios nuevos; dedicada solo si un colegio la paga |
+| 109 | El Colegio Virgen María | Instalación dedicada, con la custodia del sprint 7 (puede pasar a la compartida después) |
+| 110 | Hosting | Google Cloud, Santiago: VM e2-small y Cloud SQL para MySQL 8.4 `db-g1-small`, zonal, PITR de 7 días |
+| 111 | Alta disponibilidad | No (zonal): RPO de minutos con la PITR y de 24 h con el respaldo propio; RTO ~2 h |
+| 112 | Quién es operador | Las personas de `CC_OPERADORES` del despliegue (al menos 1, de preferencia 2) |
+| 113 | Qué ve el operador | La ficha del colegio y la lista de verificación como sí/no y conteos |
+| 114 | Activación de la primera Promotoría | Enlace de un solo uso (48 h), en la reunión de puesta en marcha, con el DNI del contrato |
+| 115 | Si el colegio pierde a su única Promotoría | Fuera del sistema: carta del representante legal y procedimiento con acta |
+| 116 | Estados del colegio | Preparación y producción; sin pagos ni recordatorios en preparación; sin vuelta atrás |
+| 117 | Lista mínima para producción | La de 14 pasos (pasarela y recaudación, opcionales) |
+| 118 | Secretos de los conectores | En la base, cifrados con AES-256-GCM y una clave maestra en Secret Manager |
+| 119 | Quién cambia un conector | Propone Administración o Promotoría; aprueba otra persona; una Promotoría participa en lo que mueve dinero |
+| 120 | WhatsApp | Un número de la plataforma con el nombre de la marca; el colegio en cada plantilla |
+| 121 | Correo | SMTP del proveedor; «De: {colegio} vía {marca}» |
+| 122 | Marca del producto | Un parámetro (`CC_MARCA_NOMBRE`); se elige antes del dominio y del nombre visible de WhatsApp |
+| 123 | Marca del colegio | Nombre, razón social, RUC, dirección y logo; sin colores propios |
+| 124 | Mismo RUC en varias sedes | Se permite, con series distintas (lo exige la base) |
+| 125 | Página de ingreso | Una para todos, con la marca del producto |
+| 126 | Demo | Instalación aparte, H2 en memoria, sin salida, reinicio a las 03:00; 3 por conexión y 50 al día |
+| 127 | Datos en la demo | Solo ficticios; la importación acepta solo el archivo de ejemplo |
+| 128 | Suscripción | Fuera del sistema: contrato, factura mensual y transferencia; nunca se suspenden los avisos a las familias sin 30 días de aviso |
+| 129 | Custodia del respaldo (compartida) | 2 custodios de la plataforma |
+| 130 | Clave HMAC (compartida) | Los mismos 2; cada colegio conserva su huella diaria y una verificación trimestral |
+| 131 | «Faltan filas» (compartida) | Por colegio: la resuelve la Promotoría de cada colegio afectado |
+| 132 | Fin del contrato | Exportación en 30 días; datos bloqueados durante el plazo tributario; eliminación con acta |
+| 133 | Dominio | `<marca>.pe` (o `.com`) con `app.` y `demo.`; certificados de Let's Encrypt |
+| 134 | Despliegue | Imagen del CI en GHCR por digest; `desplegar.sh` desde la máquina del responsable técnico |
+| 135 | Infraestructura como código | Scripts `gcloud` idempotentes; Terraform con más de 2 instalaciones |
+| 136 | Flujo transfronterizo | Cada colegio declara Chile (hosting) y EE.UU. (Meta) |
+| 137 | Contrato antes del alta | El representante legal firma los términos y el encargo antes del alta |
+| 138 | Tamaño de una instalación compartida | Hasta 25 colegios u 8,000 alumnos |
+
 ## Pendiente fuera del código
 - [ ] Reunión de descubrimiento con el colegio (kit en `docs/ux/`).
 - [ ] Trámites largos: verificación de WhatsApp Business, proveedor de comprobantes electrónicos (OSE), pasarela de pagos, Yape o Plin empresarial.
-- [ ] Elegir el hosting (decisión D3) para tener un entorno de pruebas en internet.
+- [x] Elegir el hosting (decisión D3): Google Cloud, Santiago (decisión 110; a confirmar con el paso 0).
 - [ ] Revisar y unir las ramas a `main` mediante un PR, para que corra el CI de GitHub, incluido el job de MySQL.
 - [x] Auditoría del sprint 4 (`auditor-seguridad-antifraude` y `qa-tester`) y sus correcciones (`docs/arquitectura/sprint-4-correcciones.md`).
 - [ ] Pedir al banco un extracto y un archivo de recaudación reales (anonimizados) para construir sus adaptadores, y preguntar por H2H y por la glosa del abono de la recaudación.
@@ -259,9 +328,29 @@ La lista completa está en los documentos de `docs/arquitectura/`, incluidas la 
 - [ ] Asesor legal: confirmar los plazos de la Ley 29733 (20 y 10 días hábiles, 48 horas, 1 y 2 años), redactar el aviso de privacidad y confirmar qué se responde a un pedido de cancelación.
 - [ ] El colegio: inscribir sus bancos de datos y declarar el flujo transfronterizo (Meta y, si aplica, el hosting); nombrar al responsable de los datos personales.
 - [ ] Contratar el almacenamiento de objetos con bloqueo de objetos y generar las dos claves `age` (Promotoría y responsable técnico).
+- [x] **Sprint 8:** QA (`qa-tester`) y auditoría (`auditor-seguridad-antifraude`) de las 3 tandas y sus correcciones
+      (`docs/arquitectura/sprint-8-correcciones.md`).
+- [ ] **Sprint 8:** el PR hacia `main` (CI completo: `mysql`, `respaldo`, `demo`, `secretos` y `dependencias`) y, en GitHub,
+      la protección de `main` con «Require review from Code Owners» (S8-B2).
+- [ ] **Sprint 8:** declarar al menos dos operadores en `CC_OPERADORES` (corregir el contacto de un titular exige dos).
+- [ ] **Sprint 8, paso 0:** crear la cuenta y el proyecto de Google Cloud y correr `deploy/gcp/paso-0.sh` contra una instancia
+      de prueba de Cloud SQL ([acta](operacion/acta-paso-0-cloud-sql.md)). Si falla, revisar el proveedor antes de desplegar.
+- [ ] **Sprint 8:** elegir el nombre comercial (decisión 122), comprar el dominio, pedir el nombre visible de WhatsApp y enviar
+      las plantillas `_v2` a Meta (`docs/entrega/plantillas-whatsapp-meta.md`).
+- [ ] **Sprint 8:** desplegar la instalación compartida y la demo siguiendo `docs/operacion/despliegue-gcp.md`.
+- [ ] **Sprint 8:** que un abogado revise los términos de servicio y el contrato de encargo de tratamiento (`docs/entrega/`).
 - [ ] Primer simulacro presencial de restauración en el servidor del colegio (`docs/operacion/acta-simulacro-restauracion.md`), capacitación (S1 a S6), grabar los videos 1, 2, 4 y 7 y firmar el acta de conformidad (`docs/entrega/`).
 
 ## Riesgos conocidos
+- **Sprint 8: nada se probó en Google Cloud** (no había cuenta): los scripts de `deploy/` se validaron en su sintaxis y el job
+  `mysql` se reprodujo en MySQL 8.4 local, también con un administrador sin SUPER como el de Cloud SQL. El paso 0 lo confirma.
+- **Sprint 8: el operador de la plataforma hace el alta inicial** de cada colegio. Desde las correcciones ya no puede quedarse
+  con la primera Promotoría (el DNI del titular no cambia y cambiar su contacto exige un segundo operador, con aviso al
+  contacto anterior, al correo institucional y al de control) ni con el correo de control de un colegio en producción (lo
+  aprueba la Promotoría); dos operadores en colusión siguen siendo un residual (`sprint-8-correcciones.md`). El DBA de la plataforma sí ve los datos (otra credencial): lo cubren el contrato de encargo, las
+  claves de root y `cc_migrador` fuera de la VM y los conteos por colegio del respaldo.
+- **Sprint 8: en la instalación compartida** la plataforma custodia la clave HMAC y el respaldo; una caída afecta a todos los
+  colegios a la vez; y la demo no tiene los triggers de MySQL (muestra las reglas de la aplicación).
 - La aplicación está pensada para **una sola instancia**: las sesiones y algunos límites viven en memoria.
 - La clave temporal del **personal** todavía la ve quien la genera (la del apoderado ya no: enlace de un solo uso). La entrega directa al titular llega con WhatsApp y correo en el sprint 5.
 - La alerta de «cuenta activada desde la IP de quien la creó» no detecta a quien la activa desde otra conexión; lo cubren el apoderado (no puede entrar y avisa) y el restablecimiento por Promotoría.

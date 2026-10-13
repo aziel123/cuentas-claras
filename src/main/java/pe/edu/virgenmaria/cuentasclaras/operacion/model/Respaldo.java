@@ -11,6 +11,8 @@ import jakarta.persistence.Table;
 import org.hibernate.annotations.Immutable;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Fila de {@code respaldo} (V24): la escribe SOLO {@code cc_respaldo} desde {@code scripts/respaldo/respaldar.sh}
@@ -76,6 +78,13 @@ public class Respaldo {
 	@Column(length = 1000)
 	private String diferencias;
 
+	/**
+	 * Sprint 8, tanda 3 (V30): los colegios con filas faltantes, como arreglo JSON de ids ({@code [2,5]}); {@code null} si
+	 * no falta nada o si el respaldo es anterior a V30 (entonces la falta es «de toda la base»).
+	 */
+	@Column(name = "colegios_faltan", length = 1000)
+	private String colegiosFaltan;
+
 	@Column(name = "creado_en", nullable = false)
 	private LocalDateTime creadoEn;
 
@@ -128,6 +137,35 @@ public class Respaldo {
 
 	public String getDiferencias() {
 		return diferencias;
+	}
+
+	public String getColegiosFaltan() {
+		return colegiosFaltan;
+	}
+
+	/** Los ids de {@code colegios_faltan}, en orden; vacío si es {@code null}. */
+	public List<Long> colegiosConFaltantes() {
+		if (colegiosFaltan == null || colegiosFaltan.isBlank()) {
+			return List.of();
+		}
+		return Arrays.stream(colegiosFaltan.replace("[", "").replace("]", "").split(",")).map(String::strip)
+				.filter(t -> !t.isEmpty()).map(Long::valueOf).toList();
+	}
+
+	/**
+	 * Si la falta de este respaldo toca a ese colegio: lo nombra en {@code colegios_faltan}, o es un FALTAN_FILAS anterior
+	 * a V30 (sin colegios: de toda la base).
+	 */
+	public boolean afectaA(Long colegioId) {
+		if (comparacion != ComparacionRespaldo.FALTAN_FILAS) {
+			return false;
+		}
+		return colegiosFaltan == null || colegiosConFaltantes().contains(colegioId);
+	}
+
+	/** Un FALTAN_FILAS anterior a V30: no dice qué colegios (lo cierra cualquier resolución posterior). */
+	public boolean deTodaLaBase() {
+		return comparacion == ComparacionRespaldo.FALTAN_FILAS && colegiosFaltan == null;
 	}
 
 	public boolean simulado() {

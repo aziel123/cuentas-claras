@@ -63,12 +63,15 @@ public class ObjetosConciliables {
 
 	private final PropiedadesConciliacion propiedades;
 
+	private final RecaudacionEnConciliacion recaudacion;
+
 	private final CalendarioHabil calendario;
 
 	public ObjetosConciliables(PagoRepository pagos, DepositoCajaRepository depositos, ReembolsoRepository reembolsos,
 			LiquidacionPasarelaRepository liquidaciones, LoteRecaudacionRepository lotes,
 			PartidaConciliacionRepository partidas, LineaRecaudacionRepository lineasRecaudacion, NombresUsuarios nombres,
-			PropiedadesConciliacion propiedades, CalendarioHabil calendario) {
+			PropiedadesConciliacion propiedades, CalendarioHabil calendario, RecaudacionEnConciliacion recaudacion) {
+		this.recaudacion = recaudacion;
 		this.calendario = calendario;
 		this.pagos = pagos;
 		this.depositos = depositos;
@@ -106,7 +109,7 @@ public class ObjetosConciliables {
 							+ " cargo(s) · bruto " + Dinero.formatear(l.getTotalBruto()) + " menos comisión e IGV "
 							+ Dinero.formatear(l.getTotalComision().add(l.getTotalIgv())), null));
 		}
-		if (propiedades.abonoRecaudacion() == PropiedadesConciliacion.AbonoRecaudacion.POR_LOTE) {
+		if (recaudacion.abono() == PropiedadesConciliacion.AbonoRecaudacion.POR_LOTE) {
 			for (LoteRecaudacion t : lotes.findByEstadoInAndFechaProcesoBetweenOrderByIdAsc(
 					EnumSet.of(EstadoLote.CONFIRMADO, EstadoLote.APLICADO), desde, hasta)) {
 				LocalDate[] v = ReglasEmparejamiento.ventanaRecaudacion(calendario, t.getFechaProceso());

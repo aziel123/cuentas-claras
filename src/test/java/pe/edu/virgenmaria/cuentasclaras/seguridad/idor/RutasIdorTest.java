@@ -130,6 +130,9 @@ class RutasIdorTest {
 	private ColegioRepository colegios;
 
 	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.plataforma.service.AltaColegio alta;
+
+	@Autowired
 	private PasswordEncoder codificador;
 
 	@Autowired
@@ -168,7 +171,14 @@ class RutasIdorTest {
 	@Test
 	void ningunaRutaConIdDevuelveDatosDeOtroColegio() throws Exception {
 		Datos a = prepararColegioA();
-		long colegioB = colegios.save(new Colegio("Colegio de Prueba B")).getId();
+		// Sprint 8, tanda 1: el colegio B lo da de alta el operador desde la plataforma (no la semilla).
+		SecurityContextHolder.clearContext();
+		UsuariosDePrueba.iniciarSesion(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioPlataforma.operador(usuarios,
+				codificador, colegios, "operador.idor"));
+		long colegioB = alta.crear(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioPlataforma.alta("Colegio de Prueba B",
+				pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioPlataforma.RUC_B, "titular.idor.b", "45678950",
+				"987650050"), null, null).colegioId();
+		SecurityContextHolder.clearContext();
 		Map<Rol, RequestPostProcessor> personasB = new EnumMap<>(Rol.class);
 		for (Rol rol : List.of(Rol.PROMOTOR, Rol.DIRECTOR, Rol.ADMINISTRACION, Rol.CAJA, Rol.DOCENTE)) {
 			personasB.put(rol, UsuariosDePrueba.como(UsuariosDePrueba.guardar(usuarios, codificador, colegioB,
@@ -187,6 +197,9 @@ class RutasIdorTest {
 			}
 			String camino = ruta.concreta(valores(clasificacion, a.ids()));
 			for (Rol rol : RutasDeLaAplicacion.roles(camino)) {
+				if (rol == Rol.OPERADOR_PLATAFORMA) {
+					continue; // ve la ficha de cualquier colegio (es su función), nunca sus datos: OperadorSinDatosTest
+				}
 				pedidos++;
 				revisar(ruta, camino, clasificacion, a.ids(), personasB.get(rol), rol.name(), a.marcas(), errores);
 			}
@@ -301,6 +314,7 @@ class RutasIdorTest {
 				case "accion" -> "PAGADO";
 				case "token" -> "a".repeat(43);
 				case "proveedor" -> "SIMULADA";
+				case "clavePublica" -> UUID.randomUUID().toString();
 				default -> "1";
 			};
 		}
@@ -398,6 +412,33 @@ class RutasIdorTest {
 		}
 
 		Map<Recurso, String> ids = new EnumMap<>(Recurso.class);
+		ids.put(Recurso.COLEGIO, "1");
+		// Correcciones del sprint 8: un logo, un cambio del contacto del titular (no del colegio 1: es del operador) y un
+		// cambio del correo de control propuestos en el colegio A.
+		jdbc.update("INSERT INTO colegio_logo (colegio_id, contenido, sha256, bytes, ancho, alto, vigente, creado_en, "
+				+ "creado_por, actualizado_en) VALUES (1, X'89504E47', REPEAT('a', 64), 4, 1, 1, NULL, CURRENT_TIMESTAMP, "
+				+ "'promotoria', CURRENT_TIMESTAMP)");
+		ids.put(Recurso.LOGO, texto("SELECT MAX(id) FROM colegio_logo WHERE colegio_id = 1"));
+		ids.put(Recurso.CAMBIO_CONTACTO, "999999");
+		jdbc.execute("SET REFERENTIAL_INTEGRITY FALSE");
+		try {
+			jdbc.update("INSERT INTO cambio_correo_control (colegio_id, correo_anterior, correo_nuevo, motivo, estado, "
+					+ "pendiente, propuesto_por, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) VALUES "
+					+ "(1, NULL, 'otro@x.pe', 'Motivo de la prueba IDOR', 'PROPUESTO', TRUE, 'operador.idor', 0, 0, "
+					+ "CURRENT_TIMESTAMP, 'operador.idor', CURRENT_TIMESTAMP)");
+		}
+		finally {
+			jdbc.execute("SET REFERENTIAL_INTEGRITY TRUE");
+		}
+		ids.put(Recurso.CAMBIO_CORREO, texto("SELECT MAX(id) FROM cambio_correo_control WHERE colegio_id = 1"));
+		// Sprint 8, tanda 2: un conector propuesto del colegio A (el colegio B no lo ve ni lo prueba: 404).
+		jdbc.update("INSERT INTO conector_colegio (colegio_id, tipo, proveedor, modo, configuracion, clave_publica, estado, "
+				+ "propuesto_por, creado_en, creado_por, actualizado_en) VALUES (1, 'CUENTA_BANCARIA', 'BCP', 'REAL', "
+				+ "'{\"numero\":\"1912345678901\",\"cci\":\"00219100345678901234\",\"moneda\":\"PEN\"}', ?, "
+				+ "'PROPUESTO', 'administracion', CURRENT_TIMESTAMP, 'administracion', CURRENT_TIMESTAMP)",
+				UUID.randomUUID().toString());
+		ids.put(Recurso.CONECTOR, texto("SELECT MIN(id) FROM conector_colegio WHERE colegio_id = 1"));
+		ids.put(Recurso.TIPO_CONECTOR, "cuenta-bancaria");
 		ids.put(Recurso.ALUMNO, f.mateo().toString());
 		ids.put(Recurso.FAMILIA, f.quispe().toString());
 		ids.put(Recurso.APODERADO, f.rosa().toString());

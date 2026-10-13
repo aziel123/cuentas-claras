@@ -110,7 +110,10 @@ e30)
 	grep -q "faltan filas" /tmp/cc-respaldo-2.err
 	grep -q "pago (faltan 1)" /tmp/cc-respaldo-2.out
 	test "$(admin -e "SELECT COUNT(*) FROM respaldo WHERE comparacion = 'FALTAN_FILAS' AND diferencias LIKE '%pago%'")" = "1"
-	echo "OK (E30): el respaldo siguiente detectó el pago borrado (código 3, FALTAN_FILAS registrado)"
+	# Sprint 8, tanda 3 (V30): el registro dice de qué colegio era el pago.
+	colegio=$(admin -e "SELECT colegios_faltan FROM respaldo ORDER BY id DESC LIMIT 1")
+	echo "$colegio" | grep -Eq '^\[[0-9]+\]$' || { echo "ERROR: colegios_faltan = $colegio"; exit 1; }
+	echo "OK (E30): el respaldo siguiente detectó el pago borrado (código 3, FALTAN_FILAS registrado; colegios $colegio)"
 	;;
 
 e32)
@@ -127,7 +130,10 @@ e32)
 	test "$codigo" = "3"
 	grep -q "ancla de la bitácora (evento $ancla)" /tmp/cc-respaldo-3.out
 	grep -q "evento_auditoria (faltan" /tmp/cc-respaldo-3.out
-	echo "OK (E32): el recorte del final de la bitácora (con el eslabón retrocedido) se detectó por el ancla"
+	# Sprint 8, tanda 3 (V30): el ancla de la bitácora es de toda la instalación: nombra a todos los colegios.
+	todos=$(admin -e "SELECT CONCAT('[', GROUP_CONCAT(id ORDER BY id SEPARATOR ','), ']') FROM colegio WHERE tipo = 'COLEGIO'")
+	test "$(admin -e "SELECT colegios_faltan FROM respaldo ORDER BY id DESC LIMIT 1")" = "$todos" 		|| { echo "ERROR: el ancla no nombró a todos los colegios ($todos)"; exit 1; }
+	echo "OK (E32): el recorte del final de la bitácora (con el eslabón retrocedido) se detectó por el ancla (colegios $todos)"
 	;;
 
 restauracion-sin-clave)
@@ -165,7 +171,7 @@ faltan-filas-sigue)
 			-p"$clave_respaldo" cuentasclaras -e "INSERT INTO respaldo (inicio, fin, archivo, sha256, bytes, version_esquema,
 			secuencia_antes, hash_antes, secuencia_despues, hash_despues, conteos, destino, comparacion, diferencias,
 			creado_en, creado_por) VALUES (UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR,
-			'cc-20000101-000000.sql.gz.age', REPEAT('a', 64), 1, '27', $1, '$2', $1, '$2', '{}', 'cirespaldos', 'IGUAL',
+			'cc-20000101-000000.sql.gz.age', REPEAT('a', 64), 1, '28', $1, '$2', $1, '$2', '{}', 'cirespaldos', 'IGUAL',
 			NULL, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, 'cc_respaldo')" 2> /tmp/cc-respaldo-igual.err; then
 		echo "ERROR: cc_respaldo registró IGUAL con la alerta sin resolver"; exit 1
 	fi
@@ -196,11 +202,57 @@ permisos-anidados)
 
 resuelto)
 	# Correcciones del sprint 7 (QA-S7-1): Promotoría ya resolvió la alerta con su firma (ResolucionRespaldoMySqlTest): el
-	# respaldo siguiente vuelve a comparar con el último manifiesto y dice IGUAL.
-	test "$(admin -e "SELECT COUNT(*) FROM resolucion_respaldo")" = "1"
+	# respaldo siguiente vuelve a comparar con el último manifiesto y dice IGUAL. Sprint 8, tanda 3: la resolvió la
+	# Promotoría de CADA colegio afectado (el recorte de la bitácora los afecta a todos).
+	test "$(admin -e "SELECT COUNT(*) FROM resolucion_respaldo")" -ge 1
 	sh "$respaldar" | tee /tmp/cc-respaldo-6.out
 	grep -q "comparación: IGUAL" /tmp/cc-respaldo-6.out
 	echo "OK (QA-S7-1): resuelta por Promotoría, el respaldo siguiente vuelve a IGUAL"
+	;;
+
+faltan-filas-por-colegio)
+	# Sprint 8, tanda 3 (V30, E25 y E28, decisión 131): una instalación compartida con varios colegios. Un DBA borra un
+	# pago de UN colegio (A): el respaldo siguiente avisa «faltan filas» SOLO de A (colegios_faltan = [A], la diferencia
+	# con su colegio) y el manifiesto cuenta por colegio. Después (ResolucionRespaldoPorColegioMySqlTest) la Promotoría de
+	# otro colegio no lo puede resolver (1644) y la de A sí.
+	clientes=$(admin -e "SELECT COUNT(*) FROM colegio WHERE tipo = 'COLEGIO'")
+	[ "$clientes" -ge 2 ] || { echo "ERROR: hacen falta 2 colegios en la base y hay $clientes"; exit 1; }
+	a=$(admin -e "SELECT p.colegio_id FROM pago p JOIN colegio c ON c.id = p.colegio_id WHERE c.tipo = 'COLEGIO'
+		GROUP BY p.colegio_id ORDER BY p.colegio_id DESC LIMIT 1")
+	test -n "$a"
+	grep -q "\"pago@$a\": \[" "$(ultimo_manifiesto)" || { echo "ERROR: el manifiesto no cuenta los pagos del colegio $a"; exit 1; }
+	admin -e "SET FOREIGN_KEY_CHECKS = 0; DELETE FROM pago WHERE colegio_id = $a ORDER BY id DESC LIMIT 1"
+	set +e
+	sh "$respaldar" > /tmp/cc-respaldo-7.out 2> /tmp/cc-respaldo-7.err
+	codigo=$?
+	set -e
+	cat /tmp/cc-respaldo-7.out /tmp/cc-respaldo-7.err
+	test "$codigo" = "3"
+	grep -q "pago (faltan 1) \[colegio $a\]" /tmp/cc-respaldo-7.out
+	test "$(admin -e "SELECT colegios_faltan FROM respaldo ORDER BY id DESC LIMIT 1")" = "[$a]" 		|| { echo "ERROR: colegios_faltan no es [$a]"; exit 1; }
+	# Y la base no acepta un FALTAN_FILAS sin decir de qué colegios (ni uno que nombre a un colegio que no existe).
+	ultimo=$(admin -e "SELECT CONCAT_WS(' ', secuencia_despues, hash_despues) FROM respaldo ORDER BY id DESC LIMIT 1")
+	set -- $ultimo
+	for valor in "NULL" "'[999999]'"; do
+		if mysql --protocol=TCP -h "${RESPALDO_DB_HOST:-127.0.0.1}" -P "${RESPALDO_DB_PUERTO:-3306}" -u cc_respaldo 				-p"${RESPALDO_DB_CLAVE:?}" cuentasclaras -e "INSERT INTO respaldo (inicio, fin, archivo, sha256, bytes,
+				version_esquema, secuencia_antes, hash_antes, secuencia_despues, hash_despues, conteos, destino, comparacion,
+				diferencias, colegios_faltan, creado_en, creado_por) VALUES (UTC_TIMESTAMP(6) - INTERVAL 5 HOUR,
+				UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, 'cc-20000101-000001.sql.gz.age', REPEAT('a', 64), 1, '30', $1, '$2', $1,
+				'$2', '{}', 'cirespaldos', 'FALTAN_FILAS', 'pago (faltan 1)', $valor, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR,
+				'cc_respaldo')" 2> /tmp/cc-respaldo-sin-colegios.err; then
+			echo "ERROR: cc_respaldo registró FALTAN_FILAS con colegios_faltan = $valor"; exit 1
+		fi
+		grep -q "1644.*de que colegios" /tmp/cc-respaldo-sin-colegios.err || { cat /tmp/cc-respaldo-sin-colegios.err; exit 1; }
+	done
+	echo "OK (E25 y E28): el pago borrado del colegio $a se avisa solo a ese colegio (colegios_faltan = [$a]); sin decir de qué colegios, 1644"
+	;;
+
+resuelto-por-colegio)
+	# Sprint 8, tanda 3: la Promotoría del colegio afectado ya resolvió (ResolucionRespaldoPorColegioMySqlTest): el respaldo
+	# siguiente vuelve a IGUAL, y la otra Promotoría no dejó ninguna resolución.
+	sh "$respaldar" | tee /tmp/cc-respaldo-8.out
+	grep -q "comparación: IGUAL" /tmp/cc-respaldo-8.out
+	echo "OK (E25): resuelta por la Promotoría del colegio afectado, el respaldo siguiente vuelve a IGUAL"
 	;;
 
 simulado)
@@ -221,7 +273,7 @@ simulado)
 	;;
 
 *)
-	echo "Uso: $0 sin-credenciales|primer-respaldo|e29|restauracion|e31|e30|e32|faltan-filas-sigue|restauracion-sin-clave|permisos-anidados|resuelto|simulado" >&2
+	echo "Uso: $0 sin-credenciales|primer-respaldo|e29|restauracion|e31|e30|e32|faltan-filas-sigue|restauracion-sin-clave|permisos-anidados|resuelto|faltan-filas-por-colegio|resuelto-por-colegio|simulado" >&2
 	exit 2
 	;;
 esac

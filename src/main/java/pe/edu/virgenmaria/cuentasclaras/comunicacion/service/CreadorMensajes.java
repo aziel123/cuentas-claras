@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Apoderado;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
+import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.CanalMensaje;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.DestinatarioTipo;
 import pe.edu.virgenmaria.cuentasclaras.comunicacion.model.Mensaje;
@@ -30,6 +32,9 @@ import java.util.Optional;
  *       contacto lo haya aprobado otra persona ({@code contacto_solicitud_id}). Ese canal se omite (y queda en el log).</li>
  *   <li>La clave es idempotente ({@code PAGO_REGISTRADO:pago:15:APODERADO:7:WHATSAPP}): una clave repetida no crea otro.</li>
  *   <li>Guarda con {@code saveAndFlush}: el INSERT llega a la base (y a su trigger) antes que lo que sigue.</li>
+ *   <li>Sprint 8, tanda 1 (plantillas {@code _v2}, decisión 121): antepone SIEMPRE el nombre del colegio en contexto
+ *       ({@link ColegioService#nombreParaMensajes}) como primer parámetro guardado. Los servicios arman solo los
+ *       parámetros propios de la plantilla; ningún mensaje de un colegio sale con el nombre de otro.</li>
  * </ul>
  */
 @Component
@@ -44,11 +49,14 @@ public class CreadorMensajes {
 
 	private final ObjectProvider<ProveedorWhatsApp> whatsapp;
 
+	private final ColegioService colegios;
+
 	public CreadorMensajes(MensajeRepository mensajes, UsuarioRepository usuarios,
-			ObjectProvider<ProveedorWhatsApp> whatsapp) {
+			ObjectProvider<ProveedorWhatsApp> whatsapp, ColegioService colegios) {
 		this.mensajes = mensajes;
 		this.usuarios = usuarios;
 		this.whatsapp = whatsapp;
+		this.colegios = colegios;
 	}
 
 	/** Personal: WhatsApp si hay celular; si el conector de WhatsApp está apagado y hay correo, solo correo. */
@@ -77,6 +85,9 @@ public class CreadorMensajes {
 	public List<Mensaje> paraApoderado(Apoderado apoderado, Contenido contenido, boolean ambosCanales,
 			String sufijoClave) {
 		List<Mensaje> creados = new ArrayList<>();
+		if (!familiasReciben(contenido.tipo())) {
+			return creados;
+		}
 		String celular = apoderado.getTelefonoWhatsapp();
 		String correo = apoderado.getCorreo();
 		boolean celularApto = celular != null && apto(apoderado, CanalMensaje.WHATSAPP, celular, contenido.tipo());
@@ -100,6 +111,9 @@ public class CreadorMensajes {
 	 */
 	public Optional<Mensaje> verificacion(Apoderado apoderado, CanalMensaje canal, String contacto, Contenido contenido,
 			String sufijoClave) {
+		if (!familiasReciben(contenido.tipo())) {
+			return Optional.empty();
+		}
 		String registrado = canal == CanalMensaje.WHATSAPP ? apoderado.getTelefonoWhatsapp() : apoderado.getCorreo();
 		if (contacto == null || !contacto.equals(registrado) || !aprobadoSiEsDelPersonal(apoderado, canal, contacto)) {
 			LOG.warn("No se envió la verificación del contacto {} del apoderado {}: no es el registrado o es del personal "
@@ -112,7 +126,7 @@ public class CreadorMensajes {
 	/** Mensaje a un contacto ANTERIOR del apoderado (aviso de cambio de contacto: tipo CONTACTO_CAMBIADO). */
 	public Optional<Mensaje> alContactoAnterior(Apoderado apoderado, CanalMensaje canal, String contactoAnterior,
 			Contenido contenido) {
-		if (!apto(apoderado, canal, contactoAnterior, TipoMensaje.CONTACTO_CAMBIADO)) {
+		if (!familiasReciben(contenido.tipo()) || !apto(apoderado, canal, contactoAnterior, TipoMensaje.CONTACTO_CAMBIADO)) {
 			return Optional.empty();
 		}
 		return crear(apoderado, canal, contactoAnterior, contenido, null, null);
@@ -124,6 +138,21 @@ public class CreadorMensajes {
 				: CanalMensaje.CORREO;
 		String destino = canal == CanalMensaje.WHATSAPP ? usuario.getTelefonoWhatsapp() : usuario.getCorreo();
 		if (destino == null) {
+			return Optional.empty();
+		}
+		return guardar(clave(contenido, "USUARIO", usuario.getId(), canal, sufijoClave), contenido,
+				new Mensaje.Destinatario(DestinatarioTipo.USUARIO, null, null, usuario.getId(), canal, destino), null);
+	}
+
+	/**
+	 * Correcciones del sprint 8 (S8-A1): mensaje a una persona del personal por UN canal, a su contacto registrado de ese
+	 * canal (vacío si no lo tiene). Así el aviso al contacto anterior del titular sale por cada canal que tenía, antes de
+	 * cambiarlo.
+	 */
+	public Optional<Mensaje> paraUsuarioPorCanal(Usuario usuario, CanalMensaje canal, Contenido contenido,
+			String sufijoClave) {
+		String destino = canal == CanalMensaje.WHATSAPP ? usuario.getTelefonoWhatsapp() : usuario.getCorreo();
+		if (destino == null || destino.isBlank()) {
 			return Optional.empty();
 		}
 		return guardar(clave(contenido, "USUARIO", usuario.getId(), canal, sufijoClave), contenido,
@@ -171,8 +200,30 @@ public class CreadorMensajes {
 
 	/** Correo EXTERNO (la huella y el resumen al contador; el correo lo dejó el DBA en configuracion_bd). */
 	public Optional<Mensaje> externo(String correo, Contenido contenido) {
-		return guardar(clave(contenido, "EXTERNO", 0L, CanalMensaje.CORREO, null), contenido,
+		return externo(correo, contenido, null);
+	}
+
+	/**
+	 * Correcciones del sprint 8: correo EXTERNO con un sufijo en la clave (dos correos externos de un mismo aviso, por
+	 * ejemplo el institucional y el de control). En MySQL, trg_mensaje_nace exige que sea uno de los del colegio.
+	 */
+	public Optional<Mensaje> externo(String correo, Contenido contenido, String sufijoClave) {
+		return guardar(clave(contenido, "EXTERNO", 0L, CanalMensaje.CORREO, sufijoClave), contenido,
 				new Mensaje.Destinatario(DestinatarioTipo.EXTERNO, null, null, null, CanalMensaje.CORREO, correo), null);
+	}
+
+	/**
+	 * Correcciones del sprint 8 (S8-M2 y QA-S8-4): un colegio en preparación no escribe a las familias (ni avisos, ni
+	 * enlaces, ni verificaciones, ni renovaciones). En MySQL lo exige trg_mensaje_nace. Lo que se omite queda en el log.
+	 */
+	private boolean familiasReciben(TipoMensaje tipo) {
+		Long colegioId = ContextoColegio.actual();
+		if (colegios.enProduccion(colegioId)) {
+			return true;
+		}
+		LOG.info("No se creó el mensaje {} a una familia del colegio {}: el colegio todavía no está en producción.", tipo,
+				colegioId);
+		return false;
 	}
 
 	/**
@@ -187,7 +238,8 @@ public class CreadorMensajes {
 		if (correo == null) {
 			return Optional.empty();
 		}
-		Contenido contenido = new Contenido(original.getTipo(), original.getPlantilla(), original.parametrosLista(),
+		// El original ya lleva el nombre del colegio delante: se quita para que guardar() lo anteponga una sola vez.
+		Contenido contenido = new Contenido(original.getTipo(), original.getPlantilla(), sinNombreDelColegio(original),
 				original.getEntidad(), original.getEntidadId());
 		String clave = original.getClave().replaceFirst(":WHATSAPP", ":CORREO");
 		if (mensajes.findByClave(clave).isPresent()) {
@@ -197,7 +249,8 @@ public class CreadorMensajes {
 				? new Mensaje.Destinatario(DestinatarioTipo.APODERADO, apoderado.getId(), apoderado.getFamilia().getId(),
 						null, CanalMensaje.CORREO, correo)
 				: new Mensaje.Destinatario(DestinatarioTipo.USUARIO, null, null, usuario.getId(), CanalMensaje.CORREO, correo);
-		if (apoderado != null && !apto(apoderado, CanalMensaje.CORREO, correo, original.getTipo())) {
+		if (apoderado != null && (!familiasReciben(original.getTipo())
+				|| !apto(apoderado, CanalMensaje.CORREO, correo, original.getTipo()))) {
 			return Optional.empty();
 		}
 		return guardar(clave, contenido, para, original.getId());
@@ -261,7 +314,24 @@ public class CreadorMensajes {
 			return existente;
 		}
 		return Optional.of(mensajes.saveAndFlush(Mensaje.nuevo(clave, contenido.tipo(), contenido.plantilla(), para,
-				contenido.parametros(), contenido.entidad(), contenido.entidadId(), respaldoDe, null)));
+				conNombreDelColegio(contenido.parametros()), contenido.entidad(), contenido.entidadId(), respaldoDe,
+				null)));
+	}
+
+	/** {{1}} de toda plantilla: el nombre del colegio en contexto (sin saltos de línea: es un solo parámetro). */
+	private List<String> conNombreDelColegio(List<String> propios) {
+		String nombre = colegios.nombreParaMensajes(ContextoColegio.actual()).replace('\n', ' ').replace('\r', ' ')
+				.strip();
+		List<String> parametros = new ArrayList<>(propios.size() + 1);
+		parametros.add(nombre);
+		parametros.addAll(propios);
+		return parametros;
+	}
+
+	/** Los parámetros propios de un mensaje guardado (sin el nombre del colegio que va delante). */
+	static List<String> sinNombreDelColegio(Mensaje mensaje) {
+		List<String> guardados = mensaje.parametrosLista();
+		return guardados.isEmpty() ? guardados : guardados.subList(1, guardados.size());
 	}
 
 	static String clave(Contenido contenido, String destinatario, Long id, CanalMensaje canal, String sufijo) {

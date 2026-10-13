@@ -72,10 +72,14 @@ class ReglasArquitecturaTest {
 	/** Únicas clases que pueden ver todos los colegios (se crean en la tanda 2). */
 	private static final Set<String> AUTORIZADAS_COMO_SISTEMA = Set.of(
 			BASE + ".seguridad.service.ServicioDetallesUsuario",
-			BASE + ".seguridad.inicial.InicializadorPromotor",
 			BASE + ".seguridad.inicial.DatosDemoDev",
 			// Sprint 7, tanda 2: al arrancar cierra las sesiones de la base de todos los colegios (REINICIO).
-			BASE + ".seguridad.service.sesion.SesionesFirmadas");
+			BASE + ".seguridad.service.sesion.SesionesFirmadas",
+			// Sprint 8, tanda 2 (E15): el aviso de una pasarela trae solo la clave pública opaca de su conector; esta clase
+			// busca ESE conector (por su clave exacta) y nada más.
+			BASE + ".conectores.service.BusquedaPorClavePublica",
+			// Correcciones del sprint 8 (QA-S8-6): las series que ya usan las OTRAS sedes con el mismo RUC (solo sus nombres).
+			BASE + ".comprobantes.service.SeriesDeOtrasSedes");
 
 	/** Única clase que puede usar JDBC directo: comprueba los permisos de MySQL (paso 9). */
 	private static final String VERIFICADOR_PERMISOS = BASE + ".auditoria.service.VerificadorPermisosBaseDatos";
@@ -105,6 +109,8 @@ class ReglasArquitecturaTest {
 	static final ArchRule soloLosConectoresHacenPeticionesSalientes = noClasses()
 			.that().doNotHaveFullyQualifiedName(BASE + ".comprobantes.service.EmisorNubefact")
 			.and().doNotHaveFullyQualifiedName(BASE + ".comunicacion.proveedor.WhatsAppCloudApi")
+			// Sprint 8, tanda 3: en la demo, el RestClient.Builder que FALLA siempre (bloquea la salida, no la hace).
+			.and().doNotHaveFullyQualifiedName(BASE + ".comun.demo.SalidaBloqueadaDemo")
 			.and().resideInAPackage(BASE + "..")
 			.should().dependOnClassesThat().resideInAnyPackage("org.springframework.web.client..", "java.net.http..",
 					"org.springframework.web.reactive.function.client..")
@@ -240,7 +246,9 @@ class ReglasArquitecturaTest {
 
 	private static final Map<String, String> EXPRESIONES_EXIGIDAS = Map.ofEntries(
 			Map.entry(BASE + ".seguridad.service.ServicioUsuarios", "hasAnyRole('PROMOTOR','DIRECTOR')"),
-			Map.entry(BASE + ".auditoria.service.ConsultaAuditoriaService", "hasAnyRole('PROMOTOR','DIRECTOR')"),
+			// Sprint 8, tanda 1: el operador lee la bitácora de SU colegio (la plataforma) y la última actividad de cada colegio.
+			Map.entry(BASE + ".auditoria.service.ConsultaAuditoriaService",
+					"hasAnyRole('PROMOTOR','DIRECTOR','OPERADOR_PLATAFORMA')"),
 			Map.entry(BASE + ".auditoria.service.ConsultaAuditoriaService#paraRevisar", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".auditoria.service.VerificadorIntegridadAuditoria#verificar", "hasRole('PROMOTOR')"),
 			// Sprint 2: Promotoría consulta; Dirección y Administración registran y corrigen.
@@ -535,11 +543,11 @@ class ReglasArquitecturaTest {
 							&& clase.getSimpleName().endsWith("Simulado");
 				}
 			})
-			.should(new ArchCondition<>("estar anotadas con @Profile({\"dev\", \"test\", \"piloto\"})") {
+			.should(new ArchCondition<>("estar anotadas con @Profile({\"dev\", \"test\", \"piloto\", \"demo\"})") {
 				@Override
 				public void check(JavaClass clase, ConditionEvents eventos) {
 					boolean ok = clase.tryGetAnnotationOfType(org.springframework.context.annotation.Profile.class)
-							.map(p -> Set.of(p.value()).equals(Set.of("dev", "test", "piloto"))).orElse(false);
+							.map(p -> Set.of(p.value()).equals(Set.of("dev", "test", "piloto", "demo"))).orElse(false);
 					if (!ok) {
 						eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " no está limitada a dev, test y "
 								+ "piloto"));
@@ -617,7 +625,9 @@ class ReglasArquitecturaTest {
 	static final ArchRule registroSolicitudesSoloDesdeServicios = noClasses()
 			.that().resideOutsideOfPackages(BASE + ".aprobaciones.service..", BASE + ".alumnos.service..",
 					BASE + ".cobranza.service..", BASE + ".caja.service..", BASE + ".pasarela.service..",
-					BASE + ".recaudacion.service..", BASE + ".conciliacion.service..", BASE + ".seguridad.service..")
+					BASE + ".recaudacion.service..", BASE + ".conciliacion.service..", BASE + ".seguridad.service..",
+					// Sprint 8, tanda 2: la propuesta de un conector (PROMOTOR o ADMINISTRACION) crea su CAMBIO_CONECTOR.
+					BASE + ".conectores.service..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".aprobaciones.service.RegistroSolicitudes")
 			.because("la solicitud la crea el servicio protegido que valida el cambio pedido");
 
@@ -636,6 +646,33 @@ class ReglasArquitecturaTest {
 				}
 			})
 			.because("el cambio se aplica en la misma transacción que la aprobación y su auditoría");
+
+	/**
+	 * Sprint 8, tanda 3 (sección 8): lo de la demo (crear colegios ficticios con cuentas y datos, la salida bloqueada, las
+	 * páginas públicas) existe SOLO en el perfil demo: en prod, piloto o dev no hay «Crear mi demo».
+	 */
+	@ArchTest
+	static final ArchRule loDeLaDemoSoloEnElPerfilDemo = classes()
+			.that(new DescribedPredicate<JavaClass>("son beans de la demo") {
+				@Override
+				public boolean test(JavaClass clase) {
+					boolean bean = clase.isMetaAnnotatedWith(org.springframework.stereotype.Component.class)
+							|| clase.isAnnotatedWith(org.springframework.context.annotation.Configuration.class);
+					return bean && (clase.getPackageName().startsWith(BASE + ".demo")
+							|| clase.getSimpleName().endsWith("Demo") && !clase.getSimpleName().equals("PersonaDemo"));
+				}
+			})
+			.should(new ArchCondition<>("estar anotadas con @Profile(\"demo\")") {
+				@Override
+				public void check(JavaClass clase, ConditionEvents eventos) {
+					boolean ok = clase.tryGetAnnotationOfType(org.springframework.context.annotation.Profile.class)
+							.map(p -> Set.of(p.value()).equals(Set.of("demo"))).orElse(false);
+					if (!ok) {
+						eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " no está limitada al perfil demo"));
+					}
+				}
+			})
+			.because("la demo crea colegios y cuentas sin una persona detrás: nunca debe existir fuera de la demo");
 
 	/** RegistroAlumnos no tiene @PreAuthorize: solo lo usan los servicios protegidos de alumnos y la demo de dev. */
 	@ArchTest
@@ -918,7 +955,9 @@ class ReglasArquitecturaTest {
 	/** Actuar como sistema (sin persona detrás) solo desde los procesos: nunca desde un controlador ni un servicio web. */
 	@ArchTest
 	static final ArchRule ejecucionComoSistemaSoloEnProcesos = noClasses()
-			.that().resideOutsideOfPackages(BASE + "..proceso..", BASE + ".comun.sistema..", BASE + ".comun.muestreo..")
+			.that().resideOutsideOfPackages(BASE + "..proceso..", BASE + ".comun.sistema..", BASE + ".comun.muestreo..",
+					// Sprint 8, tanda 1: los operadores los sincroniza sistema.plataforma al arrancar (CC_OPERADORES).
+					BASE + ".plataforma.inicial..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".comun.sistema.EjecucionComoSistema")
 			.because("un actor de sistema salta los permisos de las personas: solo lo usan las tareas, los procesos y la "
 					+ "semilla del muestreo (sistema.muestreo, sprint 7)");
@@ -941,13 +980,50 @@ class ReglasArquitecturaTest {
 	 */
 	@ArchTest
 	static final ArchRule ejecucionIdentidadSoloEnLasClasesDeIdentidad = noClasses()
-			.that().resideOutsideOfPackages(BASE + ".seguridad.service..", BASE + ".seguridad.inicial..")
+			.that().resideOutsideOfPackages(BASE + ".seguridad.service..", BASE + ".seguridad.inicial..",
+					// Sprint 8, tanda 1: el operador escribe el colegio, el año inicial y el correo de control con cc_sistema
+					// (EjecucionPlataforma) y el inicializador de operadores crea sus cuentas.
+					BASE + ".plataforma.service..", BASE + ".plataforma.inicial..")
 			.and().doNotHaveFullyQualifiedName(BASE + ".alumnos.service.ServicioAccesoApoderados")
 			.and().doNotHaveFullyQualifiedName(BASE + ".alumnos.inicial.DatosDemoApoderadoDev")
+			// Sprint 8, tanda 3: la cuenta del apoderado del colegio ficticio de cada visitante (solo perfil demo).
+			.and().doNotHaveFullyQualifiedName(BASE + ".alumnos.inicial.AccesoApoderadoDemo")
 			.and().doNotHaveFullyQualifiedName(BASE + ".aprobaciones.service.BandejaAprobaciones")
+			// Correcciones del sprint 8 (S8-A2): la Promotoría aprueba el correo de control (configuracion_colegio y
+			// cambio_correo_control, exclusivas de cc_sistema) con su contexto.
+			.and().doNotHaveFullyQualifiedName(BASE + ".puestaenmarcha.service.CorreoDeControl")
 			.should().dependOnClassesThat()
 			.haveFullyQualifiedName(BASE + ".seguridad.service.identidad.EjecucionIdentidad")
 			.because("la conexión de cc_sistema escribe cuentas, claves, roles y sesiones: solo desde la identidad");
+
+	/**
+	 * Sprint 8, tanda 1 (sección 3.2, E1): la plataforma no toca los datos de los colegios. Solo depende del colegio (ficha,
+	 * año y logo), del puerto de identidad {@code AltaTitular}, de la lista de verificación (conteos), de la configuración
+	 * del colegio (el correo de control), de la auditoría y de comun.
+	 */
+	@ArchTest
+	static final ArchRule plataformaNoDependeDeDatosDeColegios = noClasses()
+			.that().resideInAPackage(BASE + ".plataforma..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".alumnos..", BASE + ".familias..", BASE + ".caja..",
+					BASE + ".cobranza..", BASE + ".comprobantes..", BASE + ".conciliacion..", BASE + ".recaudacion..",
+					BASE + ".matricula..", BASE + ".panel..", BASE + ".privacidad..", BASE + ".pasarela..",
+					BASE + ".comunicacion.service..", BASE + ".comunicacion.proceso..", BASE + ".comunicacion.proveedor..",
+					BASE + ".comunicacion.web..", BASE + ".comunicacion.dto..")
+			.because("el operador de la plataforma nunca ve datos de las familias de un colegio");
+
+	/** Sprint 8, tanda 1: nadie depende de la plataforma (solo el operador entra ahí). */
+	@ArchTest
+	static final ArchRule nadieDependeDeLaPlataforma = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".plataforma..")
+			.should().dependOnClassesThat().resideInAPackage(BASE + ".plataforma..")
+			.because("la plataforma es del operador; los colegios no la conocen");
+
+	/** Sprint 8, tanda 1: la ruta de cc_sistema con el contexto del operador solo la usa plataforma.service. */
+	@ArchTest
+	static final ArchRule ejecucionPlataformaSoloEnPlataforma = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".plataforma.service..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".plataforma.service.EjecucionPlataforma")
+			.because("el operador escribe con cc_sistema solo lo que el alta necesita");
 
 	/** Sprint 7, tanda 2 (sección 3.4): quien resuelve una aprobación firma con su sesión (en MySQL, sin firma: 1644). */
 	@ArchTest
@@ -969,6 +1045,9 @@ class ReglasArquitecturaTest {
 			.or().haveFullyQualifiedName(BASE + ".caja.service.ServicioVerificacionBancaria")
 			.or().haveFullyQualifiedName(BASE + ".panel.service.LlamadasControl")
 			.or().haveFullyQualifiedName(BASE + ".operacion.service.ResolucionesRespaldo")
+			// Sprint 8, tanda 1: el operador firma la primera Promotoría y el correo de control; Promotoría, la producción.
+			.or().haveFullyQualifiedName(BASE + ".plataforma.service.AltaColegio")
+			.or().haveFullyQualifiedName(BASE + ".puestaenmarcha.service.PasoAProduccion")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".seguridad.service.sesion.FirmaSesion")
 			.because("cada aprobación de una persona lleva la firma de su sesión (sección 3.4 del sprint 7)");
 
@@ -983,11 +1062,11 @@ class ReglasArquitecturaTest {
 							|| clase.getName().equals(BASE + ".pasarela.web.SimuladorPasarelaController");
 				}
 			})
-			.should(new ArchCondition<>("estar anotadas con @Profile({\"dev\", \"test\", \"piloto\"})") {
+			.should(new ArchCondition<>("estar anotadas con @Profile({\"dev\", \"test\", \"piloto\", \"demo\"})") {
 				@Override
 				public void check(JavaClass clase, ConditionEvents eventos) {
 					boolean ok = clase.tryGetAnnotationOfType(org.springframework.context.annotation.Profile.class)
-							.map(p -> Set.of(p.value()).equals(Set.of("dev", "test", "piloto"))).orElse(false);
+							.map(p -> Set.of(p.value()).equals(Set.of("dev", "test", "piloto", "demo"))).orElse(false);
 					if (!ok) {
 						eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " no está limitada a dev, test y "
 								+ "piloto"));

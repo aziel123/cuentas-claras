@@ -198,9 +198,12 @@ class AuditoriaSprint6MySqlTest {
 		if (fotoId == null) {
 			return;
 		}
-		String verdadero = jdbc.queryForObject("SELECT parametros FROM resumen_diario WHERE id = ?", String.class, fotoId);
-		assertThat(verdadero).as("la foto guarda su texto").isNotBlank();
-		String inventado = String.join("\n", hoy.toString(), "S/ 12,000.00", "40", "80 %", "S/ 2,400.00",
+		String foto = jdbc.queryForObject("SELECT parametros FROM resumen_diario WHERE id = ?", String.class, fotoId);
+		assertThat(foto).as("la foto guarda su texto").isNotBlank();
+		// Sprint 8, tanda 1 (plantillas _v2): el mensaje lleva el nombre del colegio delante del texto de la foto.
+		String colegio = jdbc.queryForObject("SELECT nombre FROM colegio WHERE id = 1", String.class);
+		String verdadero = colegio + "\n" + foto;
+		String inventado = String.join("\n", colegio, hoy.toString(), "S/ 12,000.00", "40", "80 %", "S/ 2,400.00",
 				"2 cerrada(s), 0 sin cerrar, 0 con diferencia; desde el resumen anterior, 0 cierre(s) con diferencia",
 				"S/ 99,000.00", "S/ 0.00 de 0 familia(s)", "0", "0", "evento 1", "esta semana no hay a quién llamar");
 		String clave = "RESUMEN_DIARIO:resumen_diario:" + fotoId + ":USUARIO:" + promotora.getId() + ":WHATSAPP:" + sufijo;

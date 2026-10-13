@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Marca del colegio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="colegio-marca">
+	<div class="cabecera">
+		<div>
+			<h1>Marca del colegio</h1>
+			<p class="secundario">Lo que las familias ven en su portal y en sus boletas: el nombre, la razón social, la dirección y el logo. Cada cambio queda en la bitácora.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-logo">
+		<h2 id="titulo-logo">Logo actual</h2>
+		<div class="logo-colegio" th:if="${marca.conLogo}">
+			<img class="logo-colegio-vista" th:src="@{/marca/logo}" alt="Logo del colegio">
+			<p class="secundario" th:text="|PNG de ${marca.logoAncho} × ${marca.logoAlto} px · ${marca.logoKb()} KB|">PNG de 400 × 400 px · 20 KB</p>
+		</div>
+		<th:block th:unless="${marca.conLogo}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía sin logo', 'Mientras no subas uno, el portal y las boletas muestran solo el nombre del colegio.')}"></div>
+		</th:block>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-ficha">
+		<h2 id="titulo-ficha">Ficha del colegio</h2>
+		<form method="post" class="formulario formulario-angosto" th:action="@{/colegio/marca}" th:object="${datos}" enctype="multipart/form-data">
+			<div th:replace="~{fragments/componentes :: campo('nombre', 'Nombre del colegio', 'El nombre comercial, como lo conocen las familias.', 'organization')}"></div>
+			<div th:replace="~{fragments/componentes :: campo('razonSocial', 'Razón social', 'La que figura en SUNAT: sale en las boletas.', 'off')}"></div>
+			<div class="campo">
+				<span class="etiqueta-fija">RUC</span>
+				<p class="num" data-ruc th:text="${marca.ruc != null} ? ${marca.ruc} : 'Sin registrar'">20131312955</p>
+				<p class="ayuda">El RUC no se cambia desde esta pantalla: los comprobantes ya se emitieron con él. Si está mal, pídelo a la plataforma.</p>
+			</div>
+			<div th:replace="~{fragments/componentes :: campo('direccion', 'Dirección', 'La dirección fiscal: sale en las boletas.', 'street-address')}"></div>
+			<div th:replace="~{fragments/componentes :: campoDe('correoInstitucional', 'Correo institucional', 'Recibe los avisos del colegio (por ejemplo, cuando cambia una cuenta).', 'email', true)}"></div>
+			<div class="campo">
+				<label for="logo">Logo nuevo (opcional)</label>
+				<input class="input" type="file" id="logo" name="logo" accept="image/png,image/jpeg" aria-describedby="logo-ayuda">
+				<p class="ayuda" id="logo-ayuda">PNG o JPEG de hasta 1 MB y 4000 × 4000 px. Se guarda como PNG de 400 px como máximo; reemplaza al actual.</p>
+			</div>
+			<div class="acciones acciones-izquierda">
+				<button th:replace="~{fragments/componentes :: boton('Guardar marca', 'primario')}">Guardar marca</button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

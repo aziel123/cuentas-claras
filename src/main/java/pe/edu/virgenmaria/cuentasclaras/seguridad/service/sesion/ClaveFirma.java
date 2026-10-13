@@ -91,9 +91,97 @@ public final class ClaveFirma {
 		return "delegacion_llamada:" + Objects.requireNonNull(semana, "semana");
 	}
 
-	/** Correcciones del sprint 7 (QA-S7-1): Promotoría resuelve la alerta «Faltan filas» de ese respaldo. */
-	public static String respaldoResuelto(Long respaldoId) {
-		return "respaldo:" + id(respaldoId) + ":RESUELTO";
+	/**
+	 * Correcciones del sprint 7 (QA-S7-1): Promotoría resuelve la alerta «Faltan filas» de ese respaldo. Sprint 8, tanda 3
+	 * (V30): la de SU colegio ({@code respaldo:{id}:{colegio}:RESUELTO}).
+	 */
+	public static String respaldoResuelto(Long respaldoId, Long colegioId) {
+		return "respaldo:" + id(respaldoId) + ":" + id(colegioId) + ":RESUELTO";
+	}
+
+	/**
+	 * Sprint 8, tanda 1 (sección 3.3): el operador firma, en el colegio de plataforma, la primera Promotoría de ESE colegio.
+	 * {@code intento}: cuántas firmas de la primera Promotoría de ese colegio hay antes de esta, más uno (la firma es única
+	 * por clave y «Completar alta» firma de nuevo; el trigger exige la del último intento).
+	 */
+	public static String primeraPromotoria(Long colegioId, long intento) {
+		return "primera_promotoria:" + id(colegioId) + ":" + intento;
+	}
+
+	/**
+	 * Correcciones del sprint 8 (S8-A1): un operador PROPONE cambiar el contacto del titular de ese colegio, sin activar.
+	 * {@code intento}: cuántos cambios tuvo ese titular antes de este, más uno (la firma es única por clave).
+	 */
+	public static String cambioContactoTitularPropuesto(Long colegioId, Long usuarioId, long intento) {
+		return "cambio_contacto_titular:" + id(colegioId) + ":" + id(usuarioId) + ":" + intento;
+	}
+
+	/** Correcciones del sprint 8 (S8-A1): OTRO operador aplica (APLICADO) o un operador rechaza (RECHAZADO) ese cambio. */
+	public static String cambioContactoTitular(Long cambioId, Enum<?> estado) {
+		return "cambio_contacto_titular:" + id(cambioId) + ":" + Objects.requireNonNull(estado, "estado").name();
+	}
+
+	/**
+	 * Correcciones del sprint 8 (S8-M5): quien cambia la ficha del colegio (el operador en preparación y antes de que el
+	 * titular active su cuenta; después, la Promotoría) firma la versión actual de la fila (trg_colegio_cambio).
+	 */
+	public static String fichaColegio(Long colegioId, long version) {
+		return "colegio:" + id(colegioId) + ":FICHA:" + version;
+	}
+
+	/**
+	 * Correcciones del sprint 8 (S8-A2): el operador PROPONE cambiar el correo externo de control de un colegio en
+	 * producción. {@code intento}: cuántas propuestas tuvo ese colegio antes de esta, más uno.
+	 */
+	public static String cambioCorreoControlPropuesto(Long colegioId, long intento) {
+		return "cambio_correo_control:" + id(colegioId) + ":" + intento;
+	}
+
+	/** Correcciones del sprint 8 (S8-A2): la Promotoría aprueba (APROBADO) o rechaza (RECHAZADO) ese cambio. */
+	public static String cambioCorreoControl(Long cambioId, Enum<?> estado) {
+		return "cambio_correo_control:" + id(cambioId) + ":" + Objects.requireNonNull(estado, "estado").name();
+	}
+
+	/** Sprint 8, tanda 1 (sección 3.4): Promotoría pasa su colegio a producción. */
+	public static String colegioProduccion(Long colegioId) {
+		return "colegio:" + id(colegioId) + ":PRODUCCION";
+	}
+
+	/**
+	 * Sprint 8, tanda 1 (H10): el operador registra ({@code version} 0) o cambia (la versión que tendrá la fila) el correo
+	 * externo de control de ese colegio, firmando en el colegio de plataforma.
+	 */
+	public static String configuracionColegio(Long colegioId, String clave, long version) {
+		return "configuracion_colegio:" + id(colegioId) + ":" + Objects.requireNonNull(clave, "clave") + ":" + version;
+	}
+
+	/**
+	 * Sprint 8, tanda 2 (sección 3.6): quien propone un conector firma su propuesta (la clave pública opaca del conector,
+	 * que aún no tiene id). trg_conector_colegio_nace la exige: con la clave de cc_app nadie propone a nombre de otro.
+	 */
+	public static String conectorPropuesto(String clavePublica) {
+		return "conector_colegio:" + java.util.UUID.fromString(Objects.requireNonNull(clavePublica, "clavePublica")) + ":PROPUESTO";
+	}
+
+	/** Sprint 8, tanda 2: quien rechaza el cambio de un conector lo firma (trg_conector_colegio_estado). */
+	public static String conectorRechazado(Long conectorId) {
+		return "conector_colegio:" + id(conectorId) + ":RECHAZADO";
+	}
+
+	/**
+	 * Sprint 8, tanda 2 (sección 3.5): Promotoría acepta que el colegio empieza sin deudas anteriores (no hay lote de saldo
+	 * inicial). La firma es el registro: única por colegio y clave, de solo inserción.
+	 */
+	public static String colegioSinSaldoInicial(Long colegioId) {
+		return "colegio:" + id(colegioId) + ":SIN_SALDO_INICIAL";
+	}
+
+	/**
+	 * Sprint 8, tanda 2 (sección 3.5): Promotoría acepta usar el comprobante simulado (o el de pruebas del OSE) y emitir su
+	 * comprobante legal aparte.
+	 */
+	public static String colegioOseSimulado(Long colegioId) {
+		return "colegio:" + id(colegioId) + ":OSE_SIMULADO";
 	}
 
 	private static Long id(Long id) {

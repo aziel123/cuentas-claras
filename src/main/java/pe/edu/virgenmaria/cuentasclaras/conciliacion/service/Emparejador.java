@@ -44,10 +44,14 @@ public class Emparejador {
 
 	private final PropiedadesConciliacion propiedades;
 
+	private final RecaudacionEnConciliacion recaudacion;
+
 	private final CalendarioHabil calendario;
 
 	public Emparejador(MovimientoBancarioRepository movimientos, PartidaConciliacionRepository partidas,
-			ObjetosConciliables objetos, PropiedadesConciliacion propiedades, CalendarioHabil calendario) {
+			ObjetosConciliables objetos, PropiedadesConciliacion propiedades, CalendarioHabil calendario,
+			RecaudacionEnConciliacion recaudacion) {
+		this.recaudacion = recaudacion;
 		this.calendario = calendario;
 		this.movimientos = movimientos;
 		this.partidas = partidas;
@@ -88,7 +92,7 @@ public class Emparejador {
 
 	ReglasEmparejamiento.Parametros parametros(Set<String> descartadas) {
 		return new ReglasEmparejamiento.Parametros(propiedades.diasToleranciaFecha(), propiedades.toleranciaMontoLiquidacion(),
-				propiedades.patronAbonoRecaudacion(), descartadas, calendario);
+				recaudacion.patronAbono(), descartadas, calendario);
 	}
 
 	static MovimientoAbierto abierto(MovimientoBancario m) {

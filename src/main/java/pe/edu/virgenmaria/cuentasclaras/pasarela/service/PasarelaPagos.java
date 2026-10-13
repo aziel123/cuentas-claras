@@ -31,6 +31,18 @@ public interface PasarelaPagos {
 	 */
 	AvisoPasarela verificarAviso(byte[] cuerpo, Map<String, String> cabeceras);
 
+	/**
+	 * Sprint 8, tanda 2 (sección 3.6, E15): lo mismo, con el secreto de los avisos del CONECTOR del colegio al que llegó el
+	 * aviso (su ruta lleva la clave pública del conector). Un aviso firmado con el secreto de otro conector no es
+	 * auténtico. Un adaptador que aún no sabe validar con el secreto del conector lo rechaza.
+	 */
+	default AvisoPasarela verificarAviso(byte[] cuerpo, Map<String, String> cabeceras, String secretoDelConector) {
+		if (secretoDelConector == null || secretoDelConector.isBlank()) {
+			throw new AvisoNoAutenticoException("el conector no tiene secreto de avisos");
+		}
+		throw new AvisoNoAutenticoException("este adaptador todavía no valida avisos por conector");
+	}
+
 	/** Estado del cobro de una orden en la pasarela, con la llave secreta. */
 	EstadoCobro consultar(String proveedorOrdenId);
 

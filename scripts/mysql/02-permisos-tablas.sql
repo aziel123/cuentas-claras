@@ -250,6 +250,30 @@ GRANT INSERT ON cuentasclaras.acceso_dato_personal TO 'cc_negocio';
 GRANT INSERT ON cuentasclaras.resolucion_respaldo TO 'cc_negocio';
 -- aviso_familia: SIN cambios. El derecho de un pedido sobre datos personales (columna nueva) no está en su UPDATE: 1143.
 
+-- ===================== Sprint 8 · tanda 1 (V28): plataforma, alta y marca =====================
+-- colegio: la ficha de un colegio en producción y el paso a producción los hace la Promotoría (cc_app, por el rol); el RUC,
+-- el tipo, el creador y los datos del titular NO (1143). Nunca INSERT ni DELETE con cc_app. Lo que puede cada conexión lo
+-- decide trg_colegio_cambio.
+-- Correcciones del sprint 8 (S8-M5): y quién firmó el último cambio de la ficha (actualizado_por).
+GRANT UPDATE (nombre, razon_social, direccion, correo_institucional, estado, produccion_desde, produccion_por,
+    aviso_privacidad_version, aviso_privacidad_aprobado_por, aviso_privacidad_aprobado_en, actualizado_por, actualizado_en,
+    version) ON cuentasclaras.colegio TO 'cc_negocio';
+-- Logo: se inserta y se cambia cuál está vigente; el contenido, su huella y sus medidas no cambian (1143). Nunca DELETE.
+GRANT INSERT, UPDATE (vigente, actualizado_en, version) ON cuentasclaras.colegio_logo TO 'cc_negocio';
+
+-- ===================== Sprint 8 · tanda 2 (V29): conectores por colegio =====================
+-- Los conectores se proponen (INSERT) y cambian de estado; tipo, proveedor, modo, configuración, secreto cifrado, su pista,
+-- la versión de la clave, la clave pública y quién lo propuso NO cambian (1143). Nunca DELETE. Qué transición vale lo
+-- decide trg_conector_colegio_estado (solicitud CAMBIO_CONECTOR aprobada y firmada por otra persona). La rotación de la
+-- clave maestra (java -jar ... recifrar-conectores) la hace cc_migrador.
+GRANT INSERT, UPDATE (estado, vigente, solicitud_id, resuelto_por, resuelto_en, prueba_ok, prueba_en, prueba_detalle,
+    actualizado_en, version) ON cuentasclaras.conector_colegio TO 'cc_negocio';
+
+-- ===================== Sprint 8 · tanda 3 (V30): «faltan filas» por colegio =====================
+-- Sin GRANT nuevos: cc_respaldo ya inserta en respaldo (la columna colegios_faltan entra con su INSERT) y cc_app (por
+-- cc_negocio) ya inserta en resolucion_respaldo. Por colegio lo deciden trg_respaldo_registro y
+-- trg_resolucion_respaldo_registro.
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se
@@ -259,6 +283,26 @@ GRANT INSERT, DELETE ON cuentasclaras.usuario_rol TO 'cc_sistema'@'%';
 GRANT INSERT, UPDATE (cerrada_en, motivo_cierre, actualizado_en, version) ON cuentasclaras.sesion_usuario TO 'cc_sistema'@'%';
 --    Correcciones del sprint 7: la marca de la primera Dirección de cada colegio (una sola vez, solo inserción).
 GRANT INSERT ON cuentasclaras.primera_direccion TO 'cc_sistema'@'%';
+--    Sprint 8, tanda 1 (secciones 3.2 a 3.4). El alta de un colegio y la corrección de su ficha en preparación las hace
+--    el operador con cc_sistema (EjecucionPlataforma): INSERT y la ficha completa (el estado no: trg_colegio_cambio). Las
+--    columnas se suman a las del rol.
+GRANT INSERT ON cuentasclaras.colegio TO 'cc_sistema'@'%';
+GRANT UPDATE (nombre, razon_social, ruc, direccion, correo_institucional, niveles, titular_nombre, titular_documento,
+    contrato_codigo, actualizado_por, actualizado_en, version) ON cuentasclaras.colegio TO 'cc_sistema'@'%';
+--    La primera Promotoría: solo inserción y solo cc_sistema (como primera_direccion).
+GRANT INSERT ON cuentasclaras.primera_promotoria TO 'cc_sistema'@'%';
+--    H10. configuracion_colegio deja de ser «solo el DBA»: la escribe el operador con cc_sistema y su firma (triggers
+--    trg_configuracion_colegio_*). cc_app sigue sin GRANT (1142). El colegio y la clave no cambian (1143).
+GRANT INSERT, UPDATE (valor, actualizado_por, actualizado_en, version) ON cuentasclaras.configuracion_colegio
+    TO 'cc_sistema'@'%';
+--    Correcciones del sprint 8 (V31). S8-A1: el cambio del contacto del titular (lo propone un operador y lo aplica OTRO);
+--    S8-A2: el cambio del correo externo de control de un colegio en producción (lo propone el operador y lo aprueba la
+--    Promotoría por la ruta de identidad). Solo cc_sistema; lo inmutable (contactos, correos, motivo, quién propuso) no
+--    cambia (1143) y nada se borra. Qué transición vale lo deciden trg_cambio_contacto_titular_* y trg_cambio_correo_control_*.
+GRANT INSERT, UPDATE (estado, pendiente, resuelto_por, resuelto_en, actualizado_en, version)
+    ON cuentasclaras.cambio_contacto_titular TO 'cc_sistema'@'%';
+GRANT INSERT, UPDATE (estado, pendiente, resuelto_por, resuelto_en, actualizado_en, version)
+    ON cuentasclaras.cambio_correo_control TO 'cc_sistema'@'%';
 --    Escrituras que solo hace un proceso: con cc_app, 1142.
 GRANT INSERT ON cuentasclaras.semilla_muestreo TO 'cc_sistema'@'%';               -- sistema.muestreo, solo inserción
 GRANT INSERT ON cuentasclaras.muestra_llamada TO 'cc_sistema'@'%';                -- sistema.panel, solo inserción

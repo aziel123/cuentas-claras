@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Bitácora de la plataforma', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="plataforma-bitacora">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Plataforma</p>
+			<h1>Bitácora de la plataforma</h1>
+			<p class="secundario">Altas de colegios, correos de control y operadores: quién, qué y cuándo. Nadie puede borrarlo
+				ni cambiarlo. Lo que pasa dentro de cada colegio queda en SU bitácora.</p>
+		</div>
+	</div>
+
+	<section class="tarjeta" aria-labelledby="titulo-eventos">
+		<h2 id="titulo-eventos">Últimos 7 días</h2>
+		<th:block th:if="${eventos.empty}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('No hay eventos en los últimos 7 días', 'Las altas y los cambios aparecerán aquí.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${eventos.empty}">
+			<caption class="solo-lectores">Eventos de la plataforma, del más reciente al más antiguo. Horas de Lima.</caption>
+			<thead>
+				<tr><th scope="col">Fecha y hora</th><th scope="col">Quién</th><th scope="col">Acción</th><th scope="col">Detalle</th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="e : ${eventos.content}" th:classappend="${e.requiereAtencion} ? 'fila-atencion'">
+					<td data-etiqueta="Fecha y hora" class="num" th:text="${#temporals.format(e.ocurridoEn, 'dd/MM/yyyy HH:mm:ss')}">02/10/2026</td>
+					<td data-etiqueta="Quién" th:text="${e.nombreUsuario}">operador</td>
+					<td data-etiqueta="Acción" th:text="${e.accion}">Dio de alta un colegio</td>
+					<td data-etiqueta="Detalle">
+						<span th:if="${e.cambio != null}" class="bloque" th:text="${e.cambio}">cambio</span>
+						<span th:if="${e.detalle != null}" class="bloque secundario" th:text="${e.detalle}">detalle</span>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+		<nav class="paginacion fila entre" aria-label="Páginas" th:if="${eventos.totalPages > 1}">
+			<a class="btn btn-secundario btn-chico" th:if="${eventos.hasPrevious()}" th:href="@{/plataforma/bitacora(pagina=${eventos.number - 1})}">Más recientes</a>
+			<span class="secundario" th:text="|Página ${eventos.number + 1} de ${eventos.totalPages}|">Página</span>
+			<a class="btn btn-secundario btn-chico" th:if="${eventos.hasNext()}" th:href="@{/plataforma/bitacora(pagina=${eventos.number + 1})}">Más antiguos</a>
+		</nav>
+	</section>
+	<p><a class="btn btn-texto" th:href="@{/plataforma}">Volver a la lista</a></p>
+</main>
+</body>
+</html>

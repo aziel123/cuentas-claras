@@ -14,6 +14,8 @@ import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Apoderado;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.ApoderadoRepository;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
+import pe.edu.virgenmaria.cuentasclaras.comun.marca.Marca;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.ActorSistema;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.EjecucionComoSistema;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.RecorridoColegios;
@@ -101,14 +103,22 @@ public class DespachoMensajes {
 
 	private final CuotaRepository cuotas;
 
+	/** Sprint 8, tanda 1: el nombre del colegio para el remitente del correo y la marca para su pie. */
+	private final ColegioService nombresColegios;
+
+	private final Marca marca;
+
 	public DespachoMensajes(MensajeRepository mensajes, ObjectProvider<ProveedorWhatsApp> whatsapp,
 			ObjectProvider<ProveedorCorreo> correo, EnlacesActivacion enlaces, UsuarioRepository usuarios,
 			ApoderadoRepository apoderados, CreadorMensajes creador, AuditoriaService auditoria,
 			PropiedadesMensajeria propiedades, RecorridoColegios colegios, PlatformTransactionManager transacciones,
-			Clock reloj, CalendarioHabil calendario, VerificacionesContacto verificaciones, CuotaRepository cuotas) {
+			Clock reloj, CalendarioHabil calendario, VerificacionesContacto verificaciones, CuotaRepository cuotas,
+			ColegioService nombresColegios, Marca marca) {
 		this.calendario = calendario;
 		this.verificaciones = verificaciones;
 		this.cuotas = cuotas;
+		this.nombresColegios = nombresColegios;
+		this.marca = marca;
 		this.mensajes = mensajes;
 		this.whatsapp = whatsapp;
 		this.correo = correo;
@@ -126,7 +136,7 @@ public class DespachoMensajes {
 
 	@Scheduled(fixedDelayString = "${cuentasclaras.mensajeria.envio-cada:30s}", initialDelayString = "20s")
 	public void despachar() {
-		PasadaPorColegios.recorrer(LOG, "El envío de mensajes", colegios.activos(), this::despacharColegio);
+		PasadaPorColegios.recorrer(LOG, "El envío de mensajes", colegios.conPlataforma(), this::despacharColegio);
 	}
 
 	/** Una pasada del outbox en un colegio (la usan la tarea programada y las pruebas). @return cuántos salieron */
@@ -250,22 +260,40 @@ public class DespachoMensajes {
 						&& c.saldo().signum() > 0);
 	}
 
+	/**
+	 * Sprint 8, tanda 1: el nombre del colegio que guardó {@code CreadorMensajes} como {{1}} (para un mensaje anterior a
+	 * las plantillas v2, sin él, el nombre actual del colegio en contexto).
+	 */
+	private String nombreDelColegio(Mensaje mensaje) {
+		List<String> guardados = mensaje.parametrosLista();
+		return guardados.isEmpty() || guardados.getFirst().isBlank()
+				? nombresColegios.nombreParaMensajes(ContextoColegio.actual()) : guardados.getFirst();
+	}
+
+	/** El pie de todo correo: quién escribe y por medio de qué producto (la marca va aquí, no en la plantilla). */
+	private String pieDelCorreo(String colegio) {
+		return "\n\n" + colegio + " vía " + marca.nombre();
+	}
+
 	private Envio preparar(Mensaje mensaje) {
+		String colegio = nombreDelColegio(mensaje);
 		if (mensaje.getTipo() == TipoMensaje.VERIFICACION_CONTACTO) {
 			// S5-A1: el enlace de verificación se genera AQUÍ, en la transacción del envío (nadie del colegio lo ve).
 			LocalDateTime vence = ahora().plus(propiedades.vigenciaEnlace());
 			boolean whatsappCanal = mensaje.getCanal() == CanalMensaje.WHATSAPP;
 			String ruta = verificaciones.generarParaMensaje(ContextoColegio.actual(), mensaje.getId(),
 					mensaje.getApoderadoId(), whatsappCanal, mensaje.getDestino(), propiedades.vigenciaEnlace());
-			List<String> parametros = List.of(whatsappCanal ? "número" : "correo", vence.format(VENCE));
-			String cuerpo = PlantillaMensaje.VERIFICACION.componer(parametros) + "\n\n" + propiedades.urlPublica() + ruta;
+			List<String> parametros = List.of(colegio, whatsappCanal ? "número" : "correo", vence.format(VENCE));
+			String cuerpo = PlantillaMensaje.VERIFICACION.componer(parametros) + "\n\n" + propiedades.urlPublica() + ruta
+					+ pieDelCorreo(colegio);
 			return new Envio(parametros, ruta, cuerpo);
 		}
 		if (mensaje.getTipo() != TipoMensaje.ACTIVACION_CUENTA) {
 			List<String> parametros = mensaje.parametrosLista();
 			String cuerpo = mensaje.getPlantilla().componer(parametros)
 					+ (mensaje.getDestinatarioTipo() == DestinatarioTipo.APODERADO
-							? "\n\nVer en el portal: " + propiedades.urlPublica() + "/familia" : "");
+							? "\n\nVer en el portal: " + propiedades.urlPublica() + "/familia" : "")
+					+ pieDelCorreo(colegio);
 			return new Envio(parametros, null, cuerpo);
 		}
 		PropositoEnlace proposito = mensaje.getDestinatarioTipo() == DestinatarioTipo.USUARIO ? PropositoEnlace.PERSONAL
@@ -273,17 +301,21 @@ public class DespachoMensajes {
 		LocalDateTime vence = ahora().plus(propiedades.vigenciaEnlace());
 		String ruta = enlaces.generarParaMensaje(ContextoColegio.actual(), mensaje.getId(), mensaje.getEntidadId(),
 				proposito, propiedades.vigenciaEnlace());
-		List<String> parametros = List.of(vence.format(VENCE));
-		String cuerpo = PlantillaMensaje.ACTIVACION.componer(parametros) + "\n\n" + propiedades.urlPublica() + ruta;
+		List<String> parametros = List.of(colegio, vence.format(VENCE));
+		String cuerpo = PlantillaMensaje.ACTIVACION.componer(parametros) + "\n\n" + propiedades.urlPublica() + ruta
+				+ pieDelCorreo(colegio);
 		return new Envio(parametros, ruta, cuerpo);
 	}
 
 	private ResultadoEnvio enviar(Mensaje mensaje, Envio envio) {
 		try {
+			// El correo sale «De: {colegio} vía {marca}» (la dirección sigue siendo la del remitente configurado).
+			String remitente = nombreDelColegio(mensaje) + " vía " + marca.nombre();
 			ResultadoEnvio resultado = mensaje.getCanal() == CanalMensaje.WHATSAPP
 					? whatsapp.getObject().enviar(mensaje.getPlantilla(), mensaje.getDestino(), envio.parametros(),
 							envio.sufijoBoton())
-					: correo.getObject().enviar(mensaje.getDestino(), mensaje.getPlantilla().asunto(), envio.cuerpoCorreo());
+					: correo.getObject().enviar(remitente, mensaje.getDestino(), mensaje.getPlantilla().asunto(),
+							envio.cuerpoCorreo());
 			return resultado == null ? ResultadoEnvio.reintentable("El proveedor no respondió.") : resultado;
 		}
 		catch (RuntimeException e) {

@@ -83,6 +83,36 @@ management:
           include: readinessState, db
 
 cuentasclaras:
+  marca:
+    # Sprint 8, tanda 1 (sección 3.7, decisión 122): el ÚNICO lugar del nombre comercial del producto. En prod es
+    # obligatorio (VerificadorConfiguracion). La empresa proveedora (razón social, RUC y soporte) va en el contrato y en el
+    # aviso de privacidad.
+    nombre: ${CC_MARCA_NOMBRE:}   # vacío = el valor por defecto de Marca (solo dev y test)
+    empresa: ${CC_MARCA_EMPRESA:}
+    ruc-empresa: ${CC_MARCA_RUC:}
+    soporte-correo: ${CC_MARCA_SOPORTE_CORREO:}
+    soporte-whatsapp: ${CC_MARCA_SOPORTE_WHATSAPP:}
+  plataforma:
+    # Sprint 8, tanda 1 (secciones 3.1 a 3.3). DEDICADA: un colegio por instalación (como hoy). COMPARTIDA: varios
+    # colegios en una base, filtrados por colegio (la verificación de los conectores por instalación llega en la tanda 2).
+    instalacion: ${CC_INSTALACION:DEDICADA}
+    # Los operadores de la plataforma, "usuario:correo,usuario2:correo2" (decisión 112). Al arrancar se crea al que
+    # falta (con su enlace de activación al correo) y se desactiva al que ya no está. Sin clave en el entorno.
+    operadores: ${CC_OPERADORES:}
+    max-colegios: 25                 # decisión 138: tope de una instalación compartida
+    max-alumnos: 8000
+  conectores:
+    # Sprint 8, tanda 2 (sección 3.6, decisión 118): los secretos de los conectores de cada colegio (token del OSE, llaves
+    # de la pasarela) van cifrados con AES-256-GCM; la clave maestra (32 bytes en base64) vive en el gestor de secretos.
+    # Obligatoria en una instalación COMPARTIDA. Rotación: CC_CLAVE_CONECTORES nueva con su versión, la anterior en
+    # CC_CLAVE_CONECTORES_ANTERIOR y «java -jar cuentas-claras.jar recifrar-conectores» con cc_migrador.
+    clave: ${CC_CLAVE_CONECTORES:}
+    clave-version: ${CC_CLAVE_CONECTORES_VERSION:1}
+    clave-anterior: ${CC_CLAVE_CONECTORES_ANTERIOR:}
+    aviso-cambio-dias: 7             # la alerta CRÍTICA de un cambio de conector queda 7 días en «Para revisar»
+  colegio:
+    logo-max-subida: 1MB             # PNG o JPEG; se reescribe como PNG de 400 px y 200 KB como máximo
+    logo-max-lado: 400
   basedatos:
     # Sprint 7, tanda 2 (sección 3.2): segundo usuario de base para los procesos sistema.* y la identidad (ingreso,
     # sesiones, claves, roles y altas). En prod y piloto es obligatorio (VerificadorConfiguracion); en dev y test (H2)
@@ -128,7 +158,10 @@ cuentasclaras:
     hora-limite-cierre: "19:00"      # después, «Caja sin cerrar» en Para revisar (tanda 3)
     permitir-pago-a-cuenta: false    # pagos parciales: desactivados en el piloto
     pago-a-cuenta-minimo: 50.00
-    cuentas-deposito: BCP Soles 191-XXXXXXX-0-XX
+    # Correcciones del sprint 8 (S8-B5): sin cuenta por defecto. En una instalación COMPARTIDA la cuenta es el conector
+    # CUENTA_BANCARIA de cada colegio y el verificador no arranca si el entorno trae una; en una DEDICADA sin conector,
+    # la del entorno (CAJA_CUENTAS_DEPOSITO).
+    cuentas-deposito: ${CAJA_CUENTAS_DEPOSITO:}
     dias-sin-verificar: 1            # pagos digitales o depósitos sin verificar: alerta (tanda 3)
   comprobantes:
     # SIMULADO (sin valor tributario) o NUBEFACT. Nubefact solo con su RUTA y TOKEN (variables de entorno) y, fuera de

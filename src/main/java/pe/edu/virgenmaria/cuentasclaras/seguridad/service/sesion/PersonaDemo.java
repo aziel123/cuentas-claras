@@ -25,8 +25,8 @@ import java.util.function.Supplier;
  * queda disponible para {@link FirmaSesion} solo mientras dura la operación. Así las aprobaciones de la demo se firman
  * igual que las de una petición y la firma sigue exigiendo una sesión real de esa persona.
  * <p>
- * Solo funciona con los perfiles {@code dev} o {@code test}: en prod y piloto no hay datos de demostración y el secreto
- * de una sesión sale únicamente de la sesión HTTP.
+ * Solo funciona con los perfiles {@code dev}, {@code test} o {@code demo}: en prod y piloto no hay datos de demostración
+ * y el secreto de una sesión sale únicamente de la sesión HTTP.
  */
 @Component
 public class PersonaDemo {
@@ -52,8 +52,9 @@ public class PersonaDemo {
 		this.lectura.setReadOnly(true);
 		this.reloj = reloj;
 		List<String> perfiles = Arrays.asList(entorno.getActiveProfiles());
-		this.permitido = (perfiles.contains("dev") || perfiles.contains("test")) && !perfiles.contains("prod")
-				&& !perfiles.contains("piloto");
+		// Sprint 8, tanda 3: también la demo (H2 en memoria, datos ficticios), que carga el colegio de cada visitante.
+		this.permitido = (perfiles.contains("dev") || perfiles.contains("test") || perfiles.contains("demo"))
+				&& !perfiles.contains("prod") && !perfiles.contains("piloto");
 	}
 
 	/**
@@ -104,7 +105,7 @@ public class PersonaDemo {
 
 	private void exigirPerfil() {
 		if (!permitido) {
-			throw new IllegalStateException("Las personas de la demo solo existen con los perfiles dev y test");
+			throw new IllegalStateException("Las personas de la demo solo existen con los perfiles dev, test y demo");
 		}
 	}
 }

@@ -2,6 +2,9 @@
 <html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Caja', ~{::main})}">
 <body>
 <main id="contenido" class="contenido" data-pantalla="caja-buscar">
+	<th:block th:if="${enPreparacion}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', 'El colegio todavía está en preparación: no se registran pagos hasta que la Promotoría lo pase a producción desde «Puesta en marcha».')}"></div>
+	</th:block>
 	<div class="cabecera">
 		<div>
 			<p class="etiqueta">Caja</p>

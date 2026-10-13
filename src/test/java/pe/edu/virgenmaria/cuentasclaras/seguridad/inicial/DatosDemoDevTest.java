@@ -71,7 +71,7 @@ class DatosDemoDevTest {
 		// Un usuario por rol del personal, y una segunda cajera para demostrar dos cajas a la vez (sprint 3). El
 		// «apoderado» (sprint 4) va enlazado a un apoderado registrado: lo crea DatosDemoApoderadoDev.
 		assertThat(enColegioPrincipal).flatExtracting(Usuario::getRoles).containsOnly(java.util.Arrays.stream(Rol.values())
-				.filter(r -> r != Rol.APODERADO).toArray(Rol[]::new))
+				.filter(r -> r != Rol.APODERADO && r != Rol.OPERADOR_PLATAFORMA).toArray(Rol[]::new))
 				.filteredOn(r -> r == Rol.CAJA).hasSize(2);
 		assertThat(enColegioPrincipal).extracting(Usuario::getNombreUsuario)
 				.containsExactlyInAnyOrder("promotor", "director", "administracion", "caja", "caja2", "docente");
@@ -83,8 +83,14 @@ class DatosDemoDevTest {
 		long colegioB = jdbc.queryForObject("SELECT id FROM colegio WHERE nombre = 'Colegio de Prueba B'", Long.class);
 		assertThat(ContextoColegio.en(colegioB, () -> usuarios.findAll())).extracting(Usuario::getNombreUsuario)
 				.containsExactlyInAnyOrder("promotor.b", "caja.b");
+		// Sprint 8, tanda 1: y el operador de la plataforma (en el colegio PLATAFORMA); el colegio principal queda en
+		// producción (V28 lo deja en preparación en una base sin cuentas).
+		long plataforma = jdbc.queryForObject("SELECT id FROM colegio WHERE tipo = 'PLATAFORMA'", Long.class);
+		assertThat(ContextoColegio.en(plataforma, () -> usuarios.findAll())).singleElement()
+				.satisfies(u -> assertThat(u.getRoles()).containsExactly(Rol.OPERADOR_PLATAFORMA));
+		assertThat(jdbc.queryForObject("SELECT estado FROM colegio WHERE id = 1", String.class)).isEqualTo("PRODUCCION");
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'USUARIO_CREADO'",
-				Long.class)).isEqualTo(8);
+				Long.class)).isEqualTo(9);
 	}
 
 	@Test
@@ -94,7 +100,8 @@ class DatosDemoDevTest {
 		assertThat(datosDemo("", CLAVE_DEMO).crearSiCorresponde()).isFalse();
 
 		assertThat(ContextoColegio.comoSistema(() -> usuarios.count())).isZero();
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM colegio", Long.class)).isEqualTo(1);
+		// El colegio 1 y la fila PLATAFORMA de V28.
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM colegio", Long.class)).isEqualTo(2);
 	}
 
 	@Test
@@ -102,7 +109,7 @@ class DatosDemoDevTest {
 		datosDemo("jdbc:h2:mem:demo", CLAVE_DEMO).crearSiCorresponde();
 
 		assertThat(datosDemo("jdbc:h2:mem:demo", CLAVE_DEMO).crearSiCorresponde()).isFalse();
-		assertThat(ContextoColegio.comoSistema(() -> usuarios.count())).isEqualTo(8);
+		assertThat(ContextoColegio.comoSistema(() -> usuarios.count())).isEqualTo(9);
 	}
 
 	@Test

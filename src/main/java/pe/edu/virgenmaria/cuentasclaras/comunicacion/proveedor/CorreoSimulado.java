@@ -12,7 +12,7 @@ import pe.edu.virgenmaria.cuentasclaras.comunicacion.service.ResultadoEnvio;
  * {@code cuentasclaras.mensajeria.correo.proveedor: SIMULADO}.
  */
 @Component
-@Profile({ "dev", "test", "piloto" })
+@Profile({ "dev", "test", "piloto", "demo" })
 @ConditionalOnProperty(name = "cuentasclaras.mensajeria.correo.proveedor", havingValue = "SIMULADO")
 public class CorreoSimulado implements ProveedorCorreo {
 

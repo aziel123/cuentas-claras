@@ -1,0 +1,20 @@
+# Cuentas Claras · Caddy delante de la aplicación (sprint 8, tanda 3; decisión 133). TLS automático con Let's Encrypt para
+# el dominio de la instalación (CC_DOMINIO_APP: app.<dominio> o demo.<dominio>) y renovación sola. La aplicación solo
+# escucha en la red interna de Docker (8080 sin publicar); Caddy le pasa X-Forwarded-For y X-Forwarded-Proto (su IP de la
+# red 172.x ya está en CC_PROXIES_INTERNOS por defecto). Las cabeceras de seguridad (HSTS, CSP...) las pone la aplicación.
+{
+	email {$CC_ACME_CORREO}
+	# Sin panel de administración de Caddy expuesto.
+	admin off
+}
+
+{$CC_DOMINIO_APP} {
+	encode zstd gzip
+	reverse_proxy app:8080 {
+		header_up X-Forwarded-Proto https
+	}
+	# Los registros de acceso de Caddy no se guardan: la aplicación ya registra lo necesario sin datos personales.
+	log {
+		output discard
+	}
+}

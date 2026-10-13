@@ -23,6 +23,8 @@ public enum TipoAviso {
 	LLAMADA_REEMPLAZADA("Una familia de la llamada de control no contestó dos veces"),
 	/** S6-M2 (ATENCIÓN): Dirección registró una llamada de control con la semana delegada. */
 	LLAMADA_POR_DIRECCION("Dirección registró una llamada de control"),
+	/** Sprint 8, tanda 2 (sección 3.6, E12): un conector entró en vigencia (CRÍTICA durante unos días). */
+	CONECTOR_CAMBIADO("Cambió adónde entra el dinero del colegio"),
 	OTRA_CRITICA("Alerta crítica");
 
 	private final String texto;

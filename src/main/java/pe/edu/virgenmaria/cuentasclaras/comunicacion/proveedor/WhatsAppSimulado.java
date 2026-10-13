@@ -16,7 +16,7 @@ import java.util.List;
  * simulado solo pasa a ENVIADO si el DBA habilitó la base (trg_mensaje_envio).
  */
 @Component
-@Profile({ "dev", "test", "piloto" })
+@Profile({ "dev", "test", "piloto", "demo" })
 @ConditionalOnProperty(name = "cuentasclaras.mensajeria.whatsapp.proveedor", havingValue = "SIMULADO")
 public class WhatsAppSimulado implements ProveedorWhatsApp {
 

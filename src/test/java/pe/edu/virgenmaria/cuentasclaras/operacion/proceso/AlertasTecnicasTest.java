@@ -14,6 +14,7 @@ import org.springframework.scheduling.support.ScheduledMethodRunnable;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.EstadoCadena;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.config.ConfiguracionTiempo;
+import pe.edu.virgenmaria.cuentasclaras.comun.marca.Marca;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.comun.sistema.Latidos;
 import pe.edu.virgenmaria.cuentasclaras.operacion.config.PropiedadesMonitoreo;
@@ -147,9 +148,13 @@ class AlertasTecnicasTest {
 		when(reciente.getComparacion())
 				.thenReturn(pe.edu.virgenmaria.cuentasclaras.operacion.model.ComparacionRespaldo.FALTAN_FILAS);
 		when(respaldos.findFirstByOrderByIdDesc()).thenReturn(Optional.of(reciente));
-		// Correcciones del sprint 7 (QA-S7-1): la alerta sale mientras ese respaldo siga sin resolver.
-		when(respaldos.sinResolver(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean(),
-				org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(java.util.List.of(reciente));
+		// Correcciones del sprint 7 (QA-S7-1): la alerta sale mientras ese respaldo siga sin resolver (sprint 8, tanda 3: uno
+		// anterior a V30, de toda la base, sin ninguna resolución).
+		when(reciente.getId()).thenReturn(7L);
+		when(reciente.deTodaLaBase()).thenReturn(true);
+		when(reciente.afectaA(org.mockito.ArgumentMatchers.any())).thenReturn(true);
+		when(respaldos.conComparacion(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean(),
+				org.mockito.ArgumentMatchers.any())).thenReturn(java.util.List.of(reciente));
 
 		assertThat(alertas(propiedades).detectar(estado(propiedades).foto()))
 				.anySatisfy(a -> assertThat(a.tipo()).isEqualTo("FALTAN_FILAS"))
@@ -196,7 +201,7 @@ class AlertasTecnicasTest {
 
 	private AlertasTecnicas alertas(PropiedadesMonitoreo propiedades) {
 		return new AlertasTecnicas(estado(propiedades), errores, propiedades, proveedor(correo), "avisos@colegio.pe",
-				reloj);
+				reloj, Marca.porDefecto());
 	}
 
 	private EstadoTecnico estado(PropiedadesMonitoreo propiedades) {

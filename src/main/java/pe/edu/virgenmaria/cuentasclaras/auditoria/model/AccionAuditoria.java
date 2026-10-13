@@ -317,6 +317,60 @@ public enum AccionAuditoria {
 	/** Se resalta: se pidió desactivar o reactivar una cuenta de Promotoría o Dirección (la aprueba otra persona). */
 	ESTADO_CUENTA_PEDIDO("Pidió desactivar o reactivar una cuenta de Promotoría o Dirección", true),
 
+	// Sprint 8, tanda 1 (plataforma, alta y marca)
+	/** Se resalta: el operador dio de alta un colegio (en la bitácora de la plataforma y en la del colegio nuevo). */
+	COLEGIO_CREADO("Dio de alta un colegio en la plataforma", true),
+	/** Se resalta: el operador creó la primera Promotoría del colegio (una sola vez) y le envió su enlace. */
+	PRIMERA_PROMOTORIA_CREADA("Creó la primera cuenta de Promotoría del colegio", true),
+	/** Se resalta: el operador corrigió el contacto del titular y reenvió su enlace (antes de la activación). */
+	TITULAR_CONTACTO_CORREGIDO("Corrigió el contacto del titular y reenvió su enlace", true),
+	/** El operador corrigió la ficha del colegio (en preparación). */
+	FICHA_COLEGIO_CORREGIDA("Corrigió la ficha del colegio", false),
+	/** Se resalta: el operador registró o cambió el correo externo de control del colegio. */
+	CORREO_CONTROL_REGISTRADO("Registró el correo externo de control del colegio", true),
+	/** Se resalta: Promotoría pasó el colegio a producción (desde ahora se registran pagos). */
+	COLEGIO_EN_PRODUCCION("Pasó el colegio a producción", true),
+	/** Se resalta: el despliegue agregó un operador de la plataforma (CC_OPERADORES). */
+	OPERADOR_CREADO("Se creó un operador de la plataforma", true),
+	/** Se resalta: el despliegue quitó un operador de la plataforma (CC_OPERADORES). */
+	OPERADOR_DESACTIVADO("Se desactivó un operador de la plataforma", true),
+	/** Promotoría cambió la marca del colegio (razón social, dirección, correo institucional). */
+	MARCA_COLEGIO_CAMBIADA("Cambió la marca del colegio", false),
+	/** Promotoría cambió el logo del colegio. */
+	LOGO_COLEGIO_CAMBIADO("Cambió el logo del colegio", false),
+	/** Dirección aprobó la versión vigente del aviso de privacidad del colegio. */
+	PRIVACIDAD_COLEGIO_APROBADA("Aprobó el aviso de privacidad del colegio", false),
+
+	// Sprint 8, tanda 2 (puesta en marcha y conectores)
+	/** Se resalta: alguien propuso cambiar un conector del colegio (OSE, pasarela, cuenta bancaria o recaudación). */
+	CONECTOR_PROPUESTO("Propuso cambiar un conector del colegio", true),
+	/** Se probó la conexión de un conector propuesto (con su resultado; nunca el secreto). */
+	CONECTOR_PROBADO("Probó la conexión de un conector propuesto", false),
+	/** Se resalta: un conector entró en vigencia (cambió adónde entra el dinero o quién emite las boletas). */
+	CONECTOR_VIGENTE("Un conector del colegio entró en vigencia", true),
+	/** Se resalta: se rechazó el cambio de un conector. */
+	CONECTOR_RECHAZADO("Rechazó el cambio de un conector del colegio", true),
+	/** Se resalta: Promotoría firmó que el colegio empieza sin deudas anteriores (sin lote de saldo inicial). */
+	COLEGIO_SIN_SALDO_INICIAL("Firmó que el colegio empieza sin deudas anteriores", true),
+	/** Se resalta: Promotoría firmó que usa el comprobante simulado y emite su comprobante legal aparte. */
+	COLEGIO_OSE_SIMULADO_ACEPTADO("Firmó que usa el comprobante simulado y emite el legal aparte", true),
+
+	// Correcciones del sprint 8 (S8-A1, S8-A2 y S8-M1)
+	/** Se resalta: el operador reenvió el enlace de activación al titular (mismo contacto), con aviso. */
+	TITULAR_ENLACE_REENVIADO("Reenvió el enlace de activación al titular", true),
+	/** Se resalta: un operador propuso cambiar el contacto del titular (lo aplica otro operador). */
+	TITULAR_CONTACTO_PROPUESTO("Propuso cambiar el contacto del titular", true),
+	/** Se resalta: se rechazó el cambio del contacto del titular. */
+	TITULAR_CONTACTO_RECHAZADO("Rechazó el cambio del contacto del titular", true),
+	/** Se resalta: el operador propuso cambiar el correo externo de control de un colegio en producción. */
+	CORREO_CONTROL_PROPUESTO("Propuso cambiar el correo externo de control", true),
+	/** Se resalta: la Promotoría aprobó el cambio del correo externo de control (desde ahora recibe la huella). */
+	CORREO_CONTROL_APROBADO("Aprobó el cambio del correo externo de control", true),
+	/** Se resalta: la Promotoría rechazó el cambio del correo externo de control. */
+	CORREO_CONTROL_RECHAZADO("Rechazó el cambio del correo externo de control", true),
+	/** Se resalta: al reactivar un operador, su correo pasó a ser el de CC_OPERADORES. */
+	OPERADOR_CORREO_ACTUALIZADO("Se actualizó el correo de un operador de la plataforma", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

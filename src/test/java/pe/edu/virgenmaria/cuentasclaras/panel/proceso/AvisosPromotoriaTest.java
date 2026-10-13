@@ -142,7 +142,8 @@ class AvisosPromotoriaTest {
 		assertThat(alertasDe("CAJA_SIN_CERRAR")).singleElement().satisfies(m -> {
 			assertThat(m).containsEntry("usuario_id", promotora.getId()).containsEntry("canal", "WHATSAPP")
 					.containsEntry("creado_por", "sistema.panel").containsEntry("plantilla", "ALERTA_PROMOTORIA");
-			assertThat((String) m.get("parametros")).isEqualTo("Una caja de un día anterior sigue abierta\n15/04/2027")
+			assertThat((String) m.get("parametros"))
+					.isEqualTo("Colegio Virgen María\nUna caja de un día anterior sigue abierta\n15/04/2027")
 					.doesNotContain("Nombre de", "no hizo su cierre");
 		});
 		// Dirección no recibe las de caja (solo la anulación por aprobar).
@@ -161,7 +162,7 @@ class AvisosPromotoriaTest {
 		a(JUEVES, 19, 15);
 		avisos.enColegio(1L, JUEVES);
 		assertThat(alertasDe("CIERRE_NO_REALIZADO")).singleElement().satisfies(m -> assertThat((String) m.get("parametros"))
-				.isEqualTo("Una caja no se cerró a la hora límite\n19:00"));
+				.isEqualTo("Colegio Virgen María\nUna caja no se cerró a la hora límite\n19:00"));
 	}
 
 	/**
@@ -184,7 +185,7 @@ class AvisosPromotoriaTest {
 		assertThat(anulacion).extracting(m -> m.get("usuario_id")).containsExactlyInAnyOrder(promotora.getId(),
 				directora.getId()).doesNotContain(padrino.getId());
 		assertThat(anulacion).allSatisfy(m -> assertThat((String) m.get("parametros"))
-				.isEqualTo("Anulación de pago por aprobar\nS/ 350.00"));
+				.isEqualTo("Colegio Virgen María\nAnulación de pago por aprobar\nS/ 350.00"));
 	}
 
 	/**
@@ -199,12 +200,13 @@ class AvisosPromotoriaTest {
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ? AND plantilla = "
 				+ "'ALERTA_PROMOTORIA'", Long.class, promotora.getId())).isEqualTo(10);
 		assertThat(jdbc.queryForList("SELECT parametros FROM mensaje WHERE usuario_id = ? AND plantilla = 'ALERTA_MAS'",
-				String.class, promotora.getId())).containsExactly("2");
+				String.class, promotora.getId())).containsExactly("Colegio Virgen María\n2");
 		// Otra pasada el mismo día: la ATENCIÓN nueva se retiene y sale su propio «1 más»; la CRÍTICA sale igual.
 		a(JUEVES, 9, 15);
 		publicar(JUEVES, List.of(new Aviso(TipoAviso.CIERRE_NO_REALIZADO, "T13"), new Aviso(TipoAviso.OTRA_CRITICA, "C1")));
 		assertThat(jdbc.queryForList("SELECT parametros FROM mensaje WHERE usuario_id = ? AND plantilla = 'ALERTA_MAS' "
-				+ "ORDER BY id", String.class, promotora.getId())).containsExactly("2", "1");
+				+ "ORDER BY id", String.class, promotora.getId())).containsExactly("Colegio Virgen María\n2",
+				"Colegio Virgen María\n1");
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ? AND clave LIKE "
 				+ "'ALERTA:OTRA_CRITICA:C1:%'", Long.class, promotora.getId())).isEqualTo(1);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE usuario_id = ?", Long.class, promotora.getId()))

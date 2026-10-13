@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision.Gravedad;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
+import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.operacion.config.PropiedadesMonitoreo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.salud.EstadoRespaldo;
 import pe.edu.virgenmaria.cuentasclaras.operacion.salud.EstadoTecnico;
@@ -14,7 +15,8 @@ import java.util.List;
 
 /**
  * Sprint 7, tanda 1 (decisión 93): «Sin respaldo» y «Faltan filas» también le llegan a Promotoría en «Para revisar»,
- * además del correo al operador. El respaldo es de toda la base: la alerta es la misma en cada colegio.
+ * además del correo al operador. El respaldo es de toda la base, pero desde el sprint 8 (tanda 3, V30) «Faltan filas» es
+ * por colegio: cada Promotoría ve y resuelve la de su colegio.
  */
 @Service
 @PreAuthorize("hasAnyRole('PROMOTOR','SISTEMA_PANEL')")
@@ -33,7 +35,9 @@ public class AlertasRespaldo implements AlertasRevision {
 
 	@Override
 	public List<AlertaRevision> alertas() {
-		EstadoRespaldo respaldo = estado.respaldo();
+		// Sprint 8, tanda 3 (V30): «Faltan filas» es la de ESTE colegio (Promotoría o sistema.panel en su colegio).
+		Long colegio = ContextoColegio.actual();
+		EstadoRespaldo respaldo = estado.respaldo(colegio != null && colegio > 0 ? colegio : null);
 		List<AlertaRevision> alertas = new ArrayList<>();
 		if (respaldo.faltanFilas()) {
 			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Faltan filas que existían en un respaldo anterior. "

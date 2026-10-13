@@ -54,6 +54,7 @@ public class ComprobantesDeFamilia {
 			throw new RecursoNoEncontradoException("Comprobante no encontrado");
 		}
 		Comprobante vigente = servicio.vigenteDe(original);
-		return ServicioCobro.imprimibleDe(vigente, pago, colegios.nombreDe(vigente.getColegioId()), nombres, null, false);
+		return ServicioCobro.imprimibleDe(vigente, pago, colegios.marcaDe(vigente.getColegioId()).orElseThrow(), nombres,
+				null, false);
 	}
 }

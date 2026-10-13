@@ -79,9 +79,14 @@ services:
       # La base está en el mismo equipo, en la red interna de Docker: aquí no se exige TLS (en un servidor real, sí).
       CC_EXIGIR_TLS_BD: "false"
       AUDITORIA_CLAVE_HMAC: ${AUDITORIA_CLAVE_HMAC:?Define AUDITORIA_CLAVE_HMAC en .env}
-      CC_PROMOTOR_USUARIO: ${CC_PROMOTOR_USUARIO:-}
-      CC_PROMOTOR_NOMBRE: ${CC_PROMOTOR_NOMBRE:-}
-      CC_PROMOTOR_CLAVE: ${CC_PROMOTOR_CLAVE:-}
+      # Sprint 8, tanda 1: el nombre comercial (obligatorio en prod) y los operadores de la plataforma, que dan de alta el
+      # colegio desde /plataforma (ya no hay primer usuario por variables: CC_PROMOTOR_* se retiró).
+      CC_MARCA_NOMBRE: ${CC_MARCA_NOMBRE:?Define CC_MARCA_NOMBRE en .env (sprint 8, nombre comercial)}
+      CC_OPERADORES: ${CC_OPERADORES:?Define CC_OPERADORES en .env (sprint 8, operadores de la plataforma)}
+      CC_INSTALACION: ${CC_INSTALACION:-DEDICADA}
+      # Sprint 8, tanda 2: la clave de los secretos de los conectores (obligatoria en una instalación COMPARTIDA).
+      CC_CLAVE_CONECTORES: ${CC_CLAVE_CONECTORES:-}
+      CC_CLAVE_CONECTORES_VERSION: ${CC_CLAVE_CONECTORES_VERSION:-1}
       # Sprint 7: alertas técnicas por correo al responsable técnico (necesitan también el correo de salida SMTP).
       CC_OPERADOR_CORREO: ${CC_OPERADOR_CORREO:-}
 
@@ -96,6 +101,29 @@ services:
     depends_on:
       preparar-bd:
         condition: service_completed_successfully
+
+  # Sprint 8, tanda 3 (sección 8): la DEMO en tu PC, aparte de la instalación (otro contenedor, otra base: H2 en memoria).
+  # Solo con el perfil «demo» de Compose:  docker compose --profile demo up --build demo  →  http://localhost:8081/demo
+  # Sin ninguna clave ni variable de la base (si tuviera una, no arranca). En el servidor va en una red SIN salida a
+  # internet (deploy/compose.demo.yml); aquí, para probarla en local, publica su puerto.
+  demo:
+    profiles: [demo]
+    image: cuentas-claras:local
+    build: .
+    restart: "no"
+    environment:
+      SPRING_PROFILES_ACTIVE: demo
+      CC_MARCA_NOMBRE: ${CC_MARCA_NOMBRE:-Cuentas Claras}
+      CC_URL_PUBLICA: http://localhost:${PUERTO_DEMO:-8081}
+      # Por http en tu PC: la cookie sin «Secure» (en el servidor, https con __Host-CCSESION).
+      SERVER_SERVLET_SESSION_COOKIE_SECURE: "false"
+      CC_COOKIE_SESION: "CCSESION"
+      TZ: America/Lima
+    read_only: true
+    tmpfs:
+      - /tmp
+    ports:
+      - "127.0.0.1:${PUERTO_DEMO:-8081}:8080"
 
 volumes:
   datos-mysql:

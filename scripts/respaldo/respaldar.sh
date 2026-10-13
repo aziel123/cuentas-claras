@@ -29,6 +29,14 @@
 # ancla) y el registro dice FALTAN_FILAS (trg_respaldo_registro lo exige). Resuelta, la línea base vuelve a ser el
 # último manifiesto. Correcciones del sprint 7 (S7-M1): el manifiesto guarda los permisos de las cuentas de la
 # aplicación (permisos_objetos(), de 02) para que el simulacro semanal los compare con los de 02.
+#
+# Sprint 8, tanda 3 (V30, decisión 131): «faltan filas» POR COLEGIO. Las tablas vigiladas que tienen colegio_id se cuentan
+# por colegio (bloque «colegios» del manifiesto: "tabla@colegio": [filas, id máximo]); las demás, como antes. El registro
+# dice en colegios_faltan qué colegios tienen filas faltantes y cada diferencia lleva su colegio («pago (faltan 1)
+# [colegio 2]»). Lo que no es de un colegio cliente (tablas sin colegio, el ancla de la bitácora y las filas del colegio de
+# plataforma) afecta a TODOS los colegios. Mientras la Promotoría de un colegio no resuelva la suya, ese colegio sigue en
+# colegios_faltan (con su línea base) y los demás comparan con el último manifiesto. En una instalación dedicada (un
+# colegio) es lo mismo que en el sprint 7.
 set -eu
 umask 077
 
@@ -121,6 +129,20 @@ for tabla in $existentes; do
 done
 sql "$consulta" > "$trabajo/conteos.tsv"
 
+# Sprint 8, tanda 3: las tablas vigiladas con colegio_id, contadas por colegio; y qué colegios son clientes (COLEGIO) y
+# cuál es la plataforma (sus filas afectan a todos).
+con_colegio=$(sql "SELECT TABLE_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+	AND COLUMN_NAME = 'colegio_id' AND TABLE_NAME IN ($lista) ORDER BY TABLE_NAME")
+consulta=""
+for tabla in $con_colegio; do
+	[ -z "$consulta" ] || consulta="$consulta UNION ALL "
+	consulta="${consulta}SELECT '$tabla', colegio_id, COUNT(*), COALESCE(MAX(id), 0) FROM \`$tabla\` GROUP BY colegio_id"
+done
+: > "$trabajo/conteos-colegio.tsv"
+[ -z "$consulta" ] || sql "$consulta" > "$trabajo/conteos-colegio.tsv"
+colegios_clientes=$(sql "SELECT id FROM colegio WHERE tipo = 'COLEGIO' ORDER BY id" | tr '\n' ' ')
+plataforma=$(sql "SELECT COALESCE(MAX(id), 0) FROM colegio WHERE tipo = 'PLATAFORMA'")
+
 # S7-M1: los permisos de las cuentas (arreglo JSON de líneas canónicas, sin hosts ni claves); «[]» si 02 todavía no
 # crea la función.
 permisos=$(sql "SELECT permisos_objetos()" 2>/dev/null | tr -d '\\' || true)
@@ -129,9 +151,23 @@ case "$permisos" in
 	*) permisos="[]" ;;
 esac
 
-# QA-S7-1: ¿hay en la base un respaldo con FALTAN_FILAS sin resolver? (0 si la tabla todavía no existe)
-pendiente=$(sql "SELECT r.archivo FROM respaldo r WHERE r.comparacion = 'FALTAN_FILAS' AND NOT EXISTS (SELECT 1
-	FROM resolucion_respaldo s WHERE s.respaldo_id >= r.id) ORDER BY r.id LIMIT 1" 2>/dev/null || true)
+# QA-S7-1 y sprint 8, tanda 3: los colegios con una falta sin resolver (la de un respaldo que los nombra, o una anterior a
+# V30, de toda la base, sin ninguna resolución posterior) y el primer respaldo que sigue abierto (para el mensaje).
+abiertos="r.comparacion = 'FALTAN_FILAS' AND ((r.colegios_faltan IS NULL AND NOT EXISTS (SELECT 1 FROM resolucion_respaldo s
+	WHERE s.respaldo_id >= r.id)) OR (JSON_CONTAINS(r.colegios_faltan, CAST(k.id AS JSON)) AND NOT EXISTS (SELECT 1
+	FROM resolucion_respaldo s WHERE s.respaldo_id >= r.id AND s.colegio_id = k.id)))"
+pendientes=$(sql "SELECT k.id FROM colegio k WHERE k.tipo = 'COLEGIO' AND EXISTS (SELECT 1 FROM respaldo r WHERE $abiertos)
+	ORDER BY k.id" | tr '\n' ' ') || fallar "no se pudo leer si hay alertas de filas faltantes sin resolver"
+pendientes=$(echo "$pendientes" | sed 's/ *$//')
+pendiente=""
+if [ -n "$pendientes" ]; then
+	pendiente=$(sql "SELECT r.archivo FROM respaldo r JOIN colegio k ON k.tipo = 'COLEGIO' WHERE $abiertos
+		ORDER BY r.id LIMIT 1")
+fi
+es_pendiente() {
+	case " $pendientes " in *" $1 "*) return 0 ;; esac
+	return 1
+}
 
 # --- 2. Comparación con el manifiesto anterior (el del destino, que no se puede alterar) --------------------------------
 anterior="$trabajo/anterior.json"
@@ -145,53 +181,111 @@ else
 fi
 comparacion="PRIMERO"
 diferencias=""
+afectados=""
 base_secuencia=""
 base_hash=""
 : > "$trabajo/base-faltantes.txt"
+: > "$trabajo/base-faltantes-colegio.txt"
+
+# Una diferencia más; $2 es el colegio afectado («todos» o un id; las filas de la plataforma afectan a todos).
+anotar() {
+	[ -z "$diferencias" ] || diferencias="$diferencias, "
+	diferencias="$diferencias$1"
+	if [ "$2" = "todos" ] || [ "$2" = "$plataforma" ]; then
+		afectados="$afectados $colegios_clientes"
+	else
+		afectados="$afectados $2"
+	fi
+}
+
 if [ -s "$anterior" ]; then
 	comparacion="IGUAL"
 	sec_anterior=$(sed -n 's/^ *"secuencia_despues": *\([0-9][0-9]*\),*$/\1/p' "$anterior")
 	hash_anterior=$(sed -n 's/^ *"hash_despues": *"\([0-9a-f]*\)",*$/\1/p' "$anterior")
 	sed -n 's/^ *"\([a-z][a-z0-9_]*\)": *\[ *\([0-9][0-9]*\), *\([0-9][0-9]*\) *\],*$/\1 \2 \3/p' "$anterior" > "$trabajo/anteriores.txt"
-	# QA-S7-1: con una alerta sin resolver, la referencia es la línea base del manifiesto anterior (si la trae).
-	if [ -n "$pendiente" ] && grep -q '"base:' "$anterior"; then
+	# Sprint 8, tanda 3: por colegio («tabla@colegio»). Un manifiesto anterior a V30 no trae el bloque: entonces todas las
+	# tablas se comparan como antes y una falta en una tabla con colegio afecta a todos.
+	sed -n 's/^ *"\([a-z][a-z0-9_]*\)@\([0-9][0-9]*\)": *\[ *\([0-9][0-9]*\), *\([0-9][0-9]*\) *\],*$/\1 \2 \3 \4/p' \
+		"$anterior" > "$trabajo/anteriores-colegio.txt"
+	# QA-S7-1: con una alerta sin resolver, la referencia es la línea base del manifiesto anterior (si la trae): el ancla y
+	# las tablas sin colegio, si queda algún colegio pendiente; por colegio, solo para los colegios pendientes (y la
+	# plataforma, que afecta a todos).
+	if [ -n "$pendientes" ] && grep -q '"base:' "$anterior"; then
 		sec_anterior=$(sed -n 's/^ *"base_secuencia": *\([0-9][0-9]*\),*$/\1/p' "$anterior")
 		hash_anterior=$(sed -n 's/^ *"base_hash": *"\([0-9a-f]*\)",*$/\1/p' "$anterior")
 		sed -n 's/^ *"base:\([a-z][a-z0-9_]*\)": *\[ *\([0-9][0-9]*\), *\([0-9][0-9]*\) *\],*$/\1 \2 \3/p' "$anterior" > "$trabajo/anteriores.txt"
+		sed -n 's/^ *"base:\([a-z][a-z0-9_]*\)@\([0-9][0-9]*\)": *\[ *\([0-9][0-9]*\), *\([0-9][0-9]*\) *\],*$/\1 \2 \3 \4/p' \
+			"$anterior" > "$trabajo/base-anterior-colegio.txt"
+		: > "$trabajo/mezcla.txt"
+		while read -r tabla colegio filas maximo; do
+			if es_pendiente "$colegio" || [ "$colegio" = "$plataforma" ]; then
+				grep "^$tabla $colegio " "$trabajo/base-anterior-colegio.txt" >> "$trabajo/mezcla.txt" \
+					|| echo "$tabla $colegio $filas $maximo" >> "$trabajo/mezcla.txt"
+			else
+				echo "$tabla $colegio $filas $maximo" >> "$trabajo/mezcla.txt"
+			fi
+		done < "$trabajo/anteriores-colegio.txt"
+		mv "$trabajo/mezcla.txt" "$trabajo/anteriores-colegio.txt"
 	fi
 	if [ -n "$sec_anterior" ] && [ "$sec_anterior" -gt 0 ]; then
 		hash_actual=$(sql "SELECT hash FROM evento_auditoria WHERE secuencia = $sec_anterior")
 		if [ "$hash_actual" != "$hash_anterior" ]; then
-			diferencias="ancla de la bitácora (evento $sec_anterior)"
+			anotar "ancla de la bitácora (evento $sec_anterior)" todos
 			base_secuencia="$sec_anterior"
 			base_hash="$hash_anterior"
 		fi
 	fi
-	: > "$trabajo/base-faltantes.txt"
+	por_colegio="no"
+	[ ! -s "$trabajo/anteriores-colegio.txt" ] || por_colegio="si"
 	while read -r tabla filas maximo; do
 		echo "$existentes" | grep -qx "$tabla" || continue
+		if [ "$por_colegio" = "si" ] && echo "$con_colegio" | grep -qx "$tabla"; then
+			continue
+		fi
 		quedan=$(sql "SELECT COUNT(*) FROM \`$tabla\` WHERE id <= $maximo")
 		if [ "$quedan" -lt "$filas" ]; then
-			[ -z "$diferencias" ] || diferencias="$diferencias, "
-			diferencias="$diferencias$tabla (faltan $((filas - quedan)))"
+			anotar "$tabla (faltan $((filas - quedan)))" todos
 			echo "$tabla $filas $maximo" >> "$trabajo/base-faltantes.txt"
 		fi
 	done < "$trabajo/anteriores.txt"
-	if [ -z "$diferencias" ] && [ -n "$pendiente" ]; then
-		# La base todavía tiene la alerta sin resolver (trg_respaldo_registro exige FALTAN_FILAS): se repite.
-		diferencias="alerta sin resolver desde el respaldo $pendiente"
-	fi
-	if [ -n "$diferencias" ]; then
-		comparacion="FALTAN_FILAS"
-		avisar "CRÍTICA: faltan filas que existían en el respaldo anterior" \
-			"Comparado con $ultimo faltan: $diferencias. El respaldo de hoy se hace igual (es la evidencia). Preserva todo y sigue docs/operacion/incidente-auditoria.md."
-	fi
+	# Por colegio: una consulta por tabla con el id máximo de cada colegio en el respaldo anterior.
+	for tabla in $(cut -d' ' -f1 "$trabajo/anteriores-colegio.txt" | sort -u); do
+		echo "$con_colegio" | grep -qx "$tabla" || continue
+		condicion=$(awk -v t="$tabla" '$1 == t { printf "%s(colegio_id = %s AND id <= %s)", (n++ ? " OR " : ""), $2, $4 }' \
+			"$trabajo/anteriores-colegio.txt")
+		sql "SELECT colegio_id, COUNT(*) FROM \`$tabla\` WHERE $condicion GROUP BY colegio_id" > "$trabajo/quedan.tsv"
+		awk -v t="$tabla" '$1 == t { print $2, $3, $4 }' "$trabajo/anteriores-colegio.txt" > "$trabajo/de-la-tabla.txt"
+		while read -r colegio filas maximo; do
+			quedan=$(awk -v c="$colegio" '$1 == c { print $2 }' "$trabajo/quedan.tsv")
+			quedan="${quedan:-0}"
+			if [ "$quedan" -lt "$filas" ]; then
+				if [ "$colegio" = "$plataforma" ]; then marca="[plataforma]"; else marca="[colegio $colegio]"; fi
+				anotar "$tabla (faltan $((filas - quedan))) $marca" "$colegio"
+				echo "$tabla $colegio $filas $maximo" >> "$trabajo/base-faltantes-colegio.txt"
+			fi
+		done < "$trabajo/de-la-tabla.txt"
+	done
 fi
-if [ "$comparacion" = "PRIMERO" ] && [ -n "$pendiente" ]; then
-	# Sin manifiesto anterior en este destino, pero la base tiene una alerta sin resolver: el registro la repite.
+if [ -n "$pendientes" ]; then
+	# La base todavía tiene alertas sin resolver de esos colegios (trg_respaldo_registro exige FALTAN_FILAS): se repiten.
+	for colegio in $pendientes; do
+		case " $afectados " in
+			*" $colegio "*) ;;
+			*) anotar "alerta sin resolver desde el respaldo $pendiente [colegio $colegio]" "$colegio" ;;
+		esac
+	done
+fi
+if [ -n "$diferencias" ]; then
 	comparacion="FALTAN_FILAS"
-	diferencias="alerta sin resolver desde el respaldo $pendiente"
+	avisar "CRÍTICA: faltan filas que existían en el respaldo anterior" \
+		"Comparado con ${ultimo:-el respaldo anterior} faltan: $diferencias. El respaldo de hoy se hace igual (es la evidencia). Preserva todo y sigue docs/operacion/incidente-auditoria.md."
 fi
+# Los colegios afectados, sin repetir y en orden, como arreglo JSON (solo colegios clientes).
+colegios_faltan=""
+for colegio in $(echo "$afectados" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -n -u); do
+	case " $colegios_clientes " in *" $colegio "*) colegios_faltan="${colegios_faltan:+$colegios_faltan,}$colegio" ;; esac
+done
+[ -z "$colegios_faltan" ] || colegios_faltan="[$colegios_faltan]"
 
 # --- 3. Volcado, compresión y cifrado en una sola tubería ----------------------------------------------------------------
 cifrado="$trabajo/$archivo"
@@ -236,6 +330,7 @@ manifiesto="$trabajo/$manifiesto_nombre"
 	echo "  \"hash_despues\": \"$hash_despues\","
 	echo "  \"comparacion\": \"$comparacion\","
 	echo "  \"diferencias\": \"$diferencias\","
+	echo "  \"colegios_faltan\": ${colegios_faltan:-null},"
 	echo "  \"permisos\": $permisos,"
 	# QA-S7-1: la línea base para el respaldo siguiente: lo que mostró la falta se conserva (tabla y ancla); lo demás, lo
 	# de hoy. Solo se usa mientras la alerta siga sin resolver.
@@ -246,6 +341,16 @@ manifiesto="$trabajo/$manifiesto_nombre"
 		{ split(($1 in falta) ? falta[$1] : $2 " " $3, v, " ");
 		  printf "%s    \"base:%s\": [%s, %s]", (FNR > 1 ? ",\n" : ""), $1, v[1], v[2] } END { print "" }' \
 		"$trabajo/base-faltantes.txt" "$trabajo/conteos.tsv"
+	echo "  },"
+	# Sprint 8, tanda 3: la línea base y los conteos por colegio («tabla@colegio»).
+	echo "  \"base_colegios\": {"
+	awk 'FILENAME == ARGV[1] { falta[$1 "@" $2] = $3 " " $4; next }
+		{ k = $1 "@" $2; split((k in falta) ? falta[k] : $3 " " $4, v, " ");
+		  printf "%s    \"base:%s\": [%s, %s]", (FNR > 1 ? ",\n" : ""), k, v[1], v[2] } END { print "" }' \
+		"$trabajo/base-faltantes-colegio.txt" "$trabajo/conteos-colegio.tsv"
+	echo "  },"
+	echo "  \"colegios\": {"
+	awk '{ printf "%s    \"%s@%s\": [%s, %s]", (NR > 1 ? ",\n" : ""), $1, $2, $3, $4 } END { print "" }' "$trabajo/conteos-colegio.tsv"
 	echo "  },"
 	echo "  \"conteos\": {"
 	awk '{ printf "%s    \"%s\": [%s, %s]", (NR > 1 ? ",\n" : ""), $1, $2, $3 } END { print "" }' "$trabajo/conteos.tsv"
@@ -272,14 +377,16 @@ if [ -n "$diferencias" ]; then
 else
 	valor_diferencias="NULL"
 fi
+valor_colegios="NULL"
+[ -z "$colegios_faltan" ] || valor_colegios="'$colegios_faltan'"
 sql "INSERT INTO respaldo (inicio, fin, archivo, sha256, bytes, version_esquema, secuencia_antes, hash_antes,
-	secuencia_despues, hash_despues, conteos, destino, comparacion, diferencias, creado_en, creado_por)
+	secuencia_despues, hash_despues, conteos, destino, comparacion, diferencias, colegios_faltan, creado_en, creado_por)
 	VALUES ('$inicio', '$fin_registro', '$archivo', '$huella', $bytes, '$version', $secuencia_antes, '$hash_antes',
 	$secuencia_despues, '$hash_despues', '{$conteos_json}', '$destino', '$comparacion', $valor_diferencias,
-	UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, 'cc_respaldo')" 2> "$trabajo/registro.err" \
+	$valor_colegios, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, 'cc_respaldo')" 2> "$trabajo/registro.err" \
 	|| fallar "el respaldo $archivo se subió pero no se pudo registrar: $(cat "$trabajo/registro.err")"
 
-echo "Respaldo $archivo ($bytes bytes, sha256 $huella) en «$destino»; bitácora $secuencia_antes→$secuencia_despues; comparación: $comparacion${diferencias:+ ($diferencias)}"
+echo "Respaldo $archivo ($bytes bytes, sha256 $huella) en «$destino»; bitácora $secuencia_antes→$secuencia_despues; comparación: $comparacion${diferencias:+ ($diferencias)}${colegios_faltan:+; colegios: $colegios_faltan}"
 if [ "$comparacion" = "FALTAN_FILAS" ]; then
 	exit 3
 fi

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Colegios de la plataforma', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="plataforma-lista">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Plataforma</p>
+			<h1>Colegios de la instalación</h1>
+			<p class="secundario">Da de alta un colegio con su primera Promotoría. Aquí no se ven datos de las familias: solo la
+				ficha de cada colegio y el avance de su puesta en marcha.</p>
+		</div>
+		<div class="acciones">
+			<a class="btn btn-secundario" th:href="@{/plataforma/bitacora}">Bitácora de la plataforma</a>
+			<a class="btn btn-primario" th:href="@{/plataforma/colegios/nuevo}">Dar de alta un colegio</a>
+		</div>
+	</div>
+
+	<th:block th:if="${exito != null}">
+		<div th:replace="~{fragments/componentes :: alerta('exito', ${exito})}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-colegios">
+		<h2 id="titulo-colegios">Colegios</h2>
+		<th:block th:if="${#lists.isEmpty(colegios)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay colegios', 'Da de alta el primero con los datos del contrato firmado.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(colegios)}">
+			<caption class="solo-lectores">Colegios de la instalación con su estado y su última actividad.</caption>
+			<thead>
+				<tr><th scope="col">Colegio</th><th scope="col">RUC</th><th scope="col">Estado</th><th scope="col">Titular</th>
+					<th scope="col">Cuentas</th><th scope="col">Última actividad</th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="c : ${colegios}">
+					<td data-etiqueta="Colegio"><a th:href="@{/plataforma/colegios/{id}(id=${c.id})}" th:text="${c.nombre}">Colegio</a></td>
+					<td data-etiqueta="RUC" class="num" th:text="${c.ruc} ?: '—'">20123456789</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${c.estado.etiqueta()},
+						${c.estado.name() == 'PRODUCCION'} ? 'exito' : 'alerta')}"></span></td>
+					<td data-etiqueta="Titular" th:text="${!c.conTitular} ? 'Sin titular' : (${c.titularActivado} ? 'Activado' : 'Enlace enviado')">Activado</td>
+					<td data-etiqueta="Cuentas" class="num" th:text="${c.cuentas}">3</td>
+					<td data-etiqueta="Última actividad" class="num" th:text="${c.ultimaActividad != null} ? ${#temporals.format(c.ultimaActividad, 'dd/MM/yyyy HH:mm')} : '—'">—</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

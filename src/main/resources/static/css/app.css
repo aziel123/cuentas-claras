@@ -63,6 +63,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .marca { display: flex; align-items: center; gap: var(--esp-3); color: inherit; text-decoration: none; min-width: 0; }
 .marca-texto strong { display: block; }
 .marca-texto small { display: block; color: var(--color-texto-secundario); font-size: var(--texto-xs); }
+/* Sprint 8, tanda 1 (decisión 123): el logo del colegio ocupa el lugar del monograma, con la misma franja celeste. */
+.logo-colegio {
+  width: 36px; height: 36px; flex: none;
+  object-fit: contain;
+  border-radius: 9px;
+  background: var(--color-superficie);
+  border-bottom: 3px solid var(--color-celeste);
+}
 .monograma {
   width: 36px; height: 36px; flex: none;
   display: grid; place-items: center;
@@ -465,11 +473,21 @@ input[type="file"].input { padding: var(--esp-2); }
 .comprobante-numero { display: grid; gap: var(--esp-1); padding: var(--esp-3); border: 2px solid var(--color-texto); border-radius: var(--radio); text-align: center; }
 .comprobante-numero h1 { font-size: var(--texto-base); }
 .comprobante-numero strong { font-size: var(--texto-lg); }
+/* Sprint 8, tanda 1 (H8): el emisor con su logo (64 px de alto como máximo, también impreso). */
+.comprobante-emisor { display: flex; gap: var(--esp-3); align-items: flex-start; min-width: 0; }
+.comprobante-logo { display: block; width: auto; height: auto; max-height: 64px; max-width: 160px; flex: none; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+/* Pantalla de marca del colegio: vista previa del logo vigente y etiqueta de un dato que no se edita (el RUC). */
+.logo-colegio { display: grid; gap: var(--esp-2); justify-items: start; }
+.logo-colegio-vista { display: block; width: auto; height: auto; max-height: 120px; max-width: 240px; padding: var(--esp-2); border: 1px solid var(--color-borde); border-radius: var(--radio); background: var(--color-superficie); }
+.etiqueta-fija { font-size: var(--texto-sm); font-weight: 600; }
 /* Correcciones del sprint 4 (S4-M1): franja global de un entorno de prueba (piloto). */
 .franja-entorno {
   padding: var(--esp-2) var(--esp-4); background: var(--color-peligro); color: var(--color-superficie);
   text-align: center; font-weight: 700; letter-spacing: 0.04em; font-size: var(--texto-sm);
 }
+/* Sprint 8, tanda 3: en la demo la franja enlaza al recorrido guiado (blanco subrayado sobre rojo: 6.0:1). */
+.franja-enlace { color: var(--color-superficie); text-decoration: underline; margin-left: var(--esp-2); white-space: nowrap; }
+.franja-enlace:focus-visible { outline: 2px solid var(--color-superficie); outline-offset: 2px; }
 .marca-simulado {
   padding: var(--esp-2); border: 2px dashed var(--color-peligro); border-radius: var(--radio);
   color: var(--color-peligro); text-align: center; font-weight: 700; letter-spacing: 0.08em;
@@ -483,6 +501,7 @@ input[type="file"].input { padding: var(--esp-2); }
   body { background: var(--color-superficie); }
   .armazon { display: block; padding: 0; max-width: none; }
   .comprobante-hoja { border: 0; max-width: none; padding: 0; }
+  .comprobante-logo { display: block; max-height: 64px; }
   .tabla thead { display: table-header-group; }
   .tabla tr { display: table-row; }
   .tabla td { display: table-cell; }

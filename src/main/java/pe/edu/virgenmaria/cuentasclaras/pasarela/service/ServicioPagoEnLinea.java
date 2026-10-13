@@ -17,6 +17,8 @@ import pe.edu.virgenmaria.cuentasclaras.caja.repository.PagoRepository;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoVisibleCuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
+import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
@@ -100,10 +102,14 @@ public class ServicioPagoEnLinea {
 
 	private final Clock reloj;
 
+	/** Sprint 8, tanda 1 (H5): la descripción de la orden lleva el nombre del colegio que cobra, nunca uno fijo. */
+	private final ColegioService colegios;
+
 	public ServicioPagoEnLinea(SesionApoderado sesion, AlumnoRepository alumnos, CuotaRepository cuotas,
 			PagoRepository pagos, OrdenPagoRepository ordenes, OrdenPagoCuotaRepository cuotasDeOrden, Pasarelas pasarelas,
 			ProcesadorPagosEnLinea procesador, AuditoriaService auditoria, PropiedadesPasarela propiedades,
-			PlatformTransactionManager transacciones, Clock reloj) {
+			PlatformTransactionManager transacciones, Clock reloj, ColegioService colegios) {
+		this.colegios = colegios;
 		this.sesion = sesion;
 		this.alumnos = alumnos;
 		this.cuotas = cuotas;
@@ -156,7 +162,7 @@ public class ServicioPagoEnLinea {
 					.toList();
 			return new CuentaEnLinea(apoderado.getFamilia().getNombre(), apoderado.nombreCompleto(), hijos, total,
 					recientes, recientesPagos, pasarelas.configurada().isPresent(), pasarelas.simulada(),
-					propiedades.montoMaximo(), hoy);
+					pasarelas.montoMaximo(), hoy);
 		});
 	}
 
@@ -198,6 +204,9 @@ public class ServicioPagoEnLinea {
 	 */
 	public String crearOrden(PagoEnLineaRequest pedido) {
 		Objects.requireNonNull(pedido, "pedido");
+		// S8-M2: en un colegio en preparación no hay dinero (la caja tampoco cobra): la pasarela nunca llega a cobrar.
+		colegios.exigirEnProduccion(ContextoColegio.actual(), "El colegio todavía no recibe pagos en línea: empieza a cobrar "
+				+ "cuando termine su puesta en marcha. No se te cobró nada.");
 		PasarelaPagos pasarela = pasarelas.activa();
 		Creada creada = Objects.requireNonNull(escritura.execute(t -> crearEnTransaccion(pedido, pasarela.proveedor())));
 		if (creada.nueva()) {
@@ -268,7 +277,7 @@ public class ServicioPagoEnLinea {
 		try {
 			creada = pasarela.crearOrden(new SolicitudOrden(orden.getReferencia(), orden.getMonto(),
 					orden.getMonto().movePointRight(2).longValueExact(), orden.getMoneda(),
-					"Pago Colegio Virgen María · " + orden.getReferencia(), orden.getVenceEn(),
+					"Pago " + colegios.nombreParaMensajes(colegioId) + " · " + orden.getReferencia(), orden.getVenceEn(),
 					"/familia/pagos/" + orden.getReferencia(), colegioId));
 		}
 		catch (RuntimeException e) {
@@ -374,8 +383,8 @@ public class ServicioPagoEnLinea {
 	}
 
 	private void exigirMaximo(BigDecimal total) {
-		if (total.compareTo(propiedades.montoMaximo()) > 0) {
-			throw new ReglaNegocioException("El pago en línea es de hasta " + Dinero.formatear(propiedades.montoMaximo())
+		if (total.compareTo(pasarelas.montoMaximo()) > 0) {
+			throw new ReglaNegocioException("El pago en línea es de hasta " + Dinero.formatear(pasarelas.montoMaximo())
 					+ " por vez. Elige menos cuotas y paga el resto en otro pago.");
 		}
 	}

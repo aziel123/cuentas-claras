@@ -59,10 +59,140 @@ jobs:
           grep -q "BLOQUEA (CRÍTICA o ALTA con arreglo): log4j-core 2.14.1" muestra.txt || { cat muestra.txt; exit 1; }
           echo "OK: la muestra vulnerable no pasa (Log4Shell detectado)"
 
+  secretos:
+    name: Ningún secreto en el repositorio (gitleaks, E26)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      # Sprint 8, tanda 3 (E26): gitleaks (imagen oficial fijada por digest) sobre TODA la historia de git. Las reglas
+      # son las de gitleaks más una lista cerrada de valores inventados de las pruebas (.gitleaks.toml).
+      # Correcciones del sprint 8 (S8-B2): la configuración NO se toma del propio PR (que podría agregar a la lista blanca
+      # el secreto que trae): en un PR se usa la de la rama destino (main); en main, la de main. Además .gitleaks.toml y
+      # .github/ tienen dueño en CODEOWNERS (la revisión del dueño es obligatoria con la protección de la rama).
+      - name: "gitleaks sobre la historia del repositorio (configuración de la rama destino)"
+        env:
+          RAMA_BASE: ${{ github.base_ref }}
+        run: |
+          mkdir -p /tmp/gitleaks
+          if [ -n "$RAMA_BASE" ]; then
+            git fetch --no-tags --depth=1 origin "$RAMA_BASE"
+          fi
+          if [ -n "$RAMA_BASE" ] && ! git cat-file -e "origin/$RAMA_BASE:.gitleaks.toml" 2>/dev/null; then
+            # Solo el PR que introduce .gitleaks.toml: la rama destino aún no lo tiene, así que se usa el del PR.
+            # Desde que llega a main, aplica la regla de abajo (la de la rama destino).
+            echo "AVISO: $RAMA_BASE aún no tiene .gitleaks.toml; se usa el de este PR (revísalo en la revisión del PR)."
+            cp .gitleaks.toml /tmp/gitleaks/gitleaks.toml
+          elif [ -n "$RAMA_BASE" ]; then
+            git show "origin/$RAMA_BASE:.gitleaks.toml" > /tmp/gitleaks/gitleaks.toml
+            if ! git diff --quiet "origin/$RAMA_BASE" HEAD -- .gitleaks.toml; then
+              echo "AVISO: este PR cambia .gitleaks.toml; se revisa con la de $RAMA_BASE (el cambio lo aprueba su dueño)."
+            fi
+          else
+            cp .gitleaks.toml /tmp/gitleaks/gitleaks.toml
+          fi
+          docker run --rm -v "$PWD:/repo" -v /tmp/gitleaks:/config:ro \
+            ghcr.io/gitleaks/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
+            git /repo --no-banner --redact --config /config/gitleaks.toml
+
+      - name: "E26: la revisión SÍ falla con un secreto de muestra (un token de GitHub inventado, generado aquí)"
+        run: |
+          mkdir -p /tmp/muestra-secreto
+          echo "GITHUB_TOKEN=ghp_$(head -c 400 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 36)" > /tmp/muestra-secreto/app.env
+          if docker run --rm -v /tmp/muestra-secreto:/muestra -v /tmp/gitleaks/gitleaks.toml:/gitleaks.toml:ro \
+              ghcr.io/gitleaks/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
+              dir /muestra --no-banner --redact --config /gitleaks.toml; then
+            echo "ERROR: gitleaks no detectó el token de muestra"; exit 1
+          fi
+          echo "OK: un secreto de muestra no pasa"
+
+  demo:
+    name: "Demo (perfil demo): sin salida a internet, franja DEMO, «Crear mi demo» y no arranca con secretos (E20 a E22)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Construir la imagen (el mismo Dockerfile del despliegue)
+        run: docker build -q -t cuentas-claras:ci .
+
+      - name: Arrancar la demo en una red de Docker SIN SALIDA (internal true), como en deploy/compose.demo.yml
+        run: |
+          docker network create --internal cc-demo-interna
+          # Por http (sin Caddy): la cookie sin «Secure» (en la VM va por https con __Host-CCSESION).
+          docker run -d --name cc-demo --network cc-demo-interna --read-only --tmpfs /tmp \
+            -e SPRING_PROFILES_ACTIVE=demo -e CC_MARCA_NOMBRE="Cuentas Claras CI" \
+            -e SERVER_SERVLET_SESSION_COOKIE_SECURE=false -e CC_COOKIE_SESION=CCSESION cuentas-claras:ci
+          for i in $(seq 1 90); do
+            docker exec cc-demo curl -sf http://127.0.0.1:8080/actuator/health/readiness | grep -q UP && break
+            sleep 2
+          done
+          docker exec cc-demo curl -sf http://127.0.0.1:8080/actuator/health/readiness | grep -q UP || { docker logs cc-demo; exit 1; }
+          docker logs cc-demo 2>&1 | grep -q "Demo: salida a internet bloqueada" || { docker logs cc-demo; exit 1; }
+          echo "OK: la demo arrancó con H2 en memoria y la salida de la aplicación bloqueada"
+
+      - name: "E20: desde el contenedor de la demo, internet no responde (ni por nombre ni por IP)"
+        run: |
+          # Primero, que la demo esté corriendo (si no, «no responde» sería un falso positivo).
+          docker exec cc-demo true
+          # Correcciones del sprint 8 (S8-B1): control positivo de la prueba por /dev/tcp (con bash; dash no lo tiene).
+          docker exec cc-demo bash -c 'timeout 10 bash -c "exec 3<>/dev/tcp/127.0.0.1/8080"' \
+            || { echo "ERROR: la prueba por /dev/tcp no funciona en el contenedor"; exit 1; }
+          if docker exec cc-demo curl -sS --max-time 15 -o /dev/null https://graph.facebook.com; then
+            echo "ERROR: la demo llegó a graph.facebook.com"; exit 1
+          fi
+          if docker exec cc-demo bash -c 'timeout 10 bash -c "exec 3<>/dev/tcp/142.250.0.1/443"' 2>/dev/null; then
+            echo "ERROR: la demo abrió una conexión a internet por IP"; exit 1
+          fi
+          echo "OK (E20): sin salida a internet"
+
+      - name: "La franja dice DEMO y «Crear mi demo» devuelve un colegio con 6 cuentas (la cajera es Lucía Ramos)"
+        run: |
+          docker exec cc-demo curl -s -c /tmp/c -o /tmp/demo.html http://127.0.0.1:8080/demo
+          docker exec cc-demo grep -q "DEMO · Datos ficticios" /tmp/demo.html
+          docker exec cc-demo curl -s -I http://127.0.0.1:8080/demo | grep -qi "^X-Robots-Tag: noindex"
+          token=$(docker exec cc-demo grep -o 'name="_csrf" value="[^"]*"' /tmp/demo.html | sed 's/.*value="//; s/"$//')
+          docker exec cc-demo curl -s -b /tmp/c -c /tmp/c -o /tmp/creada.html --data-urlencode "_csrf=$token" \
+            http://127.0.0.1:8080/demo
+          test "$(docker exec cc-demo grep -c "Entrar como" /tmp/creada.html)" = "6" \
+            || { docker exec cc-demo cat /tmp/creada.html; docker logs cc-demo; exit 1; }
+          docker exec cc-demo grep -q "Lucía Ramos" /tmp/creada.html
+          docker exec cc-demo grep -q "data-clave-demo" /tmp/creada.html
+          echo "OK: franja DEMO, sin indexar y un colegio ficticio con 6 cuentas"
+
+      - name: "E20 y E21: con un secreto en el entorno, una base real o junto a prod, la demo NO arranca"
+        run: |
+          no_arranca() {
+            # Si arrancara, «timeout» corta el cliente y el contenedor se borra igual (por su nombre).
+            if timeout 180 docker run --rm --name cc-demo-no --network cc-demo-interna -e SPRING_PROFILES_ACTIVE="$1" \
+                -e "$2" cuentas-claras:ci > demo-no.log 2>&1; then
+              echo "ERROR: la demo arrancó con $1 y $2"; exit 1
+            fi
+            docker rm -f cc-demo-no > /dev/null 2>&1 || true
+            grep -q "$3" demo-no.log || { cat demo-no.log; exit 1; }
+            echo "OK: con $2 ($1) no arranca: $3"
+          }
+          no_arranca demo "NUBEFACT_TOKEN=un-token-real" "no lleva secretos"
+          no_arranca demo "DB_URL=jdbc:mysql://10.0.0.5:3306/cuentasclaras" "no lleva secretos"
+          no_arranca demo "SPRING_DATASOURCE_URL=jdbc:mysql://10.0.0.5:3306/cuentasclaras" "H2 en memoria"
+          no_arranca demo "AUDITORIA_CLAVE_HMAC=una-clave-de-una-instalacion-real-0001" "no lleva secretos"
+          no_arranca demo "CUENTASCLARAS_MENSAJERIA_WHATSAPP_PROVEEDOR=WHATSAPP_CLOUD" "proveedores son simulados"
+          no_arranca demo,prod "CC_MARCA_NOMBRE=x" "no se combina"
+          rm -f demo-no.log
+
+      - name: Borrar el contenedor y la red de la demo
+        if: always()
+        run: |
+          docker rm -f cc-demo cc-demo-no || true
+          docker network rm cc-demo-interna || true
+
   mysql:
     name: Migraciones, permisos y arranque en MySQL 8
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     services:
       mysql:
         image: mysql:8
@@ -84,6 +214,11 @@ jobs:
       CC_MYSQL_CLAVE_SISTEMA: "sistema-solo-ci-1"
       CC_MYSQL_CLAVE_RESPALDO: "respaldo-solo-ci-1"
       MYSQL_ADMIN: "mysql --protocol=TCP -h 127.0.0.1 -P 3306 -uroot -proot-ci"
+      # Sprint 8, tanda 1 (decisión 122): en prod el nombre comercial es obligatorio (VerificadorConfiguracion).
+      CC_MARCA_NOMBRE: "Cuentas Claras CI"
+      # Sprint 8, tanda 2 (decisión 118): la clave de los secretos de los conectores SOLO de este job (32 bytes en base64,
+      # no es la de desarrollo). Las pruebas cifran con ella y prod arranca verificando que los descifra todos.
+      CC_CLAVE_CONECTORES: "Y2ktY29uZWN0b3Jlcy1zb2xvLWRlbC1qb2ItbXlzcWw="
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -111,7 +246,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V27): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V31): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -133,12 +268,16 @@ jobs:
 
       - name: "Sprint 5, tanda 2: un segundo colegio (con año en curso) para la renovación de matrícula"
         run: |
-          # cc_app no crea colegios: lo hace el administrador, como el alta de un colegio real (nombre en ASCII: el
-          # cliente mysql no siempre envía UTF-8).
+          # cc_app no crea colegios: aquí lo hace el administrador (nombre en ASCII: el cliente mysql no siempre envía
+          # UTF-8). Sprint 8, tanda 1: nace en preparación, como el colegio 1 de una base nueva; las pruebas los ponen en
+          # marcha por el alta (operador, firma, primera Promotoría, Dirección, Caja y paso a producción: CuentasDePrueba).
           $MYSQL_ADMIN cuentasclaras -e "INSERT INTO colegio (nombre) VALUES ('Colegio de renovacion CI')"
 
       - name: "Fase 2: la aplicación funciona con los permisos mínimos de cc_app"
         run: ./mvnw -B test -Dtest=PermisosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 8: alta de colegios por el operador; cc_app y cc_sistema no crean colegios ni Promotorías, no cobran en preparación ni cambian el estado (E3, E5 a E7, E9 a E11, E16, E29 y E30); los conectores entran en vigencia solo con la aprobación firmada de otra persona y no se editan (E12 y E14); «faltan filas» por colegio con cc_respaldo (E25)"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint8MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint6MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
@@ -505,9 +644,61 @@ jobs:
           comprobar_sistema 1142 "DELETE FROM primera_direccion WHERE 1 = 0"
           directora=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT MIN(u.id) FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id WHERE r.rol = 'DIRECTOR' AND u.activo")
           comprobar_sistema 1644 "UPDATE usuario SET activo = FALSE, desactivado_en = NOW(6), desactivado_por = 'ci' WHERE id = ${directora}"
-          # Huellas (H7): cc_app ve las de los 75 triggers y las 7 funciones con huellas_objetos().
+          # Sprint 8, tanda 1 (V28, sección 6.4). cc_app no crea colegios, primeras Promotorías ni el correo de control
+          # (1142), no cambia el RUC ni el tipo de un colegio (1143) ni borra un colegio o un logo (1142); un pago del colegio
+          # 0 (que no está en producción) lo rechaza trg_pago_registro antes que la FK (1644).
+          comprobar 1142 "INSERT INTO colegio (nombre, tipo, estado, activo, creado_por, actualizado_en) VALUES ('ci', 'COLEGIO', 'PREPARACION', TRUE, 'ci', NOW(6))"
+          comprobar 1143 "UPDATE colegio SET ruc = ruc WHERE 1 = 0"
+          comprobar 1143 "UPDATE colegio SET tipo = tipo WHERE 1 = 0"
+          comprobar 1142 "DELETE FROM colegio WHERE 1 = 0"
+          comprobar 1142 "INSERT INTO primera_promotoria (colegio_id, usuario_id, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, NOW(6), 'ci', NOW(6))"
+          comprobar 1142 "DELETE FROM colegio_logo WHERE 1 = 0"
+          comprobar 1143 "UPDATE colegio_logo SET sha256 = sha256 WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO pago (colegio_id, familia_id, caja_diaria_id, cajero, fecha, comprobante_id, medio, total, recibido, vuelto, origen, clave_idempotencia, estado, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'ci', '2000-01-01', 0, 'EFECTIVO', 1, 1, 0, 'CAJA', 'ci-preparacion', 'VIGENTE', NOW(6), 'ci', NOW(6))"
+          # Con cc_sistema: un colegio que nace en producción (o sin operador), una primera Promotoría sin la firma del
+          # operador y el correo de control sin su firma (1644); nada de eso se borra (1142).
+          comprobar_sistema 1644 "INSERT INTO colegio (nombre, tipo, estado, activo, creado_por, actualizado_en, produccion_desde, produccion_por) VALUES ('ci', 'COLEGIO', 'PRODUCCION', TRUE, 'sistema.ci', NOW(6), NOW(6), 'sistema.ci')"
+          comprobar_sistema 1644 "INSERT INTO primera_promotoria (colegio_id, usuario_id, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, NOW(6), 'ci', NOW(6))"
+          comprobar_sistema 1644 "INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en, creado_por) VALUES (0, 'huella_correo_externo', 'ci@x.pe', NOW(6), 'ci')"
+          comprobar_sistema 1142 "DELETE FROM colegio WHERE 1 = 0"
+          comprobar_sistema 1142 "DELETE FROM primera_promotoria WHERE 1 = 0"
+          comprobar_sistema 1142 "UPDATE primera_promotoria SET version = version WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE configuracion_colegio SET clave = clave WHERE 1 = 0"
+          # Sprint 8, tanda 2 (V29, E12 y E14): un conector no se borra (1142), no cambia su configuración, su secreto, su
+          # clave pública ni quién lo propuso (1143) y no nace VIGENTE (trg_conector_colegio_nace, 1644; con cc_app y con
+          # cc_sistema).
+          conector_vigente="INSERT INTO conector_colegio (colegio_id, tipo, proveedor, modo, configuracion, clave_publica, estado, vigente, propuesto_por, resuelto_por, resuelto_en, prueba_ok, creado_en, creado_por, actualizado_en) VALUES (0, 'CUENTA_BANCARIA', 'BCP', 'REAL', '{}', '00000000-0000-4000-8000-000000000000', 'VIGENTE', TRUE, 'ci', 'ci.otro', NOW(6), TRUE, NOW(6), 'ci', NOW(6))"
+          comprobar 1142 "DELETE FROM conector_colegio WHERE 1 = 0"
+          for columna in secreto_cifrado configuracion propuesto_por clave_publica tipo proveedor modo clave_version; do
+            comprobar 1143 "UPDATE conector_colegio SET $columna = $columna WHERE 1 = 0"
+          done
+          comprobar 1644 "$conector_vigente"
+          comprobar_sistema 1644 "$conector_vigente"
+          comprobar_sistema 1142 "DELETE FROM conector_colegio WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE conector_colegio SET secreto_cifrado = secreto_cifrado WHERE 1 = 0"
+          # Correcciones del sprint 8 (V31). S8-A1 y S8-A2: el cambio del contacto del titular y el del correo de control
+          # solo los escribe cc_sistema (1142 con cc_app), con la firma de un operador activo (1644 sin ella), no se borran
+          # (1142) y lo propuesto no cambia (1143). S8-M2: una orden de pago en línea del colegio 0 (que no está en
+          # producción) la rechaza trg_orden_pago_nace (1644); QA-S8-4: un mensaje a una familia del colegio 0, trg_mensaje_nace.
+          cambio_contacto="INSERT INTO cambio_contacto_titular (colegio_id, usuario_id, telefono_nuevo, motivo, estado, pendiente, propuesto_por, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, '+51999999999', 'ci de permisos', 'PROPUESTO', TRUE, 'ci', 0, 0, NOW(6), 'ci', NOW(6))"
+          cambio_correo="INSERT INTO cambio_correo_control (colegio_id, correo_nuevo, motivo, estado, pendiente, propuesto_por, operador_id, plataforma_id, creado_en, creado_por, actualizado_en) VALUES (0, 'ci@x.pe', 'ci de permisos', 'PROPUESTO', TRUE, 'ci', 0, 0, NOW(6), 'ci', NOW(6))"
+          comprobar 1142 "$cambio_contacto"
+          comprobar 1142 "$cambio_correo"
+          comprobar_sistema 1644 "$cambio_contacto"
+          comprobar_sistema 1644 "$cambio_correo"
+          comprobar_sistema 1142 "DELETE FROM cambio_contacto_titular WHERE 1 = 0"
+          comprobar_sistema 1142 "DELETE FROM cambio_correo_control WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE cambio_contacto_titular SET telefono_nuevo = telefono_nuevo WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE cambio_correo_control SET correo_nuevo = correo_nuevo WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO orden_pago (colegio_id, referencia, familia_id, apoderado_id, proveedor, monto, moneda, comprobante_tipo, clave_idempotencia, vence_en, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'ci', 0, 0, 'CULQI', 1, 'PEN', 'BOLETA', 'ci-preparacion', NOW(6), 'CREADA', NOW(6), 'ci', NOW(6))"
+          comprobar 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'ci-familia', 'PAGO_REGISTRADO', 'CORREO', 'APODERADO', 'x@y.pe', 'PAGO_REGISTRADO', '', 'PENDIENTE', NOW(6), 'ci', NOW(6))"
+          # Exactamente un colegio PLATAFORMA y, en él, solo operadores.
+          plataformas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM colegio WHERE tipo = 'PLATAFORMA'")
+          [ "$plataformas" = "1" ] || { echo "ERROR: hay $plataformas colegios PLATAFORMA"; exit 1; }
+          # Huellas (H7): cc_app ve las de los 86 triggers y las 10 funciones con huellas_objetos() (correcciones del sprint 8).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
-          [ "$objetos" = "$((esperados + 7))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
+          [ "$objetos" = "$((esperados + 10))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
+          [ "$esperados" = "86" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y las correcciones del sprint 8 dejan 86"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -523,6 +714,8 @@ jobs:
           MENSAJERIA_CORREO_PROVEEDOR: SMTP
           CORREO_REMITENTE: "avisos@ci.cuentasclaras.pe"
           SPRING_MAIL_HOST: "127.0.0.1"
+          # Sprint 8, tanda 1 (decisión 112): el operador de la plataforma sale del despliegue (sin clave en el entorno).
+          CC_OPERADORES: "operador.ci:operador.ci@ci.cuentasclaras.pe"
         run: |
           DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" \
             java -jar target/cuentas-claras-*.jar --server.port=18080 > prod.log 2>&1 &
@@ -548,7 +741,16 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 75 triggers y las 7 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 86 triggers y las 10 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          # Sprint 8, tanda 2 (sección 3.6): los conectores (GRANT por columna y triggers) y la clave que descifra todos
+          # sus secretos (los que dejaron las pruebas, cifrados con CC_CLAVE_CONECTORES).
+          grep -q "Permisos y triggers de los conectores por colegio verificados" prod.log || { cat prod.log; exit 1; }
+          grep -q "Secretos de los conectores verificados: " prod.log || { cat prod.log; exit 1; }
+          # Sprint 8, tanda 1 (sección 6.4): un solo colegio PLATAFORMA, solo con operadores; el de CC_OPERADORES existe.
+          grep -q "Plataforma verificada: " prod.log || { cat prod.log; exit 1; }
+          grep -q "Operadores de la plataforma sincronizados: 1 en la lista" prod.log || { cat prod.log; exit 1; }
+          activo=$($MYSQL_ADMIN cuentasclaras -N -e "SELECT COUNT(*) FROM usuario u JOIN colegio c ON c.id = u.colegio_id JOIN usuario_rol r ON r.usuario_id = u.id WHERE u.nombre_usuario = 'operador.ci' AND u.activo AND c.tipo = 'PLATAFORMA' AND r.rol = 'OPERADOR_PLATAFORMA'")
+          [ "$activo" = "1" ] || { echo "ERROR: el operador de CC_OPERADORES no quedó activo en la plataforma"; exit 1; }
           grep -q "Privilegios verificados: cc_app y cc_sistema tienen solo los de 02-permisos-tablas.sql, sin roles anidados" prod.log || { cat prod.log; exit 1; }
           grep -q "Conexiones a MySQL cifradas (TLS) verificadas" prod.log || { cat prod.log; exit 1; }
           # Sprint 7, tanda 3 (V26, Ley 29733).
@@ -612,6 +814,13 @@ jobs:
             echo "ERROR: la aplicación arrancó con el mismo usuario en los dos pools"; exit 1
           fi
           grep -q "no pueden ser el mismo usuario" prod-mismo-usuario.log || { cat prod-mismo-usuario.log; exit 1; }
+          # Sprint 8, tanda 2 (secciones 3.1 y 3.6): una instalación COMPARTIDA con el token de Nubefact en el entorno no
+          # arranca (los secretos son de cada colegio, en sus conectores).
+          if CC_INSTALACION=COMPARTIDA NUBEFACT_TOKEN="un-token-del-entorno" DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" \
+               timeout 120 java -jar target/cuentas-claras-*.jar --server.port=18089 > prod-compartida-token.log 2>&1; then
+            echo "ERROR: una instalación COMPARTIDA arrancó con NUBEFACT_TOKEN en el entorno"; exit 1
+          fi
+          grep -q "no lleva secretos de conectores" prod-compartida-token.log || { cat prod-compartida-token.log; exit 1; }
           # E9: un privilegio de más (TRIGGER sobre el esquema) no deja arrancar; 02 lo quita.
           $MYSQL_ADMIN -e "GRANT TRIGGER ON cuentasclaras.* TO 'cc_app'@'%'"
           if DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" timeout 120 \
@@ -656,6 +865,8 @@ jobs:
           MENSAJERIA_CORREO_PROVEEDOR: SMTP
           CORREO_REMITENTE: "avisos@ci.cuentasclaras.pe"
           SPRING_MAIL_HOST: "127.0.0.1"
+          # El mismo operador que el arranque anterior (el paso M4 lo quita de la lista).
+          CC_OPERADORES: "operador.ci:operador.ci@ci.cuentasclaras.pe"
         run: |
           migrador() {
             mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras "$@"
@@ -702,8 +913,101 @@ jobs:
           kill "$PID_APP"
           echo "OK: restaurados 02 y 03, prod vuelve a arrancar"
 
+      - name: "M4 (E8): un operador quitado de CC_OPERADORES queda inactivo y ya no crea colegios (1644)"
+        env:
+          SPRING_PROFILES_ACTIVE: prod
+          DB_URL: "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&sslMode=REQUIRED"
+          DB_SISTEMA_USUARIO: cc_sistema
+          DB_SISTEMA_CLAVE: ${{ env.CC_MYSQL_CLAVE_SISTEMA }}
+          AUDITORIA_CLAVE_HMAC: "clave-hmac-del-job-de-integracion-continua-0001"
+          MENSAJERIA_CORREO_PROVEEDOR: SMTP
+          CORREO_REMITENTE: "avisos@ci.cuentasclaras.pe"
+          SPRING_MAIL_HOST: "127.0.0.1"
+          CC_OPERADORES: "otro.operador.ci:otro.operador.ci@ci.cuentasclaras.pe"
+        run: |
+          # Antes (con operador.ci activo), cc_sistema SÍ crea un colegio en preparación a su nombre: el control de abajo
+          # no es un falso positivo.
+          mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_sistema -p"${CC_MYSQL_CLAVE_SISTEMA}" cuentasclaras \
+            -e "INSERT INTO colegio (nombre, tipo, estado, activo, creado_por, actualizado_en) VALUES ('Colegio M4 antes', 'COLEGIO', 'PREPARACION', TRUE, 'operador.ci', NOW(6))"
+          DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" java -jar target/cuentas-claras-*.jar --server.port=18088 > prod-m4.log 2>&1 &
+          PID_APP=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:18088/actuator/health | grep -q UP && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:18088/actuator/health | grep -q UP || { cat prod-m4.log; exit 1; }
+          kill "$PID_APP"
+          grep -q "1 creados, 0 reactivados, 1 desactivados" prod-m4.log || { cat prod-m4.log; exit 1; }
+          activo=$($MYSQL_ADMIN cuentasclaras -N -e "SELECT activo FROM usuario WHERE nombre_usuario = 'operador.ci'")
+          [ "$activo" = "0" ] || { echo "ERROR: operador.ci sigue activo"; exit 1; }
+          if salida=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_sistema -p"${CC_MYSQL_CLAVE_SISTEMA}" cuentasclaras \
+              -e "INSERT INTO colegio (nombre, tipo, estado, activo, creado_por, actualizado_en) VALUES ('Colegio M4 despues', 'COLEGIO', 'PREPARACION', TRUE, 'operador.ci', NOW(6))" 2>&1); then
+            echo "ERROR: un operador desactivado creó un colegio"; exit 1
+          fi
+          echo "$salida" | grep -q "ERROR 1644" || { echo "Error inesperado: $salida"; exit 1; }
+          echo "OK (M4): quitado de CC_OPERADORES, operador.ci quedó inactivo y ya no crea colegios"
+
+      - name: "Sprint 8, tanda 2 (decisión 118): rotación de la clave de los conectores con cc_migrador; prod arranca con la nueva y no con la anterior"
+        env:
+          SPRING_PROFILES_ACTIVE: prod
+          DB_URL: "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&sslMode=REQUIRED"
+          DB_SISTEMA_USUARIO: cc_sistema
+          DB_SISTEMA_CLAVE: ${{ env.CC_MYSQL_CLAVE_SISTEMA }}
+          AUDITORIA_CLAVE_HMAC: "clave-hmac-del-job-de-integracion-continua-0001"
+          MENSAJERIA_CORREO_PROVEEDOR: SMTP
+          CORREO_REMITENTE: "avisos@ci.cuentasclaras.pe"
+          SPRING_MAIL_HOST: "127.0.0.1"
+          CC_OPERADORES: "otro.operador.ci:otro.operador.ci@ci.cuentasclaras.pe"
+          CLAVE_NUEVA: "Y2ktY29uZWN0b3Jlcy1yb3RhZGEtdjItZGVsLWpvYiE="
+        run: |
+          app() {
+            mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "$1"
+          }
+          antes=$(app "SELECT COUNT(*) FROM conector_colegio WHERE secreto_cifrado IS NOT NULL AND clave_version = 1")
+          [ "$antes" -ge 1 ] || { echo "ERROR: las pruebas no dejaron secretos de conectores para rotar"; exit 1; }
+          # cc_migrador solo cambia el secreto y su versión (hacia arriba): ni el estado ni una versión menor (1644).
+          for sql in "UPDATE conector_colegio SET estado = 'VIGENTE', vigente = TRUE WHERE secreto_cifrado IS NOT NULL AND estado = 'RECHAZADO'" \
+                     "UPDATE conector_colegio SET clave_version = 0 WHERE secreto_cifrado IS NOT NULL"; do
+            if salida=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_migrador -p"${CC_MYSQL_CLAVE_MIGRADOR}" cuentasclaras -e "$sql" 2>&1); then
+              echo "ERROR: cc_migrador pudo ejecutar: $sql"; exit 1
+            fi
+            echo "$salida" | grep -q "ERROR 1644\|ERROR 3819" || { echo "Error inesperado: $salida"; exit 1; }
+            echo "OK cc_migrador: $sql"
+          done
+          # Con cc_app, el secreto no cambia (1143) aunque alguien tenga la clave nueva.
+          if salida=$(app "UPDATE conector_colegio SET clave_version = 2 WHERE 1 = 0" 2>&1); then
+            echo "ERROR: cc_app pudo cambiar la versión de la clave"; exit 1
+          fi
+          echo "$salida" | grep -q "ERROR 1143" || { echo "Error inesperado: $salida"; exit 1; }
+          # La rotación: con cc_migrador, la clave nueva (versión 2) y la anterior.
+          DB_URL="${CC_MYSQL_URL}" DB_MIGRADOR_USUARIO=cc_migrador DB_MIGRADOR_CLAVE="${CC_MYSQL_CLAVE_MIGRADOR}" \
+            CC_CLAVE_CONECTORES_ANTERIOR="${CC_CLAVE_CONECTORES}" CC_CLAVE_CONECTORES="${CLAVE_NUEVA}" \
+            CC_CLAVE_CONECTORES_VERSION=2 java -jar target/cuentas-claras-*.jar recifrar-conectores > recifrar.log 2>&1 \
+            || { cat recifrar.log; exit 1; }
+          grep -q "Secretos de los conectores cifrados de nuevo: $antes de la versión 1 a la 2" recifrar.log || { cat recifrar.log; exit 1; }
+          [ "$(app "SELECT COUNT(*) FROM conector_colegio WHERE secreto_cifrado IS NOT NULL AND clave_version = 1")" = "0" ] \
+            || { echo "ERROR: quedaron secretos en la versión 1"; exit 1; }
+          # Con la clave anterior (versión 1), prod no arranca: no descifra los secretos rotados.
+          if DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" timeout 120 \
+               java -jar target/cuentas-claras-*.jar --server.port=18090 > prod-clave-vieja.log 2>&1; then
+            echo "ERROR: prod arrancó con la clave anterior de los conectores"; exit 1
+          fi
+          grep -q "no descifra $antes secreto" prod-clave-vieja.log || { cat prod-clave-vieja.log; exit 1; }
+          # Con la nueva (versión 2), arranca y los verifica.
+          CC_CLAVE_CONECTORES="${CLAVE_NUEVA}" CC_CLAVE_CONECTORES_VERSION=2 DB_USUARIO=cc_app DB_CLAVE="${CC_MYSQL_CLAVE_APP}" \
+            java -jar target/cuentas-claras-*.jar --server.port=18091 > prod-clave-nueva.log 2>&1 &
+          PID_APP=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:18091/actuator/health | grep -q UP && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:18091/actuator/health | grep -q UP || { cat prod-clave-nueva.log; exit 1; }
+          kill "$PID_APP"
+          grep -q "Secretos de los conectores verificados: $antes con la clave versión 2" prod-clave-nueva.log || { cat prod-clave-nueva.log; exit 1; }
+          echo "OK: rotación de la clave de los conectores con cc_migrador; prod arranca con la nueva y no con la anterior"
+
   respaldo:
-    name: Respaldo cifrado, restauración real y ataques E29 a E32
+    name: Respaldo cifrado, restauración real, ataques E29 a E32 y «faltan filas» por colegio
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -739,6 +1043,7 @@ jobs:
       CC_MYSQL_CLAVE_SISTEMA: "sistema-solo-ci-2"
       CC_MYSQL_CLAVE_RESPALDO: "respaldo-solo-ci-2"
       MYSQL_ADMIN: "mysql --protocol=TCP -h 127.0.0.1 -P 3306 -uroot -proot-ci"
+      CC_MARCA_NOMBRE: "Cuentas Claras CI"
       # El respaldo (scripts/respaldo/respaldar.sh) como en el servidor: cc_respaldo y dos destinatarios age.
       RESPALDO_DB_HOST: "127.0.0.1"
       RESPALDO_DB_PUERTO: "3306"
@@ -757,6 +1062,9 @@ jobs:
       RESTAURAR_DB_ADMIN: "root"
       RESTAURAR_DB_ADMIN_CLAVE: "root-restauracion-ci"
       MYSQL_RESTAURACION: "mysql --protocol=TCP -h 127.0.0.1 -P 3308 -uroot -proot-restauracion-ci"
+      # Sprint 8, tanda 2: la clave de los secretos de los conectores (la de este job); el arranque de prod sobre la copia
+      # verifica que los descifra.
+      CC_CLAVE_CONECTORES: "Y2ktY29uZWN0b3Jlcy1kZWwtam9iLXJlc3BhbGRvLTE="
       # La clave HMAC con la que las pruebas sellaron la bitácora (perfil test): la verificación recalcula toda la cadena.
       CLAVE_HMAC_PRUEBAS: "clave-hmac-de-pruebas-no-usar-en-produccion-0001"
     steps:
@@ -778,7 +1086,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V27, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V31, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \
@@ -838,5 +1146,43 @@ jobs:
       - name: "QA-S7-1: resuelta, el respaldo siguiente vuelve a IGUAL"
         run: sh scripts/respaldo/pruebas-ci.sh resuelto
 
+      - name: "Sprint 8, tanda 3 (E25 y E28): un DBA borra un pago de UN colegio: el respaldo avisa solo a ese colegio"
+        run: sh scripts/respaldo/pruebas-ci.sh faltan-filas-por-colegio
+
+      - name: "Sprint 8, tanda 3 (E25): la Promotoría de otro colegio no la resuelve (1644) y la del colegio afectado sí"
+        run: CC_PRUEBA_RESOLUCION_POR_COLEGIO=true ./mvnw -B test -Dtest=ResolucionRespaldoPorColegioMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 8, tanda 3: resuelta por su colegio, el respaldo siguiente vuelve a IGUAL"
+        run: sh scripts/respaldo/pruebas-ci.sh resuelto-por-colegio
+
       - name: "Destino simulado: solo con la fila del DBA (nunca en prod); sin ella, la base no lo registra (1644)"
         run: sh scripts/respaldo/pruebas-ci.sh simulado
+
+  imagen:
+    name: Imagen en GHCR por el SHA del commit, con su SBOM (solo main)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [verificar, dependencias, secretos, demo, mysql, respaldo]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Sprint 8, tanda 3 (decisión 134): la imagen se construye UNA vez aquí y se despliega por su digest (nunca
+      # «latest»). La etiqueta es el SHA del commit; el SBOM y la procedencia van como atestaciones de la imagen.
+      - name: Construir y publicar en GHCR (etiqueta = SHA del commit) con SBOM y procedencia
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          imagen="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker buildx create --use --name cc-constructor > /dev/null
+          docker buildx build --push --sbom=true --provenance=mode=max \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            -t "$imagen:$GITHUB_SHA" .
+          digest=$(docker buildx imagetools inspect "$imagen:$GITHUB_SHA" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "Imagen para desplegar: $imagen@$digest" | tee -a "$GITHUB_STEP_SUMMARY"
+          docker logout ghcr.io

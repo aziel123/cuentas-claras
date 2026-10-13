@@ -90,11 +90,15 @@ public class ServicioImportacionAlumnos {
 
 	private final Clock reloj;
 
+	/** Sprint 8, tanda 3 (E22): en la demo, solo los archivos de ejemplo. */
+	private final ArchivosPermitidosImportacion permitidos;
+
 	public ServicioImportacionAlumnos(ValidadorArchivoXlsx validador, LectorImportacionAlumnos lector,
 			PlanificadorImportacion planificador, PlantillaImportacionAlumnos plantilla, RegistroAlumnos registro,
 			AnioEscolarRepository anios, SeccionRepository secciones, AlumnoRepository alumnos,
 			ApoderadoRepository apoderados, ImportacionAlumnosRepository importaciones, AuditoriaService auditoria,
-			Clock reloj) {
+			Clock reloj, ArchivosPermitidosImportacion permitidos) {
+		this.permitidos = permitidos;
 		this.validador = validador;
 		this.lector = lector;
 		this.planificador = planificador;
@@ -157,6 +161,7 @@ public class ServicioImportacionAlumnos {
 		validador.exigirTamano(tamanoReal);
 		validador.validar(nombre, contenido);
 		String sha256 = PlanificadorImportacion.sha256(contenido);
+		permitidos.exigirPermitido(sha256);
 		LecturaImportacion lectura = lector.leer(contenido, anio.getAnio(), LocalDate.now(reloj));
 		PlanImportacion plan = planificador.planificar(anio, lectura.filas());
 		LocalDateTime importadoAntes = importaciones.findFirstByArchivoSha256OrderByCreadoEnDesc(sha256)

@@ -88,7 +88,10 @@ Los scripts están en `scripts/mysql/`. Son los mismos que usa el job `mysql` de
 | `llamada_control` | INSERT | **Solo inserción** (sprint 6, tanda 3): el resultado de la llamada de control semanal. **Sprint 7, tanda 2:** lleva la firma de la sesión de quien la registra y el segundo intento exige un «No contesta» de hace una hora con la hora de la BASE (`registrada_bd`, la pone el trigger). Desde V23 la registra una persona activa de Promotoría (Dirección, solo con la semana delegada y marcando `por_delegacion`), para el lunes de la semana en curso (hora de Lima), a una familia de la muestra congelada que no fue reemplazada, y el segundo intento solo tras un «No contesta» (trigger `trg_llamada_control_registro`); no se corrige ni se borra (1142) |
 | `muestra_llamada` | Ninguno (sprint 7: solo `cc_sistema`, INSERT) | **Solo inserción** (correcciones del sprint 6, V23): la muestra congelada de la semana. **Sprint 7, tanda 2 (E10):** la fija solo `sistema.panel` con `cc_sistema` (el lunes a las 00:10 o en la primera consulta de la semana), para la semana en curso, con familias que pagaron en efectivo o tienen deuda vencida; un reemplazo solo de quien no contestó dos veces (trigger `trg_muestra_llamada_registro`) |
 | `delegacion_llamada` | INSERT | **Solo inserción** (V23): Promotoría delega a Dirección las llamadas de la semana en curso (trigger `trg_delegacion_llamada_registro`) |
-| `configuracion_colegio` | Ninguno (solo el SELECT general) | La escribe solo el DBA (V23, QA-S6-6): `resumen_correo_externo` y, desde V25, `huella_correo_externo`, por colegio. INSERT, UPDATE y DELETE dan 1142 |
+| `configuracion_colegio` | Ninguno (solo el SELECT general) | `resumen_correo_externo` y, desde V25, `huella_correo_externo`, por colegio: el correo externo de control. **Sprint 8, tanda 1 (V28):** ya no la escribe solo el DBA: la registra el operador de la plataforma con `cc_sistema` (INSERT y UPDATE de `valor`, `actualizado_por`, `actualizado_en` y `version`) y la firma de su sesión (`trg_configuracion_colegio_registro` y `trg_configuracion_colegio_cambio`). Con `cc_app`: 1142; nadie la borra |
+| `colegio` | UPDATE **solo** de `nombre, razon_social, direccion, correo_institucional, estado, produccion_desde, produccion_por, aviso_privacidad_*, actualizado_en, version` | **Sprint 8, tanda 1 (V28):** la ficha de un colegio en producción y su paso a producción (Promotoría, con su firma, con Dirección y Caja activas: `trg_colegio_cambio`). El RUC, el tipo y el creador no cambian con `cc_app` (1143). `cc_sistema` (el operador) tiene además INSERT (el alta, solo en preparación y por un operador activo: `trg_colegio_nace`) y el UPDATE de la ficha completa con el RUC, **solo en preparación**. Nadie borra un colegio (1142) |
+| `primera_promotoria` | Ninguno (solo `cc_sistema`, INSERT) | **Sprint 8, tanda 1 (V28):** la primera Promotoría de cada colegio, una sola vez (UNIQUE). La crea un operador activo con la firma de su sesión (`primera_promotoria:{colegio}:{intento}`, 5 minutos) en un colegio en preparación cuya única cuenta es la del titular (`trg_primera_promotoria_nace`); el primer PROMOTOR de un colegio exige esta fila (`trg_usuario_rol_alta`). Solo inserción |
+| `colegio_logo` | INSERT y UPDATE **solo** de `vigente, actualizado_en, version` | **Sprint 8, tanda 1 (V28):** el logo del colegio, un PNG que la aplicación reescribe (400 px y 200 KB como máximo). Uno vigente por colegio; el contenido y su SHA-256 no cambian (1143); no se borra (1142) |
 | `semilla_muestreo`, `huella_bitacora`, `huella_hora`, `liquidacion_pasarela`, `liquidacion_linea`, `evento_pasarela`, `mensaje` (envío) | Sprint 7, tanda 2: solo `cc_sistema` | Los escriben solo los procesos (`sistema.muestreo`, `sistema.auditoria`, `sistema.pasarela`, `sistema.mensajeria`). `cc_app` sigue insertando los mensajes que nacen con un pago (el outbox) pero no los marca enviados ni entregados (1142) |
 
 ## Triggers (paso 3, después de los permisos)
@@ -98,6 +101,70 @@ Los aplica `cc_migrador` (no van en Flyway: H2 no los soporta):
 mysql -u root -p -e "SET PERSIST log_bin_trust_function_creators = 1"
 mysql -h <host> -u cc_migrador -p cuentasclaras < scripts/mysql/03-triggers.sql
 ```
+**MySQL administrado (Cloud SQL, RDS; sprint 8, H13):** `SET PERSIST` exige SUPER, que el servicio no da: la marca
+`log_bin_trust_function_creators` se pone en la configuración de la instancia (en Cloud SQL,
+`--database-flags=log_bin_trust_function_creators=on`; en RDS, un grupo de parámetros). Los usuarios `cc_*` se crean con
+`01-usuarios.sql`, por SQL, nunca desde la consola del servicio (la consola les da su rol de administrador y el
+verificador de prod no arranca).
+
+**Google Cloud (sprint 8, tanda 3):** todo esto lo hacen los scripts de `deploy/` (guía completa en
+[despliegue-gcp.md](despliegue-gcp.md)):
+- `deploy/gcp/crear-infra.sh` crea la instancia con la marca `log_bin_trust_function_creators=on`, TLS obligatorio
+  (`ENCRYPTED_ONLY`), solo IP privada, respaldos y PITR de 7 días, y deja las claves de MySQL (al azar) en Secret Manager;
+- `deploy/gcp/preparar-base.sh` corre `01` **como root y por SQL** desde el contenedor de herramientas de la VM (las claves
+  viajan por la entrada estándar de SSH y la VM no guarda las de root ni de `cc_migrador`) y comprueba que ningún `cc_*` tenga
+  un rol distinto de `cc_negocio`;
+- `deploy/desplegar.sh` corre `migrar` (con `cc_migrador`), `02` (como root) y `03` (como `cc_migrador`), en ese orden y con
+  la aplicación detenida, y no deja la aplicación arriba si el verificador no dice sus líneas;
+- la aplicación se conecta por IP privada con `sslMode=VERIFY_CA` y el certificado de la autoridad de la instancia (H14:
+  sin Cloud SQL Auth Proxy, que dejaría la sesión de MySQL sin `Ssl_cipher`);
+- el **paso 0** (`deploy/gcp/paso-0.sh`) corre el job `mysql` del CI completo contra una instancia de prueba antes de todo
+  ([acta-paso-0-cloud-sql.md](acta-paso-0-cloud-sql.md)).
+
+**Sprint 8, tanda 1 (V28): 80 triggers y 9 funciones con huella (89).** Nuevos: `trg_colegio_nace` y `trg_colegio_cambio`
+(quién crea un colegio y quién lo pasa a producción), `trg_primera_promotoria_nace` y los dos de `configuracion_colegio`;
+funciones `cc_operador_activo` y `cc_colegio_en_produccion`. Versiones nuevas: `trg_usuario_nace` y `trg_usuario_rol_alta`
+(el operador vive solo en el colegio de plataforma y solo crea la primera cuenta de un colegio; el primer PROMOTOR exige su
+`primera_promotoria`), `trg_usuario_contacto` (el operador corrige el contacto del titular antes de la activación, con su
+firma), `trg_pago_registro` (en un colegio en preparación no hay pagos), `trg_mensaje_nace` (ni recordatorios; y el
+resumen lleva el nombre del colegio delante) y `trg_serie_comprobante_nace` (dos sedes con el mismo RUC no comparten
+serie). Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
+
+**Sprint 8, tanda 2 (V29): 82 triggers y 9 funciones con huella (91).** Nuevos: `trg_conector_colegio_nace` (un conector
+nace PROPUESTO, por una persona activa de Promotoría o Administración de su colegio y con la firma de su sesión) y
+`trg_conector_colegio_estado` (entra en vigencia solo con su `CAMBIO_CONECTOR` aprobada y firmada por otra persona de
+Promotoría o Dirección, con la prueba de conexión correcta y, si mueve dinero, con una Promotoría de por medio; un vigente
+solo se reemplaza por otro aprobado; un rechazo lleva su firma). `02` da a `cc_negocio` el INSERT y el UPDATE por columna de
+`conector_colegio` (sin DELETE; tipo, proveedor, configuración, secreto y quién lo propuso no cambian: 1143). Una base
+existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
+
+**Correcciones del sprint 8 (V31): 86 triggers y 10 funciones con huella (96).** Nuevos: `trg_cambio_contacto_titular_nace`
+y `_estado` (el contacto del titular, antes de que active su cuenta, lo propone un operador y lo aplica OTRO, cada uno con su
+firma), `trg_cambio_correo_control_nace` y `_estado` (en un colegio en producción el correo externo de control lo propone el
+operador y lo aprueba una Promotoría del colegio con su firma) y la función `cc_cuenta_activada` (la cuenta usó un enlace o
+abrió una sesión). Versiones nuevas: `trg_colegio_cambio` (toda corrección de la ficha lleva la firma de quien la cambia; el
+operador, solo antes de que el titular active su cuenta; el DNI del titular no cambia después de crear su cuenta),
+`trg_usuario_contacto` (el cambio del titular sale de un `cambio_contacto_titular` APLICADO; al reactivar un operador, su
+correo pasa a ser el de la lista), `trg_configuracion_colegio_registro` y `_cambio` (en producción, solo con el cambio
+aprobado por la Promotoría), `trg_orden_pago_nace` (sin pago en línea en preparación), `trg_mensaje_nace` (ningún mensaje a
+las familias en preparación; los avisos del alta van también al correo institucional) y `trg_conector_colegio_estado` (una
+Promotoría participa también en el OSE; en producción, un OSE que ya fue REAL no vuelve a SIMULADO). `02` da a `cc_sistema`
+el INSERT y el UPDATE por columna de `cambio_contacto_titular` y `cambio_correo_control` (cc_app: 1142) y suma
+`actualizado_por` a las columnas de `colegio`. Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación
+detenida; no hay usuarios nuevos. En una instalación COMPARTIDA, quita del entorno `CAJA_CUENTAS_DEPOSITO` y las variables de
+recaudación y conciliación (`CUENTASCLARAS_RECAUDACION_*`, `CUENTASCLARAS_CONCILIACION_*`): son de cada colegio (S8-B5).
+
+**Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
+van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
+custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra
+todos los secretos guardados («Secretos de los conectores verificados: N con la clave versión V»). **Rotación**, con la
+aplicación detenida:
+1. `CC_CLAVE_CONECTORES` = la nueva, `CC_CLAVE_CONECTORES_VERSION` = la siguiente y `CC_CLAVE_CONECTORES_ANTERIOR` = la de
+   antes.
+2. `java -jar cuentas-claras.jar recifrar-conectores` con `DB_URL`, `DB_MIGRADOR_USUARIO` y `DB_MIGRADOR_CLAVE` (como
+   `migrar`): vuelve a cifrar en una transacción cada secreto de la versión anterior; si uno no se descifra, no cambia
+   ninguno. `trg_conector_colegio_estado` solo deja a `cc_migrador` cambiar el secreto y su versión, hacia arriba.
+3. Arrancar con la nueva (sin la anterior). La clave anterior se destruye con un acta.
 - Un plan fuera de BORRADOR no cambia montos, fechas ni editores; un plan cerrado no cambia de estado.
 - Planes y lotes nacen en BORRADOR; un lote confirmado o descartado no cambia.
 - Las líneas solo se agregan o se quitan con su lote en preparación.
@@ -204,6 +271,12 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
 `huella_correo_externo` a `configuracion_colegio` si V25 no lo hizo (más de un colegio) y confirma que `DB_URL` pide TLS.
 
 ## Respaldos (sprint 7, tanda 1)
+- **Sprint 8, tanda 3 (V30): «faltan filas» por colegio.** `respaldar.sh` cuenta por colegio las tablas vigiladas con
+  `colegio_id` y el registro dice en `colegios_faltan` (arreglo JSON) qué colegios tienen filas faltantes; las tablas sin
+  colegio, el ancla de la bitácora y las filas del colegio de plataforma nombran a todos. `trg_respaldo_registro` rechaza un
+  FALTAN_FILAS sin colegios (o con uno que no existe) y un IGUAL mientras un colegio tenga su falta sin resolver;
+  `trg_resolucion_respaldo_registro` exige que la resuelva la Promotoría de ESE colegio, sobre el último respaldo que lo
+  nombra, con la firma `respaldo:{id}:{colegio}:RESUELTO`. Sin GRANT nuevos (82 triggers y 91 huellas, como en la tanda 2).
 - La tabla `respaldo` (V24) la escribe **solo** `cc_respaldo` (GRANT de INSERT y `trg_respaldo_registro`, que exige
   `SESSION_USER()` = `cc_respaldo`, que se registre al terminar y que las anclas sean eventos reales de la bitácora).
   `cc_app` solo la lee: 1142 al insertar, editar o borrar. `cc_respaldo` tampoco edita ni borra (1142).
@@ -296,7 +369,9 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
 | `DB_MIGRADOR_USUARIO`, `DB_MIGRADOR_CLAVE` | `cc_migrador` y su clave. **Solo** para `java -jar cuentas-claras.jar migrar`, nunca en el entorno de la aplicación |
 | `AUDITORIA_CLAVE_HMAC` | Clave de la cadena de auditoría, de 32 caracteres o más. Custodia: `custodia-clave-auditoria.md` |
 | `CC_PROXIES_INTERNOS` | Expresión regular con las IP de tus proxies inversos. Solo de ellos se acepta la cabecera X-Forwarded-For. Por defecto: loopback y redes privadas (10.x, 172.16-31.x, 192.168.x) |
-| `CC_COLEGIO_ID`, `CC_PROMOTOR_USUARIO`, `CC_PROMOTOR_NOMBRE`, `CC_PROMOTOR_CLAVE` | Primer PROMOTOR, solo si no hay usuarios. Retira `CC_PROMOTOR_CLAVE` después del primer ingreso |
+| `CC_MARCA_NOMBRE` | Sprint 8, tanda 1: el nombre comercial del producto. Obligatorio en prod |
+| `CC_OPERADORES` | Sprint 8, tanda 1: los operadores de la plataforma (`usuario:correo,...`); dan de alta cada colegio y su primera Promotoría desde `/plataforma`. Reemplaza a `CC_COLEGIO_ID` y `CC_PROMOTOR_*`, que se retiraron (si siguen en el entorno, el log avisa) |
+| `CC_INSTALACION` | `DEDICADA` (por defecto, un colegio) o `COMPARTIDA` |
 
 ## Cómo comprobarlo
 Conectado como `cc_app`, estas sentencias deben fallar con **ERROR 1142** (comando denegado):

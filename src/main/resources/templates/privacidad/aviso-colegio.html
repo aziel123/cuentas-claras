@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<!--/* Sprint 8, tanda 1 (sección 3.7): el aviso de privacidad del colegio de la familia en sesión, con el colegio como
+     responsable y el proveedor como encargado. Sin id en la ruta: el colegio sale de la sesión. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Aviso de privacidad', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-privacidad">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta" th:text="${responsable != null} ? ${responsable.nombre} : 'Tu colegio'">Nombre del colegio</p>
+			<h1>Aviso de privacidad</h1>
+			<p class="secundario">Versión <span th:text="${version}" data-version>2027-01</span>. Ley 29733 de Protección de
+				Datos Personales y su reglamento.</p>
+		</div>
+	</div>
+
+	<section class="tarjeta" aria-label="Texto del aviso">
+		<th:block th:replace="~{privacidad/fragmentos :: textoAviso(${responsable})}"></th:block>
+		<p class="fila">
+			<a class="btn btn-secundario" th:href="@{/familia/mis-datos}">Mis datos</a>
+			<a class="btn btn-texto" th:href="@{/familia}">Volver</a>
+		</p>
+	</section>
+</main>
+</body>
+</html>

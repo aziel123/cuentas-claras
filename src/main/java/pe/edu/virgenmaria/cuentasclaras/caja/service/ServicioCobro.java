@@ -23,6 +23,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.dto.CobroRequest;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.ComprobanteImprimible;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.ConfirmacionPago;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.CuentaFamilia;
+import pe.edu.virgenmaria.cuentasclaras.caja.dto.EmisorVista;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.LineaComprobanteVista;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.PagosDelDia;
 import pe.edu.virgenmaria.cuentasclaras.caja.dto.ResultadoBusqueda;
@@ -46,6 +47,7 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.model.Cuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoVisibleCuota;
 import pe.edu.virgenmaria.cuentasclaras.cobranza.repository.CuotaRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.MarcaColegio;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.Comprobante;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.ProveedorComprobantes;
 import pe.edu.virgenmaria.cuentasclaras.comprobantes.model.TipoComprobante;
@@ -53,6 +55,7 @@ import pe.edu.virgenmaria.cuentasclaras.comprobantes.service.AperturaSerie;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador;
 
@@ -297,6 +300,8 @@ public class ServicioCobro {
 	 */
 	public Long cobrar(CobroRequest solicitud) {
 		Objects.requireNonNull(solicitud, "solicitud");
+		// Sprint 8, tanda 1 (E9): en un colegio en preparación no se registra dinero (en MySQL, trg_pago_registro).
+		colegios.exigirEnProduccion(ContextoColegio.actual());
 		String cajero = SesionCaja.usuario();
 		LocalDate hoy = hoy();
 		prepararCajaYSerie(cajero, hoy, solicitud.comprobante());
@@ -395,13 +400,22 @@ public class ServicioCobro {
 	@Transactional(readOnly = true)
 	public ComprobanteImprimible imprimible(Long pagoId) {
 		Pago pago = pagoPropio(pagoId);
-		return imprimibleDe(pago.getComprobante(), pago, colegios.nombreDe(pago.getColegioId()), nombres, null, false);
+		return imprimibleDe(pago.getComprobante(), pago, colegios.marcaDe(pago.getColegioId()).orElseThrow(), nombres,
+				null, false);
 	}
 
-	/** El impreso de un comprobante (de su pago, si tiene) o de una nota de crédito (con el comprobante que anula). */
-	static ComprobanteImprimible imprimibleDe(Comprobante c, Pago pago, String colegio, NombresUsuarios nombres,
+	/**
+	 * El impreso de un comprobante (de su pago, si tiene) o de una nota de crédito (con el comprobante que anula). El
+	 * emisor sale de la marca del colegio (H8): razón social, RUC, dirección y logo.
+	 */
+	static ComprobanteImprimible imprimibleDe(Comprobante c, Pago pago, MarcaColegio marca, NombresUsuarios nombres,
 			Comprobante anulado, boolean firmaRecepcion) {
-		return new ComprobanteImprimible(pago == null ? null : pago.getId(), colegio, c.getTipo().etiqueta(),
+		// S8-B4 y QA-S8-5: el emisor de la foto del comprobante (el de su emisión), no la marca de hoy.
+		EmisorVista emisor = c.conFotoDelEmisor()
+				? new EmisorVista(c.getEmisorNombre(), c.getEmisorRazonSocial(), c.getEmisorRuc(), c.getEmisorDireccion(),
+						c.getEmisorLogoId() != null, c.getEmisorLogoId())
+				: new EmisorVista(marca.nombre(), marca.razonSocial(), marca.ruc(), marca.direccion(), marca.conLogo());
+		return new ComprobanteImprimible(pago == null ? null : pago.getId(), emisor, c.getTipo().etiqueta(),
 				c.numeroCompleto(), c.getFechaEmision(), pago == null ? c.getCreadoEn() : pago.getCreadoEn(),
 				c.getReceptor().nombre(), c.getReceptor().documentoTexto(), lineas(c), c.getTotal(), c.getMoneda(),
 				c.getAfectacionIgv().etiqueta(), pago == null ? null : pago.getMedio().etiqueta(),

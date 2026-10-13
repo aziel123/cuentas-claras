@@ -22,6 +22,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import javax.sql.DataSource;
 
@@ -35,7 +36,8 @@ import javax.sql.DataSource;
  */
 @Component
 @Profile("test")
-public class CuentasDePrueba implements InitializingBean {
+@org.springframework.core.annotation.Order(org.springframework.core.Ordered.LOWEST_PRECEDENCE)
+public class CuentasDePrueba implements InitializingBean, org.springframework.boot.ApplicationRunner {
 
 	private static volatile CuentasDePrueba enMySql;
 
@@ -51,8 +53,29 @@ public class CuentasDePrueba implements InitializingBean {
 
 	private final boolean separadas;
 
+	private final org.springframework.beans.factory.ObjectProvider<pe.edu.virgenmaria.cuentasclaras.plataforma.service.AltaColegio> alta;
+
+	private final org.springframework.beans.factory.ObjectProvider<pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.PasoAProduccion> produccion;
+
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository colegios;
+
+	@org.springframework.beans.factory.annotation.Autowired
+	private org.springframework.beans.factory.ObjectProvider<pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion> firma;
+
+	@org.springframework.beans.factory.annotation.Autowired
+	private org.springframework.transaction.PlatformTransactionManager transacciones;
+
+	private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+
 	public CuentasDePrueba(UsuarioRepository usuarios, PasswordEncoder codificador, ServicioUsuarios servicio,
-			BandejaAprobaciones bandeja, SolicitudCambioRepository solicitudes, DataSource fuente) {
+			BandejaAprobaciones bandeja, SolicitudCambioRepository solicitudes, DataSource fuente,
+			org.springframework.beans.factory.ObjectProvider<pe.edu.virgenmaria.cuentasclaras.plataforma.service.AltaColegio> alta,
+			org.springframework.beans.factory.ObjectProvider<pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.PasoAProduccion> produccion,
+			pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository colegios) {
+		this.alta = alta;
+		this.produccion = produccion;
+		this.colegios = colegios;
+		this.jdbc = new org.springframework.jdbc.core.JdbcTemplate(fuente);
 		this.usuarios = usuarios;
 		this.codificador = codificador;
 		this.servicio = servicio;
@@ -65,6 +88,121 @@ public class CuentasDePrueba implements InitializingBean {
 	public void afterPropertiesSet() {
 		if (separadas) {
 			enMySql = this;
+		}
+	}
+
+	/** RUC válidos y distintos para los colegios que se ponen en marcha (dos sedes con el mismo RUC no comparten serie). */
+	private static final List<String> RUCS = List.of("20600000013", "20600000021", "20600000030", "20600000048",
+			"20600000056");
+
+	/**
+	 * Sprint 8, tanda 1 (MySQL real): V28 deja en preparación a los colegios de una base nueva (sin cuentas), y en
+	 * preparación la base no deja registrar pagos. Antes de las pruebas, cada colegio así se pone en marcha por el camino
+	 * legítimo, como en producción: un operador de la plataforma (creado por sistema.plataforma) completa la ficha y da de
+	 * alta la primera Promotoría con la firma de su sesión (trg_primera_promotoria_nace); la Promotoría da la primera
+	 * Dirección (primera_direccion) y una Caja; y la Promotoría lo pasa a producción con su firma (trg_colegio_cambio). En
+	 * la fase 1 del job (sin 02 ni 03) no se hace nada.
+	 */
+	@Override
+	public void run(org.springframework.boot.ApplicationArguments argumentos) {
+		if (!separadas || !conPermisosYTriggers()) {
+			return;
+		}
+		SecurityContext anterior = SecurityContextHolder.getContext();
+		try {
+			int indice = 0;
+			for (var colegio : colegios.findByTipoOrderByIdAsc(pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoColegio.COLEGIO)) {
+				if (!colegio.enProduccion() && nacioFueraDelAlta(colegio.getId())) {
+					ponerEnMarcha(colegio.getId(), RUCS.get(indice % RUCS.size()));
+				}
+				indice++;
+			}
+		}
+		finally {
+			SecurityContextHolder.setContext(anterior);
+		}
+	}
+
+	/**
+	 * Un colegio en preparación se pone en marcha aquí solo si no nació por el alta de la plataforma: el colegio 1 de una
+	 * base nueva (V28) o uno que el job insertó por SQL, como el DBA. Los que un paso anterior del job dio de alta por la
+	 * plataforma (creados por un operador) y dejó a propósito en preparación (AuditoriaSprint8MySqlTest, con o sin su
+	 * primera Promotoría) se quedan como los dejó su prueba.
+	 */
+	private boolean nacioFueraDelAlta(long colegioId) {
+		String creadoPor = jdbc.queryForObject("SELECT creado_por FROM colegio WHERE id = ?", String.class, colegioId);
+		return creadoPor == null || creadoPor.startsWith("migracion.");
+	}
+
+	private boolean conPermisosYTriggers() {
+		try {
+			String lista = jdbc.queryForObject("SELECT triggers_instalados()", String.class);
+			return lista != null && lista.contains("trg_colegio_cambio");
+		}
+		catch (org.springframework.dao.DataAccessException e) {
+			return false;
+		}
+	}
+
+	private void ponerEnMarcha(long colegioId, String ruc) {
+		String sufijo = "c" + colegioId;
+		Usuario operador = EscenarioPlataforma.operador(usuarios, codificador, colegios, "operador.pruebas");
+		ponerSesion(operador);
+		var servicioAlta = alta.getObject();
+		servicioAlta.corregirFicha(colegioId, new pe.edu.virgenmaria.cuentasclaras.plataforma.dto.FichaColegioRequest(
+				colegios.findById(colegioId).orElseThrow().getNombre(), "Colegio de pruebas " + sufijo + " S.A.C.", ruc,
+				"Av. Pruebas 123, Lima", "colegio." + sufijo + "@pruebas.pe",
+				java.util.EnumSet.allOf(pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel.class), "CT-" + sufijo,
+				"Titular de pruebas", "4" + String.format("%07d", colegioId)));
+		String nombre = "base.promotor." + sufijo;
+		if (ContextoColegio.en(colegioId, () -> usuarios.findByNombreUsuario(nombre)).isEmpty()) {
+			servicioAlta.completarAlta(colegioId, new pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.AltaTitular
+					.DatosTitular(nombre, "Nombre de " + nombre, UsuariosDePrueba.celular(nombre), null));
+		}
+		// Desde aquí, el operador ya no crea cuentas en ese colegio (trg_usuario_nace): sin su sesión.
+		SecurityContextHolder.clearContext();
+		// El titular «activa» su cuenta: elige la clave de las pruebas (por la ruta de identidad, como la activación).
+		pe.edu.virgenmaria.cuentasclaras.comun.basedatos.RutaConexion.identidad(() -> ContextoColegio.en(colegioId, () -> {
+			Usuario titular = usuarios.findByNombreUsuario(nombre).orElseThrow();
+			if (titular.isDebeCambiarClave()) {
+				titular.cambiarClave(codificador.encode(UsuariosDePrueba.CLAVE), java.time.LocalDateTime.now(java.time.Clock
+						.system(pe.edu.virgenmaria.cuentasclaras.comun.config.ConfiguracionTiempo.ZONA_LIMA)), false);
+				usuarios.saveAndFlush(titular);
+			}
+			return null;
+		}));
+		Usuario promotor = base(colegioId, nombre, Rol.PROMOTOR);
+		base(colegioId, "base.director." + sufijo, Rol.DIRECTOR);
+		if (ContextoColegio.en(colegioId, () -> usuarios.findByNombreUsuario("base.caja." + sufijo)).isEmpty()) {
+			UsuariosDePrueba.insertar(usuarios, codificador, colegioId, "base.caja." + sufijo, UsuariosDePrueba.CLAVE, false,
+					java.util.EnumSet.of(Rol.CAJA));
+		}
+		ponerSesion(promotor);
+		pasarAProduccion(colegioId, promotor);
+	}
+
+	/**
+	 * Sprint 8, tanda 2: la aplicación ya exige la lista de verificación COMPLETA para pasar a producción (respaldo al día,
+	 * conectores, planes...), que en el job mysql no existe. La base exige lo suyo (trg_colegio_cambio: una Promotoría
+	 * activa con su firma, una Dirección y una Caja activas): aquí se cumple eso, por el mismo camino de la base que usa
+	 * {@code PasoAProduccion} (la firma de la sesión de la Promotoría y el cambio de estado con cc_app). La regla de la lista
+	 * la prueban {@code PasoAProduccionTest} (H2) y {@code AuditoriaSprint8MySqlTest}.
+	 */
+	public void pasarAProduccion(long colegioId, Usuario promotor) {
+		SecurityContext anterior = SecurityContextHolder.getContext();
+		try {
+			ponerSesion(promotor);
+			new org.springframework.transaction.support.TransactionTemplate(transacciones).executeWithoutResult(t -> {
+				firma.getObject().firmar(pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma
+						.colegioProduccion(colegioId));
+				var colegio = colegios.findById(colegioId).orElseThrow();
+				colegio.pasarAProduccion(promotor.getNombreUsuario(), java.time.LocalDateTime.now(java.time.Clock.system(
+						pe.edu.virgenmaria.cuentasclaras.comun.config.ConfiguracionTiempo.ZONA_LIMA)));
+				colegios.saveAndFlush(colegio);
+			});
+		}
+		finally {
+			SecurityContextHolder.setContext(anterior);
 		}
 	}
 
@@ -162,8 +300,9 @@ public class CuentasDePrueba implements InitializingBean {
 			return existente;
 		}
 		if (rol == Rol.PROMOTOR) {
-			return UsuariosDePrueba.insertar(usuarios, codificador, colegioId, nombre, UsuariosDePrueba.CLAVE, false,
-					EnumSet.of(Rol.PROMOTOR));
+			// Sprint 8, tanda 1: el primer PROMOTOR de un colegio lo crea el operador por el alta (ponerEnMarcha), una vez.
+			throw new IllegalStateException("El colegio " + colegioId + " no tiene su primera Promotoría: debió ponerse en "
+					+ "marcha al arrancar (CuentasDePrueba.run).");
 		}
 		Usuario docente = UsuariosDePrueba.insertar(usuarios, codificador, colegioId, nombre, UsuariosDePrueba.CLAVE, false,
 				EnumSet.of(Rol.DOCENTE));

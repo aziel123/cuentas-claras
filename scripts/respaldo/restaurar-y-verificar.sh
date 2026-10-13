@@ -289,9 +289,12 @@ if [ "$arrancar" = "si" ]; then
 	# se borra. Nunca la clave real (en prod no se acepta la de pruebas y la real no debe salir de su custodia).
 	clave_hmac="restauracion-$(azar)$(azar)"
 	# Sprint 7, tanda 2: con sus dos usuarios (cc_app y cc_sistema). La copia está en un MySQL desechable local: sin TLS.
+	# Sprint 8, tanda 2: hereda CC_CLAVE_CONECTORES del entorno (la custodia la entrega para el simulacro): si la copia
+	# tiene secretos de conectores, prod no arranca sin la clave que los descifra (VerificadorClaveConectores).
 	SPRING_PROFILES_ACTIVE=prod DB_URL="$url" DB_USUARIO=cc_app DB_CLAVE="$clave_app" AUDITORIA_CLAVE_HMAC="$clave_hmac" \
 		DB_SISTEMA_USUARIO=cc_sistema DB_SISTEMA_CLAVE="$clave_sistema" CC_EXIGIR_TLS_BD=false \
 		MENSAJERIA_CORREO_PROVEEDOR=SMTP CORREO_REMITENTE="restauracion@cuentasclaras.invalid" SPRING_MAIL_HOST=127.0.0.1 \
+		CC_MARCA_NOMBRE="${CC_MARCA_NOMBRE:-Simulacro de restauracion}" \
 		CUENTASCLARAS_TAREAS_ACTIVAS=false java -jar "$jar" --server.port="$puerto_app" > "$trabajo/app.log" 2>&1 &
 	pid_app=$!
 	arranco=no

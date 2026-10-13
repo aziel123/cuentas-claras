@@ -29,6 +29,10 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import pe.edu.virgenmaria.cuentasclaras.conectores.dto.ConectorVigente;
+import pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector;
+import pe.edu.virgenmaria.cuentasclaras.conectores.service.ConectoresColegio;
 
 /**
  * Bandeja de entrada de los avisos (webhooks) de la pasarela, en {@code POST /webhooks/pasarela/{proveedor}/{colegio}}.
@@ -66,9 +70,12 @@ public class RecepcionAvisos {
 
 	private final TransactionTemplate transaccion;
 
+	private final ConectoresColegio conectores;
+
 	public RecepcionAvisos(Pasarelas pasarelas, ColegioRepository colegios, OrdenPagoRepository ordenes,
 			EventoPasarelaRepository eventos, ProcesadorPagosEnLinea procesador, ContadorAvisosNoAutenticos noAutenticos,
-			PropiedadesPasarela propiedades, PlatformTransactionManager transacciones) {
+			PropiedadesPasarela propiedades, PlatformTransactionManager transacciones, ConectoresColegio conectores) {
+		this.conectores = conectores;
 		this.pasarelas = pasarelas;
 		this.colegios = colegios;
 		this.ordenes = ordenes;
@@ -99,7 +106,10 @@ public class RecepcionAvisos {
 			return Resultado.NO_ENCONTRADO;
 		}
 		if (colegioId == null || colegioId <= 0
-				|| colegios.findById(colegioId).filter(Colegio::isActivo).isEmpty()) {
+				|| colegios.findById(colegioId).filter(Colegio::isActivo).isEmpty()
+				// Sprint 8, tanda 2 (E15): un colegio con su conector de pasarela recibe sus avisos SOLO por la ruta de su
+				// clave pública (firmados con SU secreto), nunca por esta ruta con el secreto del entorno.
+				|| conectores.vigente(colegioId, TipoConector.PASARELA).isPresent()) {
 			// S4-B4: igual que un aviso no auténtico (el controlador responde 401 en ambos casos) y cuenta para la alerta.
 			noAutenticos.registrar();
 			return Resultado.NO_ENCONTRADO;
@@ -113,6 +123,45 @@ public class RecepcionAvisos {
 			LOG.warn("Aviso de {} no auténtico para el colegio {}: {}", proveedor, colegioId, e.getMessage());
 			return Resultado.NO_AUTENTICO;
 		}
+		return registrar(proveedor, colegioId, aviso, cuerpo);
+	}
+
+	/**
+	 * Sprint 8, tanda 2 (sección 3.6, E15): el aviso que llega a {@code /webhooks/pasarela/{clave_publica}}. La clave
+	 * pública (un UUID opaco) dice de qué conector VIGENTE y de qué colegio es; la firma se valida con el secreto de los
+	 * avisos de ESE conector. Clave desconocida o de un conector que ya no está vigente: {@link Resultado#NO_ENCONTRADO}
+	 * (404); firma de otro conector o inválida: {@link Resultado#NO_AUTENTICO} (401, y cuenta para la alerta).
+	 */
+	public Resultado recibirPorClave(String clavePublica, byte[] cuerpo, Map<String, String> cabeceras) {
+		if (cuerpo == null || cuerpo.length > propiedades.maximoBytesAviso()) {
+			return Resultado.MUY_GRANDE;
+		}
+		Optional<ConectorVigente> conector = conectores.pasarelaPorClavePublica(clavePublica);
+		if (conector.isEmpty()) {
+			noAutenticos.registrar();
+			return Resultado.NO_ENCONTRADO;
+		}
+		Long colegioId = conector.get().colegioId();
+		ProveedorPasarela proveedor = Pasarelas.proveedorDe(conector.get().proveedor());
+		Optional<PasarelaPagos> pasarela = pasarelas.adaptador(proveedor);
+		if (pasarela.isEmpty() || colegios.findById(colegioId).filter(Colegio::isActivo).isEmpty()) {
+			noAutenticos.registrar();
+			return Resultado.NO_ENCONTRADO;
+		}
+		AvisoPasarela aviso;
+		try {
+			aviso = pasarela.get().verificarAviso(cuerpo, cabeceras, conector.get().secreto(ConectorVigente.SECRETO_AVISO));
+		}
+		catch (AvisoNoAutenticoException e) {
+			noAutenticos.registrar();
+			LOG.warn("Aviso de {} no auténtico para el conector {} del colegio {}: {}", proveedor, conector.get().id(),
+					colegioId, e.getMessage());
+			return Resultado.NO_AUTENTICO;
+		}
+		return registrar(proveedor, colegioId, aviso, cuerpo);
+	}
+
+	private Resultado registrar(ProveedorPasarela proveedor, Long colegioId, AvisoPasarela aviso, byte[] cuerpo) {
 		String huella = sha256(cuerpo);
 		Long eventoId = EjecucionComoSistema.como(ActorSistema.PASARELA, colegioId, () -> guardar(proveedor, aviso, huella));
 		if (eventoId == null) {

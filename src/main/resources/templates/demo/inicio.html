@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<!--/* Sprint 8, tanda 3 (sección 8.2): la portada pública de la demo. Solo existe en el perfil demo. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: publica('Prueba la plataforma', ~{::main})}">
+<body>
+<main id="contenido" class="contenido-publico">
+	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-demo" data-pantalla="demo-inicio">
+		<div>
+			<p class="etiqueta" th:text="|Demo de ${marca.nombre}|">Demo</p>
+			<h1 id="titulo-demo">Prueba la plataforma con tu propio colegio de ejemplo</h1>
+			<p class="secundario">En un minuto tendrás un colegio ficticio con 40 familias, pensiones, pagos de hoy y una cuenta
+				para cada rol: Promotoría, Dirección, Administración, Caja, Docente y Apoderado.</p>
+		</div>
+
+		<th:block th:if="${error != null}">
+			<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+		</th:block>
+
+		<div class="alerta alerta-info" role="status">
+			<p>Antes de empezar:</p>
+		</div>
+		<ul class="lista-simple" data-que-no-hace>
+			<li><strong>No envía mensajes.</strong> Los WhatsApp y correos a las familias se ven dentro de la demo, pero no
+				salen a nadie.</li>
+			<li><strong>No cobra.</strong> Los pagos y las boletas son simulados: dicen «DEMO · SIN VALOR».</li>
+			<li><strong>Se borra cada noche.</strong> A las 3:00 todo vuelve a empezar.</li>
+			<li><strong>No escribas datos reales.</strong> Ni nombres ni DNI de tus alumnos o de tu personal. Para importar,
+				usa solo el archivo de ejemplo.</li>
+		</ul>
+
+		<form class="formulario" th:action="@{/demo}" method="post">
+			<button type="submit" class="btn btn-primario btn-bloque btn-grande">Crear mi demo</button>
+		</form>
+		<p class="ayuda">¿Ya creaste la tuya? <a th:href="@{/login}">Ingresa con tu usuario</a> o mira el
+			<a th:href="@{/demo/guia}">recorrido guiado</a>.</p>
+		<p class="ayuda"><a th:href="@{/privacidad}">Aviso de privacidad</a></p>
+	</section>
+</main>
+</body>
+</html>

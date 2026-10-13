@@ -20,7 +20,19 @@ final class CatalogoRutasConId {
 	enum Recurso {
 		ALUMNO, FAMILIA, APODERADO, MATRICULA, ANIO, SECCION, PLAN, CUOTA, PAGO, COMPROBANTE, CAJA, DEPOSITO, ANULACION,
 		SOLICITUD, AVISO, RENOVACION, ORDEN, REFERENCIA_ORDEN, FERIADO, MENSAJE, EXTRACTO, CUENTA, MOVIMIENTO, PARTIDA,
-		CIERRE_MENSUAL, LOTE_SALDO, LINEA_SALDO, LOTE_RECAUDACION, LINEA_RECAUDACION, USUARIO, VERSION, PUBLICO
+		CIERRE_MENSUAL, LOTE_SALDO, LINEA_SALDO, LOTE_RECAUDACION, LINEA_RECAUDACION, USUARIO, VERSION, PUBLICO,
+		/** Sprint 8, tanda 1: un colegio, en las rutas del operador de la plataforma (ve la ficha de cualquiera: es su función). */
+		COLEGIO,
+		/** Sprint 8, tanda 2: un conector del colegio (OSE, pasarela, cuenta bancaria o recaudación). */
+		CONECTOR,
+		/** Sprint 8, tanda 2: el tipo de conector que se propone (no es un registro: la propuesta es del colegio en sesión). */
+		TIPO_CONECTOR,
+		/** Correcciones del sprint 8 (S8-B4): el logo con que se emitió un comprobante. */
+		LOGO,
+		/** Correcciones del sprint 8 (S8-A1): el cambio del contacto del titular (rutas del operador). */
+		CAMBIO_CONTACTO,
+		/** Correcciones del sprint 8 (S8-A2): el cambio del correo de control que aprueba la Promotoría. */
+		CAMBIO_CORREO
 	}
 
 	static final Map<String, Map<String, Recurso>> CATALOGO = new LinkedHashMap<>();
@@ -35,6 +47,9 @@ final class CatalogoRutasConId {
 		r("POST /webhooks/whatsapp/{colegio:\\d{1,12}}", "colegio", Recurso.PUBLICO);
 		r("POST /webhooks/pasarela/{proveedor:[A-Za-z]{3,20}}/{colegio:\\d{1,12}}", "proveedor", Recurso.PUBLICO,
 				"colegio", Recurso.PUBLICO);
+		// Sprint 8, tanda 2 (E15): el aviso de la pasarela de UN conector, por su clave pública opaca y su firma.
+		r("POST /webhooks/pasarela/{clavePublica:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}",
+				"clavePublica", Recurso.PUBLICO);
 
 		// Alumnos y familias.
 		r("GET /alumnos", "anio", Recurso.ANIO, "seccion", Recurso.SECCION);
@@ -189,6 +204,27 @@ final class CatalogoRutasConId {
 		r("POST /familia/algo-no-cuadra", "pagoId", Recurso.PAGO, "cuotaId", Recurso.CUOTA);
 		r("POST /familia/pagar", "cuotaIds", Recurso.CUOTA);
 		r("POST /familia/pagar/revisar", "cuotaIds", Recurso.CUOTA);
+
+		// Sprint 8, tanda 1: la plataforma (solo el operador; ve la ficha y la lista de cualquier colegio, nunca sus datos:
+		// lo prueba OperadorSinDatosTest).
+		r("GET /plataforma/colegios/{id:\\d+}", "id", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/ficha", "id", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/completar", "id", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/titular", "id", Recurso.COLEGIO);
+		// Correcciones del sprint 8 (S8-A1): reenviar el enlace y resolver el cambio del contacto del titular (operador).
+		r("POST /plataforma/colegios/{id:\\d+}/titular/reenviar", "id", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/titular/{cambio:\\d+}/aplicar", "id", Recurso.COLEGIO, "cambio",
+				Recurso.CAMBIO_CONTACTO);
+		r("POST /plataforma/colegios/{id:\\d+}/titular/{cambio:\\d+}/rechazar", "id", Recurso.COLEGIO, "cambio",
+				Recurso.CAMBIO_CONTACTO);
+		// Correcciones del sprint 8 (S8-A2 y S8-B4): el correo de control que aprueba la Promotoría y el logo emitido.
+		r("POST /puesta-en-marcha/correo-control/{id}/aprobar", "id", Recurso.CAMBIO_CORREO);
+		r("POST /puesta-en-marcha/correo-control/{id}/rechazar", "id", Recurso.CAMBIO_CORREO);
+		r("GET /marca/logo/{id:[0-9]+}", "id", Recurso.LOGO);
+		r("POST /plataforma/colegios/{id:\\d+}/correo-control", "id", Recurso.COLEGIO);
+		// Sprint 8, tanda 2: los conectores del colegio (proponer un tipo y probar uno propuesto).
+		r("POST /conectores/{tipo:[a-z-]{3,20}}", "tipo", Recurso.TIPO_CONECTOR);
+		r("POST /conectores/{id:\\d{1,12}}/probar", "id", Recurso.CONECTOR);
 	}
 
 	private CatalogoRutasConId() {

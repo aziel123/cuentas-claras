@@ -22,6 +22,13 @@ public interface EnlaceActivacionRepository extends Repository<EnlaceActivacion,
 
 	List<EnlaceActivacion> findByUsuarioIdOrderByIdDesc(Long usuarioId);
 
+	/**
+	 * Correcciones del sprint 8 (QA-S8-3): si la cuenta usó alguna vez un enlace (se activó). Con
+	 * {@link SesionUsuarioRepository#existsByUsuarioId} es el indicador fiable de «la cuenta ya se activó»: una clave
+	 * restablecida vuelve a pedir el cambio de clave, pero no borra el enlace usado ni las sesiones.
+	 */
+	boolean existsByUsuarioIdAndUsadoEnIsNotNull(Long usuarioId);
+
 	/** Los usados desde una fecha (alerta: activados desde la IP de quien los creó). */
 	List<EnlaceActivacion> findByUsadoEnAfterOrderByIdDesc(LocalDateTime desde);
 }

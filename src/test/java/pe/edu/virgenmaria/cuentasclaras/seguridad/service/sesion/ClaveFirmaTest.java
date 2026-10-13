@@ -54,7 +54,13 @@ class ClaveFirmaTest {
 				ClaveFirma.avisoFamilia(1L), ClaveFirma.renovacion(1L, EstadoSolicitud.APROBADA),
 				ClaveFirma.verificacionPago(1L, 1), ClaveFirma.verificacionDeposito(1L, 1),
 				ClaveFirma.llamadaControl(LocalDate.of(2026, 10, 5), 1L, 1), ClaveFirma.delegacionLlamada(LocalDate.of(2026, 10, 5)),
-				ClaveFirma.respaldoResuelto(1L))
+				ClaveFirma.respaldoResuelto(1L, 1L), ClaveFirma.primeraPromotoria(1L, 1), ClaveFirma.colegioProduccion(1L),
+				ClaveFirma.configuracionColegio(1L, "huella_correo_externo", 0), ClaveFirma.cambioContactoTitularPropuesto(1L, 1L, 1),
+				// Sprint 8, tanda 2 (V29): la propuesta y el rechazo de un conector.
+				ClaveFirma.conectorPropuesto("0f0e0d0c-0b0a-4908-8706-050403020100"), ClaveFirma.conectorRechazado(1L),
+				// Correcciones del sprint 8 (V31): el contacto del titular, la ficha y el correo de control.
+				ClaveFirma.cambioContactoTitular(1L, EstadoSolicitud.APROBADA), ClaveFirma.fichaColegio(1L, 0),
+				ClaveFirma.cambioCorreoControlPropuesto(1L, 1), ClaveFirma.cambioCorreoControl(1L, EstadoSolicitud.APROBADA))
 				.forEach(clave -> {
 					// El CHECK de V25 (firma_operacion.clave) y el largo de la columna.
 					assertThat(clave).matches("^[a-z_]+:[A-Za-z0-9:_-]+$").hasSizeLessThanOrEqualTo(120);

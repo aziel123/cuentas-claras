@@ -7,3 +7,9 @@ docs/
 *.env
 .idea/
 .vscode/
+# Sprint 8, tanda 3: lo que no va en la imagen (despliegue, scripts y carpetas de trabajo fuera del repositorio).
+deploy/
+scripts/
+marketing/
+reports/
+research_notes/

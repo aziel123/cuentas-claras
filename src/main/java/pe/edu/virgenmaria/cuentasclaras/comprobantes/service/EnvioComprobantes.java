@@ -48,7 +48,8 @@ public class EnvioComprobantes {
 
 	private final ComprobanteRepository comprobantes;
 
-	private final EmisorElectronico emisor;
+	/** Sprint 8, tanda 2 (H4): el emisor de cada comprobante es el de SU proveedor en SU colegio. */
+	private final OseDelColegio ose;
 
 	private final TransactionTemplate transaccion;
 
@@ -60,11 +61,11 @@ public class EnvioComprobantes {
 
 	private final ApplicationEventPublisher eventos;
 
-	public EnvioComprobantes(ComprobanteRepository comprobantes, EmisorElectronico emisor,
+	public EnvioComprobantes(ComprobanteRepository comprobantes, OseDelColegio ose,
 			PlatformTransactionManager transacciones, Clock reloj, PropiedadesComprobantes propiedades,
 			ApplicationEventPublisher eventos) {
 		this.comprobantes = comprobantes;
-		this.emisor = emisor;
+		this.ose = ose;
 		this.transaccion = new TransactionTemplate(transacciones);
 		this.transaccion.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 		this.lectura = new TransactionTemplate(transacciones);
@@ -112,7 +113,7 @@ public class EnvioComprobantes {
 					dia.plusDays(1).atStartOfDay())) {
 				String enOse;
 				try {
-					ResultadoEnvio r = emisor.consultar(c.getTipo(), c.getSerie(), c.getNumero());
+					ResultadoEnvio r = ose.emisorPara(c.getProveedor()).consultar(c.getTipo(), c.getSerie(), c.getNumero());
 					enOse = r == null ? "SIN RESPUESTA" : r.estado().name();
 				}
 				catch (RuntimeException e) {
@@ -151,6 +152,7 @@ public class EnvioComprobantes {
 		}
 		ResultadoEnvio resultado;
 		try {
+			EmisorElectronico emisor = ose.emisorPara(comprobante.getProveedor());
 			resultado = consulta ? emisor.consultar(comprobante.getTipo(), comprobante.getSerie(), comprobante.getNumero())
 					: emisor.enviar(DocumentoElectronico.de(comprobante, modificado));
 			Objects.requireNonNull(resultado, "respuesta del OSE");

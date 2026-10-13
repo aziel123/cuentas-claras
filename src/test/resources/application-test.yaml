@@ -10,6 +10,17 @@ spring:
       maximum-pool-size: 50
 
 cuentasclaras:
+  caja:
+    # La cuenta de ejemplo del colegio 1 (sin conector CUENTA_BANCARIA).
+    cuentas-deposito: BCP Soles 191-XXXXXXX-0-XX
+  plataforma:
+    # Sprint 8, tanda 1: las pruebas dan de alta colegios nuevos junto al colegio 1 (instalación compartida).
+    instalacion: COMPARTIDA
+  conectores:
+    # Sprint 8, tanda 2: clave SOLO de pruebas (32 bytes en base64; su texto empieza con «clave-conectores-», que el
+    # verificador rechaza fuera de dev y test). El job mysql del CI la cambia por la suya (CC_CLAVE_CONECTORES): con ella
+    # arranca prod sobre los mismos secretos.
+    clave: ${CC_CLAVE_CONECTORES:Y2xhdmUtY29uZWN0b3Jlcy1kZS1wcnVlYmFzLTAwMDE=}
   mensajeria:
     whatsapp:
       proveedor: SIMULADO

@@ -35,7 +35,12 @@ public class ServicioActivacionCuenta {
 	 * Lo que ve el titular antes de elegir su clave: su nombre, hasta cuándo sirve el enlace y si es del personal (confirma
 	 * su nombre de usuario) o de un apoderado (confirma su documento).
 	 */
-	public record VistaActivacion(String nombreCompleto, LocalDateTime venceEn, boolean personal) {
+	public record VistaActivacion(String nombreCompleto, LocalDateTime venceEn, boolean personal, boolean titular,
+			String creadoPor, LocalDateTime creadoEn) {
+
+		public VistaActivacion(String nombreCompleto, LocalDateTime venceEn, boolean personal) {
+			this(nombreCompleto, venceEn, personal, false, null, null);
+		}
 	}
 
 	private final EnlaceActivacionRepository enlaces;
@@ -55,11 +60,19 @@ public class ServicioActivacionCuenta {
 	/** Sprint 7, tanda 3 (Ley 29733): la versión vigente del aviso de privacidad que acepta la familia. */
 	private final String versionAviso;
 
+	/** Sprint 8, tanda 1: el titular de la primera Promotoría confirma su DNI (el del contrato) y ve quién creó su cuenta. */
+	private final pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraPromotoriaRepository primeras;
+
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository colegios;
+
 	public ServicioActivacionCuenta(EnlaceActivacionRepository enlaces, UsuarioRepository usuarios,
 			PasswordEncoder codificador, AuditoriaService auditoria, PlatformTransactionManager transacciones, Clock reloj,
 			EjecucionIdentidad identidad,
 			@org.springframework.beans.factory.annotation.Value("${cuentasclaras.privacidad.version-aviso:2027-01}")
-			String versionAviso) {
+			String versionAviso, pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraPromotoriaRepository primeras,
+			pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository colegios) {
+		this.primeras = primeras;
+		this.colegios = colegios;
 		this.versionAviso = versionAviso;
 		this.identidad = identidad;
 		this.enlaces = enlaces;
@@ -79,8 +92,7 @@ public class ServicioActivacionCuenta {
 			LocalDateTime ahora = ahora();
 			return enlaces.bloquearPorHash(EnlacesActivacion.hash(token)).filter(e -> e.vigente(ahora))
 					.flatMap(e -> usuarios.findById(e.getUsuarioId()).filter(Usuario::isActivo)
-							.map(u -> new VistaActivacion(u.getNombreCompleto(), e.getVenceEn(),
-									e.getProposito() == PropositoEnlace.PERSONAL)))
+							.map(u -> vista(u, e)))
 					.orElse(null);
 		})));
 	}
@@ -103,7 +115,14 @@ public class ServicioActivacionCuenta {
 			Usuario usuario = usuarios.bloquearPorId(enlace.getUsuarioId()).filter(Usuario::isActivo)
 					.orElseThrow(() -> new ReglaNegocioException(ENLACE_NO_SIRVE));
 			String escrito = documento == null ? "" : documento.strip().toLowerCase(java.util.Locale.ROOT);
-			if (!escrito.equals(usuario.getNombreUsuario())) {
+			Optional<String> dniTitular = documentoDelTitular(usuario, colegioId);
+			if (dniTitular.isPresent()) {
+				// Sprint 8, tanda 1 (E4): la primera Promotoría confirma el DNI del contrato, no su nombre de usuario.
+				if (!escrito.equalsIgnoreCase(dniTitular.get())) {
+					throw new ReglaNegocioException("El DNI no corresponde al titular del contrato de este colegio.");
+				}
+			}
+			else if (!escrito.equals(usuario.getNombreUsuario())) {
 				throw new ReglaNegocioException(enlace.getProposito() == PropositoEnlace.PERSONAL
 						? "El nombre de usuario no corresponde a esta cuenta."
 						: "El número de documento no corresponde a esta cuenta.");
@@ -138,6 +157,26 @@ public class ServicioActivacionCuenta {
 								+ ", al activar su cuenta.");
 			}
 		}));
+	}
+
+	/**
+	 * Sprint 8, tanda 1 (sección 3.3, E4): el titular de la primera Promotoría confirma el DNI del contrato (no su nombre
+	 * de usuario) y ve quién creó su colegio y su cuenta (el operador, con la fecha).
+	 */
+	private VistaActivacion vista(Usuario u, EnlaceActivacion e) {
+		boolean personal = e.getProposito() == PropositoEnlace.PERSONAL;
+		return primeras.findByUsuarioId(u.getId())
+				.map(p -> new VistaActivacion(u.getNombreCompleto(), e.getVenceEn(), personal, true, p.getCreadoPor(),
+						p.getCreadoEn()))
+				.orElseGet(() -> new VistaActivacion(u.getNombreCompleto(), e.getVenceEn(), personal));
+	}
+
+	/** El documento que debe escribir el titular de la primera Promotoría: el DNI del contrato ({@code colegio}). */
+	private Optional<String> documentoDelTitular(Usuario usuario, long colegioId) {
+		if (primeras.findByUsuarioId(usuario.getId()).filter(p -> p.getOperadorId() != null).isEmpty()) {
+			return Optional.empty();
+		}
+		return colegios.findById(colegioId).map(c -> c.getTitularDocumento()).filter(d -> d != null && !d.isBlank());
 	}
 
 	private static final String ENLACE_NO_SIRVE = "Este enlace ya no sirve (se usó, venció o se reemplazó). Pide al colegio "

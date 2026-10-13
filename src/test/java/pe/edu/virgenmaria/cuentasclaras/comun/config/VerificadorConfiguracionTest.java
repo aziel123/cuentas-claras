@@ -171,8 +171,10 @@ class VerificadorConfiguracionTest {
 	}
 
 	/** Sprint 7, tanda 2: prod y piloto usan dos usuarios de base (cc_app y cc_sistema). */
+	// Sprint 8, tanda 1: toda configuración de despliegue de las pruebas lleva también la marca (en prod es obligatoria).
 	private static final java.util.Map<String, String> DOS_USUARIOS = java.util.Map.of(VerificadorConfiguracion.DB_USUARIO,
-			"cc_app", VerificadorConfiguracion.DB_SISTEMA_USUARIO, "cc_sistema");
+			"cc_app", VerificadorConfiguracion.DB_SISTEMA_USUARIO, "cc_sistema", VerificadorConfiguracion.MARCA_NOMBRE,
+			"Colegio al Día");
 
 	private static java.util.Map<String, String> config(String... pares) {
 		java.util.Map<String, String> mapa = new java.util.HashMap<>();
@@ -324,5 +326,132 @@ class VerificadorConfiguracionTest {
 				.isInstanceOf(IllegalStateException.class).hasMessageContaining("permitir-real-fuera-de-prod");
 		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" },
 				config(VerificadorConfiguracion.COMPROBANTES, "OTRO"))).isInstanceOf(IllegalStateException.class);
+	}
+
+	// Sprint 8, tanda 1 (decisión 120): la marca es obligatoria en prod; las variables del promotor inicial solo avisan.
+
+	@Test
+	void enProduccionLaMarcaEsObligatoria() {
+		for (String sinMarca : new String[] { null, "", "   " }) {
+			java.util.Map<String, String> conf = config();
+			conf.put(VerificadorConfiguracion.MARCA_NOMBRE, sinMarca);
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, conf)).as("'" + sinMarca + "'")
+					.isInstanceOf(IllegalStateException.class).hasMessageContaining("CC_MARCA_NOMBRE");
+		}
+		// Fuera de prod vale el nombre por defecto de Marca.
+		java.util.Map<String, String> piloto = sinCorreo(VerificadorConfiguracion.WHATSAPP, "SIMULADO",
+				VerificadorConfiguracion.CORREO, "SIMULADO");
+		piloto.remove(VerificadorConfiguracion.MARCA_NOMBRE);
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "piloto" }, piloto))
+				.doesNotThrowAnyException();
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "dev" }, CLAVE_DEV)).doesNotThrowAnyException();
+	}
+
+	// Sprint 8, tanda 2 (secciones 3.1 y 3.6, decisión 118): la clave de los conectores y la instalación compartida.
+
+	/** 32 bytes que no son de desarrollo, en base64. */
+	private static final String CLAVE_CONECTORES = java.util.Base64.getEncoder().encodeToString(
+			"k3y-de-conectores-real-32-bytes!".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+	private static java.util.Map<String, String> compartida(String... pares) {
+		java.util.Map<String, String> conf = config(VerificadorConfiguracion.INSTALACION, "COMPARTIDA",
+				VerificadorConfiguracion.CLAVE_CONECTORES, CLAVE_CONECTORES, VerificadorConfiguracion.OPERADORES,
+				"operador:operador@plataforma.pe");
+		for (int i = 0; i < pares.length; i += 2) {
+			conf.put(pares[i], pares[i + 1]);
+		}
+		return conf;
+	}
+
+	@Test
+	void unaCompartidaConNubefactTokenEnElEntornoNoArranca() {
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, compartida()))
+				.doesNotThrowAnyException();
+		for (String secreto : new String[] { VerificadorConfiguracion.NUBEFACT_TOKEN,
+				VerificadorConfiguracion.CULQI_LLAVE_SECRETA, VerificadorConfiguracion.CULQI_WEBHOOK_USUARIO,
+				VerificadorConfiguracion.CULQI_WEBHOOK_CLAVE }) {
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, compartida(secreto,
+					"un-secreto-del-entorno"))).as(secreto).isInstanceOf(IllegalStateException.class)
+					.hasMessageContaining("no lleva secretos de conectores");
+		}
+		// Ni un OSE o una pasarela reales en el entorno (son de cada colegio).
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, compartida(
+				VerificadorConfiguracion.COMPROBANTES, "NUBEFACT", VerificadorConfiguracion.NUBEFACT_RUTA,
+				"https://api.nubefact.com/x"))).isInstanceOf(IllegalStateException.class);
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "test" }, compartida(
+				VerificadorConfiguracion.PASARELA, "CULQI"))).isInstanceOf(IllegalStateException.class);
+		// En una DEDICADA, la cuenta de Nubefact del entorno sigue valiendo (el colegio aún no registra la suya).
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, config(
+				VerificadorConfiguracion.COMPROBANTES, "NUBEFACT", VerificadorConfiguracion.NUBEFACT_RUTA,
+				"https://api.nubefact.com/x", VerificadorConfiguracion.NUBEFACT_TOKEN, "un-token-real")))
+				.doesNotThrowAnyException();
+	}
+
+	/**
+	 * Correcciones del sprint 8 (S8-B5): en una COMPARTIDA desplegada, la cuenta de depósito y la recaudación son de cada
+	 * colegio (sus conectores): el entorno no las trae. Con los valores por defecto (sin configurar) arranca; en una
+	 * DEDICADA, el entorno sigue valiendo.
+	 */
+	@Test
+	void unaCompartidaConLaCuentaDeDepositoOLaRecaudacionEnElEntornoNoArranca() {
+		String[][] casos = { { "cuentasclaras.caja.cuentas-deposito", "BCP Soles 191-1234567-0-12" },
+				{ "cuentasclaras.recaudacion.banco", "BCP" }, { "cuentasclaras.recaudacion.modalidad", "SIN_BASE" },
+				{ "cuentasclaras.conciliacion.patron-abono-recaudacion", "RECAUD" },
+				{ "cuentasclaras.conciliacion.abono-recaudacion", "POR_PAGO" } };
+		for (String[] caso : casos) {
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, compartida(caso[0],
+					caso[1]))).as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[0]);
+			assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, config(caso[0], caso[1])))
+					.as("dedicada " + caso[0]).doesNotThrowAnyException();
+		}
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, compartida(
+				"cuentasclaras.caja.cuentas-deposito", "", "cuentasclaras.recaudacion.banco", "GENERICO",
+				"cuentasclaras.recaudacion.modalidad", "CON_BASE_DE_DEUDAS", "cuentasclaras.conciliacion.abono-recaudacion",
+				"POR_LOTE"))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void unaCompartidaExigeLaClaveDeLosConectoresYOperadores() {
+		java.util.Map<String, String> sinClave = compartida();
+		sinClave.remove(VerificadorConfiguracion.CLAVE_CONECTORES);
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, sinClave))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("CC_CLAVE_CONECTORES");
+		java.util.Map<String, String> sinOperadores = compartida();
+		sinOperadores.remove(VerificadorConfiguracion.OPERADORES);
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, sinOperadores))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("CC_OPERADORES");
+		// En una DEDICADA la clave es opcional (sin ella no se guarda un token) y el entorno sigue sirviendo.
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, config(
+				VerificadorConfiguracion.INSTALACION, "DEDICADA"))).doesNotThrowAnyException();
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, config(
+				VerificadorConfiguracion.INSTALACION, "MIXTA"))).isInstanceOf(IllegalStateException.class);
+	}
+
+	@Test
+	void laClaveDeLosConectoresSonTreintaYDosBytesYNuncaLaDeDesarrolloEnProduccion() {
+		String deDesarrollo = "Y2xhdmUtY29uZWN0b3Jlcy1kZXNhcnJvbGxvLTAwMDE=";
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, compartida(
+				VerificadorConfiguracion.CLAVE_CONECTORES, deDesarrollo))).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("desarrollo");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, compartida(
+				VerificadorConfiguracion.CLAVE_CONECTORES, java.util.Base64.getEncoder().encodeToString(new byte[16]))))
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("32 bytes");
+		assertThatThrownBy(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, compartida(
+				VerificadorConfiguracion.CLAVE_CONECTORES_ANTERIOR, "no-es-base64!!"))).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("CC_CLAVE_CONECTORES_ANTERIOR");
+		java.util.Map<String, String> dev = new java.util.HashMap<>(java.util.Map.of(VerificadorConfiguracion.CLAVE_HMAC,
+				CLAVE_DEV, VerificadorConfiguracion.INSTALACION, "COMPARTIDA", VerificadorConfiguracion.CLAVE_CONECTORES,
+				deDesarrollo));
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "dev" }, dev)).doesNotThrowAnyException();
+	}
+
+	@Test
+	void lasVariablesDelPromotorInicialYaNoSeUsanYSoloAvisan() {
+		java.util.Map<String, String> conf = config("CC_PROMOTOR_USUARIO", "promotor", "CC_PROMOTOR_NOMBRE", "Ana",
+				"CC_PROMOTOR_CLAVE", "una-clave", "CC_COLEGIO_ID", "1");
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, conf)).doesNotThrowAnyException();
+		org.assertj.core.api.Assertions.assertThat(VerificadorConfiguracion.variablesRetiradas(conf::get))
+				.containsExactly("CC_PROMOTOR_USUARIO", "CC_PROMOTOR_NOMBRE", "CC_PROMOTOR_CLAVE", "CC_COLEGIO_ID");
+		org.assertj.core.api.Assertions.assertThat(VerificadorConfiguracion.variablesRetiradas(config()::get)).isEmpty();
 	}
 }

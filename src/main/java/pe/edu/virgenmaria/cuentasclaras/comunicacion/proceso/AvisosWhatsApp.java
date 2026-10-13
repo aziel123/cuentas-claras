@@ -93,7 +93,7 @@ public class AvisosWhatsApp {
 		if (!firmaValida(cuerpo, firma)) {
 			return Resultado.NO_AUTENTICO;
 		}
-		if (!colegios.activos().contains(colegio)) {
+		if (!colegios.conPlataforma().contains(colegio)) {
 			return Resultado.NO_ENCONTRADO;
 		}
 		JsonNode raiz;

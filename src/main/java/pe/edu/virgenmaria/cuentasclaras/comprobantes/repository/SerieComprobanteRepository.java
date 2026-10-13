@@ -19,10 +19,21 @@ public interface SerieComprobanteRepository extends Repository<SerieComprobante,
 
 	boolean existsBySerie(String serie);
 
+	/** Sprint 8, tanda 2: la serie (si ya existe en el colegio) para validar un conector OSE antes de su vigencia. */
+	Optional<SerieComprobante> findBySerie(String serie);
+
 	/** Bloquea la serie para tomar el número siguiente: dos cobros a la vez no toman el mismo número. */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select s from SerieComprobante s where s.serie = :serie")
 	Optional<SerieComprobante> bloquear(@Param("serie") String serie);
 
 	List<SerieComprobante> findAll();
+
+	/**
+	 * Correcciones del sprint 8 (QA-S8-6): cuáles de esas series ya existen en esos colegios. Solo con
+	 * {@code ContextoColegio.comoSistema} (otras sedes del mismo RUC): {@code SeriesDeOtrasSedes}.
+	 */
+	@Query("select s.serie from SerieComprobante s where s.serie in :series and s.colegioId in :colegios")
+	List<String> seriesEn(@Param("series") java.util.Collection<String> series,
+			@Param("colegios") java.util.Collection<Long> colegios);
 }

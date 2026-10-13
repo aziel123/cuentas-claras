@@ -138,8 +138,16 @@ class InterfazBaseTest {
 						"(?s).*href=\"/alumnos\" data-modulo=\"ALUMNOS\"\\s+aria-current=\"page\".*")));
 	}
 
+	/** Sprint 8, tanda 1: el operador no tiene inicio de colegio: va a /plataforma. */
+	@Test
+	void elOperadorVaALaPlataforma() throws Exception {
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(Rol.OPERADOR_PLATAFORMA)))
+				.andExpect(status().is3xxRedirection())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl("/plataforma"));
+	}
+
 	@ParameterizedTest
-	@EnumSource(Rol.class)
+	@EnumSource(value = Rol.class, names = "OPERADOR_PLATAFORMA", mode = EnumSource.Mode.EXCLUDE)
 	void cadaRolVeSuPaginaDeInicio(Rol rol) throws Exception {
 		String nombre = rol.name().toLowerCase(Locale.ROOT);
 		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(rol)))
