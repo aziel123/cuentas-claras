@@ -80,6 +80,13 @@ jobs:
           mkdir -p /tmp/gitleaks
           if [ -n "$RAMA_BASE" ]; then
             git fetch --no-tags --depth=1 origin "$RAMA_BASE"
+          fi
+          if [ -n "$RAMA_BASE" ] && ! git cat-file -e "origin/$RAMA_BASE:.gitleaks.toml" 2>/dev/null; then
+            # Solo el PR que introduce .gitleaks.toml: la rama destino aún no lo tiene, así que se usa el del PR.
+            # Desde que llega a main, aplica la regla de abajo (la de la rama destino).
+            echo "AVISO: $RAMA_BASE aún no tiene .gitleaks.toml; se usa el de este PR (revísalo en la revisión del PR)."
+            cp .gitleaks.toml /tmp/gitleaks/gitleaks.toml
+          elif [ -n "$RAMA_BASE" ]; then
             git show "origin/$RAMA_BASE:.gitleaks.toml" > /tmp/gitleaks/gitleaks.toml
             if ! git diff --quiet "origin/$RAMA_BASE" HEAD -- .gitleaks.toml; then
               echo "AVISO: este PR cambia .gitleaks.toml; se revisa con la de $RAMA_BASE (el cambio lo aprueba su dueño)."
