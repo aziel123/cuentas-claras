@@ -24,6 +24,11 @@ updates:
       time: "07:00"
       timezone: America/Lima
     labels: [dependencias]
+    # Los saltos de versión mayor de la imagen base (Java 21 → 25, Ubuntu 24.04 → 26.04, etc.) no se proponen solos: se
+    # planifican y se prueban aparte. Dependabot sigue proponiendo las actualizaciones menores y de parche.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # Sprint 8, tanda 3: la imagen base del contenedor de herramientas (respaldos, 01/02/03 y el paso 0) y la de Caddy de los
   # compose de la VM, también fijadas por digest.
@@ -35,6 +40,11 @@ updates:
       time: "07:00"
       timezone: America/Lima
     labels: [dependencias]
+    # Los saltos de versión mayor de la imagen base (Java 21 → 25, Ubuntu 24.04 → 26.04, etc.) no se proponen solos: se
+    # planifican y se prueban aparte. Dependabot sigue proponiendo las actualizaciones menores y de parche.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker-compose
     directory: /deploy
@@ -44,6 +54,11 @@ updates:
       time: "07:00"
       timezone: America/Lima
     labels: [dependencias]
+    # Los saltos de versión mayor de la imagen base (Java 21 → 25, Ubuntu 24.04 → 26.04, etc.) no se proponen solos: se
+    # planifican y se prueban aparte. Dependabot sigue proponiendo las actualizaciones menores y de parche.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
