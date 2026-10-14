@@ -44,7 +44,9 @@ updates:
     # planifican y se prueban aparte. Dependabot sigue proponiendo las actualizaciones menores y de parche.
     ignore:
       - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+        # Ubuntu publica versiones intermedias no LTS (24.10, 25.04…) que Dependabot ve como «menores»: solo se aceptan
+        # parches (nuevos digest de la misma versión). El paso a la siguiente LTS se planifica aparte.
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: docker-compose
     directory: /deploy
