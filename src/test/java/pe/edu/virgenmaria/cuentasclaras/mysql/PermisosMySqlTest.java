@@ -3988,6 +3988,80 @@ class PermisosMySqlTest {
 				String.class, equipo.colegioId())).contains("CONECTOR_PROPUESTO", "CONECTOR_PROBADO", "CONECTOR_VIGENTE");
 	}
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.academico.service.Asignaciones asignaciones;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.academico.proceso.FinAsignaciones finAsignaciones;
+
+	/**
+	 * Sprint 9, tanda 1 (sección 7.5): las asignaciones docentes con los permisos mínimos, en un colegio aparte.
+	 * Administración propone (trg_asignacion_docente_nace) y Dirección aprueba con su firma en la bandeja: la solicitud
+	 * APROBADA va con flush ANTES de la asignación (trg_asignacion_docente_estado la exige firmada). El docente abre la lista
+	 * de su sección (acceso_dato_personal LISTA_SECCION: el CHECK de V32). Un rechazo deja la solicitud RECHAZADA antes que
+	 * la asignación; Promotoría termina con su firma; y sistema.academico, con cc_sistema, termina la de una cuenta
+	 * desactivada.
+	 */
+	@Test
+	void flujoAsignacionDocenteConPermisosMinimos() throws Exception {
+		EscuelaConDocentesMySql.Escuela escuela = EscuelaConDocentesMySql.crear(sufijo + "a", "20600000048", "987653101",
+				alta, servicioUsuarios, usuarios, codificador, colegiosDeLaBase, estructura, jdbc);
+		var tutor = pe.edu.virgenmaria.cuentasclaras.academico.model.TipoAsignacion.TUTOR;
+		String motivo = "Carga horaria del año aprobada";
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().administracion());
+		Long id = asignaciones.proponer(new pe.edu.virgenmaria.cuentasclaras.academico.dto.ProponerAsignacionRequest(
+				escuela.seccionA(), escuela.docente().getId(), tutor, null, motivo));
+		Long rechazada = asignaciones.proponer(new pe.edu.virgenmaria.cuentasclaras.academico.dto.ProponerAsignacionRequest(
+				escuela.seccionB(), escuela.otroDocente().getId(),
+				pe.edu.virgenmaria.cuentasclaras.academico.model.TipoAsignacion.DOCENTE, "Matemática", motivo));
+		SecurityContextHolder.clearContext();
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().directora());
+		bandeja.aprobar(solicitudDeAsignacion(id), null);
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().directora());
+		bandeja.rechazar(solicitudDeAsignacion(rechazada), "No dicta Matemática este año");
+		SecurityContextHolder.clearContext();
+		assertThat(estadoAsignacion(id)).isEqualTo("VIGENTE");
+		assertThat(estadoAsignacion(rechazada)).isEqualTo("RECHAZADA");
+
+		// El docente abre la lista de su sección: queda en acceso_dato_personal (LISTA_SECCION, el CHECK de V32).
+		mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/academico/secciones/"
+				+ escuela.seccionA()).with(UsuariosDePrueba.como(escuela.docente())))
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT tipo FROM acceso_dato_personal WHERE usuario_id = ? ORDER BY id DESC LIMIT 1",
+				String.class, escuela.docente().getId())).isEqualTo("LISTA_SECCION");
+
+		// Promotoría la termina con su firma.
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().promotora());
+		asignaciones.terminar(id, "Cambió de colegio a mitad de año");
+		SecurityContextHolder.clearContext();
+		assertThat(estadoAsignacion(id)).isEqualTo("TERMINADA");
+
+		// Otro tutor: sistema.academico termina su asignación al desactivarse su cuenta (con cc_sistema).
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().administracion());
+		Long otra = asignaciones.proponer(new pe.edu.virgenmaria.cuentasclaras.academico.dto.ProponerAsignacionRequest(
+				escuela.seccionA(), escuela.otroDocente().getId(), tutor, null, motivo));
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().directora());
+		bandeja.aprobar(solicitudDeAsignacion(otra), null);
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().promotora());
+		servicioUsuarios.desactivar(escuela.otroDocente().getId(), "Dejó de trabajar en el colegio");
+		SecurityContextHolder.clearContext();
+		assertThat(finAsignaciones.terminar(escuela.colegioId())).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT terminada_por FROM asignacion_docente WHERE id = ?", String.class, otra))
+				.isEqualTo("sistema.academico");
+		assertThat(jdbc.queryForList("SELECT accion FROM evento_auditoria WHERE colegio_id = ? AND accion LIKE "
+				+ "'ASIGNACION_DOCENTE_%'", String.class, escuela.colegioId())).contains("ASIGNACION_DOCENTE_PROPUESTA",
+						"ASIGNACION_DOCENTE_APROBADA", "ASIGNACION_DOCENTE_RECHAZADA", "ASIGNACION_DOCENTE_TERMINADA");
+	}
+
+	private Long solicitudDeAsignacion(Long asignacion) {
+		return jdbc.queryForObject("SELECT solicitud_id FROM asignacion_docente WHERE id = ?", Long.class, asignacion);
+	}
+
+	private String estadoAsignacion(Long asignacion) {
+		return jdbc.queryForObject("SELECT estado FROM asignacion_docente WHERE id = ?", String.class, asignacion);
+	}
+
 	private static String registroRespaldo(String archivo, String fin, long secuencia, String hash, String destino) {
 		return "INSERT INTO respaldo (inicio, fin, archivo, sha256, bytes, version_esquema, secuencia_antes, hash_antes, "
 				+ "secuencia_despues, hash_despues, conteos, destino, comparacion, creado_en, creado_por) VALUES ("

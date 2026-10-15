@@ -180,7 +180,7 @@ class VerificadorRespaldoTest {
 	}
 
 	private JsonNode manifiesto(long antes, long despues) {
-		return manifiesto(antes, despues, "31");
+		return manifiesto(antes, despues, "32");
 	}
 
 	private JsonNode manifiesto(long antes, long despues, String version) {

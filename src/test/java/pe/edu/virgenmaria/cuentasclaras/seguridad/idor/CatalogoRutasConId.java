@@ -32,7 +32,9 @@ final class CatalogoRutasConId {
 		/** Correcciones del sprint 8 (S8-A1): el cambio del contacto del titular (rutas del operador). */
 		CAMBIO_CONTACTO,
 		/** Correcciones del sprint 8 (S8-A2): el cambio del correo de control que aprueba la Promotoría. */
-		CAMBIO_CORREO
+		CAMBIO_CORREO,
+		/** Sprint 9, tanda 1: una asignación docente (Docentes y secciones). */
+		ASIGNACION
 	}
 
 	static final Map<String, Map<String, Recurso>> CATALOGO = new LinkedHashMap<>();
@@ -225,6 +227,12 @@ final class CatalogoRutasConId {
 		// Sprint 8, tanda 2: los conectores del colegio (proponer un tipo y probar uno propuesto).
 		r("POST /conectores/{tipo:[a-z-]{3,20}}", "tipo", Recurso.TIPO_CONECTOR);
 		r("POST /conectores/{id:\\d{1,12}}/probar", "id", Recurso.CONECTOR);
+		// Sprint 9, tanda 1: la lista de una sección (Dirección o un docente con asignación vigente) y Docentes y secciones.
+		r("GET /academico/secciones/{id:\\d+}", "id", Recurso.SECCION);
+		r("GET /academico/asignaciones", "anio", Recurso.ANIO);
+		r("POST /academico/asignaciones", "anio", Recurso.ANIO, "seccionId", Recurso.SECCION, "docenteId", Recurso.USUARIO);
+		r("POST /academico/asignaciones/copiar-anio-anterior", "anioId", Recurso.ANIO);
+		r("POST /academico/asignaciones/{id:\\d+}/terminar", "id", Recurso.ASIGNACION, "anio", Recurso.ANIO);
 	}
 
 	private CatalogoRutasConId() {

@@ -163,6 +163,29 @@ jobs:
           docker exec cc-demo grep -q "data-clave-demo" /tmp/creada.html
           echo "OK: franja DEMO, sin indexar y un colegio ficticio con 6 cuentas"
 
+      - name: "Sprint 9, tanda 1: el docente de la demo entra y ve sus dos secciones (tutor de 3.° A y Matemática en 4.° A) sin montos"
+        run: |
+          clave=$(docker exec cc-demo grep -o 'clave-temporal-valor num">[^<]*' /tmp/creada.html | sed 's/.*">//')
+          docente=$(docker exec cc-demo grep -o '>[a-z0-9]*\.docente<' /tmp/creada.html | tr -d '<>' | head -1)
+          [ -n "$clave" ] && [ -n "$docente" ] || { echo "ERROR: no encontré la clave o la cuenta docente"; exit 1; }
+          docker exec cc-demo curl -s -c /tmp/d -o /tmp/login.html http://127.0.0.1:8080/login
+          token=$(docker exec cc-demo grep -o 'name="_csrf" value="[^"]*"' /tmp/login.html | sed 's/.*value="//; s/"$//')
+          docker exec cc-demo curl -s -b /tmp/d -c /tmp/d -o /dev/null --data-urlencode "_csrf=$token" \
+            --data-urlencode "usuario=$docente" --data-urlencode "clave=$clave" http://127.0.0.1:8080/login
+          docker exec cc-demo curl -s -b /tmp/d -o /tmp/academico.html http://127.0.0.1:8080/academico
+          docker exec cc-demo grep -q "Mis secciones" /tmp/academico.html || { docker exec cc-demo cat /tmp/academico.html; exit 1; }
+          docker exec cc-demo grep -q "3.° Primaria A" /tmp/academico.html
+          docker exec cc-demo grep -q "Matemática" /tmp/academico.html
+          seccion=$(docker exec cc-demo grep -o 'href="/academico/secciones/[0-9]*"' /tmp/academico.html | head -1 | sed 's/.*secciones\///; s/"$//')
+          docker exec cc-demo curl -s -b /tmp/d -o /tmp/seccion.html "http://127.0.0.1:8080/academico/secciones/$seccion"
+          docker exec cc-demo grep -q "Alumnos" /tmp/seccion.html
+          if docker exec cc-demo grep -q "S/ " /tmp/academico.html /tmp/seccion.html; then
+            echo "ERROR: una pantalla del docente muestra montos"; exit 1
+          fi
+          test "$(docker exec cc-demo curl -s -b /tmp/d -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/caja)" = "403"
+          test "$(docker exec cc-demo curl -s -b /tmp/d -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/alumnos)" = "403"
+          echo "OK: el docente de la demo ve sus dos secciones y los nombres de sus alumnos, sin montos; caja y alumnos: 403"
+
       - name: "E20 y E21: con un secreto en el entorno, una base real o junto a prod, la demo NO arranca"
         run: |
           no_arranca() {
@@ -246,7 +269,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V31): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V32): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -278,6 +301,9 @@ jobs:
 
       - name: "Sprint 8: alta de colegios por el operador; cc_app y cc_sistema no crean colegios ni Promotorías, no cobran en preparación ni cambian el estado (E3, E5 a E7, E9 a E11, E16, E29 y E30); los conectores entran en vigencia solo con la aprobación firmada de otra persona y no se editan (E12 y E14); «faltan filas» por colegio con cc_respaldo (E25)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint8MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 9, tanda 1: una asignación docente no nace vigente ni se aprueba sin la firma de otra persona de Dirección (nunca el docente), no se termina sin firma, no cambia ni apunta a otro colegio; DOCENTE no se combina con CAJA ni ADMINISTRACION (E3, E4, E43 y E46)"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint9MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint6MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
@@ -692,13 +718,26 @@ jobs:
           comprobar_sistema 1143 "UPDATE cambio_correo_control SET correo_nuevo = correo_nuevo WHERE 1 = 0"
           comprobar 1644 "INSERT INTO orden_pago (colegio_id, referencia, familia_id, apoderado_id, proveedor, monto, moneda, comprobante_tipo, clave_idempotencia, vence_en, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'ci', 0, 0, 'CULQI', 1, 'PEN', 'BOLETA', 'ci-preparacion', NOW(6), 'CREADA', NOW(6), 'ci', NOW(6))"
           comprobar 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'ci-familia', 'PAGO_REGISTRADO', 'CORREO', 'APODERADO', 'x@y.pe', 'PAGO_REGISTRADO', '', 'PENDIENTE', NOW(6), 'ci', NOW(6))"
+          # Sprint 9, tanda 1 (V32, E4 y E46): una asignación docente no se borra (1142), no cambia de docente, sección, año,
+          # tipo, áreas ni quién la propuso (1143) y no nace VIGENTE (trg_asignacion_docente_nace: 1644, con cc_app y con
+          # cc_sistema); DOCENTE no se da junto a CAJA (trg_usuario_rol_alta: 1644, con cc_sistema).
+          asignacion_vigente="INSERT INTO asignacion_docente (colegio_id, anio_escolar_id, seccion_id, usuario_id, tipo, estado, vigente, tutor_vigente, propuesto_por, resuelto_por, resuelto_en, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, 'TUTOR', 'VIGENTE', TRUE, TRUE, 'ci', 'ci.otro', NOW(6), NOW(6), 'ci', NOW(6))"
+          comprobar 1142 "DELETE FROM asignacion_docente WHERE 1 = 0"
+          for columna in usuario_id seccion_id anio_escolar_id tipo areas propuesto_por; do
+            comprobar 1143 "UPDATE asignacion_docente SET $columna = $columna WHERE 1 = 0"
+          done
+          comprobar 1644 "$asignacion_vigente"
+          comprobar_sistema 1644 "$asignacion_vigente"
+          comprobar_sistema 1142 "DELETE FROM asignacion_docente WHERE 1 = 0"
+          cajera=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT MIN(u.id) FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id WHERE r.rol = 'CAJA'")
+          comprobar_sistema 1644 "INSERT INTO usuario_rol (usuario_id, rol) VALUES (${cajera}, 'DOCENTE')"
           # Exactamente un colegio PLATAFORMA y, en él, solo operadores.
           plataformas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM colegio WHERE tipo = 'PLATAFORMA'")
           [ "$plataformas" = "1" ] || { echo "ERROR: hay $plataformas colegios PLATAFORMA"; exit 1; }
-          # Huellas (H7): cc_app ve las de los 86 triggers y las 10 funciones con huellas_objetos() (correcciones del sprint 8).
+          # Huellas (H7): cc_app ve las de los 88 triggers y las 11 funciones con huellas_objetos() (sprint 9, tanda 1).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
-          [ "$objetos" = "$((esperados + 10))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
-          [ "$esperados" = "86" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y las correcciones del sprint 8 dejan 86"; exit 1; }
+          [ "$objetos" = "$((esperados + 11))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
+          [ "$esperados" = "88" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 1 del sprint 9 deja 88"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -741,7 +780,7 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 86 triggers y las 10 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 88 triggers y las 11 funciones verificadas" prod.log || { cat prod.log; exit 1; }
           # Sprint 8, tanda 2 (sección 3.6): los conectores (GRANT por columna y triggers) y la clave que descifra todos
           # sus secretos (los que dejaron las pruebas, cifrados con CC_CLAVE_CONECTORES).
           grep -q "Permisos y triggers de los conectores por colegio verificados" prod.log || { cat prod.log; exit 1; }
@@ -1086,7 +1125,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V31, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V32, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \

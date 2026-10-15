@@ -52,6 +52,33 @@ class VerificadorPermisosBaseDatosTest {
 				.doesNotThrowAnyException();
 	}
 
+	/**
+	 * Sprint 9, tanda 1 (decisión 141): las cuentas de antes de V32 con DOCENTE y CAJA o ADMINISTRACION se cuentan y quedan
+	 * en el log, pero no impiden arrancar (no las creó esta versión; la puesta en marcha las muestra como pendientes).
+	 */
+	@Test
+	void lasCuentasDocenteConCobranzaSeAvisanSinImpedirArrancar() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_DOCENTES_CON_COBRANZA, Integer.class)).thenReturn(2);
+
+		assertThatCode(() -> completo(mysql).afterPropertiesSet()).doesNotThrowAnyException();
+		org.mockito.Mockito.verify(mysql).queryForObject(VerificadorPermisosBaseDatos.SQL_DOCENTES_CON_COBRANZA,
+				Integer.class);
+		// Y en H2 (sin cuentas así) la consulta corre sin error.
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(jdbc, fuenteDatos).avisarDocentesConCobranza())
+				.doesNotThrowAnyException();
+	}
+
+	/** Sprint 9, tanda 1: una asignación que nace VIGENTE debe llegar a su trigger (1644); si llega a la FK, falta. */
+	@Test
+	void fallaSiFaltaElTriggerDeLaAsignacionDocente() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doThrow(denegado(1452)).when(mysql).update(VerificadorPermisosBaseDatos.ASIGNACION_VIGENTE_IMPOSIBLE);
+
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("trg_asignacion_docente_nace");
+	}
+
 	@Test
 	void fallaSiFaltanLosTriggers() {
 		JdbcTemplate mysql = mysqlQueDeniega();

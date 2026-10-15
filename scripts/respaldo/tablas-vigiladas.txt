@@ -32,3 +32,5 @@ firma_operacion
 sesion_usuario
 acceso_dato_personal
 respaldo
+# Sprint 9, tanda 1 (V32): las asignaciones docentes no se borran (sin DELETE): se terminan o se rechazan.
+asignacion_docente

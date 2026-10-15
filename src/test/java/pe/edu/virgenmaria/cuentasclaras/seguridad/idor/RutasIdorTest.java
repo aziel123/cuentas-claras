@@ -469,6 +469,14 @@ class RutasIdorTest {
 		ids.put(Recurso.LOTE_RECAUDACION, lote.toString());
 		ids.put(Recurso.LINEA_RECAUDACION, texto("SELECT MIN(id) FROM linea_recaudacion WHERE colegio_id = 1"));
 		ids.put(Recurso.USUARIO, usuarioA.toString());
+		// Sprint 9, tanda 1: el docente usuario.a es tutor VIGENTE de la sección del colegio A (Dirección y el docente del
+		// colegio B no ven su lista ni terminan su asignación: 404).
+		jdbc.update("INSERT INTO asignacion_docente (colegio_id, anio_escolar_id, seccion_id, usuario_id, tipo, estado, vigente, "
+				+ "tutor_vigente, propuesto_por, resuelto_por, resuelto_en, creado_en, creado_por, actualizado_en) VALUES (1, "
+				+ "(SELECT anio_escolar_id FROM seccion WHERE id = ?), ?, ?, 'TUTOR', 'VIGENTE', TRUE, TRUE, 'administracion', "
+				+ "'directora', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'administracion', CURRENT_TIMESTAMP)", seccion, seccion,
+				usuarioA);
+		ids.put(Recurso.ASIGNACION, texto("SELECT MIN(id) FROM asignacion_docente WHERE colegio_id = 1"));
 		assertThat(ids.values()).as("hay un recurso real de cada tipo en el colegio A").doesNotContainNull();
 
 		Map<Recurso, String> deFlores = new EnumMap<>(Recurso.class);

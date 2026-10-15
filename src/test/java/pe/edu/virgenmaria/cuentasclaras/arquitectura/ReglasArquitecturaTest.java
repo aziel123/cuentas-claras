@@ -455,7 +455,17 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".alumnos.service.FamiliasParaLlamada", "hasAnyRole('PROMOTOR','DIRECTOR','SISTEMA_PANEL')"),
 			// Sprint 7, tanda 2 (sección 3.6): la muestra y sus reemplazos los fija solo sistema.panel.
 			Map.entry(BASE + ".panel.service.FijacionMuestra", "hasRole('SISTEMA_PANEL')"),
-			Map.entry(BASE + ".caja.service.CifrasCaja#pagosDeFamilia", APROBACION));
+			Map.entry(BASE + ".caja.service.CifrasCaja#pagosDeFamilia", APROBACION),
+			// Sprint 9, tanda 1 (sección 10): Docentes y secciones la ven Promotoría, Dirección y Administración; proponen
+			// Dirección y Administración; terminan Dirección y Promotoría (con su firma). Lo académico (inicio y listas) es
+			// de Dirección y del docente; lo que termina sistema.academico, solo él.
+			Map.entry(BASE + ".academico.service.Asignaciones", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".academico.service.Asignaciones#proponer", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".academico.service.Asignaciones#proponerLasDelAnioAnterior", ESCRITURA_ESCOLAR),
+			Map.entry(BASE + ".academico.service.Asignaciones#terminar", APROBACION),
+			Map.entry(BASE + ".academico.service.ConsultaAcademica", "hasAnyRole('DIRECTOR','DOCENTE')"),
+			Map.entry(BASE + ".academico.service.SeccionesDelDocente", "hasAnyRole('DIRECTOR','DOCENTE')"),
+			Map.entry(BASE + ".academico.service.AsignacionesDeSistema", "hasRole('SISTEMA_ACADEMICO')"));
 
 	/**
 	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para
@@ -627,7 +637,9 @@ class ReglasArquitecturaTest {
 					BASE + ".cobranza.service..", BASE + ".caja.service..", BASE + ".pasarela.service..",
 					BASE + ".recaudacion.service..", BASE + ".conciliacion.service..", BASE + ".seguridad.service..",
 					// Sprint 8, tanda 2: la propuesta de un conector (PROMOTOR o ADMINISTRACION) crea su CAMBIO_CONECTOR.
-					BASE + ".conectores.service..")
+					BASE + ".conectores.service..",
+					// Sprint 9, tanda 1: la propuesta de una asignación (DIRECTOR o ADMINISTRACION) crea su ASIGNACION_DOCENTE.
+					BASE + ".academico.service..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".aprobaciones.service.RegistroSolicitudes")
 			.because("la solicitud la crea el servicio protegido que valida el cambio pedido");
 
@@ -758,6 +770,58 @@ class ReglasArquitecturaTest {
 			.that().resideInAPackage("..cobranza..")
 			.should().dependOnClassesThat().resideInAPackage("..academico..")
 			.allowEmptyShould(true);
+
+	// ------------------------------------------------------------------ Sprint 9 · académico y comunicados (sección 9)
+
+	/**
+	 * E39 (INDECOPI y Ley 29571): lo académico y los comunicados no pueden saber quién debe. Ni dependen de los módulos del
+	 * dinero, ni del panel, ni del portal de las familias (que depende de caja y cobranza), ni de la matrícula.
+	 */
+	@ArchTest
+	static final ArchRule academicoYComunicadosNoDependenDeCobranza = noClasses()
+			.that().resideInAnyPackage(BASE + ".academico..", BASE + ".comunicados..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".cobranza..", BASE + ".caja..",
+					BASE + ".comprobantes..", BASE + ".pasarela..", BASE + ".recaudacion..", BASE + ".conciliacion..",
+					BASE + ".panel..", BASE + ".familias..", BASE + ".matricula..")
+			.because("el docente nunca ve deudas y un aviso de asistencia o un comunicado no puede depender de la deuda");
+
+	/** Lo académico tampoco depende del canal de mensajes ni de los comunicados: ellos leen de academico.api. */
+	@ArchTest
+	static final ArchRule academicoNoDependeDeComunicacionNiDeComunicados = noClasses()
+			.that().resideInAPackage(BASE + ".academico..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".comunicacion..", BASE + ".comunicados..")
+			.because("comunicacion depende de caja y cobranza (sprint 5): a través de ella lo académico vería deudas");
+
+	/** Nadie del lado del dinero depende de lo nuevo (amplía cobranzaNoDependeDeAcademico). */
+	@ArchTest
+	static final ArchRule elDineroNoDependeDeAcademicoNiDeComunicados = noClasses()
+			.that().resideInAnyPackage(BASE + ".cobranza..", BASE + ".caja..", BASE + ".comprobantes..",
+					BASE + ".pasarela..", BASE + ".recaudacion..", BASE + ".conciliacion..")
+			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".academico..", BASE + ".comunicados..")
+			.because("la cobranza no se mezcla con la asistencia ni con los comunicados (sección 3.13)");
+
+	/** Sprint 9 (sección 3.9): la librería de PDF solo la usa la validación del adjunto de un comunicado. */
+	@ArchTest
+	static final ArchRule pdfboxSoloEnAdjuntosComunicado = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".comunicados.service.AdjuntosComunicado")
+			.should().dependOnClassesThat().resideInAPackage("org.apache.pdfbox..")
+			.because("un PDF puede traer JavaScript, acciones o archivos embebidos: lo revisa un solo lugar");
+
+	/** Las asignaciones dan acceso a datos de menores: no se borran ni se cambian con SQL masivo. */
+	@ArchTest
+	static final ArchRule repositoriosDeAcademicoSinModifyingNiBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAPackage(BASE + ".academico.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("una asignación solo cambia por sus métodos (y en MySQL el UPDATE está limitado por columna)");
+
+	@ArchTest
+	static final ArchRule repositoriosDeAcademicoNoHeredanBorrados = classes()
+			.that().resideInAPackage(BASE + ".academico.repository..")
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("CrudRepository trae delete*: los repositorios académicos declaran solo lo que usan");
 
 	// ------------------------------------------------------------------ Sprint 3 · caja y comprobantes
 
