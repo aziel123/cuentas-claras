@@ -371,6 +371,16 @@ public enum AccionAuditoria {
 	/** Se resalta: al reactivar un operador, su correo pasó a ser el de CC_OPERADORES. */
 	OPERADOR_CORREO_ACTUALIZADO("Se actualizó el correo de un operador de la plataforma", true),
 
+	// Sprint 9, tanda 1 (asignaciones docentes, sección 12)
+	/** Administración o Dirección propuso asignar un docente, tutor o auxiliar a una sección (lo aprueba otra persona). */
+	ASIGNACION_DOCENTE_PROPUESTA("Propuso asignar un docente a una sección", false),
+	/** Otra persona de Dirección o Promotoría aprobó la asignación con su firma: el docente ve la sección. */
+	ASIGNACION_DOCENTE_APROBADA("Aprobó la asignación de un docente a una sección", false),
+	/** Se rechazó la propuesta de asignación. */
+	ASIGNACION_DOCENTE_RECHAZADA("Rechazó la asignación de un docente a una sección", false),
+	/** Dirección o Promotoría (con su firma) o sistema.academico terminó una asignación: el docente deja de ver la sección. */
+	ASIGNACION_DOCENTE_TERMINADA("Terminó la asignación de un docente a una sección", false),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

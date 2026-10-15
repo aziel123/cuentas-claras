@@ -36,7 +36,12 @@ public enum ActorSistema {
 	 * Sprint 8, tanda 3 (sección 8.2): solo en el perfil {@code demo}. Crea el colegio ficticio de cada visitante de la demo
 	 * («Crear mi demo») y lo deja en producción con sus cuentas y sus datos de ejemplo.
 	 */
-	DEMO("sistema.demo");
+	DEMO("sistema.demo"),
+	/**
+	 * Sprint 9, tanda 1 (sección 3.2): termina las asignaciones docentes de un año cerrado o de una cuenta desactivada (o
+	 * que ya no tiene el rol DOCENTE). Con la conexión de {@code cc_sistema}: trg_asignacion_docente_estado lo exige.
+	 */
+	ACADEMICO("sistema.academico");
 
 	/** Prefijo reservado: ninguna persona puede tener un nombre de usuario que empiece así. */
 	public static final String PREFIJO_RESERVADO = "sistema";

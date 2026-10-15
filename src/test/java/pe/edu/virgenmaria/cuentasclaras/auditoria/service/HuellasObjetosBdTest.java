@@ -22,7 +22,7 @@ class HuellasObjetosBdTest {
 	}
 
 	@Test
-	void sonLos82TriggersYLas9FuncionesDeLosScripts() {
+	void sonLos88TriggersYLas11FuncionesDeLosScripts() {
 		Map<String, String> esperadas = HuellasObjetosBd.esperadas();
 
 		// Correcciones del sprint 7 (V27): 75 triggers (trg_solicitud_cambio_nace y trg_resolucion_respaldo_registro) y 7
@@ -31,9 +31,11 @@ class HuellasObjetosBdTest {
 		// cc_colegio_en_produccion): 89 huellas. Tanda 2 (V29): 82 triggers (los conectores nacen propuestos y cambian de
 		// estado con la aprobación firmada): 91 huellas. Correcciones (V31): 86 triggers y cc_cuenta_activada: 96 huellas. Tanda 3 (V30): las mismas 91 (versión nueva de trg_respaldo_registro y
 		// trg_resolucion_respaldo_registro: «faltan filas» por colegio).
-		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(86)
+		// Sprint 9, tanda 1 (V32): 88 triggers (la asignación docente nace y cambia de estado) y cc_docente_de_seccion: 99.
+		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(88)
 				.isEqualTo(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
-		assertThat(esperadas).hasSize(96).containsKeys("trg_conector_colegio_nace", "trg_conector_colegio_estado","cc_contacto_normal", "cc_es_sistema", "cc_firma_valida",
+		assertThat(esperadas).hasSize(99).containsKeys("trg_asignacion_docente_nace", "trg_asignacion_docente_estado",
+				"cc_docente_de_seccion", "trg_conector_colegio_nace", "trg_conector_colegio_estado","cc_contacto_normal", "cc_es_sistema", "cc_firma_valida",
 				"cc_solicitud_firmada", "cc_operador_activo", "cc_colegio_en_produccion", "triggers_instalados",
 				"huellas_objetos", "permisos_objetos", "trg_usuario_rol_alta", "trg_firma_operacion_nace",
 				"trg_solicitud_cambio_nace", "trg_resolucion_respaldo_registro", "trg_colegio_nace", "trg_colegio_cambio",

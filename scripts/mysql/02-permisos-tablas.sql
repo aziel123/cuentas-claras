@@ -274,6 +274,14 @@ GRANT INSERT, UPDATE (estado, vigente, solicitud_id, resuelto_por, resuelto_en, 
 -- cc_negocio) ya inserta en resolucion_respaldo. Por colegio lo deciden trg_respaldo_registro y
 -- trg_resolucion_respaldo_registro.
 
+-- ===================== Sprint 9 · tanda 1 (V32): asignaciones docentes =====================
+-- Se proponen (INSERT) y cambian de estado; docente, sección, año, tipo, áreas y quién la propuso NO cambian (1143). Nunca
+-- DELETE. Qué transición vale lo decide trg_asignacion_docente_estado (la aprobación firmada de otra persona de Dirección
+-- o Promotoría que no es el docente; terminar, Dirección o Promotoría con su firma o sistema.academico con cc_sistema, que
+-- recibe estas columnas por el rol). acceso_dato_personal: sin cambios (ya tiene INSERT; V32 solo agrega tipos al CHECK).
+GRANT INSERT, UPDATE (estado, pendiente, vigente, tutor_vigente, solicitud_id, resuelto_por, resuelto_en, terminada_por,
+    terminada_en, motivo_fin, actualizado_en, version) ON cuentasclaras.asignacion_docente TO 'cc_negocio';
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se

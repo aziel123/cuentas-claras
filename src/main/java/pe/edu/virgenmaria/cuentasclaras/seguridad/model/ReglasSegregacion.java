@@ -13,6 +13,8 @@ import java.util.Set;
  *   <li>APODERADO no se combina con ningún otro rol: un trabajador que además es padre usa dos cuentas.</li>
  *   <li>DIRECTOR no se combina con ADMINISTRACION: quien registra descuentos no los aprueba
  *       (decisión por defecto, por confirmar con el colegio; diseño, sección 12).</li>
+ *   <li>Sprint 9, tanda 1 (decisión 141): DOCENTE no se combina con CAJA ni ADMINISTRACION: esas cuentas ven quién debe y
+ *       el docente nunca ve deudas. Con DIRECTOR sí (la pantalla de usuarios avisa que verá deudas por Dirección).</li>
  *   <li>Sprint 4: la cuenta APODERADO está enlazada a SU registro de apoderado (y por él, a su familia); ninguna otra
  *       cuenta lo está. Así el apoderado solo ve y paga lo de su familia.</li>
  * </ul>
@@ -36,6 +38,10 @@ public final class ReglasSegregacion {
 			throw new ReglaNegocioException(
 					"Dirección no puede combinarse con Administración: quien registra descuentos no los aprueba.");
 		}
+		if (roles.contains(Rol.DOCENTE) && (roles.contains(Rol.CAJA) || roles.contains(Rol.ADMINISTRACION))) {
+			throw new ReglaNegocioException(
+					"Docente no puede combinarse con Caja ni Administración: el docente no ve deudas ni pagos.");
+		}
 		if (roles.contains(Rol.APODERADO) && roles.size() > 1) {
 			throw new ReglaNegocioException(
 					"Apoderado no puede combinarse con roles del personal. Crea una cuenta aparte para cada función.");
@@ -48,6 +54,14 @@ public final class ReglasSegregacion {
 	}
 
 	/** Los roles y, además, el enlace con el apoderado: obligatorio para APODERADO y prohibido para el personal. */
+	/**
+	 * Sprint 9, tanda 1 (decisión 141): DOCENTE con DIRECTOR se permite, pero esa persona verá deudas y pagos por su rol de
+	 * Dirección. La pantalla de usuarios lo avisa.
+	 */
+	public static boolean docenteQueVeDeudas(java.util.Collection<Rol> roles) {
+		return roles != null && roles.contains(Rol.DOCENTE) && (roles.contains(Rol.DIRECTOR) || roles.contains(Rol.PROMOTOR));
+	}
+
 	public static void validarCuenta(Set<Rol> roles, Long apoderadoId) {
 		validar(roles);
 		if (roles.contains(Rol.APODERADO) && apoderadoId == null) {

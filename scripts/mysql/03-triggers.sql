@@ -9,7 +9,13 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
--- Versión de la migración V31 (correcciones del sprint 8): 86 triggers y 7 funciones (más las 3 de 02: 10 con huella).
+-- Versión de la migración V32 (sprint 9, tanda 1): 88 triggers y 8 funciones (más las 3 de 02: 11 con huella; 99 huellas).
+-- Nuevos: trg_asignacion_docente_nace (una asignación nace PROPUESTA, por Promotoría, Dirección o Administración, para una
+-- cuenta DOCENTE activa en un año abierto), trg_asignacion_docente_estado (pasa a VIGENTE solo con SU ASIGNACION_DOCENTE
+-- aprobada y firmada por otra persona de Dirección o Promotoría que no es el docente; termina Dirección o Promotoría con
+-- su firma, o sistema.academico) y la función cc_docente_de_seccion. Versión nueva de trg_usuario_rol_alta (DOCENTE no se
+-- combina con CAJA ni ADMINISTRACION: esas cuentas ven quién debe).
+-- Versión anterior (V31, correcciones del sprint 8): 86 triggers y 7 funciones (más las 3 de 02: 10 con huella).
 -- Nuevos: trg_cambio_contacto_titular_nace y _estado (S8-A1: el contacto del titular lo propone un operador y lo aplica
 -- OTRO), trg_cambio_correo_control_nace y _estado (S8-A2: en producción el correo de control lo aprueba la Promotoría) y
 -- la función cc_cuenta_activada (QA-S8-3). Versión nueva de trg_colegio_cambio (S8-M5 y S8-A1), trg_usuario_contacto
@@ -116,6 +122,18 @@ DROP FUNCTION IF EXISTS cc_cuenta_activada$$
 CREATE FUNCTION cc_cuenta_activada(p_usuario BIGINT) RETURNS BOOLEAN NOT DETERMINISTIC READS SQL DATA
     RETURN EXISTS (SELECT 1 FROM enlace_activacion e WHERE e.usuario_id = p_usuario AND e.usado_en IS NOT NULL)
         OR EXISTS (SELECT 1 FROM sesion_usuario s WHERE s.usuario_id = p_usuario)$$
+
+-- Sprint 9, tanda 1 (sección 7.3): ¿esta persona tiene una asignación VIGENTE en esta sección, con su cuenta activa y el rol
+-- DOCENTE? p_con_auxiliar: la asistencia la marca también el auxiliar; los comunicados, no. La usan los triggers de las
+-- tandas 2 y 3 (asistencia y comunicados); lee asignacion_docente, que llega en V32.
+DROP FUNCTION IF EXISTS cc_docente_de_seccion$$
+CREATE FUNCTION cc_docente_de_seccion(p_nombre VARCHAR(60), p_seccion BIGINT, p_con_auxiliar BOOLEAN) RETURNS BOOLEAN
+    NOT DETERMINISTIC READS SQL DATA
+    RETURN EXISTS (SELECT 1 FROM asignacion_docente a
+        JOIN usuario u ON u.id = a.usuario_id AND u.colegio_id = a.colegio_id
+        JOIN usuario_rol r ON r.usuario_id = u.id
+        WHERE a.seccion_id = p_seccion AND a.estado = 'VIGENTE' AND u.nombre_usuario = p_nombre AND u.activo
+          AND u.apoderado_id IS NULL AND r.rol = 'DOCENTE' AND (p_con_auxiliar OR a.tipo <> 'AUXILIAR'))$$
 
 -- Un plan nace en BORRADOR (nadie inserta un plan ya aprobado).
 DROP TRIGGER IF EXISTS trg_plan_pension_nace_borrador$$
@@ -2172,6 +2190,14 @@ BEGIN
             OR (NEW.rol = 'ADMINISTRACION' AND r.rol = 'DIRECTOR'))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: combinacion de roles prohibida (quien cobra no aprueba)';
     END IF;
+    -- Sprint 9, tanda 1 (decisión 141): el docente no ve deudas. DOCENTE no se combina con CAJA ni con ADMINISTRACION (esas
+    -- cuentas ven quién debe). Con DIRECTOR sí (en colegios chicos el director enseña). Las combinaciones anteriores a V32
+    -- no se tocan: el verificador de prod las cuenta y la puesta en marcha las muestra como pendientes.
+    IF EXISTS (SELECT 1 FROM usuario_rol r WHERE r.usuario_id = NEW.usuario_id AND (
+            (NEW.rol = 'DOCENTE' AND r.rol IN ('CAJA', 'ADMINISTRACION'))
+            OR (r.rol = 'DOCENTE' AND NEW.rol IN ('CAJA', 'ADMINISTRACION')))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el docente no ve deudas: DOCENTE no se combina con CAJA ni ADMINISTRACION';
+    END IF;
     IF NEW.rol IN ('PROMOTOR', 'DIRECTOR')
             AND NOT (NEW.rol = 'PROMOTOR' AND EXISTS (SELECT 1 FROM primera_promotoria p WHERE p.colegio_id = v_colegio
                 AND p.usuario_id = NEW.usuario_id
@@ -2535,6 +2561,78 @@ BEGIN
             OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('cambio_correo_control:', NEW.id, ':', NEW.estado),
                 NEW.resuelto_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cambio del correo de control lo resuelve la Promotoria del colegio con su firma';
+    END IF;
+END$$
+DELIMITER ;
+
+-- ===================== Sprint 9 · tanda 1 (V32): asignaciones docentes =====================
+-- (La función cc_docente_de_seccion está al principio de este archivo; la versión nueva de trg_usuario_rol_alta quedó en su
+-- lugar, marcada con «Sprint 9, tanda 1».) Dar acceso a los datos de una sección lo deciden dos personas; quitarlo, una.
+DELIMITER $$
+
+-- Una asignación nace PROPUESTA, la propone Promotoría, Dirección o Administración del colegio, para una cuenta activa con
+-- rol DOCENTE (sin apoderado), en un año que no está cerrado. El enlace con su solicitud se escribe después (la solicitud
+-- nombra a la asignación por su id).
+DROP TRIGGER IF EXISTS trg_asignacion_docente_nace$$
+CREATE TRIGGER trg_asignacion_docente_nace BEFORE INSERT ON asignacion_docente FOR EACH ROW
+BEGIN
+    IF NOT (NEW.estado <=> 'PROPUESTA') OR NEW.solicitud_id IS NOT NULL OR NEW.resuelto_por IS NOT NULL
+            OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.propuesto_por AND u.activo
+                  AND u.apoderado_id IS NULL AND r.rol IN ('PROMOTOR', 'DIRECTOR', 'ADMINISTRACION')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una asignacion nace propuesta por Promotoria, Direccion o Administracion';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id WHERE u.id = NEW.usuario_id
+                AND u.colegio_id = NEW.colegio_id AND u.activo AND u.apoderado_id IS NULL AND r.rol = 'DOCENTE')
+            OR NOT EXISTS (SELECT 1 FROM anio_escolar a WHERE a.id = NEW.anio_escolar_id AND a.colegio_id = NEW.colegio_id
+                AND a.estado <> 'CERRADO') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: se asigna una cuenta DOCENTE activa en un anio abierto';
+    END IF;
+END$$
+
+-- Dar acceso: SU solicitud aprobada y firmada por otra persona de Dirección o Promotoría que NO es el docente. Quitarlo:
+-- Dirección o Promotoría con su firma (asignacion_docente:{id}:TERMINADA), o sistema.academico con cc_sistema. Rechazar:
+-- con su solicitud rechazada. Nada más cambia de estado; una asignación resuelta no cambia de solicitud.
+DROP TRIGGER IF EXISTS trg_asignacion_docente_estado$$
+CREATE TRIGGER trg_asignacion_docente_estado BEFORE UPDATE ON asignacion_docente FOR EACH ROW
+BEGIN
+    IF OLD.estado = 'PROPUESTA' AND NEW.estado = 'VIGENTE' THEN
+        IF NOT (cc_solicitud_firmada(NEW.solicitud_id)
+                AND EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id
+                    AND s.tipo = 'ASIGNACION_DOCENTE' AND s.entidad = 'asignacion_docente' AND s.entidad_id = NEW.id
+                    AND s.solicitado_por = OLD.propuesto_por AND s.resuelto_por = NEW.resuelto_por)
+                AND EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                    WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.resuelto_por AND u.activo
+                      AND u.apoderado_id IS NULL AND r.rol IN ('PROMOTOR', 'DIRECTOR'))
+                AND NOT EXISTS (SELECT 1 FROM usuario d WHERE d.id = NEW.usuario_id AND d.nombre_usuario = NEW.resuelto_por)
+                AND EXISTS (SELECT 1 FROM usuario d JOIN usuario_rol r ON r.usuario_id = d.id WHERE d.id = NEW.usuario_id
+                    AND d.colegio_id = NEW.colegio_id AND d.activo AND r.rol = 'DOCENTE')) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la asignacion la aprueba otra persona de Direccion con su firma, nunca el docente';
+        END IF;
+    ELSEIF OLD.estado = 'PROPUESTA' AND NEW.estado = 'RECHAZADA' THEN
+        IF NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id
+                AND s.tipo = 'ASIGNACION_DOCENTE' AND s.entidad = 'asignacion_docente' AND s.entidad_id = NEW.id
+                AND s.estado = 'RECHAZADA' AND s.resuelto_por = NEW.resuelto_por) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la asignacion se rechaza con su solicitud rechazada';
+        END IF;
+    ELSEIF OLD.estado = 'VIGENTE' AND NEW.estado = 'TERMINADA' THEN
+        -- Quién la aprobó y con qué solicitud no cambia al terminarla.
+        IF NOT (NEW.resuelto_por <=> OLD.resuelto_por AND NEW.resuelto_en <=> OLD.resuelto_en
+                AND NEW.solicitud_id <=> OLD.solicitud_id) OR NOT ((NEW.terminada_por LIKE 'sistema.%' AND cc_es_sistema())
+                OR (EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                        WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.terminada_por AND u.activo
+                          AND u.apoderado_id IS NULL AND r.rol IN ('PROMOTOR', 'DIRECTOR'))
+                    AND cc_firma_valida(NEW.colegio_id, CONCAT('asignacion_docente:', NEW.id, ':TERMINADA'),
+                        NEW.terminada_por))) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la asignacion la termina Direccion con su firma o el sistema';
+        END IF;
+    ELSEIF NOT (NEW.estado <=> OLD.estado) OR (OLD.estado <> 'PROPUESTA' AND NOT (NEW.solicitud_id <=> OLD.solicitud_id
+            AND NEW.resuelto_por <=> OLD.resuelto_por AND NEW.resuelto_en <=> OLD.resuelto_en
+            AND NEW.terminada_por <=> OLD.terminada_por AND NEW.terminada_en <=> OLD.terminada_en
+            AND NEW.motivo_fin <=> OLD.motivo_fin)) THEN
+        -- Solo una PROPUESTA cambia sin cambiar de estado (el enlace con su solicitud); una resuelta no reescribe quién la
+        -- aprobó, quién la terminó ni por qué.
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: transicion de asignacion no permitida';
     END IF;
 END$$
 DELIMITER ;

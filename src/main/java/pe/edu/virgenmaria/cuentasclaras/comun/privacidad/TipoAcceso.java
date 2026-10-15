@@ -18,7 +18,16 @@ public enum TipoAcceso {
 	 * la familia, pero NO cuenta para la alerta de más de 50 fichas en un día: una cajera abre decenas de familias al día
 	 * para cobrar (y cada cobro queda además en la bitácora).
 	 */
-	COBRO("Pantalla de cobro de caja", false);
+	COBRO("Pantalla de cobro de caja", false),
+	/**
+	 * Sprint 9, tanda 1 (sección 3.3): la lista de los alumnos de una sección (nombres y número de orden), con la cantidad.
+	 * Es una lista, no fichas: no cuenta para la alerta de «más de 50 fichas en un día».
+	 */
+	LISTA_SECCION("Lista de alumnos de una sección", false),
+	/** Sprint 9, tanda 2: el reporte mensual de asistencia de una sección o un alumno (con la cantidad). */
+	REPORTE_ASISTENCIA("Reporte de asistencia", false),
+	/** Sprint 9, tanda 3: la nómina de una sección para el SIAGIE (DNI y fechas de nacimiento; con la cantidad). */
+	NOMINA_SIAGIE("Nómina para el SIAGIE", false);
 
 	private final String etiqueta;
 

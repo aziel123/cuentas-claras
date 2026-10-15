@@ -40,7 +40,11 @@ public enum TipoSolicitud {
 	// Sprint 8, tanda 2 (sección 3.6, E12): cambiar un conector del colegio (OSE, pasarela, cuenta bancaria o recaudación)
 	// es cambiar adónde entra el dinero. Lo propone Administración o Promotoría; lo aprueba OTRA persona de Promotoría o
 	// Dirección con su firma; si mueve dinero, una Promotoría participa. En MySQL lo exige trg_conector_colegio_estado.
-	CAMBIO_CONECTOR("Cambio de conector (adónde entra el dinero)");
+	CAMBIO_CONECTOR("Cambio de conector (adónde entra el dinero)"),
+	// Sprint 9, tanda 1 (sección 3.2, decisión 139): asignar un docente, tutor o auxiliar a una sección le da acceso a los
+	// nombres de sus alumnos. Lo propone Administración o Dirección; lo aprueba OTRA persona de Dirección o Promotoría con su
+	// firma, nunca el docente asignado. En MySQL lo exige trg_asignacion_docente_estado.
+	ASIGNACION_DOCENTE("Asignación de docente a una sección");
 
 	private final String etiqueta;
 

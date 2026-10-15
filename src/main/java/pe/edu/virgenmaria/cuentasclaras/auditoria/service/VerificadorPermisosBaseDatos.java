@@ -405,7 +405,22 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					"la aplicación podría proponer o aplicar el cambio del contacto del titular de un colegio."),
 			soloSistema(VerificadorPermisosBaseDatos.CAMBIO_CORREO_IMPOSIBLE,
 					"la aplicación podría proponer el cambio del correo de control de un colegio."),
-			trigger(VerificadorPermisosBaseDatos.ORDEN_EN_PREPARACION_IMPOSIBLE, "trg_orden_pago_nace (versión de V31)"));
+			trigger(VerificadorPermisosBaseDatos.ORDEN_EN_PREPARACION_IMPOSIBLE, "trg_orden_pago_nace (versión de V31)"),
+			// Sprint 9, tanda 1 (V32, E4): una asignación docente no se borra (1142), no cambia de docente ni de sección
+			// (1143) y no nace VIGENTE (trg_asignacion_docente_nace: 1644).
+			sinBorrado("asignacion_docente"),
+			columna("UPDATE asignacion_docente SET usuario_id = usuario_id WHERE 1 = 0", "asignacion_docente"),
+			columna("UPDATE asignacion_docente SET seccion_id = seccion_id WHERE 1 = 0", "asignacion_docente"),
+			trigger(VerificadorPermisosBaseDatos.ASIGNACION_VIGENTE_IMPOSIBLE, "trg_asignacion_docente_nace"));
+
+	/**
+	 * Sprint 9, tanda 1 (E4): una asignación docente del colegio 0 que nace VIGENTE, sin solicitud ni firma (la rechaza
+	 * trg_asignacion_docente_nace antes que las FK: 1644).
+	 */
+	static final String ASIGNACION_VIGENTE_IMPOSIBLE = "INSERT INTO asignacion_docente (colegio_id, anio_escolar_id, "
+			+ "seccion_id, usuario_id, tipo, estado, vigente, tutor_vigente, propuesto_por, resuelto_por, resuelto_en, "
+			+ "creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, 'TUTOR', 'VIGENTE', TRUE, TRUE, 'verificador', "
+			+ "'otro.verificador', NOW(6), NOW(6), 'verificador', NOW(6))";
 
 	/** Correcciones del sprint 8 (S8-A1): un cambio del contacto del titular del colegio 0, sin firma (1142 o 1644). */
 	static final String CAMBIO_CONTACTO_IMPOSIBLE = "INSERT INTO cambio_contacto_titular (colegio_id, usuario_id, "
@@ -546,7 +561,10 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			sinBorrado("cambio_contacto_titular"), sinBorrado("cambio_correo_control"),
 			columna("UPDATE cambio_contacto_titular SET telefono_nuevo = telefono_nuevo WHERE 1 = 0",
 					"cambio_contacto_titular"),
-			columna("UPDATE cambio_correo_control SET correo_nuevo = correo_nuevo WHERE 1 = 0", "cambio_correo_control"));
+			columna("UPDATE cambio_correo_control SET correo_nuevo = correo_nuevo WHERE 1 = 0", "cambio_correo_control"),
+			// Sprint 9, tanda 1 (V32): tampoco con cc_sistema nace una asignación VIGENTE (1644) ni se borra (1142).
+			trigger(VerificadorPermisosBaseDatos.ASIGNACION_VIGENTE_IMPOSIBLE, "trg_asignacion_docente_nace"),
+			sinBorrado("asignacion_docente"));
 
 	/** 1142 (o 1143): solo cc_sistema la escribe. */
 	private static SentenciaProhibida soloSistema(String sql, String riesgo) {
@@ -639,7 +657,9 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_conector_colegio_nace", "trg_conector_colegio_estado",
 			// Correcciones del sprint 8 (V31).
 			"trg_cambio_contacto_titular_nace", "trg_cambio_contacto_titular_estado", "trg_cambio_correo_control_nace",
-			"trg_cambio_correo_control_estado");
+			"trg_cambio_correo_control_estado",
+			// Sprint 9, tanda 1 (V32).
+			"trg_asignacion_docente_nace", "trg_asignacion_docente_estado");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -740,6 +760,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		verificarTls();
 		verificarPlataforma();
 		avisarConfiguracionVieja();
+		avisarDocentesConCobranza();
 	}
 
 	static final String SQL_PLATAFORMAS = "SELECT COUNT(*) FROM colegio WHERE tipo = 'PLATAFORMA'";
@@ -996,6 +1017,29 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 	}
 
 	/** Sprint 7, tanda 2 (H5): la fila vieja del correo de la huella ya no se usa (ahora es por colegio). */
+	/**
+	 * Sprint 9, tanda 1 (decisión 141): las cuentas activas que combinan DOCENTE con CAJA o ADMINISTRACION (de antes de V32:
+	 * desde V32 trg_usuario_rol_alta no lo permite). No impide arrancar (no las creó esta versión): quedan en el log y la
+	 * lista de puesta en marcha las muestra como pendientes hasta que Promotoría las corrija.
+	 */
+	static final String SQL_DOCENTES_CON_COBRANZA = "SELECT COUNT(DISTINCT u.id) FROM usuario u "
+			+ "JOIN usuario_rol d ON d.usuario_id = u.id AND d.rol = 'DOCENTE' "
+			+ "JOIN usuario_rol c ON c.usuario_id = u.id AND c.rol IN ('CAJA', 'ADMINISTRACION') WHERE u.activo";
+
+	void avisarDocentesConCobranza() {
+		try {
+			Integer cuentas = jdbc.queryForObject(SQL_DOCENTES_CON_COBRANZA, Integer.class);
+			if (cuentas != null && cuentas > 0) {
+				LOG.warn("Hay {} cuentas con DOCENTE combinado con CAJA o ADMINISTRACION: corrígelas en Usuarios (el docente "
+						+ "no ve deudas; decisión 141).", cuentas);
+			}
+		}
+		catch (DataAccessException e) {
+			LOG.warn("No se pudieron contar las cuentas con DOCENTE y CAJA o ADMINISTRACION: {}",
+					e.getClass().getSimpleName());
+		}
+	}
+
 	private void avisarConfiguracionVieja() {
 		try {
 			Integer filas = jdbc.queryForObject(SQL_HUELLA_CORREO_VIEJA, Integer.class);

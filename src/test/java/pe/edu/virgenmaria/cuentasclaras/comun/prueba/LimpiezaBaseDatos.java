@@ -17,6 +17,8 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Sprint 9, tanda 1 (V32): la asignación docente apunta a su solicitud, a la sección, al año y a la cuenta.
+		jdbc.update("DELETE FROM asignacion_docente");
 		// Correcciones del sprint 7 (V27): la resolución de una alerta apunta al respaldo y a la cuenta; la primera Dirección,
 		// a la cuenta; el estado de la cuenta, a su solicitud.
 		jdbc.update("DELETE FROM resolucion_respaldo");

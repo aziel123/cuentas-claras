@@ -184,6 +184,14 @@ public final class ClaveFirma {
 		return "colegio:" + id(colegioId) + ":OSE_SIMULADO";
 	}
 
+	/**
+	 * Sprint 9, tanda 1 (sección 3.2): Dirección o Promotoría termina una asignación docente vigente (el docente deja de ver
+	 * la sección). trg_asignacion_docente_estado la exige a nombre de quien figura en {@code terminada_por}.
+	 */
+	public static String asignacionTerminada(Long asignacionId) {
+		return "asignacion_docente:" + id(asignacionId) + ":TERMINADA";
+	}
+
 	private static Long id(Long id) {
 		return Objects.requireNonNull(id, "id");
 	}
