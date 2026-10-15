@@ -154,6 +154,18 @@ el INSERT y el UPDATE por columna de `cambio_contacto_titular` y `cambio_correo_
 detenida; no hay usuarios nuevos. En una instalación COMPARTIDA, quita del entorno `CAJA_CUENTAS_DEPOSITO` y las variables de
 recaudación y conciliación (`CUENTASCLARAS_RECAUDACION_*`, `CUENTASCLARAS_CONCILIACION_*`): son de cada colegio (S8-B5).
 
+**Sprint 9, tanda 1 (V32): 88 triggers y 11 funciones con huella (99).** Nuevos: `trg_asignacion_docente_nace` (una
+asignación de docente, tutor o auxiliar a una sección nace PROPUESTA, la propone Promotoría, Dirección o Administración,
+para una cuenta activa con el rol DOCENTE, en un año que no está cerrado) y `trg_asignacion_docente_estado` (pasa a VIGENTE
+solo con SU `ASIGNACION_DOCENTE` aprobada y firmada por otra persona de Dirección o Promotoría que no es el docente; la
+termina Dirección o Promotoría con su firma o `sistema.academico` con `cc_sistema`; una resuelta no reescribe quién la
+aprobó), y la función `cc_docente_de_seccion` (la usarán la asistencia y los comunicados). Versión nueva de
+`trg_usuario_rol_alta`: DOCENTE no se combina con CAJA ni ADMINISTRACION. `02` da a `cc_negocio` el INSERT y el UPDATE por
+columna de `asignacion_docente` (docente, sección, año, tipo, áreas y quién la propuso: 1143; sin DELETE). Las cuentas que
+ya combinaban DOCENTE con CAJA o ADMINISTRACION no se tocan: prod arranca y escribe en el log «Hay N cuentas con DOCENTE
+combinado con CAJA o ADMINISTRACION», y la puesta en marcha deja el paso «Equipo» pendiente hasta que Promotoría las
+corrija. Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
+
 **Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
 van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
 custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra
