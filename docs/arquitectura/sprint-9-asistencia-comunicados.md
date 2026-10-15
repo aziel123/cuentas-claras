@@ -1660,3 +1660,188 @@ Rutas relativas a `C:/Users/amedina/cuentas-claras/cuentas-claras/`:
 - `src/main/resources/db/migration/` V5, V20, V25, V26 y V31; `application.yaml` (mensajería y subida de archivos)
 - `scripts/mysql/02-permisos-tablas.sql` (bloques 0 a 3) y `03-triggers.sql` (encabezado, funciones, `trg_solicitud_cambio_*`, `trg_mensaje_nace`, `trg_mensaje_envio`, `trg_enlace_activacion_*`, `trg_huella_bitacora_registro` y `trg_usuario_rol_alta`)
 - Clases: `seguridad/config/ModuloApp`, `comunicacion/model/PlantillaMensaje`, `comun/alertas/TipoAviso`, `comun/sistema/ActorSistema` y `aprobaciones/model/TipoSolicitud`; listas de archivos de `comunicacion`, `familias`, `alumnos`, `privacidad`, `demo` y `comun`; `ReglasArquitecturaTest` (lista de reglas)
+
+## Tanda 1 · Implementación
+
+> Implementada el 14 y 15 de octubre de 2026 en la rama `claude/sprint-9-asistencia-comunicados` (agente `backend-spring`).
+> V32, **88 triggers y 8 funciones en `03` (11 con huella con las 3 de `02`): 99 huellas**, como pedía la sección 7.3.
+> Verificado con `./mvnw -B verify` (también con `-Duser.timezone=America/Los_Angeles`) y con los jobs `mysql`, `respaldo` y
+> `demo` del CI reproducidos completos en contenedores desechables. Resultados: al final de esta sección.
+> **Alcance:** solo la tanda 1. Nada de asistencia (tanda 2): el usuario todavía no decide quién la toma (tutor, docente,
+> auxiliar, portería o ninguno por ahora); la asignación de docentes a secciones sirve en todos los casos. El tipo
+> `AUXILIAR` queda tal como lo pide la decisión 140, sin pantallas de asistencia.
+
+### Qué se hizo
+**Base (V32, `02` y `03`).**
+- `V32__asignaciones_docentes.sql`: la tabla `asignacion_docente` de la sección 6 (FK compuestas con `colegio_id` a año,
+  sección, sección y año, cuenta y solicitud; los UNIQUE de una propuesta pendiente y una vigente por docente, sección y
+  tipo, y de un tutor vigente por sección) y los tres tipos nuevos de `acceso_dato_personal` (`LISTA_SECCION`,
+  `REPORTE_ASISTENCIA` y `NOMINA_SIAGIE`), conservando `COBRO` (desviación 1).
+- `02`: `INSERT` y `UPDATE` por columna de `asignacion_docente` a `cc_negocio` (estado, banderas, solicitud, resolución y
+  fin); docente, sección, año, tipo, áreas y quién la propuso: 1143. Sin `DELETE`.
+- `03`: la función `cc_docente_de_seccion` (al principio, con las demás), `trg_asignacion_docente_nace`,
+  `trg_asignacion_docente_estado` y la versión nueva de `trg_usuario_rol_alta` (DOCENTE no se combina con CAJA ni
+  ADMINISTRACION). El encabezado dice la versión de V32.
+- `VerificadorPermisosBaseDatos`: 88 triggers; con `cc_app`, `asignacion_docente` sin `DELETE` (1142), sin cambiar docente ni
+  sección (1143) y una asignación del colegio 0 que nace VIGENTE (1644 de `trg_asignacion_docente_nace`); con `cc_sistema`,
+  la misma inserción imposible y sin `DELETE`. Además cuenta las cuentas activas con DOCENTE y CAJA o ADMINISTRACION y lo
+  escribe en el log («Hay N cuentas con DOCENTE combinado con CAJA o ADMINISTRACION: corrígelas en Usuarios»), sin impedir
+  arrancar.
+- `scripts/respaldo/tablas-vigiladas.txt`: `asignacion_docente` (desviación 9).
+
+**Aplicación (paquete `academico`, nuevo).**
+- `academico.model`: `AsignacionDocente` (sin setters; `propuesta`, `enlazarSolicitud`, `aprobar`, `rechazar`, `terminar`;
+  `@PreRemove` que impide borrar), `TipoAsignacion` (`TUTOR`, `DOCENTE`, `AUXILIAR`) y `EstadoAsignacion`.
+- `academico.repository.AsignacionDocenteRepository`: extiende `Repository` (sin `delete*`), con bloqueo pesimista.
+- `academico.service.Asignaciones` (`PROMOTOR`, `DIRECTOR`, `ADMINISTRACION` para ver; `proponer` y
+  `proponerLasDelAnioAnterior` solo `DIRECTOR` y `ADMINISTRACION`; `terminar` solo `PROMOTOR` y `DIRECTOR`, con la firma
+  `asignacion_docente:{id}:TERMINADA`). Proponer exige una cuenta del personal activa con el rol DOCENTE que no combine
+  Docente con Caja o Administración, una sección activa de un año abierto, sin duplicados ni un segundo tutor; crea la
+  solicitud `ASIGNACION_DOCENTE` y el evento `ASIGNACION_DOCENTE_PROPUESTA`. «Proponer las del año anterior» copia las
+  vigentes (y las que terminó el sistema) a la sección con el mismo grado y nombre, una solicitud por cada una.
+- `academico.service.ManejadorAsignacionDocente`: el tipo nuevo de la bandeja. El docente asignado es un **involucrado**
+  (un director que enseña no aprueba la suya: `AutoaprobacionSolicitudException`). Al aprobar vuelve a validar y pasa a
+  VIGENTE (evento `ASIGNACION_DOCENTE_APROBADA`); al rechazar guarda primero la solicitud RECHAZADA y después la asignación
+  (el trigger la exige así; evento `ASIGNACION_DOCENTE_RECHAZADA`). La tarjeta de la bandeja dice qué verá esa persona.
+- `academico.service.SeccionesDelDocente` (implementa `academico.api.SeccionesDocente`, para los comunicados de la tanda 3)
+  y `ConsultaAcademica` (`DIRECTOR`, `DOCENTE`): el docente ve sus secciones con asignación VIGENTE y, en cada una, el número
+  de orden, los apellidos y los nombres de sus alumnos; Dirección ve todas las secciones del año con su tutor. Una sección
+  ajena o de otro colegio responde 404. La lista anota la cantidad para `acceso_dato_personal` (`LISTA_SECCION`).
+- `academico.service.AsignacionesDeSistema` (`SISTEMA_ACADEMICO`) y `academico.proceso.FinAsignaciones` (cada madrugada,
+  `sistema.academico` con `cc_sistema`): termina las vigentes de un año cerrado, de una cuenta desactivada, que perdió el
+  rol DOCENTE o que ahora combina Docente con Caja o Administración (desviación 7). `ActorSistema.ACADEMICO`.
+- `academico.web`: `AcademicoController` (`GET /academico` y `GET /academico/secciones/{id}`, con `@RegistraAcceso`) y
+  `AsignacionesController` (`GET` y `POST /academico/asignaciones`, `POST /academico/asignaciones/copiar-anio-anterior`,
+  `POST /academico/asignaciones/{id}/terminar`), sin lógica. Vistas `academico/inicio.html`, `seccion.html` y
+  `asignaciones.html` con los componentes de siempre (sin estilos ni scripts en línea).
+- `academico.inicial.AsignacionesDemo` (perfil `demo`) y `DemoColegios`: la cuenta «docente» de cada demo es tutor de
+  3.° Primaria A y docente de Matemática de 4.° Primaria A; las propone Administración y las aprueba Dirección en la bandeja
+  con su firma (desviación 8).
+- `seguridad`: `ModuloApp.ASIGNACIONES` (`/academico/asignaciones/**`: Promotoría, Dirección y Administración; va antes que
+  `ACADEMICO`) y `ACADEMICO` disponible (Dirección y Docente). `ReglasSegregacion` rechaza DOCENTE con CAJA o
+  ADMINISTRACION (al crear la cuenta y al cambiar sus roles) y la ficha del usuario avisa «Esta persona verá deudas y pagos
+  por su rol de Dirección o Promotoría» cuando es docente y además de Dirección o Promotoría. `ClaveFirma.asignacionTerminada`.
+- `aprobaciones.model.TipoSolicitud.ASIGNACION_DOCENTE`; `AccionAuditoria`: `ASIGNACION_DOCENTE_PROPUESTA`, `_APROBADA`,
+  `_RECHAZADA` y `_TERMINADA`; `TipoAcceso`: `LISTA_SECCION`, `REPORTE_ASISTENCIA` y `NOMINA_SIAGIE` (los dos últimos, sin uso
+  hasta las tandas 2 y 3, para que el enum coincida con el CHECK de V32).
+- `puestaenmarcha.EstadoPuestaEnMarcha`: el paso «Equipo con segregación» queda pendiente mientras haya cuentas activas con
+  Docente y Caja o Administración. `operacion.salud.EstadoTecnico`: el nombre del proceso nuevo.
+
+**Reglas ArchUnit nuevas** (`ReglasArquitecturaTest`): `academicoYComunicadosNoDependenDeCobranza` (ni de caja,
+comprobantes, pasarela, recaudación, conciliación, panel, familias ni matrícula), `academicoNoDependeDeComunicacionNiDeComunicados`,
+`elDineroNoDependeDeAcademicoNiDeComunicados`, `pdfboxSoloEnAdjuntosComunicado` (vale desde ya, sin la dependencia),
+`repositoriosDeAcademicoSinModifyingNiBorrados` y `repositoriosDeAcademicoNoHeredanBorrados`; los `@PreAuthorize` exactos de
+los servicios académicos y `academico.service` entre los que pueden crear solicitudes.
+
+**Pruebas nuevas o cambiadas.**
+- `academico.AsignacionesTest` (9): el flujo completo; E4 (quien propone no aprueba y el director que enseña tampoco; la
+  Administración no ve la bandeja); rechazada sin acceso; E3 y E32 (al terminar pierde la sección; otra sección y otro
+  docente: 404); un tutor por sección; E46 en la aplicación y en la puesta en marcha; `sistema.academico` termina la de una
+  cuenta desactivada; copiar el año anterior; aislamiento del colegio B (404) y la bitácora con el antes y el después.
+- `academico.DocenteSinCobranzaTest` (E30): `ningunaRutaDeCobranzaLeResponde` recorre TODAS las rutas de la aplicación con
+  el docente (las que la matriz no le da responden 403: más de 200) y busca «S/ » y los montos de la semilla en las que sí
+  le responden; `susPantallasNoMuestranMontos` con familias que deben sus cuotas, con un control del detector (el estado de
+  cuenta sí tiene los montos).
+- `academico.DocenteSinDatosTest` (E31 y E33): ni DNI, ni fecha de nacimiento, ni apoderados, ni celulares o correos en sus
+  pantallas (con control: la ficha de Dirección sí muestra el DNI); la lista queda como `LISTA_SECCION` con la cantidad.
+- `academico.DtoDocenteSinDatosTest`: todos los DTO de `academico.dto` (los lee del directorio) sin campos de documento,
+  nacimiento, contacto, apoderado, familia ni dinero, con un control del detector.
+- `academico.model.InmutabilidadAcademicoTest`: las columnas actualizables de la entidad son EXACTAMENTE las del GRANT;
+  las transiciones y el borrado.
+- `academico.service.AsignacionesUnitarioTest` (JUnit 5 y Mockito): las reglas de `proponer` sin base.
+- `academico.web.AsignacionesWebTest`: la matriz (Caja, Docente y Apoderado: 403), CSRF, el motivo, Administración no
+  termina (403) y el menú del docente.
+- `RutasIdorTest` y `CatalogoRutasConId`: las 5 rutas nuevas y el recurso `ASIGNACION` (con una asignación vigente del
+  colegio A que el colegio B no ve ni termina).
+- `ReglasSegregacionTest`, `ServicioUsuariosTest` (`docenteNoSeCombinaConCaja`; la prueba que daba CAJA y DOCENTE pasa a
+  dar ADMINISTRACION), `ClaveFirmaTest`, `HuellasObjetosBdTest` (88 y 99), `VerificadorPermisosBaseDatosTest` (88; el aviso
+  de las combinaciones; la falta del trigger nuevo), `MigradorBaseDatosTest` (32 migraciones), `VerificadorRespaldoTest`
+  (versión 32), `LimpiezaBaseDatos` y `MigracionMySqlTest` (V1–V32).
+- MySQL real: `PermisosMySqlTest.flujoAsignacionDocenteConPermisosMinimos` (proponer, aprobar con firma, rechazar, la lista
+  del docente con su `LISTA_SECCION`, terminar con firma y `sistema.academico` con `cc_sistema`) y la clase nueva
+  `mysql.AuditoriaSprint9MySqlTest` (5): `e4AsignacionSinSolicitudFirmadaFalla`, `e4ElDocenteNoApruebaLaSuya`,
+  `e3TerminarSinFirmaFalla`, `e43ReferenciasCruzadasYColumnasInmutables` y `e46DocenteConCajaFalla`. Ayudante
+  `EscuelaConDocentesMySql` (un colegio nuevo por el alta, con dos secciones y dos docentes).
+
+**CI** (`.github/workflows/ci.yml`): job `mysql` con V1–V32, el paso nuevo `AuditoriaSprint9MySqlTest`, el paso `comprobar`
+con `asignacion_docente` (1142, 1143 en sus 6 columnas inmutables y 1644 con las dos conexiones) y DOCENTE más CAJA con
+`cc_sistema` (1644), 88 triggers y 99 huellas, y el arranque de prod con «Huellas de los 88 triggers y las 11 funciones
+verificadas»; job `respaldo` con V1–V32; job `demo` con un paso nuevo: el docente de la demo entra, ve sus dos secciones y la
+lista de alumnos sin montos, y Caja y Alumnos le responden 403. Operación: `docs/operacion/mysql-usuarios.md`,
+`despliegue-gcp.md`, `acta-paso-0-cloud-sql.md`, `deploy/gcp/paso-0.sh` y `deploy/vm/en-la-vm.sh` con 88 y 11.
+
+### Desviaciones del diseño
+1. **V32 conserva `COBRO` en los CHECK de `acceso_dato_personal`.** El SQL de la sección 6 los recreaba sin `COBRO` (V27,
+   S7-B1): la pantalla de cobro de caja habría dejado de registrarse (fallo cerrado: la caja no abría).
+2. **Los CHECK de V32 llevan `IS NOT NULL` en cada bandera** (`pendiente`, `vigente`, `tutor_vigente`) y en `motivo_fin`.
+   Escritos como en el diseño, una PROPUESTA con `pendiente` NULL (o una TERMINADA sin motivo) **pasaba** el CHECK (un CHECK
+   que evalúa NULL pasa) y se saltaba el UNIQUE de una propuesta pendiente. La PROPUESTA exige también `resuelto_en` NULL.
+3. **Triggers algo más estrictos que la sección 7.3:** quien propone y quien aprueba o termina no puede ser una cuenta de
+   apoderado; el rechazo exige además `entidad = 'asignacion_docente'`; el docente debe ser del mismo colegio; al terminar
+   no cambian quién la aprobó, cuándo ni su solicitud; y una asignación resuelta (VIGENTE, RECHAZADA o TERMINADA) no
+   reescribe quién la aprobó, quién la terminó ni el motivo (con la clave de `cc_app` se podía falsear quién aprobó: el GRANT
+   por columna no distingue estados).
+4. **`LISTA_SECCION` se registra cada vez que se abre la lista**, no «una vez por persona, sección y día»:
+   `acceso_dato_personal` no tiene columna de sección para deduplicar, y registrar de más no oculta nada.
+5. **La lista muestra las matrículas ACTIVAS y RESERVADAS sin distinguirlas.** Una RESERVADA es la que todavía no pagó su
+   matrícula: si se ocultara, el docente deduciría quién debe (INDECOPI, sección 3.13). Las RETIRADAS no aparecen.
+6. **Sin aviso al docente cuando se aprueba su asignación.** `academico` no puede depender de `comunicacion` (regla de la
+   sección 9, que este diseño mismo pide); el aviso necesita que `comunicacion` lea `academico.api`, como hará la tanda 2.
+   El docente ve sus secciones al entrar.
+7. **`CierreAnioAcademico` es un proceso nocturno (`FinAsignaciones`)** y no un evento: la aplicación todavía no tiene un
+   flujo que cierre el año (`AnioEscolar.cerrar()` no se llama en ningún lado). El proceso termina las de un año CERRADO (lo
+   haga quien lo haga) y, además, las de una cuenta desactivada, sin el rol DOCENTE o con Caja o Administración.
+8. **Demo: tutor de 3.° Primaria A**, no de 3.° B. Los datos ficticios de la demo solo tienen sección B en 2.° de Primaria y
+   1.° de Secundaria; agregar una 3.° B cambiaría el reparto de las familias en que se apoyan las demás pruebas de la demo.
+   La cuenta «docente» es «Carlos Quispe» (tutor, no tutora). Los 15 días de asistencia y los comunicados de la sección 3.14
+   son de las tandas 2 y 3.
+9. **`asignacion_docente` entra en `tablas-vigiladas.txt`**: nunca se borra (sin `DELETE`), así que un borrado del DBA
+   aparece como «faltan filas» en el respaldo siguiente (el diseño solo agregaba las tablas de solo inserción de las tandas
+   2 y 3).
+10. **El consentimiento por finalidad y canal no va en esta tanda:** el diseño lo pone en V33 (tanda 2, sección 3.6), junto
+    con los avisos de asistencia que lo usan.
+11. **Proponer es de Dirección y Administración** (la tabla de la sección 10); `trg_asignacion_docente_nace` acepta también a
+    Promotoría, como lo escribió el diseño (la base es la segunda capa; la aplicación decide la regla fina).
+12. **«El docente de otra sección» se prueba en `AsignacionesTest` y `DocenteSinDatosTest`**, no dentro del recorrido de
+    `RutasIdorTest` (que pide los recursos del colegio A con personas del colegio B y con otra familia). La ruta nueva con id
+    de sección sí está en el recorrido.
+13. **Los datos de demostración del perfil `dev`** (`./mvnw spring-boot:run`) no traen asignaciones: la cuenta `docente` de
+    dev ve «Todavía no tienes secciones asignadas» hasta que Administración la proponga y Dirección la apruebe.
+
+### Riesgos y pendientes de la tanda
+- **H1 sigue igual:** la base no impide que el docente lea deudas con la clave de `cc_app`; lo cubren la matriz, los
+  `@PreAuthorize`, los DTO y las tres pruebas de E30.
+- **Cuentas anteriores a V32 con DOCENTE y CAJA o ADMINISTRACION:** no se corrigen solas. Prod arranca y las cuenta en el
+  log, la puesta en marcha deja «Equipo» pendiente, no se les puede asignar una sección y, si ya tuvieran una (no es posible
+  antes de V32), `sistema.academico` la terminaría.
+- **Una sección con dos propuestas de tutor:** se pueden proponer dos; la segunda no se puede aprobar mientras la primera
+  esté vigente (la aplicación lo dice y el UNIQUE lo impide). La segunda queda por aprobar hasta que alguien la rechace.
+- **La vista de Docentes y secciones abre por defecto el año en curso o, si no hay, el último que no está cerrado.**
+- Decisiones 139 a 143 aplicadas con su valor por defecto; siguen por confirmar con el usuario.
+
+### Resultados de la verificación
+- `./mvnw -B verify`: **2484 pruebas, 0 fallos, 0 errores, 146 omitidas** (las de MySQL real, que corren en los jobs `mysql`
+  y `respaldo`); BUILD SUCCESS. Con `-DargLine=-Duser.timezone=America/Los_Angeles` (también `verify`): **2484, 0 fallos,
+  0 errores, 146 omitidas**, BUILD SUCCESS. El sprint 8 cerró con 2438 (140 de MySQL): 46 pruebas nuevas, 6 de ellas de
+  MySQL real (5 de `AuditoriaSprint9MySqlTest` y el flujo de `PermisosMySqlTest`).
+- Job `mysql` del CI reproducido completo con `scripts/ci/correr-job.py` en un contenedor desechable `mysql:8` (hoy 8.4.11)
+  y el contenedor de herramientas del repositorio, sobre una copia limpia de la rama (`git archive`): **los 23 pasos en
+  OK**, del 2 (empaquetar) al 24 (rotación). V1–V32 con `cc_migrador`; `02` y `03` aplicados sin error; fase 1: 2; fase 2
+  (`PermisosMySqlTest`): 92, 0 fallos (7 omitidas por la fecha), con `flujoAsignacionDocenteConPermisosMinimos`;
+  `AuditoriaSprint8MySqlTest`: 18; **`AuditoriaSprint9MySqlTest`: 5 de 5**; sprint 6: 3; sprint 7, tanda 2: 12; QA del
+  sprint 7: 5; S7-A1: 1; estado de cuentas: 4; S7-M1: 2 + 2; fase 2b: 7. El paso `comprobar` con los casos nuevos de
+  `asignacion_docente` y DOCENTE más CAJA; `huellas_objetos()` = 99; arranque real en prod por TLS con «Huellas de los 88
+  triggers y las 11 funciones verificadas»; M2, M3, M4 y la rotación en OK.
+- Job `respaldo` reproducido completo (dos `mysql:8` desechables, el segundo en el puerto 3308): **los 21 pasos en OK**
+  (respaldo cifrado, E29, restauración real con la cadena HMAC y prod sobre la copia, E31, E30, E32, QA-S7-1, simulacro
+  semanal, S7-M1, la resolución por colegio con `colegios_faltan = [3]` y el destino simulado), con `asignacion_docente`
+  entre las tablas vigiladas.
+- Job `demo` reproducido con Docker real: **los 7 pasos en OK**: la imagen, el arranque en una red `internal` sin salida
+  (ni por nombre ni por IP), la franja DEMO y «Crear mi demo» con 6 cuentas, **el paso nuevo** (el docente de la demo
+  ingresa, ve «3.° Primaria A» y «Matemática», abre la lista de su sección sin ningún «S/ », y `/caja` y `/alumnos` le
+  responden 403) y los 6 casos en que la demo no arranca.
+- La reproducción no encontró errores en esta tanda (sí lo hizo `verify`: dos pruebas que contaban 31 migraciones y una que
+  esperaba la versión 31 del esquema en el manifiesto del respaldo, corregidas). Los contenedores (`cc-s9t1-*`, `cc-demo*`),
+  la red de la demo, la imagen `cuentas-claras:ci` y las copias de la rama se borraron al terminar; los registros quedaron
+  fuera del repositorio. No se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`, `smarthr-*`, `supabase_*` ni
+  `cc-mysql-s5*`.
