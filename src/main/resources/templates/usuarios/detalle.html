@@ -20,6 +20,11 @@
 		<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
 	</th:block>
 
+	<!--/* Sprint 9, tanda 1 (decisión 141): DOCENTE con Dirección (o Promotoría) se permite, pero esa persona ve deudas. */-->
+	<th:block th:if="${usuario.docenteQueVeDeudas()}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', 'Esta persona verá deudas y pagos por su rol de Dirección o Promotoría. En sus secciones, como docente, no se le muestran.')}"></div>
+	</th:block>
+
 	<section class="tarjeta" aria-labelledby="titulo-datos">
 		<h2 id="titulo-datos">Datos</h2>
 		<dl class="datos">

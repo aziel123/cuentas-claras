@@ -85,6 +85,8 @@ public class DemoColegios {
 
 	private final LimiteDemos limite;
 
+	private final pe.edu.virgenmaria.cuentasclaras.academico.inicial.AsignacionesDemo asignaciones;
+
 	private final TransactionTemplate transaccion;
 
 	private final Clock reloj;
@@ -93,7 +95,9 @@ public class DemoColegios {
 
 	public DemoColegios(ColegioRepository colegios, LogosColegio logos, AuditoriaService auditoria, CuentasDemo cuentas,
 			FamiliasDemo familias, AccesoApoderadoDemo apoderado, PensionesDemo pensiones, CajaDemo caja, LimiteDemos limite,
+			pe.edu.virgenmaria.cuentasclaras.academico.inicial.AsignacionesDemo asignaciones,
 			PlatformTransactionManager transacciones, Clock reloj) {
+		this.asignaciones = asignaciones;
 		this.colegios = colegios;
 		this.logos = logos;
 		this.auditoria = auditoria;
@@ -157,6 +161,10 @@ public class DemoColegios {
 			deudores.add(new Deudor(f.alumnos().getFirst().dni(), f.alumnos().getFirst().grado().nivel()));
 		}
 		pensiones.cargar(colegioId, prefijo + ".administracion", prefijo + ".direccion", creadas.anio(), hoy, deudores);
+		// Sprint 9, tanda 1: el docente es tutor de 3.° Primaria A y docente de Matemática de 4.° Primaria A (aprobado por
+		// Dirección con su firma): ve sus dos secciones y los nombres de sus alumnos, nunca deudas.
+		asignaciones.cargar(colegioId, prefijo + ".administracion", prefijo + ".direccion", prefijo + ".docente",
+				creadas.anio());
 		// QA-S8-9: el primer cobro es de la familia de la cuenta «apoderado»: quien entra como padre ve su pago, su boleta
 		// «DEMO · SIN VALOR» y el aviso que le llegó.
 		caja.cargar(colegioId, prefijo, List.of(cobro(lista.getFirst()), cobro(lista.get(2)), cobro(lista.get(3))),

@@ -136,8 +136,18 @@ public enum ModuloApp {
 			"Sprint 4 (automática)", true, "/conciliacion", new String[] { "/conciliacion", "/conciliacion/**" },
 			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 
-	ACADEMICO("Académico", "Asistencia, notas por competencias y exportación al SIAGIE.", "Más adelante", false,
-			"/academico", new String[] { "/academico", "/academico/**" }, EnumSet.of(DIRECTOR, DOCENTE)),
+	// Sprint 9, tanda 1 (sección 3.2 y 10): las asignaciones de docentes, tutores y auxiliares a las secciones. Ver y
+	// proponer: Administración y Dirección (los servicios lo exigen también); terminar, Dirección y Promotoría; aprobar, otra
+	// persona en la bandeja. Va ANTES que ACADEMICO (la primera regla que coincide gana: /academico/** es de Dirección y
+	// Docente, y el docente no ve las asignaciones de los demás).
+	ASIGNACIONES("Docentes y secciones", "Quién es tutor, docente o auxiliar de cada sección: lo propone Administración o "
+			+ "Dirección y lo aprueba otra persona.", "Sprint 9", true, "/academico/asignaciones",
+			new String[] { "/academico/asignaciones", "/academico/asignaciones/**" },
+			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+	// Sprint 9, tanda 1: el docente ve sus secciones y los nombres de sus alumnos (nunca deudas, pagos, documentos ni
+	// contactos); Dirección, todas las secciones. Promotoría no ve las listas por alumno (decisión 143).
+	ACADEMICO("Académico", "Tus secciones y la lista de tus alumnos. Nunca muestra deudas, pagos, documentos ni contactos.",
+			"Sprint 9", true, "/academico", new String[] { "/academico", "/academico/**" }, EnumSet.of(DIRECTOR, DOCENTE)),
 	COMUNICADOS("Comunicados", "Envía comunicados a las familias con confirmación de lectura.", "Más adelante", false,
 			"/comunicados", new String[] { "/comunicados", "/comunicados/**" }, EnumSet.of(PROMOTOR, DIRECTOR, DOCENTE));
 

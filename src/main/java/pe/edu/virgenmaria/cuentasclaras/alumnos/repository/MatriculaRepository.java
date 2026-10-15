@@ -39,6 +39,15 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
 	@Query("select m from Matricula m where m.id = :id")
 	Optional<Matricula> bloquear(@Param("id") Long id);
 
+	/**
+	 * Sprint 9, tanda 1 (sección 3.3): las matrículas de una sección en esos estados, con su alumno, en orden alfabético
+	 * (apellidos y nombres). La usa la lista de la sección del docente: solo nombres y número de orden.
+	 */
+	@Query("select m from Matricula m join fetch m.alumno a where m.seccion.id = :seccionId and m.estado in :estados "
+			+ "order by a.apellidoPaterno asc, a.apellidoMaterno asc, a.nombres asc, a.id asc")
+	List<Matricula> deLaSeccionEnOrden(@Param("seccionId") Long seccionId,
+			@Param("estados") Collection<EstadoMatricula> estados);
+
 	/** [id de sección, matrículas activas] de un año. */
 	@Query("select m.seccion.id, count(m) from Matricula m where m.anioEscolar.id = :anioId and m.estado = ACTIVA "
 			+ "group by m.seccion.id")

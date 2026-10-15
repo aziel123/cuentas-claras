@@ -16,4 +16,9 @@ public record UsuarioDetalle(Long id, String nombreUsuario, String nombreComplet
 		boolean debeCambiarClave, LocalDateTime ultimoIngresoEn, LocalDateTime creadoEn, String creadoPor,
 		LocalDateTime desactivadoEn, String desactivadoPor, boolean esUnoMismo, boolean puedeGestionar,
 		boolean puedeDarAcceso) {
+
+	/** Sprint 9, tanda 1 (decisión 141): es docente y además ve deudas por su rol de Dirección o Promotoría. */
+	public boolean docenteQueVeDeudas() {
+		return pe.edu.virgenmaria.cuentasclaras.seguridad.model.ReglasSegregacion.docenteQueVeDeudas(roles);
+	}
 }

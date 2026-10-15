@@ -191,11 +191,17 @@ public class EstadoPuestaEnMarcha {
 		long promotores = usuarios.contarActivosConRol(Rol.PROMOTOR);
 		long directores = sinPromotoria(Rol.DIRECTOR);
 		long cajas = sinPromotoria(Rol.CAJA);
-		boolean equipo = activado && promotores >= 1 && directores >= 1 && cajas >= 1;
+		// Sprint 9, tanda 1 (decisión 141): una cuenta de antes de V32 con DOCENTE y CAJA o ADMINISTRACION queda pendiente
+		// hasta que Promotoría la corrija (el docente no ve deudas).
+		long docentesConCobranza = usuarios.activosConRol(Rol.DOCENTE).stream()
+				.filter(u -> u.getRoles().contains(Rol.CAJA) || u.getRoles().contains(Rol.ADMINISTRACION)).count();
+		boolean equipo = activado && promotores >= 1 && directores >= 1 && cajas >= 1 && docentesConCobranza == 0;
 		puntos.add(new PuntoLista(EQUIPO, "Equipo con segregación", estado(equipo), "Promotoría: " + promotores
 				+ (activado ? "" : " (el titular aún no activa su cuenta)") + "; Dirección: " + directores + "; Caja: " + cajas
 				+ (directores >= 1 && cajas >= 1 ? "" : " (hace falta una Dirección y una Caja activas, distintas de la "
-						+ "Promotoría: quien cobra no aprueba)"), "/usuarios"));
+						+ "Promotoría: quien cobra no aprueba)")
+				+ (docentesConCobranza == 0 ? "" : "; " + docentesConCobranza + " cuenta(s) combinan Docente con Caja o "
+						+ "Administración: corrígelas (el docente no ve deudas)"), "/usuarios"));
 
 		// 3. Año escolar y secciones: el año vigente con al menos una sección por nivel ofrecido.
 		Optional<AnioEscolar> vigente = anios.findByEstado(EstadoAnioEscolar.EN_CURSO)

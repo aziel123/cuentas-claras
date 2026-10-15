@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 1 (sección 3.2): Docentes y secciones. Proponer: Dirección o Administración (aprueba otra persona en
+     Aprobaciones, nunca el docente). Terminar: Dirección o Promotoría, con motivo y su firma. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Docentes y secciones', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<h1>Docentes y secciones</h1>
+			<p class="secundario">Quién es tutor(a), docente de área o auxiliar de cada sección. Cada asignación la aprueba otra
+				persona de Dirección o Promotoría, y el docente solo ve los nombres de los alumnos de sus secciones.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<form class="filtros" method="get" th:action="@{/academico/asignaciones}" th:unless="${#lists.isEmpty(vista.anios)}">
+		<div class="campo">
+			<label for="anio">Año escolar</label>
+			<select class="input" id="anio" name="anio">
+				<option th:each="a : ${vista.anios}" th:value="${a.id}" th:text="${a.etiqueta}" th:selected="${vista.anioId == a.id}">2027</option>
+			</select>
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Ver el año', 'secundario')}"></button>
+	</form>
+
+	<th:block th:if="${vista.sinAnio()}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay años escolares', 'Créalos en Colegio con sus secciones.')}"></div>
+	</th:block>
+
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-proponer"
+		th:if="${vista.puedeProponer and !vista.sinAnio() and !vista.anioCerrado}">
+		<h2 id="titulo-proponer">Proponer una asignación</h2>
+		<th:block th:if="${#lists.isEmpty(vista.docentes)}">
+			<div th:replace="~{fragments/componentes :: alerta('info', 'No hay cuentas activas con el rol Docente: créalas en Usuarios.')}"></div>
+		</th:block>
+		<form class="formulario" th:action="@{/academico/asignaciones(anio=${vista.anioId})}" th:object="${nueva}" method="post"
+			th:unless="${#lists.isEmpty(vista.docentes)}">
+			<div class="formulario-doble">
+				<div class="campo">
+					<label for="seccionId">Sección</label>
+					<select class="input" th:field="*{seccionId}" required th:errorclass="input-con-error">
+						<option value="">Elige la sección</option>
+						<option th:each="s : ${vista.seccionesActivas()}" th:value="${s.id}" th:text="${s.etiqueta}">3.° Primaria A</option>
+					</select>
+					<p class="error" th:if="${#fields.hasErrors('seccionId')}" th:errors="*{seccionId}">Error</p>
+				</div>
+				<div class="campo">
+					<label for="docenteId">Docente</label>
+					<select class="input" th:field="*{docenteId}" required th:errorclass="input-con-error">
+						<option value="">Elige al docente</option>
+						<option th:each="d : ${vista.docentes}" th:value="${d.id}" th:text="${d.etiqueta}">Ana Torres</option>
+					</select>
+					<p class="error" th:if="${#fields.hasErrors('docenteId')}" th:errors="*{docenteId}">Error</p>
+				</div>
+				<div class="campo">
+					<label for="tipo">Qué hará</label>
+					<select class="input" th:field="*{tipo}" required th:errorclass="input-con-error">
+						<option value="">Elige</option>
+						<option th:each="t : ${tipos}" th:value="${t}" th:text="${t.etiqueta()}">Tutor(a)</option>
+					</select>
+					<p class="error" th:if="${#fields.hasErrors('tipo')}" th:errors="*{tipo}">Error</p>
+				</div>
+				<div th:replace="~{fragments/componentes :: campoDe('areas', 'Áreas (opcional)', 'Por ejemplo: Matemática, Ciencia y Tecnología. El auxiliar no lleva áreas.', 'text', false)}"></div>
+			</div>
+			<div class="campo">
+				<label for="motivo">Motivo (obligatorio)</label>
+				<textarea class="input" th:field="*{motivo}" required minlength="10" maxlength="500" aria-describedby="motivo-ayuda"
+					th:errorclass="input-con-error"></textarea>
+				<p class="ayuda" id="motivo-ayuda">Por ejemplo: «Carga horaria 2027 aprobada por Dirección». Queda en la auditoría.</p>
+				<p class="error" th:if="${#fields.hasErrors('motivo')}" th:errors="*{motivo}">Error</p>
+			</div>
+			<div class="acciones">
+				<button th:replace="~{fragments/componentes :: boton('Proponer asignación', 'primario')}"></button>
+			</div>
+		</form>
+	</section>
+
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-copiar"
+		th:if="${vista.puedeProponer and vista.anioAnterior and !vista.anioCerrado}">
+		<h2 id="titulo-copiar" th:text="|Proponer las mismas del año ${vista.anio - 1}|">Proponer las del año pasado</h2>
+		<p class="secundario">Se propone cada asignación del año anterior en la sección con el mismo grado y nombre. Cada una
+			se aprueba en Aprobaciones.</p>
+		<form class="formulario" th:action="@{/academico/asignaciones/copiar-anio-anterior}" method="post">
+			<input type="hidden" name="anioId" th:value="${vista.anioId}">
+			<div class="campo">
+				<label for="motivo-copia">Motivo (obligatorio)</label>
+				<textarea class="input" id="motivo-copia" name="motivo" required minlength="10" maxlength="500"></textarea>
+			</div>
+			<div class="acciones">
+				<button th:replace="~{fragments/componentes :: boton('Proponer las del año anterior', 'secundario')}"></button>
+			</div>
+		</form>
+	</section>
+
+	<section class="tarjeta" th:each="s : ${vista.secciones}" th:attr="aria-labelledby=${'titulo-seccion-' + s.seccionId}"
+		th:data-seccion="${s.seccion}">
+		<div class="fila entre">
+			<h2 th:id="${'titulo-seccion-' + s.seccionId}" th:text="${s.seccion}">3.° Primaria A</h2>
+			<span th:if="${!s.activa}" class="badge badge-neutro">Desactivada</span>
+			<span th:if="${s.activa and s.sinTutor()}" class="badge badge-alerta">Sin tutor(a)</span>
+		</div>
+		<p class="secundario" th:if="${#lists.isEmpty(s.asignaciones)}">Sin asignaciones.</p>
+		<ul class="lista-simple" th:unless="${#lists.isEmpty(s.asignaciones)}">
+			<li th:each="a : ${s.asignaciones}" th:data-asignacion="${a.id}">
+				<strong th:text="${a.docente}">Ana Torres</strong>
+				<span class="secundario" th:text="${a.areas != null} ? |${a.tipo}: ${a.areas}| : ${a.tipo}">Tutor(a)</span>
+				<span class="badge" th:classappend="'badge-' + ${a.variante}" th:text="${a.estado}">Vigente</span>
+				<span class="secundario" th:if="${a.resueltoPor != null}" th:text="|Propuso ${a.propuestoPor}; resolvió ${a.resueltoPor}|">Propuso</span>
+				<span class="secundario" th:if="${a.resueltoPor == null}" th:text="|Propuso ${a.propuestoPor}; falta la aprobación de otra persona|">Propuso</span>
+				<span class="secundario" th:if="${a.terminadaPor != null}" th:text="|Terminó ${a.terminadaPor}: ${a.motivoFin}|">Terminó</span>
+				<th:block th:if="${a.vigente and vista.puedeTerminar and !vista.anioCerrado}">
+					<th:block th:replace="~{fragments/componentes :: modalMotivo(${'modal-terminar-' + a.id},
+						|¿Terminar la asignación de ${a.docente}?|,
+						'Desde ahora no verá la sección. Lo que registró sigue a su nombre. Se firma con tu sesión y queda en la auditoría.',
+						@{/academico/asignaciones/{id}/terminar(id=${a.id}, anio=${vista.anioId})},
+						'Terminar', 'texto', 'Terminar asignación')}"></th:block>
+				</th:block>
+			</li>
+		</ul>
+	</section>
+</main>
+</body>
+</html>
