@@ -25,7 +25,10 @@
 				<!--/* Sprint 8, tanda 1 (decisión 123): el logo del colegio de la sesión si lo subió; si no, el monograma.
 				     Los colores no cambian por colegio (contraste AA). */-->
 				<img class="logo-colegio" th:if="${marcaColegio != null and marcaColegio.conLogo}" th:src="@{/marca/logo}" alt="">
-				<span class="monograma" aria-hidden="true" th:unless="${marcaColegio != null and marcaColegio.conLogo}">VM</span>
+				<!--/* Monograma: iniciales de las dos últimas palabras del colegio (o del producto si no hay sesión). */-->
+				<span class="monograma" aria-hidden="true" th:unless="${marcaColegio != null and marcaColegio.conLogo}"
+					th:with="pm=${((usuarioActual != null ? usuarioActual.colegio : null) ?: (nombreInstitucional ?: marca?.nombre) ?: 'C').trim().split(' +')}"
+					th:text="${#strings.toUpperCase(pm.length > 1 ? pm[pm.length - 2].substring(0, 1) + pm[pm.length - 1].substring(0, 1) : pm[0].substring(0, 1))}">C</span>
 				<span class="marca-texto">
 					<strong th:text="${usuarioActual != null} ? ${usuarioActual.colegio} : ${nombreInstitucional}">Nombre del colegio</strong>
 					<small th:text="|Plataforma ${marca?.nombre}|">Plataforma</small>
@@ -90,7 +93,9 @@
 	<header class="barra">
 		<div class="barra-in">
 			<span class="marca">
-				<span class="monograma" aria-hidden="true">VM</span>
+				<span class="monograma" aria-hidden="true"
+					th:with="pm=${((nombreInstitucional ?: marca?.nombre) ?: 'C').trim().split(' +')}"
+					th:text="${#strings.toUpperCase(pm.length > 1 ? pm[pm.length - 2].substring(0, 1) + pm[pm.length - 1].substring(0, 1) : pm[0].substring(0, 1))}">C</span>
 				<span class="marca-texto">
 					<strong th:text="${nombreInstitucional} ?: ${marca?.nombre}">Marca</strong>
 					<small th:text="|Plataforma ${marca?.nombre}|">Plataforma</small>
