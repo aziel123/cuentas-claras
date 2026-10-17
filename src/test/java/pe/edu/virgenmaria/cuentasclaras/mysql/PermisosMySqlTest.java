@@ -136,6 +136,32 @@ class PermisosMySqlTest {
 				.doesNotThrowAnyException();
 	}
 
+	/**
+	 * Bug P0 del sprint 9: dos ingresos de la misma persona, con los pools renovados entre uno y otro (como el maxLifetime
+	 * de Hikari). En H2 el CHECK ck_sesion_usuario_cierre quedaba atado a la sesión que migró; en MySQL, con cc_sistema y
+	 * sus triggers, el segundo ingreso cierra el primero con OTRA_SESION.
+	 */
+	@Test
+	void unSegundoIngresoConLosPoolsRenovadosCierraElPrimeroConOtraSesion() throws Exception {
+		Usuario directora = UsuariosDePrueba.guardar(usuarios, codificador, 1L, "dir.doble." + sufijo,
+				UsuariosDePrueba.CLAVE, false, Rol.DIRECTOR);
+		org.springframework.mock.web.MockHttpSession primera = new org.springframework.mock.web.MockHttpSession();
+		mvc.perform(post("/login").session(primera).with(csrf()).param("usuario", directora.getNombreUsuario())
+				.param("clave", UsuariosDePrueba.CLAVE)).andExpect(redirectedUrl("/inicio"));
+
+		var enrutada = (pe.edu.virgenmaria.cuentasclaras.comun.basedatos.FuenteDatosEnrutada) fuenteDatos;
+		((com.zaxxer.hikari.HikariDataSource) enrutada.app()).getHikariPoolMXBean().softEvictConnections();
+		((com.zaxxer.hikari.HikariDataSource) enrutada.sistema()).getHikariPoolMXBean().softEvictConnections();
+
+		org.springframework.mock.web.MockHttpSession segunda = new org.springframework.mock.web.MockHttpSession();
+		mvc.perform(post("/login").session(segunda).with(csrf()).param("usuario", directora.getNombreUsuario())
+				.param("clave", UsuariosDePrueba.CLAVE)).andExpect(redirectedUrl("/inicio"));
+		assertThat(jdbc.queryForList("SELECT COALESCE(motivo_cierre, 'ABIERTA') FROM sesion_usuario WHERE usuario_id = ? "
+				+ "ORDER BY id", String.class, directora.getId())).containsExactly("OTRA_SESION", "ABIERTA");
+		mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/inicio").session(segunda))
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
+	}
+
 	@Test
 	void laAplicacionFuncionaConLosPermisosMinimos() throws Exception {
 		Usuario promotora = guardar("promotora." + sufijo, Rol.PROMOTOR);

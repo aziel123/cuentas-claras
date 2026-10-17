@@ -3,7 +3,9 @@ package pe.edu.virgenmaria.cuentasclaras.seguridad.service;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.Actor;
@@ -43,8 +45,21 @@ public class ManejadorIngresoExitoso extends SavedRequestAwareAuthenticationSucc
 	public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
 			Authentication autenticacion) throws ServletException, IOException {
 		if (autenticacion.getPrincipal() instanceof UsuarioAutenticado usuario) {
-			SesionAbierta abierta = sesiones.abrir(usuario.colegioId(), usuario.usuarioId(),
-					Actor.normalizarIp(request.getRemoteAddr()));
+			SesionAbierta abierta;
+			try {
+				abierta = sesiones.abrir(usuario.colegioId(), usuario.usuarioId(),
+						Actor.normalizarIp(request.getRemoteAddr()));
+			}
+			catch (RuntimeException e) {
+				// Bug P0 del sprint 9: sin sesión de la base no hay ingreso. Spring ya guardó la autenticación en la sesión
+				// HTTP: se descarta para que la página de error no muestre a nadie como dentro (ni consulte por él).
+				SecurityContextHolder.clearContext();
+				HttpSession http = request.getSession(false);
+				if (http != null) {
+					http.invalidate();
+				}
+				throw e;
+			}
 			TokenDeSesionHttp.guardar(request.getSession(), abierta);
 		}
 		request.getSession().setAttribute(ATRIBUTO_INGRESO, reloj.instant());
