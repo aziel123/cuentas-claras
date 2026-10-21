@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 2 (sección 3.4): las secciones del docente para tomar la asistencia de hoy y los días pasados que
+     Dirección ya aprobó registrar. Sin datos de las familias ni de cobranza. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Asistencia de hoy', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="asistencia-hoy">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/academico}">Académico</a></p>
+			<h1>Asistencia de hoy</h1>
+			<p class="secundario" th:text="${hoy.fechaTexto}">martes 21 de octubre</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${hoy.motivoSinClases != null}">
+		<div th:replace="~{fragments/componentes :: alerta('info', ${hoy.motivoSinClases})}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-secciones">
+		<h2 id="titulo-secciones">Tus secciones</h2>
+		<th:block th:if="${#lists.isEmpty(hoy.secciones)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no tienes secciones asignadas', 'Dirección las asigna en Docentes y secciones.')}"></div>
+		</th:block>
+		<ul class="lista-simple" th:unless="${#lists.isEmpty(hoy.secciones)}">
+			<li class="fila entre" th:each="s : ${hoy.secciones}">
+				<span th:text="${s.etiqueta}">3.° Primaria A</span>
+				<span class="fila">
+					<span th:replace="~{fragments/componentes :: badge(${s.registradaHoy} ? 'Registrada' : 'Por registrar', ${s.registradaHoy} ? 'exito' : 'alerta')}"></span>
+					<a class="btn btn-primario btn-chico" th:href="@{/academico/asistencia/{id}/hoy(id=${s.id})}"
+						th:text="${s.registradaHoy} ? 'Ver y corregir' : 'Tomar asistencia'">Tomar asistencia</a>
+				</span>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-tardios" th:unless="${#lists.isEmpty(tardios)}">
+		<h2 id="titulo-tardios">Días pasados aprobados para registrar</h2>
+		<ul class="lista-simple">
+			<li class="fila entre" th:each="t : ${tardios}">
+				<span th:text="${t.resumen}">Registrar la asistencia de 3.° A del lunes</span>
+				<a class="btn btn-secundario btn-chico" th:href="@{/academico/asistencia/{s}/tardio/{id}(s=${t.entidadId}, id=${t.id})}">Registrar</a>
+			</li>
+		</ul>
+	</section>
+
+	<p><a th:href="@{/academico/asistencia/reporte}">Reporte del mes (tutores)</a></p>
+</main>
+</body>
+</html>

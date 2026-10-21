@@ -25,6 +25,7 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.SeccionRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
@@ -34,6 +35,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -66,6 +68,9 @@ public class Asignaciones {
 
 	static final String ENTIDAD = "asignacion_docente";
 
+	/** Sprint 9, tanda 2 (A7): la cobertura de un ausente, como máximo 5 días hábiles. */
+	static final int MAX_HABILES_COBERTURA = 5;
+
 	private static final Set<EstadoAsignacion> ABIERTAS = EnumSet.of(EstadoAsignacion.PROPUESTA, EstadoAsignacion.VIGENTE);
 
 	private final AsignacionDocenteRepository asignaciones;
@@ -84,9 +89,12 @@ public class Asignaciones {
 
 	private final Clock reloj;
 
+	private final CalendarioHabil calendario;
+
 	public Asignaciones(AsignacionDocenteRepository asignaciones, SeccionRepository secciones, AnioEscolarRepository anios,
 			UsuarioRepository usuarios, RegistroSolicitudes solicitudes, FirmaSesion firma, AuditoriaService auditoria,
-			Clock reloj) {
+			Clock reloj, CalendarioHabil calendario) {
+		this.calendario = calendario;
 		this.asignaciones = asignaciones;
 		this.secciones = secciones;
 		this.anios = anios;
@@ -148,7 +156,7 @@ public class Asignaciones {
 				.orElseThrow(() -> new RecursoNoEncontradoException("Sección no encontrada"));
 		Usuario docente = usuarios.findById(pedido.docenteId())
 				.orElseThrow(() -> new RecursoNoEncontradoException("Docente no encontrado"));
-		return proponerEn(seccion, docente, pedido.tipo(), pedido.areas(), pedido.motivo());
+		return proponerEn(seccion, docente, pedido.tipo(), pedido.areas(), pedido.motivo(), pedido.hasta());
 	}
 
 	/**
@@ -185,7 +193,7 @@ public class Asignaciones {
 				saltadas++;
 				continue;
 			}
-			proponerEn(destino.get(), docente.get(), previa.getTipo(), previa.getAreas(), motivo);
+			proponerEn(destino.get(), docente.get(), previa.getTipo(), previa.getAreas(), motivo, null);
 			propuestas++;
 		}
 		return new ResultadoCopia(propuestas, saltadas);
@@ -213,9 +221,11 @@ public class Asignaciones {
 						+ ". Desde ahora no ve la sección; lo que registró sigue a su nombre.");
 	}
 
-	private Long proponerEn(Seccion seccion, Usuario docente, TipoAsignacion tipo, String areas, String motivo) {
+	private Long proponerEn(Seccion seccion, Usuario docente, TipoAsignacion tipo, String areas, String motivo,
+			LocalDate hasta) {
 		AnioEscolar anio = seccion.getAnioEscolar();
 		exigirAbierto(anio);
+		exigirCoberturaValida(tipo, hasta);
 		if (!seccion.isActiva()) {
 			throw new ReglaNegocioException("La sección " + seccion.etiqueta() + " está desactivada.");
 		}
@@ -242,11 +252,14 @@ public class Asignaciones {
 		}
 		UsuarioAutenticado persona = PersonaEnSesion.actual();
 		AsignacionDocente asignacion = asignaciones.saveAndFlush(AsignacionDocente.propuesta(anio.getId(), seccion.getId(),
-				docente.getId(), tipo, areas, persona.getUsername()));
+				docente.getId(), tipo, areas, persona.getUsername(), hasta));
 		Map<String, String> datos = new LinkedHashMap<>();
 		datos.put("seccion", seccion.getId().toString());
 		datos.put("docente", docente.getId().toString());
 		datos.put("tipo", tipo.name());
+		if (hasta != null) {
+			datos.put("hasta", hasta.toString());
+		}
 		SolicitudCambio solicitud = solicitudes.crear(TipoSolicitud.ASIGNACION_DOCENTE, ENTIDAD, asignacion.getId(),
 				resumen(docente, tipo, asignacion.getAreas(), seccion), datos, motivo);
 		asignacion.enlazarSolicitud(solicitud.getId());
@@ -255,7 +268,8 @@ public class Asignaciones {
 				EstadoAsignacion.PROPUESTA.name(), persona.nombreCompleto() + " propuso a " + docente.getNombreCompleto()
 						+ " (" + docente.getNombreUsuario() + ") como " + tipo.etiqueta().toLowerCase(java.util.Locale.ROOT)
 						+ " de " + seccion.etiqueta() + " " + anio.getAnio() + (asignacion.getAreas() == null ? ""
-								: " (" + asignacion.getAreas() + ")") + ". Motivo: " + solicitud.getMotivo()
+								: " (" + asignacion.getAreas() + ")") + (hasta == null ? "" : ", como cobertura hasta el "
+										+ hasta) + ". Motivo: " + solicitud.getMotivo()
 						+ ". Debe aprobarla otra persona de Dirección o Promotoría, que no sea el docente.");
 		return asignacion.getId();
 	}
@@ -291,6 +305,27 @@ public class Asignaciones {
 	private boolean tutorAbierto(Long seccionId) {
 		return tutorVigente(seccionId) || asignaciones.findFirstBySeccionIdAndTipoAndEstado(seccionId, TipoAsignacion.TUTOR,
 				EstadoAsignacion.PROPUESTA).isPresent();
+	}
+
+	/**
+	 * Sprint 9, tanda 2 (A7, E56): una cobertura de un docente ausente dura como máximo {@value #MAX_HABILES_COBERTURA}
+	 * días hábiles desde hoy (con feriados; la base acepta 10 calendario) y nunca es de tutor.
+	 */
+	private void exigirCoberturaValida(TipoAsignacion tipo, LocalDate hasta) {
+		if (hasta == null) {
+			return;
+		}
+		if (tipo == TipoAsignacion.TUTOR) {
+			throw new ReglaNegocioException("Una cobertura no es de tutor(a): propón al docente o auxiliar que cubre.");
+		}
+		LocalDate hoy = LocalDate.now(reloj);
+		if (hasta.isBefore(hoy)) {
+			throw new ReglaNegocioException("La cobertura termina hoy o después.");
+		}
+		if (hasta.isAfter(hoy.plusDays(10)) || calendario.habilesEntre(hoy, hasta) > MAX_HABILES_COBERTURA) {
+			throw new ReglaNegocioException("Una cobertura dura como máximo " + MAX_HABILES_COBERTURA + " días hábiles: "
+					+ "para más tiempo, propón una asignación sin fecha de fin.");
+		}
 	}
 
 	private static void exigirAbierto(AnioEscolar anio) {

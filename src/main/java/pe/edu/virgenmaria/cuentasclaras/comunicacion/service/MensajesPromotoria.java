@@ -194,6 +194,10 @@ public class MensajesPromotoria {
 
 	/** Promotoría; la anulación de pago por aprobar, también Dirección (decisión 71: también aprueba). */
 	private static List<Usuario> destinatarios(TipoAviso tipo, List<Usuario> promotores, List<Usuario> directores) {
+		if (tipo.soloDireccion()) {
+			// Sprint 9, tanda 2 (H10): la sección sin asistencia va a Dirección (Promotoría no ve la asistencia).
+			return directores;
+		}
 		if (tipo != TipoAviso.ANULACION_PAGO_PENDIENTE) {
 			return promotores;
 		}

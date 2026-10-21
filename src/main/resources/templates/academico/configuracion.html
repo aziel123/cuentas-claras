@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 2 (A6, E15): las horas y plazos de la asistencia. Solo Dirección, con su firma; el cambio queda
+     resaltado en la bitácora. Los rangos los fija también la base: el aviso no se corre a la noche. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Horas de la asistencia', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="configuracion-academica">
+	<div class="cabecera">
+		<div>
+			<h1>Horas de la asistencia</h1>
+			<p class="secundario">A qué hora sale la alerta de secciones sin asistencia, el aviso a las familias y el segundo
+				aviso (que también cierra las correcciones del día).</p>
+			<p class="secundario" th:if="${vista.actualizadoPor != null}"
+				th:text="|Último cambio: ${vista.actualizadoPor}, ${#temporals.format(vista.actualizadoEn, 'dd/MM/yyyy HH:mm')}|">Último cambio</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta formulario-angosto">
+		<form class="formulario" method="post" th:action="@{/academico/configuracion}" th:object="${configuracion}">
+			<div class="formulario-doble">
+				<div th:replace="~{fragments/componentes :: campoDe('horaAlerta', 'Alerta de secciones sin asistencia', 'Entre 07:00 y 12:00.', 'time', true)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('horaAviso', 'Aviso a las familias', 'Entre 09:00 y 13:00, después de la alerta.', 'time', true)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('horaSegundoAviso', 'Segundo aviso y cierre de las correcciones', 'Entre 13:00 y 18:00.', 'time', true)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('horaResumenComunicados', 'Resumen de comunicados', 'Entre 12:00 y 19:30.', 'time', true)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('diasJustificacion', 'Días hábiles para justificar', 'De 1 a 10.', 'number', true)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('diasRegistroTardio', 'Días hábiles para registrar tarde', 'De 1 a 10.', 'number', true)}"></div>
+				<div th:replace="~{fragments/componentes :: campoDe('topeResumenesMes', 'Resúmenes de comunicados por WhatsApp al mes', 'De 0 a 20.', 'number', true)}"></div>
+			</div>
+			<div class="acciones">
+				<button th:replace="~{fragments/componentes :: boton('Guardar con mi firma', 'primario')}"></button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

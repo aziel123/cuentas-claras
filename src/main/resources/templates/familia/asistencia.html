@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 2 (sección 3.5): la asistencia del mes de cada hijo y la justificación de una falta reciente (motivo
+     de una lista y una nota corta, sin diagnósticos: Ley 29733). Igual para todas las familias, con deuda o sin ella. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Asistencia', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-asistencia">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/familia}">Mi familia</a></p>
+			<h1>Asistencia</h1>
+			<p class="secundario" th:text="${mes.mesTexto}">octubre de 2026</p>
+			<nav class="fila" aria-label="Meses">
+				<a class="btn btn-secundario btn-chico" th:href="@{/familia/asistencia(mes=${mes.anterior})}">Mes anterior</a>
+				<a class="btn btn-secundario btn-chico" th:if="${mes.siguiente != null}" th:href="@{/familia/asistencia(mes=${mes.siguiente})}">Mes siguiente</a>
+				<a class="btn btn-secundario btn-chico" th:href="@{/familia/avisos}">Mis avisos</a>
+			</nav>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${#lists.isEmpty(mes.hijos)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('No hay alumnos en tu familia', 'Si es un error, comunícate con el colegio.')}"></div>
+	</th:block>
+
+	<section class="tarjeta" th:each="h : ${mes.hijos}" th:attr="aria-label=${h.nombre}">
+		<div class="fila entre">
+			<h2 th:text="${h.nombre}">Mateo</h2>
+			<span class="secundario" th:text="|${h.faltas} faltas, ${h.tardes} tardanzas, ${h.justificadas} justificadas|">1 falta</span>
+		</div>
+		<th:block th:if="${#lists.isEmpty(h.dias)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Sin registros este mes', 'La asistencia aparece el mismo día que la registra el docente.')}"></div>
+		</th:block>
+		<ul class="lista-simple" th:unless="${#lists.isEmpty(h.dias)}">
+			<li th:each="d : ${h.dias}" class="fila entre">
+				<span>
+					<span th:text="${d.fechaTexto}">lun 20</span>
+					<span th:replace="~{fragments/componentes :: badge(${d.etiqueta}, ${d.variante})}"></span>
+					<span class="secundario" th:if="${d.horaLlegada != null}" th:text="${#temporals.format(d.horaLlegada, 'HH:mm')}">08:12</span>
+					<span class="secundario" th:if="${d.motivoJustificacion != null}" th:text="|(${d.motivoJustificacion})|">(Salud)</span>
+				</span>
+				<form method="post" class="formulario-en-linea" th:if="${d.justificable}"
+					th:action="@{/familia/asistencia/marcas/{id}/justificar(id=${d.marcaId})}">
+					<label class="solo-lectores" th:for="|motivo-${d.marcaId}|">Motivo</label>
+					<select class="input" th:id="|motivo-${d.marcaId}|" name="motivo" required>
+						<option value="">Motivo de la falta</option>
+						<option th:each="m : ${motivos}" th:value="${m.name()}" th:text="${m.etiqueta()}">Salud</option>
+					</select>
+					<label class="solo-lectores" th:for="|nota-${d.marcaId}|">Nota (opcional)</label>
+					<input class="input" th:id="|nota-${d.marcaId}|" name="nota" maxlength="200" placeholder="Nota opcional (sin diagnósticos)">
+					<button type="submit" class="btn btn-secundario btn-chico">Justificar</button>
+				</form>
+			</li>
+		</ul>
+	</section>
+	<p class="ayuda" th:text="|Puedes justificar una falta de los últimos ${mes.diasJustificacion} días hábiles. No escribas diagnósticos ni datos de salud: basta con el motivo.|">Ayuda</p>
+</main>
+</body>
+</html>

@@ -67,7 +67,8 @@ class AsignacionesUnitarioTest {
 	private final AuditoriaService auditoria = mock(AuditoriaService.class);
 
 	private final Asignaciones servicio = new Asignaciones(repositorio, secciones, anios, usuarios, solicitudes,
-			mock(FirmaSesion.class), auditoria, Clock.fixed(Instant.parse("2027-03-01T13:00:00Z"), ZoneId.of("UTC")));
+			mock(FirmaSesion.class), auditoria, Clock.fixed(Instant.parse("2027-03-01T13:00:00Z"), ZoneId.of("UTC")),
+			mock(pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil.class));
 
 	private Seccion seccion;
 

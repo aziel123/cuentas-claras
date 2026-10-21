@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 2 (sección 3.4): la hoja del día en el celular. Todos en «Presente»; un toque por alumno (Falta o
+     Tarde, con la hora opcional) y UN botón «Guardar». Ya registrada: cada marca se corrige con motivo (hoy, antes del
+     cierre) o se pide su corrección (otro día). Solo nombres: nunca documentos, contactos ni nada de cobranza. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Hoja de asistencia', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="hoja-asistencia">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/academico/asistencia}">Asistencia</a></p>
+			<h1 th:text="${hoja.seccion}">3.° Primaria A</h1>
+			<p class="secundario" th:text="${hoja.fechaTexto}">martes 21 de octubre</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${hoja.motivoSinClases != null}">
+		<div th:replace="~{fragments/componentes :: alerta('info', ${hoja.motivoSinClases})}"></div>
+	</th:block>
+
+	<!--/* Sin registrar: la hoja con todos en Presente y un solo POST. */-->
+	<form method="post" class="tarjeta" th:if="${!hoja.registrado and hoja.motivoSinClases == null}"
+		th:action="${hoja.solicitudId == null} ? @{/academico/asistencia/{s}/hoy(s=${hoja.seccionId})} : @{/academico/asistencia/{s}/tardio/{id}(s=${hoja.seccionId}, id=${hoja.solicitudId})}">
+		<th:block th:if="${#lists.isEmpty(hoja.alumnos)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('La sección no tiene alumnos matriculados', 'Administración los matricula.')}"></div>
+		</th:block>
+		<fieldset class="grupo-opciones hoja-fila" th:each="a : ${hoja.alumnos}">
+			<legend th:text="|${a.numero}. ${a.apellidos}, ${a.nombres}|">1. Quispe Huamán, Mateo</legend>
+			<div class="hoja-estados">
+				<label class="opcion" th:each="e : ${estados}">
+					<input type="radio" th:name="|estado-${a.alumnoId}|" th:value="${e.name()}" th:checked="${e.name() == 'PRESENTE'}">
+					<span th:text="${e.etiqueta()}">Presente</span>
+				</label>
+				<label class="campo-chico">
+					<span class="solo-lectores" th:text="|Hora de llegada de ${a.nombres}|">Hora de llegada</span>
+					<input class="input" type="time" th:name="|hora-${a.alumnoId}|" aria-label="Hora de llegada (si llegó tarde)">
+				</label>
+			</div>
+		</fieldset>
+		<div class="acciones" th:unless="${#lists.isEmpty(hoja.alumnos)}">
+			<button type="submit" class="btn btn-primario" th:text="|Guardar asistencia de ${hoja.seccion}|">Guardar asistencia</button>
+		</div>
+		<p class="ayuda">Guardas una sola vez con tu firma. Si te equivocas, corriges cada marca con su motivo hasta las
+			<span th:text="${#temporals.format(hoja.cierreCorrecciones, 'HH:mm')}">16:00</span>.</p>
+	</form>
+
+	<!--/* Ya registrada: el resultado y la corrección marca por marca. */-->
+	<section class="tarjeta" aria-labelledby="titulo-registrada" th:if="${hoja.registrado}">
+		<div class="fila entre">
+			<h2 id="titulo-registrada">Asistencia registrada</h2>
+			<span class="secundario num" th:text="|${hoja.presentes} presentes, ${hoja.faltas} faltas, ${hoja.tardes} tardes, ${hoja.justificadas} justificadas|">26 presentes</span>
+		</div>
+		<table class="tabla">
+			<caption class="solo-lectores">Marca vigente de cada alumno</caption>
+			<thead>
+				<tr><th scope="col">N.°</th><th scope="col">Alumno</th><th scope="col">Estado</th><th scope="col">Corregir</th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="a : ${hoja.alumnos}">
+					<td data-etiqueta="N.°" class="num" th:text="${a.numero}">1</td>
+					<td data-etiqueta="Alumno">
+						<span th:text="|${a.apellidos}, ${a.nombres}|">Quispe Huamán, Mateo</span>
+						<p class="ayuda" th:if="${a.nota != null}" th:text="|Nota de la familia: ${a.nota}|">Nota</p>
+					</td>
+					<td data-etiqueta="Estado">
+						<span th:replace="~{fragments/componentes :: badge(${a.etiqueta}, ${a.variante})}"></span>
+						<span class="secundario" th:if="${a.horaLlegada != null}" th:text="${#temporals.format(a.horaLlegada, 'HH:mm')}">08:12</span>
+					</td>
+					<td data-etiqueta="Corregir">
+						<form method="post" class="formulario-en-linea"
+							th:action="${a.corregibleHoy} ? @{/academico/asistencia/marcas/{id}/corregir-hoy(id=${a.marcaId}, seccion=${hoja.seccionId})} : @{/academico/asistencia/marcas/{id}/pedir-correccion(id=${a.marcaId}, seccion=${hoja.seccionId})}">
+							<label class="solo-lectores" th:for="|estado-${a.marcaId}|">Estado correcto</label>
+							<select class="input" th:id="|estado-${a.marcaId}|" name="estado" required>
+								<option th:each="e : ${estadosCorreccion}" th:value="${e.name()}" th:text="${e.etiqueta()}"
+									th:unless="${e.name() == a.estado or (a.corregibleHoy and e.name() == 'FALTA_JUSTIFICADA')}">Falta</option>
+							</select>
+							<label class="solo-lectores" th:for="|hora-${a.marcaId}|">Hora de llegada</label>
+							<input class="input" type="time" th:id="|hora-${a.marcaId}|" name="horaLlegada">
+							<label class="solo-lectores" th:for="|motivo-${a.marcaId}|">Motivo</label>
+							<input class="input" th:id="|motivo-${a.marcaId}|" name="motivo" required minlength="10" maxlength="300"
+								placeholder="Motivo (10 caracteres o más)">
+							<button type="submit" class="btn btn-secundario btn-chico" th:text="${a.corregibleHoy} ? 'Corregir' : 'Pedir corrección'">Corregir</button>
+						</form>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+		<p class="ayuda" th:if="${hoja.correccionAbierta}">Corriges directo hasta las
+			<span th:text="${#temporals.format(hoja.cierreCorrecciones, 'HH:mm')}">16:00</span>; si el aviso ya salió, la familia
+			recibe la corrección. Después, la corrección la aprueba Dirección.</p>
+		<p class="ayuda" th:unless="${hoja.correccionAbierta}">La corrección de este día la aprueba otra persona de Dirección.</p>
+	</section>
+
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-tardio" th:if="${hoja.solicitudId == null}">
+		<h2 id="titulo-tardio">¿Un día sin registrar?</h2>
+		<p class="secundario">Si un día no hubo internet y anotaste en papel, pide registrarlo (lo aprueba Dirección).</p>
+		<form method="post" class="formulario" th:action="@{/academico/asistencia/{s}/pedir-registro-tardio(s=${hoja.seccionId})}">
+			<div class="campo">
+				<label for="fecha-tardio">Día</label>
+				<input class="input" id="fecha-tardio" type="date" name="fecha" required>
+			</div>
+			<div class="campo">
+				<label for="motivo-tardio">Motivo</label>
+				<textarea class="input" id="motivo-tardio" name="motivo" required minlength="10" maxlength="500"></textarea>
+			</div>
+			<div class="acciones"><button type="submit" class="btn btn-secundario">Pedir registrar ese día</button></div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

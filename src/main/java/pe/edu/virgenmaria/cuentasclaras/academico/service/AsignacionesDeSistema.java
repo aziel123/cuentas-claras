@@ -85,6 +85,10 @@ public class AsignacionesDeSistema {
 		if (anios.findById(a.getAnioEscolarId()).map(AnioEscolar::cerrado).orElse(true)) {
 			return Optional.of("El año escolar se cerró.");
 		}
+		// Sprint 9, tanda 2 (A7): la cobertura de un ausente termina sola al día siguiente de su fecha de fin.
+		if (a.coberturaVencida(java.time.LocalDate.now(reloj))) {
+			return Optional.of("La cobertura terminó el " + a.getHasta() + ".");
+		}
 		Optional<Usuario> cuenta = usuarios.findById(a.getUsuarioId());
 		if (cuenta.isEmpty() || !cuenta.get().isActivo()) {
 			return Optional.of("La cuenta del docente se desactivó.");

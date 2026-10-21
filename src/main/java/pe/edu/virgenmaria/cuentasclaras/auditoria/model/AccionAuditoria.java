@@ -381,6 +381,26 @@ public enum AccionAuditoria {
 	/** Dirección o Promotoría (con su firma) o sistema.academico terminó una asignación: el docente deja de ver la sección. */
 	ASIGNACION_DOCENTE_TERMINADA("Terminó la asignación de un docente a una sección", false),
 
+	// Sprint 9, tanda 2 (asistencia, sección 12). Sin nombres de alumnos ni notas de justificación: conteos, ids y estados.
+	/** Un docente registró la asistencia de su sección (del día o de un día pasado con su solicitud aprobada). */
+	ASISTENCIA_REGISTRADA("Registró la asistencia de una sección", false),
+	/** Un docente corrigió el mismo día, antes del aviso a las familias. */
+	ASISTENCIA_CORREGIDA("Corrigió la asistencia del día", false),
+	/** Se resalta: corrección después del aviso a las familias, o de otro día con la aprobación de Dirección. */
+	ASISTENCIA_CORREGIDA_DESPUES_DEL_AVISO("Corrigió la asistencia después del aviso o de otro día", true),
+	/** La familia justificó una falta desde el portal (el motivo de la lista; nunca la nota). */
+	ASISTENCIA_JUSTIFICADA("La familia justificó una falta", false),
+	/** Se resalta: Dirección revirtió una justificación de la familia, con motivo y su firma. */
+	JUSTIFICACION_REVERTIDA("Revirtió la justificación de una falta", true),
+	/** Un apoderado (portal) o Administración (ficha firmada) registró un consentimiento de avisos. */
+	CONSENTIMIENTO_AVISO("Registró el consentimiento de avisos de un apoderado", false),
+	/** Se resalta: Dirección cambió las horas o plazos de la asistencia (antes y después). */
+	CONFIGURACION_ACADEMICA_CAMBIADA("Cambió las horas y plazos de la asistencia", true),
+	/** Se pidió una corrección de otro día o un registro tardío (los aprueba otra persona). */
+	ASISTENCIA_SOLICITADA("Pidió corregir o registrar la asistencia de otro día", false),
+	/** sistema.asistencia creó los avisos de asistencia a las familias y subió la marca de agua. */
+	AVISOS_ASISTENCIA_ENVIADOS("Preparó los avisos de asistencia a las familias", false),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

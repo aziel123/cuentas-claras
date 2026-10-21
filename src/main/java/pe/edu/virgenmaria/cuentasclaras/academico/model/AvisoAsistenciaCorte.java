@@ -58,12 +58,20 @@ public class AvisoAsistenciaCorte {
 		return c;
 	}
 
-	/** Sube la marca de agua al id más alto avisado (nunca baja). */
-	public void subirA(long marcaId, LocalDateTime ahora) {
+	/**
+	 * Un envío: sube la marca de agua al id más alto avisado (nunca baja) y anota cuándo fue ({@code actualizado_en}: así
+	 * el proceso sabe si el envío de esa hora ya salió).
+	 */
+	public void registrarEnvio(long marcaId, LocalDateTime ahora) {
 		if (marcaId > ultimaMarcaId) {
 			ultimaMarcaId = marcaId;
-			actualizadoEn = Objects.requireNonNull(ahora, "ahora");
 		}
+		actualizadoEn = Objects.requireNonNull(ahora, "ahora");
+	}
+
+	/** El momento del último envío ({@code null} si la fila es nueva y aún no se envió nada). */
+	public LocalDateTime ultimoEnvio() {
+		return version == null ? null : actualizadoEn;
 	}
 
 	@PreRemove

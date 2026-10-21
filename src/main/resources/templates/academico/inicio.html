@@ -12,6 +12,10 @@
 				th:text="${inicio.anio != null} ? |Secciones del año ${inicio.anio} y sus tutores.| : 'Todavía no hay un año escolar abierto.'">Secciones del año</p>
 		</div>
 		<a class="btn btn-secundario" th:if="${inicio.direccion}" th:href="@{/academico/asignaciones}">Docentes y secciones</a>
+		<a class="btn btn-secundario" th:if="${inicio.direccion}" th:href="@{/academico/asistencia/cambios}">Cambios de la asistencia</a>
+		<a class="btn btn-secundario" th:if="${inicio.direccion}" th:href="@{/academico/asistencia/reporte}">Reporte de asistencia</a>
+		<a class="btn btn-secundario" th:if="${inicio.direccion}" th:href="@{/academico/configuracion}">Horas de la asistencia</a>
+		<a class="btn btn-primario" th:unless="${inicio.direccion and #lists.isEmpty(inicio.mias)}" th:href="@{/academico/asistencia}">Asistencia de hoy</a>
 	</div>
 
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>

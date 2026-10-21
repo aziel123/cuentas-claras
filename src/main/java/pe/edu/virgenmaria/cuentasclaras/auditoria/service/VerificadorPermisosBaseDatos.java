@@ -810,6 +810,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		verificarPlataforma();
 		avisarConfiguracionVieja();
 		avisarDocentesConCobranza();
+		avisarColegiosSinGobierno();
 	}
 
 	static final String SQL_PLATAFORMAS = "SELECT COUNT(*) FROM colegio WHERE tipo = 'PLATAFORMA'";
@@ -1085,6 +1086,31 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		}
 		catch (DataAccessException e) {
 			LOG.warn("No se pudieron contar las cuentas con DOCENTE y CAJA o ADMINISTRACION: {}",
+					e.getClass().getSimpleName());
+		}
+	}
+
+	/**
+	 * Sprint 9, tanda 2 (A8): los colegios en producción con menos de 2 personas activas de Promotoría o Dirección. Ahí la
+	 * segregación («quien pide no aprueba») no se puede cumplir. No impide arrancar: queda en el log, y la lista de puesta
+	 * en marcha lo muestra pendiente; el alta de esos roles va por CAMBIO_ROLES aprobada por la otra persona.
+	 */
+	static final String SQL_COLEGIOS_SIN_GOBIERNO = "SELECT COUNT(*) FROM colegio c WHERE c.tipo = 'COLEGIO' "
+			+ "AND c.estado = 'PRODUCCION' AND (SELECT COUNT(DISTINCT u.id) FROM usuario u JOIN usuario_rol r "
+			+ "ON r.usuario_id = u.id WHERE u.colegio_id = c.id AND u.activo AND u.apoderado_id IS NULL "
+			+ "AND r.rol IN ('PROMOTOR', 'DIRECTOR')) < 2";
+
+	void avisarColegiosSinGobierno() {
+		try {
+			Integer colegios = jdbc.queryForObject(SQL_COLEGIOS_SIN_GOBIERNO, Integer.class);
+			if (colegios != null && colegios > 0) {
+				LOG.warn("Hay {} colegio(s) en producción con menos de 2 personas activas de Promotoría o Dirección: la "
+						+ "segregación de funciones no se cumple (quien pide no aprueba). Revisa la puesta en marcha.",
+						colegios);
+			}
+		}
+		catch (DataAccessException e) {
+			LOG.warn("No se pudieron contar los colegios con menos de 2 personas de gobierno: {}",
 					e.getClass().getSimpleName());
 		}
 	}
