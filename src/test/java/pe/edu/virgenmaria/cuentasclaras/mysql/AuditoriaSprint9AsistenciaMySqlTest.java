@@ -518,8 +518,9 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 		Clase c = clase("i", "987654481");
 		String admin = c.escuela().equipo().administracion().getNombreUsuario();
 		String directora = c.escuela().equipo().directora().getNombreUsuario();
+		// Versión 99: ninguna firma la cubre (el colegio es compartido y otra prueba pudo firmar ya la versión 0).
 		String insertar = "INSERT INTO configuracion_academica (colegio_id, hora_aviso, actualizado_por, creado_en, "
-				+ "creado_por, actualizado_en) VALUES (?, ?, ?, NOW(6), ?, NOW(6))";
+				+ "creado_por, actualizado_en, version) VALUES (?, ?, ?, NOW(6), ?, NOW(6), 99)";
 		assertThat(codigoAl(() -> jdbc.update(insertar, c.colegio(), "11:00:00", admin, admin))).isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update(insertar, c.colegio(), "11:00:00", directora, directora))).isEqualTo(1644);
 		// Por la aplicación (Dirección con su firma), sí.
