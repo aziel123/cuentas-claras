@@ -594,3 +594,12 @@ input[type="file"].input { padding: var(--esp-2); }
 .desplegable > .lista-panel, .desplegable > p { margin: var(--esp-3) var(--esp-4); }
 .llamada-familia { display: grid; gap: var(--esp-3); min-width: 0; }
 .llamada-familia .grupo-opciones { display: grid; gap: var(--esp-2); }
+
+/* Sprint 9, tanda 2: la hoja de asistencia (un toque por alumno, sin JavaScript) y las correcciones en línea */
+.hoja-fila { border-bottom: 1px solid var(--color-borde); padding: var(--esp-2) 0; }
+.hoja-estados { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); }
+.campo-chico { display: inline-flex; align-items: center; }
+.campo-chico .input { width: auto; min-width: 7rem; }
+.formulario-en-linea { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); }
+.formulario-en-linea .input { width: auto; min-width: 8rem; }
+.fila-resaltada { background: var(--color-alerta-suave); }

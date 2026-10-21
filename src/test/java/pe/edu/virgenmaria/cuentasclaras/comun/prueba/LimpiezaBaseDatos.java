@@ -17,6 +17,17 @@ public final class LimpiezaBaseDatos {
 	}
 
 	public static void limpiar(JdbcTemplate jdbc) {
+		// Sprint 9, tanda 2 (V33): las marcas apuntan a sí mismas (reemplaza_id), al registro, a la sesión y a la solicitud;
+		// el consentimiento, al apoderado y a la sesión.
+		// La cadena se borra desde la última (nadie la reemplaza) hacia la primera: el CHECK no deja vaciar reemplaza_id.
+		while (jdbc.update("DELETE FROM marca_asistencia WHERE id NOT IN (SELECT reemplaza_id FROM marca_asistencia "
+				+ "WHERE reemplaza_id IS NOT NULL)") > 0) {
+			// sigue con la marca anterior de cada cadena
+		}
+		jdbc.update("DELETE FROM registro_asistencia");
+		jdbc.update("DELETE FROM consentimiento_aviso");
+		jdbc.update("DELETE FROM configuracion_academica");
+		jdbc.update("DELETE FROM aviso_asistencia_corte");
 		// Sprint 9, tanda 1 (V32): la asignación docente apunta a su solicitud, a la sección, al año y a la cuenta.
 		jdbc.update("DELETE FROM asignacion_docente");
 		// Correcciones del sprint 7 (V27): la resolución de una alerta apunta al respaldo y a la cuenta; la primera Dirección,

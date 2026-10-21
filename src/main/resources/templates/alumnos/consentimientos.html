@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 2 (E38): registrar el «sí» a los avisos de asistencia que la familia firmó en la ficha de
+     matrícula, con el código de la ficha como evidencia. La familia lo ve y lo retira en su portal. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Consentimientos de la ficha', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="consentimientos-ficha">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/alumnos}">Alumnos</a></p>
+			<h1>Consentimientos de la ficha</h1>
+			<p class="secundario">Registra solo lo que la familia firmó en la ficha de matrícula. Queda a tu nombre, con el
+				código de la ficha, y la familia lo ve en su portal.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta formulario-angosto">
+		<form class="formulario" method="post" th:action="@{/alumnos/consentimientos}" th:object="${ficha}">
+			<input type="hidden" th:field="*{finalidad}">
+			<div th:replace="~{fragments/componentes :: campoDe('apoderadoId', 'Código del apoderado', 'El número que aparece en la ficha de la familia.', 'number', true)}"></div>
+			<div class="campo">
+				<label for="canal">Canal</label>
+				<select class="input" th:field="*{canal}" required>
+					<option th:each="c : ${canales}" th:value="${c}" th:text="${c.etiqueta()}">WhatsApp</option>
+				</select>
+			</div>
+			<div th:replace="~{fragments/componentes :: campoDe('codigoFicha', 'Código de la ficha firmada', 'De 3 a 40 caracteres.', 'text', true)}"></div>
+			<div class="acciones">
+				<button th:replace="~{fragments/componentes :: boton('Registrar', 'primario')}"></button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

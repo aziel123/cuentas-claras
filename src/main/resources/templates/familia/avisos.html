@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 2 (sección 3.6, decisión 152): los avisos de asistencia de cada apoderado de la familia. WhatsApp con
+     el «sí» explícito; el correo sale salvo oposición. El portal muestra siempre todo, con consentimiento o sin él. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Mis avisos', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-avisos">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/familia}">Mi familia</a></p>
+			<h1>Mis avisos</h1>
+			<p class="secundario">Elige cómo recibes el aviso de asistencia del día (faltas y tardanzas de tus hijos). Aunque
+				no recibas avisos, siempre ves la asistencia en el portal.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" th:each="a : ${apoderados}" th:attr="aria-label=${a.nombre}">
+		<h2 th:text="${a.yo} ? |${a.nombre} (tú)| : ${a.nombre}">Rosa Huamán (tú)</h2>
+		<ul class="lista-simple">
+			<li class="fila entre" th:each="c : ${a.consentimientos}">
+				<span>
+					<span th:text="|${c.finalidadTexto} por ${c.canalTexto}|">Avisos de asistencia por WhatsApp</span>
+					<span th:replace="~{fragments/componentes :: badge(${c.otorgado} ? 'Sí' : 'No', ${c.otorgado} ? 'exito' : 'neutro')}"></span>
+					<span class="secundario" th:if="${!c.contacto}">(contacto sin verificar: no llega hasta que lo confirmes)</span>
+					<span class="secundario" th:if="${c.origen != null}" th:text="|Desde: ${c.origen}|">Desde: Portal</span>
+				</span>
+				<form method="post" th:action="@{/familia/avisos}" th:if="${a.yo}">
+					<input type="hidden" name="finalidad" th:value="${c.finalidad}">
+					<input type="hidden" name="canal" th:value="${c.canal}">
+					<input type="hidden" name="otorga" th:value="${!c.otorgado}">
+					<button type="submit" class="btn btn-secundario btn-chico" th:text="${c.otorgado} ? 'No quiero recibirlo' : 'Sí, quiero recibirlo'">Cambiar</button>
+				</form>
+			</li>
+		</ul>
+	</section>
+	<p class="ayuda">Los avisos de pago no se apagan: son el control de la familia sobre lo que se registra en el colegio.</p>
+</main>
+</body>
+</html>

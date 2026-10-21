@@ -132,7 +132,11 @@ class ReglasArquitecturaTest {
 					pe.edu.virgenmaria.cuentasclaras.comunicacion.model.ConfiguracionColegio.class,
 					pe.edu.virgenmaria.cuentasclaras.operacion.model.Respaldo.class,
 					// Correcciones del sprint 7 (QA-S7-1): la resolución de una alerta de respaldo es de toda la base.
-					pe.edu.virgenmaria.cuentasclaras.operacion.model.ResolucionRespaldo.class)
+					pe.edu.virgenmaria.cuentasclaras.operacion.model.ResolucionRespaldo.class,
+					// Sprint 9, tanda 2: la clave de estas dos ES el colegio (una fila por colegio); se leen siempre con el
+					// colegio del contexto.
+					pe.edu.virgenmaria.cuentasclaras.academico.model.ConfiguracionAcademica.class,
+					pe.edu.virgenmaria.cuentasclaras.academico.model.AvisoAsistenciaCorte.class)
 			.should().beAssignableTo(BaseEntity.class)
 			.because("BaseEntity aporta colegioId (@TenantId), autoría y versión");
 
@@ -470,7 +474,21 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".academico.service.Asignaciones#terminar", APROBACION),
 			Map.entry(BASE + ".academico.service.ConsultaAcademica", "hasAnyRole('DIRECTOR','DOCENTE')"),
 			Map.entry(BASE + ".academico.service.SeccionesDelDocente", "hasAnyRole('DIRECTOR','DOCENTE')"),
-			Map.entry(BASE + ".academico.service.AsignacionesDeSistema", "hasRole('SISTEMA_ACADEMICO')"));
+			Map.entry(BASE + ".academico.service.AsignacionesDeSistema", "hasRole('SISTEMA_ACADEMICO')"),
+			// Sprint 9, tanda 2 (sección 10): la hoja del día y sus correcciones, SOLO el docente (decisión 144); los cambios
+			// del día y la reversión, Dirección; la familia justifica; los avisos y la marca de agua, sistema.asistencia.
+			Map.entry(BASE + ".academico.service.ServicioAsistencia", "hasRole('DOCENTE')"),
+			Map.entry(BASE + ".academico.service.AsistenciaDireccion", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.service.JustificacionesFamilia", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".academico.service.ReportesAsistencia", "hasAnyRole('DIRECTOR','DOCENTE')"),
+			Map.entry(BASE + ".academico.service.AvisosDeAsistencia", "hasRole('SISTEMA_ASISTENCIA')"),
+			Map.entry(BASE + ".academico.service.ConfiguracionesAcademicas#cambiar", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.service.ConsentimientosAviso#registrarEnPortal", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".academico.service.ConsentimientosAviso#registrarDesdeFicha",
+					"hasAnyRole('DIRECTOR','ADMINISTRACION')"),
+			Map.entry(BASE + ".academico.service.AlertasAcademicas", ALERTAS),
+			Map.entry(BASE + ".aprobaciones.service.AlertasSolicitudesPendientes", ALERTAS),
+			Map.entry(BASE + ".comunicacion.service.AvisosAsistenciaFamilias", "hasRole('SISTEMA_ASISTENCIA')"));
 
 	/**
 	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para
@@ -811,6 +829,30 @@ class ReglasArquitecturaTest {
 			.that().doNotHaveFullyQualifiedName(BASE + ".comunicados.service.AdjuntosComunicado")
 			.should().dependOnClassesThat().resideInAPackage("org.apache.pdfbox..")
 			.because("un PDF puede traer JavaScript, acciones o archivos embebidos: lo revisa un solo lugar");
+
+	/**
+	 * Sprint 9, tanda 2 (A15): el marcador dactilar no está habilitado. Nadie usa {@code FuenteAsistencia.MARCADOR} fuera del
+	 * propio enum (la fuente es siempre DOCENTE; los triggers rechazan MARCADOR).
+	 */
+	@ArchTest
+	static final ArchRule nadieUsaLaFuenteMarcador = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".academico.model.FuenteAsistencia")
+			.should().accessField(pe.edu.virgenmaria.cuentasclaras.academico.model.FuenteAsistencia.class, "MARCADOR")
+			.because("el marcador todavía no existe: habilitarlo es otra migración, otros triggers y su propio diseño");
+
+	/**
+	 * Sprint 9, tanda 2 (sección 9): los avisos de asistencia (el proceso y su servicio) leen lo académico SOLO por
+	 * {@code academico.api}: así no ven nada más que el primer nombre, el estado y la hora.
+	 */
+	@ArchTest
+	static final ArchRule avisosDeAsistenciaSoloLeenLaApiAcademica = noClasses()
+			.that().haveFullyQualifiedName(BASE + ".comunicacion.proceso.AvisosAsistencia")
+			.or().haveFullyQualifiedName(BASE + ".comunicacion.service.AvisosAsistenciaFamilias")
+			.or().haveFullyQualifiedName(BASE + ".comunicacion.service.CreadorMensajes")
+			.should().dependOnClassesThat(DescribedPredicate.describe("de academico fuera de academico.api",
+					(JavaClass c) -> c.getPackageName().startsWith(BASE + ".academico")
+							&& !c.getPackageName().startsWith(BASE + ".academico.api")))
+			.because("el aviso a la familia no debe poder leer más que lo que expone academico.api");
 
 	/** Las asignaciones dan acceso a datos de menores: no se borran ni se cambian con SQL masivo. */
 	@ArchTest

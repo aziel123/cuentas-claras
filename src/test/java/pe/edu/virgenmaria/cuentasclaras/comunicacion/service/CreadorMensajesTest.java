@@ -55,7 +55,7 @@ class CreadorMensajesTest {
 
 	@BeforeEach
 	void preparar() {
-		creador = new CreadorMensajes(mensajes, usuarios, whatsapp, colegios);
+		creador = new CreadorMensajes(mensajes, usuarios, whatsapp, colegios, org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class));
 		when(colegios.nombreParaMensajes(any())).thenReturn(COLEGIO);
 		// Correcciones del sprint 8 (QA-S8-4): a las familias solo se les escribe con el colegio en producción.
 		when(colegios.enProduccion(any())).thenReturn(true);

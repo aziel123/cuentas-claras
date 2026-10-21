@@ -272,8 +272,33 @@ simulado)
 	echo "OK: el destino simulado solo con la fila del DBA (en prod el verificador no arranca con ella)"
 	;;
 
+faltan-filas-asistencia)
+	# Sprint 9, tanda 2 (H13): la asistencia es de solo inserción y está en tablas-vigiladas.txt. Un DBA borra una marca de
+	# UN colegio: el respaldo siguiente avisa «faltan filas» SOLO de ese colegio. Si la fase 2 corrió en fin de semana o
+	# feriado no hay marcas (el día lo decide la base): se omite con un aviso.
+	a=$(admin -e "SELECT m.colegio_id FROM marca_asistencia m JOIN colegio c ON c.id = m.colegio_id WHERE c.tipo = 'COLEGIO'
+		GROUP BY m.colegio_id ORDER BY m.colegio_id DESC LIMIT 1")
+	if [ -z "$a" ]; then
+		echo "OMITIDO: no hay marcas de asistencia (la fase 2 corrió en un día sin clases)"
+		exit 0
+	fi
+	sh "$respaldar" > /tmp/cc-respaldo-9a.out 2>&1 || { cat /tmp/cc-respaldo-9a.out; exit 1; }
+	grep -q "\"marca_asistencia@$a\": \[" "$(ultimo_manifiesto)" || { echo "ERROR: el manifiesto no cuenta las marcas del colegio $a"; exit 1; }
+	admin -e "SET FOREIGN_KEY_CHECKS = 0; DELETE FROM marca_asistencia WHERE colegio_id = $a ORDER BY id DESC LIMIT 1"
+	set +e
+	sh "$respaldar" > /tmp/cc-respaldo-9b.out 2> /tmp/cc-respaldo-9b.err
+	codigo=$?
+	set -e
+	cat /tmp/cc-respaldo-9b.out /tmp/cc-respaldo-9b.err
+	test "$codigo" = "3"
+	grep -q "marca_asistencia (faltan 1) \[colegio $a\]" /tmp/cc-respaldo-9b.out
+	test "$(admin -e "SELECT colegios_faltan FROM respaldo ORDER BY id DESC LIMIT 1")" = "[$a]" \
+		|| { echo "ERROR: colegios_faltan no es [$a]"; exit 1; }
+	echo "OK (H13): la marca de asistencia borrada del colegio $a se avisa solo a ese colegio"
+	;;
+
 *)
-	echo "Uso: $0 sin-credenciales|primer-respaldo|e29|restauracion|e31|e30|e32|faltan-filas-sigue|restauracion-sin-clave|permisos-anidados|resuelto|faltan-filas-por-colegio|resuelto-por-colegio|simulado" >&2
+	echo "Uso: $0 sin-credenciales|primer-respaldo|e29|restauracion|e31|e30|e32|faltan-filas-sigue|restauracion-sin-clave|permisos-anidados|resuelto|faltan-filas-por-colegio|resuelto-por-colegio|simulado|faltan-filas-asistencia" >&2
 	exit 2
 	;;
 esac

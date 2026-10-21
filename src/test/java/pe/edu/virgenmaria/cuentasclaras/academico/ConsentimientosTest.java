@@ -1,0 +1,76 @@
+package pe.edu.virgenmaria.cuentasclaras.academico;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
+import pe.edu.virgenmaria.cuentasclaras.academico.api.Consentimientos;
+import pe.edu.virgenmaria.cuentasclaras.academico.dto.portal.AvisosDelApoderado;
+import pe.edu.virgenmaria.cuentasclaras.academico.dto.portal.ConsentimientoFichaRequest;
+import pe.edu.virgenmaria.cuentasclaras.academico.dto.portal.ConsentimientoRequest;
+import pe.edu.virgenmaria.cuentasclaras.academico.model.Canal;
+import pe.edu.virgenmaria.cuentasclaras.academico.model.Finalidad;
+import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * Sprint 9, tanda 2 (sección 3.6, H2, decisión 152; E38): sin ninguna fila, WhatsApp vale «no» y correo «sí»; la familia
+ * da o retira el suyo en el portal; Administración lo registra desde la ficha firmada SOLO con su código; la familia lo ve
+ * y lo revoca. Vale la última fila (solo inserción).
+ */
+class ConsentimientosTest extends PruebaAsistencia {
+
+	@Autowired
+	private Consentimientos vigentes;
+
+	private boolean recibe(Long apoderado, boolean whatsapp) {
+		return como(datos.rosaEnLinea(), () -> vigentes.recibeAsistencia(apoderado, whatsapp));
+	}
+
+	@Test
+	void sinFilasWhatsappNoYCorreoSi() {
+		assertThat(recibe(datos.rosa(), true)).isFalse();
+		assertThat(recibe(datos.rosa(), false)).isTrue();
+		List<AvisosDelApoderado> avisos = como(datos.rosaEnLinea(), () -> consentimientos.avisos());
+		assertThat(avisos).singleElement().satisfies(a -> {
+			assertThat(a.yo()).isTrue();
+			assertThat(a.consentimientos()).extracting(c -> c.canal() + ":" + c.otorgado() + ":" + c.porDefecto())
+					.containsExactly("WHATSAPP:false:true", "CORREO:true:true");
+		});
+	}
+
+	@Test
+	void desdeFichaExigeEvidencia() {
+		assertThatThrownBy(() -> como(EscenarioCobranza.ADMINISTRACION, () -> consentimientos.registrarDesdeFicha(
+				new ConsentimientoFichaRequest(datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, "  "))))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("código de la ficha");
+		assertThatThrownBy(() -> como(EscenarioCobranza.CAJA, () -> consentimientos.registrarDesdeFicha(
+				new ConsentimientoFichaRequest(datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, "FM-2026-0012"))))
+				.isInstanceOf(AccessDeniedException.class);
+		como(EscenarioCobranza.ADMINISTRACION, () -> consentimientos.registrarDesdeFicha(new ConsentimientoFichaRequest(
+				datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, "FM-2026-0012")));
+		assertThat(recibe(datos.rosa(), true)).isTrue();
+		assertThat(jdbc.queryForObject("SELECT evidencia FROM consentimiento_aviso", String.class)).isEqualTo("FM-2026-0012");
+		assertThat(EscenarioEscolar.ultimoEvento(jdbc, "CONSENTIMIENTO_AVISO").get("DETALLE").toString())
+				.contains("FM-2026-0012");
+	}
+
+	@Test
+	void laFamiliaLoRevoca() {
+		como(EscenarioCobranza.ADMINISTRACION, () -> consentimientos.registrarDesdeFicha(new ConsentimientoFichaRequest(
+				datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, "FM-2026-0012")));
+		como(datos.rosaEnLinea(), () -> consentimientos.registrarEnPortal(new ConsentimientoRequest(Finalidad.ASISTENCIA,
+				Canal.WHATSAPP, false)));
+		assertThat(recibe(datos.rosa(), true)).isFalse();
+		// Solo inserción: las dos filas quedan (vale la última).
+		assertThat(EscenarioEscolar.contar(jdbc, "consentimiento_aviso")).isEqualTo(2);
+		// Otra familia no ve ni cambia lo de Rosa: su portal muestra solo a Pedro.
+		List<AvisosDelApoderado> dePedro = como(datos.pedroEnLinea(), () -> consentimientos.avisos());
+		assertThat(dePedro).extracting(AvisosDelApoderado::apoderadoId).containsExactly(datos.pedro());
+	}
+}

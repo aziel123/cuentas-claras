@@ -25,6 +25,10 @@ public enum TipoAviso {
 	LLAMADA_POR_DIRECCION("Dirección registró una llamada de control"),
 	/** Sprint 8, tanda 2 (sección 3.6, E12): un conector entró en vigencia (CRÍTICA durante unos días). */
 	CONECTOR_CAMBIADO("Cambió adónde entra el dinero del colegio"),
+	/** Sprint 9, tanda 2 (decisión 149, A4): secciones sin asistencia (o incompleta) a la hora de alerta. A Dirección. */
+	SECCION_SIN_ASISTENCIA("Hay secciones sin asistencia registrada"),
+	/** Sprint 9, tanda 2 (A8): solicitudes de la bandeja pendientes más de 2 días hábiles. A Promotoría. */
+	SOLICITUDES_PENDIENTES("Hay solicitudes por aprobar hace más de 2 días"),
 	OTRA_CRITICA("Alerta crítica");
 
 	private final String texto;
@@ -41,7 +45,12 @@ public enum TipoAviso {
 	/** Las ATENCIÓN que también salen al celular (decisión 70); de las demás, solo las CRÍTICAS. */
 	public boolean saleAunqueNoSeaCritica() {
 		return this == CIERRE_NO_REALIZADO || this == ANULACION_PAGO_PENDIENTE || this == LLAMADA_REEMPLAZADA
-				|| this == LLAMADA_POR_DIRECCION;
+				|| this == LLAMADA_POR_DIRECCION || this == SECCION_SIN_ASISTENCIA || this == SOLICITUDES_PENDIENTES;
+	}
+
+	/** Sprint 9, tanda 2 (H10): las que van SOLO a Dirección (no a Promotoría, que no ve la asistencia: decisión 143). */
+	public boolean soloDireccion() {
+		return this == SECCION_SIN_ASISTENCIA;
 	}
 
 	/**

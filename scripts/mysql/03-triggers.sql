@@ -9,7 +9,17 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
--- Versión de la migración V32 (sprint 9, tanda 1): 88 triggers y 8 funciones (más las 3 de 02: 11 con huella; 99 huellas).
+-- Versión de la migración V33 (sprint 9, tanda 2): 93 triggers y 10 funciones (más las 3 de 02: 13 con huella; 106 huellas).
+-- Nuevos: trg_registro_asistencia_nace (el registro del día lo hace SOLO un docente asignado a la sección, con su sesión y
+-- su firma, un día de clases y HOY según la base; otro día, con su REGISTRO_ASISTENCIA_TARDIO aprobada y firmada),
+-- trg_marca_asistencia_nace (cada marca, con su sesión; corregir el mismo día antes del segundo aviso y con firma; otro
+-- día, con su CORRECCION_ASISTENCIA aprobada; justificar, la familia con su firma; revertir, Dirección con su firma),
+-- trg_consentimiento_aviso_nace (el apoderado en el portal o Administración desde la ficha firmada),
+-- trg_configuracion_academica_nace y _cambio (A6: solo Dirección con su firma) y las funciones cc_hoy_lima y
+-- cc_sesion_abierta. Versión nueva de cc_docente_de_seccion (A7: una cobertura vencida ya no da acceso),
+-- trg_asignacion_docente_nace (A7: una cobertura dura como máximo 10 días calendario) y trg_mensaje_nace (los avisos de
+-- asistencia: su proceso, su plantilla, sin cobranza y con el consentimiento de la familia).
+-- Versión anterior (V32, sprint 9, tanda 1): 88 triggers y 8 funciones (más las 3 de 02: 11 con huella; 99 huellas).
 -- Nuevos: trg_asignacion_docente_nace (una asignación nace PROPUESTA, por Promotoría, Dirección o Administración, para una
 -- cuenta DOCENTE activa en un año abierto), trg_asignacion_docente_estado (pasa a VIGENTE solo con SU ASIGNACION_DOCENTE
 -- aprobada y firmada por otra persona de Dirección o Promotoría que no es el docente; termina Dirección o Promotoría con
@@ -123,9 +133,27 @@ CREATE FUNCTION cc_cuenta_activada(p_usuario BIGINT) RETURNS BOOLEAN NOT DETERMI
     RETURN EXISTS (SELECT 1 FROM enlace_activacion e WHERE e.usuario_id = p_usuario AND e.usado_en IS NOT NULL)
         OR EXISTS (SELECT 1 FROM sesion_usuario s WHERE s.usuario_id = p_usuario)$$
 
+-- Sprint 9, tanda 2 (sección 7.3): el día de hoy en Lima según el reloj de la BASE (Perú no tiene horario de verano). Mismo
+-- criterio que cc_firma_valida (UTC menos 5 horas). El servidor de la aplicación no decide qué día es (E9).
+DROP FUNCTION IF EXISTS cc_hoy_lima$$
+CREATE FUNCTION cc_hoy_lima() RETURNS DATE NOT DETERMINISTIC NO SQL
+    RETURN DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR)$$
+
+-- Sprint 9, tanda 2: ¿es una sesión abierta y vigente de esta persona en este colegio? Lo que escribe un docente o una
+-- familia lleva su sesión: con la clave de cc_app no se escribe «como» alguien que no está conectado. vence_en está en
+-- hora de Lima (A12: lo prueba a12ZonaDeVenceEnEsLima).
+DROP FUNCTION IF EXISTS cc_sesion_abierta$$
+CREATE FUNCTION cc_sesion_abierta(p_sesion BIGINT, p_nombre VARCHAR(60), p_colegio BIGINT) RETURNS BOOLEAN
+    NOT DETERMINISTIC READS SQL DATA
+    RETURN EXISTS (SELECT 1 FROM sesion_usuario s JOIN usuario u ON u.id = s.usuario_id AND u.colegio_id = s.colegio_id
+        WHERE s.id = p_sesion AND s.colegio_id = p_colegio AND u.nombre_usuario = p_nombre AND u.activo
+          AND s.cerrada_en IS NULL AND s.vence_en > UTC_TIMESTAMP(6) - INTERVAL 5 HOUR)$$
+
 -- Sprint 9, tanda 1 (sección 7.3): ¿esta persona tiene una asignación VIGENTE en esta sección, con su cuenta activa y el rol
 -- DOCENTE? p_con_auxiliar: la asistencia la marca también el auxiliar; los comunicados, no. La usan los triggers de las
 -- tandas 2 y 3 (asistencia y comunicados); lee asignacion_docente, que llega en V32.
+-- Sprint 9, tanda 2 (A7): una cobertura vencida (hasta anterior a hoy en Lima) ya no da acceso, aunque siga VIGENTE. Va
+-- después de cc_hoy_lima, que usa.
 DROP FUNCTION IF EXISTS cc_docente_de_seccion$$
 CREATE FUNCTION cc_docente_de_seccion(p_nombre VARCHAR(60), p_seccion BIGINT, p_con_auxiliar BOOLEAN) RETURNS BOOLEAN
     NOT DETERMINISTIC READS SQL DATA
@@ -133,7 +161,8 @@ CREATE FUNCTION cc_docente_de_seccion(p_nombre VARCHAR(60), p_seccion BIGINT, p_
         JOIN usuario u ON u.id = a.usuario_id AND u.colegio_id = a.colegio_id
         JOIN usuario_rol r ON r.usuario_id = u.id
         WHERE a.seccion_id = p_seccion AND a.estado = 'VIGENTE' AND u.nombre_usuario = p_nombre AND u.activo
-          AND u.apoderado_id IS NULL AND r.rol = 'DOCENTE' AND (p_con_auxiliar OR a.tipo <> 'AUXILIAR'))$$
+          AND u.apoderado_id IS NULL AND r.rol = 'DOCENTE' AND (p_con_auxiliar OR a.tipo <> 'AUXILIAR')
+          AND (a.hasta IS NULL OR a.hasta >= cc_hoy_lima()))$$
 
 -- Un plan nace en BORRADOR (nadie inserta un plan ya aprobado).
 DROP TRIGGER IF EXISTS trg_plan_pension_nace_borrador$$
@@ -1150,6 +1179,40 @@ BEGIN
     -- Correcciones del sprint 8 (QA-S8-4 y S8-M2): ningún mensaje a las familias (ni avisos, ni enlaces, ni verificaciones).
     IF NEW.destinatario_tipo = 'APODERADO' AND NOT cc_colegio_en_produccion(NEW.colegio_id) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio todavia no esta en produccion: sin recordatorios de cobro ni mensajes a las familias';
+    END IF;
+    -- Sprint 9, tanda 2 (secciones 3.6 y 3.13): los avisos de asistencia los crea solo su proceso (sistema.asistencia, con
+    -- cc_sistema por la regla de arriba), a un apoderado, con su plantilla; no hablan de cobranza (la misma expresión que
+    -- ContenidoSinCobranza en Java, que lo comprueba); por WhatsApp, con el último consentimiento de asistencia otorgado;
+    -- por correo, sin oposición. Y una plantilla de asistencia nunca sirve para otro aviso (E40). La tanda 3 suma los de
+    -- comunicados.
+    IF NEW.tipo IN ('ASISTENCIA_DIA', 'ASISTENCIA_CORREGIDA') THEN
+        -- El respaldo por correo de un WhatsApp FALLIDO lo crea el despacho (sistema.mensajeria; la regla del respaldo,
+        -- más abajo, exige que sea del mismo tipo y al mismo apoderado).
+        IF NOT (NEW.destinatario_tipo <=> 'APODERADO')
+                OR NOT (NEW.creado_por <=> 'sistema.asistencia'
+                    OR (NEW.respaldo_de_id IS NOT NULL AND NEW.creado_por <=> 'sistema.mensajeria'))
+                OR NOT (NEW.plantilla LIKE 'cc\_asistencia%') THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los avisos de asistencia los crea su proceso, con su plantilla';
+        END IF;
+        IF NEW.parametros IS NULL OR REGEXP_LIKE(NEW.parametros,
+                'S/|US[$]|[0-9][.,][0-9]{2}([^0-9]|$)|\\bdeud|\\bpensi[oó]n|\\bcuotas?\\b|\\bpag(o|os|ar|ue|ues)\\b|\\bmoros|\\bcobr|\\bvencid|\\byape\\b|\\bplin\\b',
+                'i') THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un aviso de asistencia no habla de cobranza';
+        END IF;
+        IF NEW.canal = 'WHATSAPP' AND NOT EXISTS (SELECT 1 FROM consentimiento_aviso c
+                WHERE c.id = (SELECT MAX(c2.id) FROM consentimiento_aviso c2 WHERE c2.colegio_id = NEW.colegio_id
+                    AND c2.apoderado_id = NEW.apoderado_id AND c2.canal = 'WHATSAPP' AND c2.finalidad = 'ASISTENCIA')
+                  AND c.otorgado) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: sin el consentimiento del apoderado no se le escribe por WhatsApp';
+        END IF;
+        IF NEW.canal = 'CORREO' AND EXISTS (SELECT 1 FROM consentimiento_aviso c
+                WHERE c.id = (SELECT MAX(c2.id) FROM consentimiento_aviso c2 WHERE c2.colegio_id = NEW.colegio_id
+                    AND c2.apoderado_id = NEW.apoderado_id AND c2.canal = 'CORREO' AND c2.finalidad = 'ASISTENCIA')
+                  AND NOT c.otorgado) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el apoderado se opuso a recibir estos avisos por correo';
+        END IF;
+    ELSEIF NEW.plantilla LIKE 'cc\_asistencia%' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una plantilla de asistencia no sirve para otro aviso';
     END IF;
     IF NEW.destinatario_tipo = 'APODERADO' AND NEW.tipo <> 'CONTACTO_CAMBIADO' AND NOT EXISTS (SELECT 1 FROM apoderado a
             WHERE a.id = NEW.apoderado_id AND a.colegio_id = NEW.colegio_id
@@ -2588,6 +2651,11 @@ BEGIN
                 AND a.estado <> 'CERRADO') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: se asigna una cuenta DOCENTE activa en un anio abierto';
     END IF;
+    -- Sprint 9, tanda 2 (A7): una cobertura (con fecha de fin) dura como máximo 10 días calendario desde hoy en Lima (los 5
+    -- días hábiles exactos, con feriados, los valida la aplicación) y nunca es de tutor (ck_asignacion_docente_hasta).
+    IF NEW.hasta IS NOT NULL AND NOT (NEW.hasta >= cc_hoy_lima() AND NEW.hasta <= cc_hoy_lima() + INTERVAL 10 DAY) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una cobertura dura como maximo 5 dias habiles';
+    END IF;
 END$$
 
 -- Dar acceso: SU solicitud aprobada y firmada por otra persona de Dirección o Promotoría que NO es el docente. Quitarlo:
@@ -2633,6 +2701,192 @@ BEGIN
         -- Solo una PROPUESTA cambia sin cambiar de estado (el enlace con su solicitud); una resuelta no reescribe quién la
         -- aprobó, quién la terminó ni por qué.
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: transicion de asignacion no permitida';
+    END IF;
+END$$
+DELIMITER ;
+
+-- ===================== Sprint 9 · tanda 2 (V33): asistencia y consentimientos =====================
+-- (Las funciones cc_hoy_lima y cc_sesion_abierta, y la versión nueva de cc_docente_de_seccion, están al principio de este
+-- archivo; las versiones nuevas de trg_mensaje_nace y trg_asignacion_docente_nace quedaron en su lugar, marcadas con
+-- «Sprint 9, tanda 2».) La asistencia es un libro de solo inserción: estos triggers deciden quién escribe cada fila.
+DELIMITER $$
+
+-- El registro del día: SOLO un docente asignado a la sección (decisión 144: Dirección no registra), con su sesión y su
+-- firma (A5: una por registro, un POST), un día de clases del año en curso y HOY según la base (E1, E9); otro día, solo con
+-- su REGISTRO_ASISTENCIA_TARDIO aprobada y firmada por otra persona de Dirección o Promotoría (E10). El marcador todavía no
+-- está habilitado (E50).
+DROP TRIGGER IF EXISTS trg_registro_asistencia_nace$$
+CREATE TRIGGER trg_registro_asistencia_nace BEFORE INSERT ON registro_asistencia FOR EACH ROW
+BEGIN
+    SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    IF NOT (NEW.fuente <=> 'DOCENTE') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el marcador todavia no esta habilitado; la asistencia la registra el docente';
+    END IF;
+    IF NOT cc_sesion_abierta(NEW.sesion_id, NEW.registrado_por, NEW.colegio_id)
+            OR NOT cc_docente_de_seccion(NEW.registrado_por, NEW.seccion_id, TRUE)
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('asistencia:', NEW.seccion_id, ':',
+                DATE_FORMAT(NEW.fecha, '%Y-%m-%d'), ':REGISTRADA'), NEW.registrado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la asistencia la registra un docente asignado a la seccion, con su sesion y su firma';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM seccion s JOIN anio_escolar a ON a.id = s.anio_escolar_id
+                WHERE s.id = NEW.seccion_id AND s.colegio_id = NEW.colegio_id AND s.activa AND a.id = NEW.anio_escolar_id
+                  AND a.estado = 'EN_CURSO' AND NEW.fecha BETWEEN a.inicio_clases AND a.fin_clases)
+            OR DAYOFWEEK(NEW.fecha) IN (1, 7)
+            OR EXISTS (SELECT 1 FROM feriado f WHERE f.colegio_id = NEW.colegio_id AND f.fecha = NEW.fecha AND f.vigente
+                AND NOT f.pendiente) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la asistencia es de un dia de clases del anio en curso';
+    END IF;
+    IF NEW.origen = 'DEL_DIA' AND NOT (NEW.fecha <=> cc_hoy_lima()) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la asistencia se registra el mismo dia; otro dia necesita la aprobacion de Direccion';
+    END IF;
+    IF NEW.origen = 'TARDIO' AND NOT (NEW.fecha < cc_hoy_lima() AND NEW.fecha >= cc_hoy_lima() - INTERVAL 15 DAY
+            AND cc_solicitud_firmada(NEW.solicitud_id)
+            AND EXISTS (SELECT 1 FROM solicitud_cambio s JOIN usuario u ON u.nombre_usuario = s.resuelto_por
+                    AND u.colegio_id = s.colegio_id JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id AND s.tipo = 'REGISTRO_ASISTENCIA_TARDIO'
+                  AND s.entidad = 'seccion' AND s.entidad_id = NEW.seccion_id AND s.solicitado_por = NEW.registrado_por
+                  AND JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.fecha')) = DATE_FORMAT(NEW.fecha, '%Y-%m-%d')
+                  AND u.activo AND u.apoderado_id IS NULL AND r.rol IN ('PROMOTOR', 'DIRECTOR'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el registro de un dia pasado exige su solicitud aprobada y firmada por Direccion';
+    END IF;
+END$$
+
+-- El consentimiento: en el portal, la cuenta del propio apoderado con su sesión; desde la ficha firmada, Administración o
+-- Dirección activa con su sesión (la evidencia la exige el CHECK). E38.
+DROP TRIGGER IF EXISTS trg_consentimiento_aviso_nace$$
+CREATE TRIGGER trg_consentimiento_aviso_nace BEFORE INSERT ON consentimiento_aviso FOR EACH ROW
+BEGIN
+    IF NOT cc_sesion_abierta(NEW.sesion_id, NEW.creado_por, NEW.colegio_id)
+            OR (NEW.origen = 'PORTAL' AND NOT EXISTS (SELECT 1 FROM usuario u WHERE u.nombre_usuario = NEW.creado_por
+                AND u.colegio_id = NEW.colegio_id AND u.activo AND u.apoderado_id = NEW.apoderado_id))
+            OR (NEW.origen = 'FICHA' AND NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE u.nombre_usuario = NEW.creado_por AND u.colegio_id = NEW.colegio_id AND u.activo
+                  AND u.apoderado_id IS NULL AND r.rol IN ('ADMINISTRACION', 'DIRECTOR'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el consentimiento lo da el apoderado en el portal o se registra desde su ficha firmada';
+    END IF;
+END$$
+
+-- Cada marca: de su registro y con la sesión de quien la escribe. La inicial, de un alumno matriculado en la sección, del
+-- día (o en la hora siguiente a un registro tardío aprobado) y a nombre de quien registró (A5). Una corrección reemplaza
+-- la marca de ese alumno y cambia el estado: el mismo día, un docente de la sección (Dirección no), antes de la hora del
+-- segundo aviso, con su firma y nunca sobre una justificación de la familia ni su reversión (A1, A2, A5); otro día, con SU
+-- CORRECCION_ASISTENCIA aprobada y firmada, pedida por un docente de la sección (A13). La justificación, un apoderado de
+-- la familia del alumno con su firma, nunca sobre una reversión (A3); la reversión, Dirección con su firma y sin
+-- asignación en la sección (A13). Lee su propia tabla (la marca anterior): MySQL lo permite en un trigger de INSERT.
+DROP TRIGGER IF EXISTS trg_marca_asistencia_nace$$
+CREATE TRIGGER trg_marca_asistencia_nace BEFORE INSERT ON marca_asistencia FOR EACH ROW
+BEGIN
+    DECLARE v_fecha DATE;
+    DECLARE v_origen_registro VARCHAR(10);
+    DECLARE v_registrado_bd DATETIME(6);
+    DECLARE v_registrado_por VARCHAR(60);
+    DECLARE v_estado_anterior VARCHAR(20);
+    DECLARE v_origen_anterior VARCHAR(24);
+    DECLARE v_es_personal BOOLEAN;
+    DECLARE v_cierre TIME;
+    -- Con SET y subconsultas (no SELECT ... INTO): sin fila, la variable queda en NULL sin la advertencia de «sin datos».
+    SET v_fecha = (SELECT r.fecha FROM registro_asistencia r WHERE r.id = NEW.registro_id
+        AND r.colegio_id = NEW.colegio_id AND r.seccion_id = NEW.seccion_id);
+    SET v_origen_registro = (SELECT r.origen FROM registro_asistencia r WHERE r.id = NEW.registro_id
+        AND r.colegio_id = NEW.colegio_id);
+    SET v_registrado_bd = (SELECT r.registrado_bd FROM registro_asistencia r WHERE r.id = NEW.registro_id
+        AND r.colegio_id = NEW.colegio_id);
+    SET v_registrado_por = (SELECT r.registrado_por FROM registro_asistencia r WHERE r.id = NEW.registro_id
+        AND r.colegio_id = NEW.colegio_id);
+    IF v_fecha IS NULL OR NOT (NEW.fecha <=> v_fecha)
+            OR NOT cc_sesion_abierta(NEW.sesion_id, NEW.creado_por, NEW.colegio_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la marca es de su registro y lleva la sesion de quien la escribe';
+    END IF;
+    IF NOT (NEW.fuente <=> 'DOCENTE') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el marcador todavia no esta habilitado; la asistencia la registra el docente';
+    END IF;
+    SET v_es_personal = cc_docente_de_seccion(NEW.creado_por, NEW.seccion_id, TRUE);
+    IF NEW.origen = 'REGISTRO' THEN
+        IF NOT v_es_personal OR NOT (NEW.creado_por <=> v_registrado_por)
+                OR NOT EXISTS (SELECT 1 FROM matricula m WHERE m.id = NEW.matricula_id AND m.colegio_id = NEW.colegio_id
+                    AND m.alumno_id = NEW.alumno_id AND m.seccion_id = NEW.seccion_id AND m.estado = 'ACTIVA')
+                OR NOT ((v_origen_registro <=> 'DEL_DIA' AND v_fecha = cc_hoy_lima())
+                    OR (v_origen_registro <=> 'TARDIO' AND v_registrado_bd >= UTC_TIMESTAMP(6) - INTERVAL 6 HOUR)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la marca inicial es de hoy, de un alumno de la seccion y de quien registra';
+        END IF;
+    ELSE
+        SET v_estado_anterior = (SELECT a.estado FROM marca_asistencia a WHERE a.id = NEW.reemplaza_id
+            AND a.colegio_id = NEW.colegio_id AND a.registro_id = NEW.registro_id AND a.alumno_id = NEW.alumno_id
+            AND a.matricula_id = NEW.matricula_id);
+        SET v_origen_anterior = (SELECT a.origen FROM marca_asistencia a WHERE a.id = NEW.reemplaza_id
+            AND a.colegio_id = NEW.colegio_id AND a.registro_id = NEW.registro_id AND a.alumno_id = NEW.alumno_id
+            AND a.matricula_id = NEW.matricula_id);
+        IF v_estado_anterior IS NULL OR v_estado_anterior <=> NEW.estado THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una correccion reemplaza una marca de ese alumno y cambia el estado';
+        END IF;
+        SET v_cierre = COALESCE((SELECT c.hora_segundo_aviso FROM configuracion_academica c
+            WHERE c.colegio_id = NEW.colegio_id), '16:00:00');
+        IF NEW.origen = 'CORRECCION_DEL_DIA' AND NOT (v_es_personal AND v_fecha = cc_hoy_lima()
+                AND TIME(UTC_TIMESTAMP(6) - INTERVAL 5 HOUR) < v_cierre
+                AND v_origen_anterior NOT IN ('JUSTIFICACION', 'REVERSION_JUSTIFICACION')
+                AND cc_firma_valida(NEW.colegio_id, CONCAT('marca_asistencia:', NEW.reemplaza_id, ':CORREGIDA'),
+                    NEW.creado_por)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: despues de la hora del segundo aviso, o sobre una justificacion, la correccion la aprueba Direccion';
+        END IF;
+        IF NEW.origen = 'CORRECCION_APROBADA' AND NOT (cc_solicitud_firmada(NEW.solicitud_id)
+                AND EXISTS (SELECT 1 FROM solicitud_cambio s JOIN usuario u ON u.nombre_usuario = s.resuelto_por
+                        AND u.colegio_id = s.colegio_id JOIN usuario_rol r ON r.usuario_id = u.id
+                    WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id AND s.tipo = 'CORRECCION_ASISTENCIA'
+                      AND s.entidad = 'marca_asistencia' AND s.entidad_id = NEW.reemplaza_id
+                      AND JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.estadoNuevo')) = NEW.estado
+                      AND NEW.creado_por IN (s.solicitado_por, s.resuelto_por)
+                      AND cc_docente_de_seccion(s.solicitado_por, NEW.seccion_id, TRUE)
+                      AND u.activo AND u.apoderado_id IS NULL AND r.rol IN ('PROMOTOR', 'DIRECTOR'))) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la correccion de otro dia exige su solicitud aprobada y firmada por Direccion';
+        END IF;
+        IF NEW.origen = 'JUSTIFICACION' AND NOT (v_estado_anterior <=> 'FALTA' AND NEW.estado = 'FALTA_JUSTIFICADA'
+                AND NOT (v_origen_anterior <=> 'REVERSION_JUSTIFICACION')
+                AND cc_firma_valida(NEW.colegio_id, CONCAT('marca_asistencia:', NEW.reemplaza_id, ':JUSTIFICADA'),
+                    NEW.creado_por)
+                AND v_fecha >= cc_hoy_lima() - INTERVAL 15 DAY
+                AND EXISTS (SELECT 1 FROM usuario u JOIN apoderado p ON p.id = u.apoderado_id
+                        JOIN alumno al ON al.familia_id = p.familia_id
+                    WHERE u.nombre_usuario = NEW.creado_por AND u.colegio_id = NEW.colegio_id AND u.activo AND p.activo
+                      AND p.id = NEW.apoderado_id AND p.familia_id = NEW.familia_id AND al.id = NEW.alumno_id)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la falta la justifica un apoderado de la familia del alumno, con su sesion';
+        END IF;
+        IF NEW.origen = 'REVERSION_JUSTIFICACION' AND NOT (v_origen_anterior <=> 'JUSTIFICACION' AND NEW.estado = 'FALTA'
+                AND NOT v_es_personal
+                AND EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                    WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.creado_por AND u.activo
+                      AND u.apoderado_id IS NULL AND r.rol = 'DIRECTOR')
+                AND cc_firma_valida(NEW.colegio_id, CONCAT('marca_asistencia:', NEW.reemplaza_id, ':REVERTIDA'),
+                    NEW.creado_por)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la justificacion la revierte Direccion con su firma';
+        END IF;
+    END IF;
+END$$
+
+-- A6: las horas y plazos de los avisos los cambia SOLO Dirección, con la firma de su sesión, y queda quién
+-- (actualizado_por). MySQL no tiene un trigger para INSERT y UPDATE a la vez: por eso son dos (E55).
+DROP TRIGGER IF EXISTS trg_configuracion_academica_nace$$
+CREATE TRIGGER trg_configuracion_academica_nace BEFORE INSERT ON configuracion_academica FOR EACH ROW
+BEGIN
+    IF NOT (NEW.creado_por <=> NEW.actualizado_por)
+            OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.actualizado_por AND u.activo
+                  AND u.apoderado_id IS NULL AND r.rol = 'DIRECTOR')
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('configuracion_academica:', NEW.colegio_id, ':CAMBIADA:',
+                NEW.version), NEW.actualizado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la configuracion academica la cambia Direccion con su firma';
+    END IF;
+END$$
+
+DROP TRIGGER IF EXISTS trg_configuracion_academica_cambio$$
+CREATE TRIGGER trg_configuracion_academica_cambio BEFORE UPDATE ON configuracion_academica FOR EACH ROW
+BEGIN
+    IF NOT (NEW.colegio_id <=> OLD.colegio_id) OR NOT (NEW.creado_por <=> OLD.creado_por)
+            OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.actualizado_por AND u.activo
+                  AND u.apoderado_id IS NULL AND r.rol = 'DIRECTOR')
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('configuracion_academica:', NEW.colegio_id, ':CAMBIADA:',
+                NEW.version), NEW.actualizado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la configuracion academica la cambia Direccion con su firma';
     END IF;
 END$$
 DELIMITER ;

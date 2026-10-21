@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.comunicacion.service;
 
+import pe.edu.virgenmaria.cuentasclaras.academico.api.Consentimientos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -51,12 +52,47 @@ public class CreadorMensajes {
 
 	private final ColegioService colegios;
 
+	private final ObjectProvider<Consentimientos> consentimientos;
+
 	public CreadorMensajes(MensajeRepository mensajes, UsuarioRepository usuarios,
-			ObjectProvider<ProveedorWhatsApp> whatsapp, ColegioService colegios) {
+			ObjectProvider<ProveedorWhatsApp> whatsapp, ColegioService colegios,
+			ObjectProvider<Consentimientos> consentimientos) {
 		this.mensajes = mensajes;
 		this.usuarios = usuarios;
 		this.whatsapp = whatsapp;
 		this.colegios = colegios;
+		this.consentimientos = consentimientos;
+	}
+
+	/**
+	 * Sprint 9, tanda 2 (sección 3.6, decisión 152): un aviso académico a UN apoderado por UN canal según su consentimiento:
+	 * por WhatsApp si lo permite (el «sí» explícito), hay conector y el celular está verificado; si no, por correo si no
+	 * se opuso y el correo está verificado. Vacío si no hay a dónde escribir (o el colegio está en preparación).
+	 *
+	 * @param porWhatsapp  el apoderado dio el «sí» a los avisos de esta finalidad por WhatsApp
+	 * @param porCorreo    el apoderado no se opuso a recibirlos por correo
+	 */
+	public Optional<Mensaje> paraApoderadoConConsentimiento(Apoderado apoderado, Contenido contenido, String sufijoClave,
+			boolean porWhatsapp, boolean porCorreo) {
+		if (!familiasReciben(contenido.tipo())) {
+			return Optional.empty();
+		}
+		String celular = apoderado.getTelefonoWhatsapp();
+		if (porWhatsapp && celular != null && whatsapp.getIfAvailable() != null
+				&& apto(apoderado, CanalMensaje.WHATSAPP, celular, contenido.tipo())) {
+			return crear(apoderado, CanalMensaje.WHATSAPP, celular, contenido, sufijoClave, null);
+		}
+		String correo = apoderado.getCorreo();
+		if (porCorreo && correo != null && apto(apoderado, CanalMensaje.CORREO, correo, contenido.tipo())) {
+			return crear(apoderado, CanalMensaje.CORREO, correo, contenido, sufijoClave, null);
+		}
+		return Optional.empty();
+	}
+
+	/** Sprint 9, tanda 2: el nombre del colegio en contexto, como va en {{1}} (para revisar el texto antes de crearlo). */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public String nombreDelColegio() {
+		return colegios.nombreParaMensajes(ContextoColegio.actual()).replace('\n', ' ').replace('\r', ' ').strip();
 	}
 
 	/** Personal: WhatsApp si hay celular; si el conector de WhatsApp está apagado y hay correo, solo correo. */
@@ -252,6 +288,14 @@ public class CreadorMensajes {
 		if (apoderado != null && (!familiasReciben(original.getTipo())
 				|| !apto(apoderado, CanalMensaje.CORREO, correo, original.getTipo()))) {
 			return Optional.empty();
+		}
+		// Sprint 9, tanda 2 (E37): el respaldo de un aviso de asistencia sale por correo solo si el apoderado no se opuso.
+		if (apoderado != null && (original.getTipo() == TipoMensaje.ASISTENCIA_DIA
+				|| original.getTipo() == TipoMensaje.ASISTENCIA_CORREGIDA)) {
+			Consentimientos vigentes = consentimientos.getIfAvailable();
+			if (vigentes == null || !vigentes.recibeAsistencia(apoderado.getId(), false)) {
+				return Optional.empty();
+			}
 		}
 		return guardar(clave, contenido, para, original.getId());
 	}

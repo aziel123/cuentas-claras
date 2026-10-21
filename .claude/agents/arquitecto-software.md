@@ -30,4 +30,7 @@ Antes de proponer nada, carga la skill `contexto-colegio` para conocer el domini
 - Riesgos y decisiones abiertas que el usuario debe tomar.
 - Orden de implementación sugerido (pasos pequeños y verificables).
 
+## Brief por tanda
+Además del documento de diseño, escribe un **brief por tanda** en `docs/arquitectura/sprint-N/tanda-K.md`, de unas 150 líneas. Debe traer: alcance, migración, triggers y huellas esperadas, archivos que toca, pruebas obligatorias (incluidas las de MySQL) y riesgos. Es lo que lee primero `backend-spring`. Escribe los archivos con Bash usando heredocs entre comillas.
+
 Sé concreto. Prefiere la solución más simple que cumpla las reglas antifraude. No sobrediseñes: es un MVP para un colegio real.

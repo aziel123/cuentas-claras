@@ -277,6 +277,12 @@ cuentasclaras:
     plazo-otros-dias-habiles: 10          # rectificación, cancelación y oposición
     aviso-dias-habiles: 7                 # sin atender: ATENCIÓN; vencido el plazo: CRÍTICA
     contactos-meses: 12                   # decisión 98: contactos de familias que se fueron sin deuda
+  academico:
+    # Sprint 9, tandas 1 y 2 (sección 8). Las horas de cada colegio están en configuracion_academica (las cambia Dirección).
+    fin-asignaciones-cron: "0 20 2 * * *"           # sistema.academico termina las asignaciones vencidas (y coberturas, A7)
+    revisar-avisos-cada: "0 */5 7-19 * * MON-FRI"   # sistema.asistencia mira cada 5 min si a un colegio le toca su envío
+    avisos-activos: true
+    max-apoderados-aviso: 2                         # decisión 151 (no se sube sin cambiar la decisión)
   monitoreo:
     # Sprint 7, tanda 1 (sección 10): alertas técnicas por correo directo (SMTP de spring.mail y remitente
     # CORREO_REMITENTE) al responsable técnico. Sin CC_OPERADOR_CORREO quedan apagadas y /panel/sistema lo dice en rojo.

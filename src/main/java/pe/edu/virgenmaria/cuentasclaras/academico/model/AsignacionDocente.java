@@ -10,6 +10,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.model.BaseEntity;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
@@ -88,6 +89,14 @@ public class AsignacionDocente extends BaseEntity {
 	@Column(name = "motivo_fin", length = MAX_MOTIVO_FIN)
 	private String motivoFin;
 
+	/**
+	 * Sprint 9, tanda 2 (A7): el último día de una COBERTURA (un docente que cubre a otro ausente), o {@code null} si no es
+	 * una cobertura. Desde el día siguiente ya no da acceso (cc_docente_de_seccion) y {@code FinAsignaciones} la termina.
+	 * No cambia ({@code updatable = false} y fuera del GRANT: 1143); nunca para un tutor (ck_asignacion_docente_hasta).
+	 */
+	@Column(updatable = false)
+	private LocalDate hasta;
+
 	protected AsignacionDocente() {
 		// requerido por JPA
 	}
@@ -95,7 +104,17 @@ public class AsignacionDocente extends BaseEntity {
 	/** Una propuesta nueva, a nombre de quien la propone (que debe ser la persona en sesión: CHECK con creado_por). */
 	public static AsignacionDocente propuesta(Long anioEscolarId, Long seccionId, Long usuarioId, TipoAsignacion tipo,
 			String areas, String propuestoPor) {
+		return propuesta(anioEscolarId, seccionId, usuarioId, tipo, areas, propuestoPor, null);
+	}
+
+	/** Sprint 9, tanda 2 (A7): una propuesta, de cobertura si trae {@code hasta} (nunca de tutor). */
+	public static AsignacionDocente propuesta(Long anioEscolarId, Long seccionId, Long usuarioId, TipoAsignacion tipo,
+			String areas, String propuestoPor, LocalDate hasta) {
+		if (hasta != null && tipo == TipoAsignacion.TUTOR) {
+			throw new ReglaNegocioException("Una cobertura no es de tutor(a): propón al docente o auxiliar que cubre.");
+		}
 		AsignacionDocente a = new AsignacionDocente();
+		a.hasta = hasta;
 		a.anioEscolarId = Objects.requireNonNull(anioEscolarId, "anioEscolarId");
 		a.seccionId = Objects.requireNonNull(seccionId, "seccionId");
 		a.usuarioId = Objects.requireNonNull(usuarioId, "usuarioId");
@@ -187,6 +206,20 @@ public class AsignacionDocente extends BaseEntity {
 
 	public boolean esVigente() {
 		return estado == EstadoAsignacion.VIGENTE;
+	}
+
+	/** Sprint 9, tanda 2 (A7): si es una cobertura cuyo último día ya pasó (no da acceso aunque siga VIGENTE). */
+	public boolean coberturaVencida(LocalDate hoy) {
+		return hasta != null && hasta.isBefore(hoy);
+	}
+
+	/** Si da acceso hoy: VIGENTE y, si es una cobertura, sin vencer. */
+	public boolean daAcceso(LocalDate hoy) {
+		return esVigente() && !coberturaVencida(hoy);
+	}
+
+	public LocalDate getHasta() {
+		return hasta;
 	}
 
 	public Long getAnioEscolarId() {

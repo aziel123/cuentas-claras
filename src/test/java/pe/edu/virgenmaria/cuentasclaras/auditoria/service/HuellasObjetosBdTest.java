@@ -32,9 +32,13 @@ class HuellasObjetosBdTest {
 		// estado con la aprobación firmada): 91 huellas. Correcciones (V31): 86 triggers y cc_cuenta_activada: 96 huellas. Tanda 3 (V30): las mismas 91 (versión nueva de trg_respaldo_registro y
 		// trg_resolucion_respaldo_registro: «faltan filas» por colegio).
 		// Sprint 9, tanda 1 (V32): 88 triggers (la asignación docente nace y cambia de estado) y cc_docente_de_seccion: 99.
-		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(88)
+		// Sprint 9, tanda 2 (V33): 93 triggers (la asistencia, el consentimiento y la configuración académica) y
+		// cc_hoy_lima y cc_sesion_abierta: 106.
+		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(93)
 				.isEqualTo(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
-		assertThat(esperadas).hasSize(99).containsKeys("trg_asignacion_docente_nace", "trg_asignacion_docente_estado",
+		assertThat(esperadas).hasSize(106).containsKeys("trg_registro_asistencia_nace", "trg_marca_asistencia_nace",
+				"trg_consentimiento_aviso_nace", "trg_configuracion_academica_nace", "trg_configuracion_academica_cambio",
+				"cc_hoy_lima", "cc_sesion_abierta", "trg_asignacion_docente_nace", "trg_asignacion_docente_estado",
 				"cc_docente_de_seccion", "trg_conector_colegio_nace", "trg_conector_colegio_estado","cc_contacto_normal", "cc_es_sistema", "cc_firma_valida",
 				"cc_solicitud_firmada", "cc_operador_activo", "cc_colegio_en_produccion", "triggers_instalados",
 				"huellas_objetos", "permisos_objetos", "trg_usuario_rol_alta", "trg_firma_operacion_nace",

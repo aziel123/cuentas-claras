@@ -269,7 +269,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V32): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V33): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -304,6 +304,9 @@ jobs:
 
       - name: "Sprint 9, tanda 1: una asignación docente no nace vigente ni se aprueba sin la firma de otra persona de Dirección (nunca el docente), no se termina sin firma, no cambia ni apunta a otro colegio; DOCENTE no se combina con CAJA ni ADMINISTRACION (E3, E4, E43 y E46)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint9MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 9, tanda 2: la asistencia la registra solo el docente asignado, hoy según la base, con su sesión y su firma; no se edita, no se borra ni se bifurca; el personal no justifica; la corrección del día cierra al segundo aviso; la configuración solo Dirección con firma; los avisos sin cobranza y con consentimiento (E1, E2, E7 a E10, E12, E13, E15, E37, E40, E49 a E56, A12)"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint9AsistenciaMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint6MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
@@ -734,10 +737,27 @@ jobs:
           # Exactamente un colegio PLATAFORMA y, en él, solo operadores.
           plataformas=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT COUNT(*) FROM colegio WHERE tipo = 'PLATAFORMA'")
           [ "$plataformas" = "1" ] || { echo "ERROR: hay $plataformas colegios PLATAFORMA"; exit 1; }
-          # Huellas (H7): cc_app ve las de los 88 triggers y las 11 funciones con huellas_objetos() (sprint 9, tanda 1).
+          # Sprint 9, tanda 2 (V33, E7, E1, E55, E40, A2): la asistencia y el consentimiento son de solo inserción (1142);
+          # la cobertura no se alarga (hasta: 1143); la marca de agua de los avisos la escribe solo cc_sistema (1142 con cc_app;
+          # 1143 y 1142 con cc_sistema); un registro «del día» de ayer del colegio 0, una configuración académica sin
+          # Dirección ni firma (1644) y, con cc_sistema, un aviso de asistencia con un monto (1644).
+          for tabla in registro_asistencia marca_asistencia consentimiento_aviso; do
+            comprobar 1142 "UPDATE $tabla SET version = version WHERE 1 = 0"
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          comprobar 1143 "UPDATE asignacion_docente SET hasta = hasta WHERE 1 = 0"
+          comprobar 1142 "INSERT INTO aviso_asistencia_corte (colegio_id, ultima_marca_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, NOW(6), 'sistema.asistencia', NOW(6))"
+          comprobar 1142 "UPDATE aviso_asistencia_corte SET ultima_marca_id = ultima_marca_id WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE aviso_asistencia_corte SET colegio_id = colegio_id WHERE 1 = 0"
+          comprobar_sistema 1142 "DELETE FROM aviso_asistencia_corte WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO registro_asistencia (colegio_id, anio_escolar_id, seccion_id, fecha, origen, fuente, registrado_por, sesion_id, alumnos, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, DATE(UTC_TIMESTAMP() - INTERVAL 29 HOUR), 'DEL_DIA', 'DOCENTE', 'ci', 0, 0, NOW(6), 'ci', NOW(6))"
+          comprobar 1644 "INSERT INTO configuracion_academica (colegio_id, actualizado_por, creado_en, creado_por, actualizado_en) VALUES (0, 'ci', NOW(6), 'ci', NOW(6))"
+          comprobar_sistema 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, familia_id, apoderado_id, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'ci-asistencia', 'ASISTENCIA_DIA', 'CORREO', 'APODERADO', 0, 0, 'x@y.pe', 'cc_asistencia_v2', 'Mateo: falta. Debe S/ 350.00', 'PENDIENTE', NOW(6), 'sistema.asistencia', NOW(6))"
+          # Huellas (H7): cc_app ve las de los 93 triggers y las 13 funciones con huellas_objetos() (sprint 9, tanda 2).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
-          [ "$objetos" = "$((esperados + 11))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
-          [ "$esperados" = "88" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 1 del sprint 9 deja 88"; exit 1; }
+          [ "$objetos" = "$((esperados + 13))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
+          [ "$objetos" = "106" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y la tanda 2 del sprint 9 deja 106"; exit 1; }
+          [ "$esperados" = "93" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 2 del sprint 9 deja 93"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -780,7 +800,7 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 88 triggers y las 11 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 93 triggers y las 13 funciones verificadas" prod.log || { cat prod.log; exit 1; }
           # Sprint 8, tanda 2 (sección 3.6): los conectores (GRANT por columna y triggers) y la clave que descifra todos
           # sus secretos (los que dejaron las pruebas, cifrados con CC_CLAVE_CONECTORES).
           grep -q "Permisos y triggers de los conectores por colegio verificados" prod.log || { cat prod.log; exit 1; }
@@ -1125,7 +1145,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V32, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V33, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \
@@ -1196,6 +1216,9 @@ jobs:
 
       - name: "Destino simulado: solo con la fila del DBA (nunca en prod); sin ella, la base no lo registra (1644)"
         run: sh scripts/respaldo/pruebas-ci.sh simulado
+
+      - name: "Sprint 9, tanda 2 (H13): un DBA borra una marca de asistencia de UN colegio: el respaldo avisa «faltan filas» solo a ese colegio"
+        run: sh scripts/respaldo/pruebas-ci.sh faltan-filas-asistencia
 
   imagen:
     name: Imagen en GHCR por el SHA del commit, con su SBOM (solo main)
