@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Inicio', ~{::main})}">
 <body>
-<!--/* Rediseño (hallazgo 9): la misma estructura en todos los inicios: encabezado, lo primero por hacer y el detalle. */-->
+<!--/* Rediseño (hallazgo 9 y tablero): encabezado, cifras, lo primero por hacer, los gráficos y el detalle. */-->
 <main id="contenido" class="contenido" data-inicio="director"
 	th:with="porAprobar=${#aggregates.sum(menuGrupos.![pendientes]).intValue()}">
 	<div class="cabecera">
@@ -15,6 +15,12 @@
 	<th:block th:if="${avisoClave != null}">
 		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
 	</th:block>
+
+	<!--/* Tablero: lo académico, las aprobaciones y la morosidad (sin detalle por alumno). */-->
+	<section th:if="${tablero != null}" class="tablero" aria-labelledby="titulo-tablero">
+		<h2 id="titulo-tablero" class="solo-lectores">Cifras de hoy</h2>
+		<ul th:replace="~{fragments/graficos :: kpis(${tablero.kpis()})}"></ul>
+	</section>
 
 	<section class="tarjeta revisar" th:classappend="${porAprobar == 0} ? 'revisar-vacio'" aria-labelledby="titulo-revisar">
 		<div class="revisar-cabecera">
@@ -39,6 +45,32 @@
 			</li>
 		</ul>
 	</section>
+
+	<div th:if="${tablero != null}" class="graficos graficos-pares" data-tablero-graficos>
+		<th:block th:if="${tablero.asistencia() != null}">
+			<section th:replace="~{fragments/graficos :: barraApilada(${tablero.asistencia()})}"></section>
+		</th:block>
+		<section th:if="${tablero.asistencia() == null}" class="tarjeta grafico" id="grafico-asistencia"
+			aria-labelledby="grafico-asistencia-titulo" data-asistencia-vacia>
+			<h2 id="grafico-asistencia-titulo">Asistencia del día</h2>
+			<div th:replace="~{fragments/componentes :: estadoVacio('Aún sin registros hoy', ${tablero.asistenciaVacia()})}"></div>
+			<a class="btn btn-secundario" th:href="@{/academico/asistencia/cambios}">Ver los cambios de asistencia</a>
+		</section>
+		<section th:replace="~{fragments/graficos :: barrasHorizontales(${tablero.morosidad()})}"></section>
+		<section class="tarjeta" aria-labelledby="titulo-sin-docente" data-secciones-sin-docente>
+			<h2 id="titulo-sin-docente">Secciones sin docente</h2>
+			<th:block th:if="${#lists.isEmpty(tablero.seccionesSinDocente())}">
+				<div th:replace="~{fragments/componentes :: alerta('exito', 'Todas las secciones activas tienen un docente asignado.')}"></div>
+			</th:block>
+			<th:block th:unless="${#lists.isEmpty(tablero.seccionesSinDocente())}">
+				<p class="secundario">Sin docente, nadie registra su asistencia. Propón la asignación y otra persona la aprueba.</p>
+				<ul class="lista-chips" role="list">
+					<li th:each="s : ${tablero.seccionesSinDocente()}" class="badge badge-alerta" th:text="${s}">3.° Primaria A</li>
+				</ul>
+				<a class="btn btn-primario" th:href="@{/academico/asignaciones}">Asignar docentes</a>
+			</th:block>
+		</section>
+	</div>
 
 	<section class="tarjeta" aria-labelledby="titulo-controles">
 		<h2 id="titulo-controles">Cómo te cuida el sistema</h2>

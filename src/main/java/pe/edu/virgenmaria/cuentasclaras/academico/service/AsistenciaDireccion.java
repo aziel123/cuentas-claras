@@ -3,8 +3,10 @@ package pe.edu.virgenmaria.cuentasclaras.academico.service;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.virgenmaria.cuentasclaras.academico.dto.AsistenciaDelDia;
 import pe.edu.virgenmaria.cuentasclaras.academico.dto.CambioDelDia;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.ConfiguracionAcademica;
+import pe.edu.virgenmaria.cuentasclaras.academico.model.EstadoAsistencia;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.MarcaAsistencia;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.OrigenMarca;
 import pe.edu.virgenmaria.cuentasclaras.academico.repository.MarcaAsistenciaRepository;
@@ -100,6 +102,24 @@ public class AsistenciaDireccion {
 					m.getOrigen() == OrigenMarca.JUSTIFICACION ? motivoFamilia(m) : m.getMotivo(), revertible));
 		}
 		return cambios;
+	}
+
+	/**
+	 * Rediseño (tablero de Dirección): la asistencia de hoy en números (marcas vigentes por estado y secciones con
+	 * registro), sin nombres. Solo lectura.
+	 */
+	@Transactional(readOnly = true)
+	public AsistenciaDelDia resumenDelDia() {
+		LocalDate hoy = LocalDate.now(reloj);
+		long[] porEstado = new long[EstadoAsistencia.values().length];
+		java.util.Set<Long> conRegistro = new java.util.HashSet<>();
+		for (MarcaAsistencia m : marcas.vigentesDelDia(hoy)) {
+			porEstado[m.getEstado().ordinal()]++;
+			conRegistro.add(m.getSeccionId());
+		}
+		return new AsistenciaDelDia(hoy, porEstado[EstadoAsistencia.PRESENTE.ordinal()],
+				porEstado[EstadoAsistencia.TARDE.ordinal()], porEstado[EstadoAsistencia.FALTA.ordinal()],
+				porEstado[EstadoAsistencia.FALTA_JUSTIFICADA.ordinal()], conRegistro.size());
 	}
 
 	/** Revierte una justificación de la familia, con motivo y la firma de la sesión (E13). */

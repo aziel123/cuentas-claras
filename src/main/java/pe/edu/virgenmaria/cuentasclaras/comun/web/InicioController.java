@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.IndicadoresInicio;
+import pe.edu.virgenmaria.cuentasclaras.comun.graficos.TableroDireccion;
 import pe.edu.virgenmaria.cuentasclaras.comun.graficos.TableroPromotoria;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioInicio;
@@ -33,12 +34,16 @@ public class InicioController {
 
 	private final ObjectProvider<TableroPromotoria> tableroPromotoria;
 
+	private final ObjectProvider<TableroDireccion> tableroDireccion;
+
 	public InicioController(ServicioInicio servicioInicio, ObjectProvider<AlertasRevision> alertas,
-			ObjectProvider<IndicadoresInicio> indicadores, ObjectProvider<TableroPromotoria> tableroPromotoria) {
+			ObjectProvider<IndicadoresInicio> indicadores, ObjectProvider<TableroPromotoria> tableroPromotoria,
+			ObjectProvider<TableroDireccion> tableroDireccion) {
 		this.servicioInicio = servicioInicio;
 		this.alertas = alertas;
 		this.indicadores = indicadores;
 		this.tableroPromotoria = tableroPromotoria;
+		this.tableroDireccion = tableroDireccion;
 	}
 
 	@GetMapping("/")
@@ -66,6 +71,12 @@ public class InicioController {
 			model.addAttribute("avisosPorArea", porArea(todas));
 			model.addAttribute("indicadores", indicadores.orderedStream().toList());
 			TableroPromotoria tablero = tableroPromotoria.getIfAvailable();
+			if (tablero != null) {
+				model.addAttribute("tablero", tablero.tablero());
+			}
+		}
+		if (principal == Rol.DIRECTOR) {
+			TableroDireccion tablero = tableroDireccion.getIfAvailable();
 			if (tablero != null) {
 				model.addAttribute("tablero", tablero.tablero());
 			}

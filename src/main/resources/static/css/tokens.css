@@ -53,6 +53,7 @@
   --color-serie-1: #1b4f9c;   /* azul: efectivo y barras de una sola serie */
   --color-serie-2: #38aee6;   /* celeste: digital */
   --color-serie-3: #7c5cc4;   /* violeta: banco (4.9:1 sobre blanco) */
+  --color-serie-4: #c0457e;   /* magenta: cuarta categoría (faltas justificadas) */
   --color-grafico-guia: #dce7f2;
   --color-grafico-pista: #eef3f9;
   /* Siempre claro, aunque Windows o el celular estén en modo oscuro (decisión del colegio). */

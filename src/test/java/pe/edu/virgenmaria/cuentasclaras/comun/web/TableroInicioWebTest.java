@@ -90,6 +90,43 @@ class TableroInicioWebTest {
 				.isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
 	}
 
+	@Test
+	@ComoUsuario(roles = Rol.DIRECTOR, nombreCompleto = "Jorge Salazar")
+	void direccionVeLoAcademicoSusAprobacionesYLaMorosidadPorNivel() throws Exception {
+		String html = mvc.perform(get("/inicio"))
+				.andExpect(status().isOk())
+				.andExpect(model().attribute("tablero", org.hamcrest.Matchers.instanceOf(
+						pe.edu.virgenmaria.cuentasclaras.comun.graficos.TableroDireccion.Tablero.class)))
+				.andExpect(content().string(containsString("data-tablero-kpis")))
+				.andExpect(content().string(containsString("Secciones sin docente")))
+				.andExpect(content().string(containsString("Docentes asignados")))
+				.andExpect(content().string(containsString("Pendientes por aprobar")))
+				.andExpect(content().string(containsString("id=\"grafico-morosidad-nivel\"")))
+				.andExpect(content().string(containsString("id=\"grafico-asistencia\"")))
+				// Sin detalle de cobranza de Promotoría: ni la serie diaria ni los medios de pago.
+				.andExpect(content().string(not(containsString("grafico-diaria"))))
+				.andExpect(content().string(not(containsString("grafico-medios"))))
+				.andReturn().getResponse().getContentAsString();
+
+		assertThat(EN_LINEA.matcher(html).find()).as("estilo o script en línea en el inicio de Dirección").isFalse();
+	}
+
+	@Test
+	@ComoUsuario(roles = Rol.CAJA)
+	void cajaNoPuedeLlamarAlTableroDeDireccion(
+			@Autowired pe.edu.virgenmaria.cuentasclaras.comun.graficos.TableroDireccion tablero) {
+		org.assertj.core.api.Assertions.assertThatThrownBy(tablero::tablero)
+				.isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+	}
+
+	@Test
+	@ComoUsuario(roles = Rol.PROMOTOR)
+	void promotoriaNoUsaElTableroDeDireccion(
+			@Autowired pe.edu.virgenmaria.cuentasclaras.comun.graficos.TableroDireccion tablero) {
+		org.assertj.core.api.Assertions.assertThatThrownBy(tablero::tablero)
+				.isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+	}
+
 	private static String seccion(String html, String id) {
 		int inicio = html.indexOf("id=\"" + id + "\"");
 		assertThat(inicio).as("sección " + id).isPositive();

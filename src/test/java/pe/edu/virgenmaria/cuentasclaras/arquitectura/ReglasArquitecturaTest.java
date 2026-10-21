@@ -342,6 +342,8 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".panel.service.PanelPromotoria", "hasRole('PROMOTOR')"),
 			// Rediseño (tablero del inicio): los gráficos de cobranza son solo de Promotoría; Caja no ve montos agregados.
 			Map.entry(BASE + ".panel.service.GraficosPromotoria", "hasRole('PROMOTOR')"),
+			// Rediseño (tablero de Dirección): lo académico, sus aprobaciones y la morosidad por nivel; solo Dirección.
+			Map.entry(BASE + ".panel.service.GraficosDireccion", "hasRole('DIRECTOR')"),
 			Map.entry(BASE + ".panel.service.ReportesCobranza", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".panel.service.ExportacionContador", "hasAnyRole('PROMOTOR','ADMINISTRACION')"),
 			Map.entry(BASE + ".comprobantes.service.AlertasComprobantes", ALERTAS),
