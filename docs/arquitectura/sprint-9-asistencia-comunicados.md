@@ -18,7 +18,7 @@
 - **Comunicados que no se editan y que no pueden cobrar.** Dirección y Promotoría escriben a todo el colegio, un nivel, un grado o una sección; el docente, solo a sus secciones. El emisor lo pone el sistema (nadie se hace pasar por Dirección), un **filtro bloquea cobranza, montos, cuentas, celulares, DNI y enlaces**, cada comunicado lleva un pie fijo («el colegio nunca le pedirá pagos por un comunicado») y el PDF se sanea. Un comunicado enviado no cambia: se manda una **fe de erratas** a los mismos destinatarios. La familia confirma «Leído» **en el portal, con su sesión**; nadie confirma por ella.
 - **WhatsApp cuesta por mensaje.** Con los valores por defecto (asistencia agrupada por familia y comunicados en un resumen diario con tope de 4 al mes por familia), un colegio de 300 alumnos generaría unos **15,500 mensajes al año, unos US$ 325–535** (sección 3.7).
 - **Nómina para el SIAGIE:** Cuotaria entrega, por sección, los datos que pide la matrícula masiva del SIAGIE en un perfil de columnas configurable, para copiarlos en la plantilla oficial. La nómina oficial la sigue generando y aprobando el SIAGIE.
-- **Tres tandas:** (1) docentes y secciones (V32, 88 triggers); (2) asistencia con aviso a las familias (V33, 91 triggers); (3) comunicados y nómina para el SIAGIE (V34, 95 triggers).
+- **Tres tandas:** (1) docentes y secciones (V32, 88 triggers); (2) asistencia con aviso a las familias (V33, 93 triggers); (3) comunicados y nómina para el SIAGIE (V34, 97 triggers).
 
 ## 2. Hallazgos al leer el código (leer antes de implementar)
 1. **H1 (alto). La base no puede impedir que el docente lea deudas.** `cc_negocio` tiene `SELECT ON cuentasclaras.*` y todas las personas usan `cc_app`. «El docente nunca ve deudas» depende SOLO de la aplicación: `ModuloApp`, `@PreAuthorize`, los servicios y los DTO. Por eso este diseño lo cubre con tres pruebas independientes (E30 y E31) y una regla ArchUnit, y no promete una «segunda capa» de MySQL que no existe.
@@ -101,7 +101,7 @@
 | Otro día | Lo pide el docente o el tutor; **lo aprueba otra persona de Dirección o Promotoría** con su firma | Solicitud `CORRECCION_ASISTENCIA` (marca, estado nuevo y motivo) → marca `CORRECCION_APROBADA` | **Sí**, siempre |
 
 - **Registro de un día pasado** (decisión 146): no hay modo sin conexión. Si un día no hubo internet, el docente anota en papel y pide `REGISTRO_ASISTENCIA_TARDIO` (sección, fecha y motivo), que aprueba otra persona de Dirección o Promotoría con su firma, hasta 5 días hábiles atrás (la base acepta como máximo 15 días calendario). Con la solicitud aprobada, el docente registra ese día dentro de la hora siguiente; las faltas de ese día se avisan a las familias como corrección («se registró la asistencia del …»).
-- **Alerta «sección sin asistencia»** (decisión 149): a la hora de alerta del colegio (09:30 por defecto), `AlertasAcademicas` cuenta las secciones activas con clases ese día que no tienen registro y publica **una** alerta del día a **Dirección**, con el número de secciones (sin nombres de alumnos), por el camino de las alertas del sprint 6 (`TipoAviso.SECCION_SIN_ASISTENCIA`, `cc_alerta_promotoria_v2`).
+- **Alerta «sección sin asistencia»** (decisión 149): a la hora de alerta del colegio (09:30 por defecto), `AlertasAcademicas` cuenta las secciones activas con clases ese día que no tienen registro **o cuyo registro tiene menos marcas iniciales que matrículas ACTIVAS** (A4) y publica **una** alerta del día a **Dirección**, con el número y **los nombres de las secciones** («3.° B, 4.° A»; sin nombres de alumnos, A7), por el camino de las alertas del sprint 6 (`TipoAviso.SECCION_SIN_ASISTENCIA`, `cc_alerta_promotoria_v2`).
 - **Reporte mensual** (`/academico/asistencia/reporte`): por sección (tutor y Dirección) y por alumno (tutor y Dirección): días de clase, presentes, tardanzas, faltas y faltas justificadas, y el porcentaje de inasistencia injustificada. Sin exportación en este sprint (solo pantalla e impresión); cada consulta queda en `acceso_dato_personal` (`REPORTE_ASISTENCIA`).
 
 ### 3.5 Justificación desde el portal (tanda 2)
@@ -115,8 +115,8 @@
 Reutiliza la mensajería del sprint 5 sin cambiar sus reglas: outbox `mensaje`, WhatsApp con correo de respaldo, destino **igual al contacto registrado y verificado** (S5-A1), nada a un contacto del personal sin aprobación (S5-M1), nada a las familias de un colegio en preparación (S8-M2) y el nombre del colegio en `{{1}}` (sprint 8).
 
 - **A una hora fija, una vez por familia y día** (decisión 151):
-  - a la **hora del aviso** del colegio (10:30 por defecto, entre 09:00 y 13:00), `comunicacion.proceso.AvisosAsistencia`, como `sistema.asistencia`, lee las marcas vigentes del día con FALTA o TARDE (`academico.api.InasistenciasDelDia`) y crea **un mensaje por familia** con todos sus hijos («Mateo: falta. Lucía: llegó tarde, 08:12»);
-  - a la **segunda hora** (16:00 por defecto) sale lo que cambió después: faltas registradas tarde y correcciones posteriores al primer aviso (`cc_asistencia_corregida_v2`);
+  - a la **hora del aviso** del colegio (10:30 por defecto, entre 09:00 y 13:00), `comunicacion.proceso.AvisosAsistencia`, como `sistema.asistencia`, lee las marcas vigentes del día con FALTA, TARDE o FALTA_JUSTIFICADA (A1) y las marcas posteriores a la marca de agua del colegio, también de días anteriores (A2) (`academico.api.InasistenciasDelDia`) y crea **un mensaje por familia** con todos sus hijos («Mateo: falta. Lucía: llegó tarde, 08:12»);
+  - a la **segunda hora** (16:00 por defecto) sale lo que cambió después de la marca de agua: faltas registradas tarde y correcciones posteriores al primer aviso (`cc_asistencia_corregida_v2`); a esa hora se cierra la corrección del día (A2): lo que pase después (justificaciones, registros tardíos, correcciones aprobadas) sale a las 10:30 del día siguiente;
   - clave idempotente: `ASISTENCIA:{fecha}:{tanda}:FAMILIA:{id}:APODERADO:{id}:{canal}`;
   - solo de lunes a viernes, días de clase, y nunca fuera de 07:00–20:00.
 - **A quién:** a los apoderados activos de la familia con el consentimiento de asistencia, **como máximo 2 por familia** (la familia elige cuáles en el portal; por defecto, los dos primeros con consentimiento). Cada apoderado recibe por WhatsApp si dio su consentimiento para ese canal; si no, o si el WhatsApp queda FALLIDO, por correo.
@@ -204,6 +204,12 @@ Un comunicado lleva **como máximo un PDF de hasta 2 MB y 10 páginas** (decisi�
 > - **SHA-256** guardado (del original y del saneado);
 > - se sirve con `Content-Disposition: attachment` y `X-Content-Type-Options: nosniff` (punto 5);
 > - pruebas con al menos un **PDF malformado**, un **PDF enorme** (por bytes y por páginas) y un **PDF con JavaScript**, dentro de los 10 archivos hostiles de E26.
+>
+> **Auditoría en papel de la tanda 2 (A9, A10, A14):**
+> - memoria: `MemoryUsageSetting.setupMixed(maxMain, maxStorage)` con **los dos topes** (50 MB en memoria y 100 MB en disco); `/tmp` en tmpfs **con `size=`** (`compose.prod.yml` ya tiene `size=256m`; con 2 hilos son 200 MB como máximo, más lo que usa Tomcat para las subidas: subir a `size=384m` si la prueba lo pide);
+> - concurrencia: **executor dedicado** (`ThreadPoolExecutor` de 1 o 2 hilos, cola acotada de 4, `AbortPolicy`): lleno, responde «Estamos revisando otros archivos; intente en unos minutos» sin abrir el PDF; **límite de subidas por usuario** (10 por hora); prueba `diezBombasSeguidasNoDejanSinServicio` (10 PDF bomba seguidos: las páginas de la aplicación siguen respondiendo en menos de 2 s y ninguna subida pasa de 10 s);
+> - rechazo, además de lo del punto 2: `/Names/JavaScript`, anotaciones con `/A` o `/AA`, acciones `Rendition`, `Sound`, `Movie`, `Named`, `ResetForm` y `Hide`; las `URI` solo con **lista permitida** (el dominio de `CC_URL_PUBLICA` y `dominios-permitidos`);
+> - re-guardado: se quitan el diccionario `Info`, los metadatos XMP (`/Metadata` del catálogo y de las páginas) y las revisiones incrementales (guardado completo).
 
 `comunicados.service.AdjuntosComunicado` es la **única** clase que usa PDFBox (ArchUnit).
 
@@ -292,6 +298,25 @@ El colegio no puede condicionar lo académico al pago (skill `contexto-colegio`)
   - códigos modulares ficticios (`0000001`, `0000002`, `0000003`) y la nómina de una sección con la marca «DEMO · DATOS FICTICIOS» en la primera fila y en el nombre del archivo.
   - En la demo, **el adjunto solo acepta el PDF de ejemplo** empaquetado en el jar (por su SHA-256, como la importación), para que nadie suba un documento real con datos de alumnos.
   - El recorrido guiado (`/demo/guia`) gana dos pasos: «Marca la asistencia de 3.° B en un minuto» y «Envía un comunicado y mira quién lo confirmó».
+
+### 3.15 Auditoría en papel de la tanda 2 (sobre `d581d0d`): 15 hallazgos incorporados
+| # | Nivel | Hallazgo | Cómo queda el diseño |
+|---|---|---|---|
+| A1 | Alto | Un docente podía convertir una FALTA en FALTA_JUSTIFICADA y la familia no se enteraba (el aviso solo llevaba FALTA y TARDE) | CHECK `ck_marca_asistencia_justificada` (FALTA_JUSTIFICADA solo por `JUSTIFICACION` o `CORRECCION_APROBADA`); `CORRECCION_DEL_DIA` prohibida sobre una marca `JUSTIFICACION` o `REVERSION_JUSTIFICACION`; `InasistenciasDelDia` incluye FALTA_JUSTIFICADA (el aviso dice «falta justificada»). Prueba E51 |
+| A2 | Alto | Lo hecho después del envío de las 16:00 no se avisaba nunca | Marca de agua por colegio (`aviso_asistencia_corte.ultima_marca_id`): cada envío avisa las marcas con id mayor y la sube; el de las 10:30 recoge también lo del día anterior. `CORRECCION_DEL_DIA` se cierra a la `hora_segundo_aviso` del colegio (trigger); desde ahí, la corrección va por `CORRECCION_ASISTENCIA`. Prueba E52 |
+| A3 | Medio | Una justificación revertida por Dirección se podía volver a justificar | El trigger rechaza `JUSTIFICACION` si la marca anterior es `REVERSION_JUSTIFICACION` (E53) |
+| A4 | Medio | Un registro con alumnos sin marcar no disparaba la alerta | `AlertasAcademicas` cuenta también los registros del día con menos marcas iniciales que matrículas ACTIVAS de la sección |
+| A5 | Medio | Justificar y corregir el día no llevaban firma de sesión; las marcas iniciales podían ir a nombre de otro | `cc_firma_valida` en `JUSTIFICACION` (`marca_asistencia:{id}:JUSTIFICADA`) y en `CORRECCION_DEL_DIA` (`…:CORREGIDA`); **una firma por registro** (un POST: `asistencia:{seccion}:{fecha}:REGISTRADA`); las marcas `REGISTRO` exigen `creado_por = registrado_por` del registro (E54) |
+| A6 | Medio | Las horas del aviso las podía cambiar cualquiera con la clave de `cc_app` | `trg_configuracion_academica_nace` y `_cambio`: solo DIRECTOR activo, con firma `configuracion_academica:{colegio}:CAMBIADA` y `actualizado_por` (E55). Son **dos** triggers: MySQL no tiene uno para INSERT y UPDATE a la vez |
+| A7 | Medio | Sin Dirección que cubra, la cobertura de un ausente quedaba abierta sin fin | `asignacion_docente.hasta` (cobertura de hasta 5 días hábiles; la base acepta 10 calendario y nunca para TUTOR), respetada por `cc_docente_de_seccion` y terminada por `FinAsignaciones`. La alerta «sección sin asistencia» **nombra las secciones** (sin alumnos) para que Dirección sepa a quién cubrir (E56) |
+| A8 | Medio | Con una sola persona de Dirección o Promotoría, la segregación no se puede cumplir | `VerificadorConfiguracion` (log) y la lista de puesta en marcha (pendiente) avisan si hay menos de 2 personas activas con PROMOTOR o DIRECTOR; el alta de esos roles sigue por `CAMBIO_ROLES` aprobada por la otra persona (sprint 7); `TipoAviso.SOLICITUDES_PENDIENTES` a Promotoría por solicitudes de la bandeja pendientes más de 2 días |
+| A9 | Medio | PDFBox: un solo tope de memoria no limita el archivo temporal | `MemoryUsageSetting.setupMixed(maxMain, maxStorage)` con los dos topes (50 MB en memoria, 100 MB en disco) y `/tmp` en tmpfs con `size=` (hoy `size=256m` en `compose.prod.yml`) (sección 3.9) |
+| A10 | Medio | PDFBox: diez bombas seguidas podían ocupar todos los hilos | Executor dedicado de 1 o 2 hilos con cola acotada que rechaza al llenarse («intente en unos minutos»), límite de subidas por usuario y prueba de diez bombas seguidas con la aplicación respondiendo (sección 3.9) |
+| A11 | Bajo | `RutasIdorTest` no recorría los parámetros de consulta | Incluye `?seccion=` y `?alumno=` (reporte de asistencia y nómina) |
+| A12 | Bajo | La zona de `sesion_usuario.vence_en` quedaba como «comprobar» | Prueba obligatoria en MySQL (`a12ZonaDeVenceEnEsLima`) |
+| A13 | Bajo | Un director que enseña en la sección podía revertir allí; una corrección aprobada podía pedirla alguien ajeno a la sección | `REVERSION_JUSTIFICACION` excluye a quien tiene asignación VIGENTE en la sección; `CORRECCION_ASISTENCIA` exige `cc_docente_de_seccion(solicitado_por, …)` (E57) |
+| A14 | Bajo | Lista de rechazo de PDFBox incompleta | Se agregan `/Names/JavaScript`, `Annots` con `/A` o `/AA`, `Rendition`, `Sound`, `Movie`, `Named`, `ResetForm` y `Hide`; las URI con lista permitida; el re-guardado quita `Info`, XMP y las revisiones incrementales (sección 3.9) |
+| A15 | Bajo | Nada impedía que el código escribiera `MARCADOR` | El DTO de la hoja (`MarcaPedida`) no tiene `fuente` (prueba por reflexión) y una regla ArchUnit prohíbe usar `FuenteAsistencia.MARCADOR` fuera del propio enum |
 
 ## 4. Modelo
 ```mermaid
@@ -588,6 +613,9 @@ CREATE TABLE marca_asistencia (
             AND motivo_justificacion IN ('SALUD', 'FAMILIAR', 'TRAMITE', 'OTRO'))
         OR (origen <> 'JUSTIFICACION' AND apoderado_id IS NULL AND familia_id IS NULL AND motivo_justificacion IS NULL
             AND nota_justificacion IS NULL)),
+    -- A1 (auditoría en papel): una FALTA_JUSTIFICADA solo la crea la familia (JUSTIFICACION) o una solicitud aprobada.
+    CONSTRAINT ck_marca_asistencia_justificada CHECK (estado <> 'FALTA_JUSTIFICADA'
+        OR origen IN ('JUSTIFICACION', 'CORRECCION_APROBADA')),
     CONSTRAINT ck_marca_asistencia_fuente CHECK (fuente IN ('DOCENTE', 'MARCADOR')),
     CONSTRAINT ck_marca_asistencia_actor CHECK (creado_por NOT LIKE 'sistema%')
 );
@@ -628,6 +656,27 @@ CREATE TABLE consentimiento_aviso (
     CONSTRAINT ck_consentimiento_aviso_actor CHECK (creado_por NOT LIKE 'sistema%')
 );
 CREATE INDEX ix_consentimiento_aviso_vigente ON consentimiento_aviso (colegio_id, apoderado_id, finalidad, canal, id);
+
+-- A7 (auditoría en papel): asignación de COBERTURA de un docente ausente, con fecha de fin (como máximo 5 días hábiles,
+-- la aplicación; 10 días calendario, la base). cc_docente_de_seccion la ignora desde el día siguiente a `hasta` y
+-- FinAsignaciones la termina (sistema.academico). `hasta` no está en el UPDATE de cc_negocio (1143). Una cobertura no es
+-- de tutor (el tutor es uno por sección).
+ALTER TABLE asignacion_docente ADD COLUMN hasta DATE;
+ALTER TABLE asignacion_docente ADD CONSTRAINT ck_asignacion_docente_hasta CHECK (hasta IS NULL OR tipo <> 'TUTOR');
+
+-- A2 (auditoría en papel): marca de agua de los avisos de asistencia, una fila por colegio. Cada envío (10:30 y 16:00)
+-- avisa las marcas con id mayor que `ultima_marca_id` (también las de días anteriores: lo hecho después del envío de
+-- las 16:00 sale a las 10:30 del día siguiente) y la sube al id más alto que avisó. Solo la escribe cc_sistema.
+CREATE TABLE aviso_asistencia_corte (
+    colegio_id       BIGINT       NOT NULL PRIMARY KEY,
+    ultima_marca_id  BIGINT       NOT NULL DEFAULT 0,
+    creado_en        DATETIME(6)  NOT NULL,
+    creado_por       VARCHAR(60)  NOT NULL,
+    actualizado_en   DATETIME(6)  NOT NULL,
+    version          BIGINT       NOT NULL DEFAULT 0,
+    CONSTRAINT fk_aviso_asistencia_corte_colegio FOREIGN KEY (colegio_id) REFERENCES colegio (id),
+    CONSTRAINT ck_aviso_asistencia_corte_actor CHECK (creado_por = 'sistema.asistencia' AND ultima_marca_id >= 0)
+);
 
 -- Avisos nuevos a las familias (tipos propios, plantillas propias: sección 3.6).
 ALTER TABLE mensaje DROP CONSTRAINT ck_mensaje_tipo;
@@ -871,6 +920,10 @@ GRANT INSERT ON cuentasclaras.registro_asistencia TO 'cc_negocio';              
 GRANT INSERT ON cuentasclaras.marca_asistencia TO 'cc_negocio';                   -- solo inserción
 GRANT INSERT ON cuentasclaras.consentimiento_aviso TO 'cc_negocio';               -- solo inserción
 -- mensaje: sin cambios (los tipos nuevos usan las mismas columnas; el estado lo sigue cambiando solo cc_sistema).
+-- asignacion_docente.hasta (A7): NO entra en el UPDATE por columna de la tanda 1 (1143).
+-- A2: la marca de agua de los avisos la escribe solo cc_sistema (sistema.asistencia); cc_app no tiene ningún permiso.
+GRANT SELECT, INSERT, UPDATE (ultima_marca_id, actualizado_en, version) ON cuentasclaras.aviso_asistencia_corte
+    TO 'cc_sistema'@'%';
 
 -- ===================== Sprint 9 · tanda 3 (V34): comunicados y nómina para el SIAGIE =====================
 -- comunicado: título, texto, alcance, emisor, adjunto y huella NO están en el UPDATE (1143): enviado no se edita.
@@ -973,7 +1026,7 @@ DELIMITER ;
     END IF;
 ```
 
-#### Tanda 2 (V33): 2 funciones, 3 triggers nuevos y 1 con versión nueva: 91 triggers
+#### Tanda 2 (V33): 2 funciones nuevas y 1 con versión nueva, 5 triggers nuevos y 2 con versión nueva: 93 triggers
 ```sql
 DELIMITER $$
 -- Sprint 9, tanda 2: el día de hoy en Lima según el reloj de la BASE (Perú no tiene horario de verano). Mismo criterio que
@@ -1001,8 +1054,11 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el marcador todavia no esta habilitado; la asistencia la registra el docente';
     END IF;
     IF NOT cc_sesion_abierta(NEW.sesion_id, NEW.registrado_por, NEW.colegio_id)
-            OR NOT cc_docente_de_seccion(NEW.registrado_por, NEW.seccion_id, TRUE) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la asistencia la registra un docente asignado a la seccion, con su sesion';
+            OR NOT cc_docente_de_seccion(NEW.registrado_por, NEW.seccion_id, TRUE)
+            -- A5: una firma de sesión por registro (un POST), con la sección y la fecha en la clave.
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('asistencia:', NEW.seccion_id, ':',
+                DATE_FORMAT(NEW.fecha, '%Y-%m-%d'), ':REGISTRADA'), NEW.registrado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la asistencia la registra un docente asignado a la seccion, con su sesion y su firma';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM seccion s JOIN anio_escolar a ON a.id = s.anio_escolar_id
                 WHERE s.id = NEW.seccion_id AND s.colegio_id = NEW.colegio_id AND s.activa AND a.id = NEW.anio_escolar_id
@@ -1055,7 +1111,10 @@ BEGIN
     DECLARE v_estado_anterior VARCHAR(20);
     DECLARE v_origen_anterior VARCHAR(24);
     DECLARE v_es_personal BOOLEAN;
-    SELECT r.fecha, r.origen, r.registrado_bd INTO v_fecha, v_origen_registro, v_registrado_bd
+    DECLARE v_registrado_por VARCHAR(60);
+    DECLARE v_cierre TIME;
+    SELECT r.fecha, r.origen, r.registrado_bd, r.registrado_por
+      INTO v_fecha, v_origen_registro, v_registrado_bd, v_registrado_por
       FROM registro_asistencia r WHERE r.id = NEW.registro_id AND r.colegio_id = NEW.colegio_id
        AND r.seccion_id = NEW.seccion_id;
     IF v_fecha IS NULL OR NOT (NEW.fecha <=> v_fecha) OR NOT cc_sesion_abierta(NEW.sesion_id, NEW.creado_por, NEW.colegio_id) THEN
@@ -1066,7 +1125,7 @@ BEGIN
     END IF;
     SET v_es_personal = cc_docente_de_seccion(NEW.creado_por, NEW.seccion_id, TRUE);
     IF NEW.origen = 'REGISTRO' THEN
-        IF NOT v_es_personal
+        IF NOT v_es_personal OR NOT (NEW.creado_por <=> v_registrado_por)   -- A5: hereda quién registró
                 OR NOT EXISTS (SELECT 1 FROM matricula m WHERE m.id = NEW.matricula_id AND m.colegio_id = NEW.colegio_id
                     AND m.alumno_id = NEW.alumno_id AND m.seccion_id = NEW.seccion_id AND m.estado = 'ACTIVA')
                 OR NOT ((v_origen_registro = 'DEL_DIA' AND v_fecha = cc_hoy_lima())
@@ -1080,8 +1139,16 @@ BEGIN
         IF v_estado_anterior IS NULL OR v_estado_anterior = NEW.estado THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una correccion reemplaza una marca de ese alumno y cambia el estado';
         END IF;
-        IF NEW.origen = 'CORRECCION_DEL_DIA' AND NOT (v_es_personal AND v_fecha = cc_hoy_lima()) THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: despues del dia, la correccion la aprueba Direccion';
+        -- A1, A2 y A5: el mismo día, antes de la hora del segundo aviso, con su firma, y nunca sobre una justificación
+        -- de la familia ni su reversión (eso solo cambia con una solicitud aprobada).
+        SET v_cierre = COALESCE((SELECT c.hora_segundo_aviso FROM configuracion_academica c
+            WHERE c.colegio_id = NEW.colegio_id), '16:00:00');
+        IF NEW.origen = 'CORRECCION_DEL_DIA' AND NOT (v_es_personal AND v_fecha = cc_hoy_lima()
+                AND TIME(UTC_TIMESTAMP(6) - INTERVAL 5 HOUR) < v_cierre
+                AND v_origen_anterior NOT IN ('JUSTIFICACION', 'REVERSION_JUSTIFICACION')
+                AND cc_firma_valida(NEW.colegio_id, CONCAT('marca_asistencia:', NEW.reemplaza_id, ':CORREGIDA'),
+                    NEW.creado_por)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: despues de la hora del segundo aviso, o sobre una justificacion, la correccion la aprueba Direccion';
         END IF;
         IF NEW.origen = 'CORRECCION_APROBADA' AND NOT (cc_solicitud_firmada(NEW.solicitud_id)
                 AND EXISTS (SELECT 1 FROM solicitud_cambio s JOIN usuario u ON u.nombre_usuario = s.resuelto_por
@@ -1090,10 +1157,14 @@ BEGIN
                       AND s.entidad = 'marca_asistencia' AND s.entidad_id = NEW.reemplaza_id
                       AND JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.estadoNuevo')) = NEW.estado
                       AND NEW.creado_por IN (s.solicitado_por, s.resuelto_por)
+                      AND cc_docente_de_seccion(s.solicitado_por, NEW.seccion_id, TRUE)   -- A13: la pide un docente de la seccion
                       AND u.activo AND r.rol IN ('PROMOTOR', 'DIRECTOR'))) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la correccion de otro dia exige su solicitud aprobada y firmada por Direccion';
         END IF;
         IF NEW.origen = 'JUSTIFICACION' AND NOT (v_estado_anterior = 'FALTA' AND NEW.estado = 'FALTA_JUSTIFICADA'
+                AND v_origen_anterior <> 'REVERSION_JUSTIFICACION'                  -- A3: lo revertido no se rejustifica
+                AND cc_firma_valida(NEW.colegio_id, CONCAT('marca_asistencia:', NEW.reemplaza_id, ':JUSTIFICADA'),
+                    NEW.creado_por)                                                -- A5
                 AND v_fecha >= cc_hoy_lima() - INTERVAL 15 DAY
                 AND EXISTS (SELECT 1 FROM usuario u JOIN apoderado p ON p.id = u.apoderado_id
                         JOIN alumno al ON al.familia_id = p.familia_id
@@ -1102,6 +1173,7 @@ BEGIN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la falta la justifica un apoderado de la familia del alumno, con su sesion';
         END IF;
         IF NEW.origen = 'REVERSION_JUSTIFICACION' AND NOT (v_origen_anterior = 'JUSTIFICACION' AND NEW.estado = 'FALTA'
+                AND NOT v_es_personal                    -- A13: un director que enseña en la sección no revierte allí
                 AND EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
                     WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.creado_por AND u.activo
                       AND r.rol = 'DIRECTOR')
@@ -1113,8 +1185,53 @@ BEGIN
 END$$
 DELIMITER ;
 ```
-> - «Dentro de la hora siguiente» del registro tardío se escribe `registrado_bd >= ahora − 6 h` porque `registrado_bd` está en hora de Lima (UTC − 5) y la comparación usa UTC: la ventana real es de 1 hora. **Comprobar** con una prueba en MySQL que la ventana es de una hora (y la zona de `sesion_usuario.vence_en`).
+> - «Dentro de la hora siguiente» del registro tardío se escribe `registrado_bd >= ahora − 6 h` porque `registrado_bd` está en hora de Lima (UTC − 5) y la comparación usa UTC: la ventana real es de 1 hora. **Prueba obligatoria en MySQL** (A12): la ventana es de una hora, y `sesion_usuario.vence_en` está en hora de Lima (`a12ZonaDeVenceEnEsLima`: una sesión que vence en 1 minuto sirve; una vencida hace 1 minuto no). La hora de cierre de `CORRECCION_DEL_DIA` (A2) usa la misma zona.
 > - El trigger lee `marca_asistencia` dentro de su propio trigger de INSERT (solo lectura de otra fila; MySQL prohíbe escribir la tabla, no leerla). `trg_conector_colegio_estado` (sprint 8) lee su propia tabla y pasó el job `mysql`; **comprobar** lo mismo en un trigger de INSERT.
+
+**Auditoría en papel de la tanda 2 (A6, A7): 2 triggers nuevos de `configuracion_academica`, versión nueva de `cc_docente_de_seccion` y de `trg_asignacion_docente_nace`.** MySQL no tiene un trigger para INSERT y UPDATE a la vez: por eso son dos.
+```sql
+DELIMITER $$
+-- A6: las horas y plazos los cambia SOLO Dirección, con la firma de su sesión, y queda quién (actualizado_por).
+DROP TRIGGER IF EXISTS trg_configuracion_academica_nace$$
+CREATE TRIGGER trg_configuracion_academica_nace BEFORE INSERT ON configuracion_academica FOR EACH ROW
+BEGIN
+    IF NOT (NEW.creado_por <=> NEW.actualizado_por)
+            OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.actualizado_por AND u.activo
+                  AND u.apoderado_id IS NULL AND r.rol = 'DIRECTOR')
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('configuracion_academica:', NEW.colegio_id, ':CAMBIADA'),
+                NEW.actualizado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la configuracion academica la cambia Direccion con su firma';
+    END IF;
+END$$
+
+DROP TRIGGER IF EXISTS trg_configuracion_academica_cambio$$
+CREATE TRIGGER trg_configuracion_academica_cambio BEFORE UPDATE ON configuracion_academica FOR EACH ROW
+BEGIN
+    IF NOT (NEW.colegio_id <=> OLD.colegio_id) OR NOT (NEW.creado_por <=> OLD.creado_por)
+            OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.actualizado_por AND u.activo
+                  AND u.apoderado_id IS NULL AND r.rol = 'DIRECTOR')
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('configuracion_academica:', NEW.colegio_id, ':CAMBIADA'),
+                NEW.actualizado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la configuracion academica la cambia Direccion con su firma';
+    END IF;
+END$$
+
+-- A7: versión nueva (misma firma de la función): una cobertura vencida ya no da acceso, aunque siga VIGENTE.
+DROP FUNCTION IF EXISTS cc_docente_de_seccion$$
+CREATE FUNCTION cc_docente_de_seccion(p_nombre VARCHAR(60), p_seccion BIGINT, p_con_auxiliar BOOLEAN) RETURNS BOOLEAN
+    NOT DETERMINISTIC READS SQL DATA
+    RETURN EXISTS (SELECT 1 FROM asignacion_docente a
+        JOIN usuario u ON u.id = a.usuario_id AND u.colegio_id = a.colegio_id
+        JOIN usuario_rol r ON r.usuario_id = u.id
+        WHERE a.seccion_id = p_seccion AND a.estado = 'VIGENTE' AND u.nombre_usuario = p_nombre AND u.activo
+          AND u.apoderado_id IS NULL AND r.rol = 'DOCENTE' AND (p_con_auxiliar OR a.tipo <> 'AUXILIAR')
+          AND (a.hasta IS NULL OR a.hasta >= cc_hoy_lima()))$$
+DELIMITER ;
+```
+- `cc_docente_de_seccion` se define en `03` **después** de `cc_hoy_lima` (o se mueve `cc_hoy_lima` arriba): MySQL resuelve la llamada al ejecutarla, pero el orden claro evita sorpresas en una base nueva.
+- **`trg_asignacion_docente_nace` (versión nueva):** bloque agregado al final: `IF NEW.hasta IS NOT NULL AND NOT (NEW.hasta >= cc_hoy_lima() AND NEW.hasta <= cc_hoy_lima() + INTERVAL 10 DAY) THEN SIGNAL … 'una cobertura dura como maximo 5 dias habiles'`. Los 5 días hábiles exactos (con feriados) los valida la aplicación.
 
 **Versión nueva de `trg_mensaje_nace`** (mismo nombre; tanda 2 con los tipos de asistencia, tanda 3 suma los de comunicados). Bloque nuevo, después de «solo cc_sistema firma como sistema» y del bloque de preparación (S8-M2), y **antes** de las reglas del contacto registrado y verificado, que siguen igual:
 ```sql
@@ -1155,7 +1272,7 @@ DELIMITER ;
 > - La expresión regular corre sobre los **parámetros**, que en estos tipos son: el nombre del colegio, fechas, primeros nombres, estados fijos («falta», «llegó tarde»), horas, cuántos comunicados y las etiquetas de los emisores (y el título, solo en un urgente). **Comprobar** con H2 que la aplicación usa la misma lista (`ContenidoSinCobranza`, una sola fuente para Java y para la prueba que compara con el trigger) y, en MySQL 8.4 (ICU), que `\b` y `'i'` funcionan como se espera, con nombres como «Pagán» o «Vencesla» (no deben coincidir).
 > - Un primer nombre que dispare la regla (improbable) deja el aviso sin crear y una alerta técnica: el proceso lo reintenta con «su hijo(a)» en lugar del nombre (sección 15).
 
-#### Tanda 3 (V34): 4 triggers nuevos y 1 con versión nueva: 95 triggers
+#### Tanda 3 (V34): 4 triggers nuevos y 1 con versión nueva: 97 triggers
 ```sql
 DELIMITER $$
 -- Un comunicado lo envía una persona del colegio con su sesión, con su rol REAL, en un colegio en producción y en el año en
@@ -1291,12 +1408,12 @@ DELIMITER ;
 |---|---|---|---|---|---|
 | Hoy (V31) | — | — | 86 | 7 + 3 = 10 | 96 |
 | 1 (V32) | `trg_asignacion_docente_nace`, `trg_asignacion_docente_estado`; función `cc_docente_de_seccion` | `trg_usuario_rol_alta` | **88** | 8 + 3 = 11 | **99** |
-| 2 (V33) | `trg_registro_asistencia_nace`, `trg_marca_asistencia_nace`, `trg_consentimiento_aviso_nace`; funciones `cc_hoy_lima` y `cc_sesion_abierta` | `trg_mensaje_nace` | **91** | 10 + 3 = 13 | **104** |
-| 3 (V34) | `trg_comunicado_nace`, `trg_comunicado_estado`, `trg_comunicado_destinatario_nace`, `trg_confirmacion_lectura_nace` | `trg_mensaje_nace` | **95** | 13 | **108** |
+| 2 (V33) | `trg_registro_asistencia_nace`, `trg_marca_asistencia_nace`, `trg_consentimiento_aviso_nace`, `trg_configuracion_academica_nace` y `_cambio` (A6); funciones `cc_hoy_lima` y `cc_sesion_abierta` | `trg_mensaje_nace`, `trg_asignacion_docente_nace` (A7); función `cc_docente_de_seccion` (A7) | **93** | 10 + 3 = 13 | **106** |
+| 3 (V34) | `trg_comunicado_nace`, `trg_comunicado_estado`, `trg_comunicado_destinatario_nace`, `trg_confirmacion_lectura_nace` | `trg_mensaje_nace` | **97** | 13 | **110** |
 
 ### 7.4 `VerificadorPermisosBaseDatos` y `VerificadorConfiguracion` (prod y piloto)
 Además de lo de hoy:
-1. **`TRIGGERS_ESPERADOS`:** 88, 91 y 95. **Huellas:** 99, 104 y 108 («Huellas de los 95 triggers y las 13 funciones verificadas»). El valor esperado sigue saliendo del `03` y el `02` empaquetados en el jar.
+1. **`TRIGGERS_ESPERADOS`:** 88, 93 y 97. **Huellas:** 99, 106 y 110 («Huellas de los 97 triggers y las 13 funciones verificadas»). El valor esperado sigue saliendo del `03` y el `02` empaquetados en el jar.
 2. **Nuevas para `cc_app`** (1142 o 1143, con `WHERE 1 = 0`):
    - `UPDATE registro_asistencia …`, `DELETE FROM marca_asistencia …`, `UPDATE consentimiento_aviso …`, `UPDATE confirmacion_lectura …`, `UPDATE exportacion_nomina …` y `UPDATE comunicado_adjunto …` (1142);
    - `UPDATE comunicado SET titulo = titulo …`, `… SET cuerpo = cuerpo …`, `… SET adjunto_id = adjunto_id …`; `UPDATE asignacion_docente SET usuario_id = usuario_id …` y `… SET seccion_id = seccion_id …`; `UPDATE comunicado_destinatario SET familia_id = familia_id …` (1143).
@@ -1358,7 +1475,7 @@ cuentasclaras:
 - `academico.service.CierreAnioAcademico`: al pasar el año a CERRADO, termina las asignaciones (`sistema.academico`).
 - `academico.service.ConsentimientosAviso`: `void registrarEnPortal(Finalidad, Canal, boolean otorga, boolean principal)` (APODERADO) y `void registrarDesdeFicha(long apoderadoId, Finalidad, Canal, String codigoFicha)` (ADMINISTRACION, DIRECTOR). Lo lee `comunicacion` por `academico.api.Consentimientos`.
 - `academico.siagie.NominaSiagie`: `DatosFaltantes faltantes(long anioId)`, `ArchivoNomina exportar(long seccionId)` (DIRECTOR; registra `exportacion_nomina`, `NOMINA_SIAGIE` y el evento) y `academico.siagie.PerfilNomina` (lee el JSON del perfil; `CampoNomina` es un enum cerrado).
-- `academico.api` (interfaces de solo lectura para otros módulos): `InasistenciasDelDia` (por colegio y fecha: familia, primer nombre del alumno, estado y hora; nada más), `SeccionesDocente` y `Consentimientos`.
+- `academico.api` (interfaces de solo lectura para otros módulos): `InasistenciasDelDia` (por colegio y fecha: familia, primer nombre del alumno, estado (también FALTA_JUSTIFICADA) y hora, más las marcas con id mayor que la marca de agua; nada más), `SeccionesDocente` y `Consentimientos`.
 - `academico.web`: `AsignacionesController` (`/academico/asignaciones/**`), `AsistenciaController` (`/academico/asistencia/**`), `SiagieController` (`/academico/siagie/**`), `ConfiguracionAcademicaController` (`/academico/configuracion`) y `PortalAsistenciaController` (`/familia/asistencia/**`, `/familia/avisos`).
 
 ### `comunicados` (nuevo)
@@ -1522,6 +1639,14 @@ Las pruebas de MySQL van en `mysql/AuditoriaSprint9MySqlTest` (job `mysql`), sal
 | E49 | **Dirección, Administración o un docente sin asignación en la sección registra o corrige la asistencia del día** (decisión 144: solo el docente) | La ruta es solo del docente con asignación VIGENTE (403 o 404); `trg_registro_asistencia_nace` y `trg_marca_asistencia_nace` exigen `cc_docente_de_seccion` sin excepción para Dirección | `RegistroAsistenciaTest.direccionNoRegistra` (403); `e49DireccionSinAsignacionNoRegistraNiCorrige` (1644) |
 | E50 | **Con la clave de `cc_app`, un registro o una marca con `fuente = 'MARCADOR'`** (simular un marcador que no existe) | Los dos triggers rechazan toda fuente distinta de DOCENTE en este sprint | `e50FuenteMarcadorSeRechaza` (2 casos, 1644) |
 
+| E51 | **Un docente cambia una FALTA por FALTA_JUSTIFICADA** (o corrige una justificación de la familia) para que el aviso no la mencione (A1) | `ck_marca_asistencia_justificada`; `CORRECCION_DEL_DIA` no reemplaza `JUSTIFICACION` ni `REVERSION_JUSTIFICACION`; el aviso incluye FALTA_JUSTIFICADA | `e51DocenteNoJustificaNiTocaLaJustificacion` (3 casos: 3819 del CHECK y 1644); `AvisosAsistenciaTest.laFaltaJustificadaTambienSeAvisa` |
+| E52 | **Corregir después del último envío** para que la familia no se entere (A2) | `CORRECCION_DEL_DIA` se cierra a la hora del segundo aviso; marca de agua: lo posterior sale a las 10:30 del día siguiente | `e52CorreccionDelDiaDespuesDelCierreFalla` (1644); `AvisosAsistenciaTest.loDeDespuesDelUltimoEnvioSaleAlDiaSiguiente` |
+| E53 | **Volver a justificar una justificación revertida** (A3) | El trigger rechaza `JUSTIFICACION` sobre `REVERSION_JUSTIFICACION` | `e53NoSeRejustificaLoRevertido` (1644); `JustificacionTest.loRevertidoNoSeJustifica` |
+| E54 | **Justificar, corregir o registrar sin la firma de la sesión**, o marcas iniciales a nombre de otra persona (A5) | `cc_firma_valida` por registro, por corrección y por justificación; `creado_por = registrado_por` | `e54SinFirmaNoSeRegistraNiCorrigeNiJustifica` (3 casos) y `e54MarcaInicialDeOtroFalla` (1644) |
+| E55 | **Cambiar las horas del aviso con la clave de `cc_app`** o sin ser Dirección (A6) | `trg_configuracion_academica_nace` y `_cambio` | `e55ConfiguracionSinDireccionNiFirmaFalla` (INSERT y UPDATE, 1644) |
+| E56 | **Una cobertura que no termina** o de más de 5 días hábiles (A7) | `hasta` con tope en la base, `cc_docente_de_seccion` la ignora vencida, `FinAsignaciones` la termina | `e56CoberturaLargaFalla` y `e56CoberturaVencidaNoMarca` (1644); `AsignacionesTest.coberturaTerminaSola` |
+| E57 | **Un director-docente revierte una justificación en su propia sección**, o una corrección aprobada pedida por alguien ajeno a la sección (A13) | `NOT v_es_personal` en la reversión; `cc_docente_de_seccion(solicitado_por, …)` | `e57DirectorDocenteNoRevierteEnSuSeccion` y `e57CorreccionPedidaPorAjenoFalla` (1644) |
+
 ### 13.2 Comunicados
 | # | Escenario | Control | Prueba |
 |---|---|---|---|
@@ -1587,9 +1712,9 @@ Antes de la tanda 1: **pedir a la Dirección del colegio piloto la plantilla de 
 5. Reglas ArchUnit de la sección 9; `RutasIdorTest` con las rutas nuevas y el docente de otra sección.
 - **Terminado cuando:** Administración propone las asignaciones del año, Dirección las aprueba con su firma, el docente entra desde su celular y ve solo los nombres de los alumnos de sus secciones, ninguna ruta de cobranza le responde y la lista que abrió quedó en «Quién vio datos personales».
 
-### Tanda 2 · Asistencia diaria con aviso a las familias (V33; 91 triggers; 1.5 semanas)
+### Tanda 2 · Asistencia diaria con aviso a las familias (V33; 93 triggers; 1.5 semanas)
 > Brief de la tanda: `docs/arquitectura/sprint-9/tanda-2.md` (léase primero). Decisión 144 confirmada: solo el docente registra y corrige el día (E49), con la columna `fuente` (E50).
-1. V33; `02` (asistencia, consentimiento, configuración); `03` con `cc_hoy_lima`, `cc_sesion_abierta`, los 3 triggers y la versión de `trg_mensaje_nace` (tipos de asistencia). **Verificable:** E1, E2, E3, E6 a E15 (parte MySQL), E37 y E40; 91 triggers y 104 huellas.
+1. V33; `02` (asistencia, consentimiento, configuración); `03` con `cc_hoy_lima`, `cc_sesion_abierta`, los 5 triggers (A6), la versión de `trg_mensaje_nace` (tipos de asistencia), la de `trg_asignacion_docente_nace` y la de `cc_docente_de_seccion` (A7). **Verificable:** E1, E2, E3, E6 a E15 (parte MySQL), E37 y E40; E49 a E57; 93 triggers y 106 huellas.
 2. Hoja del día en el celular, guardar, corrección del mismo día; reporte mensual. **Verificable:** una sección de 30 alumnos se guarda en menos de 1 minuto en un celular de gama media (prueba con el `investigador-ux` y un docente real o simulado) y en menos de 1 segundo en el servidor (prueba de carga de 7.5).
 3. Corrección de otro día y registro tardío por la bandeja (`CORRECCION_ASISTENCIA`, `REGISTRO_ASISTENCIA_TARDIO`). **Verificable:** E5, E6 y E10 en H2.
 4. Portal: `/familia/asistencia`, justificar, `/familia/avisos` (consentimientos y contacto principal); consentimiento desde la ficha (Administración); reversión por Dirección. **Verificable:** E11 a E14, E35 y E38.
@@ -1597,8 +1722,8 @@ Antes de la tanda 1: **pedir a la Dirección del colegio piloto la plantilla de 
 6. «Mis datos», «Datos con plazo vencido» y `respaldar.sh` con las tablas nuevas. **Verificable:** el job `respaldo` con una marca borrada del colegio A.
 - **Terminado cuando:** un docente registra la asistencia de su sección desde el celular en menos de 1 minuto; el apoderado del alumno ausente, con su consentimiento, recibe el aviso ese mismo día a la hora fija (con los hermanos en un solo mensaje); una corrección después del aviso le llega también; una falta de ayer no se cambia sin la firma de Dirección; y una familia con deuda recibe exactamente el mismo aviso que una al día.
 
-### Tanda 3 · Comunicados con confirmación de lectura y nómina para el SIAGIE (V34; 95 triggers; 1.5 semanas)
-1. V34; `02` (comunicados y SIAGIE); `03` con los 4 triggers y la versión de `trg_mensaje_nace` (tipos de comunicados). **Verificable:** E16 a E20, E23, E24, E28, E29, E43 y E45 en MySQL; 95 triggers y 108 huellas.
+### Tanda 3 · Comunicados con confirmación de lectura y nómina para el SIAGIE (V34; 97 triggers; 1.5 semanas)
+1. V34; `02` (comunicados y SIAGIE); `03` con los 4 triggers y la versión de `trg_mensaje_nace` (tipos de comunicados). **Verificable:** E16 a E20, E23, E24, E28, E29, E43 y E45 en MySQL; 97 triggers y 110 huellas.
 2. Dependencia PDFBox (decisión 157), `AdjuntosComunicado` y los 10 archivos hostiles. **Verificable:** E26; ArchUnit de PDFBox; OSV-Scanner sin vulnerabilidades críticas ni altas con arreglo.
 3. `FiltroContenido`, `EnvioComunicados` (vista previa, firma, destinatarios, pie fijo), fe de erratas, retiro y `PUBLICAR_COMUNICADO`. **Verificable:** E16 a E22, E27 a E29 en H2; `IntegridadComunicadosTest` (E19).
 4. Portal (`/familia/comunicados`, abrir y confirmar), estadísticas, `AvisosComunicados` (resumen diario, urgentes, recordatorio a 48 h, tope mensual) y el consumo en `/panel/sistema`. **Verificable:** E23 a E25, E42 y E44.
@@ -1620,6 +1745,8 @@ Antes de la tanda 1: **pedir a la Dirección del colegio piloto la plantilla de 
 - **Un primer nombre que coincida con una palabra de la regla de cobranza** (`trg_mensaje_nace`) deja el aviso sin crear: el proceso reintenta con «su hijo(a)» y avisa al responsable técnico.
 - **Familias sin portal no confirman** y no justifican: la adopción del portal (meta del 70 %) es condición para que la confirmación sirva.
 - **Una sola instancia:** 40 secciones guardando a las 8:00 son unos 1,200 INSERT con triggers en un minuto; la prueba de carga de la tanda 2 lo mide. Si no alcanza, se agrupa el INSERT de las marcas (ya es una transacción por sección).
+- **La marca de agua de los avisos (`aviso_asistencia_corte`) la protege solo el GRANT** (escribe solo `cc_sistema`): quien tenga esa clave podría saltarse avisos. Lo mismo vale hoy para todo el outbox; se acepta (A2).
+- **Colegio con menos de 2 personas de Dirección o Promotoría:** la segregación no se puede cumplir; el sistema lo avisa (A8) pero no impide operar.
 - **Plazos de conservación y finalidades** sin revisar por el asesor legal (decisión 153).
 - **Residuales de los sprints anteriores:** sin cambios (`sprint-7-correcciones.md` y `sprint-8-correcciones.md`).
 
