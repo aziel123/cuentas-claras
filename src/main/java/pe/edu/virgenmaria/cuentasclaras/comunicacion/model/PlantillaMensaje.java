@@ -108,7 +108,20 @@ public enum PlantillaMensaje {
 					+ "que lo apruebe una persona de Promotoría del colegio. Si no lo reconoces, avisa hoy a la Promotoría."),
 	CORREO_CONTROL_CAMBIADO("cc_correo_control_cambiado_v2", "Cambió el correo de control", 3, false,
 			"{{1}}: el correo externo de control del colegio ahora es {{2}} (lo cambió {{3}}). Desde hoy recibe la huella "
-					+ "de la bitácora y el resumen diario. Si no lo reconoces, avisa hoy a la Promotoría y al proveedor.");
+					+ "de la bitácora y el resumen diario. Si no lo reconoces, avisa hoy a la Promotoría y al proveedor."),
+	// Sprint 9, tanda 2 (sección 11): asistencia. Solo el primer nombre del alumno (minimización), estados fijos y horas;
+	// nunca montos ni palabras de cobranza (lo exigen ContenidoSinCobranza y trg_mensaje_nace). El botón lleva a
+	// /familia/asistencia, nunca al estado de cuenta.
+	ASISTENCIA("cc_asistencia_v2", "Asistencia de hoy", 3, true,
+			"{{1}}: asistencia del {{2}}. {{3}}. Si hay un error o desea justificar una falta, ingrese al portal."),
+	ASISTENCIA_CORREGIDA("cc_asistencia_corregida_v2", "Se corrigió la asistencia", 6, true,
+			"{{1}}: se corrigió la asistencia de {{2}} del {{3}}: ahora figura {{4}} (antes: {{5}}). Lo registró {{6}}. "
+					+ "Si no lo reconoce, avísenos desde el portal.");
+
+	/** Sprint 9, tanda 2: las plantillas de asistencia (botón a {@code /familia/asistencia}). */
+	public boolean deAsistencia() {
+		return this == ASISTENCIA || this == ASISTENCIA_CORREGIDA;
+	}
 
 	private static final Pattern MARCADOR = Pattern.compile("\\{\\{(\\d+)}}");
 

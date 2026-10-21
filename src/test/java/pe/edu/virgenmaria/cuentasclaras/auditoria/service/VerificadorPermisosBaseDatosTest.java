@@ -639,7 +639,7 @@ class VerificadorPermisosBaseDatosTest {
 		// Sprint 8, tanda 1 (V28): 80 con el colegio (nace y cambia), la primera Promotoría y el correo externo de control;
 		// tanda 2 (V29): 82 con los conectores (nacen propuestos y cambian de estado con la aprobación firmada); tanda 3 (V30):
 		// los mismos 82 (los dos del respaldo cambian de versión).
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(88);
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(93);
 	}
 
 	/**

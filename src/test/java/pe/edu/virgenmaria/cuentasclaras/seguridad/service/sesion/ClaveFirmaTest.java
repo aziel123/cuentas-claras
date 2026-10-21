@@ -62,7 +62,10 @@ class ClaveFirmaTest {
 				ClaveFirma.cambioContactoTitular(1L, EstadoSolicitud.APROBADA), ClaveFirma.fichaColegio(1L, 0),
 				ClaveFirma.cambioCorreoControlPropuesto(1L, 1), ClaveFirma.cambioCorreoControl(1L, EstadoSolicitud.APROBADA),
 				// Sprint 9, tanda 1 (V32): terminar una asignación docente.
-				ClaveFirma.asignacionTerminada(1L))
+				ClaveFirma.asignacionTerminada(1L),
+				// Sprint 9, tanda 2 (V33): registrar, corregir, justificar y revertir la asistencia; la configuración.
+				ClaveFirma.asistenciaRegistrada(1L, LocalDate.of(2026, 10, 5)), ClaveFirma.marcaCorregida(1L),
+				ClaveFirma.marcaJustificada(1L), ClaveFirma.marcaRevertida(1L), ClaveFirma.configuracionAcademica(1L, 0))
 				.forEach(clave -> {
 					// El CHECK de V25 (firma_operacion.clave) y el largo de la columna.
 					assertThat(clave).matches("^[a-z_]+:[A-Za-z0-9:_-]+$").hasSizeLessThanOrEqualTo(120);

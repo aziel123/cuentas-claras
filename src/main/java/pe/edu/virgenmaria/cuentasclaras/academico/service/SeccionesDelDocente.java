@@ -15,6 +15,8 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -35,9 +37,19 @@ public class SeccionesDelDocente implements SeccionesDocente {
 
 	private final SeccionRepository secciones;
 
-	public SeccionesDelDocente(AsignacionDocenteRepository asignaciones, SeccionRepository secciones) {
+	private final Clock reloj;
+
+	public SeccionesDelDocente(AsignacionDocenteRepository asignaciones, SeccionRepository secciones, Clock reloj) {
 		this.asignaciones = asignaciones;
 		this.secciones = secciones;
+		this.reloj = reloj;
+	}
+
+	/** Las asignaciones VIGENTES del docente que dan acceso hoy (A7: sin las coberturas vencidas). */
+	private List<AsignacionDocente> vigentesDe(Long usuarioId) {
+		LocalDate hoy = LocalDate.now(reloj);
+		return asignaciones.findByUsuarioIdAndEstadoOrderBySeccionIdAsc(usuarioId, EstadoAsignacion.VIGENTE).stream()
+				.filter(a -> a.daAcceso(hoy)).toList();
 	}
 
 	@Override
@@ -48,7 +60,7 @@ public class SeccionesDelDocente implements SeccionesDocente {
 			return List.of();
 		}
 		Map<Long, List<AsignacionDocente>> porSeccion = new LinkedHashMap<>();
-		asignaciones.findByUsuarioIdAndEstadoOrderBySeccionIdAsc(persona.usuarioId(), EstadoAsignacion.VIGENTE)
+		vigentesDe(persona.usuarioId())
 				.forEach(a -> porSeccion.computeIfAbsent(a.getSeccionId(), id -> new ArrayList<>()).add(a));
 		List<SeccionDocente> mias = new ArrayList<>();
 		porSeccion.forEach((seccionId, delaSeccion) -> secciones.findById(seccionId)
@@ -76,10 +88,18 @@ public class SeccionesDelDocente implements SeccionesDocente {
 		if (seccion.isEmpty()) {
 			return Optional.empty();
 		}
-		List<AsignacionDocente> suyas = asignaciones.findByUsuarioIdAndEstadoOrderBySeccionIdAsc(persona.usuarioId(),
-				EstadoAsignacion.VIGENTE).stream().filter(a -> a.getSeccionId().equals(seccionId))
+		List<AsignacionDocente> suyas = vigentesDe(persona.usuarioId()).stream()
+				.filter(a -> a.getSeccionId().equals(seccionId))
 				.filter(a -> conAuxiliar || a.getTipo() != TipoAsignacion.AUXILIAR).toList();
 		return suyas.isEmpty() ? Optional.empty() : Optional.of(Map.entry(seccion.get(), funcion(suyas)));
+	}
+
+	/** Sprint 9, tanda 2: si el docente en sesión es tutor(a) VIGENTE de la sección (ve las notas y el reporte). */
+	@Transactional(readOnly = true)
+	public boolean tutorDe(long seccionId) {
+		UsuarioAutenticado persona = PersonaEnSesion.actual();
+		return persona.roles().contains(Rol.DOCENTE) && vigentesDe(persona.usuarioId()).stream()
+				.anyMatch(a -> a.getSeccionId().equals(seccionId) && a.getTipo() == TipoAsignacion.TUTOR);
 	}
 
 	/** «Tutor(a)», «Docente de área: Matemática», «Auxiliar de educación» (varias, unidas con « · »). */

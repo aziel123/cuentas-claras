@@ -411,7 +411,46 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			sinBorrado("asignacion_docente"),
 			columna("UPDATE asignacion_docente SET usuario_id = usuario_id WHERE 1 = 0", "asignacion_docente"),
 			columna("UPDATE asignacion_docente SET seccion_id = seccion_id WHERE 1 = 0", "asignacion_docente"),
-			trigger(VerificadorPermisosBaseDatos.ASIGNACION_VIGENTE_IMPOSIBLE, "trg_asignacion_docente_nace"));
+			trigger(VerificadorPermisosBaseDatos.ASIGNACION_VIGENTE_IMPOSIBLE, "trg_asignacion_docente_nace"),
+			// Sprint 9, tanda 2 (V33, E7): la asistencia y el consentimiento son de solo inserción (1142); una cobertura no
+			// se alarga (hasta: 1143); la marca de agua de los avisos la escribe solo cc_sistema (1142, A2); un registro de
+			// ayer «del día» (E1) y una configuración académica sin Dirección ni firma (E55): 1644 de sus triggers.
+			soloInsercion("registro_asistencia"), sinBorrado("registro_asistencia"),
+			soloInsercion("marca_asistencia"), sinBorrado("marca_asistencia"),
+			soloInsercion("consentimiento_aviso"), sinBorrado("consentimiento_aviso"),
+			columna("UPDATE asignacion_docente SET hasta = hasta WHERE 1 = 0", "asignacion_docente"),
+			soloSistema(VerificadorPermisosBaseDatos.CORTE_AVISOS_IMPOSIBLE,
+					"la aplicación podría mover la marca de agua de los avisos de asistencia (las familias no se enterarían)."),
+			new SentenciaProhibida("UPDATE aviso_asistencia_corte SET ultima_marca_id = ultima_marca_id WHERE 1 = 0",
+					Set.of(MYSQL_COMANDO_DENEGADO, MYSQL_COLUMNA_DENEGADA), "la aplicación podría mover la marca de agua "
+							+ "de los avisos de asistencia (solo cc_sistema: revisa 02-permisos-tablas.sql)."),
+			sinBorrado("aviso_asistencia_corte"),
+			trigger(VerificadorPermisosBaseDatos.REGISTRO_AYER_IMPOSIBLE, "trg_registro_asistencia_nace"),
+			trigger(VerificadorPermisosBaseDatos.CONFIGURACION_ACADEMICA_IMPOSIBLE, "trg_configuracion_academica_nace"));
+
+	/** Sprint 9, tanda 2 (E1): un registro «del día» del colegio 0 con la fecha de ayer, sin sesión ni firma (1644). */
+	static final String REGISTRO_AYER_IMPOSIBLE = "INSERT INTO registro_asistencia (colegio_id, anio_escolar_id, seccion_id, "
+			+ "fecha, origen, fuente, registrado_por, sesion_id, alumnos, creado_en, creado_por, actualizado_en) VALUES (0, 0, "
+			+ "0, DATE(UTC_TIMESTAMP() - INTERVAL 29 HOUR), 'DEL_DIA', 'DOCENTE', 'verificador', 0, 0, NOW(6), 'verificador', "
+			+ "NOW(6))";
+
+	/** Sprint 9, tanda 2 (E55, A6): la configuración académica del colegio 0, sin Dirección ni firma (1644). */
+	static final String CONFIGURACION_ACADEMICA_IMPOSIBLE = "INSERT INTO configuracion_academica (colegio_id, "
+			+ "actualizado_por, creado_en, creado_por, actualizado_en) VALUES (0, 'verificador', NOW(6), 'verificador', "
+			+ "NOW(6))";
+
+	/** Sprint 9, tanda 2 (A2): la marca de agua de los avisos del colegio 0 (cc_app no la escribe: 1142). */
+	static final String CORTE_AVISOS_IMPOSIBLE = "INSERT INTO aviso_asistencia_corte (colegio_id, ultima_marca_id, "
+			+ "creado_en, creado_por, actualizado_en) VALUES (0, 0, NOW(6), 'sistema.asistencia', NOW(6))";
+
+	/**
+	 * Sprint 9, tanda 2 (E40, sección 3.13): con cc_sistema, un aviso de asistencia del colegio 0 con un monto en los
+	 * parámetros (1644: lo rechaza la regla del colegio en preparación o la de cobranza de trg_mensaje_nace).
+	 */
+	static final String AVISO_ASISTENCIA_CON_MONTO_IMPOSIBLE = "INSERT INTO mensaje (colegio_id, clave, tipo, canal, "
+			+ "destinatario_tipo, familia_id, apoderado_id, destino, plantilla, parametros, estado, creado_en, creado_por, "
+			+ "actualizado_en) VALUES (0, 'verificador-asistencia', 'ASISTENCIA_DIA', 'CORREO', 'APODERADO', 0, 0, 'x@y.pe', "
+			+ "'cc_asistencia_v2', 'Mateo: falta. Debe S/ 350.00', 'PENDIENTE', NOW(6), 'sistema.asistencia', NOW(6))";
 
 	/**
 	 * Sprint 9, tanda 1 (E4): una asignación docente del colegio 0 que nace VIGENTE, sin solicitud ni firma (la rechaza
@@ -564,7 +603,14 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			columna("UPDATE cambio_correo_control SET correo_nuevo = correo_nuevo WHERE 1 = 0", "cambio_correo_control"),
 			// Sprint 9, tanda 1 (V32): tampoco con cc_sistema nace una asignación VIGENTE (1644) ni se borra (1142).
 			trigger(VerificadorPermisosBaseDatos.ASIGNACION_VIGENTE_IMPOSIBLE, "trg_asignacion_docente_nace"),
-			sinBorrado("asignacion_docente"));
+			sinBorrado("asignacion_docente"),
+			// Sprint 9, tanda 2 (V33): con cc_sistema, un aviso de asistencia con un monto no nace (1644); la marca de agua
+			// no se borra (1142) ni cambia de colegio (1143); la asistencia tampoco se edita ni se borra (1142).
+			trigger(VerificadorPermisosBaseDatos.AVISO_ASISTENCIA_CON_MONTO_IMPOSIBLE,
+					"trg_mensaje_nace (versión del sprint 9, tanda 2)"),
+			sinBorrado("aviso_asistencia_corte"),
+			columna("UPDATE aviso_asistencia_corte SET colegio_id = colegio_id WHERE 1 = 0", "aviso_asistencia_corte"),
+			soloInsercion("marca_asistencia"), sinBorrado("marca_asistencia"));
 
 	/** 1142 (o 1143): solo cc_sistema la escribe. */
 	private static SentenciaProhibida soloSistema(String sql, String riesgo) {
@@ -659,7 +705,10 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_cambio_contacto_titular_nace", "trg_cambio_contacto_titular_estado", "trg_cambio_correo_control_nace",
 			"trg_cambio_correo_control_estado",
 			// Sprint 9, tanda 1 (V32).
-			"trg_asignacion_docente_nace", "trg_asignacion_docente_estado");
+			"trg_asignacion_docente_nace", "trg_asignacion_docente_estado",
+			// Sprint 9, tanda 2 (V33).
+			"trg_registro_asistencia_nace", "trg_consentimiento_aviso_nace", "trg_marca_asistencia_nace",
+			"trg_configuracion_academica_nace", "trg_configuracion_academica_cambio");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 

@@ -192,6 +192,37 @@ public final class ClaveFirma {
 		return "asignacion_docente:" + id(asignacionId) + ":TERMINADA";
 	}
 
+	/**
+	 * Sprint 9, tanda 2 (A5): el docente firma, con un solo POST, el registro de la asistencia de SU sección en esa fecha.
+	 * trg_registro_asistencia_nace la exige a nombre de quien figura en {@code registrado_por}.
+	 */
+	public static String asistenciaRegistrada(Long seccionId, LocalDate fecha) {
+		return "asistencia:" + id(seccionId) + ":" + Objects.requireNonNull(fecha, "fecha") + ":REGISTRADA";
+	}
+
+	/** Sprint 9, tanda 2 (A5): el docente corrige el mismo día la marca {@code marcaId} (la que reemplaza). */
+	public static String marcaCorregida(Long marcaId) {
+		return "marca_asistencia:" + id(marcaId) + ":CORREGIDA";
+	}
+
+	/** Sprint 9, tanda 2 (A5): el apoderado justifica la falta {@code marcaId} desde el portal. */
+	public static String marcaJustificada(Long marcaId) {
+		return "marca_asistencia:" + id(marcaId) + ":JUSTIFICADA";
+	}
+
+	/** Sprint 9, tanda 2: Dirección revierte la justificación {@code marcaId}. */
+	public static String marcaRevertida(Long marcaId) {
+		return "marca_asistencia:" + id(marcaId) + ":REVERTIDA";
+	}
+
+	/**
+	 * Sprint 9, tanda 2 (A6): Dirección cambia las horas y plazos de su colegio. {@code version}: la que tendrá la fila
+	 * (0 al crearla); la firma es única por clave y la configuración se cambia más de una vez.
+	 */
+	public static String configuracionAcademica(Long colegioId, long version) {
+		return "configuracion_academica:" + id(colegioId) + ":CAMBIADA:" + version;
+	}
+
 	private static Long id(Long id) {
 		return Objects.requireNonNull(id, "id");
 	}
