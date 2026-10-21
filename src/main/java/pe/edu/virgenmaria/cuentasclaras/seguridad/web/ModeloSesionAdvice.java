@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.MarcaColegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.marca.Marca;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Monograma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.GrupoMenu;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.ModuloApp;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
@@ -94,6 +95,16 @@ public class ModeloSesionAdvice {
 					|| pendientes > 0, elementos, pendientes));
 		}
 		return grupos;
+	}
+
+	/**
+	 * Las iniciales de la barra cuando no hay logo: del colegio de la sesión o, sin sesión (ingreso, errores), del producto.
+	 * Auditoría del PR #19 (hallazgo 3): se calculan aquí, con salida por defecto si el nombre está vacío.
+	 */
+	@ModelAttribute("monograma")
+	public String monograma(@AuthenticationPrincipal UsuarioAutenticado usuario) {
+		String colegio = usuario == null ? null : colegios.nombreDe(usuario.colegioId());
+		return Monograma.de(colegio, marca.nombre());
 	}
 
 	@ModelAttribute("rutaActual")

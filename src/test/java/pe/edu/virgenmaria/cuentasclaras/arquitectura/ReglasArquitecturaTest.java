@@ -438,6 +438,9 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".comunicacion.service.ConsultaMensajes#avisosFinancieros", ALERTAS),
 			Map.entry(BASE + ".aprobaciones.service.BandejaAprobaciones#contarPendientes",
 					"hasAnyRole('PROMOTOR','DIRECTOR','SISTEMA_PANEL')"),
+			// Rediseño (auditoría del PR #19): el contador del menú, con los roles del módulo Aprobaciones.
+			Map.entry(BASE + ".aprobaciones.service.BandejaAprobaciones#contarPorResolver",
+					"hasAnyRole('PROMOTOR','DIRECTOR')"),
 			Map.entry(BASE + ".seguridad.service.ServicioContactoPersonal",
 					"hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','CAJA','DOCENTE')"),
 			// Sprint 6, tanda 3 (decisión 77): la llamada de control la hacen Promotoría o Dirección (ven la muestra, los

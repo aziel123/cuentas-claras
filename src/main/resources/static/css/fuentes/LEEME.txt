@@ -1,6 +1,6 @@
 Inter (versión variable, ejes wght 100-900, subconjunto latino)
 Autor: The Inter Project Authors (https://github.com/rsms/inter)
-Licencia: SIL Open Font License 1.1 (https://openfontlicense.org)
+Licencia: SIL Open Font License 1.1 (texto completo en OFL.txt, junto a este archivo)
 
 Se aloja aquí (bajo /css/) y no en /fonts/ porque la CSP solo permite font-src 'self' y las reglas de
 seguridad ya abren /css/** como recurso estático; así no se toca ninguna regla de acceso.

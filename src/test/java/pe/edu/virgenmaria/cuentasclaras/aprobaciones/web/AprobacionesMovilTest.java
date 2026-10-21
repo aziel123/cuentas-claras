@@ -104,6 +104,28 @@ class AprobacionesMovilTest {
 				.isEqualTo("APROBADA");
 	}
 
+	/**
+	 * Auditoría del PR #19 (hallazgo 2): el contador del menú usa la regla de {@code puedeResolver}. A quien la pidió no
+	 * se le cuenta; a quien puede resolverla, sí.
+	 */
+	@Test
+	void elContadorDelMenuNoCuentaLoQueUnoMismoPidio() throws Exception {
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(directora)))
+				.andExpect(content().string(containsString("aria-label=\"1 por aprobar\"")));
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(promotora)))
+				.andExpect(content().string(not(containsString("por aprobar\""))))
+				.andExpect(content().string(not(containsString("class=\"contador\""))));
+	}
+
+	/** Auditoría del PR #19 (hallazgo 1): Caja, Docente y la familia no reciben ningún contador, aunque haya pendientes. */
+	@Test
+	void cajaDocenteYApoderadoNoRecibenContadores() throws Exception {
+		for (Rol rol : new Rol[] { Rol.CAJA, Rol.DOCENTE, Rol.APODERADO }) {
+			mvc.perform(get("/inicio").with(UsuariosDePrueba.como(rol))).andExpect(status().isOk())
+					.andExpect(content().string(not(containsString("class=\"contador"))));
+		}
+	}
+
 	/** P8: quien la pidió ve el detalle sin botones y, si fuerza el POST, se rechaza y queda en la bitácora. */
 	@Test
 	void quienLaPidioNoLaApruebaDesdeElCelular() throws Exception {
