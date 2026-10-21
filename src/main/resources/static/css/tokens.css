@@ -48,6 +48,13 @@
   --ancho-max: 1440px;
   --ancho-menu: 264px;
   --color-texto-numero: #0b1f3f;   /* cifras grandes: azul casi negro, 15:1 sobre blanco */
+  /* Gráficos (tablero del inicio). Orden fijo, validado con el validador de dataviz (CVD ΔE ≥ 15). La serie 2 (celeste)
+     tiene 2.5:1 sobre blanco: siempre va con leyenda escrita, separación de 2 px y tabla de datos. */
+  --color-serie-1: #1b4f9c;   /* azul: efectivo y barras de una sola serie */
+  --color-serie-2: #38aee6;   /* celeste: digital */
+  --color-serie-3: #7c5cc4;   /* violeta: banco (4.9:1 sobre blanco) */
+  --color-grafico-guia: #dce7f2;
+  --color-grafico-pista: #eef3f9;
   /* Siempre claro, aunque Windows o el celular estén en modo oscuro (decisión del colegio). */
   color-scheme: light;
 }

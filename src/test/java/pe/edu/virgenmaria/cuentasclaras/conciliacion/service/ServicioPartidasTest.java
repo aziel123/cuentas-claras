@@ -286,11 +286,11 @@ class ServicioPartidasTest {
 		confirmar(extractos, PROMOTORIA, cuentaId, banco.saldoFinal().toPlainString());
 		como(PROMOTORIA);
 		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.ATENCION
-				&& a.texto().startsWith("1 abono(s) en el banco por S/ 450.00 sin pareja"));
+				&& a.texto().startsWith("1 abono en el banco por S/ 450.00 sin pareja"));
 
 		reloj.fijar(LUNES.plusSeconds(3 * 24 * 3600));
 		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.CRITICA
-				&& a.texto().startsWith("1 abono(s) en el banco por S/ 450.00 llevan más de 2 días hábiles sin pareja"));
+				&& a.texto().startsWith("1 abono en el banco por S/ 450.00 lleva más de 2 días hábiles sin pareja"));
 	}
 
 	/** El Yape del viernes que la cajera registra recién el lunes: la pasada siguiente del sistema lo propone. */

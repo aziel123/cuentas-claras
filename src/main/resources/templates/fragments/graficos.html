@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<body>
+<!--/* Rediseño (tableros del inicio): gráficos en SVG dibujado en el servidor. Sin JavaScript ni style (CSP estricta): la
+     geometría va en atributos x, y, width y height en %, y el color en clases de rediseno.css con los tokens. Cada
+     gráfico tiene título, resumen (aria-describedby y <desc>) y su tabla de datos equivalente en un details. */-->
+
+<!--/* Fila de cifras: etiqueta, cifra grande, comparación con flecha Y palabras, y un medidor si lo lleva. */-->
+<ul th:fragment="kpis(kpis)" class="kpis tablero-kpis" data-tablero-kpis>
+	<li th:each="k : ${kpis}" class="kpi">
+		<span class="kpi-etiqueta" th:text="${k.etiqueta()}">Cobrado hoy</span>
+		<strong class="kpi-cifra num" th:text="${k.cifra()}">S/ 1,250.00</strong>
+		<svg th:if="${k.avance() != null}" class="medidor" width="100%" height="8" role="img"
+			th:aria-label="|Avance: ${k.comparacion()}|" focusable="false">
+			<rect class="medidor-fondo" x="0" y="0" width="100%" height="8" rx="4"></rect>
+			<rect class="medidor-lleno" x="0" y="0" th:width="|${k.avance()}%|" height="8" rx="4"></rect>
+		</svg>
+		<small class="kpi-nota" th:classappend="|tendencia-${#strings.toLowerCase(k.tendencia().name())}|">
+			<span th:if="${!#strings.isEmpty(k.tendencia().flecha())}" class="tendencia-flecha" aria-hidden="true"
+				th:text="${k.tendencia().flecha()}">▲</span>
+			<span th:text="${k.comparacion()}">12 % más que el 21/09</span>
+		</small>
+		<a th:if="${k.enlace() != null}" class="btn btn-texto btn-chico" th:href="@{${k.enlace()}}" th:text="${k.textoEnlace()}">Ver</a>
+	</li>
+</ul>
+
+<!--/* Barras verticales: el eje (HTML, para que el texto no se deforme) y las barras (SVG en %). */-->
+<section th:fragment="barrasVerticales(g)" class="tarjeta grafico" th:id="${g.id()}" th:aria-labelledby="|${g.id()}-titulo|" data-grafico>
+	<h2 th:id="|${g.id()}-titulo|" th:text="${g.titulo()}">Cobranza de los últimos 30 días</h2>
+	<p class="secundario grafico-resumen" th:id="|${g.id()}-resumen|" th:text="${g.resumen()}">Resumen</p>
+	<div class="grafico-area">
+		<div class="grafico-eje" aria-hidden="true">
+			<span th:each="guia : ${g.guias()}" th:text="${guia.texto()}">S/ 2,000</span>
+		</div>
+		<svg class="grafico-svg barras-v" width="100%" height="180" role="img" focusable="false"
+			th:aria-labelledby="|${g.id()}-titulo ${g.id()}-resumen|">
+			<title th:text="${g.titulo()}">Cobranza</title>
+			<desc th:text="${g.resumen()}">Resumen</desc>
+			<line th:each="guia : ${g.guias()}" class="grafico-guia" x1="0" x2="100%" th:y1="|${guia.y()}%|" th:y2="|${guia.y()}%|"></line>
+			<rect th:each="b : ${g.barras()}" class="grafico-barra serie-1" th:x="|${b.x()}%|" th:y="|${b.y()}%|"
+				th:width="|${b.ancho()}%|" th:height="|${b.alto()}%|" rx="2"><title th:text="|${b.etiqueta()}: ${b.valor()} (${b.detalle()})|">01/10: S/ 0.00</title></rect>
+		</svg>
+		<div class="grafico-hueco" aria-hidden="true"></div>
+		<svg class="grafico-rotulos" width="100%" height="20" aria-hidden="true" focusable="false">
+			<text th:each="r : ${g.rotulos()}" th:x="|${r.x()}%|" y="14" th:attr="text-anchor=${r.anclaje()}" th:text="${r.texto()}">01/10</text>
+		</svg>
+	</div>
+	<details class="grafico-datos">
+		<summary>Ver los datos en una tabla</summary>
+		<div class="tabla-desplazable">
+			<table class="tabla">
+				<caption class="solo-lectores" th:text="${g.titulo()}">Cobranza</caption>
+				<thead><tr><th scope="col" th:each="c, i : ${g.columnas()}" th:classappend="${i.index > 0} ? 'num'" th:text="${c}">Día</th></tr></thead>
+				<tbody>
+					<tr th:each="b : ${g.barras()}">
+						<th scope="row" th:text="${b.etiqueta()}">01/10/2026</th>
+						<td class="num" th:text="${b.valor()}">S/ 0.00</td>
+						<td class="num" th:text="${b.detalle()}">0 pagos</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</details>
+</section>
+
+<!--/* Barras horizontales: una fila HTML por categoría (etiqueta, barra SVG y valor), escala de 0 a 100 %. */-->
+<section th:fragment="barrasHorizontales(g)" class="tarjeta grafico" th:id="${g.id()}" th:aria-labelledby="|${g.id()}-titulo|" data-grafico>
+	<h2 th:id="|${g.id()}-titulo|" th:text="${g.titulo()}">Morosidad por grado</h2>
+	<p class="secundario grafico-resumen" th:id="|${g.id()}-resumen|" th:text="${g.resumen()}">Resumen</p>
+	<th:block th:if="${#lists.isEmpty(g.filas())}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Sin datos', ${g.vacio()})}"></div>
+	</th:block>
+	<ul class="barras-h" th:unless="${#lists.isEmpty(g.filas())}" role="list">
+		<li th:each="f : ${g.filas()}" class="barra-h">
+			<span class="barra-h-etiqueta" th:text="${f.etiqueta()}">5.° Primaria</span>
+			<svg class="barra-h-svg" width="100%" height="14" role="img" focusable="false"
+				th:aria-label="|${f.etiqueta()}: ${f.valor()}, ${f.detalle()}|">
+				<title th:text="|${f.etiqueta()}: ${f.valor()} (${f.detalle()}, ${f.monto()})|">5.° Primaria</title>
+				<rect class="grafico-pista" x="0" y="0" width="100%" height="14" rx="3"></rect>
+				<rect class="grafico-barra serie-1" x="0" y="0" th:width="|${f.ancho()}%|" height="14" rx="3"></rect>
+			</svg>
+			<span class="barra-h-valor num"><strong th:text="${f.valor()}">25 %</strong> <small class="secundario" th:text="${f.detalle()}">3 de 12</small></span>
+		</li>
+	</ul>
+	<details class="grafico-datos" th:unless="${#lists.isEmpty(g.filas())}">
+		<summary>Ver los datos en una tabla</summary>
+		<div class="tabla-desplazable">
+			<table class="tabla">
+				<caption class="solo-lectores" th:text="${g.titulo()}">Morosidad</caption>
+				<thead><tr><th scope="col" th:each="c, i : ${g.columnas()}" th:classappend="${i.index > 0} ? 'num'" th:text="${c}">Grado</th></tr></thead>
+				<tbody>
+					<tr th:each="f : ${g.filas()}">
+						<th scope="row" th:text="${f.etiqueta()}">5.° Primaria</th>
+						<td class="num" th:text="${f.valor()}">25 %</td>
+						<td class="num" th:text="${f.detalle()}">3 de 12 alumnos</td>
+						<td class="num" th:text="${f.monto()}">S/ 1,350.00</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</details>
+</section>
+
+<!--/* Barra apilada al 100 %: segmentos en orden fijo, separados por 2 px, con leyenda que escribe monto y %. */-->
+<section th:fragment="barraApilada(g)" class="tarjeta grafico" th:id="${g.id()}" th:aria-labelledby="|${g.id()}-titulo|" data-grafico>
+	<h2 th:id="|${g.id()}-titulo|" th:text="${g.titulo()}">Medios de pago</h2>
+	<p class="secundario grafico-resumen" th:id="|${g.id()}-resumen|" th:text="${g.resumen()}">Resumen</p>
+	<th:block th:if="${g.sinDatos()}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Sin cobros', ${g.vacio()})}"></div>
+	</th:block>
+	<th:block th:unless="${g.sinDatos()}">
+		<svg class="grafico-svg apilada" width="100%" height="28" role="img" focusable="false"
+			th:aria-labelledby="|${g.id()}-titulo ${g.id()}-resumen|">
+			<title th:text="${g.titulo()}">Medios</title>
+			<desc th:text="${g.resumen()}">Resumen</desc>
+			<rect th:each="s : ${g.segmentos()}" th:unless="${s.ancho() == '0.00'}" class="grafico-barra grafico-segmento"
+				th:classappend="|serie-${s.serie()}|" th:x="|${s.x()}%|" y="0" th:width="|${s.ancho()}%|" height="28"><title
+				th:text="|${s.etiqueta()}: ${s.monto()} (${s.porcentaje()})|">Efectivo</title></rect>
+		</svg>
+		<ul class="leyenda" role="list">
+			<li th:each="s : ${g.segmentos()}">
+				<svg class="leyenda-muestra" width="14" height="14" aria-hidden="true" focusable="false"><rect
+					class="grafico-barra" th:classappend="|serie-${s.serie()}|" x="0" y="0" width="14" height="14" rx="3"></rect></svg>
+				<span><span th:text="${s.etiqueta()}">Efectivo</span>: <strong class="num" th:text="${s.porcentaje()}">40 %</strong>
+					<small class="secundario num" th:text="|${s.monto()} · ${s.pagos()}|">S/ 1,000.00 · 3 pagos</small></span>
+			</li>
+		</ul>
+		<details class="grafico-datos">
+			<summary>Ver los datos en una tabla</summary>
+			<div class="tabla-desplazable">
+				<table class="tabla">
+					<caption class="solo-lectores" th:text="${g.titulo()}">Medios</caption>
+					<thead><tr><th scope="col" th:each="c, i : ${g.columnas()}" th:classappend="${i.index > 0} ? 'num'" th:text="${c}">Medio</th></tr></thead>
+					<tbody>
+						<tr th:each="s : ${g.segmentos()}">
+							<th scope="row" th:text="${s.etiqueta()}">Efectivo</th>
+							<td class="num" th:text="${s.monto()}">S/ 1,000.00</td>
+							<td class="num" th:text="${s.porcentaje()}">40 %</td>
+							<td class="num" th:text="${s.pagos()}">3 pagos</td>
+						</tr>
+					</tbody>
+					<tfoot><tr><th scope="row">Total</th><td class="num" th:text="${g.total()}">S/ 2,500.00</td><td class="num">100 %</td><td></td></tr></tfoot>
+				</table>
+			</div>
+		</details>
+	</th:block>
+</section>
+</body>
+</html>

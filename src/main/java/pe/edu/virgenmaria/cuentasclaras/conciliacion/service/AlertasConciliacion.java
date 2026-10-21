@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.conciliacion.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Plural;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -168,15 +169,15 @@ public class AlertasConciliacion implements AlertasRevision {
 		List<MovimientoBancario> criticos = abonos.stream().filter(m -> diferencias.abonoCritico(m, hoy))
 				.toList();
 		if (!criticos.isEmpty()) {
-			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, criticos.size() + " abono(s) en el banco por "
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, Plural.de(criticos.size(), "abono", "abonos") + " en el banco por "
 					+ Dinero.formatear(Dinero.sumar(criticos.stream().map(MovimientoBancario::getMonto).toList()))
-					+ " llevan más de 2 días hábiles sin pareja (el más antiguo, del "
+					+ " " + Plural.segun(criticos.size(), "lleva", "llevan") + " más de 2 días hábiles sin pareja (el más antiguo, del "
 					+ Calendario.formatear(criticos.getFirst().getFecha()) + "): es dinero que entró y nadie registró. "
 					+ "Administración lo empareja o lo explica.", ENLACE));
 		}
 		List<MovimientoBancario> recientes = abonos.stream().filter(m -> !criticos.contains(m)).toList();
 		if (!recientes.isEmpty()) {
-			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, recientes.size() + " abono(s) en el banco por "
+			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, Plural.de(recientes.size(), "abono", "abonos") + " en el banco por "
 					+ Dinero.formatear(Dinero.sumar(recientes.stream().map(MovimientoBancario::getMonto).toList()))
 					+ " sin pareja: Administración debe emparejarlos o explicarlos.", ENLACE));
 		}
@@ -211,15 +212,15 @@ public class AlertasConciliacion implements AlertasRevision {
 		List<MovimientoBancario> criticos = cargos.stream()
 				.filter(m -> ReglasEmparejamiento.diasHabilesEntre(calendario, m.getFecha(), hoy) > 2).toList();
 		if (!criticos.isEmpty()) {
-			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, criticos.size() + " cargo(s) en el banco por "
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, Plural.de(criticos.size(), "cargo", "cargos") + " en el banco por "
 					+ Dinero.formatear(Dinero.sumar(criticos.stream().map(MovimientoBancario::getMonto).toList()))
-					+ " llevan más de 2 días hábiles sin explicar (el más antiguo, del "
+					+ " " + Plural.segun(criticos.size(), "lleva", "llevan") + " más de 2 días hábiles sin explicar (el más antiguo, del "
 					+ Calendario.formatear(criticos.getFirst().getFecha()) + "): es dinero que salió. Búscalos en tu app "
 					+ "del banco y explícalos; si no están, el extracto fue alterado.", ENLACE));
 		}
 		List<MovimientoBancario> recientes = cargos.stream().filter(m -> !criticos.contains(m)).toList();
 		if (!recientes.isEmpty()) {
-			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, recientes.size() + " cargo(s) en el banco por "
+			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, Plural.de(recientes.size(), "cargo", "cargos") + " en el banco por "
 					+ Dinero.formatear(Dinero.sumar(recientes.stream().map(MovimientoBancario::getMonto).toList()))
 					+ " sin explicar: los explica alguien que no subió el extracto, mirando la app del banco.", ENLACE));
 		}
@@ -246,7 +247,7 @@ public class AlertasConciliacion implements AlertasRevision {
 			}
 		}
 		if (!sospechosos.isEmpty()) {
-			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, sospechosos.size() + " cargo(s) del extracto del mismo "
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, Plural.de(sospechosos.size(), "cargo", "cargos") + " del extracto del mismo "
 					+ "monto que un abono de esos días: " + String.join("; ", sospechosos.stream().limit(3).toList())
 					+ (sospechosos.size() > 3 ? " y " + (sospechosos.size() - 3) + " más" : "") + ". ¿Abono inventado y un "
 					+ "cargo para cuadrar el saldo? Busca ambos en tu app del banco hoy mismo.", ENLACE));
@@ -278,9 +279,9 @@ public class AlertasConciliacion implements AlertasRevision {
 	private void liquidaciones(List<AlertaRevision> alertas, LocalDate hoy) {
 		List<LiquidacionLinea> sinPago = lineasLiquidacion.findByTipoAndPagoIdIsNullOrderByIdAsc(TipoLineaLiquidacion.CARGO);
 		if (!sinPago.isEmpty()) {
-			alertas.add(new AlertaRevision(Gravedad.CRITICA, "Pagos en línea", sinPago.size() + " cargo(s) de la pasarela "
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, "Pagos en línea", Plural.de(sinPago.size(), "cargo", "cargos") + " de la pasarela "
 					+ "por " + Dinero.formatear(Dinero.sumar(sinPago.stream().map(LiquidacionLinea::getBruto).toList()))
-					+ " liquidados sin pago registrado (la pasarela cobró algo que no registramos). Revísalo con la "
+					+ " " + Plural.segun(sinPago.size(), "liquidado", "liquidados") + " sin pago registrado (la pasarela cobró algo que no registramos). Revísalo con la "
 					+ "pasarela.", "/pagos-en-linea"));
 		}
 		// Pagos en línea de hace más de 5 días hábiles que ninguna liquidación trae.
@@ -296,9 +297,9 @@ public class AlertasConciliacion implements AlertasRevision {
 					.collect(Collectors.toSet());
 			List<Pago> sinLiquidar = enLinea.stream().filter(p -> !liquidados.contains(p.getId())).toList();
 			if (!sinLiquidar.isEmpty()) {
-				alertas.add(new AlertaRevision(Gravedad.ATENCION, "Pagos en línea", sinLiquidar.size() + " pago(s) en línea "
+				alertas.add(new AlertaRevision(Gravedad.ATENCION, "Pagos en línea", Plural.de(sinLiquidar.size(), "pago", "pagos") + " en línea "
 						+ "por " + Dinero.formatear(Dinero.sumar(sinLiquidar.stream().map(Pago::getTotal).toList()))
-						+ " llevan más de 5 días hábiles sin aparecer en una liquidación de la pasarela.", "/pagos-en-linea"));
+						+ " " + Plural.segun(sinLiquidar.size(), "lleva", "llevan") + " más de 5 días hábiles sin aparecer en una liquidación de la pasarela.", "/pagos-en-linea"));
 			}
 		}
 	}

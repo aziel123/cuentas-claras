@@ -68,3 +68,63 @@
   .desplegable summary, .denominaciones-detalle summary, .pestanas-hijos summary { min-height: 48px; }
   .pestanas-hijos summary { display: flex; align-items: center; cursor: pointer; font-weight: 600; }
 }
+
+/* Tablero del inicio (Promotoría y Dirección): cifras arriba y gráficos SVG dibujados en el servidor. */
+.tablero-kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.tablero-kpis .kpi .btn { justify-self: start; padding-left: 0; }
+.tendencia-flecha { font-size: var(--texto-xs); margin-right: var(--esp-1); }
+.tendencia-sube .tendencia-flecha { color: var(--color-exito); }
+.tendencia-baja .tendencia-flecha { color: var(--color-peligro); }
+.medidor { display: block; margin: var(--esp-1) 0; }
+.medidor-fondo { fill: var(--color-grafico-pista); }
+.medidor-lleno { fill: var(--color-serie-1); }
+
+.graficos { display: grid; gap: var(--esp-4); grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.graficos > .grafico:first-child { grid-column: 1 / -1; }
+@media (max-width: 900px) { .graficos { grid-template-columns: minmax(0, 1fr); } }
+.grafico { display: grid; gap: var(--esp-3); min-width: 0; }
+.grafico h2 { margin: 0; }
+.grafico-resumen { margin: 0; }
+.grafico-svg, .barra-h-svg, .grafico-rotulos { display: block; overflow: visible; }
+.grafico-barra.serie-1 { fill: var(--color-serie-1); }
+.grafico-barra.serie-2 { fill: var(--color-serie-2); }
+.grafico-barra.serie-3 { fill: var(--color-serie-3); }
+.grafico-segmento { stroke: var(--color-superficie); stroke-width: 2; }
+.grafico-guia { stroke: var(--color-grafico-guia); stroke-width: 1; }
+.grafico-pista { fill: var(--color-grafico-pista); }
+.grafico-barra:hover { fill: var(--color-primario-hover); }
+.grafico-segmento:hover { opacity: 0.85; }
+
+/* Barras verticales: el eje en HTML a la izquierda (el texto no se deforma) y el SVG al lado. */
+.grafico-area { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--esp-2); }
+.grafico-eje {
+  display: flex; flex-direction: column; justify-content: space-between; height: 180px; margin: -0.5em 0;
+  font-size: var(--texto-xs); color: var(--color-texto-secundario); text-align: right; font-variant-numeric: tabular-nums;
+}
+.grafico-rotulos text { font-size: var(--texto-xs); fill: var(--color-texto-secundario); font-family: var(--fuente); }
+
+/* Barras horizontales: etiqueta, barra y valor por fila; en celular la etiqueta va arriba. */
+.barras-h { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--esp-3); }
+.barra-h { display: grid; grid-template-columns: minmax(7rem, 9rem) minmax(0, 1fr) minmax(8.5rem, auto); gap: var(--esp-3);
+  align-items: center; }
+.barra-h-etiqueta { font-size: var(--texto-sm); }
+.barra-h-valor { font-size: var(--texto-sm); white-space: nowrap; }
+@media (max-width: 640px) {
+  .barra-h { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--esp-1); }
+  .barra-h-svg { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* Barra apilada: leyenda con el % y el monto escritos (el color nunca es la única señal). */
+.leyenda { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--esp-2); }
+.leyenda li { display: flex; align-items: baseline; gap: var(--esp-2); font-size: var(--texto-sm); }
+.leyenda-muestra { flex: none; align-self: center; }
+
+.grafico-datos summary { cursor: pointer; color: var(--color-primario-texto); font-weight: 500; min-height: 44px;
+  display: flex; align-items: center; }
+.grafico-datos .tabla-desplazable { max-height: 320px; overflow: auto; }
+
+/* «Para revisar» compacto: avisos por área en desplegables. */
+.avisos-area { display: grid; gap: var(--esp-2); }
+.aviso-area summary { display: flex; align-items: center; justify-content: space-between; gap: var(--esp-3);
+  min-height: 48px; padding: var(--esp-2) var(--esp-4); cursor: pointer; font-weight: 600; }
+.aviso-area .lista-revisar { padding: var(--esp-3); }

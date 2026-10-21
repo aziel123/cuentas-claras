@@ -8,11 +8,15 @@ import org.springframework.web.bind.annotation.GetMapping;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertaRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.IndicadoresInicio;
+import pe.edu.virgenmaria.cuentasclaras.comun.graficos.TableroPromotoria;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioInicio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Página de inicio según el rol principal del usuario (prioridad: PROMOTOR, DIRECTOR,
@@ -27,11 +31,14 @@ public class InicioController {
 
 	private final ObjectProvider<IndicadoresInicio> indicadores;
 
+	private final ObjectProvider<TableroPromotoria> tableroPromotoria;
+
 	public InicioController(ServicioInicio servicioInicio, ObjectProvider<AlertasRevision> alertas,
-			ObjectProvider<IndicadoresInicio> indicadores) {
+			ObjectProvider<IndicadoresInicio> indicadores, ObjectProvider<TableroPromotoria> tableroPromotoria) {
 		this.servicioInicio = servicioInicio;
 		this.alertas = alertas;
 		this.indicadores = indicadores;
+		this.tableroPromotoria = tableroPromotoria;
 	}
 
 	@GetMapping("/")
@@ -50,10 +57,27 @@ public class InicioController {
 		if (principal == Rol.PROMOTOR) {
 			model.addAttribute("paraRevisar", servicioInicio.paraRevisar());
 			// Las críticas primero (un faltante de caja antes que una matrícula sin cronograma).
-			model.addAttribute("alertasRevision", alertas.orderedStream().flatMap(a -> a.alertas().stream())
-					.sorted(AlertaRevision.POR_GRAVEDAD).toList());
+			List<AlertaRevision> todas = alertas.orderedStream().flatMap(a -> a.alertas().stream())
+					.sorted(AlertaRevision.POR_GRAVEDAD).toList();
+			model.addAttribute("alertasRevision", todas);
+			// Rediseño (tablero): las críticas siempre a la vista; los avisos, agrupados por área y desplegables.
+			model.addAttribute("criticasRevision", todas.stream()
+					.filter(a -> a.gravedad() == AlertaRevision.Gravedad.CRITICA).toList());
+			model.addAttribute("avisosPorArea", porArea(todas));
 			model.addAttribute("indicadores", indicadores.orderedStream().toList());
+			TableroPromotoria tablero = tableroPromotoria.getIfAvailable();
+			if (tablero != null) {
+				model.addAttribute("tablero", tablero.tablero());
+			}
 		}
 		return "inicio/" + principal.name().toLowerCase(Locale.ROOT);
+	}
+
+	/** Los avisos (todo lo que no es crítico) por área, en el orden en que aparece cada área. */
+	static Map<String, List<AlertaRevision>> porArea(List<AlertaRevision> todas) {
+		Map<String, List<AlertaRevision>> porArea = new LinkedHashMap<>();
+		todas.stream().filter(a -> a.gravedad() != AlertaRevision.Gravedad.CRITICA)
+				.forEach(a -> porArea.computeIfAbsent(a.modulo(), m -> new java.util.ArrayList<>()).add(a));
+		return porArea;
 	}
 }

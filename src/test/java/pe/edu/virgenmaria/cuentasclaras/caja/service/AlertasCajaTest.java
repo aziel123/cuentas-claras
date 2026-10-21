@@ -146,7 +146,7 @@ class AlertasCajaTest {
 		anulaciones.solicitarDevolucion(pago, EscenarioAprobaciones.MOTIVO_ANULACION);
 		como(PROMOTORIA);
 		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.ATENCION
-				&& a.texto().equals("1 anulación(es) de pago por S/ 450.00 esperan aprobación."));
+				&& a.texto().equals("1 anulación de pago por S/ 450.00 espera aprobación."));
 	}
 
 	@Test
@@ -158,7 +158,7 @@ class AlertasCajaTest {
 
 		reloj.avanzar(Duration.ofDays(1));
 		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.ATENCION
-				&& a.texto().equals("1 pago(s) digital(es) por S/ 450.00 llevan más de 1 día(s) sin verificarse en el banco."));
+				&& a.texto().equals("1 pago digital por S/ 450.00 lleva más de 1 día sin verificarse en el banco."));
 	}
 
 	@Test
@@ -167,7 +167,7 @@ class AlertasCajaTest {
 		assertThat(alertas.alertas()).noneMatch(a -> a.texto().contains("La serie"));
 		jdbc.update("UPDATE serie_comprobante SET ultimo_numero = ultimo_numero + 1 WHERE serie = 'B001'");
 		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.CRITICA
-				&& a.texto().startsWith("La serie B001 va en el 2 pero tiene 1 comprobante(s)"));
+				&& a.texto().startsWith("La serie B001 va en el 2 pero tiene 1 comprobante"));
 	}
 
 	@Test

@@ -414,7 +414,7 @@ class EscenariosFraudeCorreccionesTest {
 				.anyMatch(a -> a.gravedad() == Gravedad.ATENCION && a.texto().contains("sin verificarse"));
 		reloj.fijar(ZonedDateTime.of(2026, 10, 5, 19, 0, 0, 0, LIMA).toInstant());
 		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.CRITICA
-				&& a.texto().startsWith("1 pago(s) digital(es) por S/ 450.00 siguen sin verificarse"));
+				&& a.texto().startsWith("1 pago digital por S/ 450.00 sigue sin verificarse"));
 	}
 
 	/**
@@ -432,7 +432,7 @@ class EscenariosFraudeCorreccionesTest {
 		assertThat(alertas.alertas()).noneMatch(a -> a.texto().contains("sin verificarse"));
 		reloj.fijar(ZonedDateTime.of(2026, 10, 3, 23, 59, 59, 0, LIMA).toInstant());
 		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.ATENCION
-				&& a.texto().startsWith("1 pago(s) digital(es) por S/ 450.00 llevan más de 1 día(s)"));
+				&& a.texto().startsWith("1 pago digital por S/ 450.00 lleva más de 1 día sin"));
 	}
 
 	/** A4: Promotoría ve al día hábil siguiente una muestra de verificaciones con quién verificó y qué escribió. */

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Inicio', ~{::main})}">
 <body>
-<!--/* Rediseño (hallazgos 1, 4 y 9): «Para revisar» primero, con un botón por ítem y lo crítico resaltado; luego las
-     cifras con el número grande; al final los cambios de claves y usuarios. */-->
+<!--/* Rediseño (hallazgos 1, 4 y 9, y tablero): cuatro cifras arriba, «Para revisar» compacto (críticas a la vista, avisos
+     por área), los gráficos de cobranza, el detalle del día y al final los cambios de claves y usuarios. */-->
 <main id="contenido" class="contenido" data-inicio="promotor"
 	th:with="criticas=${#lists.size(alertasRevision.?[gravedad().name() == 'CRITICA'])}, total=${#lists.size(alertasRevision)}">
 	<div class="cabecera">
@@ -17,6 +17,13 @@
 		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
 	</th:block>
 
+	<!--/* Tablero (pedido del usuario: «un reporte con gráficos para que no se vea todo texto»): cuatro cifras arriba. */-->
+	<section th:if="${tablero != null}" class="tablero" aria-labelledby="titulo-tablero">
+		<h2 id="titulo-tablero" class="solo-lectores">Cifras de hoy</h2>
+		<ul th:replace="~{fragments/graficos :: kpis(${tablero.kpis()})}"></ul>
+	</section>
+
+	<!--/* «Para revisar» compacto: las críticas siempre a la vista; los avisos, por área y desplegables. */-->
 	<section class="tarjeta revisar" th:classappend="${total == 0} ? 'revisar-vacio'" aria-labelledby="titulo-revisar">
 		<div class="revisar-cabecera">
 			<h2 id="titulo-revisar">Para revisar</h2>
@@ -25,24 +32,45 @@
 			<span th:if="${total > criticas}" class="badge badge-alerta"
 				th:text="${total - criticas == 1} ? '1 aviso' : |${total - criticas} avisos|">3 avisos</span>
 		</div>
-		<p class="secundario" th:unless="${total == 0}">Primero lo crítico: faltantes de caja, cajas sin cerrar, pagos que no
-			aparecen en el banco y abonos que nadie registró.</p>
 		<th:block th:if="${total == 0}">
 			<div th:replace="~{fragments/componentes :: alerta('exito', 'Nada urgente por revisar hoy: no hay faltantes de caja ni pagos sin verificar.')}"></div>
 		</th:block>
 		<ul class="lista-revisar alertas-revision" th:unless="${total == 0}" data-alertas-revision>
-			<li th:each="a : ${alertasRevision}" class="item-revisar"
-				th:classappend="${a.gravedad().name() == 'CRITICA'} ? 'item-critico alerta-critica'" th:data-gravedad="${a.gravedad()}">
+			<li th:each="a : ${criticasRevision}" class="item-revisar item-critico alerta-critica" th:data-gravedad="${a.gravedad()}">
 				<div class="item-revisar-texto">
 					<span th:replace="~{fragments/componentes :: badge(|${a.modulo()} · ${a.gravedad().etiqueta()}|, ${a.gravedad().variante()})}"></span>
 					<p th:text="${a.texto()}">Faltante de S/ 50.00 en la caja de Lucía Ramos</p>
 				</div>
-				<a th:if="${a.enlace() != null}" class="btn"
-					th:classappend="${a.gravedad().name() == 'CRITICA'} ? 'btn-primario' : 'btn-secundario'"
-					th:href="@{${a.enlace()}}">Revisar<span class="solo-lectores" th:text="|: ${a.texto()}|"></span></a>
+				<a th:if="${a.enlace() != null}" class="btn btn-primario" th:href="@{${a.enlace()}}">Revisar<span
+					class="solo-lectores" th:text="|: ${a.texto()}|"></span></a>
 			</li>
 		</ul>
+		<div class="avisos-area" th:unless="${#maps.isEmpty(avisosPorArea)}">
+			<details th:each="area : ${avisosPorArea}" class="desplegable aviso-area" data-avisos-area>
+				<summary>
+					<span class="aviso-area-nombre" th:text="${area.key}">Caja</span>
+					<span class="badge badge-alerta" th:text="${#lists.size(area.value) == 1} ? '1 aviso' : |${#lists.size(area.value)} avisos|">2 avisos</span>
+				</summary>
+				<ul class="lista-revisar">
+					<li th:each="a : ${area.value}" class="item-revisar" th:data-gravedad="${a.gravedad()}">
+						<div class="item-revisar-texto">
+							<span th:replace="~{fragments/componentes :: badge(${a.gravedad().etiqueta()}, ${a.gravedad().variante()})}"></span>
+							<p th:text="${a.texto()}">1 anulación de pago por S/ 450.00 espera aprobación.</p>
+						</div>
+						<a th:if="${a.enlace() != null}" class="btn btn-secundario" th:href="@{${a.enlace()}}">Revisar<span
+							class="solo-lectores" th:text="|: ${a.texto()}|"></span></a>
+					</li>
+				</ul>
+			</details>
+		</div>
 	</section>
+
+	<!--/* Los gráficos: en escritorio la serie diaria a lo ancho y debajo dos columnas; en celular, una sola. */-->
+	<div th:if="${tablero != null}" class="graficos" data-tablero-graficos>
+		<section th:replace="~{fragments/graficos :: barrasVerticales(${tablero.diaria()})}"></section>
+		<section th:replace="~{fragments/graficos :: barrasHorizontales(${tablero.morosidad()})}"></section>
+		<section th:replace="~{fragments/graficos :: barraApilada(${tablero.medios()})}"></section>
+	</div>
 
 	<section class="tarjeta" th:each="ind, i : ${indicadores}" th:aria-labelledby="|titulo-indicadores-${i.index}|" data-indicadores>
 		<div class="fila entre">

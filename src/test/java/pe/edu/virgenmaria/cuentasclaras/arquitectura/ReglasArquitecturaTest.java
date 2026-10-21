@@ -336,6 +336,8 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".cobranza.service.CifrasCobranza", LECTURA_CIFRAS),
 			Map.entry(BASE + ".panel.service.CifrasDelDia", ALERTAS),
 			Map.entry(BASE + ".panel.service.PanelPromotoria", "hasRole('PROMOTOR')"),
+			// Rediseño (tablero del inicio): los gráficos de cobranza son solo de Promotoría; Caja no ve montos agregados.
+			Map.entry(BASE + ".panel.service.GraficosPromotoria", "hasRole('PROMOTOR')"),
 			Map.entry(BASE + ".panel.service.ReportesCobranza", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".panel.service.ExportacionContador", "hasAnyRole('PROMOTOR','ADMINISTRACION')"),
 			Map.entry(BASE + ".comprobantes.service.AlertasComprobantes", ALERTAS),

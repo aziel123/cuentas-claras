@@ -370,6 +370,6 @@ class EscenariosFraudeConciliacionTest {
 		assertThat(contar(jdbc, "liquidacion_linea WHERE pago_id IS NULL")).isEqualTo(1);
 		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'LIQUIDACION_SIN_PAGO'")).isEqualTo(1);
 		assertThat(alertasDePromotoria()).anyMatch(a -> a.gravedad() == Gravedad.CRITICA
-				&& a.texto().contains("liquidados sin pago registrado"));
+				&& a.texto().startsWith("1 cargo de la pasarela") && a.texto().contains(" liquidado sin pago registrado"));
 	}
 }

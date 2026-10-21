@@ -11,6 +11,11 @@ public final class Plural {
 
 	/** {@code 1 pago} o {@code 3 pagos}: la cantidad y la forma que corresponde. */
 	public static String de(long cantidad, String singular, String plural) {
-		return cantidad + " " + (cantidad == 1 ? singular : plural);
+		return cantidad + " " + segun(cantidad, singular, plural);
+	}
+
+	/** Solo la forma que corresponde, sin la cantidad: para el verbo («sigue» o «siguen», «lleva» o «llevan»). */
+	public static String segun(long cantidad, String singular, String plural) {
+		return cantidad == 1 ? singular : plural;
 	}
 }
