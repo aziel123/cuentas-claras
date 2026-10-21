@@ -72,6 +72,27 @@
 		<main id="contenido" class="contenido" th:replace="${contenido}">Contenido</main>
 	</div>
 
+	<!--/* Rediseño (portal de familias en celular): barra inferior con lo que más usa una familia. Solo en celular (CSS);
+	     cada destino de 48 px de alto, con ícono y texto, y aria-current en la página actual. */-->
+	<nav class="barra-inferior" aria-label="Accesos rápidos de la familia" th:if="${esFamilia == true}" data-barra-inferior>
+		<a th:href="@{/familia}" th:aria-current="${rutaActual == '/familia'} ? 'page'">
+			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+			<span>Inicio</span></a>
+		<a th:href="@{/familia/estado-de-cuenta}" th:aria-current="${rutaActual == '/familia/estado-de-cuenta'} ? 'page'">
+			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h6M9 16h6M9 8h3"/></svg>
+			<span>Estado de cuenta</span></a>
+		<a th:href="@{/familia#pagar}" class="barra-inferior-pagar">
+			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>
+			<span>Pagar</span></a>
+		<a th:href="@{/familia/mensajes}" th:aria-current="${rutaActual == '/familia/mensajes'} ? 'page'">
+			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+			<span>Avisos</span></a>
+	</nav>
+
 	<footer class="pie" th:text="|${marca?.nombre} · gestión escolar transparente|">Pie</footer>
 </body>
 </html>

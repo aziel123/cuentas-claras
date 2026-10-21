@@ -208,6 +208,24 @@ class PortalFamiliaWebTest {
 				.andExpect(content().string(not(containsString("use este enlace"))));
 	}
 
+	/** Rediseño (portal en celular): la familia tiene la barra inferior con sus cuatro destinos; el personal, no. */
+	@Test
+	void laFamiliaTieneLaBarraInferiorYElPersonalNo() throws Exception {
+		EscenarioCaja.Familias f = familias();
+		UsuarioAutenticado rosa = apoderado(40L, "rosa.familia", f.rosa());
+		String html = mvc.perform(get("/familia/estado-de-cuenta").with(UsuariosDePrueba.como(rosa)))
+				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		int inicio = html.indexOf("data-barra-inferior");
+		assertThat(inicio).as("barra inferior de la familia").isPositive();
+		String barra = html.substring(inicio, html.indexOf("</nav>", inicio));
+		assertThat(barra).contains("href=\"/familia\"", "href=\"/familia/estado-de-cuenta\"", "href=\"/familia#pagar\"",
+				"href=\"/familia/mensajes\"", ">Inicio<", ">Estado de cuenta<", ">Pagar<", ">Avisos<");
+		// La página actual lleva aria-current (no solo un color).
+		assertThat(barra).containsPattern("href=\"/familia/estado-de-cuenta\"\s+aria-current=\"page\"");
+		mvc.perform(get("/avisos-familias").with(UsuariosDePrueba.como(EscenarioCobranza.PROMOTORIA)))
+				.andExpect(status().isOk()).andExpect(content().string(not(containsString("data-barra-inferior"))));
+	}
+
 	@Test
 	void sinEstilosNiScriptsEnLinea() throws Exception {
 		EscenarioCaja.Familias f = familias();

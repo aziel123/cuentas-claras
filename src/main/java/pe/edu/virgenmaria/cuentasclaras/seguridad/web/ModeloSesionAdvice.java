@@ -52,6 +52,15 @@ public class ModeloSesionAdvice {
 				colegios.nombreDe(usuario.colegioId()), usuario.debeCambiarClave());
 	}
 
+	/**
+	 * Rediseño (portal de familias en celular): si quien está en sesión es solo apoderado. Con eso el armazón muestra la
+	 * barra inferior (Inicio, Estado de cuenta, Pagar y Avisos). No da permisos: solo decide qué navegación se ve.
+	 */
+	@ModelAttribute("esFamilia")
+	public boolean esFamilia(@AuthenticationPrincipal UsuarioAutenticado usuario) {
+		return usuario != null && usuario.roles().size() == 1 && usuario.roles().contains(Rol.APODERADO);
+	}
+
 	@ModelAttribute("menu")
 	public List<ElementoMenu> menu(@AuthenticationPrincipal UsuarioAutenticado usuario) {
 		if (usuario == null) {
