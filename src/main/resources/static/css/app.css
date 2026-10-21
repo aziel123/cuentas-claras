@@ -624,7 +624,7 @@ input[type="file"].input { padding: var(--esp-2); }
   border-radius: var(--radio); background: var(--color-superficie);
 }
 .kpi-etiqueta { font-size: var(--texto-sm); font-weight: 500; color: var(--color-texto-secundario); }
-.kpi-cifra {
+.kpi-cifra, .indicadores .kpi-cifra {
   font-size: var(--texto-2xl); font-weight: 700; line-height: 1.1; letter-spacing: -0.02em;
   color: var(--color-texto-numero); font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
 }
@@ -632,7 +632,7 @@ input[type="file"].input { padding: var(--esp-2); }
 @media (max-width: 640px) {
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--esp-2); }
   .kpi { padding: var(--esp-3); }
-  .kpi-cifra { font-size: var(--texto-xl); }
+  .kpi-cifra, .indicadores .kpi-cifra { font-size: var(--texto-xl); }
 }
 
 /* Inicio de Caja: el buscador de cobro es lo primero. */
