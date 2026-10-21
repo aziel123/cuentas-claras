@@ -2134,3 +2134,26 @@ lista de alumnos sin montos, y Caja y Alumnos le responden 403. Operación: `doc
 - **Un nombre de colegio con una palabra de cobranza** deja todos sus avisos de asistencia sin crear (la regla corre sobre
   todos los parámetros); el proceso lo reintenta cada 5 minutos y queda en el log técnico.
 - Decisiones 144 y 157 confirmadas; 145 a 153 aplicadas con su valor por defecto.
+
+### Resultados de la verificación
+- `./mvnw -B verify` en local (sobre 9af3c57): **2574 pruebas, 0 fallos, 0 errores, 161 omitidas** (las de MySQL real);
+  BUILD SUCCESS. La tanda 1 cerró con 2484 (146 de MySQL): 90 pruebas nuevas, 15 de ellas de MySQL real.
+- MySQL real en local (contenedor propio `cc-s9t2-mysql`, `mysql:8`): V1–V33 con `cc_migrador`, `02` y `03` sin error,
+  **93 triggers, 13 funciones y 106 huellas**. `MigracionMySqlTest` 2 de 2; `PermisosMySqlTest` 94, 0 fallos (7 omitidas
+  por la fecha), con `flujoAsistenciaConPermisosMinimos`; `AuditoriaSprint8MySqlTest` 18; `AuditoriaSprint9MySqlTest` 5;
+  `AuditoriaSprint9AsistenciaMySqlTest` 13, con 1 fallo que corrigió 9af3c57 (ver abajo).
+- CI del PR #18, corrida 39642587708 sobre 9af3c57: **todos los jobs en verde** (compilar y probar, con la zona de Los
+  Ángeles: 2574, 0 fallos; MySQL 8; respaldo; demo; dependencias; gitleaks; la imagen en GHCR se omite en un PR). El job
+  `mysql` da `huellas_objetos()` = 106 y el arranque en prod registra «Huellas de los 93 triggers y las 13 funciones
+  verificadas».
+- Lo que el CI encontró y se corrigió:
+  - 85c30d0: `PermisosMySqlTest.elResumenYLasAlertasSoloVanAPromotoria` tomaba el último colegio, que con el flujo de
+    asistencia ya tenía su `resumen_correo_externo` (1062). Ahora elige el último colegio sin esa fila.
+  - 9af3c57: en `e55e15ConfiguracionSinDireccionNiFirmaFalla`, con el colegio compartido de la clase otra prueba podía
+    haber firmado ya la versión 0 de la configuración, y la INSERT directa de Dirección llegaba a la clave primaria (1062)
+    en vez de al trigger (1644). La INSERT usa ahora la versión 99, que ninguna firma cubre. El trigger no cambió.
+- Riesgo que queda abierto: una firma `configuracion_academica:{colegio}:CAMBIADA:{versión}` vale 5 minutos y el trigger no
+  exige que esté sin usar; la clave primaria impide la segunda fila y el UPDATE exige versión nueva, así que no hay
+  doble cambio, pero la auditoría del código debería confirmarlo.
+- El contenedor `cc-s9t2-mysql` se borró al terminar. No se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`,
+  `smarthr-*`, `supabase_*` ni `cc-mysql-s5*`.
