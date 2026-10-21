@@ -49,7 +49,7 @@
 
 	<div class="armazon" th:classappend="${#lists.isEmpty(menu)} ? 'sin-menu'">
 		<nav class="menu-lateral" aria-label="Menú principal" th:unless="${#lists.isEmpty(menu)}">
-			<ul th:replace="~{fragments/layout :: menuLista}"></ul>
+			<div th:replace="~{fragments/layout :: menuLista}"></div>
 		</nav>
 		<!--/* Celular: el menú y las acciones de la cuenta van juntos en un desplegable para que la cabecera sea corta. */-->
 		<details class="menu-movil" th:if="${usuarioActual != null}">
@@ -58,7 +58,7 @@
 				<span class="menu-movil-usuario" th:text="${usuarioActual.nombreCompleto}">Nombre</span>
 			</summary>
 			<nav aria-label="Menú principal" th:unless="${#lists.isEmpty(menu)}">
-				<ul th:replace="~{fragments/layout :: menuLista}"></ul>
+				<div th:replace="~{fragments/layout :: menuLista}"></div>
 			</nav>
 			<div class="sesion-movil">
 				<p><strong th:text="${usuarioActual.nombreCompleto}">Nombre</strong>
@@ -108,14 +108,34 @@
 </body>
 </html>
 
-<!--/* Lista del menú: se usa en el menú lateral y en el desplegable del celular. */-->
-<ul class="menu" th:fragment="menuLista">
-	<li th:each="m : ${menu}">
-		<a th:if="${m.disponible}" class="menu-enlace" th:href="@{${m.ruta}}" th:data-modulo="${m.codigo}"
-			th:aria-current="${rutaActual == m.ruta or #strings.startsWith(rutaActual, m.ruta + '/')} ? 'page'" th:text="${m.etiqueta}">Inicio</a>
-		<span th:unless="${m.disponible}" class="menu-proximo" th:data-modulo="${m.codigo}">
-			<span th:text="${m.etiqueta}">Módulo</span>
-			<span class="badge badge-neutro">Próximamente</span>
-		</span>
-	</li>
-</ul>
+<!--/* Menú agrupado (rediseño, hallazgo 3): Inicio arriba y luego los grupos plegables con <details>/<summary>
+     nativos (teclado y lector de pantalla sin JavaScript). Solo los grupos con algún módulo del rol. Se usa en el menú
+     lateral y en el desplegable del celular. Los contadores llevan su texto para lectores de pantalla. */-->
+<div class="menu-grupos" th:fragment="menuLista">
+	<ul class="menu" th:each="m : ${menu}" th:if="${m.codigo == 'INICIO'}">
+		<li><a class="menu-enlace" th:href="@{${m.ruta}}" th:data-modulo="${m.codigo}"
+			th:aria-current="${rutaActual == m.ruta or rutaActual == '/'} ? 'page'" th:text="${m.etiqueta}">Inicio</a></li>
+	</ul>
+	<details class="grupo-menu" th:each="g : ${menuGrupos}" th:open="${g.abierto}" th:data-grupo="${g.codigo}">
+		<summary>
+			<span th:text="${g.etiqueta}">Dinero de hoy</span>
+			<span class="contador" th:if="${g.pendientes > 0}" th:text="${g.pendientes}"
+				th:aria-label="|${g.pendientes} pendientes|">3</span>
+		</summary>
+		<ul class="menu">
+			<li th:each="m : ${g.elementos}">
+				<a th:if="${m.disponible}" class="menu-enlace" th:href="@{${m.ruta}}" th:data-modulo="${m.codigo}"
+					th:aria-current="${rutaActual == m.ruta or #strings.startsWith(rutaActual, m.ruta + '/')} ? 'page'"><span
+					th:text="${m.etiqueta}">Aprobaciones</span><span th:if="${m.contador > 0}" class="contador"
+					th:classappend="${!m.urgente} ? 'contador-aviso'" th:text="${m.contador}"
+					th:aria-label="${m.contadorTexto}">3</span></a>
+				<span th:unless="${m.disponible}" class="menu-proximo" th:data-modulo="${m.codigo}">
+					<span th:text="${m.etiqueta}">Módulo</span>
+					<span class="badge badge-neutro">Próximamente</span>
+				</span>
+			</li>
+			<li th:if="${g.codigo == 'MI_CUENTA'}"><a class="menu-enlace" th:href="@{/cuenta/cambiar-clave}"
+				th:aria-current="${rutaActual == '/cuenta/cambiar-clave'} ? 'page'">Cambiar mi clave</a></li>
+		</ul>
+	</details>
+</div>

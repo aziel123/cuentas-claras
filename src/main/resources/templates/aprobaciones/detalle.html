@@ -29,7 +29,8 @@
 			th:text="|Resuelta por ${s.resueltoPor} · ${#temporals.format(s.resueltoEn, 'dd/MM/yyyy HH:mm')}|">Resuelta por director</p>
 
 		<th:block th:if="${s.puedeResolver}">
-			<button type="button" class="btn btn-primario btn-bloque" th:popovertarget="|aprobar-${s.id}|">Aprobar</button>
+			<button type="button" class="btn btn-bloque" th:classappend="${s.pideComentario} ? 'btn-cuidado' : 'btn-primario'"
+				th:popovertarget="|aprobar-${s.id}|" th:text="${s.pideComentario} ? 'Aprobar con nota' : 'Aprobar'">Aprobar</button>
 			<div class="modal" th:id="|aprobar-${s.id}|" popover role="dialog" aria-modal="true" th:aria-labelledby="|aprobar-${s.id}-titulo|">
 				<form method="post" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}" class="modal-cuerpo">
 					<input type="hidden" name="volver" value="movil">

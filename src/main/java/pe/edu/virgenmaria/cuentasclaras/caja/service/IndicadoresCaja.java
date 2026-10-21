@@ -15,6 +15,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.alertas.IndicadoresInicio;
 import pe.edu.virgenmaria.cuentasclaras.comun.dinero.Dinero;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Plural;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
@@ -70,13 +71,13 @@ public class IndicadoresCaja implements IndicadoresInicio {
 						.filter(CierreCaja::conDiferencia).count();
 		List<Pago> enLinea = vigentes.stream().filter(p -> p.getCaja().esDeCanal()).toList();
 		return List.of(
-				new Indicador("Cobrado hoy", Dinero.formatear(total), vigentes.size() + " pago(s)"),
+				new Indicador("Cobrado hoy", Dinero.formatear(total), Plural.de(vigentes.size(), "pago", "pagos")),
 				new Indicador("Entró solo (en línea y por banco)", Dinero.formatear(Dinero.sumar(enLinea.stream()
-						.map(Pago::getTotal).toList())), enLinea.size() + " pago(s) sin que nadie digite"),
-				new Indicador("Efectivo", Dinero.formatear(enEfectivo), efectivo.size() + " pago(s)"),
+						.map(Pago::getTotal).toList())), Plural.de(enLinea.size(), "pago", "pagos") + " sin que nadie digite"),
+				new Indicador("Efectivo", Dinero.formatear(enEfectivo), Plural.de(efectivo.size(), "pago", "pagos")),
 				new Indicador("Digital", Dinero.formatear(Dinero.normalizar(digital)), porcentaje + " % del total"),
-				new Indicador("Cajas", abiertas + " abierta(s) · " + cerradas + " cerrada(s)",
-						conDiferencia == 0 ? "Sin diferencias" : conDiferencia + " cierre(s) con diferencia"));
+				new Indicador("Cajas", Plural.de(abiertas, "abierta", "abiertas") + " · " + Plural.de(cerradas, "cerrada", "cerradas"),
+						conDiferencia == 0 ? "Sin diferencias" : Plural.de(conDiferencia, "cierre", "cierres") + " con diferencia"));
 	}
 
 	@Override

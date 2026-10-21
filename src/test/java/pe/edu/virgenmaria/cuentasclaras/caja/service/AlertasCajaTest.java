@@ -212,12 +212,12 @@ class AlertasCajaTest {
 		assertThat(indicadores.titulo()).isEqualTo("Hoy en caja · 02/10/2026");
 		assertThat(indicadores.indicadores()).extracting(IndicadoresInicio.Indicador::etiqueta,
 				IndicadoresInicio.Indicador::valor, IndicadoresInicio.Indicador::detalle).containsExactly(
-				org.assertj.core.groups.Tuple.tuple("Cobrado hoy", "S/ 900.00", "2 pago(s)"),
+				org.assertj.core.groups.Tuple.tuple("Cobrado hoy", "S/ 900.00", "2 pagos"),
 				// Sprint 4: lo que entró por la pasarela (o la recaudación) sin que nadie lo digite.
-				org.assertj.core.groups.Tuple.tuple("Entró solo (en línea y por banco)", "S/ 0.00", "0 pago(s) sin que nadie digite"),
-				org.assertj.core.groups.Tuple.tuple("Efectivo", "S/ 450.00", "1 pago(s)"),
+				org.assertj.core.groups.Tuple.tuple("Entró solo (en línea y por banco)", "S/ 0.00", "0 pagos sin que nadie digite"),
+				org.assertj.core.groups.Tuple.tuple("Efectivo", "S/ 450.00", "1 pago"),
 				org.assertj.core.groups.Tuple.tuple("Digital", "S/ 450.00", "50 % del total"),
-				org.assertj.core.groups.Tuple.tuple("Cajas", "1 abierta(s) · 0 cerrada(s)", "Sin diferencias"));
+				org.assertj.core.groups.Tuple.tuple("Cajas", "1 abierta · 0 cerradas", "Sin diferencias"));
 	}
 
 	/** Sprint 5, tanda 3 (G21): dos Yape del viernes verificados; el lunes Promotoría ve su muestra al azar. */
