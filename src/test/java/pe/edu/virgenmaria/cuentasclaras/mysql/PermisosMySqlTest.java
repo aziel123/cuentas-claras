@@ -3388,7 +3388,9 @@ class PermisosMySqlTest {
 							"jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&useSSL=false"),
 					"cc_migrador", claveMigrador));
 			String correo = "contador." + sufijo + "@estudio.pe";
-			Long otroColegio = migrador.queryForObject("SELECT MAX(id) FROM colegio", Long.class);
+			// Sprint 9, tanda 2: otro colegio SIN esa fila (el alta de las pruebas de asistencia ya registra la suya).
+			Long otroColegio = migrador.queryForObject("SELECT MAX(c.id) FROM colegio c WHERE NOT EXISTS (SELECT 1 FROM "
+					+ "configuracion_colegio x WHERE x.colegio_id = c.id AND x.clave = 'resumen_correo_externo')", Long.class);
 			if (otroColegio != null && otroColegio != 1L) {
 				migrador.update("INSERT INTO configuracion_colegio (colegio_id, clave, valor, creado_en) VALUES (?, "
 						+ "'resumen_correo_externo', ?, NOW(6))", otroColegio, correo);
