@@ -1,0 +1,70 @@
+/* Rediseño de la interfaz (docs/ux/rediseno-interfaz.md): componentes nuevos. Solo usa variables de tokens.css.
+   Va aparte de app.css: sus media queries no deben caer en las secciones de celular de app.css. */
+/* Para revisar: va primero en el inicio; cada ítem con su badge, el texto y un botón con la acción. */
+.revisar { border-top: 4px solid var(--color-peligro); }
+.revisar-vacio { border-top-color: var(--color-exito); }
+.revisar-cabecera { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2) var(--esp-3); }
+.lista-revisar { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--esp-2); }
+.item-revisar {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--esp-2) var(--esp-4); align-items: center;
+  padding: var(--esp-3) var(--esp-4); border-radius: var(--radio);
+  background: var(--color-superficie-2); border: 1px solid transparent;
+}
+.item-revisar p { overflow-wrap: anywhere; }
+.item-revisar-texto { display: grid; gap: var(--esp-1); justify-items: start; min-width: 0; }
+.item-critico { background: var(--color-peligro-suave); border-color: var(--color-peligro); }
+.item-critico .item-revisar-texto p { font-weight: 600; }
+@media (max-width: 640px) {
+  .item-revisar { grid-template-columns: minmax(0, 1fr); }
+  .item-revisar .btn { width: 100%; }
+}
+
+/* Tarjetas de cifras: etiqueta chica, número grande y tabular, nota debajo. */
+.kpis { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--esp-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
+.kpi {
+  display: grid; gap: var(--esp-1); align-content: start; min-width: 0;
+  padding: var(--esp-4); border: 1px solid var(--color-borde); border-top: 3px solid var(--color-celeste);
+  border-radius: var(--radio); background: var(--color-superficie);
+}
+.kpi-etiqueta { font-size: var(--texto-sm); font-weight: 500; color: var(--color-texto-secundario); }
+.kpi-cifra, .indicadores .kpi-cifra {
+  font-size: var(--texto-2xl); font-weight: 700; line-height: 1.1; letter-spacing: -0.02em;
+  color: var(--color-texto-numero); font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+.kpi-nota { font-size: var(--texto-sm); color: var(--color-texto-secundario); }
+@media (max-width: 640px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--esp-2); }
+  .kpi { padding: var(--esp-3); }
+  .kpi-cifra, .indicadores .kpi-cifra { font-size: var(--texto-xl); }
+}
+
+/* Inicio de Caja: el buscador de cobro es lo primero. */
+.cobro-rapido { border-top: 4px solid var(--color-primario); }
+.accesos { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
+
+/* Dos columnas en escritorio (contenido y lateral) */
+.dos-col { display: grid; gap: var(--esp-4); grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 1100px) { .dos-col { grid-template-columns: minmax(0, 1fr); } }
+
+/* Portal de la familia: lo que debe hoy, con el botón para pagar al lado del total. */
+.deuda-hoy { border-top: 4px solid var(--color-celeste); }
+.deuda-hoy.con-vencido { border-top-color: var(--color-peligro); }
+.deuda-total { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-3) var(--esp-6); }
+.deuda-total .kpi-cifra { font-size: var(--texto-3xl); }
+@media (max-width: 640px) {
+  .deuda-total .btn { width: 100%; min-height: 52px; }
+  .deuda-total .kpi-cifra { font-size: var(--texto-2xl); }
+}
+
+/* Botón que pide cuidado (aprobar con faltante): borde de alerta, no el azul de la acción principal. */
+.btn-cuidado { background: var(--color-superficie); color: var(--color-alerta); border-color: var(--color-alerta); }
+.btn-cuidado:hover { background: var(--color-alerta-suave); }
+
+/* adapt: objetivos táctiles de 44 px en celular */
+@media (max-width: 860px) {
+  .tactil, .lista-simple li > a, .alertas-revision a, .pasos li { min-height: 44px; }
+  .tactil, .lista-simple li > a { display: inline-flex; align-items: center; }
+  .desplegable summary, .denominaciones-detalle summary, .pestanas-hijos summary { min-height: 48px; }
+  .pestanas-hijos summary { display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+}

@@ -14,6 +14,7 @@
 	<meta th:if="${recargarCada != null}" http-equiv="refresh" th:content="${recargarCada}">
 	<link rel="stylesheet" th:href="@{/css/tokens.css}">
 	<link rel="stylesheet" th:href="@{/css/app.css}">
+	<link rel="stylesheet" th:href="@{/css/rediseno.css}">
 </head>
 <body>
 	<a class="saltar" href="#contenido">Saltar al contenido</a>
@@ -86,6 +87,7 @@
 	<title th:text="|${entornoDemo == true ? '[DEMO] ' : ''}${titulo} · ${marca?.nombre}|">Título</title>
 	<link rel="stylesheet" th:href="@{/css/tokens.css}">
 	<link rel="stylesheet" th:href="@{/css/app.css}">
+	<link rel="stylesheet" th:href="@{/css/rediseno.css}">
 </head>
 <body class="publica">
 	<div class="franja-entorno" role="status" th:if="${franjaEntorno != null}"><span th:text="${franjaEntorno}">PILOTO</span>
