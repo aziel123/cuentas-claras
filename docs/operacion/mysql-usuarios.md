@@ -166,6 +166,25 @@ ya combinaban DOCENTE con CAJA o ADMINISTRACION no se tocan: prod arranca y escr
 combinado con CAJA o ADMINISTRACION», y la puesta en marcha deja el paso «Equipo» pendiente hasta que Promotoría las
 corrija. Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
 
+**Sprint 9, tanda 2 (V33): 93 triggers y 13 funciones con huella (106).** Nuevos: `trg_registro_asistencia_nace` (la
+asistencia la registra solo un docente con asignación VIGENTE en la sección, con su sesión abierta y la firma
+`asistencia:{seccion}:{fecha}:REGISTRADA`, un día de clases del año en curso, HOY según el reloj de la base; otro día, con
+su `REGISTRO_ASISTENCIA_TARDIO` aprobada y firmada; la fuente MARCADOR se rechaza), `trg_marca_asistencia_nace` (cada marca
+con la sesión de quien la escribe; la inicial a nombre de quien registró; la corrección del día antes de la hora del segundo
+aviso, con firma y nunca sobre una justificación; otro día, con su `CORRECCION_ASISTENCIA` pedida por un docente de la
+sección; la justificación, el apoderado de la familia con su firma y nunca sobre una reversión; la reversión, Dirección con
+su firma y sin asignación en la sección), `trg_consentimiento_aviso_nace`, `trg_configuracion_academica_nace` y `_cambio`
+(solo Dirección con la firma `configuracion_academica:{colegio}:CAMBIADA:{version}`), y las funciones `cc_hoy_lima` y
+`cc_sesion_abierta`. Versión nueva de `cc_docente_de_seccion` (una cobertura vencida no da acceso),
+`trg_asignacion_docente_nace` (una cobertura dura como máximo 10 días calendario) y `trg_mensaje_nace` (los avisos de
+asistencia los crea solo `sistema.asistencia`, con su plantilla, sin palabras de cobranza y, por WhatsApp, con el último
+consentimiento otorgado; su respaldo por correo, `sistema.mensajeria`). `02` da a `cc_negocio` solo INSERT en
+`registro_asistencia`, `marca_asistencia` y `consentimiento_aviso` (1142 al editar o borrar), INSERT y UPDATE por columna
+en `configuracion_academica`, y a `cc_sistema` la marca de agua `aviso_asistencia_corte` (cc_app: 1142);
+`asignacion_docente.hasta` queda fuera del UPDATE (1143). Prod: «Huellas de los 93 triggers y las 13 funciones
+verificadas». Prod avisa en el log si un colegio en producción tiene menos de 2 personas activas de Promotoría o Dirección
+(A8). Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
+
 **Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
 van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
 custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra

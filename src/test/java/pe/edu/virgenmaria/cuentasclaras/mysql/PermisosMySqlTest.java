@@ -4080,6 +4080,134 @@ class PermisosMySqlTest {
 						"ASIGNACION_DOCENTE_APROBADA", "ASIGNACION_DOCENTE_RECHAZADA", "ASIGNACION_DOCENTE_TERMINADA");
 	}
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.academico.service.ServicioAsistencia servicioAsistencia;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.academico.service.JustificacionesFamilia justificacionesFamilia;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.academico.service.AsistenciaDireccion asistenciaDireccion;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.academico.service.ConsentimientosAviso consentimientosAviso;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.academico.service.ConfiguracionesAcademicas configuracionesAcademicas;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comunicacion.proceso.AvisosAsistencia avisosAsistencia;
+
+	/**
+	 * Sprint 9, tanda 2 (sección 7.5): la asistencia con los permisos mínimos, en un colegio aparte cuyo año cubre hoy.
+	 * Dirección cambia las horas con su firma (trg_configuracion_academica_nace); el docente registra con UNA firma (las
+	 * marcas, a su nombre, las lee trg_marca_asistencia_nace de su propia tabla); corrige el mismo día con su firma (si es
+	 * antes del cierre); pide la corrección de otra marca y Dirección la aprueba en la bandeja (CORRECCION_APROBADA); la
+	 * familia da su consentimiento y justifica con su sesión y su firma; Dirección revierte con la suya; y
+	 * sistema.asistencia, con cc_sistema, prepara los avisos y escribe la marca de agua. En fin de semana o feriado (el día
+	 * lo decide la base), solo la configuración.
+	 */
+	@Test
+	void flujoAsistenciaConPermisosMinimos() {
+		EscuelaConDocentesMySql.Escuela escuela = EscuelaConDocentesMySql.crear(sufijo + "s", "20600000048", "987653181",
+				alta, servicioUsuarios, usuarios, codificador, colegiosDeLaBase, estructura, jdbc);
+		java.time.LocalDate hoy = jdbc.queryForObject("SELECT cc_hoy_lima()", java.time.LocalDate.class);
+		jdbc.update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(40),
+				hoy.plusDays(40), escuela.anioId());
+		// Dirección: las horas (el cierre de las correcciones a las 19:30 para que el flujo corra casi todo el día).
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().directora());
+		configuracionesAcademicas.cambiar(new pe.edu.virgenmaria.cuentasclaras.academico.model.ConfiguracionAcademica.Valores(
+				java.time.LocalTime.of(9, 30), java.time.LocalTime.of(10, 30), java.time.LocalTime.of(18, 0), 5, 5,
+				java.time.LocalTime.of(18, 0), 4));
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT actualizado_por FROM configuracion_academica WHERE colegio_id = ?",
+				String.class, escuela.colegioId())).isEqualTo(escuela.equipo().directora().getNombreUsuario());
+		boolean deClases = hoy.getDayOfWeek().getValue() <= 5
+				&& !pe.edu.virgenmaria.cuentasclaras.comun.fecha.FeriadosNacionales.es(hoy);
+		org.junit.jupiter.api.Assumptions.assumeTrue(deClases, "hoy no hay clases: el resto del flujo se omite");
+
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().administracion());
+		Long mateo = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoNuevo("73100001", "Quispe", "Rojas", "Mateo", java.time.LocalDate.of(2016, 3, 3), "47100001",
+						"Rojas", "Paz", "Rosa", null, "rosa.asistencia." + sufijo + "@correo.pe", escuela.seccionA()))
+				.alumnoId();
+		Long lucas = servicioAlumnos.registrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar
+				.conApoderadoNuevo("73100002", "Flores", "Díaz", "Lucas", java.time.LocalDate.of(2016, 4, 4), "47100002",
+						"Flores", "Luna", "Pedro", null, "pedro.asistencia." + sufijo + "@correo.pe", escuela.seccionA()))
+				.alumnoId();
+		Long id = asignaciones.proponer(new pe.edu.virgenmaria.cuentasclaras.academico.dto.ProponerAsignacionRequest(
+				escuela.seccionA(), escuela.docente().getId(), pe.edu.virgenmaria.cuentasclaras.academico.model
+						.TipoAsignacion.TUTOR, null, "Tutoría del año aprobada por Dirección"));
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().directora());
+		bandeja.aprobar(solicitudDeAsignacion(id), null);
+
+		// El docente registra la hoja con UNA firma.
+		UsuariosDePrueba.iniciarSesion(escuela.docente());
+		var falta = pe.edu.virgenmaria.cuentasclaras.academico.model.EstadoAsistencia.FALTA;
+		servicioAsistencia.guardar(escuela.seccionA(), new pe.edu.virgenmaria.cuentasclaras.academico.dto.HojaRequest(
+				java.util.List.of(new pe.edu.virgenmaria.cuentasclaras.academico.dto.MarcaPedida(mateo, falta, null),
+						new pe.edu.virgenmaria.cuentasclaras.academico.dto.MarcaPedida(lucas, falta, null)), null));
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM marca_asistencia m JOIN registro_asistencia r ON r.id = "
+				+ "m.registro_id WHERE r.seccion_id = ? AND m.creado_por = ?", Long.class, escuela.seccionA(),
+				escuela.docente().getNombreUsuario())).isEqualTo(2);
+		Long marcaLucas = jdbc.queryForObject("SELECT id FROM marca_asistencia WHERE alumno_id = ?", Long.class, lucas);
+		Long marcaMateo = jdbc.queryForObject("SELECT id FROM marca_asistencia WHERE alumno_id = ?", Long.class, mateo);
+
+		// Corrige el mismo día con su firma (antes del cierre de las 18:00) o, después, pide la corrección.
+		var presente = pe.edu.virgenmaria.cuentasclaras.academico.model.EstadoAsistencia.PRESENTE;
+		var correccion = new pe.edu.virgenmaria.cuentasclaras.academico.dto.CorreccionRequest(presente, null,
+				"Llegó con su mamá al final de la primera hora");
+		UsuariosDePrueba.iniciarSesion(escuela.docente());
+		if (java.time.LocalTime.now(java.time.ZoneId.of("America/Lima")).isBefore(java.time.LocalTime.of(17, 55))) {
+			servicioAsistencia.corregirHoy(marcaLucas, correccion);
+		}
+		else {
+			Long solicitud = servicioAsistencia.pedirCorreccion(marcaLucas, correccion);
+			UsuariosDePrueba.iniciarSesion(escuela.equipo().directora());
+			bandeja.aprobar(solicitud, null);
+		}
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT m.estado FROM marca_asistencia m WHERE m.alumno_id = ? AND NOT EXISTS "
+				+ "(SELECT 1 FROM marca_asistencia s WHERE s.reemplaza_id = m.id)", String.class, lucas)).isEqualTo("PRESENTE");
+
+		// La familia de Mateo: su consentimiento de WhatsApp y la justificación (con su sesión y su firma).
+		Long rosa = jdbc.queryForObject("SELECT a.id FROM apoderado a JOIN alumno al ON al.familia_id = a.familia_id "
+				+ "WHERE al.id = ?", Long.class, mateo);
+		String documento = jdbc.queryForObject("SELECT numero_documento FROM apoderado WHERE id = ?", String.class, rosa);
+		Usuario cuenta = pe.edu.virgenmaria.cuentasclaras.comun.basedatos.RutaConexion.identidad(() -> pe.edu.virgenmaria
+				.cuentasclaras.comun.multicolegio.ContextoColegio.en(escuela.colegioId(), () -> usuarios.saveAndFlush(
+						Usuario.deApoderado(documento, "asistencia.familia." + sufijo, null,
+								codificador.encode(UsuariosDePrueba.CLAVE), rosa))));
+		var familia = new pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado(cuenta.getId(),
+				escuela.colegioId(), cuenta.getNombreUsuario(), "Rosa", null, true, false, false, EnumSet.of(Rol.APODERADO),
+				rosa);
+		UsuariosDePrueba.iniciarSesion(familia);
+		consentimientosAviso.registrarEnPortal(new pe.edu.virgenmaria.cuentasclaras.academico.dto.portal
+				.ConsentimientoRequest(pe.edu.virgenmaria.cuentasclaras.academico.model.Finalidad.ASISTENCIA,
+						pe.edu.virgenmaria.cuentasclaras.academico.model.Canal.WHATSAPP, true));
+		justificacionesFamilia.justificar(marcaMateo, new pe.edu.virgenmaria.cuentasclaras.academico.dto.portal
+				.JustificarRequest(pe.edu.virgenmaria.cuentasclaras.academico.model.MotivoJustificacion.SALUD, null));
+		SecurityContextHolder.clearContext();
+		Long justificada = jdbc.queryForObject("SELECT MAX(id) FROM marca_asistencia WHERE alumno_id = ?", Long.class, mateo);
+		assertThat(jdbc.queryForObject("SELECT estado FROM marca_asistencia WHERE id = ?", String.class, justificada))
+				.isEqualTo("FALTA_JUSTIFICADA");
+		// Dirección revierte con su firma.
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().directora());
+		asistenciaDireccion.revertir(justificada, "La familia confirmó que no estuvo enfermo");
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT origen FROM marca_asistencia WHERE alumno_id = ? ORDER BY id DESC LIMIT 1",
+				String.class, mateo)).isEqualTo("REVERSION_JUSTIFICACION");
+
+		// sistema.asistencia (cc_sistema) prepara los avisos (a la hora del primer envío) y escribe la marca de agua.
+		avisosAsistencia.enColegio(escuela.colegioId(), hoy.atTime(10, 31));
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM aviso_asistencia_corte WHERE colegio_id = ? AND "
+				+ "ultima_marca_id > 0", Long.class, escuela.colegioId())).isEqualTo(1);
+		assertThat(jdbc.queryForList("SELECT accion FROM evento_auditoria WHERE colegio_id = ?", String.class,
+				escuela.colegioId())).contains("ASISTENCIA_REGISTRADA", "ASISTENCIA_JUSTIFICADA", "JUSTIFICACION_REVERTIDA",
+						"CONSENTIMIENTO_AVISO", "CONFIGURACION_ACADEMICA_CAMBIADA");
+	}
+
 	private Long solicitudDeAsignacion(Long asignacion) {
 		return jdbc.queryForObject("SELECT solicitud_id FROM asignacion_docente WHERE id = ?", Long.class, asignacion);
 	}

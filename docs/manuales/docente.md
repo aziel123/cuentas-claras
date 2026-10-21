@@ -11,6 +11,19 @@
 4. **Revisa tu celular y tu correo** en *Mi celular y correo*: ahí te llegan los avisos de tu cuenta. Si cambiaste de número, pide el cambio; lo aprueba otra persona.
 5. **Desde marzo** (fase académica): pasarás asistencia, registrarás notas por competencias y enviarás comunicados a tus secciones. Las notas oficiales se siguen registrando en el SIAGIE; la plataforma ayuda a exportarlas.
 
+## La asistencia de hoy, en un minuto (sprint 9)
+1. En **Académico → Asistencia de hoy** elige tu sección. Todos los alumnos aparecen en «Presente».
+2. Toca **Falta** o **Tarde** solo en quien corresponde (con la hora de llegada, si la sabes).
+3. Toca **Guardar asistencia** una sola vez: queda a tu nombre, con la hora del servidor y tu firma de sesión.
+4. ¿Te equivocaste? Hasta la hora del segundo aviso (16:00 por defecto) corriges cada marca con su motivo. Si el aviso de
+   las 10:30 ya salió, la familia recibe la corrección. Después de esa hora, o para otro día, toca **Pedir corrección**: la
+   aprueba otra persona de Dirección.
+5. ¿Un día sin internet? Anota en papel y pide **registrar ese día** (hasta 5 días hábiles atrás). Cuando Dirección lo
+   apruebe, aparece en «Días pasados aprobados para registrar».
+6. Una falta que la familia justificó en su portal no la cambias tú: si hay un error, pide la corrección. Si eres tutor(a),
+   ves el motivo y la nota de la familia; si no, solo que está justificada.
+7. El **Reporte del mes** lo ven el tutor(a) de la sección y Dirección.
+
 ## Lo que el sistema no te deja hacer, y por qué
 - **Ver pagos, deudas ni boletas de las familias:** no los necesitas para enseñar y la ley protege esos datos. Además, la deuda nunca puede afectar las notas ni los exámenes de un alumno.
 - **Ver alumnos de otras secciones:** solo verás tus secciones (acceso mínimo por rol).

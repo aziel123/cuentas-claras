@@ -126,6 +126,9 @@ public class AvisosDeAsistencia implements InasistenciasDelDia {
 
 	/** «Prof. Ana T.» si lo registró el personal; «su familia» si fue una justificación desde el portal. */
 	private String quien(MarcaAsistencia m) {
+		if (m.getOrigen() == OrigenMarca.JUSTIFICACION) {
+			return "su familia";
+		}
 		Optional<Usuario> cuenta = usuarios.findByNombreUsuario(m.getCreadoPor());
 		if (cuenta.isEmpty()) {
 			return "el colegio";

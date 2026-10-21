@@ -69,6 +69,35 @@ class VerificadorPermisosBaseDatosTest {
 				.doesNotThrowAnyException();
 	}
 
+	/**
+	 * Sprint 9, tanda 2 (A8): un colegio en producción con menos de 2 personas activas de Promotoría o Dirección se avisa en
+	 * el log (la segregación no se cumple) sin impedir arrancar; en H2 la consulta corre sin error.
+	 */
+	@Test
+	void avisaConMenosDeDosPersonasDeGobierno() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_COLEGIOS_SIN_GOBIERNO, Integer.class)).thenReturn(1);
+
+		assertThatCode(() -> completo(mysql).afterPropertiesSet()).doesNotThrowAnyException();
+		org.mockito.Mockito.verify(mysql).queryForObject(VerificadorPermisosBaseDatos.SQL_COLEGIOS_SIN_GOBIERNO,
+				Integer.class);
+		assertThatCode(() -> new VerificadorPermisosBaseDatos(jdbc, fuenteDatos).avisarColegiosSinGobierno())
+				.doesNotThrowAnyException();
+	}
+
+	/** Sprint 9, tanda 2 (E1, E55): el registro de ayer y la configuración sin Dirección deben llegar a su trigger. */
+	@Test
+	void fallaSiFaltanLosTriggersDeLaAsistencia() {
+		for (String[] caso : new String[][] { { VerificadorPermisosBaseDatos.REGISTRO_AYER_IMPOSIBLE,
+				"trg_registro_asistencia_nace" }, { VerificadorPermisosBaseDatos.CONFIGURACION_ACADEMICA_IMPOSIBLE,
+						"trg_configuracion_academica_nace" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doThrow(denegado(1452)).when(mysql).update(caso[0]);
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[1]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+	}
+
 	/** Sprint 9, tanda 1: una asignación que nace VIGENTE debe llegar a su trigger (1644); si llega a la FK, falta. */
 	@Test
 	void fallaSiFaltaElTriggerDeLaAsignacionDocente() {
@@ -169,7 +198,8 @@ class VerificadorPermisosBaseDatosTest {
 					+ "verificacion_bancaria|reembolso|orden_pago_cuota|configuracion_bd|archivo_cargado|movimiento_bancario|"
 					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora|semilla_muestreo|huella_hora|"
 					+ "resumen_diario|llamada_control|muestra_llamada|delegacion_llamada|configuracion_colegio|respaldo|"
-					+ "firma_operacion|acceso_dato_personal) ");
+					+ "firma_operacion|acceso_dato_personal|registro_asistencia|marca_asistencia|consentimiento_aviso|"
+					+ "aviso_asistencia_corte) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -287,7 +317,7 @@ class VerificadorPermisosBaseDatosTest {
 	/** Sprint 7, tanda 2: lo que solo escribe cc_sistema (a cc_app le falta el GRANT: 1142). */
 	private static final java.util.regex.Pattern SOLO_SISTEMA = java.util.regex.Pattern.compile(
 			"^INSERT INTO (usuario|usuario_rol|sesion_usuario|semilla_muestreo|muestra_llamada|resumen_diario|primera_direccion|"
-			+ "colegio|primera_promotoria|cambio_contacto_titular|cambio_correo_control) ");
+			+ "colegio|primera_promotoria|cambio_contacto_titular|cambio_correo_control|aviso_asistencia_corte) ");
 
 	private static JdbcTemplate mysqlQueDeniega() {
 		JdbcTemplate mysql = mock(JdbcTemplate.class);

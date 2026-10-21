@@ -19,8 +19,11 @@ public final class LimpiezaBaseDatos {
 	public static void limpiar(JdbcTemplate jdbc) {
 		// Sprint 9, tanda 2 (V33): las marcas apuntan a sí mismas (reemplaza_id), al registro, a la sesión y a la solicitud;
 		// el consentimiento, al apoderado y a la sesión.
-		jdbc.update("UPDATE marca_asistencia SET reemplaza_id = NULL WHERE reemplaza_id IS NOT NULL");
-		jdbc.update("DELETE FROM marca_asistencia");
+		// La cadena se borra desde la última (nadie la reemplaza) hacia la primera: el CHECK no deja vaciar reemplaza_id.
+		while (jdbc.update("DELETE FROM marca_asistencia WHERE id NOT IN (SELECT reemplaza_id FROM marca_asistencia "
+				+ "WHERE reemplaza_id IS NOT NULL)") > 0) {
+			// sigue con la marca anterior de cada cadena
+		}
 		jdbc.update("DELETE FROM registro_asistencia");
 		jdbc.update("DELETE FROM consentimiento_aviso");
 		jdbc.update("DELETE FROM configuracion_academica");

@@ -34,7 +34,9 @@ final class CatalogoRutasConId {
 		/** Correcciones del sprint 8 (S8-A2): el cambio del correo de control que aprueba la Promotoría. */
 		CAMBIO_CORREO,
 		/** Sprint 9, tanda 1: una asignación docente (Docentes y secciones). */
-		ASIGNACION
+		ASIGNACION,
+		/** Sprint 9, tanda 2: una marca de asistencia (corregir, pedir corrección, justificar, revertir). */
+		MARCA
 	}
 
 	static final Map<String, Map<String, Recurso>> CATALOGO = new LinkedHashMap<>();
@@ -233,6 +235,20 @@ final class CatalogoRutasConId {
 		r("POST /academico/asignaciones", "anio", Recurso.ANIO, "seccionId", Recurso.SECCION, "docenteId", Recurso.USUARIO);
 		r("POST /academico/asignaciones/copiar-anio-anterior", "anioId", Recurso.ANIO);
 		r("POST /academico/asignaciones/{id:\\d+}/terminar", "id", Recurso.ASIGNACION, "anio", Recurso.ANIO);
+		// Sprint 9, tanda 2: la asistencia (hoja, correcciones, registro tardío, reversión y reporte con ?seccion=, A11),
+		// la justificación de la familia y el consentimiento desde la ficha (?apoderado=).
+		r("GET /academico/asistencia/{seccionId:\\d+}/hoy", "seccionId", Recurso.SECCION);
+		r("POST /academico/asistencia/{seccionId:\\d+}/hoy", "seccionId", Recurso.SECCION);
+		r("GET /academico/asistencia/{seccionId:\\d+}/tardio/{solicitudId:\\d+}", "seccionId", Recurso.SECCION, "solicitudId", Recurso.SOLICITUD);
+		r("POST /academico/asistencia/{seccionId:\\d+}/tardio/{solicitudId:\\d+}", "seccionId", Recurso.SECCION, "solicitudId", Recurso.SOLICITUD);
+		r("POST /academico/asistencia/marcas/{id:\\d+}/corregir-hoy", "id", Recurso.MARCA, "seccion", Recurso.SECCION);
+		r("POST /academico/asistencia/marcas/{id:\\d+}/pedir-correccion", "id", Recurso.MARCA, "seccion", Recurso.SECCION);
+		r("POST /academico/asistencia/{seccionId:\\d+}/pedir-registro-tardio", "seccionId", Recurso.SECCION);
+		r("POST /academico/asistencia/marcas/{id:\\d+}/revertir-justificacion", "id", Recurso.MARCA);
+		r("GET /academico/asistencia/reporte", "seccion", Recurso.SECCION);
+		r("POST /familia/asistencia/marcas/{id:\\d+}/justificar", "id", Recurso.MARCA);
+		r("GET /alumnos/consentimientos", "apoderado", Recurso.APODERADO);
+		r("POST /alumnos/consentimientos", "apoderadoId", Recurso.APODERADO);
 	}
 
 	private CatalogoRutasConId() {

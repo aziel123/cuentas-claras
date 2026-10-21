@@ -41,6 +41,8 @@
 | 24 | `cc_ficha_colegio_corregida_v2` | Titular, correo institucional y correo de control | 3 | — |
 | 25 | `cc_correo_control_propuesto_v2` | Promotoría, correo institucional y correo de control | 3 | — |
 | 26 | `cc_correo_control_cambiado_v2` | Promotoría, correo institucional y correo de control | 3 | — |
+| 27 | `cc_asistencia_v2` | Familias | 3 | «Ver asistencia» (`/familia/asistencia`) |
+| 28 | `cc_asistencia_corregida_v2` | Familias | 6 | «Ver asistencia» (`/familia/asistencia`) |
 
 ## 1. `cc_pago_registrado_v2` · Registramos su pago
 
@@ -391,6 +393,40 @@
 | `{{1}}` | Colegio San Martín (ejemplo) |
 | `{{2}}` | c***@estudio-contable.pe |
 | `{{3}}` | María Elena T. (Promotoría) |
+
+## 27. `cc_asistencia_v2` · Asistencia de hoy
+
+> Sprint 9, tanda 2 (sección 11 del diseño). Un aviso por familia y día, a la hora fija del colegio, con los hermanos juntos.
+> Solo el primer nombre de cada hijo y estados fijos: nunca montos ni palabras de cobranza (lo exige también la base). El
+> botón lleva a `/familia/asistencia`, nunca al estado de cuenta. Por WhatsApp solo con el «sí» explícito de la familia.
+
+```text
+{{1}}: asistencia del {{2}}. {{3}}. Si hay un error o desea justificar una falta, ingrese al portal.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | lunes 15/03/2027 |
+| `{{3}}` | Mateo: falta. Lucía: llegó tarde (08:12) |
+
+## 28. `cc_asistencia_corregida_v2` · Se corrigió la asistencia
+
+> Sprint 9, tanda 2. Una corrección después del aviso (del día, aprobada por Dirección, una justificación de la familia o
+> su reversión): la familia vuelve a ser el auditor. Quien registró va con el nombre y la inicial del apellido.
+
+```text
+{{1}}: se corrigió la asistencia de {{2}} del {{3}}: ahora figura {{4}} (antes: {{5}}). Lo registró {{6}}. Si no lo reconoce, avísenos desde el portal.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | Mateo |
+| `{{3}}` | 15/03/2027 |
+| `{{4}}` | presente |
+| `{{5}}` | falta |
+| `{{6}}` | Prof. Ana T. |
 
 ## Después de la aprobación
 1. Anotar en `docs/estado-del-proyecto.md` la fecha de aprobación de cada plantilla.
