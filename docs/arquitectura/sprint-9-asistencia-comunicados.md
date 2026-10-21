@@ -89,14 +89,15 @@
   - el docente toca a quien faltó (un toque: Falta; dos: Tarde, con la hora de llegada opcional; tres: vuelve a Presente);
   - un solo botón «Guardar asistencia de 3.° B» con el resumen («26 presentes, 2 faltas, 1 tarde»). Un solo POST crea el registro y sus marcas.
 - **Estados** (decisión 145): `PRESENTE`, `TARDE` (con `hora_llegada` opcional), `FALTA` y `FALTA_JUSTIFICADA`.
-- **Quién registra** (decisión 144): cualquier docente con una asignación VIGENTE en la sección (tutor, docente o auxiliar) o Dirección (para cubrir a un docente ausente). **Turno único** por colegio en este sprint.
+- **Quién registra** (decisión 144, **confirmada por el usuario el 21-oct-2026**): **solo el docente**, en sus propias secciones: una cuenta con rol DOCENTE y una asignación VIGENTE en la sección (tutor, docente o auxiliar). **Dirección no registra ni corrige marcas directamente**: aprueba las solicitudes, revierte justificaciones y ve todo. Para cubrir a un docente ausente, Dirección propone una asignación (por ejemplo AUXILIAR) a otra persona y la aprueba otra persona de Dirección o Promotoría (tanda 1). **Turno único** por colegio en este sprint.
+- **Fuente de la marca** (puerta abierta a un marcador dactilar en la puerta): `registro_asistencia.fuente` y `marca_asistencia.fuente` valen `DOCENTE` o `MARCADOR`. En este sprint **solo `DOCENTE`**: los triggers rechazan `MARCADOR` («el marcador todavía no está habilitado»). Habilitarlo será otra migración, otra versión de los triggers y su propio diseño (actor de sistema, dispositivo y conciliación con lo que marca el docente). No se implementa nada del marcador.
 - **Solo el día de hoy, con la hora de la base:** `trg_registro_asistencia_nace` exige `fecha = cc_hoy_lima()` (la fecha de Lima según el reloj de MySQL, no el del servidor de la aplicación), un día de lunes a viernes dentro de las fechas de clases del año EN_CURSO y sin día no laborable del colegio. La aplicación además rechaza los feriados nacionales (H8). El trigger guarda `registrado_bd`.
 - **Corregir no es editar:** una corrección es una marca nueva con `reemplaza_id` apuntando a la marca vigente. Un UNIQUE sobre `reemplaza_id` impide dos «sucesoras» de la misma marca: la historia es una cadena lineal y la marca vigente es la que nadie reemplazó.
 
 | Cuándo | Quién | Cómo | Aviso a la familia |
 |---|---|---|---|
-| El mismo día, antes del aviso | Un docente asignado o Dirección | Directo (`CORRECCION_DEL_DIA`) | El aviso de la hora fija ya sale con el estado correcto |
-| El mismo día, después del aviso | Un docente asignado o Dirección | Directo (`CORRECCION_DEL_DIA`), con motivo | **Sí**: `cc_asistencia_corregida_v2` en el siguiente envío. Evento resaltado; Dirección ve la lista «Correcciones de hoy después del aviso» |
+| El mismo día, antes del aviso | Un docente asignado (Dirección no) | Directo (`CORRECCION_DEL_DIA`) | El aviso de la hora fija ya sale con el estado correcto |
+| El mismo día, después del aviso | Un docente asignado (Dirección no) | Directo (`CORRECCION_DEL_DIA`), con motivo | **Sí**: `cc_asistencia_corregida_v2` en el siguiente envío. Evento resaltado; Dirección ve la lista «Correcciones de hoy después del aviso» |
 | Otro día | Lo pide el docente o el tutor; **lo aprueba otra persona de Dirección o Promotoría** con su firma | Solicitud `CORRECCION_ASISTENCIA` (marca, estado nuevo y motivo) → marca `CORRECCION_APROBADA` | **Sí**, siempre |
 
 - **Registro de un día pasado** (decisión 146): no hay modo sin conexión. Si un día no hubo internet, el docente anota en papel y pide `REGISTRO_ASISTENCIA_TARDIO` (sección, fecha y motivo), que aprueba otra persona de Dirección o Promotoría con su firma, hasta 5 días hábiles atrás (la base acepta como máximo 15 días calendario). Con la solicitud aprobada, el docente registra ese día dentro de la hora siguiente; las faltas de ese día se avisan a las familias como corrección («se registró la asistencia del …»).
@@ -193,7 +194,18 @@ Meta cobra **por plantilla entregada** desde el 1 de julio de 2025 (ya no por co
 - **Destinatarios congelados:** al enviarse, el sistema calcula las familias con un alumno con matrícula ACTIVA en el alcance y las guarda en `comunicado_destinatario` (una fila por familia). Las estadísticas y las confirmaciones son de ese conjunto; una familia que se matricula después no lo ve.
 
 ### 3.9 El PDF adjunto (tanda 3)
-Un comunicado lleva **como máximo un PDF de hasta 2 MB y 10 páginas** (decisión 157). `comunicados.service.AdjuntosComunicado` es la **única** clase que usa PDFBox (ArchUnit).
+Un comunicado lleva **como máximo un PDF de hasta 2 MB y 10 páginas** (decisión 157).
+
+> **Decisión del usuario (21-oct-2026): PDFBox (Apache 2.0) aprobado.** Controles obligatorios, todos con prueba:
+> - la **última versión 3.x estable** (hoy 3.0.8; nunca anterior a 3.0.7, que corrige CVE-2026-23907), fijada en el `pom.xml` y cubierta por el job **Dependencias** del CI (SBOM CycloneDX y OSV-Scanner: sin CRÍTICA ni ALTA con arreglo); Dependabot la sigue;
+> - **tamaño máximo** (2 MB) antes de abrirlo; **bytes mágicos** `%PDF-` al inicio; **límite de páginas** (10);
+> - carga con `MemoryUsageSetting` acotado (memoria limitada más archivo temporal, unos 50 MB en total) y **tiempo límite** de 10 segundos en un hilo que se cancela;
+> - **rechazo** de PDF cifrados y de JavaScript o acciones embebidas (la lista del punto 2);
+> - **SHA-256** guardado (del original y del saneado);
+> - se sirve con `Content-Disposition: attachment` y `X-Content-Type-Options: nosniff` (punto 5);
+> - pruebas con al menos un **PDF malformado**, un **PDF enorme** (por bytes y por páginas) y un **PDF con JavaScript**, dentro de los 10 archivos hostiles de E26.
+
+`comunicados.service.AdjuntosComunicado` es la **única** clase que usa PDFBox (ArchUnit).
 
 1. **Antes de abrirlo:** el tamaño (≤ 2 MB, con el límite de subida de Spring), que empiece con `%PDF-` y que no sea a la vez otra cosa conocida (cabecera ZIP, HTML o JavaScript en el primer kilobyte: polígloto).
 2. **Al abrirlo con PDFBox,** con memoria limitada (`MemoryUsageSetting` con un tope de unos 50 MB y archivos temporales en `/tmp`, que en el contenedor es `tmpfs`) y un **tiempo máximo de 10 segundos** (en un hilo aparte que se cancela):
@@ -318,11 +330,11 @@ erDiagram
   - PROPUESTA → VIGENTE solo con SU `ASIGNACION_DOCENTE` aprobada y firmada (`cc_solicitud_firmada`) por otra persona activa de Dirección o Promotoría que **no es el docente asignado** (MySQL); → RECHAZADA con la solicitud rechazada (MySQL);
   - VIGENTE → TERMINADA por Dirección o Promotoría con su firma, o por `sistema.academico` (MySQL); nada más cambia de estado (MySQL);
   - docente, sección, año, tipo, áreas y quién la propuso no cambian (1143).
-- **`registro_asistencia`** (tanda 2): uno por colegio, sección y fecha (base); solo inserción (1142); de hoy en Lima según la base, o de un día pasado (≤ 15 días) con su `REGISTRO_ASISTENCIA_TARDIO` aprobada y firmada (MySQL); en un día de clases del año EN_CURSO, de lunes a viernes y sin día no laborable del colegio (MySQL; los feriados nacionales, la aplicación); por un docente con asignación VIGENTE en la sección o por Dirección, con su sesión abierta (MySQL); `registrado_bd` lo pone la base (MySQL).
+- **`registro_asistencia`** (tanda 2): uno por colegio, sección y fecha (base); solo inserción (1142); de hoy en Lima según la base, o de un día pasado (≤ 15 días) con su `REGISTRO_ASISTENCIA_TARDIO` aprobada y firmada (MySQL); en un día de clases del año EN_CURSO, de lunes a viernes y sin día no laborable del colegio (MySQL; los feriados nacionales, la aplicación); solo por un docente (rol DOCENTE) con asignación VIGENTE en la sección, con su sesión abierta; Dirección no registra (MySQL); `fuente` = DOCENTE (base: DOCENTE o MARCADOR; MySQL: MARCADOR se rechaza en este sprint); `registrado_bd` lo pone la base (MySQL).
 - **`marca_asistencia`** (tanda 2):
   - solo inserción (1142); una marca inicial por registro y alumno; una sola sucesora por marca (base);
   - la inicial es de un alumno con matrícula ACTIVA en esa sección, del día de hoy (o dentro de la hora siguiente a un registro tardío aprobado), por quien puede registrar (MySQL);
-  - una corrección reemplaza una marca del mismo registro y alumno y cambia el estado (base y MySQL). El mismo día: un docente asignado o Dirección. Otro día: con SU `CORRECCION_ASISTENCIA` aprobada y firmada, con el estado nuevo de la solicitud (MySQL);
+  - una corrección reemplaza una marca del mismo registro y alumno y cambia el estado (base y MySQL). El mismo día: un docente asignado (Dirección no). Otro día: con SU `CORRECCION_ASISTENCIA` aprobada y firmada, con el estado nuevo de la solicitud (MySQL);
   - la justificación pasa de FALTA a FALTA_JUSTIFICADA, por la cuenta de un apoderado activo de la familia del alumno, con su sesión, hasta 15 días atrás (MySQL; 5 hábiles, la aplicación); la reversión la hace Dirección con su firma (MySQL);
   - la hora de llegada solo en TARDE; motivo y apoderado solo en la justificación; solicitud solo en la corrección aprobada (base).
 - **`consentimiento_aviso`** (tanda 2): solo inserción (1142); desde el portal, por la cuenta del propio apoderado con su sesión; desde la ficha, por Administración o Dirección con el código de la ficha (base y MySQL).
@@ -350,7 +362,7 @@ VIGENTE ──(Dirección o Promotoría con su firma; sistema.academico al cerra
 **Marca de asistencia** (no hay estados que cambien: cada flecha es una fila NUEVA que reemplaza a la vigente)
 ```
 REGISTRO (PRESENTE | TARDE | FALTA | FALTA_JUSTIFICADA)
-   ├──(mismo día: docente asignado o Dirección)────────────────────────▶ CORRECCION_DEL_DIA (otro estado)
+   ├──(mismo día: docente asignado)────────────────────────────────────▶ CORRECCION_DEL_DIA (otro estado)
    ├──(otro día: CORRECCION_ASISTENCIA aprobada y firmada por Dirección)──▶ CORRECCION_APROBADA (otro estado)
    └──(FALTA, hasta 5 días hábiles: el apoderado en el portal)──────────▶ JUSTIFICACION (FALTA_JUSTIFICADA)
                                                                               └──(Dirección con su firma)──▶ REVERSION_JUSTIFICACION (FALTA)
@@ -485,6 +497,7 @@ CREATE TABLE registro_asistencia (
     seccion_id       BIGINT        NOT NULL,
     fecha            DATE          NOT NULL,
     origen           VARCHAR(10)   NOT NULL,   -- DEL_DIA | TARDIO
+    fuente           VARCHAR(10)   NOT NULL DEFAULT 'DOCENTE',  -- DOCENTE | MARCADOR (futuro; hoy el trigger lo rechaza)
     solicitud_id     BIGINT,                   -- REGISTRO_ASISTENCIA_TARDIO aprobada (solo TARDIO)
     registrado_por   VARCHAR(60)   NOT NULL,
     sesion_id        BIGINT        NOT NULL,
@@ -509,6 +522,7 @@ CREATE TABLE registro_asistencia (
     CONSTRAINT ck_registro_asistencia_origen CHECK (origen IN ('DEL_DIA', 'TARDIO')
         AND ((origen = 'TARDIO') = (solicitud_id IS NOT NULL))),
     CONSTRAINT ck_registro_asistencia_alumnos CHECK (alumnos >= 0),
+    CONSTRAINT ck_registro_asistencia_fuente CHECK (fuente IN ('DOCENTE', 'MARCADOR')),
     CONSTRAINT ck_registro_asistencia_actor CHECK (creado_por = registrado_por AND registrado_por NOT LIKE 'sistema%')
 );
 CREATE INDEX ix_registro_asistencia_fecha ON registro_asistencia (colegio_id, fecha);
@@ -525,6 +539,7 @@ CREATE TABLE marca_asistencia (
     matricula_id          BIGINT        NOT NULL,
     estado                VARCHAR(20)   NOT NULL,   -- PRESENTE | TARDE | FALTA | FALTA_JUSTIFICADA
     hora_llegada          TIME,
+    fuente                VARCHAR(10)   NOT NULL DEFAULT 'DOCENTE',  -- DOCENTE | MARCADOR (futuro; hoy el trigger lo rechaza)
     origen                VARCHAR(24)   NOT NULL,   -- REGISTRO | CORRECCION_DEL_DIA | CORRECCION_APROBADA |
                                                     -- JUSTIFICACION | REVERSION_JUSTIFICACION
     primera               BOOLEAN,                  -- TRUE en la marca del registro; NULL en las que reemplazan
@@ -573,6 +588,7 @@ CREATE TABLE marca_asistencia (
             AND motivo_justificacion IN ('SALUD', 'FAMILIAR', 'TRAMITE', 'OTRO'))
         OR (origen <> 'JUSTIFICACION' AND apoderado_id IS NULL AND familia_id IS NULL AND motivo_justificacion IS NULL
             AND nota_justificacion IS NULL)),
+    CONSTRAINT ck_marca_asistencia_fuente CHECK (fuente IN ('DOCENTE', 'MARCADOR')),
     CONSTRAINT ck_marca_asistencia_actor CHECK (creado_por NOT LIKE 'sistema%')
 );
 CREATE INDEX ix_marca_asistencia_alumno ON marca_asistencia (colegio_id, alumno_id, fecha);
@@ -975,18 +991,18 @@ CREATE FUNCTION cc_sesion_abierta(p_sesion BIGINT, p_nombre VARCHAR(60), p_coleg
         WHERE s.id = p_sesion AND s.colegio_id = p_colegio AND u.nombre_usuario = p_nombre AND u.activo
           AND s.cerrada_en IS NULL AND s.vence_en > UTC_TIMESTAMP(6) - INTERVAL 5 HOUR)$$
 
--- El registro del día: un docente asignado a la sección (o Dirección) con su sesión, un día de clases del año en curso, y
+-- El registro del día: SOLO un docente asignado a la sección (decisión 144 confirmada: Dirección no registra), con su sesión, un día de clases del año en curso, y
 -- HOY según la base; otro día, solo con su REGISTRO_ASISTENCIA_TARDIO aprobada y firmada por Dirección o Promotoría.
 DROP TRIGGER IF EXISTS trg_registro_asistencia_nace$$
 CREATE TRIGGER trg_registro_asistencia_nace BEFORE INSERT ON registro_asistencia FOR EACH ROW
 BEGIN
     SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    IF NOT (NEW.fuente <=> 'DOCENTE') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el marcador todavia no esta habilitado; la asistencia la registra el docente';
+    END IF;
     IF NOT cc_sesion_abierta(NEW.sesion_id, NEW.registrado_por, NEW.colegio_id)
-            OR NOT (cc_docente_de_seccion(NEW.registrado_por, NEW.seccion_id, TRUE)
-                OR EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
-                    WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.registrado_por AND u.activo
-                      AND r.rol = 'DIRECTOR')) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la asistencia la registra un docente de la seccion o Direccion, con su sesion';
+            OR NOT cc_docente_de_seccion(NEW.registrado_por, NEW.seccion_id, TRUE) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la asistencia la registra un docente asignado a la seccion, con su sesion';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM seccion s JOIN anio_escolar a ON a.id = s.anio_escolar_id
                 WHERE s.id = NEW.seccion_id AND s.colegio_id = NEW.colegio_id AND s.activa AND a.id = NEW.anio_escolar_id
@@ -1028,7 +1044,7 @@ END$$
 
 -- Cada marca: de su registro y con la sesión de quien la escribe. La inicial, de un alumno matriculado en la sección y del
 -- día (o en la hora siguiente a un registro tardío aprobado). Una corrección reemplaza la marca de ese alumno y cambia el
--- estado: el mismo día, un docente de la sección o Dirección; otro día, con SU solicitud aprobada y firmada. La
+-- estado: el mismo día, un docente de la sección (Dirección no); otro día, con SU solicitud aprobada y firmada. La
 -- justificación, la cuenta de un apoderado de la familia del alumno; la reversión, Dirección con su firma.
 DROP TRIGGER IF EXISTS trg_marca_asistencia_nace$$
 CREATE TRIGGER trg_marca_asistencia_nace BEFORE INSERT ON marca_asistencia FOR EACH ROW
@@ -1045,9 +1061,10 @@ BEGIN
     IF v_fecha IS NULL OR NOT (NEW.fecha <=> v_fecha) OR NOT cc_sesion_abierta(NEW.sesion_id, NEW.creado_por, NEW.colegio_id) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la marca es de su registro y lleva la sesion de quien la escribe';
     END IF;
-    SET v_es_personal = cc_docente_de_seccion(NEW.creado_por, NEW.seccion_id, TRUE)
-        OR EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id WHERE u.colegio_id = NEW.colegio_id
-            AND u.nombre_usuario = NEW.creado_por AND u.activo AND r.rol = 'DIRECTOR');
+    IF NOT (NEW.fuente <=> 'DOCENTE') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el marcador todavia no esta habilitado; la asistencia la registra el docente';
+    END IF;
+    SET v_es_personal = cc_docente_de_seccion(NEW.creado_por, NEW.seccion_id, TRUE);
     IF NEW.origen = 'REGISTRO' THEN
         IF NOT v_es_personal
                 OR NOT EXISTS (SELECT 1 FROM matricula m WHERE m.id = NEW.matricula_id AND m.colegio_id = NEW.colegio_id
@@ -1393,10 +1410,10 @@ DOC = docente, tutor o auxiliar (con la asignación que se indica). Ninguna ruta
 | `POST /academico/asignaciones/{id}/terminar` | Terminar una asignación (firma) | X | X | | | |
 | `POST /aprobaciones/{id}/aprobar` (`ASIGNACION_DOCENTE`, `CORRECCION_ASISTENCIA`, `REGISTRO_ASISTENCIA_TARDIO`, `PUBLICAR_COMUNICADO`) | Aprobar con firma; nunca quien pidió ni el docente asignado | X | X | | | |
 | `GET /academico/secciones/{id}` | Lista de la sección: nombres y número de orden (`LISTA_SECCION`) | | X | | Su sección | |
-| `GET, POST /academico/asistencia/{seccionId}/hoy` | Hoja del día y guardar | | X | | Su sección | |
-| `POST /academico/asistencia/marcas/{id}/corregir-hoy` | Corrección del mismo día | | X | | Su sección | |
-| `POST /academico/asistencia/marcas/{id}/pedir-correccion` | Pedir la corrección de otro día | | X | | Su sección | |
-| `POST /academico/asistencia/{seccionId}/pedir-registro-tardio` | Pedir registrar un día pasado | | X | | Su sección | |
+| `GET, POST /academico/asistencia/{seccionId}/hoy` | Hoja del día y guardar (solo el docente, decisión 144) | | | | Su sección | |
+| `POST /academico/asistencia/marcas/{id}/corregir-hoy` | Corrección del mismo día | | | | Su sección | |
+| `POST /academico/asistencia/marcas/{id}/pedir-correccion` | Pedir la corrección de otro día | | | | Su sección | |
+| `POST /academico/asistencia/{seccionId}/pedir-registro-tardio` | Pedir registrar un día pasado | | | | Su sección | |
 | `POST /academico/asistencia/marcas/{id}/revertir-justificacion` | Revertir una justificación (firma) | | X | | | |
 | `GET /academico/asistencia/reporte` | Reporte mensual por sección y por alumno (`REPORTE_ASISTENCIA`) | | X | | Tutor de la sección | |
 | `GET, POST /academico/configuracion` | Horas de alerta, aviso y resumen; plazos; tope mensual | | X | | | |
@@ -1502,6 +1519,8 @@ Las pruebas de MySQL van en `mysql/AuditoriaSprint9MySqlTest` (job `mysql`), sal
 | E13 | **Revertir una justificación sin firma**, o hacerlo un docente | Dirección con su firma | `e13ReversionSinFirmaFalla` (1644); `JustificacionTest.elDocenteNoRevierte` (403) |
 | E14 | **Un apoderado justifica faltas viejas** (de hace un mes) | 5 días hábiles en la aplicación; 15 días en la base | `JustificacionTest.fueraDePlazoSeRechaza`; `e14JustificacionDeHaceUnMesFalla` (1644) |
 | E15 | **Dirección corre la hora del aviso a la noche** para que las familias no se enteren de las faltas | CHECK de horas (09:00 a 13:00); evento resaltado con el antes y el después | `e15HoraDeAvisoFueraDeRangoFalla` (3819); `ConfiguracionAcademicaTest.cambiarHorasQuedaResaltado` |
+| E49 | **Dirección, Administración o un docente sin asignación en la sección registra o corrige la asistencia del día** (decisión 144: solo el docente) | La ruta es solo del docente con asignación VIGENTE (403 o 404); `trg_registro_asistencia_nace` y `trg_marca_asistencia_nace` exigen `cc_docente_de_seccion` sin excepción para Dirección | `RegistroAsistenciaTest.direccionNoRegistra` (403); `e49DireccionSinAsignacionNoRegistraNiCorrige` (1644) |
+| E50 | **Con la clave de `cc_app`, un registro o una marca con `fuente = 'MARCADOR'`** (simular un marcador que no existe) | Los dos triggers rechazan toda fuente distinta de DOCENTE en este sprint | `e50FuenteMarcadorSeRechaza` (2 casos, 1644) |
 
 ### 13.2 Comunicados
 | # | Escenario | Control | Prueba |
@@ -1569,6 +1588,7 @@ Antes de la tanda 1: **pedir a la Dirección del colegio piloto la plantilla de 
 - **Terminado cuando:** Administración propone las asignaciones del año, Dirección las aprueba con su firma, el docente entra desde su celular y ve solo los nombres de los alumnos de sus secciones, ninguna ruta de cobranza le responde y la lista que abrió quedó en «Quién vio datos personales».
 
 ### Tanda 2 · Asistencia diaria con aviso a las familias (V33; 91 triggers; 1.5 semanas)
+> Brief de la tanda: `docs/arquitectura/sprint-9/tanda-2.md` (léase primero). Decisión 144 confirmada: solo el docente registra y corrige el día (E49), con la columna `fuente` (E50).
 1. V33; `02` (asistencia, consentimiento, configuración); `03` con `cc_hoy_lima`, `cc_sesion_abierta`, los 3 triggers y la versión de `trg_mensaje_nace` (tipos de asistencia). **Verificable:** E1, E2, E3, E6 a E15 (parte MySQL), E37 y E40; 91 triggers y 104 huellas.
 2. Hoja del día en el celular, guardar, corrección del mismo día; reporte mensual. **Verificable:** una sección de 30 alumnos se guarda en menos de 1 minuto en un celular de gama media (prueba con el `investigador-ux` y un docente real o simulado) y en menos de 1 segundo en el servidor (prueba de carga de 7.5).
 3. Corrección de otro día y registro tardío por la bandeja (`CORRECCION_ASISTENCIA`, `REGISTRO_ASISTENCIA_TARDIO`). **Verificable:** E5, E6 y E10 en H2.
@@ -1613,10 +1633,10 @@ Valor por defecto entre corchetes. Sigue la numeración de `estado-del-proyecto.
 | 141 | DOCENTE con otros roles | **[No con CAJA ni ADMINISTRACION (ven quién debe); sí con DIRECTOR, con aviso; las combinaciones anteriores se listan para corregirlas]** |
 | 142 | Qué ve el docente | **[Nombres y número de orden de los alumnos de sus secciones, su asistencia y sus comunicados; nunca DNI, fecha de nacimiento, apoderados, contactos, deudas ni pagos]** |
 | 143 | Promotoría y la asistencia | **[No ve la asistencia por alumno; sí envía comunicados]** |
-| 144 | Quién marca | **[Cualquier docente asignado a la sección (también el auxiliar) o Dirección; un registro por sección y día; turno único]** |
+| 144 | Quién marca | **Confirmada (21-oct-2026): solo el docente asignado a la sección (también el auxiliar); Dirección no marca; un registro por sección y día; turno único; columna `fuente` (DOCENTE, y MARCADOR a futuro, hoy rechazado)** |
 | 145 | Estados | **[Presente, tarde (con hora opcional), falta y falta justificada]** |
 | 146 | Sin conexión | **[No hay modo sin conexión: papel y registro tardío con aprobación de Dirección, hasta 5 días hábiles]** |
-| 147 | Correcciones | **[El mismo día, un docente asignado o Dirección, con aviso a la familia si el aviso ya salió; otro día, solicitud aprobada por otra persona de Dirección o Promotoría, con aviso a la familia]** |
+| 147 | Correcciones | **[El mismo día, un docente asignado (Dirección no, por la decisión 144), con aviso a la familia si el aviso ya salió; otro día, solicitud aprobada por otra persona de Dirección o Promotoría, con aviso a la familia]** |
 | 148 | Horas por colegio | **[Alerta 09:30; aviso 10:30 (entre 09:00 y 13:00); segundo aviso 16:00; resumen de comunicados 18:00]** |
 | 149 | Alerta de sección sin registro | **[Una al día a Dirección, con el número de secciones, sin nombres]** |
 | 150 | Justificación por la familia | **[Desde el portal, hasta 5 días hábiles, con motivo de una lista y nota opcional de 200 caracteres sin diagnósticos; queda justificada al instante; Dirección la puede revertir con firma; las tardanzas no se justifican]** |
@@ -1626,7 +1646,7 @@ Valor por defecto entre corchetes. Sigue la numeración de `estado-del-proyecto.
 | 154 | Quién envía comunicados y a quién | **[Promotoría y Dirección: todo el colegio, un nivel, un grado o una sección; docente (tutor o docente): solo sus secciones; auxiliar: no; nunca a una familia sola]** |
 | 155 | Filtro de contenido | **[Bloquea cobranza, montos, medios de pago y cuentas, celulares, DNI, correos y enlaces externos en título, texto y PDF; sin excepciones, tampoco para Dirección]** |
 | 156 | Pie fijo | **[«{colegio} nunca le pedirá pagos ni datos personales por un comunicado. Los pagos se hacen solo en el portal de Cuotaria, en el banco con el código del alumno o en la caja del colegio…»; texto a revisar por el colegio]** |
-| 157 | PDF adjunto | **[Uno por comunicado, de hasta 2 MB y 10 páginas, validado y vuelto a guardar con Apache PDFBox (dependencia nueva, licencia Apache 2.0); el de un docente lo aprueba Dirección antes de salir; sin antivirus]**. Sin PDFBox: sin adjuntos en este sprint |
+| 157 | PDF adjunto | **Confirmada (21-oct-2026): PDFBox aprobado, última 3.x estable, con los controles de la sección 3.9.** **[Uno por comunicado, de hasta 2 MB y 10 páginas, validado y vuelto a guardar con Apache PDFBox (dependencia nueva, licencia Apache 2.0); el de un docente lo aprueba Dirección antes de salir; sin antivirus]**. Sin PDFBox: sin adjuntos en este sprint |
 | 158 | Aviso de comunicados por WhatsApp | **[Nunca uno por comunicado: un resumen diario (18:00) sin títulos al contacto principal de la familia; los demás apoderados por correo; urgentes de Dirección o Promotoría al momento, con el título]** |
 | 159 | Tope de WhatsApp de comunicados | **[4 resúmenes por familia al mes (configurable por colegio, 0 a 20); después, correo y portal; los urgentes no cuentan; los avisos de pago y de asistencia no tienen tope]** |
 | 160 | Recordatorio a quien no confirmó | **[Uno, a las 48 horas, dentro del resumen, solo si el comunicado pide confirmación]** |
