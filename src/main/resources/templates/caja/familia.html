@@ -28,58 +28,76 @@
 			|Primero cierra tu caja del ${#temporals.format(k.cajaAnteriorAbierta, 'dd/MM')}: no puedes cobrar con una caja anterior abierta.|)}"></div>
 	</th:block>
 
-	<form method="post" th:action="@{/caja/familias/{id}/revisar(id=${k.familiaId})}" class="formulario">
-		<section class="tarjeta" aria-labelledby="titulo-cuotas">
-			<h2 id="titulo-cuotas">Cuotas por pagar</h2>
-			<th:block th:if="${k.sinDeuda()}">
-				<div th:replace="~{fragments/componentes :: estadoVacio('Esta familia está al día',
-					'No tiene cuotas por pagar. Si el apoderado cree que debe algo, revisa sus pagos recientes abajo.')}"></div>
-			</th:block>
-			<fieldset class="grupo-opciones" th:each="a : ${k.alumnos}" th:unless="${#lists.isEmpty(a.cuotas)}">
-				<legend><span th:text="${a.nombre}">Mateo Quispe Huamán</span>
-					<span class="secundario" th:if="${a.grado != null}" th:text="| · ${a.grado}|"> · 5.° Primaria A · 2026</span></legend>
-				<div class="lista-cuotas">
-					<label class="cuota-opcion" th:each="q : ${a.cuotas}" th:classappend="${!q.cobrable} ? 'opcion-deshabilitada'"
-						th:data-cuota="${q.id}">
-						<input type="checkbox" name="cuotaIds" th:value="${q.id}" th:disabled="${!q.cobrable}">
-						<span class="cuota-datos">
-							<strong th:text="${q.descripcion}">Pensión diciembre 2026</strong>
-							<span class="secundario" th:text="|Vence ${#temporals.format(q.vencimiento, 'dd/MM/yyyy')}|">Vence 31/12/2026</span>
-							<span class="secundario" th:if="${q.descuento.signum() > 0 or q.pagado.signum() > 0}"
-								th:text="|Monto S/ ${#numbers.formatDecimal(q.monto, 1, 'COMMA', 2, 'POINT')} · descuento S/ ${#numbers.formatDecimal(q.descuento, 1, 'COMMA', 2, 'POINT')} · pagado S/ ${#numbers.formatDecimal(q.pagado, 1, 'COMMA', 2, 'POINT')}|">Monto</span>
-							<span class="fila">
-								<span th:replace="~{fragments/componentes :: badge(${q.estadoEtiqueta}, ${q.estadoVariante})}"></span>
-								<span th:if="${q.motivoNoCobrable != null}" class="badge badge-alerta" th:text="${q.motivoNoCobrable}">Anulación por aprobar</span>
-								<span th:unless="${q.exactoEnEfectivo}" class="badge badge-neutro">Solo pago digital</span>
+	<!--/* Rediseño (cobro en dos columnas): a la izquierda la familia y sus cuotas; a la derecha, fijo, el resumen del cobro
+	     con el medio de pago y el botón. Sin JavaScript el resumen muestra lo pendiente y el total exacto sale en el paso
+	     siguiente; con cobro.js (archivo propio, CSP 'self') suma en vivo lo marcado. El monto lo decide el servidor. */-->
+	<form method="post" th:action="@{/caja/familias/{id}/revisar(id=${k.familiaId})}" class="formulario cobro-dos-col" data-cobro>
+		<div class="cobro-principal">
+			<section class="tarjeta" aria-labelledby="titulo-cuotas">
+				<h2 id="titulo-cuotas">Cuotas por pagar</h2>
+				<th:block th:if="${k.sinDeuda()}">
+					<div th:replace="~{fragments/componentes :: estadoVacio('Esta familia está al día',
+						'No tiene cuotas por pagar. Si el apoderado cree que debe algo, revisa sus pagos recientes abajo.')}"></div>
+				</th:block>
+				<fieldset class="grupo-opciones" th:each="a : ${k.alumnos}" th:unless="${#lists.isEmpty(a.cuotas)}">
+					<legend><span th:text="${a.nombre}">Mateo Quispe Huamán</span>
+						<span class="secundario" th:if="${a.grado != null}" th:text="| · ${a.grado}|"> · 5.° Primaria A · 2026</span></legend>
+					<div class="lista-cuotas">
+						<label class="cuota-opcion" th:each="q : ${a.cuotas}" th:classappend="${!q.cobrable} ? 'opcion-deshabilitada'"
+							th:data-cuota="${q.id}">
+							<input type="checkbox" name="cuotaIds" th:value="${q.id}" th:disabled="${!q.cobrable}"
+								th:data-saldo="${q.saldo.setScale(2).toPlainString()}">
+							<span class="cuota-datos">
+								<strong th:text="${q.descripcion}">Pensión diciembre 2026</strong>
+								<span class="secundario" th:text="|Vence ${#temporals.format(q.vencimiento, 'dd/MM/yyyy')}|">Vence 31/12/2026</span>
+								<span class="secundario" th:if="${q.descuento.signum() > 0 or q.pagado.signum() > 0}"
+									th:text="|Monto S/ ${#numbers.formatDecimal(q.monto, 1, 'COMMA', 2, 'POINT')} · descuento S/ ${#numbers.formatDecimal(q.descuento, 1, 'COMMA', 2, 'POINT')} · pagado S/ ${#numbers.formatDecimal(q.pagado, 1, 'COMMA', 2, 'POINT')}|">Monto</span>
+								<span class="fila">
+									<span th:replace="~{fragments/componentes :: badge(${q.estadoEtiqueta}, ${q.estadoVariante})}"></span>
+									<span th:if="${q.motivoNoCobrable != null}" class="badge badge-alerta" th:text="${q.motivoNoCobrable}">Anulación por aprobar</span>
+									<span th:unless="${q.exactoEnEfectivo}" class="badge badge-neutro">Solo pago digital</span>
+								</span>
 							</span>
-						</span>
-						<span class="cuota-saldo"><span th:replace="~{fragments/componentes :: monto(${q.saldo})}"></span></span>
-					</label>
-				</div>
-			</fieldset>
-		</section>
+							<span class="cuota-saldo"><span th:replace="~{fragments/componentes :: monto(${q.saldo})}"></span></span>
+						</label>
+					</div>
+				</fieldset>
+			</section>
+		</div>
 
-		<section class="tarjeta" aria-labelledby="titulo-medio" th:unless="${k.sinDeuda()}">
-			<h2 id="titulo-medio">¿Cómo paga?</h2>
-			<th:block th:unless="${k.aceptaEfectivo}">
-				<div th:replace="~{fragments/componentes :: alerta('advertencia',
-					'La caja de hoy ya se cerró: solo se aceptan pagos digitales hasta mañana.')}"></div>
-			</th:block>
-			<fieldset class="grupo-opciones">
-				<legend>Medio de pago</legend>
-				<div class="medios">
-					<label class="opcion" th:each="m : ${k.medios()}"
-						th:classappend="${m.name() == 'EFECTIVO' and !k.aceptaEfectivo} ? 'opcion-deshabilitada'">
-						<input type="radio" name="medio" th:value="${m}" required
-							th:disabled="${m.name() == 'EFECTIVO' and !k.aceptaEfectivo}">
-						<span th:text="${m.etiqueta()}">Efectivo</span>
-					</label>
+		<aside class="cobro-resumen" aria-labelledby="titulo-resumen" th:unless="${k.sinDeuda()}">
+			<section class="tarjeta resumen-cobro">
+				<h2 id="titulo-resumen">Resumen del cobro</h2>
+				<dl class="resumen-datos">
+					<div><dt>Familia</dt><dd th:text="${k.familia}">Familia Quispe Huamán</dd></div>
+					<div><dt>Cuotas por cobrar</dt><dd class="num" th:text="${k.cuotasCobrables()} + (${k.cuotasVencidas() > 0} ? | (${k.cuotasVencidas()} vencidas)| : '')">3 (1 vencida)</dd></div>
+					<div><dt>Total pendiente</dt><dd><span th:replace="~{fragments/componentes :: monto(${k.totalCobrable()})}"></span></dd></div>
+				</dl>
+				<div class="resumen-total">
+					<span class="etiqueta">Marcado para cobrar</span>
+					<output class="total-cobro-monto" data-total-marcado aria-live="polite">S/ 0.00</output>
+					<span class="secundario" data-cuotas-marcadas>Marca las cuotas a la izquierda.</span>
 				</div>
-			</fieldset>
-			<div class="acciones acciones-izquierda">
+
+				<th:block th:unless="${k.aceptaEfectivo}">
+					<div th:replace="~{fragments/componentes :: alerta('advertencia',
+						'La caja de hoy ya se cerró: solo se aceptan pagos digitales hasta mañana.')}"></div>
+				</th:block>
+				<fieldset class="grupo-opciones">
+					<legend id="titulo-medio">¿Cómo paga?</legend>
+					<div class="medios">
+						<label class="opcion" th:each="m : ${k.medios()}"
+							th:classappend="${m.name() == 'EFECTIVO' and !k.aceptaEfectivo} ? 'opcion-deshabilitada'">
+							<input type="radio" name="medio" th:value="${m}" required
+								th:disabled="${m.name() == 'EFECTIVO' and !k.aceptaEfectivo}">
+							<span th:text="${m.etiqueta()}">Efectivo</span>
+						</label>
+					</div>
+				</fieldset>
 				<button th:replace="~{fragments/componentes :: boton('Revisar cobro', 'primario')}"></button>
-			</div>
-		</section>
+				<p class="ayuda">En el siguiente paso ves el total exacto y recién ahí se registra el pago.</p>
+			</section>
+		</aside>
 	</form>
 
 	<section class="tarjeta" aria-labelledby="titulo-recientes">
@@ -99,6 +117,7 @@
 			</tbody>
 		</table>
 	</section>
+	<script src="/js/cobro.js" th:src="@{/js/cobro.js}" defer></script>
 </main>
 </body>
 </html>

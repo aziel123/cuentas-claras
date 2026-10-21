@@ -42,6 +42,24 @@ public record CuentaFamilia(Long familiaId, String familia, List<AlumnoCuotas> a
 		return pagosEnLineaEnCurso != null && !pagosEnLineaEnCurso.isEmpty();
 	}
 
+	/** Rediseño (cobro en dos columnas): cuántas cuotas se pueden elegir hoy. */
+	public long cuotasCobrables() {
+		return alumnos.stream().flatMap(a -> a.cuotas().stream()).filter(CuotaPorCobrar::cobrable).count();
+	}
+
+	/** Rediseño (cobro en dos columnas): la suma de los saldos que se pueden cobrar hoy, con escala 2. */
+	public BigDecimal totalCobrable() {
+		return alumnos.stream().flatMap(a -> a.cuotas().stream()).filter(CuotaPorCobrar::cobrable)
+				.map(CuotaPorCobrar::saldo).reduce(BigDecimal.ZERO, BigDecimal::add)
+				.setScale(2, java.math.RoundingMode.HALF_UP);
+	}
+
+	/** Rediseño: cuántas de las cuotas por pagar ya vencieron (para el resumen de la derecha). */
+	public long cuotasVencidas() {
+		return alumnos.stream().flatMap(a -> a.cuotas().stream())
+				.filter(q -> hoy != null && q.vencimiento() != null && q.vencimiento().isBefore(hoy)).count();
+	}
+
 	public boolean sinDeuda() {
 		return alumnos.stream().allMatch(a -> a.cuotas().isEmpty());
 	}

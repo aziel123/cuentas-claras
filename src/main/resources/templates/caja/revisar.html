@@ -14,25 +14,26 @@
 		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${aviso})}"></div>
 	</th:block>
 
-	<form method="post" th:action="@{/caja/pagos}" class="formulario">
+	<form method="post" th:action="@{/caja/pagos}" class="formulario cobro-dos-col">
 		<input type="hidden" name="clave" th:value="${r.clave}">
 		<input type="hidden" name="familiaId" th:value="${r.familiaId}">
 		<input type="hidden" name="medio" th:value="${r.medio}">
 		<input type="hidden" name="totalVisto" th:value="${r.total}">
 		<input type="hidden" name="cuotaIds" th:each="id : ${r.cuotaIds}" th:value="${id}">
 
-		<section class="tarjeta total-cobro" aria-labelledby="titulo-total">
-			<h2 id="titulo-total" class="etiqueta">Total a cobrar · <span th:text="${r.medio.etiqueta()}">Efectivo</span></h2>
-			<p class="total-cobro-monto" data-total th:text="|S/ ${#numbers.formatDecimal(r.total, 1, 'COMMA', 2, 'POINT')}|">S/ 900.00</p>
-			<ul class="lista-imputacion">
-				<li th:each="l : ${r.lineas}">
-					<span><strong th:text="${l.descripcion}">Pensión diciembre 2026</strong>
-						<span class="secundario bloque" th:text="|${l.alumno} · vence ${#temporals.format(l.vencimiento, 'dd/MM/yyyy')}|">Mateo · vence 31/12/2026</span></span>
-					<span th:replace="~{fragments/componentes :: monto(${l.monto})}"></span>
-				</li>
-			</ul>
-			<p class="ayuda">Caja no decide montos: la deuda la generó el sistema. Al registrar, se emite el comprobante.</p>
-		</section>
+
+		<div class="cobro-principal">
+			<section class="tarjeta" aria-labelledby="titulo-detalle">
+				<h2 id="titulo-detalle">Qué se cobra</h2>
+				<ul class="lista-imputacion">
+					<li th:each="l : ${r.lineas}">
+						<span><strong th:text="${l.descripcion}">Pensión diciembre 2026</strong>
+							<span class="secundario bloque" th:text="|${l.alumno} · vence ${#temporals.format(l.vencimiento, 'dd/MM/yyyy')}|">Mateo · vence 31/12/2026</span></span>
+						<span th:replace="~{fragments/componentes :: monto(${l.monto})}"></span>
+					</li>
+				</ul>
+				<p class="ayuda">Caja no decide montos: la deuda la generó el sistema. Al registrar, se emite el comprobante.</p>
+			</section>
 
 		<section class="tarjeta" aria-labelledby="titulo-pago">
 			<h2 id="titulo-pago" th:text="${r.efectivo()} ? 'Efectivo recibido' : 'Datos del pago'">Efectivo recibido</h2>
@@ -103,10 +104,18 @@
 			</details>
 		</section>
 
-		<div class="acciones acciones-izquierda">
-			<button type="submit" class="btn btn-primario btn-grande" data-cobrar th:text="|Cobrar S/ ${#numbers.formatDecimal(r.total, 1, 'COMMA', 2, 'POINT')}|">Cobrar S/ 900.00</button>
-			<a class="btn btn-secundario" th:href="@{/caja/familias/{id}(id=${r.familiaId})}">Cambiar cuotas</a>
 		</div>
+
+		<aside class="cobro-resumen" aria-labelledby="titulo-total">
+			<section class="tarjeta total-cobro resumen-cobro">
+				<h2 id="titulo-total" class="etiqueta">Total a cobrar · <span th:text="${r.medio.etiqueta()}">Efectivo</span></h2>
+				<p class="total-cobro-monto" data-total th:text="|S/ ${#numbers.formatDecimal(r.total, 1, 'COMMA', 2, 'POINT')}|">S/ 900.00</p>
+				<p class="secundario" th:text="|${r.familia} · ${#lists.size(r.lineas) == 1 ? '1 cuota' : #lists.size(r.lineas) + ' cuotas'}|">Familia Quispe Huamán · 2 cuotas</p>
+				<button type="submit" class="btn btn-primario btn-grande btn-bloque" data-cobrar th:text="|Cobrar S/ ${#numbers.formatDecimal(r.total, 1, 'COMMA', 2, 'POINT')}|">Cobrar S/ 900.00</button>
+				<a class="btn btn-secundario btn-bloque" th:href="@{/caja/familias/{id}(id=${r.familiaId})}">Cambiar cuotas</a>
+				<p class="ayuda">Al cobrar se emite la boleta y el apoderado recibe el aviso con el monto y el número.</p>
+			</section>
+		</aside>
 	</form>
 </main>
 </body>
