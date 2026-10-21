@@ -40,7 +40,7 @@
 		<ul class="lista-simple">
 			<li class="fila entre" th:each="t : ${tardios}">
 				<span th:text="${t.resumen}">Registrar la asistencia de 3.° A del lunes</span>
-				<a class="btn btn-secundario btn-chico" th:href="@{/academico/asistencia/{s}/tardio/{id}(s=${t.entidadId}, id=${t.id})}">Registrar</a>
+				<a class="btn btn-secundario btn-chico" th:href="@{/academico/asistencia/{s}/tardio/{id}(s=${t.seccionId}, id=${t.solicitudId})}">Registrar</a>
 			</li>
 		</ul>
 	</section>

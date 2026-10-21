@@ -143,17 +143,19 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 	}
 
 	/** El escenario: un colegio nuevo con 3.° A, su tutor(a) aprobado por la bandeja, dos alumnos y el año que cubre hoy. */
-	private record Clase(EscuelaConDocentesMySql.Escuela escuela, Long alumno, Long otroAlumno, Long apoderado,
-			Long matricula) {
+	private record Clase(EscuelaConDocentesMySql.Escuela escuela, long seccion, Long alumno, Long otroAlumno,
+			Long apoderado, Long matricula) {
 
 		long colegio() {
 			return escuela.colegioId();
 		}
-
-		long seccion() {
-			return escuela.seccionA();
-		}
 	}
+
+	/**
+	 * UN colegio para toda la clase (la instalación del CI admite 25 colegios y las demás pruebas de MySQL ya crean
+	 * varios): cada prueba usa una sección propia de ese colegio, con su tutor(a) y sus dos alumnos.
+	 */
+	private static EscuelaConDocentesMySql.Escuela compartida;
 
 	private JdbcTemplate sistema() {
 		FuenteDatosEnrutada enrutada = (FuenteDatosEnrutada) fuenteDatos;
@@ -162,7 +164,7 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 	}
 
 	private LocalDate hoyEnLaBase() {
-		return jdbc.queryForObject("SELECT cc_hoy_lima()", LocalDate.class);
+		return jdbc.queryForObject("SELECT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR)", LocalDate.class);
 	}
 
 	/** Las pruebas que registran «hoy» necesitan un día de clases (lunes a viernes, sin feriado nacional). */
@@ -173,21 +175,27 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 	}
 
 	private Clase clase(String marca, String celular) {
-		EscuelaConDocentesMySql.Escuela e = EscuelaConDocentesMySql.crear(sufijo + marca, "20600000056", celular, alta,
-				servicioUsuarios, usuarios, codificador, colegios, estructura, jdbc);
-		LocalDate hoy = hoyEnLaBase();
-		// El año del alta (2027) pasa a cubrir hoy (cc_app tiene UPDATE de anio_escolar; sin trigger).
-		jdbc.update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(40),
-				hoy.plusDays(40), e.anioId());
+		if (compartida == null) {
+			compartida = EscuelaConDocentesMySql.crear(sufijo + "asis", "20600000056", celular, alta, servicioUsuarios,
+					usuarios, codificador, colegios, estructura, jdbc);
+			LocalDate hoy = hoyEnLaBase();
+			// El año del alta (2027) pasa a cubrir hoy (cc_app tiene UPDATE de anio_escolar; sin trigger).
+			jdbc.update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(40),
+					hoy.plusDays(40), compartida.anioId());
+		}
+		EscuelaConDocentesMySql.Escuela e = compartida;
+		long seccion = como(e.equipo().administracion(), () -> estructura.crearSeccion(e.anioId(),
+				new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest(
+						pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "T" + marca + numero(4))));
 		UsuariosDePrueba.iniciarSesion(e.equipo().administracion());
 		Long alumno = alumnos.registrar(EscenarioEscolar.conApoderadoNuevo("71" + numero(6), "Quispe", "Rojas", "Mateo",
 				LocalDate.of(2016, 3, 3), "45" + numero(6), "Rojas", "Paz", "Rosa", null, "rosa." + sufijo + marca
-						+ "@correo.pe", e.seccionA())).alumnoId();
+						+ "@correo.pe", seccion)).alumnoId();
 		Long otro = alumnos.registrar(EscenarioEscolar.conApoderadoNuevo("72" + numero(6), "Flores", "Díaz", "Lucas",
 				LocalDate.of(2016, 4, 4), "46" + numero(6), "Flores", "Luna", "Pedro", null, "pedro." + sufijo + marca
-						+ "@correo.pe", e.seccionA())).alumnoId();
+						+ "@correo.pe", seccion)).alumnoId();
 		SecurityContextHolder.clearContext();
-		Long id = como(e.equipo().administracion(), () -> asignaciones.proponer(new ProponerAsignacionRequest(e.seccionA(),
+		Long id = como(e.equipo().administracion(), () -> asignaciones.proponer(new ProponerAsignacionRequest(seccion,
 				e.docente().getId(), TipoAsignacion.TUTOR, null, "Tutoría del año aprobada por Dirección")));
 		Long solicitud = jdbc.queryForObject("SELECT solicitud_id FROM asignacion_docente WHERE id = ?", Long.class, id);
 		como(e.equipo().directora(), () -> {
@@ -197,7 +205,7 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 		Long apoderado = jdbc.queryForObject("SELECT a.id FROM apoderado a JOIN alumno al ON al.familia_id = a.familia_id "
 				+ "WHERE al.id = ?", Long.class, alumno);
 		Long matricula = jdbc.queryForObject("SELECT id FROM matricula WHERE alumno_id = ?", Long.class, alumno);
-		return new Clase(e, alumno, otro, apoderado, matricula);
+		return new Clase(e, seccion, alumno, otro, apoderado, matricula);
 	}
 
 	private String numero(int digitos) {
@@ -249,7 +257,7 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 		Long sesion = sesionDe(quien);
 		Long registro = jdbc.queryForObject("SELECT registro_id FROM marca_asistencia WHERE id = ?", Long.class, reemplaza);
 		LocalDate fecha = jdbc.queryForObject("SELECT fecha FROM marca_asistencia WHERE id = ?", LocalDate.class, reemplaza);
-		return new TransactionTemplate(transacciones).execute(t -> {
+		return this.<Integer>transaccion(quien, t -> {
 			if (clave != null) {
 				UsuariosDePrueba.iniciarSesion(quien);
 				firma.firmar(clave);
@@ -272,7 +280,7 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 		Usuario docente = c.escuela().docente();
 		Long sesion = sesionDe(docente);
 		for (LocalDate fecha : new LocalDate[] { hoyEnLaBase().minusDays(1), hoyEnLaBase().plusDays(1) }) {
-			Integer codigo = new TransactionTemplate(transacciones).execute(t -> {
+			Integer codigo = this.<Integer>transaccion(docente, t -> {
 				UsuariosDePrueba.iniciarSesion(docente);
 				firma.firmar(ClaveFirma.asistenciaRegistrada(c.seccion(), fecha));
 				SecurityContextHolder.clearContext();
@@ -295,7 +303,7 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 		Usuario directora = c.escuela().equipo().directora();
 		// Dirección (sin asignación en la sección), aunque firme: 1644.
 		Long sesionDirectora = sesionDe(directora);
-		assertThat(this.<Integer>transaccion(t -> {
+		assertThat(this.<Integer>transaccion(directora, t -> {
 			UsuariosDePrueba.iniciarSesion(directora);
 			firma.firmar(ClaveFirma.asistenciaRegistrada(c.seccion(), hoy));
 			SecurityContextHolder.clearContext();
@@ -309,7 +317,7 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 		assertThat(codigoAl(() -> jdbc.update(REGISTRO, c.colegio(), c.escuela().anioId(), c.seccion(), hoy, "DOCENTE",
 				docente.getNombreUsuario(), sesion, docente.getNombreUsuario()))).isEqualTo(1644);
 		// El docente con firma pero con la fuente MARCADOR: 1644 (E50).
-		assertThat(this.<Integer>transaccion(t -> {
+		assertThat(this.<Integer>transaccion(docente, t -> {
 			UsuariosDePrueba.iniciarSesion(docente);
 			firma.firmar(ClaveFirma.asistenciaRegistrada(c.seccion(), hoy));
 			SecurityContextHolder.clearContext();
@@ -321,7 +329,7 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 		// El otro docente (sin asignación en la sección), con su firma: 1644 (E2).
 		Usuario otro = c.escuela().otroDocente();
 		Long sesionOtro = sesionDe(otro);
-		assertThat(this.<Integer>transaccion(t -> {
+		assertThat(this.<Integer>transaccion(otro, t -> {
 			UsuariosDePrueba.iniciarSesion(otro);
 			firma.firmar(ClaveFirma.asistenciaRegistrada(c.seccion(), hoy));
 			SecurityContextHolder.clearContext();
@@ -452,7 +460,7 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 				.isEqualTo("REVERSION_JUSTIFICACION");
 		// La familia no la vuelve a justificar, ni saltándose la aplicación (con su sesión y su firma): 1644 (A3).
 		Long sesionFamilia = como(familia, () -> tokens.actual().map(SesionAbierta::sesionId).orElseThrow());
-		Integer rejustificar = new TransactionTemplate(transacciones).execute(t -> {
+		Integer rejustificar = this.<Integer>transaccion(familia, t -> {
 			UsuariosDePrueba.iniciarSesion(familia);
 			firma.firmar(ClaveFirma.marcaJustificada(revertida));
 			SecurityContextHolder.clearContext();
@@ -490,7 +498,7 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 		LocalDate ayer = hoyEnLaBase().minusDays(1);
 		Long otraSolicitud = jdbc.queryForObject("SELECT MAX(id) FROM solicitud_cambio WHERE colegio_id = ?", Long.class,
 				c.colegio());
-		assertThat(this.<Integer>transaccion(t -> {
+		assertThat(this.<Integer>transaccion(docente, t -> {
 			UsuariosDePrueba.iniciarSesion(docente);
 			firma.firmar(ClaveFirma.asistenciaRegistrada(c.seccion(), ayer));
 			SecurityContextHolder.clearContext();
@@ -515,7 +523,7 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 		assertThat(codigoAl(() -> jdbc.update(insertar, c.colegio(), "11:00:00", admin, admin))).isEqualTo(1644);
 		assertThat(codigoAl(() -> jdbc.update(insertar, c.colegio(), "11:00:00", directora, directora))).isEqualTo(1644);
 		// Por la aplicación (Dirección con su firma), sí.
-		ajustarCierre(c, LocalTime.of(16, 0));
+		ajustarCierre(c, LocalTime.of(15, 30));
 		assertThat(jdbc.queryForObject("SELECT actualizado_por FROM configuracion_academica WHERE colegio_id = ?",
 				String.class, c.colegio())).isEqualTo(directora);
 		// UPDATE sin firma nueva (o a nombre de Administración): 1644. El aviso a las 20:00: 3819.
@@ -589,26 +597,38 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 	@Test
 	void a12ZonaDeVenceEnEsLima() {
 		Clase c = clase("l", "987654511");
-		Usuario docente = c.escuela().docente();
+		// cc_app no llama a cc_sesion_abierta directamente (no tiene EXECUTE): se prueba por el trigger que la usa. La
+		// Administración registra un consentimiento desde la ficha con cada sesión (trg_consentimiento_aviso_nace).
+		Usuario admin = c.escuela().equipo().administracion();
 		String abrir = "INSERT INTO sesion_usuario (colegio_id, usuario_id, hash_token, ip, abierta_en, vence_en, creado_en, "
 				+ "creado_por, actualizado_en) VALUES (?, ?, ?, '127.0.0.1', UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL ? "
 				+ "MINUTE, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR + INTERVAL ? MINUTE, NOW(6), 'prueba', NOW(6))";
 		RutaConexion.identidad(() -> {
-			sistema().update(abrir, c.colegio(), docente.getId(), "a".repeat(48) + numero(16), 0, 1);
-			sistema().update(abrir, c.colegio(), docente.getId(), "b".repeat(48) + numero(16), 4, -1);
+			sistema().update(abrir, c.colegio(), admin.getId(), "a".repeat(48) + numero(16), 0, 1);
+			sistema().update(abrir, c.colegio(), admin.getId(), "b".repeat(48) + numero(16), 4, -1);
 			return null;
 		});
 		List<Long> sesiones = jdbc.queryForList("SELECT id FROM sesion_usuario WHERE usuario_id = ? ORDER BY id DESC LIMIT 2",
-				Long.class, docente.getId());
+				Long.class, admin.getId());
 		Long vencida = sesiones.get(0);
 		Long vigente = sesiones.get(1);
-		assertThat(jdbc.queryForObject("SELECT cc_sesion_abierta(?, ?, ?)", Boolean.class, vigente,
-				docente.getNombreUsuario(), c.colegio())).isTrue();
-		assertThat(jdbc.queryForObject("SELECT cc_sesion_abierta(?, ?, ?)", Boolean.class, vencida,
-				docente.getNombreUsuario(), c.colegio())).isFalse();
-		// Y cc_hoy_lima es la fecha de Lima de la base.
-		assertThat(hoyEnLaBase()).isEqualTo(jdbc.queryForObject("SELECT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR)",
-				LocalDate.class));
+		String consentimiento = "INSERT INTO consentimiento_aviso (colegio_id, familia_id, apoderado_id, finalidad, canal, "
+				+ "otorgado, contacto_principal, origen, evidencia, aviso_privacidad_version, sesion_id, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (?, (SELECT familia_id FROM apoderado WHERE id = ?), ?, 'ASISTENCIA', 'CORREO', TRUE, "
+				+ "FALSE, 'FICHA', 'FM-A12', 'v1', ?, NOW(6), ?, NOW(6))";
+		// La que vence en 1 minuto (hora de Lima) sirve; la vencida hace 1 minuto, no (con UTC, las dos al revés).
+		assertThat(jdbc.update(consentimiento, c.colegio(), c.apoderado(), c.apoderado(), vigente, admin.getNombreUsuario()))
+				.isEqualTo(1);
+		assertThat(codigoAl(() -> jdbc.update(consentimiento, c.colegio(), c.apoderado(), c.apoderado(), vencida,
+				admin.getNombreUsuario()))).isEqualTo(1644);
+		// Y la Caja (no es Administración ni Dirección) no registra desde la ficha aunque tenga sesión: 1644 (E38).
+		Long caja = jdbc.queryForObject("SELECT MIN(u.id) FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id "
+				+ "WHERE u.colegio_id = ? AND r.rol = 'CAJA'", Long.class, c.colegio());
+		String cajera = jdbc.queryForObject("SELECT nombre_usuario FROM usuario WHERE id = ?", String.class, caja);
+		RutaConexion.identidad(() -> sistema().update(abrir, c.colegio(), caja, "c".repeat(48) + numero(16), 0, 5));
+		Long sesionCaja = jdbc.queryForObject("SELECT MAX(id) FROM sesion_usuario WHERE usuario_id = ?", Long.class, caja);
+		assertThat(codigoAl(() -> jdbc.update(consentimiento, c.colegio(), c.apoderado(), c.apoderado(), sesionCaja,
+				cajera))).isEqualTo(1644);
 	}
 
 	/** Dirección pone la hora del segundo aviso (con su firma, por la aplicación). */
@@ -630,6 +650,31 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 				Usuario.deApoderado(documento, nombre, null, codificador.encode(UsuariosDePrueba.CLAVE), c.apoderado()))));
 		return new UsuarioAutenticado(cuenta.getId(), c.colegio(), cuenta.getNombreUsuario(), nombre, null, true, false,
 				false, EnumSet.of(Rol.APODERADO), c.apoderado());
+	}
+
+	/**
+	 * La transacción con la persona YA en sesión: Hibernate fija el colegio de la sesión (el {@code @TenantId} de la firma)
+	 * al empezar la transacción, así que la persona va antes.
+	 */
+	private <T> T transaccion(Usuario quien, org.springframework.transaction.support.TransactionCallback<T> operacion) {
+		UsuariosDePrueba.iniciarSesion(quien);
+		try {
+			return new TransactionTemplate(transacciones).execute(operacion);
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+	}
+
+	private <T> T transaccion(UsuarioAutenticado quien,
+			org.springframework.transaction.support.TransactionCallback<T> operacion) {
+		UsuariosDePrueba.iniciarSesion(quien);
+		try {
+			return new TransactionTemplate(transacciones).execute(operacion);
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
 	}
 
 	private <T> T transaccion(org.springframework.transaction.support.TransactionCallback<T> operacion) {

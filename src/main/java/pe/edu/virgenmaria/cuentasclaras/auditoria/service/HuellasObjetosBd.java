@@ -98,11 +98,36 @@ public final class HuellasObjetosBd {
 	 */
 	public static String normalizar(String cuerpo) {
 		String sinComentarios = COMENTARIO.matcher(cuerpo).replaceAll("");
-		return ESPACIOS.matcher(sinComentarios.replace(ESCAPE_SALTO, "\n")).replaceAll(" ").trim();
+		return ESPACIOS.matcher(sinEscapes(sinComentarios)).replaceAll(" ").trim();
 	}
 
-	/** La barra invertida seguida de «n» dentro de un literal SQL. */
-	private static final String ESCAPE_SALTO = "\\" + "n";
+	/**
+	 * Las secuencias de escape que MySQL procesa al guardar el cuerpo: la barra y la «n» (un salto de línea) y, desde el
+	 * sprint 9, tanda 2, dos barras seguidas (quedan en una: la expresión de cobranza de trg_mensaje_nace; comprobado en
+	 * MySQL 8.4.11). Las demás (como la barra y el guion bajo de un LIKE) quedan tal cual, igual que en MySQL.
+	 */
+	static String sinEscapes(String texto) {
+		StringBuilder resultado = new StringBuilder(texto.length());
+		for (int i = 0; i < texto.length(); i++) {
+			char c = texto.charAt(i);
+			char siguiente = i + 1 < texto.length() ? texto.charAt(i + 1) : 0;
+			if (c == BARRA && siguiente == 'n') {
+				resultado.append('\n');
+				i++;
+			}
+			else if (c == BARRA && siguiente == BARRA) {
+				resultado.append(BARRA);
+				i++;
+			}
+			else {
+				resultado.append(c);
+			}
+		}
+		return resultado.toString();
+	}
+
+	/** La barra invertida de las secuencias de escape de un literal SQL. */
+	private static final char BARRA = '\\';
 
 	/** Las sentencias de un script, sin comentarios y respetando {@code DELIMITER}. */
 	static List<String> sentencias(String sql) {

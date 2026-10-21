@@ -13,6 +13,7 @@ import pe.edu.virgenmaria.cuentasclaras.academico.dto.RegistroTardioRequest;
 import pe.edu.virgenmaria.cuentasclaras.academico.dto.ResultadoRegistro;
 import pe.edu.virgenmaria.cuentasclaras.academico.dto.SeccionDocente;
 import pe.edu.virgenmaria.cuentasclaras.academico.dto.SeccionesDeHoy;
+import pe.edu.virgenmaria.cuentasclaras.academico.dto.TardioAprobado;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.ConfiguracionAcademica;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.EstadoAsistencia;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.MarcaAsistencia;
@@ -151,14 +152,14 @@ public class ServicioAsistencia {
 
 	/** Los registros tardíos aprobados del docente que todavía no registró (para abrir esa hoja). */
 	@Transactional(readOnly = true)
-	public List<SolicitudCambio> tardiosPorRegistrar() {
+	public List<TardioAprobado> tardiosPorRegistrar() {
 		String yo = PersonaEnSesion.actual().getUsername();
 		LocalDate hoy = hoy();
 		return solicitudes.findByTipoOrderByIdDesc(TipoSolicitud.REGISTRO_ASISTENCIA_TARDIO).stream()
 				.filter(s -> s.getEstado() == EstadoSolicitud.APROBADA && yo.equals(s.getSolicitadoPor()))
 				.filter(s -> fechaDe(s).map(f -> !f.isBefore(hoy.minusDays(MAX_DIAS_TARDIO))
 						&& registros.findBySeccionIdAndFecha(s.getEntidadId(), f).isEmpty()).orElse(false))
-				.toList();
+				.map(s -> new TardioAprobado(s.getId(), s.getEntidadId(), s.getResumen())).toList();
 	}
 
 	/** La hoja de hoy de una sección del docente (404 si no es suya). */

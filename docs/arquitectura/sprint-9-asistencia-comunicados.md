@@ -1992,3 +1992,145 @@ lista de alumnos sin montos, y Caja y Alumnos le responden 403. Operación: `doc
   la red de la demo, la imagen `cuentas-claras:ci` y las copias de la rama se borraron al terminar; los registros quedaron
   fuera del repositorio. No se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`, `smarthr-*`, `supabase_*` ni
   `cc-mysql-s5*`.
+
+## Tanda 2 · Implementación
+
+> Implementada el 21 de octubre de 2026 en la rama `claude/sprint-9-asistencia-comunicados` (agente `backend-spring`,
+> «Método por sprint»: brief `docs/arquitectura/sprint-9/tanda-2.md`, PR en borrador #18 con el CI como verificación).
+> V33, **93 triggers y 10 funciones en `03` (13 con huella con las 3 de `02`): 106 huellas**, como pedía el brief.
+> Sin código de PDFBox (tanda 3). Resultados de la verificación: al final de esta sección.
+
+### Qué se hizo
+**Base (V33, `02` y `03`).**
+- `V33__asistencia_y_consentimientos.sql`: `configuracion_academica`, `registro_asistencia`, `marca_asistencia`,
+  `consentimiento_aviso`, `aviso_asistencia_corte`, `asignacion_docente.hasta` con `ck_asignacion_docente_hasta`, el CHECK
+  `ck_marca_asistencia_justificada` (A1) y los tipos `ASISTENCIA_DIA` y `ASISTENCIA_CORREGIDA` (la lista de V31 completa) con
+  `ix_mensaje_tipo_fecha`. Se aplicó sobre V1–V32 en H2 2.4.240 (MODE=MySQL) y en MySQL 8.4 (desviación 1).
+- `02`: bloque «Sprint 9 · tanda 2»: solo INSERT en las tres tablas de solo inserción; INSERT y UPDATE por columna en
+  `configuracion_academica`; `hasta` fuera del UPDATE de `asignacion_docente` (1143); la marca de agua, solo `cc_sistema`
+  (INSERT y UPDATE de `ultima_marca_id`, `actualizado_en` y `version`; con `cc_app`, 1142).
+- `03`: `cc_hoy_lima`, `cc_sesion_abierta` y la versión nueva de `cc_docente_de_seccion` (después de `cc_hoy_lima`);
+  `trg_registro_asistencia_nace`, `trg_consentimiento_aviso_nace`, `trg_marca_asistencia_nace`,
+  `trg_configuracion_academica_nace` y `_cambio`; versiones nuevas de `trg_asignacion_docente_nace` (cobertura de hasta 10
+  días calendario) y `trg_mensaje_nace` (asistencia). Encabezado con la versión de V33 y la anterior de V32.
+- `VerificadorPermisosBaseDatos`: 93 triggers; con `cc_app`, 1142 en `registro_asistencia`, `marca_asistencia` y
+  `consentimiento_aviso` (UPDATE y DELETE) y en toda escritura de `aviso_asistencia_corte`, 1143 en `asignacion_docente.hasta`,
+  1644 de un registro «del día» de ayer del colegio 0 y de una configuración académica sin Dirección ni firma; con
+  `cc_sistema`, 1644 de un aviso de asistencia con «S/ 350.00», 1142 y 1143 en la marca de agua. Avisa en el log (sin impedir
+  arrancar) si un colegio en producción tiene menos de 2 personas activas de Promotoría o Dirección (A8).
+- `tablas-vigiladas.txt`: `registro_asistencia`, `marca_asistencia` y `consentimiento_aviso` (H13; `respaldar.sh` los
+  cuenta por colegio sin cambios, porque toma la lista del archivo).
+
+**Aplicación.**
+- `academico.model`: `RegistroAsistencia`, `MarcaAsistencia` y `ConsentimientoAviso` (solo inserción: ninguna columna propia
+  actualizable, `@PreUpdate` y `@PreRemove` que fallan), `ConfiguracionAcademica` y `AvisoAsistenciaCorte` (la clave es el
+  colegio), los enums `EstadoAsistencia`, `OrigenMarca`, `OrigenRegistro`, `FuenteAsistencia`, `MotivoJustificacion`,
+  `Finalidad`, `Canal` y `OrigenConsentimiento`; `AsignacionDocente.hasta` (`updatable = false`).
+- Repositorios sin `delete*`, sin `@Modifying` y sin heredar de `CrudRepository`.
+- `academico.service`:
+  - `ServicioAsistencia` (DOCENTE): las secciones de hoy, la hoja (todos en «Presente»; `LISTA_SECCION`), el guardado en UN
+    POST con UNA firma (`asistencia:{seccion}:{fecha}:REGISTRADA`), la corrección del día hasta la hora del segundo aviso con
+    su firma (`marca_asistencia:{id}:CORREGIDA`), las solicitudes `CORRECCION_ASISTENCIA` y `REGISTRO_ASISTENCIA_TARDIO` y la
+    hoja del día pasado aprobado;
+  - `ManejadorCorreccionAsistencia` y `ManejadorRegistroTardio` (la bandeja de siempre; vuelven a validar que la marca sigue
+    vigente y que quien pidió sigue siendo docente de la sección, A13);
+  - `AsistenciaDireccion` (DIRECTOR): los cambios del día, resaltando los de después del aviso (E5), y la reversión con su
+    firma (`marca_asistencia:{id}:REVERTIDA`), nunca en una sección donde enseña (A13);
+  - `JustificacionesFamilia` (APODERADO): el mes de cada hijo y la justificación con su firma
+    (`marca_asistencia:{id}:JUSTIFICADA`), dentro de los días hábiles del colegio, nunca sobre una reversión (A3);
+  - `ConsentimientosAviso` (portal y ficha) y `ConsentimientosVigentes` (`academico.api.Consentimientos`);
+  - `ConfiguracionesAcademicas` (cambia solo DIRECTOR, con `configuracion_academica:{colegio}:CAMBIADA:{version}`, resaltado);
+  - `ReportesAsistencia` (tutor y Dirección; `REPORTE_ASISTENCIA`), `AlertasAcademicas` (`TipoAviso.SECCION_SIN_ASISTENCIA`,
+    con los nombres de las secciones y registros incompletos, A4 y A7) y `AvisosDeAsistencia`
+    (`academico.api.InasistenciasDelDia`, solo `sistema.asistencia`).
+  - `Asignaciones`: la cobertura con `hasta` (hasta 5 días hábiles con feriados, nunca de tutor); `AsignacionesDeSistema` la
+    termina al día siguiente de su fin.
+- `comunicacion`: `TipoMensaje` y `PlantillaMensaje` (+2: `cc_asistencia_v2` y `cc_asistencia_corregida_v2`, con el botón y
+  el enlace del correo a `/familia/asistencia`); `CreadorMensajes.paraApoderadoConConsentimiento` y el respaldo por correo de
+  un aviso de asistencia solo sin oposición; `service.AvisosAsistenciaFamilias` y `proceso.AvisosAsistencia` (cada 5 minutos,
+  lunes a viernes de 07:00 a 19:55; primer envío a la hora del aviso, segundo a la del segundo aviso, con la marca de agua).
+- `comun.texto.ContenidoSinCobranza`: la MISMA expresión de `trg_mensaje_nace` (una prueba las compara).
+- `aprobaciones.service.AlertasSolicitudesPendientes` (`TipoAviso.SOLICITUDES_PENDIENTES` a Promotoría, más de 2 días
+  hábiles); `MensajesPromotoria` manda `SECCION_SIN_ASISTENCIA` solo a Dirección. `TipoSolicitud` (+2), `ActorSistema.ASISTENCIA`,
+  `AccionAuditoria` (+9), `ClaveFirma` (+5), la lista de puesta en marcha (A8) y «Mis datos» (usos y plazos nuevos).
+- `ModuloApp`: `CONFIGURACION_ACADEMICA` y `ASISTENCIA_DIRECCION` (DIRECTOR), `REPORTE_ASISTENCIA` (DIRECTOR y DOCENTE),
+  `ASISTENCIA` (solo DOCENTE: Dirección recibe 403, E49), `CONSENTIMIENTOS_FICHA` (DIRECTOR y ADMINISTRACION), todos antes de
+  las reglas más amplias. El portal (`/familia/asistencia/**`, `/familia/avisos`) va por `FAMILIA`.
+- `academico.web`: `AsistenciaController`, `AsistenciaDireccionController`, `ReporteAsistenciaController`,
+  `ConfiguracionAcademicaController`, `PortalAsistenciaController` y `ConsentimientosFichaController`, sin lógica. Vistas
+  `academico/asistencia`, `hoja`, `cambios`, `reporte` y `configuracion`, `familia/asistencia` y `avisos`, y
+  `alumnos/consentimientos` (sin estilos ni scripts en línea: la hoja usa radios, un toque por alumno, sin JavaScript).
+- `docs/entrega/plantillas-whatsapp-meta.md` (26 → 28), `docs/manuales/docente.md`, `docs/operacion/mysql-usuarios.md`,
+  `despliegue-gcp.md`, `acta-paso-0-cloud-sql.md`, `deploy/gcp/paso-0.sh` y `deploy/vm/en-la-vm.sh` con 93 y 13.
+- CI: fase 1 con V1–V33; paso nuevo «Sprint 9, tanda 2» (`AuditoriaSprint9AsistenciaMySqlTest`); el paso `comprobar` con los
+  casos de la tabla 7.4; huellas 106 (93 + 13) y prod «Huellas de los 93 triggers y las 13 funciones verificadas»; job
+  `respaldo` con el caso `faltan-filas-asistencia` (una marca borrada como DBA en un colegio marca solo a ese colegio).
+
+**Pruebas nuevas o cambiadas.**
+- H2: `RegistroAsistenciaTest` (6: E1, E2, E49 con 403, el formulario en un POST, 30 alumnos con UNA firma, la hoja
+  incompleta), `MarcaVigenteTest` (E8), `CorreccionAsistenciaTest` (5: E5 con el aviso de la corrección, la lista de
+  Dirección, E6 con la bandeja y «quien pide no aprueba», E52, E10), `JustificacionTest` (7: E11, E13, E14, E35, E53, la
+  bitácora sin la nota, el docente no corrige una justificación), `ConsentimientosTest` (3, E38), `AvisosAsistenciaTest` (7:
+  uno por familia y día, el horario, WhatsApp con consentimiento y si no correo, la oposición al correo, A1, A2 y el segundo
+  envío), `AsistenciaSinDeudaTest` (E39, con cuotas vencidas de verdad), `AlertasAcademicasTest` (2: sin registro y
+  registro incompleto, A4), `ConfiguracionAcademicaTest` (3: E15 y E55), `CoberturaTest` (2: E56), `InmutabilidadAsistenciaTest`
+  (5), `MarcaPedidaSinFuenteTest` (2, A15), `ContenidoSinCobranzaTest` (24, la expresión de Java es la de `03`),
+  `AlertasSolicitudesPendientesTest` (A8); `ReglasArquitecturaTest` (nadie usa `FuenteAsistencia.MARCADOR`; los avisos de
+  asistencia solo leen `academico.api`; los `@PreAuthorize` exactos de los servicios nuevos); `RutasIdorTest` y
+  `CatalogoRutasConId` con las 12 rutas nuevas, `?seccion=` y `?apoderado=` (A11) y una marca de otra familia;
+  `VerificadorPermisosBaseDatosTest` (A8 y los triggers nuevos); `HuellasObjetosBdTest` (93 y 106), `MigradorBaseDatosTest`,
+  `MigracionMySqlTest` (V33), `VerificadorRespaldoTest`, `ClaveFirmaTest` y `PlantillasMetaDocTest`.
+- MySQL real: `mysql/AuditoriaSprint9AsistenciaMySqlTest` (E1 y E9, E2, E49, E50, E54, E7, E8 con 1062, E51 con 3819 y 1644,
+  E12, E13, E53, E52, E10, E55 y E15, E56, E37, E40, la expresión con «Pagán» y «Vencesla» en ICU y A12) y
+  `PermisosMySqlTest.flujoAsistenciaConPermisosMinimos` (configuración con firma, registro con una firma, corrección del día
+  o solicitud aprobada, consentimiento y justificación de la familia, reversión de Dirección y la marca de agua de
+  `sistema.asistencia` con `cc_sistema`).
+
+### Desviaciones del diseño
+1. **Los CHECK de V33 llevan `IS NOT NULL`** en `primera`, `motivo`, `motivo_justificacion` y `evidencia` (la lección de V32:
+   escritos como en la sección 6, una marca REGISTRO con `primera` NULL, una corrección sin motivo o una ficha sin evidencia
+   pasaban). `configuracion_academica` lleva además `ck_configuracion_academica_actor` (nadie «sistema»).
+2. **La firma de la configuración lleva la versión** (`configuracion_academica:{colegio}:CAMBIADA:{version}`): la firma es
+   única por clave (`uk_firma_operacion`) y la configuración se cambia más de una vez. `trg_configuracion_academica_nace` y
+   `_cambio` la comparan con `NEW.version` (0 al crear; la que tendrá la fila al cambiar).
+3. **`trg_marca_asistencia_nace` lee con `SET v = (SELECT …)`**, no con `SELECT … INTO` (sin fila, la variable queda en NULL
+   sin la condición «sin datos»); y compara con `<=>` donde el valor puede faltar (`v_origen_anterior` de una marca inicial).
+4. **El respaldo por correo de un aviso de asistencia lo crea `sistema.mensajeria`** (el despacho, como el de los avisos de
+   pago): `trg_mensaje_nace` lo acepta solo con `respaldo_de_id` (la regla del respaldo exige un WhatsApp FALLIDO del mismo
+   tipo y apoderado), y la aplicación lo crea solo si el apoderado no se opuso al correo.
+5. **La huella de un cuerpo procesa también dos barras seguidas** (`HuellasObjetosBd.sinEscapes`): MySQL guarda la expresión
+   de cobranza (`'\\b…'` en `03`) con una sola barra, igual que guarda `'\n'` como un salto de línea. Sin eso, prod no
+   arrancaba con la versión nueva de `trg_mensaje_nace` («huella distinta»; lo vio el job `mysql` reproducido).
+6. **Cuándo toca cada envío:** el proceso corre cada 5 minutos y decide por la hora del colegio y el momento del último envío
+   (`aviso_asistencia_corte.actualizado_en`, que escribe solo `cc_sistema`); si el primer envío no salió (servidor caído),
+   sale primero aunque ya sea la hora del segundo. La marca de agua se lee ANTES que las marcas: lo que llegue mientras tanto
+   sale en el envío siguiente.
+7. **Hasta 2 apoderados por familia, los primeros (por id) que reciben por algún canal.** La elección de la familia en el
+   portal («cuáles») queda para la tanda 3 junto con el contacto principal de los comunicados.
+8. **La alerta «sección sin asistencia» al celular dice cuántas** (el `Aviso` del sprint 6 solo admite montos, horas o
+   números: hallazgo 2); **los nombres de las secciones** van en la tarjeta de alertas (y Dirección los ve en «Académico»).
+   Va SOLO a Dirección (`TipoAviso.soloDireccion`).
+9. **El reporte por alumno es la fila del reporte de la sección** (tutor y Dirección), sin una pantalla aparte; la nota de una
+   justificación la ve el tutor en la hoja y Dirección en «Cambios de la asistencia» (E35).
+10. **La hoja muestra solo matrículas ACTIVAS** (las que exige el trigger). Un alumno matriculado después del registro deja
+    el registro incompleto (la alerta lo cuenta, A4) y lo completa el mismo docente desde la hoja.
+11. **Una solicitud `REGISTRO_ASISTENCIA_TARDIO` pendiente por sección a la vez** (`RegistroSolicitudes` no admite dos
+    pendientes de la misma entidad). La corrección aprobada la inserta quien aprueba (`creado_por` = Dirección, con su sesión).
+12. **A8 en `VerificadorPermisosBaseDatos`** (necesita la base) y en la puesta en marcha; `VerificadorConfiguracion` solo lee
+    el entorno. «Mis datos» explica la asistencia y los avisos y remite a «Asistencia» y «Mis avisos» del portal, que los
+    muestran completos; «Datos con plazo vencido» no suma todavía la asistencia (ningún dato vence antes de 2029).
+13. **El job `respaldo`** agrega el caso `faltan-filas-asistencia` (después de «Destino simulado»); si la fase 2 corrió en
+    un día sin clases no hay marcas y el caso se omite con un aviso.
+
+### Riesgos y pendientes de la tanda
+- **No implementado en esta tanda** (queda en el diseño): la prueba de carga de 40 secciones en el mismo minuto, los casos
+  nuevos de `LogsSinDatosPersonalesTest`, E57 en MySQL (director que enseña no revierte en su sección: lo cubren la
+  aplicación y el trigger, sin prueba de MySQL), E56 «cobertura vencida no marca» en MySQL (no se puede envejecer una
+  cobertura sin el DBA: se prueba en H2 con `CoberturaTest` y el borde «vence hoy da acceso» en MySQL), la elección de los
+  2 apoderados por la familia y la alerta de más de 30 consentimientos de ficha por persona (hoy queda en el texto del
+  evento).
+- **Las pruebas de MySQL que registran «hoy» se omiten en fin de semana o feriado** (el día lo decide la base) y la
+  corrección del día, después de las 18:00 de Lima: un CI en esas horas prueba menos.
+- **Un nombre de colegio con una palabra de cobranza** deja todos sus avisos de asistencia sin crear (la regla corre sobre
+  todos los parámetros); el proceso lo reintenta cada 5 minutos y queda en el log técnico.
+- Decisiones 144 y 157 confirmadas; 145 a 153 aplicadas con su valor por defecto.

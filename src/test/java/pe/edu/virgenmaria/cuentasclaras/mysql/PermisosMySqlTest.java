@@ -4111,10 +4111,10 @@ class PermisosMySqlTest {
 	void flujoAsistenciaConPermisosMinimos() {
 		EscuelaConDocentesMySql.Escuela escuela = EscuelaConDocentesMySql.crear(sufijo + "s", "20600000048", "987653181",
 				alta, servicioUsuarios, usuarios, codificador, colegiosDeLaBase, estructura, jdbc);
-		java.time.LocalDate hoy = jdbc.queryForObject("SELECT cc_hoy_lima()", java.time.LocalDate.class);
+		java.time.LocalDate hoy = jdbc.queryForObject("SELECT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR)", java.time.LocalDate.class);
 		jdbc.update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(40),
 				hoy.plusDays(40), escuela.anioId());
-		// Dirección: las horas (el cierre de las correcciones a las 19:30 para que el flujo corra casi todo el día).
+		// Dirección: las horas (el cierre de las correcciones a las 18:00, el máximo, para que el flujo corra casi todo el día).
 		UsuariosDePrueba.iniciarSesion(escuela.equipo().directora());
 		configuracionesAcademicas.cambiar(new pe.edu.virgenmaria.cuentasclaras.academico.model.ConfiguracionAcademica.Valores(
 				java.time.LocalTime.of(9, 30), java.time.LocalTime.of(10, 30), java.time.LocalTime.of(18, 0), 5, 5,
