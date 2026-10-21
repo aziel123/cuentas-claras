@@ -46,3 +46,23 @@ Flujo sugerido para una funcionalidad: `investigador-ux` → `arquitecto-softwar
 - Toda entidad de negocio lleva `colegioId` y toda consulta filtra por él.
 - Quien cobra no aprueba (segregación de funciones).
 - Nada de credenciales en el código: van en variables de entorno.
+
+## Método por sprint (desde el 21-oct-2026)
+Este método busca la misma calidad con menos espera. **No elimina ningún control**: solo cambia dónde y cuándo se corre cada uno.
+
+1. **Diseño:** `arquitecto-software` escribe `docs/arquitectura/sprint-N-*.md` y, además, un **brief por tanda** de unas 150 líneas en `docs/arquitectura/sprint-N/tanda-K.md`. El brief trae alcance, migración, triggers y huellas esperadas, archivos que toca, pruebas obligatorias y riesgos.
+2. **Auditoría del diseño:** antes de implementar, `auditor-seguridad-antifraude` revisa el diseño en papel. Los hallazgos críticos y altos se corrigen en el diseño antes de codear.
+3. **PR en borrador desde el inicio del sprint:** cada tanda hace push a la rama del sprint y el CI de GitHub corre los jobs completos (pruebas, zona horaria de Los Ángeles, MySQL real, respaldo, demo, dependencias y gitleaks).
+4. **Implementación** (`backend-spring`), por tanda:
+   - en local, `./mvnw -B verify` una vez, más las pruebas de MySQL real de lo que se tocó (triggers, permisos, migración nueva);
+   - la réplica local completa de los jobs del CI solo hace falta si el CI falla y hay que diagnosticar;
+   - **la tanda está terminada cuando el CI del PR en borrador está en verde.** Si falla, se corrige antes de seguir.
+5. **QA y auditoría del código**, en paralelo y cada uno en su worktree. **Correcciones** con su documento de correcciones.
+6. El PR se marca listo cuando las correcciones tienen el CI en verde. El merge lo hace el usuario.
+
+**Reglas de ejecución para los agentes:**
+- Leer primero el brief de la tanda; el diseño completo, solo en las secciones que se necesiten.
+- Comandos largos (verify, jobs de MySQL, renders) siempre en segundo plano, revisándolos cada pocos minutos; nunca bloquearse esperando.
+- Hacer commits por bloque terminado y push frecuente, para que un corte no pierda trabajo.
+- Trabajar directamente, sin subagentes, salvo QA y auditoría en worktrees.
+- Nunca matar procesos por nombre: solo los PID propios.
