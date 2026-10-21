@@ -53,9 +53,12 @@ public class HistorialCobranzaDemoDev implements ApplicationRunner {
 
 	private static final Logger LOG = LoggerFactory.getLogger(HistorialCobranzaDemoDev.class);
 
-	/** Alumnos de la demo, en el orden en que se acercan a pagar (DatosDemoColegioDev). */
-	private static final List<String> DNIS = List.of("78451236", "76902114", "79876543", "79215560", "77640391",
-			"80127745", "75330981", "81554203", "82345671", "74018832");
+	/**
+	 * Alumnos de la demo que se acercan a pagar (DatosDemoColegioDev). NO están los Quispe Huamán (la familia del usuario
+	 * «apoderado»: su portal debe mostrar deuda y el botón para pagar) ni Thiago (su pago tiene la anulación pendiente).
+	 */
+	private static final List<String> DNIS = List.of("76902114", "79876543", "79215560", "77640391", "75330981",
+			"81554203", "82345671");
 
 	/** Días hacia atrás: del 28 al 6 (de ayer a hace 5 días ya hay datos de las otras demos). */
 	private static final int DESDE = 28;
@@ -110,8 +113,9 @@ public class HistorialCobranzaDemoDev implements ApplicationRunner {
 			if (dia.getDayOfWeek() == DayOfWeek.SATURDAY || dia.getDayOfWeek() == DayOfWeek.SUNDAY) {
 				continue;
 			}
-			// De 1 a 3 cobros por día, con más movimiento a inicios de mes (cuando vence la pensión).
-			int cobros = dia.getDayOfMonth() <= 7 ? 3 : (atras % 3 == 0 ? 2 : 1);
+			// Un cobro por día hábil (dos a inicios de mes, cuando vence la pensión): la demo tiene pocas cuotas por
+			// cobrar y así alcanzan para más días.
+			int cobros = dia.getDayOfMonth() <= 5 ? 2 : 1;
 			movible.mover(Duration.ofDays(-atras));
 			try {
 				if (unDia(cobros, turno)) {

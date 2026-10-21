@@ -70,9 +70,9 @@
 }
 
 /* Tablero del inicio (Promotoría y Dirección): cifras arriba y gráficos SVG dibujados en el servidor. */
-.tablero-kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.tablero-kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); }
 .tablero-kpis .kpi .btn { justify-self: start; padding-left: 0; }
-.tendencia-flecha { font-size: var(--texto-xs); margin-right: var(--esp-1); }
+.tendencia-flecha { display: inline-block; vertical-align: -1px; margin-right: var(--esp-1); fill: currentColor; }
 .tendencia-sube .tendencia-flecha { color: var(--color-exito); }
 .tendencia-baja .tendencia-flecha { color: var(--color-peligro); }
 .medidor { display: block; margin: var(--esp-1) 0; }
@@ -89,6 +89,7 @@
 .grafico-barra.serie-1 { fill: var(--color-serie-1); }
 .grafico-barra.serie-2 { fill: var(--color-serie-2); }
 .grafico-barra.serie-3 { fill: var(--color-serie-3); }
+.grafico-barra.serie-4 { fill: var(--color-serie-4); }
 .grafico-segmento { stroke: var(--color-superficie); stroke-width: 2; }
 .grafico-guia { stroke: var(--color-grafico-guia); stroke-width: 1; }
 .grafico-pista { fill: var(--color-grafico-pista); }
@@ -128,3 +129,76 @@
 .aviso-area summary { display: flex; align-items: center; justify-content: space-between; gap: var(--esp-3);
   min-height: 48px; padding: var(--esp-2) var(--esp-4); cursor: pointer; font-weight: 600; }
 .aviso-area .lista-revisar { padding: var(--esp-3); }
+.graficos-pares > .grafico:first-child { grid-column: auto; }
+.graficos-pares > [data-secciones-sin-docente] { grid-column: 1 / -1; }
+.lista-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--esp-2); }
+
+/* Caja: cobro en dos columnas. Izquierda, la familia y sus cuotas; derecha, fijo al desplazar, el resumen con el total y
+   el botón. En celular y tableta, una sola columna con el resumen al final (después de elegir). */
+.cobro-dos-col { display: grid; gap: var(--esp-4); grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  align-items: start; }
+.cobro-principal { display: grid; gap: var(--esp-4); min-width: 0; }
+.cobro-resumen { position: sticky; top: var(--esp-4); min-width: 0; }
+.resumen-cobro { display: grid; gap: var(--esp-4); border-top: 4px solid var(--color-primario); }
+.resumen-cobro h2 { margin: 0; }
+.resumen-datos { display: grid; gap: var(--esp-2); margin: 0; }
+.resumen-datos div { display: flex; justify-content: space-between; gap: var(--esp-3); align-items: baseline; }
+.resumen-datos dt { color: var(--color-texto-secundario); font-size: var(--texto-sm); }
+.resumen-datos dd { margin: 0; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.resumen-total { display: grid; gap: var(--esp-1); padding: var(--esp-4); border-radius: var(--radio);
+  background: var(--color-superficie-2); }
+.resumen-total .total-cobro-monto { font-size: var(--texto-3xl); line-height: 1.1; }
+.resumen-cobro .medios { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.resumen-cobro .btn, .btn-bloque { width: 100%; justify-content: center; }
+.resumen-cobro .btn-primario { min-height: 52px; font-size: var(--texto-lg); }
+@media (max-width: 1100px) {
+  .cobro-dos-col { grid-template-columns: minmax(0, 1fr); }
+  .cobro-resumen { position: static; }
+}
+
+/* Portal de familias en celular: barra inferior fija (Inicio, Estado de cuenta, Pagar, Avisos). En escritorio no se ve:
+   el menú lateral ya tiene todo. Cada destino mide al menos 56 px de alto y un cuarto del ancho. */
+.barra-inferior { display: none; }
+@media (max-width: 860px) {
+  .barra-inferior {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0;
+    z-index: 20; background: var(--color-superficie); border-top: 1px solid var(--color-borde);
+    box-shadow: 0 -2px 8px rgb(15 23 42 / 0.06); padding-bottom: env(safe-area-inset-bottom);
+  }
+  .barra-inferior a {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 56px;
+    padding: var(--esp-1) var(--esp-1); color: var(--color-texto-secundario); text-decoration: none;
+    font-size: var(--texto-xs); font-weight: 600; text-align: center; line-height: 1.2;
+  }
+  .barra-inferior a[aria-current="page"] { color: var(--color-primario-texto); box-shadow: inset 0 3px 0 var(--color-primario); }
+  .barra-inferior a:focus-visible { outline: 3px solid var(--color-primario); outline-offset: -3px; }
+  .barra-inferior-pagar { color: var(--color-primario-texto) !important; }
+  body:has(.barra-inferior) .pie { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  body:has(.barra-inferior) .contenido { padding-bottom: 72px; }
+  /* Objetivos táctiles del portal: botones y enlaces de acción de 44 px o más. */
+  body:has(.barra-inferior) .contenido .btn, body:has(.barra-inferior) .contenido summary { min-height: 44px; }
+}
+
+/* Tablas en celular: cada fila es una tarjeta (borde, radio y aire), la primera celda hace de título y las acciones
+   ocupan todo el ancho. Complementa la regla de app.css (thead oculto y etiqueta de cada celda con data-etiqueta). */
+@media (max-width: 640px) {
+  .tabla, .tabla tbody, .tabla tfoot { display: block; }
+  .tabla tbody { display: grid; gap: var(--esp-2); }
+  .tabla tbody tr, .tabla tfoot tr {
+    padding: var(--esp-3) var(--esp-4); border: 1px solid var(--color-borde); border-radius: var(--radio);
+    background: var(--color-superficie); box-shadow: var(--sombra);
+  }
+  .tabla tfoot tr { margin-top: var(--esp-2); background: var(--color-superficie-2); }
+  .tabla tbody tr > :first-child { font-weight: 600; font-size: var(--texto-base); color: var(--color-texto); }
+  .tabla tbody tr > th:first-child { padding: 0 0 var(--esp-1); border: 0; text-transform: none; letter-spacing: 0; }
+  .tabla td:not([data-etiqueta])::before, .tabla td[data-etiqueta=""]::before { content: none; }
+  .tabla td .btn { min-height: 44px; }
+  .tabla td:not([data-etiqueta]) .btn, .tabla td:not([data-etiqueta]) form { width: 100%; }
+}
+
+/* Pulido final (impeccable polish): las superficies del navegador también llevan la marca. */
+:root { accent-color: var(--color-primario); }
+input, textarea, select { caret-color: var(--color-primario); }
+a { text-underline-offset: 0.18em; }
+summary:focus-visible, .tabla a:focus-visible { outline: 3px solid var(--color-primario-texto); outline-offset: 2px; }
+.num, .monto, td.num { font-variant-numeric: tabular-nums; }

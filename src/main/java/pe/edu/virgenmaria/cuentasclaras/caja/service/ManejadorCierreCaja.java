@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.caja.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Plural;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -120,12 +121,12 @@ public class ManejadorCierreCaja implements ManejadorSolicitud {
 		lineas.add("Caja de " + nombres.de(caja.getCajero()) + " (" + caja.getCajero() + ") del "
 				+ Calendario.formatear(caja.getFecha()) + " · cierre N.° " + c.getNumero());
 		lineas.add("Esperado " + Dinero.formatear(c.getEsperado()) + ": fondo " + Dinero.formatear(c.getFondoFijo())
-				+ " + efectivo " + Dinero.formatear(c.getEfectivoCobrado()) + " en " + c.getPagosEfectivo() + " pago(s)");
+				+ " + efectivo " + Dinero.formatear(c.getEfectivoCobrado()) + " en " + Plural.de(c.getPagosEfectivo(), "pago", "pagos"));
 		lineas.add("Contado " + Dinero.formatear(c.getContado()) + (c.huboReconteo() ? " al reconteo (primer conteo "
 				+ Dinero.formatear(c.getPrimerConteo()) + ": no coincidió)" : " al primer conteo"));
 		lineas.add("Diferencia: " + ServicioCierreCaja.diferenciaTexto(c.getDiferencia()));
 		lineas.add("Digital (no entra al esperado): " + Dinero.formatear(c.getTotalDigital()) + " en "
-				+ c.getPagosDigitales() + " pago(s)");
+				+ Plural.de(c.getPagosDigitales(), "pago", "pagos"));
 		if (c.getExplicacion() != null) {
 			lineas.add("Explicación de la cajera: " + c.getExplicacion());
 		}
