@@ -747,8 +747,9 @@ class AuditoriaSprint9ComunicadosMySqlTest {
 	void c3ConfiguracionQueSaltaVersionesFalla() {
 		Escuela s = escuela();
 		como(s.directora(), () -> {
-			configuraciones.cambiar(new ConfiguracionAcademica.Valores(java.time.LocalTime.of(9, 30),
-					java.time.LocalTime.of(10, 30), java.time.LocalTime.of(16, 0), 5, 5, java.time.LocalTime.of(18, 0), 4));
+			// Valores distintos de los de por defecto (sin cambios, no se escribe la fila).
+			configuraciones.cambiar(new ConfiguracionAcademica.Valores(java.time.LocalTime.of(9, 45),
+					java.time.LocalTime.of(10, 40), java.time.LocalTime.of(15, 30), 4, 4, java.time.LocalTime.of(18, 0), 4));
 			return null;
 		});
 		long v = jdbc.queryForObject("SELECT version FROM configuracion_academica WHERE colegio_id = ?", Long.class,

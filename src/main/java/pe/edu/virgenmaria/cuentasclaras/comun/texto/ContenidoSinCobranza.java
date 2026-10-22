@@ -54,7 +54,7 @@ public final class ContenidoSinCobranza {
 	private static final String ABONO = "\\babon(o|os|ó|ar|e|en|ad[oa]s?|ando)\\b";
 
 	/** Correcciones del sprint 9 (INDECOPI). */
-	private static final String REGULARIZAR = "\\bregulariz";
+	private static final String REGULARIZAR = "\\bregulari[zc]";
 
 	/** Correcciones del sprint 9 (INDECOPI). */
 	private static final String CANCELAR = "\\bcancel(ar|en)\\s+(la|su)\\b";

@@ -17,7 +17,7 @@ class CobranzaIndecopiTest {
 			"los alumnos que no estén al día con la mensualidad no podrán rendir el examen bimestral",
 			"Recuerden la mensualidad de noviembre.", "Deben estar al dia con el colegio.",
 			"Cumplan sus obligaciones económicas.", "Sus compromisos economicos vencen.", "Tiene un saldo pendiente.",
-			"Pueden abonar en secretaría.", "Hagan su abono hoy.", "Abonen lo que falta.", "Deben regularizar su situación.",
+			"Pueden abonar en secretaría.", "Hagan su abono hoy.", "Abonen lo que falta.", "Deben regularizar su situación.", "Regularicen su situación.",
 			"Por favor cancelar la matrícula.", "Deben cancelar su compromiso.", "No podrá rendir el examen.",
 			"no podrán dar examen", "Traigan S/ trescientos.", "Son S/. cien.", "s/ veintiocho por alumno",
 			"S/ mil quinientos" })
