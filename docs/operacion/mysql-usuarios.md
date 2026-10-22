@@ -203,6 +203,16 @@ admite DELETE (1142). Prod: «Huellas de los 98 triggers y las 13 funciones veri
 `tablas-vigiladas.txt`. Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios
 nuevos.
 
+**Correcciones del sprint 9 (sin migración nueva): 99 triggers y 13 funciones con huella (112).** Nuevo:
+`trg_comunicado_destinatario_cambio` (la apertura de un comunicado se marca una vez, con la hora de la base ±5 minutos; el
+aviso y el recordatorio, una vez y solo con `cc_sistema`, con un mensaje de comunicados a un apoderado de esa familia).
+Cambian: `trg_comunicado_nace` (TODO comunicado con PDF nace POR_APROBAR, sea quien sea el emisor, sin mirar
+`requiere_revision`), `trg_comunicado_estado` (el PDF de un docente sale solo si el docente sigue con la sección),
+`trg_configuracion_academica_cambio` (la versión sube de a una) y la regla de cobranza de `trg_mensaje_nace` y
+`trg_comunicado_nace` (mensualidad, «al día con», obligaciones económicas, saldo, abonos, regularizar, «cancelar la/su»,
+condicionar un examen y montos en letras después de «S/»). Prod: «Huellas de los 99 triggers y las 13 funciones
+verificadas». Una base existente: solo `03` (con la aplicación detenida).
+
 **Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
 van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
 custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra

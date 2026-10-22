@@ -18,4 +18,10 @@ public interface SeccionesDocente {
 	 * auxiliar). Si no, la sección «no existe» para él: 404 (como el IDOR de siempre).
 	 */
 	void exigir(long seccionId, boolean conAuxiliar);
+
+	/**
+	 * QA-S9-9: si ese docente (no quien está en sesión: lo pregunta quien aprueba su comunicado) sigue con una asignación
+	 * VIGENTE de tutor o de área (no auxiliar) en la sección, en un año no cerrado.
+	 */
+	boolean sigueAsignado(long usuarioId, long seccionId);
 }

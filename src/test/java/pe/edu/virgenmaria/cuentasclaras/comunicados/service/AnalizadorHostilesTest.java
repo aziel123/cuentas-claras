@@ -89,6 +89,33 @@ class AnalizadorHostilesTest {
 		assertThat(AdjuntosComunicado.requiereRevision(poco)).isTrue();
 	}
 
+	/** Correcciones del sprint 9 (auditoría, 1): la imagen en línea y el texto invisible piden revisión. */
+	@Test
+	void imagenEnLineaYTextoInvisibleRequierenRevision() {
+		LanzadorAnalizador.Salida enLinea = lanzador.analizar(PdfsDePrueba.conImagenEnLinea(), DOMINIOS);
+		assertThat(enLinea.aceptado()).as(enLinea.motivo()).isTrue();
+		assertThat(enLinea.resultado().getProperty("imagenes")).isEqualTo("true");
+		assertThat(AdjuntosComunicado.requiereRevision(enLinea)).isTrue();
+		LanzadorAnalizador.Salida invisible = lanzador.analizar(PdfsDePrueba.conTextoInvisible(), DOMINIOS);
+		assertThat(invisible.aceptado()).as(invisible.motivo()).isTrue();
+		assertThat(Integer.parseInt(invisible.resultado().getProperty("caracteres"))).isLessThan(50);
+		assertThat(AdjuntosComunicado.requiereRevision(invisible)).isTrue();
+		// Sin la imagen ni el texto invisible, el mismo texto no pide revisión.
+		assertThat(AdjuntosComunicado.requiereRevision(lanzador.analizar(PdfsDePrueba.normal(), DOMINIOS))).isFalse();
+	}
+
+	/**
+	 * Correcciones del sprint 9 (auditoría, 1): con un ToUnicode falso, el texto extraído no es el que se ve y el filtro no
+	 * lo puede leer. El analizador no lo detecta (es un límite conocido): por eso TODO PDF lo aprueba otra persona
+	 * ({@code trg_comunicado_nace} y {@code QaSprint9CorreccionesTest}).
+	 */
+	@Test
+	void toUnicodeFalsoNoSeLeeYQuedaParaLaPersonaQueAprueba() {
+		LanzadorAnalizador.Salida salida = lanzador.analizar(PdfsDePrueba.conToUnicodeFalso(), DOMINIOS);
+		assertThat(salida.aceptado()).as(salida.motivo()).isTrue();
+		assertThat(salida.texto()).doesNotContainIgnoringCase("deuda").doesNotContainIgnoringCase("pague");
+	}
+
 	@Test
 	void unEnlaceALaPlataformaSePermite() {
 		LanzadorAnalizador.Salida salida = lanzador.analizar(PdfsDePrueba.conEnlacePermitido(), DOMINIOS);

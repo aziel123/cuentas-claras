@@ -52,6 +52,9 @@ public interface MarcaAsistenciaRepository extends Repository<MarcaAsistencia, L
 	/** Las marcas posteriores a la marca de agua (A2), en orden de llegada. */
 	List<MarcaAsistencia> findByIdGreaterThanOrderByIdAsc(Long id);
 
+	/** QA-S9-8: todas las marcas de una fecha (vigentes y reemplazadas), en el orden en que se escribieron. */
+	List<MarcaAsistencia> findByFechaAndIdLessThanEqualOrderByIdAsc(LocalDate fecha, Long hastaId);
+
 	/** El id más alto del colegio (0 si no hay marcas). */
 	@Query("select coalesce(max(m.id), 0) from MarcaAsistencia m")
 	Long ultimoId();
@@ -60,6 +63,10 @@ public interface MarcaAsistenciaRepository extends Repository<MarcaAsistencia, L
 	@Query("select m.registroId, count(m) from MarcaAsistencia m where m.registroId in :registros and m.primera = true "
 			+ "group by m.registroId")
 	List<Object[]> inicialesPorRegistro(@Param("registros") Collection<Long> registros);
+
+	/** QA-S9-6: [registro_id, alumno_id] de las marcas iniciales (para comparar alumnos, no cantidades). */
+	@Query("select m.registroId, m.alumnoId from MarcaAsistencia m where m.registroId in :registros and m.primera = true")
+	List<Object[]> alumnosInicialesPorRegistro(@Param("registros") Collection<Long> registros);
 
 	/** Las marcas que no son del registro inicial de una fecha (la lista de Dirección «correcciones del día»). */
 	@Query("select m from MarcaAsistencia m where m.fecha = :fecha and m.origen <> pe.edu.virgenmaria.cuentasclaras"

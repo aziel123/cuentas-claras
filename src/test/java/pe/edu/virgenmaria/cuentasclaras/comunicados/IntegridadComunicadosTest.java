@@ -35,8 +35,7 @@ class IntegridadComunicadosTest extends PruebaComunicados {
 	void unTextoCambiadoPorElDbaSeDetecta() {
 		Long id = como(EscenarioCobranza.DIRECCION, () -> envio.enviar(aTodoElColegio(EmisorRol.DIRECCION,
 				"Día del Logro"), null));
-		como(EscenarioCobranza.DIRECCION, () -> envio.enviar(aTodoElColegio(EmisorRol.DIRECCION, "Simulacro de sismo"),
-				pdf(false)));
+		conPdfAprobado(aTodoElColegio(EmisorRol.DIRECCION, "Simulacro de sismo"));
 		assertThat(como(EscenarioCobranza.PROMOTORIA, () -> integridad.problemas())).isEmpty();
 		ResultadoVerificacion antes = como(EscenarioCobranza.PROMOTORIA, () -> verificador.verificar());
 		assertThat(antes.integra()).as(antes.detalle()).isTrue();
@@ -51,8 +50,7 @@ class IntegridadComunicadosTest extends PruebaComunicados {
 
 	@Test
 	void unPdfCambiadoPorElDbaSeDetecta() {
-		Long id = como(EscenarioCobranza.DIRECCION, () -> envio.enviar(aTodoElColegio(EmisorRol.DIRECCION,
-				"Simulacro de sismo"), pdf(false)));
+		Long id = conPdfAprobado(aTodoElColegio(EmisorRol.DIRECCION, "Simulacro de sismo"));
 		Long adjunto = jdbc.queryForObject("SELECT adjunto_id FROM comunicado WHERE id = ?", Long.class, id);
 		jdbc.update("UPDATE comunicado_adjunto SET contenido = ? WHERE id = ?", PdfsDePrueba.conPocoTexto(), adjunto);
 		assertThat(como(EscenarioCobranza.PROMOTORIA, () -> integridad.problemas())).singleElement().asString()

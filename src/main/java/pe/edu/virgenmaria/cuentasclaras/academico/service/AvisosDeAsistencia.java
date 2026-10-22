@@ -84,6 +84,26 @@ public class AvisosDeAsistencia implements InasistenciasDelDia {
 	}
 
 	@Override
+	@Transactional(readOnly = true)
+	public List<Inasistencia> delDiaHasta(LocalDate fecha, long hastaMarcaId) {
+		Map<String, MarcaAsistencia> ultima = new LinkedHashMap<>();
+		for (MarcaAsistencia m : marcas.findByFechaAndIdLessThanEqualOrderByIdAsc(fecha, hastaMarcaId)) {
+			ultima.put(m.getRegistroId() + ":" + m.getAlumnoId(), m);
+		}
+		Map<Long, Optional<Alumno>> deAlumno = new HashMap<>();
+		List<Inasistencia> lista = new ArrayList<>();
+		for (MarcaAsistencia m : ultima.values()) {
+			if (!m.getEstado().seAvisa()) {
+				continue;
+			}
+			Optional<Alumno> alumno = deAlumno.computeIfAbsent(m.getAlumnoId(), alumnos::findById);
+			alumno.ifPresent(a -> lista.add(new Inasistencia(m.getId(), a.getFamilia().getId(), a.getId(),
+					NombreCorto.primerNombre(a.getNombres()), m.getFecha(), m.getEstado().enElAviso(), m.getHoraLlegada())));
+		}
+		return lista;
+	}
+
+	@Override
 	public List<Cambio> despuesDe(long ultimaMarcaId) {
 		Map<String, List<MarcaAsistencia>> cadenas = new LinkedHashMap<>();
 		for (MarcaAsistencia m : marcas.findByIdGreaterThanOrderByIdAsc(ultimaMarcaId)) {

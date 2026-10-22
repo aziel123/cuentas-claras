@@ -94,6 +94,15 @@ public class SeccionesDelDocente implements SeccionesDocente {
 		return suyas.isEmpty() ? Optional.empty() : Optional.of(Map.entry(seccion.get(), funcion(suyas)));
 	}
 
+	@Override
+	@Transactional(readOnly = true)
+	@PreAuthorize("hasAnyRole('DIRECTOR','PROMOTOR')")
+	public boolean sigueAsignado(long usuarioId, long seccionId) {
+		return secciones.findById(seccionId).filter(s -> !s.getAnioEscolar().cerrado()).isPresent()
+				&& vigentesDe(usuarioId).stream().anyMatch(a -> a.getSeccionId().equals(seccionId)
+						&& a.getTipo() != TipoAsignacion.AUXILIAR);
+	}
+
 	/** Sprint 9, tanda 2: si el docente en sesión es tutor(a) VIGENTE de la sección (ve las notas y el reporte). */
 	@Transactional(readOnly = true)
 	public boolean tutorDe(long seccionId) {

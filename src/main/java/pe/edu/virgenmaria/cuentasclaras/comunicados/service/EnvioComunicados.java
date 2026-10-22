@@ -61,8 +61,9 @@ import java.util.Objects;
  *       la regla (sin el texto) aunque no se envíe nada.</li>
  *   <li><b>Firma del envío</b> ({@code comunicado:{huella40}:ENVIAR}, también si queda POR_APROBAR) y huella del
  *       contenido que recalcula la base (B2): el mismo contenido no sale dos veces.</li>
- *   <li><b>PDF</b> de un docente o que requiere revisión (B3): POR_APROBAR con su {@code PUBLICAR_COMUNICADO}, que aprueba
- *       el otro órgano en la bandeja.</li>
+ *   <li><b>Todo PDF</b> (decisión del usuario en las correcciones del sprint 9, sea quien sea el emisor): POR_APROBAR
+ *       con su {@code PUBLICAR_COMUNICADO}, que aprueba el otro órgano en la bandeja. {@code trg_comunicado_nace} lo
+ *       exige sin mirar {@code requiere_revision}.</li>
  *   <li><b>Destinatarios congelados</b> al enviarse; la fe de erratas llega a TODOS los del original (B1).</li>
  *   <li><b>Retirar no borra</b> (E28): Dirección o Promotoría, con su firma y motivo.</li>
  * </ul>
@@ -167,7 +168,7 @@ public class EnvioComunicados {
 		return transaccion.execute(t -> {
 			t.setRollbackOnly();
 			Preparado p = preparar(borrador, adjunto, corrigeId);
-			boolean porAprobar = adjunto != null && (p.emisor() == EmisorRol.DOCENTE || adjunto.requiereRevision());
+			boolean porAprobar = adjunto != null;
 			return new VistaPrevia(p.etiqueta(), textoAlcance(p.alcance()), p.familias().size(), p.titulo(),
 					parrafos(p.cuerpo()), pie.texto(), borrador.urgente(), borrador.requiereConfirmacion(),
 					adjunto == null ? null : adjunto.paginas(), porAprobar, porAprobar ? quienAprueba(p.emisor()) : null);
@@ -261,7 +262,7 @@ public class EnvioComunicados {
 			throw new ReglaNegocioException("Ya se envió un comunicado con este mismo contenido a este alcance: para "
 					+ "corregirlo, envía una fe de erratas.");
 		}
-		boolean porAprobar = adjunto != null && (p.emisor() == EmisorRol.DOCENTE || adjunto.requiereRevision());
+		boolean porAprobar = adjunto != null;
 		firma.firmar(ClaveFirma.comunicadoEnviar(huella));
 		Comunicado c = comunicados.saveAndFlush(Comunicado.nuevo(p.anio().getId(), original == null ? null
 				: original.getId(), new Comunicado.Emisor(p.persona().usuarioId(), p.emisor(), p.etiqueta(),
@@ -276,9 +277,8 @@ public class EnvioComunicados {
 			}
 			SolicitudCambio solicitud = solicitudes.crear(TipoSolicitud.PUBLICAR_COMUNICADO, ENTIDAD, c.getId(),
 					"Publicar «" + p.titulo() + "» de " + p.etiqueta() + " a " + textoAlcance(alcance) + " (con PDF)",
-					datos, adjunto.requiereRevision() && p.emisor() != EmisorRol.DOCENTE
-							? "El PDF tiene poco texto o imágenes: lo revisa " + quienAprueba(p.emisor()) + " antes de salir."
-							: "PDF de un docente: lo revisa Dirección o Promotoría antes de salir.");
+					datos, (adjunto.requiereRevision() ? "El PDF tiene poco texto o imágenes. " : "")
+							+ "Todo PDF lo revisa " + quienAprueba(p.emisor()) + " antes de salir.");
 			c.ligarSolicitud(solicitud.getId());
 			comunicados.saveAndFlush(c);
 			auditoria.registrar(AccionAuditoria.COMUNICADO_POR_APROBAR, ENTIDAD, c.getId().toString(), null, huella,

@@ -29,6 +29,8 @@ public enum TipoAviso {
 	SECCION_SIN_ASISTENCIA("Hay secciones sin asistencia registrada"),
 	/** Sprint 9, tanda 2 (A8): solicitudes de la bandeja pendientes más de 2 días hábiles. A Promotoría. */
 	SOLICITUDES_PENDIENTES("Hay solicitudes por aprobar hace más de 2 días"),
+	/** Correcciones del sprint 9 (auditoría, 6): más de 30 consentimientos desde la ficha por una persona en un día. */
+	CONSENTIMIENTOS_DESDE_FICHA("Muchos consentimientos registrados hoy desde la ficha"),
 	OTRA_CRITICA("Alerta crítica");
 
 	private final String texto;
@@ -45,12 +47,13 @@ public enum TipoAviso {
 	/** Las ATENCIÓN que también salen al celular (decisión 70); de las demás, solo las CRÍTICAS. */
 	public boolean saleAunqueNoSeaCritica() {
 		return this == CIERRE_NO_REALIZADO || this == ANULACION_PAGO_PENDIENTE || this == LLAMADA_REEMPLAZADA
-				|| this == LLAMADA_POR_DIRECCION || this == SECCION_SIN_ASISTENCIA || this == SOLICITUDES_PENDIENTES;
+				|| this == LLAMADA_POR_DIRECCION || this == SECCION_SIN_ASISTENCIA || this == SOLICITUDES_PENDIENTES
+				|| this == CONSENTIMIENTOS_DESDE_FICHA;
 	}
 
 	/** Sprint 9, tanda 2 (H10): las que van SOLO a Dirección (no a Promotoría, que no ve la asistencia: decisión 143). */
 	public boolean soloDireccion() {
-		return this == SECCION_SIN_ASISTENCIA;
+		return this == SECCION_SIN_ASISTENCIA || this == CONSENTIMIENTOS_DESDE_FICHA;
 	}
 
 	/**

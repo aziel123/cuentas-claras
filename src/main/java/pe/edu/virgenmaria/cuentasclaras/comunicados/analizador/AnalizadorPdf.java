@@ -14,6 +14,11 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.pdmodel.font.FontMappers;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.pdfbox.text.TextPosition;
+import org.apache.pdfbox.contentstream.PDFGraphicsStreamEngine;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImage;
+import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
+import java.awt.geom.Point2D;
 
 import java.io.File;
 import java.io.IOException;
@@ -132,7 +137,21 @@ public final class AnalizadorPdf {
 	}
 
 	/** {@code java … AnalizadorPdf {dir} [dominio1,dominio2]}. */
+	/** Correcciones del sprint 9 (auditoría, 5): el hijo se termina solo a los 12 s aunque el padre no lo mate. */
+	static final long SEGUNDOS_TOPE = 12;
+
 	public static void main(String[] argumentos) {
+		Thread tope = new Thread(() -> {
+			try {
+				Thread.sleep(SEGUNDOS_TOPE * 1000);
+			}
+			catch (InterruptedException e) {
+				return;
+			}
+			Runtime.getRuntime().halt(NO_REVISADO);
+		}, "tope-del-analizador");
+		tope.setDaemon(true);
+		tope.start();
 		int codigo;
 		try {
 			Path directorio = Path.of(argumentos[0]).toAbsolutePath().normalize();
@@ -228,12 +247,18 @@ public final class AnalizadorPdf {
 			if (activo.isPresent()) {
 				return rechazar(activo.get());
 			}
-			PDFTextStripper extractor = new PDFTextStripper();
+			ExtractorVisible extractor = new ExtractorVisible();
 			for (int p = 1; p <= paginas; p++) {
 				extractor.setStartPage(p);
 				extractor.setEndPage(p);
+				extractor.visibles = 0;
 				String pagina = extractor.getText(documento);
-				caracteres.add((int) pagina.codePoints().filter(c -> !Character.isWhitespace(c)).count());
+				// Correcciones del sprint 9: el texto invisible (modo 3) no cuenta como texto de la página.
+				caracteres.add(extractor.visibles);
+				// Y una imagen en línea (BI … ID … EI) o dibujada desde un XObject cuenta como imagen.
+				MotorDeImagenes motor = new MotorDeImagenes(documento.getPage(p - 1));
+				motor.processPage(documento.getPage(p - 1));
+				imagenes |= motor.dibujaImagen;
 				if (texto.length() < MAX_TEXTO) {
 					texto.append(pagina, 0, Math.min(pagina.length(), MAX_TEXTO - texto.length())).append('\n');
 				}
@@ -274,6 +299,93 @@ public final class AnalizadorPdf {
 		resultado.setProperty("requiereRevision", Boolean.toString(revision));
 		escribir(resultado);
 		return ACEPTADO;
+	}
+
+	/**
+	 * Correcciones del sprint 9 (auditoría, 1): cuenta solo los caracteres que se ven. El texto en modo 3 (ni relleno ni
+	 * trazo: invisible) va al texto que revisa el filtro, pero no cuenta para «tiene texto».
+	 */
+	static final class ExtractorVisible extends PDFTextStripper {
+
+		int visibles;
+
+		@Override
+		protected void processTextPosition(TextPosition texto) {
+			RenderingMode modo = getGraphicsState().getTextState().getRenderingMode();
+			if (modo != RenderingMode.NEITHER && texto.getUnicode() != null) {
+				visibles += (int) texto.getUnicode().codePoints().filter(c -> !Character.isWhitespace(c)).count();
+			}
+			super.processTextPosition(texto);
+		}
+	}
+
+	/** Correcciones del sprint 9 (auditoría, 1): ¿la página dibuja alguna imagen (en línea o XObject)? */
+	static final class MotorDeImagenes extends PDFGraphicsStreamEngine {
+
+		boolean dibujaImagen;
+
+		private final Point2D.Float punto = new Point2D.Float();
+
+		MotorDeImagenes(PDPage pagina) {
+			super(pagina);
+		}
+
+		@Override
+		public void drawImage(PDImage imagen) {
+			dibujaImagen = true;
+		}
+
+		@Override
+		public void appendRectangle(Point2D p0, Point2D p1, Point2D p2, Point2D p3) {
+		}
+
+		@Override
+		public void clip(int regla) {
+		}
+
+		@Override
+		public void moveTo(float x, float y) {
+			punto.setLocation(x, y);
+		}
+
+		@Override
+		public void lineTo(float x, float y) {
+			punto.setLocation(x, y);
+		}
+
+		@Override
+		public void curveTo(float x1, float y1, float x2, float y2, float x3, float y3) {
+			punto.setLocation(x3, y3);
+		}
+
+		@Override
+		public Point2D getCurrentPoint() {
+			return punto;
+		}
+
+		@Override
+		public void closePath() {
+		}
+
+		@Override
+		public void endPath() {
+		}
+
+		@Override
+		public void strokePath() {
+		}
+
+		@Override
+		public void fillPath(int regla) {
+		}
+
+		@Override
+		public void fillAndStrokePath(int regla) {
+		}
+
+		@Override
+		public void shadingFill(COSName nombre) {
+		}
 	}
 
 	private static PDDocument abrir(byte[] bytes) throws IOException {

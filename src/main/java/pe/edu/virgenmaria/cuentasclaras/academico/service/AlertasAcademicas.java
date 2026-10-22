@@ -57,9 +57,13 @@ public class AlertasAcademicas implements AlertasRevision {
 
 	private final Clock reloj;
 
+	private final pe.edu.virgenmaria.cuentasclaras.academico.repository.ConsentimientoAvisoRepository consentimientos;
+
 	public AlertasAcademicas(AnioEscolarRepository anios, SeccionRepository secciones, MatriculaRepository matriculas,
 			RegistroAsistenciaRepository registros, MarcaAsistenciaRepository marcas,
-			ConfiguracionesAcademicas configuraciones, DiaDeClases diaDeClases, Clock reloj) {
+			ConfiguracionesAcademicas configuraciones, DiaDeClases diaDeClases, Clock reloj,
+			pe.edu.virgenmaria.cuentasclaras.academico.repository.ConsentimientoAvisoRepository consentimientos) {
+		this.consentimientos = consentimientos;
 		this.anios = anios;
 		this.secciones = secciones;
 		this.matriculas = matriculas;
@@ -74,18 +78,50 @@ public class AlertasAcademicas implements AlertasRevision {
 	@Transactional(readOnly = true)
 	public List<AlertaRevision> alertas() {
 		LocalDateTime ahora = LocalDateTime.now(reloj);
+		List<AlertaRevision> alertas = new ArrayList<>(consentimientosDesdeFicha(ahora));
 		ConfiguracionAcademica configuracion = configuraciones.vigente();
 		if (ahora.toLocalTime().isBefore(configuracion.getHoraAlerta())) {
-			return List.of();
+			return alertas;
 		}
 		List<String> faltan = seccionesSinAsistencia(ahora.toLocalDate());
 		if (faltan.isEmpty()) {
-			return List.of();
+			return alertas;
 		}
-		return List.of(new AlertaRevision(AlertaRevision.Gravedad.ATENCION, "Asistencia", "Secciones sin asistencia "
+		alertas.add(new AlertaRevision(AlertaRevision.Gravedad.ATENCION, "Asistencia", "Secciones sin asistencia "
 				+ "registrada (o incompleta) hoy: " + String.join(", ", faltan) + ". Dirección decide quién la cubre.", null,
 				new Aviso(TipoAviso.SECCION_SIN_ASISTENCIA, "ASISTENCIA:" + ahora.toLocalDate().format(DIA),
 						String.valueOf(faltan.size()))));
+		return alertas;
+	}
+
+	/** La referencia de un aviso admite letras, cifras, «:» y «-» (hasta 40). */
+	private static String referencia(String texto) {
+		String limpia = texto.replaceAll("[^A-Za-z0-9:-]", "-");
+		return limpia.length() > 40 ? limpia.substring(0, 40) : limpia;
+	}
+
+	/** Más de esto en un día por la misma persona desde la ficha: alerta a Dirección (correcciones del sprint 9). */
+	static final int MAX_FICHAS_DIA = 30;
+
+	/**
+	 * Correcciones del sprint 9 (auditoría, 6): quien registra más de {@value #MAX_FICHAS_DIA} consentimientos desde la
+	 * ficha firmada en un día. Va a Dirección (TipoAviso.soloDireccion), con el usuario y la cantidad.
+	 */
+	List<AlertaRevision> consentimientosDesdeFicha(LocalDateTime ahora) {
+		Map<String, Long> porPersona = new java.util.TreeMap<>();
+		consentimientos.findByOrigenAndCreadoEnGreaterThanEqual(
+				pe.edu.virgenmaria.cuentasclaras.academico.model.OrigenConsentimiento.FICHA, ahora.toLocalDate().atStartOfDay())
+				.forEach(c -> porPersona.merge(c.getCreadoPor(), 1L, Long::sum));
+		List<AlertaRevision> alertas = new ArrayList<>();
+		porPersona.forEach((quien, cuantos) -> {
+			if (cuantos > MAX_FICHAS_DIA) {
+				alertas.add(new AlertaRevision(AlertaRevision.Gravedad.ATENCION, "Consentimientos", quien + " registró hoy "
+						+ cuantos + " consentimientos desde la ficha firmada: revisa las fichas en papel.", "/auditoria",
+						new Aviso(TipoAviso.CONSENTIMIENTOS_DESDE_FICHA, referencia("FICHAS:" + ahora.toLocalDate().format(DIA)
+								+ ":" + quien), String.valueOf(cuantos))));
+			}
+		});
+		return alertas;
 	}
 
 	/** Las etiquetas de las secciones activas con clases ese día sin registro o con el registro incompleto (A4). */
@@ -95,27 +131,29 @@ public class AlertasAcademicas implements AlertasRevision {
 		if (anio.isEmpty()) {
 			return List.of();
 		}
-		Map<Long, Long> activas = new HashMap<>();
-		for (Object[] fila : matriculas.contarActivasPorSeccion(anio.get().getId())) {
-			activas.put((Long) fila[0], ((Number) fila[1]).longValue());
+		// QA-S9-6: se comparan ALUMNOS (matrículas activas sin su marca inicial), no cantidades: si el mismo día se retira un
+		// alumno ya marcado y se matricula otro, el nuevo sin marca deja el registro incompleto.
+		Map<Long, java.util.Set<Long>> activas = new HashMap<>();
+		for (Object[] fila : matriculas.alumnosActivosPorSeccion(anio.get().getId())) {
+			activas.computeIfAbsent((Long) fila[0], k -> new java.util.HashSet<>()).add((Long) fila[1]);
 		}
 		Map<Long, RegistroAsistencia> delDia = new HashMap<>();
 		registros.findByFecha(fecha).forEach(r -> delDia.put(r.getSeccionId(), r));
-		Map<Long, Long> iniciales = new HashMap<>();
+		Map<Long, java.util.Set<Long>> iniciales = new HashMap<>();
 		if (!delDia.isEmpty()) {
-			for (Object[] fila : marcas.inicialesPorRegistro(delDia.values().stream().map(RegistroAsistencia::getId)
+			for (Object[] fila : marcas.alumnosInicialesPorRegistro(delDia.values().stream().map(RegistroAsistencia::getId)
 					.toList())) {
-				iniciales.put((Long) fila[0], ((Number) fila[1]).longValue());
+				iniciales.computeIfAbsent((Long) fila[0], k -> new java.util.HashSet<>()).add((Long) fila[1]);
 			}
 		}
 		List<String> faltan = new ArrayList<>();
 		for (Seccion s : secciones.findByAnioEscolarIdOrderByGradoAscNombreAsc(anio.get().getId())) {
-			long matriculados = activas.getOrDefault(s.getId(), 0L);
-			if (!s.isActiva() || matriculados == 0 || diaDeClases.sinClases(s, fecha).isPresent()) {
+			java.util.Set<Long> matriculados = activas.getOrDefault(s.getId(), java.util.Set.of());
+			if (!s.isActiva() || matriculados.isEmpty() || diaDeClases.sinClases(s, fecha).isPresent()) {
 				continue;
 			}
 			RegistroAsistencia registro = delDia.get(s.getId());
-			if (registro == null || iniciales.getOrDefault(registro.getId(), 0L) < matriculados) {
+			if (registro == null || !iniciales.getOrDefault(registro.getId(), java.util.Set.of()).containsAll(matriculados)) {
 				faltan.add(s.etiqueta());
 			}
 		}

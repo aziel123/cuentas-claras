@@ -199,6 +199,16 @@ public abstract class PruebaComunicados {
 		return new AdjuntoValidado(bytes, 1, sha, sha, requiereRevision);
 	}
 
+	/**
+	 * Correcciones del sprint 9: TODO comunicado con PDF queda por aprobar. Dirección lo envía y Promotoría lo aprueba en la
+	 * bandeja; devuelve el id (ya ENVIADO).
+	 */
+	protected Long conPdfAprobado(BorradorComunicado borrador) {
+		Long id = como(EscenarioCobranza.DIRECCION, () -> envio.enviar(borrador, pdf(false)));
+		EscenarioAprobaciones.aprueba(EscenarioCobranza.PROMOTORIA, bandeja, jdbc, "comunicado", id);
+		return id;
+	}
+
 	/** Corre la operación como esa persona y deja la sesión vacía. */
 	protected <T> T como(UsuarioAutenticado quien, Supplier<T> operacion) {
 		UsuariosDePrueba.iniciarSesion(quien);

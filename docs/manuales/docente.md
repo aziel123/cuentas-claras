@@ -28,7 +28,7 @@
 1. En **Comunicados → Nuevo** elige tu sección (solo aparecen las tuyas, como tutor(a) o de curso), escribe el título y el
    texto y, si quieres, adjunta un PDF (máximo 10 páginas).
 2. Toca **Revisar** y lee la vista previa: así lo verán las familias, con tu nombre y tu curso.
-3. Toca **Enviar**. Si el PDF tiene imágenes o poco texto, queda **por aprobar** y lo aprueba Dirección en su bandeja.
+3. Toca **Enviar**. Con PDF, queda **por aprobar** y lo aprueba Dirección o Promotoría en su bandeja.
 4. ¿Te equivocaste? Un comunicado enviado no se edita: pide a Dirección una **fe de erratas** (llega a las mismas familias)
    o que lo retire con su motivo.
 5. Un comunicado no habla de pagos, deudas, montos, cuentas ni medios de pago: el sistema no lo deja salir. Para eso está

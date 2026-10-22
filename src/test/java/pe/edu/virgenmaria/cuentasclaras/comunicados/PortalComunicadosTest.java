@@ -80,8 +80,7 @@ class PortalComunicadosTest extends PruebaComunicados {
 
 	@Test
 	void cabecerasDeDescarga() throws Exception {
-		Long id = como(EscenarioCobranza.DIRECCION, () -> envio.enviar(aLaSeccion(EmisorRol.DIRECCION, seccionA,
-				"Programa del Día del Logro"), pdf(false)));
+		Long id = conPdfAprobado(aLaSeccion(EmisorRol.DIRECCION, seccionA, "Programa del Día del Logro"));
 		for (var pedido : new org.springframework.test.web.servlet.RequestBuilder[] {
 				get("/comunicados/" + id + "/adjunto").with(UsuariosDePrueba.como(EscenarioCobranza.DIRECCION)),
 				get("/familia/comunicados/" + id + "/adjunto").with(UsuariosDePrueba.como(rosaEnLinea())) }) {
@@ -116,8 +115,7 @@ class PortalComunicadosTest extends PruebaComunicados {
 		assertThat(jdbc.queryForObject("SELECT estado FROM comunicado WHERE id = ?", String.class, id))
 				.isEqualTo("RECHAZADO");
 		// Retirado: tampoco.
-		Long enviado = como(EscenarioCobranza.DIRECCION, () -> envio.enviar(aLaSeccion(EmisorRol.DIRECCION, seccionA,
-				"Programa del Día del Logro"), pdf(false)));
+		Long enviado = conPdfAprobado(aLaSeccion(EmisorRol.DIRECCION, seccionA, "Programa del Día del Logro"));
 		como(EscenarioCobranza.DIRECCION, () -> {
 			envio.retirar(enviado, "Se adjuntó el programa equivocado");
 			return null;

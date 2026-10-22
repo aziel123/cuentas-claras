@@ -105,7 +105,8 @@
 			</thead>
 			<tbody>
 				<tr th:each="m : ${ficha.matriculas}">
-					<td data-etiqueta="Año" th:text="${m.anio}">2026</td>
+					<td data-etiqueta="Año"><span th:text="${m.anio}">2026</span>
+						<span class="secundario" th:text="|Ficha FM-${m.anio}-${#numbers.formatInteger(m.id, 4)}|">Ficha FM-2026-0012</span></td>
 					<td data-etiqueta="Sección" th:text="${m.seccion}">5.° Primaria A</td>
 					<td data-etiqueta="Desde" th:text="${#temporals.format(m.fechaMatricula, 'dd/MM/yyyy')}">02/03/2026</td>
 					<td data-etiqueta="Estado">

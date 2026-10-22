@@ -756,6 +756,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_configuracion_academica_nace", "trg_configuracion_academica_cambio",
 			// Sprint 9, tanda 3 (V34).
 			"trg_comunicado_nace", "trg_comunicado_estado", "trg_comunicado_destinatario_nace",
+			"trg_comunicado_destinatario_cambio",
 			"trg_confirmacion_lectura_nace", "trg_exportacion_nomina_nace");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";

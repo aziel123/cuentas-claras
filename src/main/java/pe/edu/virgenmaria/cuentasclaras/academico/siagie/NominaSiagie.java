@@ -182,10 +182,9 @@ public class NominaSiagie {
 				.orElseThrow(() -> new RecursoNoEncontradoException("Sección no encontrada"));
 		PerfilNomina columnas = PerfilNomina.leer(perfil);
 		List<Matricula> lista = matriculas.deLaSeccionEnOrden(seccion.getId(), List.of(EstadoMatricula.ACTIVA)).stream()
-				.sorted(Comparator.comparing((Matricula m) -> m.getAlumno().getApellidoPaterno())
-						.thenComparing(m -> m.getAlumno().getNombres()))
+				.sorted(enOrdenAlfabetico())
 				.toList();
-		Map<Long, Matricula> anteriores = anteriores(anio, lista);
+		Map<Long, List<Matricula>> anteriores = anteriores(anio, lista);
 		Optional<CodigoModular> codigo = codigos.findByNivel(seccion.nivel());
 		String codigoExportacion = nuevoCodigo();
 		LocalDateTime ahora = LocalDateTime.now(reloj);
@@ -209,7 +208,8 @@ public class NominaSiagie {
 			}
 			List<Celda> fila = new ArrayList<>();
 			for (PerfilNomina.Columna c : columnas.columnas()) {
-				fila.add(Celda.texto(c.traducir(valor(c.campo(), orden, m, codigo, anteriores.get(a.getId())))));
+				fila.add(Celda.texto(c.traducir(valor(c.campo(), orden, m, codigo,
+						anteriores.getOrDefault(a.getId(), List.of())))));
 			}
 			filas.add(fila);
 		}
@@ -231,7 +231,21 @@ public class NominaSiagie {
 		return new ArchivoNomina(nombre, archivo, codigoExportacion, lista.size());
 	}
 
-	private String valor(CampoNomina campo, int orden, Matricula m, Optional<CodigoModular> codigo, Matricula anterior) {
+	/**
+	 * QA-S9-10: apellido paterno, materno y nombres con la intercalación del español del Perú (la Ñ va después de la N y
+	 * las tildes no mandan al final). El número de orden que va al SIAGIE sale de este orden.
+	 */
+	static Comparator<Matricula> enOrdenAlfabetico() {
+		java.text.Collator espanol = java.text.Collator.getInstance(Locale.forLanguageTag("es-PE"));
+		espanol.setStrength(java.text.Collator.SECONDARY);
+		Comparator<String> texto = Comparator.nullsFirst((x, y) -> espanol.compare(x, y));
+		return Comparator.comparing((Matricula m) -> m.getAlumno().getApellidoPaterno(), texto)
+				.thenComparing(m -> m.getAlumno().getApellidoMaterno(), texto)
+				.thenComparing(m -> m.getAlumno().getNombres(), texto);
+	}
+
+	private String valor(CampoNomina campo, int orden, Matricula m, Optional<CodigoModular> codigo,
+			List<Matricula> anteriores) {
 		Alumno a = m.getAlumno();
 		return switch (campo) {
 			case ORDEN -> String.valueOf(orden);
@@ -248,31 +262,43 @@ public class NominaSiagie {
 			case SECCION -> m.getSeccion().getNombre();
 			case CODIGO_MODULAR -> codigo.map(CodigoModular::getCodigo).orElse(null);
 			case ANEXO -> codigo.map(CodigoModular::getAnexo).orElse(null);
-			case SITUACION -> situacion(m, anterior).name();
+			case SITUACION -> situacion(m, anteriores).name();
 			case FECHA_MATRICULA -> m.getFechaMatricula() == null ? null : m.getFechaMatricula().format(FECHA);
 			case VACIO -> "";
 		};
 	}
 
-	/** La situación CALCULADA (sección 3.11), con la matrícula del año anterior en el colegio. */
-	static SituacionMatricula situacion(Matricula actual, Matricula anterior) {
-		if (anterior == null) {
-			return SituacionMatricula.INGRESANTE;
+	/**
+	 * La situación CALCULADA (sección 3.11; QA-S9-4), con las matrículas del alumno en años anteriores del colegio:
+	 * <ul>
+	 *   <li>cursó el año anterior (matrícula ACTIVA de ese año): PROMOVIDO si ahora está en un grado mayor; REPITENTE si
+	 *       está en el mismo (o en uno menor);</li>
+	 *   <li>no cursó el año anterior (no tuvo matrícula, la tuvo RESERVADA o se RETIRÓ), pero estudió antes en el colegio
+	 *       (una matrícula ACTIVA o RETIRADA de algún año anterior): REENTRANTE;</li>
+	 *   <li>nunca estudió en el colegio (a lo más, reservas que no se usaron): INGRESANTE.</li>
+	 * </ul>
+	 * Sigue siendo PROVISIONAL: los códigos exactos dependen de la plantilla real del SIAGIE (D12).
+	 */
+	static SituacionMatricula situacion(Matricula actual, List<Matricula> anteriores) {
+		int anio = actual.getAnioEscolar().getAnio();
+		Optional<Matricula> cursada = anteriores.stream()
+				.filter(m -> m.getAnioEscolar().getAnio() == anio - 1 && m.getEstado() == EstadoMatricula.ACTIVA)
+				.max(Comparator.comparing(Matricula::getId, Comparator.nullsFirst(Comparator.naturalOrder())));
+		if (cursada.isPresent()) {
+			return actual.getSeccion().getGrado().ordinal() > cursada.get().getSeccion().getGrado().ordinal()
+					? SituacionMatricula.PROMOVIDO : SituacionMatricula.REPITENTE;
 		}
-		if (anterior.getSeccion().getGrado() == actual.getSeccion().getGrado()) {
-			return SituacionMatricula.REPITENTE;
-		}
-		return anterior.getSeccion().getGrado().siguiente().filter(g -> g == actual.getSeccion().getGrado()).isPresent()
-				? SituacionMatricula.PROMOVIDO : SituacionMatricula.REENTRANTE;
+		boolean estudioAntes = anteriores.stream().anyMatch(m -> m.getAnioEscolar().getAnio() < anio
+				&& m.getEstado() != EstadoMatricula.RESERVADA);
+		return estudioAntes ? SituacionMatricula.REENTRANTE : SituacionMatricula.INGRESANTE;
 	}
 
-	private Map<Long, Matricula> anteriores(AnioEscolar anio, List<Matricula> lista) {
-		Optional<AnioEscolar> previo = anios.findByAnio(anio.getAnio() - 1);
-		if (previo.isEmpty() || lista.isEmpty()) {
+	private Map<Long, List<Matricula>> anteriores(AnioEscolar anio, List<Matricula> lista) {
+		if (lista.isEmpty()) {
 			return Map.of();
 		}
-		return matriculas.delAnioParaAlumnos(previo.get().getId(), lista.stream().map(m -> m.getAlumno().getId()).toList())
-				.stream().collect(Collectors.toMap(m -> m.getAlumno().getId(), Function.identity(), (x, y) -> x));
+		return matriculas.anterioresDeAlumnos(lista.stream().map(m -> m.getAlumno().getId()).toList(), anio.getAnio())
+				.stream().collect(Collectors.groupingBy(m -> m.getAlumno().getId()));
 	}
 
 	private static boolean sinIdentificador(Alumno a) {

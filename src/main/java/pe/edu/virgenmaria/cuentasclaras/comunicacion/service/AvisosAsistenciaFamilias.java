@@ -130,11 +130,11 @@ public class AvisosAsistenciaFamilias {
 		Map<Long, List<String>> delDia = new LinkedHashMap<>();
 		List<InasistenciasDelDia.Cambio> corregidas = new ArrayList<>();
 		if (envio == Envio.PRIMERO) {
-			for (InasistenciasDelDia.Inasistencia i : inasistencias.delDia(hoy)) {
-				if (i.marcaId() <= hasta) {
-					delDia.computeIfAbsent(i.familiaId(), f -> new ArrayList<>()).add(linea(i.primerNombre(), i.estado(),
-							i.horaLlegada()));
-				}
+			// QA-S9-8: el estado de cada alumno en la marca de agua (no el vigente): una corrección que llegó mientras se
+			// preparaba este envío sale en el siguiente como corrección de lo que la familia sí recibió.
+			for (InasistenciasDelDia.Inasistencia i : inasistencias.delDiaHasta(hoy, hasta)) {
+				delDia.computeIfAbsent(i.familiaId(), f -> new ArrayList<>()).add(linea(i.primerNombre(), i.estado(),
+						i.horaLlegada()));
 			}
 		}
 		for (InasistenciasDelDia.Cambio c : inasistencias.despuesDe(corte.ultimaMarcaId())) {

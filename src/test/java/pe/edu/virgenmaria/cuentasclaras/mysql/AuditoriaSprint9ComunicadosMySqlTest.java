@@ -14,7 +14,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.virgenmaria.cuentasclaras.academico.dto.ProponerAsignacionRequest;
+import pe.edu.virgenmaria.cuentasclaras.academico.model.ConfiguracionAcademica;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.TipoAsignacion;
+import pe.edu.virgenmaria.cuentasclaras.academico.service.ConfiguracionesAcademicas;
 import pe.edu.virgenmaria.cuentasclaras.academico.service.Asignaciones;
 import pe.edu.virgenmaria.cuentasclaras.academico.siagie.CodigoModularRequest;
 import pe.edu.virgenmaria.cuentasclaras.academico.siagie.NominaSiagie;
@@ -111,6 +113,9 @@ class AuditoriaSprint9ComunicadosMySqlTest {
 
 	@Autowired
 	private Asignaciones asignaciones;
+
+	@Autowired
+	private ConfiguracionesAcademicas configuraciones;
 
 	@Autowired
 	private BandejaAprobaciones bandeja;
@@ -525,8 +530,14 @@ class AuditoriaSprint9ComunicadosMySqlTest {
 				.isEqualTo(1644);
 		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").conAdjunto(true).porAprobar().titulo("B3 por aprobar "
 				+ sufijo))).isNull();
+		// Correcciones del sprint 9 (auditoría, 1): TODO comunicado con PDF queda por aprobar, aunque el adjunto diga que no
+		// requiere revisión (requiere_revision lo calcula la aplicación: con cc_app se podría escribir en falso).
 		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").conAdjunto(false).porAprobar().titulo("B3 sin revisión "
-				+ sufijo))).as("Dirección sin revisión no queda por aprobar").isEqualTo(1644);
+				+ sufijo))).as("Dirección con PDF sin revisión queda por aprobar").isNull();
+		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").conAdjunto(false).titulo("B3 directo sin revisión "
+				+ sufijo))).as("un PDF «sin revisión» no sale directo").isEqualTo(1644);
+		assertThat(insertar(Fila.de(s.promotora(), "PROMOTORIA").conAdjunto(false).titulo("B3 promotoría directo "
+				+ sufijo))).as("tampoco el de Promotoría").isEqualTo(1644);
 	}
 
 	/** B3: el PDF por aprobar de Dirección no lo aprueba otra persona de Dirección (solo Promotoría). */
@@ -708,6 +719,86 @@ class AuditoriaSprint9ComunicadosMySqlTest {
 				+ "'cc_comunicados_v2', ?, 'familia', ?, 'PENDIENTE', NOW(6), 'sistema.comunicados', NOW(6))", s.colegio(),
 				"ci-e37-" + sufijo, s.familiaA(), s.apoderadoA(), colegio + "\n1 comunicado nuevo\nDirección",
 				s.familiaA()))).isEqualTo(1644);
+	}
+
+	// ------------------------------------------------------------------------------------------------ correcciones
+
+	/** Correcciones del sprint 9 (auditoría, 2; QA-S9-5): la frase de INDECOPI y un monto en letras no entran. */
+	@Test
+	void c2FraseIndecopiYMontoEnLetrasFallan() {
+		Escuela s = escuela();
+		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").titulo("C2 examen " + sufijo).cuerpo("Los alumnos que no "
+				+ "estén al día con la mensualidad no podrán rendir el examen bimestral."))).isEqualTo(1644);
+		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").titulo("C2 letras " + sufijo)
+				.cuerpo("Para el paseo traigan S/ treinta en un sobre."))).isEqualTo(1644);
+		String expresion = ContenidoSinCobranza.EXPRESION;
+		for (String no : new String[] { "su saldo", "abonen hoy", "regularicen", "cancelar su deuda", "obligaciones económicas",
+				"S/ trescientos" }) {
+			assertThat(jdbc.queryForObject("SELECT REGEXP_LIKE(?, ?, 'i')", Integer.class, no, expresion)).as(no).isEqualTo(1);
+		}
+		for (String pasa : new String[] { "Av. Lima s/n", "padres/madres", "Saldaña y Abondano" }) {
+			assertThat(jdbc.queryForObject("SELECT REGEXP_LIKE(?, ?, 'i')", Integer.class, pasa, expresion)).as(pasa)
+					.isZero();
+		}
+	}
+
+	/** Correcciones del sprint 9 (auditoría, 3): la versión de la configuración académica sube de a una. */
+	@Test
+	void c3ConfiguracionQueSaltaVersionesFalla() {
+		Escuela s = escuela();
+		como(s.directora(), () -> {
+			configuraciones.cambiar(new ConfiguracionAcademica.Valores(java.time.LocalTime.of(9, 30),
+					java.time.LocalTime.of(10, 30), java.time.LocalTime.of(16, 0), 5, 5, java.time.LocalTime.of(18, 0), 4));
+			return null;
+		});
+		long v = jdbc.queryForObject("SELECT version FROM configuracion_academica WHERE colegio_id = ?", Long.class,
+				s.colegio());
+		String directora = s.directora().getNombreUsuario();
+		String cambiar = "UPDATE configuracion_academica SET hora_aviso = '10:45:00', actualizado_por = ?, actualizado_en = "
+				+ "NOW(6), version = ? WHERE colegio_id = ?";
+		Integer saltando = enTransaccion(s.directora(), () -> {
+			firma.firmar(ClaveFirma.configuracionAcademica(s.colegio(), v + 5));
+			return codigoAl(() -> jdbc.update(cambiar, directora, v + 5, s.colegio()));
+		});
+		assertThat(saltando).as("de " + v + " a " + (v + 5)).isEqualTo(1644);
+		Integer igual = enTransaccion(s.directora(), () -> {
+			firma.firmar(ClaveFirma.configuracionAcademica(s.colegio(), v + 1));
+			return codigoAl(() -> jdbc.update(cambiar.replace("version = ?", "version = version + ?"), directora, 0L,
+					s.colegio()));
+		});
+		assertThat(igual).as("sin subir la versión").isEqualTo(1644);
+		Integer deAUna = enTransaccion(s.directora(), () -> {
+			firma.firmar(ClaveFirma.configuracionAcademica(s.colegio(), v + 1));
+			return codigoAl(() -> jdbc.update(cambiar, directora, v + 1, s.colegio()));
+		});
+		assertThat(deAUna).as("de a una, con su firma").isNull();
+	}
+
+	/**
+	 * Correcciones del sprint 9 (auditoría, 4): trg_comunicado_destinatario_cambio. El aviso y el recordatorio los marca
+	 * solo cc_sistema, una vez y con un mensaje de comunicados de esa familia; la apertura, una vez y con la hora de la base.
+	 */
+	@Test
+	void c4DestinatarioSoloCambiaComoDebe() {
+		Escuela s = escuela();
+		Long id = enviarLegitimo(s, "C4 " + sufijo);
+		Long destinatario = jdbc.queryForObject("SELECT id FROM comunicado_destinatario WHERE comunicado_id = ? AND "
+				+ "familia_id = ?", Long.class, id, s.familiaA());
+		String avisar = "UPDATE comunicado_destinatario SET avisado_mensaje_id = ? WHERE id = ?";
+		assertThat(codigoAl(() -> jdbc.update(avisar, 999_999_999L, destinatario))).as("con cc_app").isEqualTo(1644);
+		assertThat(codigoAl(() -> sistema().update(avisar, 999_999_999L, destinatario))).as("sin su mensaje")
+				.isIn(1644, 1452);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE comunicado_destinatario SET recordado_mensaje_id = ? WHERE id = ?",
+				999_999_999L, destinatario))).as("el recordatorio con cc_app").isEqualTo(1644);
+		assertThat(codigoAl(() -> jdbc.update("UPDATE comunicado_destinatario SET abierto_en = UTC_TIMESTAMP(6) - INTERVAL "
+				+ "5 HOUR - INTERVAL 1 DAY WHERE id = ?", destinatario))).as("abierto ayer").isEqualTo(1644);
+		// La familia lo abre por la aplicación (con la hora de la base): pasa; y no se vuelve a marcar.
+		UsuarioAutenticado rosa = cuentaDe(s, s.apoderadoA(), "c4");
+		como(rosa, () -> lectura.abrir(id));
+		assertThat(jdbc.queryForObject("SELECT abierto_en IS NOT NULL FROM comunicado_destinatario WHERE id = ?",
+				Boolean.class, destinatario)).isTrue();
+		assertThat(codigoAl(() -> jdbc.update("UPDATE comunicado_destinatario SET abierto_en = UTC_TIMESTAMP(6) - INTERVAL "
+				+ "5 HOUR WHERE id = ?", destinatario))).as("reabrir").isEqualTo(1644);
 	}
 
 	// ------------------------------------------------------------------------------------------------ el flujo

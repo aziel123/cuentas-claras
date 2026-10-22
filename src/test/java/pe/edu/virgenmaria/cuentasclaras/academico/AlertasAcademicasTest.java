@@ -59,4 +59,23 @@ class AlertasAcademicasTest extends PruebaAsistencia {
 		assertThat(alertasAhora()).singleElement().satisfies(a -> assertThat(a.texto()).contains("5.° Primaria A")
 				.doesNotContain("Sofía"));
 	}
+
+	/**
+	 * QA-S9-6: se comparan ALUMNOS, no cantidades. El mismo día se retira un alumno ya marcado y se matricula otro: los
+	 * números coinciden (3 marcas iniciales y 3 matrículas activas), pero el alumno nuevo no tiene marca.
+	 */
+	@Test
+	void debeAvisarCuandoCuadraElNumeroPeroFaltaElAlumnoNuevo() {
+		registrar(Map.of());
+		jdbc.update("UPDATE matricula SET estado = 'RETIRADA', retirada_en = CURRENT_DATE WHERE alumno_id = ?",
+				datos.valeria());
+		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
+		alumnos.registrar(EscenarioEscolar.conApoderadoNuevo("72345679", "Rojas", "Paz", "Sofía", LocalDate.of(2015, 5, 5),
+				"42345678", "Rojas", "Luna", "Carmen", null, "carmen.rojas@gmail.com", datos.seccion()));
+		SecurityContextHolder.clearContext();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM matricula WHERE seccion_id = ? AND estado = 'ACTIVA'",
+				Long.class, datos.seccion())).isEqualTo(3);
+		alas(0, 10, 0);
+		assertThat(alertasAhora()).singleElement().satisfies(a -> assertThat(a.texto()).contains("5.° Primaria A"));
+	}
 }

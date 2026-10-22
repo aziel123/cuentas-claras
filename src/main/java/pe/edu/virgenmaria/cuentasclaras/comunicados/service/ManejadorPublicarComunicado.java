@@ -3,6 +3,7 @@ package pe.edu.virgenmaria.cuentasclaras.comunicados.service;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.virgenmaria.cuentasclaras.academico.api.SeccionesDocente;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.SolicitudCambio;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.TipoSolicitud;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.ManejadorSolicitud;
@@ -11,6 +12,7 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comunicados.model.Comunicado;
 import pe.edu.virgenmaria.cuentasclaras.comunicados.model.ComunicadoAdjunto;
+import pe.edu.virgenmaria.cuentasclaras.comunicados.model.EmisorRol;
 import pe.edu.virgenmaria.cuentasclaras.comunicados.model.EstadoComunicado;
 import pe.edu.virgenmaria.cuentasclaras.comunicados.repository.ComunicadoAdjuntoRepository;
 import pe.edu.virgenmaria.cuentasclaras.comunicados.repository.ComunicadoRepository;
@@ -43,8 +45,11 @@ public class ManejadorPublicarComunicado implements ManejadorSolicitud {
 
 	private final Clock reloj;
 
+	private final SeccionesDocente seccionesDocente;
+
 	public ManejadorPublicarComunicado(ComunicadoRepository comunicados, ComunicadoAdjuntoRepository adjuntos,
-			EnvioComunicados envio, AuditoriaService auditoria, Clock reloj) {
+			EnvioComunicados envio, AuditoriaService auditoria, Clock reloj, SeccionesDocente seccionesDocente) {
+		this.seccionesDocente = seccionesDocente;
 		this.comunicados = comunicados;
 		this.adjuntos = adjuntos;
 		this.envio = envio;
@@ -69,6 +74,12 @@ public class ManejadorPublicarComunicado implements ManejadorSolicitud {
 		if (persona.roles().stream().noneMatch(c.getEmisorRol()::loApruebaQuienTiene)) {
 			throw new ReglaNegocioException("Este comunicado lo aprueba " + EnvioComunicados.quienAprueba(c.getEmisorRol())
 					+ " (el otro órgano de quien lo escribió).");
+		}
+		// QA-S9-9: el de un docente sale solo si el docente sigue con su asignación vigente en la sección (lo exige también
+		// trg_comunicado_estado). Si ya no la tiene, se rechaza.
+		if (c.getEmisorRol() == EmisorRol.DOCENTE
+				&& !seccionesDocente.sigueAsignado(c.getEmisorUsuarioId(), c.getSeccionId())) {
+			throw new ReglaNegocioException("El docente que escribió este comunicado ya no tiene esa sección: recházalo.");
 		}
 		c.aprobar(LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS));
 		comunicados.saveAndFlush(c);

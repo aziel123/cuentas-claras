@@ -17,7 +17,8 @@ import java.util.regex.Pattern;
  */
 public final class ContenidoSinCobranza {
 
-	private static final String SOLES = "(^|[^a-z])s/\\.?\\s*[0-9]";
+	/** «S/» delante de una cifra o de un número en letras (QA-S9-5: «S/ trescientos»; «s/n» pasa). */
+	private static final String SOLES = "(^|[^a-z])s/\\.?\\s*([0-9]|(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieci[a-zéá]*|veinte|veinti[a-zéá]*|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos|mil)\\b)";
 
 	private static final String DOLARES = "US[$]";
 
@@ -37,9 +38,33 @@ public final class ContenidoSinCobranza {
 
 	private static final String MEDIOS = "\\byape\\b|\\bplin\\b";
 
+	/** Correcciones del sprint 9 (INDECOPI). */
+	private static final String MENSUALIDAD = "\\bmensualidad";
+
+	/** Correcciones del sprint 9 (INDECOPI). */
+	private static final String AL_DIA = "\\bal\\s+d[ií]a\\s+con\\b";
+
+	/** Correcciones del sprint 9 (INDECOPI). */
+	private static final String OBLIGACIONES = "\\b(obligaciones|compromisos)\\s+econ[oó]mic";
+
+	/** Correcciones del sprint 9 (INDECOPI). */
+	private static final String SALDO = "\\bsaldos?\\b";
+
+	/** Correcciones del sprint 9 (INDECOPI). */
+	private static final String ABONO = "\\babon(o|os|ó|ar|e|en|ad[oa]s?|ando)\\b";
+
+	/** Correcciones del sprint 9 (INDECOPI). */
+	private static final String REGULARIZAR = "\\bregulariz";
+
+	/** Correcciones del sprint 9 (INDECOPI). */
+	private static final String CANCELAR = "\\bcancel(ar|en)\\s+(la|su)\\b";
+
+	/** Correcciones del sprint 9 (INDECOPI). */
+	private static final String EXAMEN = "\\bno\\s+podr[aá]n?\\s+(rendir|dar)\\s+(el\\s+)?ex[aá]men";
+
 	/** La expresión, tal cual va (con las barras sin duplicar) en los REGEXP_LIKE de trg_mensaje_nace y trg_comunicado_nace. */
 	public static final String EXPRESION = String.join("|", SOLES, DOLARES, DECIMALES, DEUDA, PENSION, PAGO, MOROSIDAD,
-			COBRO, VENCIDO, MEDIOS);
+			COBRO, VENCIDO, MEDIOS, MENSUALIDAD, AL_DIA, OBLIGACIONES, SALDO, ABONO, REGULARIZAR, CANCELAR, EXAMEN);
 
 	private static final int BANDERAS = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS;
 
@@ -51,7 +76,15 @@ public final class ContenidoSinCobranza {
 			new Regla(DEUDA, "menciona una deuda"), new Regla(PENSION, "menciona pensiones o cuotas"),
 			new Regla(PAGO, "menciona pagos"), new Regla(MOROSIDAD, "menciona morosidad"),
 			new Regla(COBRO, "menciona cobros o cobranza"), new Regla(VENCIDO, "menciona un vencimiento"),
-			new Regla(MEDIOS, "menciona Yape o Plin"));
+			new Regla(MEDIOS, "menciona Yape o Plin"),
+			new Regla(MENSUALIDAD, "menciona la mensualidad"),
+			new Regla(AL_DIA, "pide estar al día con algo"),
+			new Regla(OBLIGACIONES, "menciona obligaciones económicas"),
+			new Regla(SALDO, "menciona un saldo"),
+			new Regla(ABONO, "menciona un abono"),
+			new Regla(REGULARIZAR, "pide regularizar algo"),
+			new Regla(CANCELAR, "pide cancelar algo"),
+			new Regla(EXAMEN, "condiciona un examen"));
 
 	private ContenidoSinCobranza() {
 	}

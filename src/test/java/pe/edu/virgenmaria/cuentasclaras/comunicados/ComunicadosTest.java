@@ -107,9 +107,12 @@ class ComunicadosTest extends PruebaComunicados {
 		EscenarioAprobaciones.aprueba(EscenarioCobranza.PROMOTORIA, bandeja, jdbc, "comunicado", id);
 		assertThat(estado(id)).isEqualTo("ENVIADO");
 		assertThat(contar("SELECT COUNT(*) FROM comunicado_destinatario WHERE comunicado_id = ?", id)).isEqualTo(3);
-		// El PDF con texto de Dirección sale al momento.
+		// Correcciones del sprint 9: también el PDF con texto de Dirección espera la aprobación de Promotoría.
 		Long conTexto = como(EscenarioCobranza.DIRECCION, () -> envio.enviar(aTodoElColegio(EmisorRol.DIRECCION,
 				"Programa del Día del Logro"), pdf(false)));
+		assertThat(estado(conTexto)).isEqualTo("POR_APROBAR");
+		assertThat(contar("SELECT COUNT(*) FROM comunicado_destinatario WHERE comunicado_id = ?", conTexto)).isZero();
+		EscenarioAprobaciones.aprueba(EscenarioCobranza.PROMOTORIA, bandeja, jdbc, "comunicado", conTexto);
 		assertThat(estado(conTexto)).isEqualTo("ENVIADO");
 	}
 

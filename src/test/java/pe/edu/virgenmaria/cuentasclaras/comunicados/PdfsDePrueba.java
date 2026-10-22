@@ -118,6 +118,91 @@ public final class PdfsDePrueba {
 		});
 	}
 
+	/**
+	 * Correcciones del sprint 9 (auditoría, 1): con texto suficiente y una imagen EN LÍNEA (BI … ID … EI) en el contenido
+	 * de la página, sin XObject: cuenta como imagen.
+	 */
+	public static byte[] conImagenEnLinea() {
+		return conTexto(1, TEXTO_NORMAL, d -> agregarContenido(d, "q 120 0 0 120 50 450 cm BI /W 2 /H 2 /CS /G /BPC 8 ID "
+				+ "\u0000\u00ff\u00ff\u0000 EI Q"));
+	}
+
+	/**
+	 * Correcciones del sprint 9 (auditoría, 1): «Ver afiche.» visible y un párrafo largo en modo 3 (invisible): el texto
+	 * invisible no cuenta como texto de la página.
+	 */
+	public static byte[] conTextoInvisible() {
+		return generar(d -> {
+			PDPage pagina = new PDPage(PDRectangle.A4);
+			d.addPage(pagina);
+			try (PDPageContentStream c = new PDPageContentStream(d, pagina)) {
+				c.beginText();
+				c.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 11);
+				c.newLineAtOffset(50, 750);
+				c.showText("Ver afiche.");
+				c.setRenderingMode(org.apache.pdfbox.pdmodel.graphics.state.RenderingMode.NEITHER);
+				c.newLineAtOffset(0, -16);
+				c.showText(TEXTO_NORMAL.substring(0, 110));
+				c.endText();
+			}
+			catch (IOException e) {
+				throw new UncheckedIOException(e);
+			}
+		});
+	}
+
+	/** El texto que se VE en {@link #conToUnicodeFalso()} (la extracción devuelve otra cosa). */
+	public static final String VISIBLE_CON_TOUNICODE_FALSO = "Pague su deuda hoy en la cuenta del colegio sin falta";
+
+	/**
+	 * Correcciones del sprint 9 (auditoría, 1): una fuente con un ToUnicode falso. Se ve «Pague su deuda…», pero el texto
+	 * extraído es otro (cada código se corre de letra): el filtro no lo puede leer. Por eso todo PDF lo aprueba otra persona.
+	 */
+	public static byte[] conToUnicodeFalso() {
+		return generar(d -> {
+			PDPage pagina = new PDPage(PDRectangle.A4);
+			d.addPage(pagina);
+			try {
+				PDType1Font fuente = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+				COSStream cmap = d.getDocument().createCOSStream();
+				try (OutputStream o = cmap.createOutputStream()) {
+					o.write(("/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CMapName /Falso def\n"
+							+ "/CMapType 2 def\n1 begincodespacerange\n<00> <FF>\nendcodespacerange\n1 beginbfrange\n"
+							+ "<20> <7E> <0061>\nendbfrange\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n")
+							.getBytes(StandardCharsets.ISO_8859_1));
+				}
+				fuente.getCOSObject().setItem(COSName.TO_UNICODE, cmap);
+				try (PDPageContentStream c = new PDPageContentStream(d, pagina)) {
+					c.beginText();
+					c.setFont(fuente, 11);
+					c.newLineAtOffset(50, 750);
+					c.showText(VISIBLE_CON_TOUNICODE_FALSO);
+					c.endText();
+				}
+			}
+			catch (IOException e) {
+				throw new UncheckedIOException(e);
+			}
+		});
+	}
+
+	private static void agregarContenido(PDDocument d, String operadores) {
+		try {
+			PDPage pagina = d.getPage(0);
+			java.util.List<org.apache.pdfbox.pdmodel.common.PDStream> flujos = new java.util.ArrayList<>();
+			pagina.getContentStreams().forEachRemaining(flujos::add);
+			org.apache.pdfbox.pdmodel.common.PDStream nuevo = new org.apache.pdfbox.pdmodel.common.PDStream(d);
+			try (OutputStream o = nuevo.createOutputStream()) {
+				o.write(operadores.getBytes(StandardCharsets.ISO_8859_1));
+			}
+			flujos.add(nuevo);
+			pagina.setContents(flujos);
+		}
+		catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
 	/** Un PDF con poco texto (una línea): requiere revisión (B3). */
 	public static byte[] conPocoTexto() {
 		return conTexto(1, "Ver afiche.", d -> { });

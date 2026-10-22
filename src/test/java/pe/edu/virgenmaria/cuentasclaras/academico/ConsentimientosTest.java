@@ -46,26 +46,47 @@ class ConsentimientosTest extends PruebaAsistencia {
 		});
 	}
 
+	/** La ficha de matrícula registrada de la familia del apoderado (la que muestra la ficha del alumno). */
+	private String fichaDe(Long apoderado) {
+		return jdbc.queryForObject("SELECT CONCAT('FM-', a.anio, '-', LPAD(m.id, 4, '0')) FROM matricula m JOIN anio_escolar a "
+				+ "ON a.id = m.anio_escolar_id JOIN alumno al ON al.id = m.alumno_id JOIN apoderado p ON p.familia_id = "
+				+ "al.familia_id WHERE p.id = ? ORDER BY m.id LIMIT 1", String.class, apoderado);
+	}
+
+	/** Correcciones del sprint 9 (auditoría, 6): un código inventado o de otra familia no sirve de evidencia. */
+	@Test
+	void desdeFichaExigeLaFichaRegistradaDeLaFamilia() {
+		assertThatThrownBy(() -> como(EscenarioCobranza.ADMINISTRACION, () -> consentimientos.registrarDesdeFicha(
+				new ConsentimientoFichaRequest(datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, "FM-2026-999999"))))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("matrícula registrada");
+		assertThatThrownBy(() -> como(EscenarioCobranza.ADMINISTRACION, () -> consentimientos.registrarDesdeFicha(
+				new ConsentimientoFichaRequest(datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, fichaDe(datos.pedro())))))
+				.as("la ficha de otra familia").isInstanceOf(ReglaNegocioException.class);
+		assertThat(EscenarioEscolar.contar(jdbc, "consentimiento_aviso")).isZero();
+	}
+
 	@Test
 	void desdeFichaExigeEvidencia() {
 		assertThatThrownBy(() -> como(EscenarioCobranza.ADMINISTRACION, () -> consentimientos.registrarDesdeFicha(
 				new ConsentimientoFichaRequest(datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, "  "))))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("código de la ficha");
 		assertThatThrownBy(() -> como(EscenarioCobranza.CAJA, () -> consentimientos.registrarDesdeFicha(
-				new ConsentimientoFichaRequest(datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, "FM-2026-0012"))))
+				new ConsentimientoFichaRequest(datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, fichaDe(datos.rosa())))))
 				.isInstanceOf(AccessDeniedException.class);
+		String ficha = fichaDe(datos.rosa());
 		como(EscenarioCobranza.ADMINISTRACION, () -> consentimientos.registrarDesdeFicha(new ConsentimientoFichaRequest(
-				datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, "FM-2026-0012")));
+				datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, ficha)));
 		assertThat(recibe(datos.rosa(), true)).isTrue();
-		assertThat(jdbc.queryForObject("SELECT evidencia FROM consentimiento_aviso", String.class)).isEqualTo("FM-2026-0012");
+		assertThat(jdbc.queryForObject("SELECT evidencia FROM consentimiento_aviso", String.class)).isEqualTo(ficha);
 		assertThat(EscenarioEscolar.ultimoEvento(jdbc, "CONSENTIMIENTO_AVISO").get("DETALLE").toString())
-				.contains("FM-2026-0012");
+				.contains(ficha);
 	}
 
 	@Test
 	void laFamiliaLoRevoca() {
+		String ficha = fichaDe(datos.rosa());
 		como(EscenarioCobranza.ADMINISTRACION, () -> consentimientos.registrarDesdeFicha(new ConsentimientoFichaRequest(
-				datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, "FM-2026-0012")));
+				datos.rosa(), Finalidad.ASISTENCIA, Canal.WHATSAPP, ficha)));
 		como(datos.rosaEnLinea(), () -> consentimientos.registrarEnPortal(new ConsentimientoRequest(Finalidad.ASISTENCIA,
 				Canal.WHATSAPP, false)));
 		assertThat(recibe(datos.rosa(), true)).isFalse();

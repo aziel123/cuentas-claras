@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--/* Sprint 9, tanda 3 (sección 3.8): escribir un comunicado (o la fe de erratas de uno) con vista previa. La firma que ve la
      familia la pone el sistema; el texto es plano (se muestra escapado) y pasa por el filtro de contenido. El PDF lo revisa
-     el analizador en un proceso aparte y, si es de un docente o tiene poco texto o imágenes, lo aprueba el otro órgano. */-->
+     el analizador en un proceso aparte y TODO comunicado con PDF lo aprueba el otro órgano (correcciones del sprint 9). */-->
 <html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Nuevo comunicado', ~{::main})}">
 <body>
 <main id="contenido" class="contenido" data-pantalla="comunicado-nuevo">
@@ -91,10 +91,9 @@
 				<label for="archivo">PDF (opcional)</label>
 				<input class="input" id="archivo" name="archivo" type="file" accept="application/pdf,.pdf">
 				<p class="ayuda" th:if="${adjunto == null}">Hasta 2 MB y 10 páginas, exportado «como PDF» y sin formularios,
-					adjuntos ni enlaces a otros sitios. Si es de un docente, o si tiene poco texto o imágenes, lo aprueba otra
-					persona antes de salir.</p>
+					adjuntos ni enlaces a otros sitios. Todo comunicado con PDF lo aprueba otra persona antes de salir.</p>
 				<p class="ayuda" th:if="${adjunto != null}"
-					th:text="|Adjunto revisado: ${adjunto.paginas()} página(s)${adjunto.requiereRevision() ? ', con poco texto o imágenes: lo aprobará el otro órgano' : ''}.|">Adjunto</p>
+					th:text="|Adjunto revisado: ${adjunto.paginas()} página(s)${adjunto.requiereRevision() ? ', con poco texto o imágenes' : ''}. Todo comunicado con PDF lo aprueba otra persona antes de salir.|">Adjunto</p>
 			</div>
 			<div class="fila">
 				<label class="opcion" th:if="${opciones.urgentePermitido and original == null}">

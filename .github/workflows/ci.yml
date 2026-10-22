@@ -828,11 +828,11 @@ jobs:
           comprobar 1644 "INSERT INTO comunicado (colegio_id, anio_escolar_id, tipo, emisor_usuario_id, emisor_rol, emisor_etiqueta, alcance, titulo, cuerpo, huella_contenido, estado, enviado_en, sesion_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'NORMAL', 0, 'DIRECCION', 'ci', 'COLEGIO', 'Comunicado ci', 'Comunicado del CI', REPEAT('0', 64), 'ENVIADO', NOW(6), 0, NOW(6), 'ci', NOW(6))"
           comprobar 1644 "INSERT INTO exportacion_nomina (colegio_id, anio_escolar_id, seccion_id, perfil, filas, faltantes, codigo, sha256, sesion_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'SIAGIE_MATRICULA_PROVISIONAL', 0, 0, 'CI-0001', REPEAT('0', 64), 0, NOW(6), 'ci', NOW(6))"
           comprobar_sistema 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, familia_id, apoderado_id, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'ci-comunicados', 'COMUNICADOS_RESUMEN', 'CORREO', 'APODERADO', 0, 0, 'x@y.pe', 'cc_comunicados_v2', 'Colegio ci\n2 comunicados. Debe S/ 350.00', 'PENDIENTE', NOW(6), 'sistema.comunicados', NOW(6))"
-          # Huellas (H7): cc_app ve las de los 98 triggers y las 13 funciones con huellas_objetos() (sprint 9, tanda 3).
+          # Huellas (H7): cc_app ve las de los 99 triggers y las 13 funciones con huellas_objetos() (correcciones del sprint 9).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
           [ "$objetos" = "$((esperados + 13))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
-          [ "$objetos" = "111" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y la tanda 3 del sprint 9 deja 111"; exit 1; }
-          [ "$esperados" = "98" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 3 del sprint 9 deja 98"; exit 1; }
+          [ "$objetos" = "112" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y las correcciones del sprint 9 dejan 112"; exit 1; }
+          [ "$esperados" = "99" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y las correcciones del sprint 9 dejan 99"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -875,7 +875,7 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 98 triggers y las 13 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 99 triggers y las 13 funciones verificadas" prod.log || { cat prod.log; exit 1; }
           # Sprint 8, tanda 2 (sección 3.6): los conectores (GRANT por columna y triggers) y la clave que descifra todos
           # sus secretos (los que dejaron las pruebas, cifrados con CC_CLAVE_CONECTORES).
           grep -q "Permisos y triggers de los conectores por colegio verificados" prod.log || { cat prod.log; exit 1; }

@@ -178,7 +178,7 @@ public class DemoColegios {
 		// Sprint 9, tanda 3 (sección 3.14): tres comunicados (uno con el PDF de ejemplo y su fe de erratas, y uno de la
 		// tutora) y los códigos modulares ficticios.
 		if (comunicados != null) {
-			comunicados.ifAvailable(c -> c.cargar(colegioId, prefijo + ".direccion", prefijo + ".docente"));
+			comunicados.ifAvailable(c -> c.cargar(colegioId, prefijo + ".promotoria", prefijo + ".direccion", prefijo + ".docente"));
 		}
 		// QA-S8-9: el primer cobro es de la familia de la cuenta «apoderado»: quien entra como padre ve su pago, su boleta
 		// «DEMO · SIN VALOR» y el aviso que le llegó.

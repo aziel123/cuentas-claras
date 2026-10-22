@@ -54,6 +54,15 @@ public interface DiasHabiles {
 		return anterior;
 	}
 
+	/**
+	 * QA-S9-7: la ÚNICA regla de «N días hábiles» (justificación, registro tardío y cobertura): el {@code dia} está dentro
+	 * de los N días hábiles que empiezan en {@code inicio}, que cuenta como el primero (con los feriados del colegio). Con 5:
+	 * una falta del lunes se justifica hasta el viernes; una cobertura desde hoy, lunes, llega hasta el viernes.
+	 */
+	default boolean dentroDeHabiles(LocalDate inicio, LocalDate dia, int dias) {
+		return !dia.isBefore(inicio) && habilesEntre(inicio, dia) < dias;
+	}
+
 	/** {@code dias} días hábiles después de la fecha (o antes, si es negativo). 0 devuelve la misma fecha. */
 	default LocalDate sumarHabiles(LocalDate fecha, int dias) {
 		LocalDate resultado = fecha;

@@ -383,7 +383,7 @@ public class ServicioAsistencia {
 			throw new ReglaNegocioException("El registro tardío es de un día pasado: la de hoy se registra en la hoja.");
 		}
 		if (fecha.isBefore(hoy.minusDays(MAX_DIAS_TARDIO))
-				|| calendario.habilesEntre(fecha, hoy) > configuracion.getDiasRegistroTardio()) {
+				|| !calendario.dentroDeHabiles(fecha, hoy, configuracion.getDiasRegistroTardio())) {
 			throw new ReglaNegocioException("Solo se registra un día de los últimos "
 					+ configuracion.getDiasRegistroTardio() + " días hábiles.");
 		}

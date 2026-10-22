@@ -24,6 +24,10 @@ public interface ConsentimientoAvisoRepository extends Repository<Consentimiento
 	List<ConsentimientoAviso> findByFamiliaIdOrderByIdDesc(Long familiaId);
 
 	/** Las registradas por una persona desde la ficha (la alerta de más de 30 en un día). */
+	/** Correcciones del sprint 9 (auditoría, 6): los registrados desde la ficha desde un momento (para la alerta). */
+	List<ConsentimientoAviso> findByOrigenAndCreadoEnGreaterThanEqual(
+			pe.edu.virgenmaria.cuentasclaras.academico.model.OrigenConsentimiento origen, java.time.LocalDateTime desde);
+
 	long countByCreadoPorAndOrigenAndCreadoEnGreaterThanEqual(String creadoPor,
 			pe.edu.virgenmaria.cuentasclaras.academico.model.OrigenConsentimiento origen, java.time.LocalDateTime desde);
 }

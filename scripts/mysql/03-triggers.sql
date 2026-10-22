@@ -9,6 +9,12 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
+-- Versión de las correcciones del sprint 9 (V34): 99 triggers y 10 funciones (13 con huella; 112 huellas). Nuevo:
+-- trg_comunicado_destinatario_cambio (la apertura se marca una vez con la hora de la base; el aviso y el recordatorio,
+-- una vez y solo con cc_sistema, con un mensaje de comunicados a un apoderado de esa familia). Cambian:
+-- trg_comunicado_nace (TODO comunicado con PDF nace POR_APROBAR, sea quien sea el emisor), trg_comunicado_estado (el
+-- PDF de un docente se aprueba solo si sigue asignado a la sección: QA-S9-9), trg_configuracion_academica_cambio (la
+-- versión sube de a una) y la regla de cobranza de trg_mensaje_nace y trg_comunicado_nace (INDECOPI y QA-S9-5).
 -- Versión de la migración V34 (sprint 9, tanda 3): 98 triggers y 10 funciones (13 con huella; 111 huellas).
 -- Nuevos: trg_comunicado_nace (un comunicado lo envía una persona con su rol REAL, su sesión y su firma, con la huella que
 -- recalcula la base (B2), sin caracteres de formato ni cobranza (B4); un PDF que requiere revisión espera la aprobación del
@@ -1210,7 +1216,7 @@ BEGIN
         IF NEW.parametros IS NULL OR NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id
                 AND CAST(LEFT(NEW.parametros, CHAR_LENGTH(c.nombre) + 1) AS BINARY) = CAST(CONCAT(c.nombre, CHAR(10)) AS BINARY)
                 AND NOT REGEXP_LIKE(SUBSTRING(NEW.parametros, CHAR_LENGTH(c.nombre) + 2),
-                    '(^|[^a-z])s/\\.?\\s*[0-9]|US[$]|[0-9][.,][0-9]{2}(?![0-9]|\\s*([ap]\\.?\\s?m|h)\\b)|\\bdeud|\\bpensi[oó]n|\\bcuotas?\\b|\\bpag(o|os|ar|ue|ues)\\b|\\bmoros|\\bcobr|\\bvencid|\\byape\\b|\\bplin\\b',
+                    '(^|[^a-z])s/\\.?\\s*([0-9]|(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieci[a-zéá]*|veinte|veinti[a-zéá]*|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos|mil)\\b)|US[$]|[0-9][.,][0-9]{2}(?![0-9]|\\s*([ap]\\.?\\s?m|h)\\b)|\\bdeud|\\bpensi[oó]n|\\bcuotas?\\b|\\bpag(o|os|ar|ue|ues)\\b|\\bmoros|\\bcobr|\\bvencid|\\byape\\b|\\bplin\\b|\\bmensualidad|\\bal\\s+d[ií]a\\s+con\\b|\\b(obligaciones|compromisos)\\s+econ[oó]mic|\\bsaldos?\\b|\\babon(o|os|ó|ar|e|en|ad[oa]s?|ando)\\b|\\bregulariz|\\bcancel(ar|en)\\s+(la|su)\\b|\\bno\\s+podr[aá]n?\\s+(rendir|dar)\\s+(el\\s+)?ex[aá]men',
                     'i')) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un aviso de asistencia o de comunicados no habla de cobranza y empieza con el colegio';
         END IF;
@@ -2901,6 +2907,7 @@ BEGIN
             OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
                 WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.actualizado_por AND u.activo
                   AND u.apoderado_id IS NULL AND r.rol = 'DIRECTOR')
+            OR NOT (NEW.version <=> OLD.version + 1)
             OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('configuracion_academica:', NEW.colegio_id, ':CAMBIADA:',
                 NEW.version), NEW.actualizado_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la configuracion academica la cambia Direccion con su firma';
@@ -2917,14 +2924,14 @@ DELIMITER $$
 -- Un comunicado lo envía una persona del colegio con su sesión y su rol REAL, en un colegio en producción y en el año en
 -- curso, con la firma de su sesión (también el que queda POR_APROBAR). La base recalcula la huella del contenido (B2) y
 -- rechaza los caracteres de formato (B4) y la cobranza. Un docente, solo a una sección con su asignación vigente (no
--- auxiliar); con PDF, queda POR_APROBAR. Un PDF que requiere revisión (B3) queda POR_APROBAR para cualquier emisor. La fe
+-- auxiliar). TODO comunicado con PDF queda POR_APROBAR, sea quien sea el emisor (correcciones del sprint 9: no depende
+-- de requiere_revision, que calcula la aplicación). La fe
 -- de erratas va al mismo alcance que el original; la de un retirado, solo Dirección o Promotoría (B9). El envío a ±5
 -- minutos del reloj de la base (B13).
 DROP TRIGGER IF EXISTS trg_comunicado_nace$$
 CREATE TRIGGER trg_comunicado_nace BEFORE INSERT ON comunicado FOR EACH ROW
 BEGIN
     DECLARE v_sha_adjunto CHAR(64);
-    DECLARE v_revision BOOLEAN DEFAULT FALSE;
     IF NEW.estado NOT IN ('ENVIADO', 'POR_APROBAR') OR NEW.solicitud_id IS NOT NULL OR NEW.retirado_por IS NOT NULL
             OR NEW.destinatarios IS NOT NULL
             OR NOT cc_colegio_en_produccion(NEW.colegio_id)
@@ -2939,7 +2946,7 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el comunicado lo envia una persona del colegio con su rol real y su sesion';
     END IF;
     IF NEW.adjunto_id IS NOT NULL THEN
-        SELECT a.sha256, a.requiere_revision INTO v_sha_adjunto, v_revision FROM comunicado_adjunto a
+        SELECT a.sha256 INTO v_sha_adjunto FROM comunicado_adjunto a
             WHERE a.id = NEW.adjunto_id AND a.colegio_id = NEW.colegio_id AND a.creado_por = NEW.creado_por;
         IF v_sha_adjunto IS NULL THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el adjunto lo subio quien envia el comunicado';
@@ -2951,7 +2958,7 @@ BEGIN
     END IF;
     IF REGEXP_LIKE(CONCAT(NEW.titulo, NEW.cuerpo), '\\p{Cf}')
             OR REGEXP_LIKE(CONCAT_WS(CHAR(10), NEW.titulo, NEW.cuerpo),
-                '(^|[^a-z])s/\\.?\\s*[0-9]|US[$]|[0-9][.,][0-9]{2}(?![0-9]|\\s*([ap]\\.?\\s?m|h)\\b)|\\bdeud|\\bpensi[oó]n|\\bcuotas?\\b|\\bpag(o|os|ar|ue|ues)\\b|\\bmoros|\\bcobr|\\bvencid|\\byape\\b|\\bplin\\b',
+                '(^|[^a-z])s/\\.?\\s*([0-9]|(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieci[a-zéá]*|veinte|veinti[a-zéá]*|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos|mil)\\b)|US[$]|[0-9][.,][0-9]{2}(?![0-9]|\\s*([ap]\\.?\\s?m|h)\\b)|\\bdeud|\\bpensi[oó]n|\\bcuotas?\\b|\\bpag(o|os|ar|ue|ues)\\b|\\bmoros|\\bcobr|\\bvencid|\\byape\\b|\\bplin\\b|\\bmensualidad|\\bal\\s+d[ií]a\\s+con\\b|\\b(obligaciones|compromisos)\\s+econ[oó]mic|\\bsaldos?\\b|\\babon(o|os|ó|ar|e|en|ad[oa]s?|ando)\\b|\\bregulariz|\\bcancel(ar|en)\\s+(la|su)\\b|\\bno\\s+podr[aá]n?\\s+(rendir|dar)\\s+(el\\s+)?ex[aá]men',
                 'i') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un comunicado no lleva caracteres invisibles ni habla de cobranza';
     END IF;
@@ -2961,8 +2968,8 @@ BEGIN
                 OR (NEW.adjunto_id IS NOT NULL AND NEW.estado = 'POR_APROBAR'))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el docente escribe solo a sus secciones; con PDF, lo aprueba Direccion';
     END IF;
-    IF NEW.emisor_rol <> 'DOCENTE' AND NOT (NEW.estado <=> IF(v_revision, 'POR_APROBAR', 'ENVIADO')) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el comunicado de Direccion o Promotoria sale al enviarse, salvo un PDF que requiere revision';
+    IF NOT (NEW.estado <=> IF(NEW.adjunto_id IS NOT NULL, 'POR_APROBAR', 'ENVIADO')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: todo comunicado con PDF espera la aprobacion de otra persona; sin PDF, sale al enviarse';
     END IF;
     IF NOT cc_firma_valida(NEW.colegio_id, CONCAT('comunicado:', LEFT(NEW.huella_contenido, 40), ':ENVIAR'),
             NEW.creado_por) THEN
@@ -3020,6 +3027,10 @@ BEGIN
                     AND UTC_TIMESTAMP(6) - INTERVAL 5 HOUR + INTERVAL 5 MINUTE) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el comunicado por aprobar lo aprueba el otro organo con su firma';
         END IF;
+        -- QA-S9-9: el de un docente sale solo si el docente sigue con su asignación vigente en la sección.
+        IF OLD.emisor_rol = 'DOCENTE' AND NOT cc_docente_de_seccion(OLD.creado_por, OLD.seccion_id, FALSE) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el docente ya no tiene la seccion: el comunicado no sale';
+        END IF;
     ELSEIF OLD.estado = 'POR_APROBAR' AND NEW.estado = 'RECHAZADO' THEN
         IF NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id
                 AND s.tipo = 'PUBLICAR_COMUNICADO' AND s.entidad = 'comunicado' AND s.entidad_id = NEW.id
@@ -3070,6 +3081,29 @@ BEGIN
               AND (v_alcance = 'COLEGIO' OR (v_alcance = 'NIVEL' AND s.grado LIKE CONCAT(v_nivel, '\_%'))
                   OR (v_alcance = 'GRADO' AND s.grado = v_grado) OR (v_alcance = 'SECCION' AND s.id = v_seccion))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el destinatario tiene un alumno matriculado en el alcance del comunicado';
+    END IF;
+END$$
+
+-- Correcciones del sprint 9 (auditoría del código, 4): un destinatario cambia solo para marcar que la familia lo abrió
+-- (una vez, con la hora del reloj de la base, ±5 minutos) o, con cc_sistema, que se le avisó o se le recordó (una vez cada
+-- uno, con un mensaje de comunicados a un apoderado de ESA familia). La familia y el comunicado no cambian (1143).
+DROP TRIGGER IF EXISTS trg_comunicado_destinatario_cambio$$
+CREATE TRIGGER trg_comunicado_destinatario_cambio BEFORE UPDATE ON comunicado_destinatario FOR EACH ROW
+BEGIN
+    IF NOT (NEW.abierto_en <=> OLD.abierto_en) AND (OLD.abierto_en IS NOT NULL OR NEW.abierto_en IS NULL
+            OR NOT (NEW.abierto_en BETWEEN UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE
+                AND UTC_TIMESTAMP(6) - INTERVAL 5 HOUR + INTERVAL 5 MINUTE)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la apertura de un comunicado se marca una vez, con la hora de la base';
+    END IF;
+    IF (NOT (NEW.avisado_mensaje_id <=> OLD.avisado_mensaje_id) AND (OLD.avisado_mensaje_id IS NOT NULL
+                OR NOT cc_es_sistema() OR NOT EXISTS (SELECT 1 FROM mensaje m JOIN apoderado a ON a.id = m.apoderado_id
+                    WHERE m.id = NEW.avisado_mensaje_id AND m.colegio_id = NEW.colegio_id AND m.tipo LIKE 'COMUNICADO%'
+                      AND a.colegio_id = NEW.colegio_id AND a.familia_id = NEW.familia_id)))
+            OR (NOT (NEW.recordado_mensaje_id <=> OLD.recordado_mensaje_id) AND (OLD.recordado_mensaje_id IS NOT NULL
+                OR NOT cc_es_sistema() OR NOT EXISTS (SELECT 1 FROM mensaje m JOIN apoderado a ON a.id = m.apoderado_id
+                    WHERE m.id = NEW.recordado_mensaje_id AND m.colegio_id = NEW.colegio_id AND m.tipo LIKE 'COMUNICADO%'
+                      AND a.colegio_id = NEW.colegio_id AND a.familia_id = NEW.familia_id))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el aviso y el recordatorio de un comunicado los marca el proceso, una vez, con su mensaje';
     END IF;
 END$$
 

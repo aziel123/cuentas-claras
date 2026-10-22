@@ -61,8 +61,15 @@ public class ConsentimientosAviso {
 
 	private final Clock reloj;
 
+	/** «FM-2026-0012»: el año y el id de la matrícula registrada (Matricula.codigoFicha). */
+	private static final java.util.regex.Pattern CODIGO_FICHA = java.util.regex.Pattern.compile("FM-([0-9]{4})-([0-9]{4,12})");
+
+	private final pe.edu.virgenmaria.cuentasclaras.alumnos.repository.MatriculaRepository matriculas;
+
 	public ConsentimientosAviso(ConsentimientoAvisoRepository consentimientos, ApoderadoRepository apoderados,
-			ColegioRepository colegios, SesionDeQuienEscribe sesiones, AuditoriaService auditoria, Clock reloj) {
+			ColegioRepository colegios, SesionDeQuienEscribe sesiones, AuditoriaService auditoria, Clock reloj,
+			pe.edu.virgenmaria.cuentasclaras.alumnos.repository.MatriculaRepository matriculas) {
+		this.matriculas = matriculas;
 		this.consentimientos = consentimientos;
 		this.apoderados = apoderados;
 		this.colegios = colegios;
@@ -120,6 +127,7 @@ public class ConsentimientosAviso {
 		UsuarioAutenticado persona = PersonaEnSesion.actual();
 		Apoderado apoderado = apoderados.findById(pedido.apoderadoId()).filter(Apoderado::isActivo)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Apoderado no encontrado"));
+		exigirFichaDeLaFamilia(pedido.codigoFicha(), apoderado);
 		ConsentimientoAviso nuevo = consentimientos.saveAndFlush(ConsentimientoAviso.desdeFicha(
 				apoderado.getFamilia().getId(), apoderado.getId(), pedido.finalidad(), pedido.canal(), pedido.codigoFicha(),
 				versionAviso(), sesiones.de(persona)));
@@ -131,6 +139,23 @@ public class ConsentimientosAviso {
 						+ " por " + pedido.canal().etiqueta() + " del apoderado " + apoderado.getId() + "."
 						+ (hoy > ALERTA_FICHAS_DIA ? " Revisar: " + hoy + " consentimientos desde ficha hoy por la misma "
 								+ "persona." : ""));
+	}
+
+	/**
+	 * Correcciones del sprint 9 (auditoría, 6): el código es el de una ficha de matrícula REGISTRADA de un hijo de esa
+	 * familia (se ve en la ficha del alumno). Un código inventado o de otra familia no sirve de evidencia.
+	 */
+	private void exigirFichaDeLaFamilia(String codigo, Apoderado apoderado) {
+		java.util.regex.Matcher m = CODIGO_FICHA.matcher(codigo == null ? "" : codigo.strip().toUpperCase(java.util.Locale.ROOT));
+		boolean valido = m.matches() && matriculas.findById(Long.parseLong(m.group(2)))
+				.filter(x -> x.getAnioEscolar().getAnio() == Integer.parseInt(m.group(1)))
+				.filter(x -> x.getAlumno().getFamilia() != null
+						&& x.getAlumno().getFamilia().getId().equals(apoderado.getFamilia().getId()))
+				.isPresent();
+		if (!valido) {
+			throw new ReglaNegocioException("El código de la ficha no corresponde a una matrícula registrada de esta "
+					+ "familia. Cópialo de la ficha del alumno (por ejemplo, FM-2026-0012).");
+		}
 	}
 
 	private List<ConsentimientoVista> vistas(Apoderado a) {

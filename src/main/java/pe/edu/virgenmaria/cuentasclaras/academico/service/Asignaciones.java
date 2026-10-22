@@ -322,7 +322,7 @@ public class Asignaciones {
 		if (hasta.isBefore(hoy)) {
 			throw new ReglaNegocioException("La cobertura termina hoy o después.");
 		}
-		if (hasta.isAfter(hoy.plusDays(10)) || calendario.habilesEntre(hoy, hasta) > MAX_HABILES_COBERTURA) {
+		if (hasta.isAfter(hoy.plusDays(10)) || !calendario.dentroDeHabiles(hoy, hasta, MAX_HABILES_COBERTURA)) {
 			throw new ReglaNegocioException("Una cobertura dura como máximo " + MAX_HABILES_COBERTURA + " días hábiles: "
 					+ "para más tiempo, propón una asignación sin fecha de fin.");
 		}

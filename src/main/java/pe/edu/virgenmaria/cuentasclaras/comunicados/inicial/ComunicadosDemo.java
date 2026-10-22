@@ -6,6 +6,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import pe.edu.virgenmaria.cuentasclaras.academico.siagie.CodigoModularRequest;
 import pe.edu.virgenmaria.cuentasclaras.academico.siagie.NominaSiagie;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaAprobaciones;
+import pe.edu.virgenmaria.cuentasclaras.comunicados.repository.ComunicadoRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comunicados.dto.AdjuntoValidado;
@@ -42,8 +44,14 @@ public class ComunicadosDemo {
 
 	private final PersonaDemo personas;
 
+	private final BandejaAprobaciones bandeja;
+
+	private final ComunicadoRepository comunicados;
+
 	public ComunicadosDemo(EnvioComunicados envio, AdjuntosComunicado adjuntos, PdfEjemplo ejemplo, NominaSiagie nomina,
-			PersonaDemo personas) {
+			PersonaDemo personas, BandejaAprobaciones bandeja, ComunicadoRepository comunicados) {
+		this.bandeja = bandeja;
+		this.comunicados = comunicados;
 		this.envio = envio;
 		this.adjuntos = adjuntos;
 		this.ejemplo = ejemplo;
@@ -51,17 +59,26 @@ public class ComunicadosDemo {
 		this.personas = personas;
 	}
 
-	public void cargar(long colegioId, String direccion, String docente) {
+	public void cargar(long colegioId, String promotoria, String direccion, String docente) {
 		try {
-			personas.como(colegioId, direccion, () -> {
+			Long dia = personas.como(colegioId, direccion, () -> {
 				for (Nivel nivel : Nivel.values()) {
 					nomina.registrarCodigoModular(new CodigoModularRequest(nivel, "000000" + (nivel.ordinal() + 1), "0"));
 				}
 				AdjuntoValidado pdf = adjuntos.validar(PdfEjemplo.ARCHIVO, ejemplo.contenido());
-				Long dia = envio.enviar(new BorradorComunicado(EmisorRol.DIRECCION, AlcanceComunicado.COLEGIO, null, null,
+				return envio.enviar(new BorradorComunicado(EmisorRol.DIRECCION, AlcanceComunicado.COLEGIO, null, null,
 						null, "Día del Logro (ejemplo de la demo)", "Estimadas familias: el viernes celebraremos el Día del "
 								+ "Logro en el patio principal, de 9:00 a 11:30. Los alumnos asisten con el uniforme de "
 								+ "educación física. Encontrarán el programa en el PDF adjunto.", false, true), pdf);
+			});
+			// Todo comunicado con PDF lo aprueba otra persona (correcciones del sprint 9): el de Dirección, Promotoría.
+			Long solicitud = personas.como(colegioId, promotoria, () -> comunicados.findById(dia).orElseThrow()
+					.getSolicitudId());
+			personas.como(colegioId, promotoria, () -> {
+				bandeja.aprobar(solicitud, null);
+				return null;
+			});
+			personas.como(colegioId, direccion, () -> {
 				envio.enviarFeDeErratas(dia, new BorradorComunicado(EmisorRol.DIRECCION, AlcanceComunicado.COLEGIO, null,
 						null, null, "Fe de erratas: Día del Logro", "Corregimos el horario: el Día del Logro es de 9:30 a "
 								+ "12:00. Lo demás no cambia.", false, true), null);
