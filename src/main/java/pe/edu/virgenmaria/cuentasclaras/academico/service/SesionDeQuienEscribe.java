@@ -12,19 +12,19 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.TokenDeSesion;
  * con la clave de {@code cc_app} nadie escribe «como» alguien que no está conectado.
  */
 @Component
-class SesionDeQuienEscribe {
+public class SesionDeQuienEscribe {
 
 	static final String SIN_SESION = "Tu sesión ya no sirve para guardar (venció o ingresaste en otro equipo). Cierra "
 			+ "sesión y vuelve a ingresar: no se guardó nada.";
 
 	private final TokenDeSesion tokens;
 
-	SesionDeQuienEscribe(TokenDeSesion tokens) {
+	public SesionDeQuienEscribe(TokenDeSesion tokens) {
 		this.tokens = tokens;
 	}
 
 	/** El id de la sesión de la base de la persona en sesión (o un error claro si no tiene). */
-	Long de(UsuarioAutenticado persona) {
+	public Long de(UsuarioAutenticado persona) {
 		return tokens.actual()
 				.filter(s -> s.usuarioId().equals(persona.usuarioId()) && s.colegioId().equals(persona.colegioId()))
 				.map(SesionAbierta::sesionId).orElseThrow(() -> new ReglaNegocioException(SIN_SESION));

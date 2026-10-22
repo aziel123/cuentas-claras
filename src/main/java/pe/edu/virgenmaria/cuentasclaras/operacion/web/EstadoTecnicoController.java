@@ -24,9 +24,13 @@ public class EstadoTecnicoController {
 
 	private final ResolucionesRespaldo resoluciones;
 
-	public EstadoTecnicoController(ServicioEstadoTecnico servicio, ResolucionesRespaldo resoluciones) {
+	private final pe.edu.virgenmaria.cuentasclaras.comunicacion.service.ConsumoMensajes consumo;
+
+	public EstadoTecnicoController(ServicioEstadoTecnico servicio, ResolucionesRespaldo resoluciones,
+			pe.edu.virgenmaria.cuentasclaras.comunicacion.service.ConsumoMensajes consumo) {
 		this.servicio = servicio;
 		this.resoluciones = resoluciones;
+		this.consumo = consumo;
 	}
 
 	/** Correcciones del sprint 7 (QA-S7-1): Promotoría resuelve con motivo la alerta «Faltan filas». */
@@ -46,6 +50,7 @@ public class EstadoTecnicoController {
 	@GetMapping("/panel/sistema")
 	public String sistema(Model modelo) {
 		modelo.addAttribute("sistema", servicio.vista());
+		modelo.addAttribute("consumo", consumo.delMes());
 		return "panel/sistema";
 	}
 

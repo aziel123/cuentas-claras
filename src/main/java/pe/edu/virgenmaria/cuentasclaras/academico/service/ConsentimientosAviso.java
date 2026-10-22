@@ -93,17 +93,19 @@ public class ConsentimientosAviso {
 	public void registrarEnPortal(ConsentimientoRequest pedido) {
 		UsuarioAutenticado persona = PersonaEnSesion.actual();
 		Apoderado yo = apoderadoEnSesion();
-		if (pedido.finalidad() != Finalidad.ASISTENCIA) {
-			throw new ReglaNegocioException("Los avisos de comunicados llegan en la próxima versión.");
-		}
+		// Sprint 9, tanda 3: también los comunicados; el «sí» por WhatsApp a los comunicados puede marcar al apoderado como
+		// el contacto principal de su familia (recibe el resumen diario).
+		boolean principal = pedido.principal() && pedido.finalidad() == Finalidad.COMUNICADOS
+				&& pedido.canal() == Canal.WHATSAPP && pedido.otorga();
 		Optional<ConsentimientoAviso> actual = consentimientos.findFirstByApoderadoIdAndFinalidadAndCanalOrderByIdDesc(
 				yo.getId(), pedido.finalidad(), pedido.canal());
 		boolean vigente = actual.map(ConsentimientoAviso::isOtorgado).orElse(pedido.canal().salvoOposicion());
-		if (actual.isPresent() && vigente == pedido.otorga()) {
+		boolean eraPrincipal = actual.map(ConsentimientoAviso::isContactoPrincipal).orElse(false);
+		if (actual.isPresent() && vigente == pedido.otorga() && eraPrincipal == principal) {
 			return;
 		}
 		ConsentimientoAviso nuevo = consentimientos.saveAndFlush(ConsentimientoAviso.enPortal(yo.getFamilia().getId(),
-				yo.getId(), pedido.finalidad(), pedido.canal(), pedido.otorga(), false, versionAviso(),
+				yo.getId(), pedido.finalidad(), pedido.canal(), pedido.otorga(), principal, versionAviso(),
 				sesiones.de(persona)));
 		auditoria.registrar(AccionAuditoria.CONSENTIMIENTO_AVISO, "consentimiento_aviso", nuevo.getId().toString(),
 				actual.isEmpty() ? null : String.valueOf(vigente), String.valueOf(pedido.otorga()), "El apoderado "
@@ -116,9 +118,6 @@ public class ConsentimientosAviso {
 	@Transactional
 	public void registrarDesdeFicha(ConsentimientoFichaRequest pedido) {
 		UsuarioAutenticado persona = PersonaEnSesion.actual();
-		if (pedido.finalidad() != Finalidad.ASISTENCIA) {
-			throw new ReglaNegocioException("Los avisos de comunicados llegan en la próxima versión.");
-		}
 		Apoderado apoderado = apoderados.findById(pedido.apoderadoId()).filter(Apoderado::isActivo)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Apoderado no encontrado"));
 		ConsentimientoAviso nuevo = consentimientos.saveAndFlush(ConsentimientoAviso.desdeFicha(
@@ -136,14 +135,16 @@ public class ConsentimientosAviso {
 
 	private List<ConsentimientoVista> vistas(Apoderado a) {
 		List<ConsentimientoVista> vistas = new ArrayList<>();
-		for (Canal canal : Canal.values()) {
-			Optional<ConsentimientoAviso> fila = consentimientos.findFirstByApoderadoIdAndFinalidadAndCanalOrderByIdDesc(
-					a.getId(), Finalidad.ASISTENCIA, canal);
-			boolean contacto = canal == Canal.WHATSAPP ? a.telefonoVerificado() : a.correoVerificado();
-			vistas.add(new ConsentimientoVista(Finalidad.ASISTENCIA.name(), Finalidad.ASISTENCIA.etiqueta(), canal.name(),
-					canal.etiqueta(), fila.map(ConsentimientoAviso::isOtorgado).orElse(canal.salvoOposicion()),
-					fila.isEmpty(), fila.map(f -> f.getOrigen() == OrigenConsentimiento.FICHA ? "Ficha de matrícula"
-							: "Portal").orElse(null), fila.map(ConsentimientoAviso::getCreadoEn).orElse(null), contacto));
+		for (Finalidad finalidad : Finalidad.values()) {
+			for (Canal canal : Canal.values()) {
+				Optional<ConsentimientoAviso> fila = consentimientos.findFirstByApoderadoIdAndFinalidadAndCanalOrderByIdDesc(
+						a.getId(), finalidad, canal);
+				boolean contacto = canal == Canal.WHATSAPP ? a.telefonoVerificado() : a.correoVerificado();
+				vistas.add(new ConsentimientoVista(finalidad.name(), finalidad.etiqueta(), canal.name(), canal.etiqueta(),
+						fila.map(ConsentimientoAviso::isOtorgado).orElse(canal.salvoOposicion()), fila.isEmpty(),
+						fila.map(f -> f.getOrigen() == OrigenConsentimiento.FICHA ? "Ficha de matrícula" : "Portal")
+								.orElse(null), fila.map(ConsentimientoAviso::getCreadoEn).orElse(null), contacto));
+			}
 		}
 		return vistas;
 	}

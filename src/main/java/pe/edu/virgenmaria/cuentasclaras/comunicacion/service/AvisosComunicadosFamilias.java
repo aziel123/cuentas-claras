@@ -182,8 +182,10 @@ public class AvisosComunicadosFamilias {
 	private Optional<Mensaje> enviar(List<Apoderado> deLaFamilia, CreadorMensajes.Contenido contenido, String sufijo,
 			boolean conTope, LocalDateTime ahora) {
 		Optional<Mensaje> primero = Optional.empty();
+		Optional<Long> elPrincipal = deLaFamilia.isEmpty() ? Optional.empty()
+				: consentimientos.contactoPrincipal(deLaFamilia.get(0).getFamilia().getId());
 		for (Apoderado a : deLaFamilia) {
-			boolean principal = consentimientos.esContactoPrincipal(a.getId());
+			boolean principal = elPrincipal.filter(a.getId()::equals).isPresent();
 			boolean porWhatsapp = principal && consentimientos.recibeComunicados(a.getId(), true)
 					&& (!conTope || bajoElTope(a, ahora));
 			boolean porCorreo = consentimientos.recibeComunicados(a.getId(), false);

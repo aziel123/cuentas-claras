@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 3 (sección 3.10, E23 a E25, E28): un comunicado en el portal. «Confirmo que lo leí» es un POST con la
+     sesión de la familia (no hay enlace que confirme). Si fue retirado, solo la constancia. Siempre el pie fijo: el colegio
+     nunca pide pagos por un comunicado. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Comunicado', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-comunicado">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/familia/comunicados}">Comunicados</a></p>
+			<h1 th:text="${c.titulo()}">Título</h1>
+			<p class="secundario" th:text="|${c.emisor()} · ${#temporals.format(c.enviadoEn(), 'dd/MM/yyyy HH:mm')}|">De</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<div th:if="${c.retirado()}" th:replace="~{fragments/componentes :: alerta('advertencia', ${c.constanciaRetiro()})}"></div>
+
+	<section class="tarjeta" th:unless="${c.retirado()}" aria-label="Texto">
+		<span th:if="${c.urgente()}" th:replace="~{fragments/componentes :: badge('Urgente', 'alerta')}"></span>
+		<p th:each="p : ${c.parrafos()}" th:text="${p}">Párrafo</p>
+		<p th:if="${c.conAdjunto()}"><a th:href="@{/familia/comunicados/{id}/adjunto(id=${c.id()})}">Descargar el PDF</a></p>
+	</section>
+
+	<section class="tarjeta" th:unless="${#lists.isEmpty(c.feDeErratas())}" aria-label="Fe de erratas">
+		<p>Hay una fe de erratas de este comunicado:</p>
+		<ul class="lista-simple">
+			<li th:each="f : ${c.feDeErratas()}"><a th:href="@{/familia/comunicados/{id}(id=${f})}">Ver la corrección</a></li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" th:if="${c.requiereConfirmacion()}" aria-label="Confirmación">
+		<p th:if="${c.confirmado()}">Ya confirmaste que lo leíste. Gracias.</p>
+		<form method="post" th:unless="${c.confirmado()}" th:action="@{/familia/comunicados/{id}/confirmar(id=${c.id()})}">
+			<button th:replace="~{fragments/componentes :: boton('Confirmo que lo leí', 'primario')}"></button>
+		</form>
+	</section>
+
+	<p class="ayuda" th:text="${c.pie()}">Pie fijo</p>
+</main>
+</body>
+</html>

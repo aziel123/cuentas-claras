@@ -18,4 +18,10 @@ public interface Consentimientos {
 	 * comunicados por WhatsApp (con su «sí»); los demás, por correo.
 	 */
 	boolean esContactoPrincipal(long apoderadoId);
+
+	/**
+	 * El contacto principal de la familia: el apoderado cuyo último consentimiento de comunicados por WhatsApp es un «sí»
+	 * como principal; si hay varios, el más reciente (cada apoderado lo elige con su cuenta; uno solo recibe el resumen).
+	 */
+	java.util.Optional<Long> contactoPrincipal(long familiaId);
 }

@@ -181,6 +181,23 @@
 		</ul>
 	</section>
 
+	<!--/* Sprint 9, tanda 3 (sección 3.11): sexo y código de estudiante para la matrícula en el SIAGIE. */-->
+	<section class="tarjeta" th:if="${puedeEditar and c.activo()}" aria-labelledby="titulo-siagie">
+		<h2 id="titulo-siagie">Datos para el SIAGIE</h2>
+		<form class="formulario-en-linea" method="post" th:action="@{/alumnos/{id}/datos-siagie(id=${c.id})}">
+			<label for="sexo-siagie">Sexo</label>
+			<select class="input" id="sexo-siagie" name="sexo">
+				<option value="" th:selected="${ficha.sexo() == null}">Sin registrar</option>
+				<option value="M" th:selected="${ficha.sexo() == 'M'}">Hombre</option>
+				<option value="F" th:selected="${ficha.sexo() == 'F'}">Mujer</option>
+			</select>
+			<label for="codigo-siagie">Código de estudiante (solo si no tiene DNI)</label>
+			<input class="input" id="codigo-siagie" name="codigoEstudiante" maxlength="20"
+				th:value="${ficha.codigoEstudiante()}">
+			<button type="submit" class="btn btn-secundario btn-chico">Guardar</button>
+		</form>
+	</section>
+
 	<section class="tarjeta zona-sensible" th:if="${puedeEditar and c.activo()}" aria-labelledby="titulo-retiro">
 		<div>
 			<h2 id="titulo-retiro">Retiro</h2>

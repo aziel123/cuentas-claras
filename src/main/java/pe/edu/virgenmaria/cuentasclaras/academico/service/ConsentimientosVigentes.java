@@ -42,6 +42,21 @@ public class ConsentimientosVigentes implements Consentimientos {
 
 	@Override
 	@Transactional(readOnly = true)
+	public java.util.Optional<Long> contactoPrincipal(long familiaId) {
+		java.util.Set<Long> vistos = new java.util.HashSet<>();
+		for (ConsentimientoAviso c : consentimientos.findByFamiliaIdOrderByIdDesc(familiaId)) {
+			if (c.getFinalidad() != Finalidad.COMUNICADOS || c.getCanal() != Canal.WHATSAPP || !vistos.add(c.getApoderadoId())) {
+				continue;
+			}
+			if (c.isOtorgado() && c.isContactoPrincipal()) {
+				return java.util.Optional.of(c.getApoderadoId());
+			}
+		}
+		return java.util.Optional.empty();
+	}
+
+	@Override
+	@Transactional(readOnly = true)
 	public boolean esContactoPrincipal(long apoderadoId) {
 		return consentimientos.findFirstByApoderadoIdAndFinalidadAndCanalOrderByIdDesc(apoderadoId, Finalidad.COMUNICADOS,
 				Canal.WHATSAPP).map(c -> c.isOtorgado() && c.isContactoPrincipal()).orElse(false);

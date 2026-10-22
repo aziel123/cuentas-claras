@@ -8,5 +8,11 @@ import pe.edu.virgenmaria.cuentasclaras.academico.model.Finalidad;
 public record ConsentimientoRequest(
 		@NotNull(message = "Elige el aviso.") Finalidad finalidad,
 		@NotNull(message = "Elige el canal.") Canal canal,
-		boolean otorga) {
+		boolean otorga,
+		boolean principal) {
+
+	/** Sin el contacto principal (sprint 9, tanda 2). */
+	public ConsentimientoRequest(Finalidad finalidad, Canal canal, boolean otorga) {
+		this(finalidad, canal, otorga, false);
+	}
 }
