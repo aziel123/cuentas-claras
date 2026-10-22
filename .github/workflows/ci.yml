@@ -123,7 +123,9 @@ jobs:
         run: |
           docker network create --internal cc-demo-interna
           # Por http (sin Caddy): la cookie sin «Secure» (en la VM va por https con __Host-CCSESION).
-          docker run -d --name cc-demo --network cc-demo-interna --read-only --tmpfs /tmp \
+          # Sprint 9, tanda 3: con el límite de memoria y el 55 % de deploy/compose.demo.yml (el hijo del analizador de PDF).
+          docker run -d --name cc-demo --network cc-demo-interna --read-only --tmpfs /tmp --memory 1400m \
+            -e JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=55 \
             -e SPRING_PROFILES_ACTIVE=demo -e CC_MARCA_NOMBRE="Cuentas Claras CI" \
             -e SERVER_SERVLET_SESSION_COOKIE_SECURE=false -e CC_COOKIE_SESION=CCSESION cuentas-claras:ci
           for i in $(seq 1 90); do
@@ -185,6 +187,60 @@ jobs:
           test "$(docker exec cc-demo curl -s -b /tmp/d -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/caja)" = "403"
           test "$(docker exec cc-demo curl -s -b /tmp/d -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/alumnos)" = "403"
           echo "OK: el docente de la demo ve sus dos secciones y los nombres de sus alumnos, sin montos; caja y alumnos: 403"
+
+      - name: "Sprint 9, tanda 3 (B5): el analizador de PDF corre como proceso hijo DENTRO de la imagen (read-only, /tmp)"
+        run: |
+          # 1) Al crear la demo, el comunicado de ejemplo pasó por el hijo (AdjuntosComunicado.validar): sin el aviso de fallo.
+          if docker logs cc-demo 2>&1 | grep -q "No se cargaron los comunicados de la demo"; then
+            docker logs cc-demo 2>&1 | grep -A3 "No se cargaron los comunicados"; exit 1
+          fi
+          # 2) El hijo a mano, con las MISMAS opciones que LanzadorAnalizador.comando, sobre el PDF de ejemplo y una bomba.
+          # Con el entorno vacío (env -i), como ProcessBuilder en LanzadorAnalizador.ejecutar.
+          hijo() {
+            docker exec cc-demo sh -c "exec env -i \"\$JAVA_HOME/bin/java\" -Xmx128m -Xss512k -XX:MaxMetaspaceSize=64m \
+              -XX:ReservedCodeCacheSize=32m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:+ExitOnOutOfMemoryError -Xshare:auto \
+              -Djava.io.tmpdir=$1 -Djava.security.manager=allow -Djava.awt.headless=true -Dfile.encoding=UTF-8 \
+              -cp /app/app.jar -Dloader.main=pe.edu.virgenmaria.cuentasclaras.comunicados.analizador.AnalizadorPdf \
+              org.springframework.boot.loader.launch.PropertiesLauncher $1 -"
+          }
+          docker exec cc-demo mkdir -p /tmp/ci-ejemplo /tmp/ci-bomba
+          docker exec cc-demo curl -sf -o /tmp/ci-ejemplo/entrada.pdf http://127.0.0.1:8080/demo/ejemplos/comunicado-ejemplo.pdf
+          set +e; hijo /tmp/ci-ejemplo; codigo=$?; set -e
+          test "$codigo" = "0" || { echo "ERROR: el PDF de ejemplo salió con $codigo"; docker exec cc-demo ls -la /tmp/ci-ejemplo; exit 1; }
+          docker exec cc-demo test -s /tmp/ci-ejemplo/saneado.pdf
+          docker exec cc-demo test -s /tmp/ci-ejemplo/texto.txt
+          # Una bomba Flate: 400 MB de ceros comprimidos en ~400 KB (el tope de lo descomprimido es 48 MB).
+          python3 - <<'PY'
+          import zlib
+          datos = zlib.compress(b"\0" * (400 * 1024 * 1024), 9)
+          objetos = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                     b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R >>",
+                     b"<< /Length %d /Filter /FlateDecode >>\nstream\n" % len(datos) + datos + b"\nendstream"]
+          salida = bytearray(b"%PDF-1.7\n")
+          posiciones = []
+          for i, o in enumerate(objetos, 1):
+              posiciones.append(len(salida))
+              salida += b"%d 0 obj\n" % i + o + b"\nendobj\n"
+          xref = len(salida)
+          salida += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objetos) + 1)
+          for p in posiciones:
+              salida += b"%010d 00000 n \n" % p
+          salida += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%EOF\n" % (len(objetos) + 1, xref)
+          open("bomba.pdf", "wb").write(salida)
+          PY
+          # Diez bombas seguidas (como diezBombasSeguidasNoDejanSinServicio, con el límite de memoria de compose.demo.yml).
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            docker exec cc-demo sh -c 'rm -rf /tmp/ci-bomba && mkdir -p /tmp/ci-bomba'
+            docker exec -i cc-demo sh -c 'cat > /tmp/ci-bomba/entrada.pdf' < bomba.pdf
+            set +e; timeout 60 bash -c "$(declare -f hijo); hijo /tmp/ci-bomba"; codigo=$?; set -e
+            test "$codigo" = "2" -o "$codigo" = "3" || { echo "ERROR: la bomba $i salió con $codigo (se esperaba 2 o 3)"; exit 1; }
+            docker exec cc-demo test ! -e /tmp/ci-bomba/saneado.pdf
+          done
+          rm -f bomba.pdf
+          # 3) Y la aplicación sigue respondiendo.
+          docker exec cc-demo curl -sf http://127.0.0.1:8080/actuator/health/readiness | grep -q UP
+          docker exec cc-demo rm -rf /tmp/ci-ejemplo /tmp/ci-bomba
+          echo "OK: en la imagen, el hijo acepta el PDF de ejemplo (0) y rechaza diez bombas seguidas; la app sigue arriba"
 
       - name: "E20 y E21: con un secreto en el entorno, una base real o junto a prod, la demo NO arranca"
         run: |

@@ -117,7 +117,12 @@ public class NominaSiagie {
 	/** «Datos que faltan para el SIAGIE» del año en curso, por sección. */
 	@Transactional(readOnly = true)
 	public DatosFaltantes faltantes() {
-		AnioEscolar anio = anioEnCurso();
+		// Sin año en curso (un colegio recién creado) la pantalla abre vacía, con su mensaje, en vez de un error.
+		var enCurso = anios.findByEstado(EstadoAnioEscolar.EN_CURSO);
+		if (enCurso.isEmpty()) {
+			return new DatosFaltantes(List.of(), List.of());
+		}
+		AnioEscolar anio = enCurso.get();
 		Map<Long, List<Matricula>> porSeccion = matriculas.findByAnioEscolarIdAndEstado(anio.getId(), EstadoMatricula.ACTIVA)
 				.stream().collect(Collectors.groupingBy(m -> m.getSeccion().getId()));
 		List<DatosFaltantes.Seccion> resultado = new ArrayList<>();

@@ -185,6 +185,24 @@ en `configuracion_academica`, y a `cc_sistema` la marca de agua `aviso_asistenci
 verificadas». Prod avisa en el log si un colegio en producción tiene menos de 2 personas activas de Promotoría o Dirección
 (A8). Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
 
+**Sprint 9, tanda 3 (V34): 98 triggers y 13 funciones con huella (111).** Nuevos: `trg_comunicado_nace` (el comunicado lo
+escribe quien lo firma: Dirección o Promotoría al colegio, nivel o grado; un docente, solo a su sección como tutor o de
+curso, nunca urgente; con su sesión abierta y la firma `comunicado:{huella}:ENVIAR`; la base RECALCULA la huella del
+contenido (B2), que es única por colegio; rechaza caracteres invisibles y palabras de cobranza (B4); un adjunto que requiere
+revisión deja el comunicado POR_APROBAR (B3) y el adjunto es de quien envía; la fe de erratas tiene el alcance del original y,
+si el original está retirado, solo Dirección (B9)), `trg_comunicado_estado` (lo enviado no se edita: 1143 en el contenido;
+la aprobación la da otro órgano; los destinatarios se cierran una vez y cuadran con las filas (B1); el retiro con motivo y la
+firma `comunicado:{id}:RETIRADO`, y no se reescribe), `trg_comunicado_destinatario_nace` (lista cerrada),
+`trg_confirmacion_lectura_nace` (la familia destinataria con su sesión) y `trg_exportacion_nomina_nace` (Dirección con su
+sesión, B14). Versión nueva de `trg_mensaje_nace`: los avisos de comunicados (`COMUNICADOS_RESUMEN`, `COMUNICADO_URGENTE`)
+los crea solo `sistema.comunicados`, con su plantilla, los parámetros empiezan con el nombre del colegio y la regla de
+cobranza corre sobre lo que va después (B6), y por WhatsApp con el consentimiento de COMUNICADOS. `02` da a `cc_negocio` solo
+INSERT en `comunicado_adjunto`, `confirmacion_lectura` y `exportacion_nomina`; INSERT y UPDATE por columna en `comunicado`
+(estado, aprobación, envío, retiro), `comunicado_destinatario` (apertura y mensajes) y `codigo_modular`; ninguna tabla de V34
+admite DELETE (1142). Prod: «Huellas de los 98 triggers y las 13 funciones verificadas». Las cinco tablas están en
+`tablas-vigiladas.txt`. Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios
+nuevos.
+
 **Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
 van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
 custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra

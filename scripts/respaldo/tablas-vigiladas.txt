@@ -39,3 +39,10 @@ asignacion_docente
 registro_asistencia
 marca_asistencia
 consentimiento_aviso
+# Sprint 9, tanda 3 (V34): los comunicados, sus adjuntos, destinatarios y confirmaciones, y las exportaciones de la
+# nómina del SIAGIE no se borran (sin DELETE): un borrado del DBA aparece como «faltan filas» del colegio.
+comunicado
+comunicado_adjunto
+comunicado_destinatario
+confirmacion_lectura
+exportacion_nomina

@@ -24,6 +24,16 @@
    ves el motivo y la nota de la familia; si no, solo que está justificada.
 7. El **Reporte del mes** lo ven el tutor(a) de la sección y Dirección.
 
+## Un comunicado a tu sección (sprint 9)
+1. En **Comunicados → Nuevo** elige tu sección (solo aparecen las tuyas, como tutor(a) o de curso), escribe el título y el
+   texto y, si quieres, adjunta un PDF (máximo 10 páginas).
+2. Toca **Revisar** y lee la vista previa: así lo verán las familias, con tu nombre y tu curso.
+3. Toca **Enviar**. Si el PDF tiene imágenes o poco texto, queda **por aprobar** y lo aprueba Dirección en su bandeja.
+4. ¿Te equivocaste? Un comunicado enviado no se edita: pide a Dirección una **fe de erratas** (llega a las mismas familias)
+   o que lo retire con su motivo.
+5. Un comunicado no habla de pagos, deudas, montos, cuentas ni medios de pago: el sistema no lo deja salir. Para eso está
+   Administración.
+
 ## Lo que el sistema no te deja hacer, y por qué
 - **Ver pagos, deudas ni boletas de las familias:** no los necesitas para enseñar y la ley protege esos datos. Además, la deuda nunca puede afectar las notas ni los exámenes de un alumno.
 - **Ver alumnos de otras secciones:** solo verás tus secciones (acceso mínimo por rol).

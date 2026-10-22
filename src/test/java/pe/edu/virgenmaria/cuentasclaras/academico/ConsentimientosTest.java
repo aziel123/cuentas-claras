@@ -39,8 +39,10 @@ class ConsentimientosTest extends PruebaAsistencia {
 		List<AvisosDelApoderado> avisos = como(datos.rosaEnLinea(), () -> consentimientos.avisos());
 		assertThat(avisos).singleElement().satisfies(a -> {
 			assertThat(a.yo()).isTrue();
-			assertThat(a.consentimientos()).extracting(c -> c.canal() + ":" + c.otorgado() + ":" + c.porDefecto())
-					.containsExactly("WHATSAPP:false:true", "CORREO:true:true");
+			// Sprint 9, tanda 3: cada finalidad (asistencia y comunicados) con sus dos canales.
+			assertThat(a.consentimientos()).extracting(c -> c.finalidad() + ":" + c.canal() + ":" + c.otorgado() + ":"
+					+ c.porDefecto()).containsExactly("ASISTENCIA:WHATSAPP:false:true", "ASISTENCIA:CORREO:true:true",
+							"COMUNICADOS:WHATSAPP:false:true", "COMUNICADOS:CORREO:true:true");
 		});
 	}
 
