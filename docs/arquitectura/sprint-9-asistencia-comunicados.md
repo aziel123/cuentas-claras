@@ -18,7 +18,7 @@
 - **Comunicados que no se editan y que no pueden cobrar.** Dirección y Promotoría escriben a todo el colegio, un nivel, un grado o una sección; el docente, solo a sus secciones. El emisor lo pone el sistema (nadie se hace pasar por Dirección), un **filtro bloquea cobranza, montos, cuentas, celulares, DNI y enlaces**, cada comunicado lleva un pie fijo («el colegio nunca le pedirá pagos por un comunicado») y el PDF se sanea. Un comunicado enviado no cambia: se manda una **fe de erratas** a los mismos destinatarios. La familia confirma «Leído» **en el portal, con su sesión**; nadie confirma por ella.
 - **WhatsApp cuesta por mensaje.** Con los valores por defecto (asistencia agrupada por familia y comunicados en un resumen diario con tope de 4 al mes por familia), un colegio de 300 alumnos generaría unos **15,500 mensajes al año, unos US$ 325–535** (sección 3.7).
 - **Nómina para el SIAGIE:** Cuotaria entrega, por sección, los datos que pide la matrícula masiva del SIAGIE en un perfil de columnas configurable, para copiarlos en la plantilla oficial. La nómina oficial la sigue generando y aprobando el SIAGIE.
-- **Tres tandas:** (1) docentes y secciones (V32, 88 triggers); (2) asistencia con aviso a las familias (V33, 93 triggers); (3) comunicados y nómina para el SIAGIE (V34, 97 triggers).
+- **Tres tandas:** (1) docentes y secciones (V32, 88 triggers); (2) asistencia con aviso a las familias (V33, 93 triggers); (3) comunicados y nómina para el SIAGIE (V34, 98 triggers, con la auditoría en papel de la sección 3.16).
 
 ## 2. Hallazgos al leer el código (leer antes de implementar)
 1. **H1 (alto). La base no puede impedir que el docente lea deudas.** `cc_negocio` tiene `SELECT ON cuentasclaras.*` y todas las personas usan `cc_app`. «El docente nunca ve deudas» depende SOLO de la aplicación: `ModuloApp`, `@PreAuthorize`, los servicios y los DTO. Por eso este diseño lo cubre con tres pruebas independientes (E30 y E31) y una regla ArchUnit, y no promete una «segunda capa» de MySQL que no existe.
@@ -194,6 +194,7 @@ Meta cobra **por plantilla entregada** desde el 1 de julio de 2025 (ya no por co
 - **Destinatarios congelados:** al enviarse, el sistema calcula las familias con un alumno con matrícula ACTIVA en el alcance y las guarda en `comunicado_destinatario` (una fila por familia). Las estadísticas y las confirmaciones son de ese conjunto; una familia que se matricula después no lo ve.
 
 ### 3.9 El PDF adjunto (tanda 3)
+> **Auditoría en papel de la tanda 3 (B3, B5, B8 y B12, sección 3.16):** PDFBox corre en un **proceso hijo**, no en la aplicación; los PDF con poco texto o con imágenes van siempre por la aprobación del otro órgano. Lo que sigue se lee con esos cambios.
 Un comunicado lleva **como máximo un PDF de hasta 2 MB y 10 páginas** (decisión 157).
 
 > **Decisión del usuario (21-oct-2026): PDFBox (Apache 2.0) aprobado.** Controles obligatorios, todos con prueba:
@@ -317,6 +318,28 @@ El colegio no puede condicionar lo académico al pago (skill `contexto-colegio`)
 | A13 | Bajo | Un director que enseña en la sección podía revertir allí; una corrección aprobada podía pedirla alguien ajeno a la sección | `REVERSION_JUSTIFICACION` excluye a quien tiene asignación VIGENTE en la sección; `CORRECCION_ASISTENCIA` exige `cc_docente_de_seccion(solicitado_por, …)` (E57) |
 | A14 | Bajo | Lista de rechazo de PDFBox incompleta | Se agregan `/Names/JavaScript`, `Annots` con `/A` o `/AA`, `Rendition`, `Sound`, `Movie`, `Named`, `ResetForm` y `Hide`; las URI con lista permitida; el re-guardado quita `Info`, XMP y las revisiones incrementales (sección 3.9) |
 | A15 | Bajo | Nada impedía que el código escribiera `MARCADOR` | El DTO de la hoja (`MarcaPedida`) no tiene `fuente` (prueba por reflexión) y una regla ArchUnit prohíbe usar `FuenteAsistencia.MARCADOR` fuera del propio enum |
+
+### 3.16 Auditoría en papel de la tanda 3 (sobre `021d693`): 16 hallazgos incorporados
+Brief: `docs/arquitectura/sprint-9/tanda-3.md` (secciones 3 a 7). Prevalece sobre el SQL de las secciones 6 y 7.3, escrito antes de esta auditoría. Con B14 la tanda 3 tiene **98 triggers y 111 huellas** (13 funciones sin cambio).
+
+| # | Nivel | Hallazgo | Cómo queda el diseño |
+|---|---|---|---|
+| B1 | Alto | La fe de erratas podía llegar a menos familias que el original (solo se exigía un subconjunto) | Sin destinatarios propios: llega a TODOS los del original. `trg_comunicado_estado` exige `destinatarios` = filas de `comunicado_destinatario` = destinatarios del original; `trg_comunicado_destinatario_nace` no admite filas con la lista ya cerrada |
+| B2 | Alto | `huella_contenido` la calculaba solo la aplicación | `trg_comunicado_nace` la recalcula con `SHA2(CONCAT_WS(CHAR(10), alcance, nivel, grado, seccion_id, titulo, cuerpo, sha256 del adjunto), 256)` (vacío por NULL) y la compara; `uk_comunicado_huella UNIQUE (colegio_id, huella_contenido)`; `HuellaComunicado` en Java con la misma cadena |
+| B3 | Alto | Un PDF de imagen o de poco texto de Dirección o Promotoría salía sin que nadie más lo viera | `comunicado_adjunto.requiere_revision` (menos de ~50 caracteres por página o con imágenes): siempre `PUBLICAR_COMUNICADO`, aprobado por el otro órgano (Promotoría si escribe Dirección y al revés; de un docente, cualquiera de los dos). Se rechazan las anotaciones que no sean `Link` y las capas OCG |
+| B4 | Alto | El filtro se burlaba con ancho cero, letras de ancho completo, homoglifos o dígitos no ASCII | `FiltroContenido`: NFKC, sin `\p{Cf}` ni acentos combinados, homoglifos a latino, dígitos a ASCII. La base rechaza `\p{Cf}` en título y texto |
+| B5 | Alto | PDFBox en el proceso de la aplicación: un análisis que no atiende la interrupción o un `StackOverflowError` la afectan | **Proceso hijo** `comunicados.analizador.AnalizadorPdf`: `java -Xmx128m … -cp /app/app.jar -Dloader.main=… PropertiesLauncher`, entorno vacío, intercambio por archivos en `/tmp/cc-pdf/{uuid}` (tmpfs), `SecurityManager` sin `SocketPermission`, 10 s y `destroyForcibly()` por su PID; 1 hijo a la vez, 1 tarea por usuario y 2 por colegio; la aplicación pasa a `MaxRAMPercentage=55` |
+| B6 | Alto | La regla de cobranza corría sobre el nombre del colegio y de las personas: un nombre que calzaba dejaba sin avisos a todo el colegio | `trg_mensaje_nace` exige que `parametros` empiece con `CONCAT(c.nombre, CHAR(10))` y aplica la regla al resto; si una persona calza, etiqueta genérica; el alta y el cambio de nombre del colegio avisan |
+| B7 | Medio | «S/» con `'i'` coincidía con «padres/madres» y los decimales con «7.45 a.m.» | Expresión nueva en `03` y en `ContenidoSinCobranza` (con motivo claro): `(^|[^a-z])s/\.?\s*[0-9]` y decimales sin horas |
+| B8 | Medio | El adjunto de un comunicado POR_APROBAR, RECHAZADO o RETIRADO se podía descargar | 404 si no está ENVIADO, salvo para quien lo aprueba desde la bandeja |
+| B9 | Medio | Un docente podía publicar la fe de erratas de un comunicado retirado | La de un RETIRADO, solo Dirección o Promotoría (trigger) |
+| B10 | Medio | Las alertas de nómina masiva y de retiro iban a quien hace la acción | Van a Promotoría |
+| B11 | Medio | Nadie comprobaba que los destinatarios congelados fueran los del alcance | `IntegridadComunicados` los compara con las matrículas ACTIVAS del alcance al enviarse y alerta si no coinciden |
+| B12 | Bajo | El límite de subidas en memoria se reiniciaba con la aplicación | Se cuenta desde la bitácora (`ADJUNTO_REVISADO`): 10 por usuario y 30 por colegio por hora |
+| B13 | Bajo | `enviado_en` lo ponía la aplicación sin límite y el CHECK no exigía NULL en POR_APROBAR ni RECHAZADO | ±5 minutos del reloj de la base (trigger); `enviado_en` y `destinatarios` NULL en POR_APROBAR y RECHAZADO (CHECK) |
+| B14 | Bajo | `exportacion_nomina` sin trigger ni sesión; el archivo no decía quién lo sacó | `sesion_id` y `trg_exportacion_nomina_nace` (DIRECTOR activo y `cc_sesion_abierta`); el archivo imprime usuario y fecha junto a «PROVISIONAL»; `CampoNominaSinContactosNiCobranzaTest`; nota en `direccion.md` |
+| B15 | Bajo | `ck_alumno_codigo_estudiante` aceptaba minúsculas por la colación | `REGEXP_LIKE(…, 'c')` |
+| B16 | Bajo | Un docente sin asignación seguía viendo los pendientes de lectura con nombres de alumnos | Exige la asignación VIGENTE en la sección |
 
 ## 4. Modelo
 ```mermaid
@@ -694,6 +717,7 @@ CREATE INDEX ix_mensaje_tipo_fecha ON mensaje (colegio_id, tipo, creado_en);
 > - Las entidades `RegistroAsistencia`, `MarcaAsistencia` y `ConsentimientoAviso` tienen todos sus campos `updatable = false`, y sus repositorios no tienen `save` sobre una entidad existente (`InmutabilidadAcademicoTest`).
 
 ### `V34__comunicados_y_nomina_siagie.sql` (tanda 3)
+> Con los ajustes de la sección 3.16 (B2, B3, B13, B14 y B15) descritos en el brief de la tanda 3: `uk_comunicado_huella`, `requiere_revision`, `exportacion_nomina.sesion_id`, los CHECK con NULL y `'c'` en el código de estudiante.
 ```sql
 -- Sprint 9 · tanda 3. Comunicados que no se editan (fe de erratas), con PDF saneado, destinatarios congelados y
 -- confirmación de lectura de la familia con su sesión; datos para la matrícula en el SIAGIE. Nada se borra.
@@ -1272,7 +1296,8 @@ DELIMITER ;
 > - La expresión regular corre sobre los **parámetros**, que en estos tipos son: el nombre del colegio, fechas, primeros nombres, estados fijos («falta», «llegó tarde»), horas, cuántos comunicados y las etiquetas de los emisores (y el título, solo en un urgente). **Comprobar** con H2 que la aplicación usa la misma lista (`ContenidoSinCobranza`, una sola fuente para Java y para la prueba que compara con el trigger) y, en MySQL 8.4 (ICU), que `\b` y `'i'` funcionan como se espera, con nombres como «Pagán» o «Vencesla» (no deben coincidir).
 > - Un primer nombre que dispare la regla (improbable) deja el aviso sin crear y una alerta técnica: el proceso lo reintenta con «su hijo(a)» en lugar del nombre (sección 15).
 
-#### Tanda 3 (V34): 4 triggers nuevos y 1 con versión nueva: 97 triggers
+#### Tanda 3 (V34): 5 triggers nuevos y 1 con versión nueva: 98 triggers
+> Con la auditoría en papel (sección 3.16): `trg_exportacion_nomina_nace` es nuevo (B14); los triggers de abajo ganan B1, B2, B3, B4, B9 y B13, y `trg_mensaje_nace`, B6 y B7. Las reglas exactas están en el brief de la tanda 3, sección 4.
 ```sql
 DELIMITER $$
 -- Un comunicado lo envía una persona del colegio con su sesión, con su rol REAL, en un colegio en producción y en el año en
@@ -1409,11 +1434,11 @@ DELIMITER ;
 | Hoy (V31) | — | — | 86 | 7 + 3 = 10 | 96 |
 | 1 (V32) | `trg_asignacion_docente_nace`, `trg_asignacion_docente_estado`; función `cc_docente_de_seccion` | `trg_usuario_rol_alta` | **88** | 8 + 3 = 11 | **99** |
 | 2 (V33) | `trg_registro_asistencia_nace`, `trg_marca_asistencia_nace`, `trg_consentimiento_aviso_nace`, `trg_configuracion_academica_nace` y `_cambio` (A6); funciones `cc_hoy_lima` y `cc_sesion_abierta` | `trg_mensaje_nace`, `trg_asignacion_docente_nace` (A7); función `cc_docente_de_seccion` (A7) | **93** | 10 + 3 = 13 | **106** |
-| 3 (V34) | `trg_comunicado_nace`, `trg_comunicado_estado`, `trg_comunicado_destinatario_nace`, `trg_confirmacion_lectura_nace` | `trg_mensaje_nace` | **97** | 13 | **110** |
+| 3 (V34) | `trg_comunicado_nace`, `trg_comunicado_estado`, `trg_comunicado_destinatario_nace`, `trg_confirmacion_lectura_nace`, `trg_exportacion_nomina_nace` (B14) | `trg_mensaje_nace` | **98** | 13 | **111** |
 
 ### 7.4 `VerificadorPermisosBaseDatos` y `VerificadorConfiguracion` (prod y piloto)
 Además de lo de hoy:
-1. **`TRIGGERS_ESPERADOS`:** 88, 93 y 97. **Huellas:** 99, 106 y 110 («Huellas de los 97 triggers y las 13 funciones verificadas»). El valor esperado sigue saliendo del `03` y el `02` empaquetados en el jar.
+1. **`TRIGGERS_ESPERADOS`:** 88, 93 y 98. **Huellas:** 99, 106 y 111 («Huellas de los 98 triggers y las 13 funciones verificadas»). El valor esperado sigue saliendo del `03` y el `02` empaquetados en el jar.
 2. **Nuevas para `cc_app`** (1142 o 1143, con `WHERE 1 = 0`):
    - `UPDATE registro_asistencia …`, `DELETE FROM marca_asistencia …`, `UPDATE consentimiento_aviso …`, `UPDATE confirmacion_lectura …`, `UPDATE exportacion_nomina …` y `UPDATE comunicado_adjunto …` (1142);
    - `UPDATE comunicado SET titulo = titulo …`, `… SET cuerpo = cuerpo …`, `… SET adjunto_id = adjunto_id …`; `UPDATE asignacion_docente SET usuario_id = usuario_id …` y `… SET seccion_id = seccion_id …`; `UPDATE comunicado_destinatario SET familia_id = familia_id …` (1143).
@@ -1722,9 +1747,11 @@ Antes de la tanda 1: **pedir a la Dirección del colegio piloto la plantilla de 
 6. «Mis datos», «Datos con plazo vencido» y `respaldar.sh` con las tablas nuevas. **Verificable:** el job `respaldo` con una marca borrada del colegio A.
 - **Terminado cuando:** un docente registra la asistencia de su sección desde el celular en menos de 1 minuto; el apoderado del alumno ausente, con su consentimiento, recibe el aviso ese mismo día a la hora fija (con los hermanos en un solo mensaje); una corrección después del aviso le llega también; una falta de ayer no se cambia sin la firma de Dirección; y una familia con deuda recibe exactamente el mismo aviso que una al día.
 
-### Tanda 3 · Comunicados con confirmación de lectura y nómina para el SIAGIE (V34; 97 triggers; 1.5 semanas)
-1. V34; `02` (comunicados y SIAGIE); `03` con los 4 triggers y la versión de `trg_mensaje_nace` (tipos de comunicados). **Verificable:** E16 a E20, E23, E24, E28, E29, E43 y E45 en MySQL; 97 triggers y 110 huellas.
-2. Dependencia PDFBox (decisión 157), `AdjuntosComunicado` y los 10 archivos hostiles. **Verificable:** E26; ArchUnit de PDFBox; OSV-Scanner sin vulnerabilidades críticas ni altas con arreglo.
+### Tanda 3 · Comunicados con confirmación de lectura y nómina para el SIAGIE (V34; 98 triggers; 1.5 semanas)
+> Brief de la tanda: `docs/arquitectura/sprint-9/tanda-3.md` (léase primero), con los 16 hallazgos de la auditoría en papel (sección 3.16).
+1. V34; `02` (comunicados y SIAGIE); `03` con los 5 triggers y la versión de `trg_mensaje_nace` (tipos de comunicados, B6 y B7). **Verificable:** E16 a E20, E23, E24, E28, E29, E43, E45 y B1 a B15 en MySQL; 98 triggers y 111 huellas.
+2. Dependencia PDFBox (decisión 157), el analizador en un proceso hijo (B5), `AdjuntosComunicado` y los 10 archivos hostiles. **Verificable:** E26; `AnalizadorPdfTest`; ArchUnit de PDFBox;
+ OSV-Scanner sin vulnerabilidades críticas ni altas con arreglo.
 3. `FiltroContenido`, `EnvioComunicados` (vista previa, firma, destinatarios, pie fijo), fe de erratas, retiro y `PUBLICAR_COMUNICADO`. **Verificable:** E16 a E22, E27 a E29 en H2; `IntegridadComunicadosTest` (E19).
 4. Portal (`/familia/comunicados`, abrir y confirmar), estadísticas, `AvisosComunicados` (resumen diario, urgentes, recordatorio a 48 h, tope mensual) y el consumo en `/panel/sistema`. **Verificable:** E23 a E25, E42 y E44.
 5. SIAGIE: sexo y código de estudiante (ficha e importación), códigos modulares, «datos que faltan», el perfil provisional y la exportación por sección. Si llegó la plantilla real, un perfil con sus columnas y una prueba que llena una copia y la compara. **Verificable:** E34; la nómina de una sección sale en el perfil y con el código impreso.
