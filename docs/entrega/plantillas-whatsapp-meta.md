@@ -43,6 +43,8 @@
 | 26 | `cc_correo_control_cambiado_v2` | Promotoría, correo institucional y correo de control | 3 | — |
 | 27 | `cc_asistencia_v2` | Familias | 3 | «Ver asistencia» (`/familia/asistencia`) |
 | 28 | `cc_asistencia_corregida_v2` | Familias | 6 | «Ver asistencia» (`/familia/asistencia`) |
+| 29 | `cc_comunicados_v2` | Familias | 3 | «Ver comunicados» (`/familia/comunicados`) |
+| 30 | `cc_comunicado_urgente_v2` | Familias | 3 | «Ver comunicados» (`/familia/comunicados`) |
 
 ## 1. `cc_pago_registrado_v2` · Registramos su pago
 
@@ -427,6 +429,38 @@
 | `{{4}}` | presente |
 | `{{5}}` | falta |
 | `{{6}}` | Prof. Ana T. |
+
+## 29. `cc_comunicados_v2` · Comunicados del colegio
+
+> Sprint 9, tanda 3 (sección 11 del diseño). Un resumen por familia y día, a la hora del colegio, al contacto principal
+> (con tope mensual): cuántos comunicados nuevos y por confirmar, y de quién. SIN títulos ni texto (son texto libre de una
+> persona: Meta lo clasificaría como marketing); se leen y se confirman en el portal. Nunca montos ni palabras de cobranza.
+
+```text
+{{1}}: tiene {{2}} en el portal, de {{3}}. Léalos y confirme su lectura allí.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | 2 comunicados nuevos y 1 por confirmar |
+| `{{3}}` | Dirección y Prof. Ana T. |
+
+## 30. `cc_comunicado_urgente_v2` · Comunicado urgente
+
+> Sprint 9, tanda 3. Solo Dirección o Promotoría envían urgentes (una suspensión de clases, un simulacro): sale al momento,
+> entre las 07:00 y las 20:00, con el título que pasó por el filtro de contenido. Si Meta lo clasifica como marketing, el
+> urgente sale sin título con `cc_comunicados_v2` (sección 15 del diseño).
+
+```text
+{{1}}: {{2}} le envió un comunicado urgente: «{{3}}». Léalo en el portal.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | Dirección |
+| `{{3}}` | Suspensión de clases del martes 16 |
 
 ## Después de la aprobación
 1. Anotar en `docs/estado-del-proyecto.md` la fecha de aprobación de cada plantilla.

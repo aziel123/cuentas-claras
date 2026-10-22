@@ -492,6 +492,8 @@ class RutasIdorTest {
 				+ "MAX(id) FROM registro_asistencia), ?, CURRENT_DATE, ?, ?, 'FALTA', 'DOCENTE', 'REGISTRO', TRUE, ?, "
 				+ "CURRENT_TIMESTAMP, 'usuario.a', CURRENT_TIMESTAMP)", seccionMateo, f.mateo(), matriculaMateo, sesionA);
 		ids.put(Recurso.MARCA, texto("SELECT MIN(id) FROM marca_asistencia WHERE colegio_id = 1"));
+		// Sprint 9, tanda 3: un comunicado del docente usuario.a a la sección de Mateo (destinataria: la familia Quispe).
+		ids.put(Recurso.COMUNICADO, comunicado(seccionMateo, usuarioA, sesionA, f.quispe(), "a").toString());
 		assertThat(ids.values()).as("hay un recurso real de cada tipo en el colegio A").doesNotContainNull();
 
 		Map<Recurso, String> deFlores = new EnumMap<>(Recurso.class);
@@ -513,6 +515,9 @@ class RutasIdorTest {
 				+ "'DOCENTE', 'REGISTRO', TRUE, ?, CURRENT_TIMESTAMP, 'usuario.a', CURRENT_TIMESTAMP)", seccionSebastian,
 				seccionSebastian, f.sebastian(), matriculaDeSebastian, sesionA);
 		deFlores.put(Recurso.MARCA, texto("SELECT id FROM marca_asistencia WHERE alumno_id = ?", f.sebastian()));
+		// Sprint 9, tanda 3: un comunicado a la sección de Sebastián que solo recibe la familia Flores.
+		deFlores.put(Recurso.COMUNICADO, comunicado(seccionSebastian, usuarioA, sesionA,
+				id("SELECT familia_id FROM alumno WHERE id = ?", f.sebastian()), "b").toString());
 		deFlores.put(Recurso.COMPROBANTE, texto("SELECT comprobante_id FROM pago WHERE id = ?", pagoFlores));
 		deFlores.put(Recurso.RENOVACION, texto("SELECT id FROM renovacion_matricula WHERE alumno_id = ?", f.sebastian()));
 		deFlores.put(Recurso.REFERENCIA_ORDEN, ordenFlores);
@@ -527,6 +532,21 @@ class RutasIdorTest {
 		List<String> marcasFlores = List.of("Flores", "Sebastián", EscenarioCaja.DNI_SEBASTIAN, EscenarioCaja.DNI_PEDRO,
 				comprobanteFlores);
 		return new Datos(f, ids, deFlores, marcas, marcasFlores);
+	}
+
+	/** Sprint 9, tanda 3: un comunicado ENVIADO a una sección con UNA familia destinataria (H2: sin triggers). */
+	private Long comunicado(Long seccionId, Long emisor, Long sesion, Long familia, String letra) {
+		jdbc.update("INSERT INTO comunicado (colegio_id, anio_escolar_id, tipo, emisor_usuario_id, emisor_rol, "
+				+ "emisor_etiqueta, alcance, seccion_id, titulo, cuerpo, huella_contenido, estado, enviado_en, destinatarios, "
+				+ "sesion_id, creado_en, creado_por, actualizado_en) VALUES (1, (SELECT anio_escolar_id FROM seccion WHERE "
+				+ "id = ?), 'NORMAL', ?, 'DOCENTE', 'Prof. IDOR', 'SECCION', ?, 'Comunicado IDOR', 'Texto del comunicado "
+				+ "IDOR', ?, 'ENVIADO', CURRENT_TIMESTAMP, 1, ?, CURRENT_TIMESTAMP, 'usuario.a', CURRENT_TIMESTAMP)",
+				seccionId, emisor, seccionId, letra.repeat(64), sesion);
+		Long id = jdbc.queryForObject("SELECT MAX(id) FROM comunicado WHERE colegio_id = 1", Long.class);
+		jdbc.update("INSERT INTO comunicado_destinatario (colegio_id, comunicado_id, familia_id, alumnos, creado_en, "
+				+ "creado_por, actualizado_en) VALUES (1, ?, ?, 1, CURRENT_TIMESTAMP, 'usuario.a', CURRENT_TIMESTAMP)", id,
+				familia);
+		return id;
 	}
 
 	private Long id(String sql, Object... argumentos) {

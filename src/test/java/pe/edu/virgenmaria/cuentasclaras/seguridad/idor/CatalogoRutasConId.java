@@ -36,7 +36,9 @@ final class CatalogoRutasConId {
 		/** Sprint 9, tanda 1: una asignación docente (Docentes y secciones). */
 		ASIGNACION,
 		/** Sprint 9, tanda 2: una marca de asistencia (corregir, pedir corrección, justificar, revertir). */
-		MARCA
+		MARCA,
+		/** Sprint 9, tanda 3: un comunicado (detalle, fe de erratas, retiro, PDF y el portal de la familia). */
+		COMUNICADO
 	}
 
 	static final Map<String, Map<String, Recurso>> CATALOGO = new LinkedHashMap<>();
@@ -249,6 +251,19 @@ final class CatalogoRutasConId {
 		r("POST /familia/asistencia/marcas/{id:\\d+}/justificar", "id", Recurso.MARCA);
 		r("GET /alumnos/consentimientos", "apoderado", Recurso.APODERADO);
 		r("POST /alumnos/consentimientos", "apoderadoId", Recurso.APODERADO);
+		// Sprint 9, tanda 3: los comunicados del personal (de otro colegio u otro docente: 404), los del portal (de otra
+		// familia: 404), la nómina del SIAGIE por sección (?seccion=, A11) y los datos del SIAGIE de un alumno.
+		r("POST /comunicados/nuevo", "seccionId", Recurso.SECCION);
+		r("GET /comunicados/{id:\\d+}", "id", Recurso.COMUNICADO);
+		r("GET /comunicados/{id:\\d+}/fe-de-erratas", "id", Recurso.COMUNICADO);
+		r("POST /comunicados/{id:\\d+}/fe-de-erratas", "id", Recurso.COMUNICADO, "seccionId", Recurso.SECCION);
+		r("POST /comunicados/{id:\\d+}/retirar", "id", Recurso.COMUNICADO);
+		r("GET /comunicados/{id:\\d+}/adjunto", "id", Recurso.COMUNICADO);
+		r("GET /familia/comunicados/{id:\\d+}", "id", Recurso.COMUNICADO);
+		r("POST /familia/comunicados/{id:\\d+}/confirmar", "id", Recurso.COMUNICADO);
+		r("GET /familia/comunicados/{id:\\d+}/adjunto", "id", Recurso.COMUNICADO);
+		r("GET /academico/siagie/nomina", "seccion", Recurso.SECCION);
+		r("POST /alumnos/{id:\\d+}/datos-siagie", "id", Recurso.ALUMNO);
 	}
 
 	private CatalogoRutasConId() {

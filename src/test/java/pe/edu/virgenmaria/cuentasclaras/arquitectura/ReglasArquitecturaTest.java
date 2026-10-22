@@ -483,7 +483,21 @@ class ReglasArquitecturaTest {
 					"hasAnyRole('DIRECTOR','ADMINISTRACION')"),
 			Map.entry(BASE + ".academico.service.AlertasAcademicas", ALERTAS),
 			Map.entry(BASE + ".aprobaciones.service.AlertasSolicitudesPendientes", ALERTAS),
-			Map.entry(BASE + ".comunicacion.service.AvisosAsistenciaFamilias", "hasRole('SISTEMA_ASISTENCIA')"));
+			Map.entry(BASE + ".comunicacion.service.AvisosAsistenciaFamilias", "hasRole('SISTEMA_ASISTENCIA')"),
+			// Sprint 9, tanda 3 (sección 10): escriben y ven comunicados Promotoría, Dirección y el docente (sus secciones, lo
+			// exige el servicio); retiran Dirección y Promotoría; la familia lee y confirma; los avisos, sistema.comunicados;
+			// la nómina del SIAGIE, solo Dirección; el consumo de mensajes, Promotoría.
+			Map.entry(BASE + ".comunicados.service.EnvioComunicados", "hasAnyRole('PROMOTOR','DIRECTOR','DOCENTE')"),
+			Map.entry(BASE + ".comunicados.service.EnvioComunicados#retirar", APROBACION),
+			Map.entry(BASE + ".comunicados.service.ConsultaComunicados", "hasAnyRole('PROMOTOR','DIRECTOR','DOCENTE')"),
+			Map.entry(BASE + ".comunicados.service.AdjuntosComunicado#validar",
+					"hasAnyRole('PROMOTOR','DIRECTOR','DOCENTE')"),
+			Map.entry(BASE + ".comunicados.service.LecturaFamilia", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".comunicados.service.AvisosDeComunicados", "hasRole('SISTEMA_COMUNICADOS')"),
+			Map.entry(BASE + ".comunicados.service.AlertasComunicados", ALERTAS),
+			Map.entry(BASE + ".comunicacion.service.AvisosComunicadosFamilias", "hasRole('SISTEMA_COMUNICADOS')"),
+			Map.entry(BASE + ".comunicacion.service.ConsumoMensajes", "hasRole('PROMOTOR')"),
+			Map.entry(BASE + ".academico.siagie.NominaSiagie", "hasRole('DIRECTOR')"));
 
 	/**
 	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para
@@ -657,7 +671,10 @@ class ReglasArquitecturaTest {
 					// Sprint 8, tanda 2: la propuesta de un conector (PROMOTOR o ADMINISTRACION) crea su CAMBIO_CONECTOR.
 					BASE + ".conectores.service..",
 					// Sprint 9, tanda 1: la propuesta de una asignación (DIRECTOR o ADMINISTRACION) crea su ASIGNACION_DOCENTE.
-					BASE + ".academico.service..")
+					BASE + ".academico.service..",
+					// Sprint 9, tanda 3: el comunicado con PDF (de un docente o que requiere revisión) crea su
+					// PUBLICAR_COMUNICADO.
+					BASE + ".comunicados.service..")
 			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".aprobaciones.service.RegistroSolicitudes")
 			.because("la solicitud la crea el servicio protegido que valida el cambio pedido");
 
@@ -818,12 +835,53 @@ class ReglasArquitecturaTest {
 			.should().dependOnClassesThat().resideInAnyPackage(BASE + ".academico..", BASE + ".comunicados..")
 			.because("la cobranza no se mezcla con la asistencia ni con los comunicados (sección 3.13)");
 
-	/** Sprint 9 (sección 3.9): la librería de PDF solo la usa la validación del adjunto de un comunicado. */
+	/**
+	 * Sprint 9, tanda 3 (sección 3.9, B5): la librería de PDF solo la usa el analizador, que corre en un PROCESO HIJO con su
+	 * memoria, su tiempo y sin red. La aplicación nunca abre un PDF.
+	 */
 	@ArchTest
-	static final ArchRule pdfboxSoloEnAdjuntosComunicado = noClasses()
-			.that().doNotHaveFullyQualifiedName(BASE + ".comunicados.service.AdjuntosComunicado")
-			.should().dependOnClassesThat().resideInAPackage("org.apache.pdfbox..")
-			.because("un PDF puede traer JavaScript, acciones o archivos embebidos: lo revisa un solo lugar");
+	static final ArchRule pdfboxSoloEnElAnalizador = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".comunicados.analizador..")
+			.and().resideOutsideOfPackage("org.apache.pdfbox..").and().resideOutsideOfPackage("org.apache.fontbox..")
+			.should().dependOnClassesThat().resideInAnyPackage("org.apache.pdfbox..", "org.apache.fontbox..")
+			.because("un PDF puede traer JavaScript, acciones, bombas o archivos embebidos: lo abre solo el proceso hijo");
+
+	/** B5: el analizador no depende de nada de la aplicación (corre sin Spring, sin base y sin credenciales). */
+	@ArchTest
+	static final ArchRule elAnalizadorNoDependeDeLaAplicacion = noClasses()
+			.that().resideInAPackage(BASE + ".comunicados.analizador..")
+			.should().dependOnClassesThat(DescribedPredicate.describe("de la aplicación fuera del analizador",
+					(JavaClass c) -> c.getPackageName().startsWith(BASE)
+							&& !c.getPackageName().startsWith(BASE + ".comunicados.analizador")))
+			.orShould().dependOnClassesThat().resideInAPackage("org.springframework..")
+			.because("el proceso hijo no tiene Spring, ni base de datos, ni credenciales: solo el PDF y su directorio");
+
+	/**
+	 * Sprint 9, tanda 3 (sección 9): los avisos de comunicados (el proceso y su servicio) leen los comunicados SOLO por
+	 * {@code comunicados.api}: sin su texto.
+	 */
+	@ArchTest
+	static final ArchRule avisosDeComunicadosSoloLeenLaApi = noClasses()
+			.that().haveFullyQualifiedName(BASE + ".comunicacion.proceso.AvisosComunicados")
+			.or().haveFullyQualifiedName(BASE + ".comunicacion.service.AvisosComunicadosFamilias")
+			.should().dependOnClassesThat(DescribedPredicate.describe("de comunicados fuera de comunicados.api",
+					(JavaClass c) -> c.getPackageName().startsWith(BASE + ".comunicados")
+							&& !c.getPackageName().startsWith(BASE + ".comunicados.api")))
+			.because("el aviso a la familia no debe poder leer el texto de un comunicado");
+
+	/** Un comunicado no se edita ni se borra: sus repositorios no heredan delete* ni tienen @Modifying. */
+	@ArchTest
+	static final ArchRule repositoriosDeComunicadosSinModifyingNiBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAPackage(BASE + ".comunicados.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("un comunicado se retira o se corrige con una fe de erratas; nunca se edita ni se borra");
+
+	@ArchTest
+	static final ArchRule repositoriosDeComunicadosNoHeredanBorrados = classes()
+			.that().resideInAPackage(BASE + ".comunicados.repository..")
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("CrudRepository trae delete*: los repositorios de comunicados declaran solo lo que usan");
 
 	/**
 	 * Sprint 9, tanda 2 (A15): el marcador dactilar no está habilitado. Nadie usa {@code FuenteAsistencia.MARCADOR} fuera del

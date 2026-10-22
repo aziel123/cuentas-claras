@@ -199,7 +199,7 @@ class VerificadorPermisosBaseDatosTest {
 					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora|semilla_muestreo|huella_hora|"
 					+ "resumen_diario|llamada_control|muestra_llamada|delegacion_llamada|configuracion_colegio|respaldo|"
 					+ "firma_operacion|acceso_dato_personal|registro_asistencia|marca_asistencia|consentimiento_aviso|"
-					+ "aviso_asistencia_corte) ");
+					+ "aviso_asistencia_corte|comunicado_adjunto|confirmacion_lectura|exportacion_nomina) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
