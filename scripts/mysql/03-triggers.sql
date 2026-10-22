@@ -9,7 +9,17 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
--- Versión de la migración V33 (sprint 9, tanda 2): 93 triggers y 10 funciones (más las 3 de 02: 13 con huella; 106 huellas).
+-- Versión de la migración V34 (sprint 9, tanda 3): 98 triggers y 10 funciones (13 con huella; 111 huellas).
+-- Nuevos: trg_comunicado_nace (un comunicado lo envía una persona con su rol REAL, su sesión y su firma, con la huella que
+-- recalcula la base (B2), sin caracteres de formato ni cobranza (B4); un PDF que requiere revisión espera la aprobación del
+-- otro órgano (B3); la fe de erratas va al mismo alcance y la de un retirado, solo Dirección o Promotoría (B9)),
+-- trg_comunicado_estado (la aprobación del otro órgano con su firma; un retiro no se reescribe; los destinatarios se
+-- cierran una vez y una fe de erratas llega a TODOS los del original, B1), trg_comunicado_destinatario_nace,
+-- trg_confirmacion_lectura_nace (la familia confirma con su cuenta y su sesión) y trg_exportacion_nomina_nace (la nómina la
+-- saca Dirección con su sesión, B14). Versión nueva de trg_mensaje_nace (los avisos de comunicados; B6: los parámetros
+-- empiezan con el nombre del colegio y la regla de cobranza corre sobre el resto; B7: «S/» solo delante de una cifra y
+-- los decimales sin las horas).
+-- Versión anterior (V33, sprint 9, tanda 2): 93 triggers y 10 funciones (más las 3 de 02: 13 con huella; 106 huellas).
 -- Nuevos: trg_registro_asistencia_nace (el registro del día lo hace SOLO un docente asignado a la sección, con su sesión y
 -- su firma, un día de clases y HOY según la base; otro día, con su REGISTRO_ASISTENCIA_TARDIO aprobada y firmada),
 -- trg_marca_asistencia_nace (cada marca, con su sesión; corregir el mismo día antes del segundo aviso y con firma; otro
@@ -1180,39 +1190,46 @@ BEGIN
     IF NEW.destinatario_tipo = 'APODERADO' AND NOT cc_colegio_en_produccion(NEW.colegio_id) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio todavia no esta en produccion: sin recordatorios de cobro ni mensajes a las familias';
     END IF;
-    -- Sprint 9, tanda 2 (secciones 3.6 y 3.13): los avisos de asistencia los crea solo su proceso (sistema.asistencia, con
-    -- cc_sistema por la regla de arriba), a un apoderado, con su plantilla; no hablan de cobranza (la misma expresión que
-    -- ContenidoSinCobranza en Java, que lo comprueba); por WhatsApp, con el último consentimiento de asistencia otorgado;
-    -- por correo, sin oposición. Y una plantilla de asistencia nunca sirve para otro aviso (E40). La tanda 3 suma los de
-    -- comunicados.
-    IF NEW.tipo IN ('ASISTENCIA_DIA', 'ASISTENCIA_CORREGIDA') THEN
+    -- Sprint 9, tandas 2 y 3 (secciones 3.6, 3.10 y 3.13): los avisos académicos (asistencia y comunicados) los crea solo
+    -- su proceso (sistema.asistencia o sistema.comunicados, con cc_sistema por la regla de arriba), a un apoderado, con su
+    -- plantilla; no hablan de cobranza (la misma expresión que ContenidoSinCobranza en Java, que lo comprueba); por
+    -- WhatsApp, con el último consentimiento de esa finalidad otorgado; por correo, sin oposición. Una plantilla académica
+    -- nunca sirve para otro aviso (E40).
+    -- Tanda 3 (B6): los parámetros empiezan con el nombre del colegio (comparación binaria) y la regla corre SOLO sobre el
+    -- resto: un colegio cuyo nombre calza con la regla no se queda sin avisos. (B7): «S/» solo delante de una cifra (las
+    -- palabras «padres/madres» pasan) y los decimales sin las horas («7.45 a.m.» pasa).
+    IF NEW.tipo IN ('ASISTENCIA_DIA', 'ASISTENCIA_CORREGIDA', 'COMUNICADOS_RESUMEN', 'COMUNICADO_URGENTE') THEN
         -- El respaldo por correo de un WhatsApp FALLIDO lo crea el despacho (sistema.mensajeria; la regla del respaldo,
         -- más abajo, exige que sea del mismo tipo y al mismo apoderado).
         IF NOT (NEW.destinatario_tipo <=> 'APODERADO')
-                OR NOT (NEW.creado_por <=> 'sistema.asistencia'
+                OR NOT (NEW.creado_por <=> IF(NEW.tipo LIKE 'ASISTENCIA%', 'sistema.asistencia', 'sistema.comunicados')
                     OR (NEW.respaldo_de_id IS NOT NULL AND NEW.creado_por <=> 'sistema.mensajeria'))
-                OR NOT (NEW.plantilla LIKE 'cc\_asistencia%') THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los avisos de asistencia los crea su proceso, con su plantilla';
+                OR NOT (NEW.plantilla LIKE IF(NEW.tipo LIKE 'ASISTENCIA%', 'cc\_asistencia%', 'cc\_comunicado%')) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los avisos de asistencia y de comunicados los crea su proceso, con su plantilla';
         END IF;
-        IF NEW.parametros IS NULL OR REGEXP_LIKE(NEW.parametros,
-                'S/|US[$]|[0-9][.,][0-9]{2}([^0-9]|$)|\\bdeud|\\bpensi[oó]n|\\bcuotas?\\b|\\bpag(o|os|ar|ue|ues)\\b|\\bmoros|\\bcobr|\\bvencid|\\byape\\b|\\bplin\\b',
-                'i') THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un aviso de asistencia no habla de cobranza';
+        IF NEW.parametros IS NULL OR NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id
+                AND CAST(LEFT(NEW.parametros, CHAR_LENGTH(c.nombre) + 1) AS BINARY) = CAST(CONCAT(c.nombre, CHAR(10)) AS BINARY)
+                AND NOT REGEXP_LIKE(SUBSTRING(NEW.parametros, CHAR_LENGTH(c.nombre) + 2),
+                    '(^|[^a-z])s/\\.?\\s*[0-9]|US[$]|[0-9][.,][0-9]{2}(?![0-9]|\\s*([ap]\\.?\\s?m|h)\\b)|\\bdeud|\\bpensi[oó]n|\\bcuotas?\\b|\\bpag(o|os|ar|ue|ues)\\b|\\bmoros|\\bcobr|\\bvencid|\\byape\\b|\\bplin\\b',
+                    'i')) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un aviso de asistencia o de comunicados no habla de cobranza y empieza con el colegio';
         END IF;
         IF NEW.canal = 'WHATSAPP' AND NOT EXISTS (SELECT 1 FROM consentimiento_aviso c
                 WHERE c.id = (SELECT MAX(c2.id) FROM consentimiento_aviso c2 WHERE c2.colegio_id = NEW.colegio_id
-                    AND c2.apoderado_id = NEW.apoderado_id AND c2.canal = 'WHATSAPP' AND c2.finalidad = 'ASISTENCIA')
+                    AND c2.apoderado_id = NEW.apoderado_id AND c2.canal = 'WHATSAPP'
+                    AND c2.finalidad = IF(NEW.tipo LIKE 'ASISTENCIA%', 'ASISTENCIA', 'COMUNICADOS'))
                   AND c.otorgado) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: sin el consentimiento del apoderado no se le escribe por WhatsApp';
         END IF;
         IF NEW.canal = 'CORREO' AND EXISTS (SELECT 1 FROM consentimiento_aviso c
                 WHERE c.id = (SELECT MAX(c2.id) FROM consentimiento_aviso c2 WHERE c2.colegio_id = NEW.colegio_id
-                    AND c2.apoderado_id = NEW.apoderado_id AND c2.canal = 'CORREO' AND c2.finalidad = 'ASISTENCIA')
+                    AND c2.apoderado_id = NEW.apoderado_id AND c2.canal = 'CORREO'
+                    AND c2.finalidad = IF(NEW.tipo LIKE 'ASISTENCIA%', 'ASISTENCIA', 'COMUNICADOS'))
                   AND NOT c.otorgado) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el apoderado se opuso a recibir estos avisos por correo';
         END IF;
-    ELSEIF NEW.plantilla LIKE 'cc\_asistencia%' THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una plantilla de asistencia no sirve para otro aviso';
+    ELSEIF NEW.plantilla LIKE 'cc\_asistencia%' OR NEW.plantilla LIKE 'cc\_comunicado%' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una plantilla de asistencia o de comunicados no sirve para otro aviso';
     END IF;
     IF NEW.destinatario_tipo = 'APODERADO' AND NEW.tipo <> 'CONTACTO_CAMBIADO' AND NOT EXISTS (SELECT 1 FROM apoderado a
             WHERE a.id = NEW.apoderado_id AND a.colegio_id = NEW.colegio_id
@@ -2887,6 +2904,199 @@ BEGIN
             OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('configuracion_academica:', NEW.colegio_id, ':CAMBIADA:',
                 NEW.version), NEW.actualizado_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la configuracion academica la cambia Direccion con su firma';
+    END IF;
+END$$
+DELIMITER ;
+
+-- ===================== Sprint 9 · tanda 3 (V34): comunicados y nómina para el SIAGIE =====================
+-- (La versión nueva de trg_mensaje_nace quedó en su lugar, marcada con «Sprint 9, tandas 2 y 3».) Un comunicado no se
+-- edita ni se borra: nace completo, se aprueba, se retira o se corrige con una fe de erratas. Con la auditoría en papel
+-- de la tanda 3 (B1 a B4, B9, B13 y B14).
+DELIMITER $$
+
+-- Un comunicado lo envía una persona del colegio con su sesión y su rol REAL, en un colegio en producción y en el año en
+-- curso, con la firma de su sesión (también el que queda POR_APROBAR). La base recalcula la huella del contenido (B2) y
+-- rechaza los caracteres de formato (B4) y la cobranza. Un docente, solo a una sección con su asignación vigente (no
+-- auxiliar); con PDF, queda POR_APROBAR. Un PDF que requiere revisión (B3) queda POR_APROBAR para cualquier emisor. La fe
+-- de erratas va al mismo alcance que el original; la de un retirado, solo Dirección o Promotoría (B9). El envío a ±5
+-- minutos del reloj de la base (B13).
+DROP TRIGGER IF EXISTS trg_comunicado_nace$$
+CREATE TRIGGER trg_comunicado_nace BEFORE INSERT ON comunicado FOR EACH ROW
+BEGIN
+    DECLARE v_sha_adjunto CHAR(64);
+    DECLARE v_revision BOOLEAN DEFAULT FALSE;
+    IF NEW.estado NOT IN ('ENVIADO', 'POR_APROBAR') OR NEW.solicitud_id IS NOT NULL OR NEW.retirado_por IS NOT NULL
+            OR NEW.destinatarios IS NOT NULL
+            OR NOT cc_colegio_en_produccion(NEW.colegio_id)
+            OR NOT cc_sesion_abierta(NEW.sesion_id, NEW.creado_por, NEW.colegio_id)
+            OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE u.id = NEW.emisor_usuario_id AND u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.creado_por
+                  AND u.activo AND u.apoderado_id IS NULL
+                  AND r.rol = CASE NEW.emisor_rol WHEN 'PROMOTORIA' THEN 'PROMOTOR' WHEN 'DIRECCION' THEN 'DIRECTOR'
+                      ELSE 'DOCENTE' END)
+            OR NOT EXISTS (SELECT 1 FROM anio_escolar a WHERE a.id = NEW.anio_escolar_id AND a.colegio_id = NEW.colegio_id
+                AND a.estado = 'EN_CURSO') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el comunicado lo envia una persona del colegio con su rol real y su sesion';
+    END IF;
+    IF NEW.adjunto_id IS NOT NULL THEN
+        SELECT a.sha256, a.requiere_revision INTO v_sha_adjunto, v_revision FROM comunicado_adjunto a
+            WHERE a.id = NEW.adjunto_id AND a.colegio_id = NEW.colegio_id AND a.creado_por = NEW.creado_por;
+        IF v_sha_adjunto IS NULL THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el adjunto lo subio quien envia el comunicado';
+        END IF;
+    END IF;
+    IF NOT (SHA2(CONCAT_WS(CHAR(10), NEW.alcance, IFNULL(NEW.nivel, ''), IFNULL(NEW.grado, ''),
+            IFNULL(NEW.seccion_id, ''), NEW.titulo, NEW.cuerpo, IFNULL(v_sha_adjunto, '')), 256) <=> NEW.huella_contenido) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la huella del comunicado no corresponde a su contenido';
+    END IF;
+    IF REGEXP_LIKE(CONCAT(NEW.titulo, NEW.cuerpo), '\\p{Cf}')
+            OR REGEXP_LIKE(CONCAT_WS(CHAR(10), NEW.titulo, NEW.cuerpo),
+                '(^|[^a-z])s/\\.?\\s*[0-9]|US[$]|[0-9][.,][0-9]{2}(?![0-9]|\\s*([ap]\\.?\\s?m|h)\\b)|\\bdeud|\\bpensi[oó]n|\\bcuotas?\\b|\\bpag(o|os|ar|ue|ues)\\b|\\bmoros|\\bcobr|\\bvencid|\\byape\\b|\\bplin\\b',
+                'i') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un comunicado no lleva caracteres invisibles ni habla de cobranza';
+    END IF;
+    IF NEW.emisor_rol = 'DOCENTE' AND NOT (NEW.alcance = 'SECCION'
+            AND cc_docente_de_seccion(NEW.creado_por, NEW.seccion_id, FALSE)
+            AND ((NEW.adjunto_id IS NULL AND NEW.estado = 'ENVIADO')
+                OR (NEW.adjunto_id IS NOT NULL AND NEW.estado = 'POR_APROBAR'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el docente escribe solo a sus secciones; con PDF, lo aprueba Direccion';
+    END IF;
+    IF NEW.emisor_rol <> 'DOCENTE' AND NOT (NEW.estado <=> IF(v_revision, 'POR_APROBAR', 'ENVIADO')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el comunicado de Direccion o Promotoria sale al enviarse, salvo un PDF que requiere revision';
+    END IF;
+    IF NOT cc_firma_valida(NEW.colegio_id, CONCAT('comunicado:', LEFT(NEW.huella_contenido, 40), ':ENVIAR'),
+            NEW.creado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el envio lleva la firma de la sesion de quien lo envia';
+    END IF;
+    IF NEW.estado = 'ENVIADO' AND NOT (NEW.enviado_en BETWEEN UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE
+            AND UTC_TIMESTAMP(6) - INTERVAL 5 HOUR + INTERVAL 5 MINUTE) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la hora del envio la pone el reloj de la base';
+    END IF;
+    IF NEW.tipo = 'FE_DE_ERRATAS' AND NOT EXISTS (SELECT 1 FROM comunicado o WHERE o.id = NEW.corrige_id
+            AND o.colegio_id = NEW.colegio_id AND o.alcance = NEW.alcance
+            AND o.nivel <=> NEW.nivel AND o.grado <=> NEW.grado AND o.seccion_id <=> NEW.seccion_id
+            AND ((o.estado = 'ENVIADO' AND (o.emisor_usuario_id = NEW.emisor_usuario_id
+                    OR NEW.emisor_rol IN ('DIRECCION', 'PROMOTORIA')))
+                OR (o.estado = 'RETIRADO' AND NEW.emisor_rol IN ('DIRECCION', 'PROMOTORIA')))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la fe de erratas va al mismo alcance que el original; la de un retirado, Direccion o Promotoria';
+    END IF;
+END$$
+
+-- POR_APROBAR → ENVIADO con SU PUBLICAR_COMUNICADO aprobada y firmada por el OTRO órgano (B3): de un docente, Promotoría o
+-- Dirección; de Dirección, Promotoría; de Promotoría, Dirección; siempre otra persona. → RECHAZADO con la solicitud
+-- rechazada; ENVIADO → RETIRADO por Dirección o Promotoría con su firma y motivo. Un retiro no se reescribe. Lo escrito
+-- del envío no cambia; los destinatarios se cierran una vez, con las filas de comunicado_destinatario y, en una fe de
+-- erratas, con TODOS los del original (B1).
+DROP TRIGGER IF EXISTS trg_comunicado_estado$$
+CREATE TRIGGER trg_comunicado_estado BEFORE UPDATE ON comunicado FOR EACH ROW
+BEGIN
+    IF (OLD.solicitud_id IS NOT NULL AND NOT (NEW.solicitud_id <=> OLD.solicitud_id))
+            OR (OLD.enviado_en IS NOT NULL AND NOT (NEW.enviado_en <=> OLD.enviado_en))
+            OR (OLD.destinatarios IS NOT NULL AND NOT (NEW.destinatarios <=> OLD.destinatarios)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: lo escrito del envio de un comunicado no cambia';
+    END IF;
+    IF OLD.estado = 'RETIRADO' AND NOT (NEW.estado <=> OLD.estado AND NEW.retirado_por <=> OLD.retirado_por
+            AND NEW.retirado_en <=> OLD.retirado_en AND NEW.motivo_retiro <=> OLD.motivo_retiro) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un retiro no se reescribe';
+    END IF;
+    IF OLD.destinatarios IS NULL AND NEW.destinatarios IS NOT NULL AND NOT (NEW.estado = 'ENVIADO'
+            AND NEW.destinatarios = (SELECT COUNT(*) FROM comunicado_destinatario d WHERE d.comunicado_id = NEW.id)
+            AND (NEW.tipo = 'NORMAL' OR NEW.destinatarios <=> (SELECT o.destinatarios FROM comunicado o
+                WHERE o.id = NEW.corrige_id AND o.colegio_id = NEW.colegio_id))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los destinatarios se cierran una vez; la fe de erratas llega a todos los del original';
+    END IF;
+    IF OLD.estado = 'POR_APROBAR' AND NEW.estado = 'ENVIADO' THEN
+        IF NOT (cc_solicitud_firmada(NEW.solicitud_id) AND EXISTS (SELECT 1 FROM solicitud_cambio s
+                    JOIN usuario u ON u.nombre_usuario = s.resuelto_por AND u.colegio_id = s.colegio_id
+                    JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id AND s.tipo = 'PUBLICAR_COMUNICADO'
+                  AND s.entidad = 'comunicado' AND s.entidad_id = NEW.id AND s.solicitado_por = OLD.creado_por
+                  AND s.resuelto_por <> OLD.creado_por AND u.activo AND u.apoderado_id IS NULL
+                  AND r.rol IN (CASE OLD.emisor_rol WHEN 'DIRECCION' THEN 'PROMOTOR' WHEN 'PROMOTORIA' THEN 'DIRECTOR'
+                          ELSE 'PROMOTOR' END,
+                      CASE OLD.emisor_rol WHEN 'DIRECCION' THEN 'PROMOTOR' WHEN 'PROMOTORIA' THEN 'DIRECTOR'
+                          ELSE 'DIRECTOR' END))
+                AND NEW.enviado_en IS NOT NULL AND NEW.enviado_en BETWEEN UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE
+                    AND UTC_TIMESTAMP(6) - INTERVAL 5 HOUR + INTERVAL 5 MINUTE) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el comunicado por aprobar lo aprueba el otro organo con su firma';
+        END IF;
+    ELSEIF OLD.estado = 'POR_APROBAR' AND NEW.estado = 'RECHAZADO' THEN
+        IF NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id
+                AND s.tipo = 'PUBLICAR_COMUNICADO' AND s.entidad = 'comunicado' AND s.entidad_id = NEW.id
+                AND s.estado = 'RECHAZADA') THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el comunicado se rechaza con su solicitud rechazada';
+        END IF;
+    ELSEIF OLD.estado = 'ENVIADO' AND NEW.estado = 'RETIRADO' THEN
+        IF NOT (EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                    WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.retirado_por AND u.activo
+                      AND u.apoderado_id IS NULL AND r.rol IN ('PROMOTOR', 'DIRECTOR'))
+                AND cc_firma_valida(NEW.colegio_id, CONCAT('comunicado:', NEW.id, ':RETIRADO'), NEW.retirado_por)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un comunicado lo retira Direccion o Promotoria con su firma';
+        END IF;
+    ELSEIF NOT (NEW.estado <=> OLD.estado) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: transicion de comunicado no permitida';
+    END IF;
+END$$
+
+-- Destinatario: solo de un comunicado ENVIADO cuya lista no se cerró (B1); una familia con un alumno con matrícula ACTIVA
+-- en el alcance o, en una fe de erratas, una familia destinataria del original. Nace sin abrir ni avisar.
+DROP TRIGGER IF EXISTS trg_comunicado_destinatario_nace$$
+CREATE TRIGGER trg_comunicado_destinatario_nace BEFORE INSERT ON comunicado_destinatario FOR EACH ROW
+BEGIN
+    DECLARE v_estado VARCHAR(12);
+    DECLARE v_tipo VARCHAR(14);
+    DECLARE v_corrige BIGINT;
+    DECLARE v_alcance VARCHAR(10);
+    DECLARE v_nivel VARCHAR(12);
+    DECLARE v_grado VARCHAR(20);
+    DECLARE v_seccion BIGINT;
+    DECLARE v_anio BIGINT;
+    DECLARE v_cerrada INT;
+    SELECT c.estado, c.tipo, c.corrige_id, c.alcance, c.nivel, c.grado, c.seccion_id, c.anio_escolar_id, c.destinatarios
+      INTO v_estado, v_tipo, v_corrige, v_alcance, v_nivel, v_grado, v_seccion, v_anio, v_cerrada
+      FROM comunicado c WHERE c.id = NEW.comunicado_id AND c.colegio_id = NEW.colegio_id;
+    IF NOT (v_estado <=> 'ENVIADO') OR v_cerrada IS NOT NULL OR NEW.abierto_en IS NOT NULL
+            OR NEW.avisado_mensaje_id IS NOT NULL OR NEW.recordado_mensaje_id IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: solo un comunicado enviado y con la lista abierta tiene destinatarios nuevos, sin abrir ni avisar';
+    END IF;
+    IF v_tipo = 'FE_DE_ERRATAS' THEN
+        IF NOT EXISTS (SELECT 1 FROM comunicado_destinatario d WHERE d.comunicado_id = v_corrige
+                AND d.colegio_id = NEW.colegio_id AND d.familia_id = NEW.familia_id) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la fe de erratas va a los destinatarios del original';
+        END IF;
+    ELSEIF NOT EXISTS (SELECT 1 FROM alumno al JOIN matricula m ON m.alumno_id = al.id JOIN seccion s ON s.id = m.seccion_id
+            WHERE al.familia_id = NEW.familia_id AND al.colegio_id = NEW.colegio_id AND m.anio_escolar_id = v_anio
+              AND m.estado = 'ACTIVA'
+              AND (v_alcance = 'COLEGIO' OR (v_alcance = 'NIVEL' AND s.grado LIKE CONCAT(v_nivel, '\_%'))
+                  OR (v_alcance = 'GRADO' AND s.grado = v_grado) OR (v_alcance = 'SECCION' AND s.id = v_seccion))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el destinatario tiene un alumno matriculado en el alcance del comunicado';
+    END IF;
+END$$
+
+-- «Confirmo que lo leí»: la cuenta de un apoderado activo de ESA familia, con su sesión abierta, en un comunicado ENVIADO.
+-- Que la familia sea destinataria lo exige la FK.
+DROP TRIGGER IF EXISTS trg_confirmacion_lectura_nace$$
+CREATE TRIGGER trg_confirmacion_lectura_nace BEFORE INSERT ON confirmacion_lectura FOR EACH ROW
+BEGIN
+    IF NOT cc_sesion_abierta(NEW.sesion_id, NEW.creado_por, NEW.colegio_id)
+            OR NOT EXISTS (SELECT 1 FROM usuario u JOIN apoderado p ON p.id = u.apoderado_id
+                WHERE u.id = NEW.usuario_id AND u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.creado_por
+                  AND u.activo AND p.id = NEW.apoderado_id AND p.familia_id = NEW.familia_id AND p.activo)
+            OR NOT EXISTS (SELECT 1 FROM comunicado c WHERE c.id = NEW.comunicado_id AND c.colegio_id = NEW.colegio_id
+                AND c.estado = 'ENVIADO') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la lectura la confirma un apoderado de esa familia, con su sesion';
+    END IF;
+END$$
+
+-- La nómina para el SIAGIE la saca Dirección (una persona activa con DIRECTOR) con su sesión abierta (B14).
+DROP TRIGGER IF EXISTS trg_exportacion_nomina_nace$$
+CREATE TRIGGER trg_exportacion_nomina_nace BEFORE INSERT ON exportacion_nomina FOR EACH ROW
+BEGIN
+    IF NOT cc_sesion_abierta(NEW.sesion_id, NEW.creado_por, NEW.colegio_id)
+            OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.creado_por AND u.activo
+                  AND u.apoderado_id IS NULL AND r.rol = 'DIRECTOR') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la nomina del SIAGIE la saca Direccion con su sesion';
     END IF;
 END$$
 DELIMITER ;

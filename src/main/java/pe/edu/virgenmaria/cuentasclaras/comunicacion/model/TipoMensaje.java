@@ -37,7 +37,11 @@ public enum TipoMensaje {
 	// Sprint 9, tanda 2 (sección 3.6): avisos de asistencia a las familias, con tipos y plantillas propios (nunca mezclados
 	// con la cobranza: INDECOPI). Los crea solo sistema.asistencia (trg_mensaje_nace).
 	ASISTENCIA_DIA("Aviso de asistencia del día", false),
-	ASISTENCIA_CORREGIDA("Corrección de asistencia", false);
+	ASISTENCIA_CORREGIDA("Corrección de asistencia", false),
+	// Sprint 9, tanda 3 (sección 3.10): el resumen diario de comunicados y el urgente. Los crea solo sistema.comunicados
+	// (trg_mensaje_nace); nunca llevan el texto del comunicado (el título, solo el urgente).
+	COMUNICADOS_RESUMEN("Resumen de comunicados", false),
+	COMUNICADO_URGENTE("Comunicado urgente", false);
 
 	private final String etiqueta;
 

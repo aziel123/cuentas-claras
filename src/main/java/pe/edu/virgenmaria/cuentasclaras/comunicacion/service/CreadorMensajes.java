@@ -289,11 +289,19 @@ public class CreadorMensajes {
 				|| !apto(apoderado, CanalMensaje.CORREO, correo, original.getTipo()))) {
 			return Optional.empty();
 		}
-		// Sprint 9, tanda 2 (E37): el respaldo de un aviso de asistencia sale por correo solo si el apoderado no se opuso.
+		// Sprint 9, tandas 2 y 3 (E37): el respaldo de un aviso de asistencia o de comunicados sale por correo solo si el
+		// apoderado no se opuso a esa finalidad.
 		if (apoderado != null && (original.getTipo() == TipoMensaje.ASISTENCIA_DIA
 				|| original.getTipo() == TipoMensaje.ASISTENCIA_CORREGIDA)) {
 			Consentimientos vigentes = consentimientos.getIfAvailable();
 			if (vigentes == null || !vigentes.recibeAsistencia(apoderado.getId(), false)) {
+				return Optional.empty();
+			}
+		}
+		if (apoderado != null && (original.getTipo() == TipoMensaje.COMUNICADOS_RESUMEN
+				|| original.getTipo() == TipoMensaje.COMUNICADO_URGENTE)) {
+			Consentimientos vigentes = consentimientos.getIfAvailable();
+			if (vigentes == null || !vigentes.recibeComunicados(apoderado.getId(), false)) {
 				return Optional.empty();
 			}
 		}

@@ -207,11 +207,12 @@ public class AvisosAsistenciaFamilias {
 	}
 
 	/**
-	 * Si los parámetros (con el nombre del colegio delante, como los guarda el mensaje) coincidieran con la regla de
-	 * cobranza de trg_mensaje_nace, los nombres de los alumnos salen como «su hijo(a)» (sección 15).
+	 * Si los parámetros propios (SIN el nombre del colegio, que la regla de trg_mensaje_nace ya no revisa: B6) coincidieran
+	 * con la regla de cobranza, los nombres de los alumnos salen como «su hijo(a)» y el de quien registró, como «su
+	 * docente» (sección 15).
 	 */
 	private List<String> sinCobranza(List<String> parametros, List<String> conNombres) {
-		String texto = creador.nombreDelColegio() + "\n" + String.join("\n", parametros);
+		String texto = String.join("\n", parametros);
 		if (!ContenidoSinCobranza.hablaDeCobranza(texto)) {
 			return parametros;
 		}
@@ -220,7 +221,8 @@ public class AvisosAsistenciaFamilias {
 				.replaceAll("\\. [^:.]+:", ". Su hijo(a):");
 		List<String> limpios = new ArrayList<>();
 		for (String p : parametros) {
-			limpios.add(conNombres.contains(p) ? "su hijo(a)" : p.contains(":") ? sinNombre.apply(p) : p);
+			String limpio = conNombres.contains(p) ? "su hijo(a)" : p.contains(":") ? sinNombre.apply(p) : p;
+			limpios.add(ContenidoSinCobranza.hablaDeCobranza(limpio) ? "su docente" : limpio);
 		}
 		return limpios;
 	}

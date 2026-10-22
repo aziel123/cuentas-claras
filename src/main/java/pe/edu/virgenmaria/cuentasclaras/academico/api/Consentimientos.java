@@ -9,4 +9,13 @@ public interface Consentimientos {
 
 	/** ¿Se le escribe por WhatsApp ({@code true}) o por correo ({@code false}) los avisos de asistencia? */
 	boolean recibeAsistencia(long apoderadoId, boolean porWhatsapp);
+
+	/** Sprint 9, tanda 3: ¿se le escriben los avisos de comunicados por WhatsApp ({@code true}) o por correo? */
+	boolean recibeComunicados(long apoderadoId, boolean porWhatsapp);
+
+	/**
+	 * Sprint 9, tanda 3 (sección 3.10): el apoderado es el contacto principal de su familia: recibe el resumen de
+	 * comunicados por WhatsApp (con su «sí»); los demás, por correo.
+	 */
+	boolean esContactoPrincipal(long apoderadoId);
 }

@@ -49,7 +49,9 @@ public enum TipoSolicitud {
 	// correcciones del día) y registrar un día pasado. Lo pide un docente de la sección; lo aprueba OTRA persona de
 	// Dirección o Promotoría con su firma. En MySQL lo exigen trg_marca_asistencia_nace y trg_registro_asistencia_nace.
 	CORRECCION_ASISTENCIA("Corrección de asistencia"),
-	REGISTRO_ASISTENCIA_TARDIO("Registro de asistencia de un día pasado");
+	REGISTRO_ASISTENCIA_TARDIO("Registro de asistencia de un día pasado"),
+	/** Sprint 9, tanda 3 (decisión 157, B3): un comunicado con PDF de un docente o con un PDF que requiere revisión. */
+	PUBLICAR_COMUNICADO("Publicar un comunicado con PDF");
 
 	private final String etiqueta;
 
