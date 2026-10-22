@@ -61,6 +61,16 @@ public final class ContenidoSinCobranza {
 		return texto != null && PATRON.matcher(texto).find();
 	}
 
+	/**
+	 * Sprint 9, tanda 3 (B6): si el nombre de un colegio calza con la regla, los avisos académicos siguen saliendo (la base
+	 * la aplica solo a lo que va después del nombre), pero conviene saberlo: el aviso para quien da de alta o corrige la
+	 * ficha. Vacío si el nombre no calza.
+	 */
+	public static Optional<String> advertenciaNombreColegio(String nombre) {
+		return motivo(nombre).map(m -> "El nombre del colegio " + m + " para la regla que protege los avisos de asistencia "
+				+ "y de comunicados. Los avisos salen igual (el nombre no se revisa), pero revisa que esté bien escrito.");
+	}
+
 	/** El motivo claro por el que el texto habla de cobranza («menciona un monto en soles»), o vacío si no habla. */
 	public static Optional<String> motivo(String texto) {
 		if (!hablaDeCobranza(texto)) {

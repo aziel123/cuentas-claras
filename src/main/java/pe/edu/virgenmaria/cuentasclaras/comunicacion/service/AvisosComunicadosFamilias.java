@@ -231,7 +231,7 @@ public class AvisosComunicadosFamilias {
 	 * El emisor sin el nombre del colegio: «Dirección», «Promotoría» o «Prof. Ana T.»; si el nombre de la persona calza
 	 * con la regla de cobranza de la base, «su docente» (B6).
 	 */
-	static String emisorCorto(String etiqueta) {
+	public static String emisorCorto(String etiqueta) {
 		if (etiqueta == null) {
 			return "el colegio";
 		}

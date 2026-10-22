@@ -17,7 +17,6 @@
 	</div>
 
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
-	<div th:if="${error != null}" th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
 
 	<section class="tarjeta" th:if="${!opciones.puedeEscribir}">
 		<div th:replace="~{fragments/componentes :: estadoVacio('No puedes enviar comunicados', 'Los envían Dirección, Promotoría y los docentes con una asignación vigente de tutor o de área.')}"></div>

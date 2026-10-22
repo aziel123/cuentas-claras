@@ -20,6 +20,12 @@ public record BorradorComunicado(
 		Long seccionId,
 		@NotBlank(message = "Escribe el título.") @Size(min = 5, max = 120, message = "El título va de 5 a 120 caracteres.") String titulo,
 		@NotBlank(message = "Escribe el texto.") @Size(min = 10, max = 4000, message = "El texto va de 10 a 4,000 caracteres.") String cuerpo,
-		boolean urgente,
-		boolean requiereConfirmacion) {
+		Boolean urgente,
+		Boolean requiereConfirmacion) {
+
+	/** Una casilla sin marcar no llega en el formulario: vale «no». */
+	public BorradorComunicado {
+		urgente = urgente != null && urgente;
+		requiereConfirmacion = requiereConfirmacion != null && requiereConfirmacion;
+	}
 }

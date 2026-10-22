@@ -57,6 +57,7 @@ public class LanzadorAnalizador {
 
 	private final Duration tiempo;
 
+	@org.springframework.beans.factory.annotation.Autowired
 	public LanzadorAnalizador(@Value("${cuentasclaras.comunicados.adjunto.max-segundos-validacion:10}") long segundos) {
 		this(Path.of(System.getProperty("java.io.tmpdir"), "cc-pdf"), Duration.ofSeconds(segundos));
 	}

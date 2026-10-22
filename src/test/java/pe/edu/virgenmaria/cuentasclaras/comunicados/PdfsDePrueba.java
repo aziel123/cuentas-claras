@@ -280,12 +280,12 @@ public final class PdfsDePrueba {
 		return new byte[] { (byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n', 0, 0, 0, 0 };
 	}
 
-	/** Bomba de objetos: un arreglo con 150,000 diccionarios. */
+	/** Bomba de objetos: un arreglo con 120,000 arreglos vacíos (pesa menos de 2 MB: lo detiene el tope de objetos). */
 	public static byte[] bombaDeObjetos() {
 		return conTexto(1, TEXTO_NORMAL, d -> {
 			COSArray arreglo = new COSArray();
-			for (int i = 0; i < 150_000; i++) {
-				arreglo.add(new COSDictionary());
+			for (int i = 0; i < 120_000; i++) {
+				arreglo.add(new COSArray());
 			}
 			d.getDocumentCatalog().getCOSObject().setItem(COSName.getPDFName("Bomba"), arreglo);
 		});

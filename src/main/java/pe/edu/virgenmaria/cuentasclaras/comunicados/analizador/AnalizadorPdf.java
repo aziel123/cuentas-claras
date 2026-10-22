@@ -6,6 +6,7 @@ import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSObject;
+import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.cos.COSString;
 import org.apache.pdfbox.io.MemoryUsageSetting;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -87,6 +88,15 @@ public final class AnalizadorPdf {
 	public static final int MIN_CARACTERES_POR_PAGINA = 50;
 
 	static final int MAX_OBJETOS = 100_000;
+
+	/** Un flujo (el contenido de una página, una fuente) descomprimido no pasa de 16 MB. */
+	static final long MAX_FLUJO = 16L * 1024 * 1024;
+
+	/** Todo el documento descomprimido no pasa de 48 MB (un PDF de 2 MB y 10 páginas de texto ocupa mucho menos). */
+	static final long MAX_DESCOMPRIMIDO = 48L * 1024 * 1024;
+
+	private static final Set<String> IMAGEN_CON_FORMATO = Set.of("DCTDecode", "DCT", "JPXDecode", "JBIG2Decode",
+			"CCITTFaxDecode", "CCF");
 
 	private static final long MEMORIA = 48L * 1024 * 1024;
 
@@ -293,6 +303,7 @@ public final class AnalizadorPdf {
 		Set<COSBase> vistos = Collections.newSetFromMap(new IdentityHashMap<>());
 		pendientes.push(documento.getDocument().getTrailer());
 		int objetos = 0;
+		List<COSStream> flujos = new ArrayList<>();
 		while (!pendientes.isEmpty()) {
 			COSBase base = pendientes.pop();
 			if (base instanceof COSObject referencia) {
@@ -309,13 +320,63 @@ public final class AnalizadorPdf {
 				if (motivo.isPresent()) {
 					return motivo;
 				}
+				if (diccionario instanceof COSStream flujo) {
+					flujos.add(flujo);
+				}
 				diccionario.getValues().forEach(pendientes::push);
 			}
 			else if (base instanceof COSArray arreglo) {
 				arreglo.iterator().forEachRemaining(pendientes::push);
 			}
 		}
+		return tamanoDecodificado(flujos);
+	}
+
+	/**
+	 * Bomba de compresión (A9, B5): cuánto ocupa cada flujo DESCOMPRIMIDO, contado mientras se lee (sin guardarlo en
+	 * memoria). Un flujo de más de {@value #MAX_FLUJO} bytes o un total de más de {@value #MAX_DESCOMPRIMIDO} se rechazan
+	 * antes de extraer el texto o volver a guardar (el saneado no debe llevar la bomba a la familia). Las imágenes
+	 * comprimidas con su propio formato (JPEG, JPEG 2000, JBIG2, CCITT) cuentan por su tamaño en el archivo.
+	 */
+	private static Optional<String> tamanoDecodificado(List<COSStream> flujos) {
+		long total = 0;
+		byte[] bufer = new byte[64 * 1024];
+		for (COSStream flujo : flujos) {
+			if (esImagenConSuFormato(flujo)) {
+				total += flujo.getLength();
+			}
+			else {
+				long este = 0;
+				try (InputStream entrada = flujo.createInputStream()) {
+					for (int n = entrada.read(bufer); n >= 0; n = entrada.read(bufer)) {
+						este += n;
+						if (este > MAX_FLUJO || total + este > MAX_DESCOMPRIMIDO) {
+							return Optional.of("se descomprime a un tamaño desmedido (posible archivo bomba)");
+						}
+					}
+				}
+				catch (IOException e) {
+					return Optional.of("está dañado o no se pudo leer como PDF");
+				}
+				total += este;
+			}
+			if (total > MAX_DESCOMPRIMIDO) {
+				return Optional.of("se descomprime a un tamaño desmedido (posible archivo bomba)");
+			}
+		}
 		return Optional.empty();
+	}
+
+	private static boolean esImagenConSuFormato(COSStream flujo) {
+		COSBase filtro = flujo.getDictionaryObject(COSName.FILTER);
+		List<COSBase> filtros = new ArrayList<>();
+		if (filtro instanceof COSArray lista) {
+			lista.forEach(filtros::add);
+		}
+		else if (filtro != null) {
+			filtros.add(filtro);
+		}
+		return filtros.stream().anyMatch(f -> f instanceof COSName nombre && IMAGEN_CON_FORMATO.contains(nombre.getName()));
 	}
 
 	private Optional<String> revisarDiccionario(COSDictionary d) {
