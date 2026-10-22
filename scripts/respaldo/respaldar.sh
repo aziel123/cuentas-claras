@@ -112,8 +112,21 @@ ahora_lima() {
 
 # --- 1. Ancla «antes», versión del esquema y conteos de las tablas de solo inserción --------------------------------------
 inicio=$(ahora_lima) || fallar "no se pudo conectar a la base como $usuario"
-sello=$(sql "SELECT DATE_FORMAT(UTC_TIMESTAMP() - INTERVAL 5 HOUR, '%Y%m%d-%H%i%s')")
-archivo="cc-$sello.sql.gz.age"
+# El nombre es por segundo (ck_respaldo_archivo, V24) y único (uk_respaldo_archivo). Dos respaldos seguidos pueden caer en
+# el mismo segundo (una base chica se respalda en menos de uno): si el nombre ya está registrado o en el destino simulado,
+# se espera al segundo siguiente. La clave única sigue siendo el control final (dos respaldos a la vez: el segundo falla).
+intentos=0
+while :; do
+	sello=$(sql "SELECT DATE_FORMAT(UTC_TIMESTAMP() - INTERVAL 5 HOUR, '%Y%m%d-%H%i%s')")
+	archivo="cc-$sello.sql.gz.age"
+	ocupado=$(sql "SELECT COUNT(*) FROM respaldo WHERE archivo = '$archivo'")
+	if [ "$ocupado" = "0" ] && ! { [ "$destino" = "simulado" ] && [ -e "$carpeta_simulada/$archivo" ]; }; then
+		break
+	fi
+	intentos=$((intentos + 1))
+	[ "$intentos" -lt 5 ] || fallar "el nombre $archivo ya existe y no se liberó en 5 segundos (¿otro respaldo corriendo a la vez?)"
+	sleep 1
+done
 manifiesto_nombre="cc-$sello.manifiesto.json"
 version=$(sql "SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success = 1")
 set -- $(sql "SELECT ultima_secuencia, ultimo_hash FROM auditoria_cadena WHERE id = 1")

@@ -400,16 +400,29 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 		assertThat(insertarSucesora(c, marca, "TARDE", "CORRECCION_DEL_DIA", docente, null, MOTIVO)).isEqualTo(1062);
 	}
 
-	/** E51 (A1): una FALTA_JUSTIFICADA del personal (3819) y la corrección de una justificación de la familia (1644). */
+	/**
+	 * E51 (A1): una FALTA_JUSTIFICADA del personal no nace y el docente no corrige la justificación de la familia (1644).
+	 * La hora del cierre es la que más tarde admite la base (hasta 2 horas después de ahora, con el tope de las 18:00).
+	 * Antes del cierre, el trigger deja pasar la corrección del día y la rechaza el CHECK (3819); después, la rechaza el
+	 * trigger por la hora (1644). La prueba vale a cualquier hora: lo que no cambia es que la marca no nace.
+	 */
 	@Test
 	void e51DocenteNoJustificaNiTocaLaJustificacion() {
 		soloEnDiaDeClases();
 		Clase c = clase("e", "987654441");
 		Long marca = registrarHoy(c, EstadoAsistencia.FALTA);
-		ajustarCierre(c, LocalTime.of(18, 0));
+		LocalTime cierre = cierreDesdeAhora();
+		ajustarCierre(c, cierre);
+		boolean antesDelCierre = LocalTime.now(LIMA).isBefore(cierre.minusMinutes(5));
 		Usuario docente = c.escuela().docente();
-		assertThat(insertarSucesora(c, marca, "FALTA_JUSTIFICADA", "CORRECCION_DEL_DIA", docente,
-				ClaveFirma.marcaCorregida(marca), MOTIVO)).isEqualTo(3819);
+		Integer justificaPersonal = insertarSucesora(c, marca, "FALTA_JUSTIFICADA", "CORRECCION_DEL_DIA", docente,
+				ClaveFirma.marcaCorregida(marca), MOTIVO);
+		if (antesDelCierre) {
+			assertThat(justificaPersonal).isEqualTo(3819);
+		}
+		else {
+			assertThat(justificaPersonal).isIn(1644, 3819);
+		}
 		// La familia justifica (con la cuenta del apoderado, su sesión y su firma).
 		UsuarioAutenticado familia = familia(c);
 		como(familia, () -> {
@@ -419,7 +432,7 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 		Long justificada = marcaVigente(c.alumno());
 		assertThat(jdbc.queryForObject("SELECT origen FROM marca_asistencia WHERE id = ?", String.class, justificada))
 				.isEqualTo("JUSTIFICACION");
-		// El docente no corrige la justificación (aunque firme y sea antes del cierre): 1644.
+		// El docente no corrige la justificación (aunque firme, antes o después del cierre): 1644.
 		assertThat(insertarSucesora(c, justificada, "PRESENTE", "CORRECCION_DEL_DIA", docente,
 				ClaveFirma.marcaCorregida(justificada), MOTIVO)).isEqualTo(1644);
 		// El personal no «justifica como la familia» (E12): 1644 (o 3819 del CHECK sin apoderado).
@@ -630,6 +643,19 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 		Long sesionCaja = jdbc.queryForObject("SELECT MAX(id) FROM sesion_usuario WHERE usuario_id = ?", Long.class, caja);
 		assertThat(codigoAl(() -> jdbc.update(consentimiento, c.colegio(), c.apoderado(), c.apoderado(), sesionCaja,
 				cajera))).isEqualTo(1644);
+	}
+
+	/**
+	 * La hora del cierre que deja la mayor parte del día abierta: 2 horas después de ahora (hora de Lima), dentro de lo que
+	 * admite la base (de 13:00 a 18:00). Después de las 18:00 ya no hay hora que deje abierta la corrección del día.
+	 */
+	private static LocalTime cierreDesdeAhora() {
+		LocalTime ahora = LocalTime.now(LIMA).withSecond(0).withNano(0);
+		LocalTime propuesta = ahora.isAfter(LocalTime.of(21, 59)) ? LocalTime.of(18, 0) : ahora.plusHours(2);
+		if (propuesta.isBefore(LocalTime.of(13, 0))) {
+			return LocalTime.of(13, 0);
+		}
+		return propuesta.isAfter(LocalTime.of(18, 0)) ? LocalTime.of(18, 0) : propuesta;
 	}
 
 	/** Dirección pone la hora del segundo aviso (con su firma, por la aplicación). */
