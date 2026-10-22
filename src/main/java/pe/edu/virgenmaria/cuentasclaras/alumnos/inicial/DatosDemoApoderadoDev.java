@@ -34,7 +34,7 @@ import java.util.Optional;
  */
 @Component
 @Profile("dev")
-@Order(5)
+@Order(7)
 public class DatosDemoApoderadoDev implements ApplicationRunner {
 
 	public static final String USUARIO = "apoderado";

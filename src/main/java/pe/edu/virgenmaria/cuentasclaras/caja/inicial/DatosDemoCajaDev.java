@@ -54,7 +54,7 @@ import java.util.function.Supplier;
  */
 @Component
 @Profile("dev")
-@Order(4)
+@Order(6)
 public class DatosDemoCajaDev implements ApplicationRunner {
 
 	private static final Logger LOG = LoggerFactory.getLogger(DatosDemoCajaDev.class);
