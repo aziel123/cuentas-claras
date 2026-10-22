@@ -163,10 +163,14 @@ public class AvisosComunicadosFamilias {
 		List<String> parametros = List.of(cuantos(nuevos.size(), porConfirmar.size()), deQuienes(emisores));
 		CreadorMensajes.Contenido contenido = new CreadorMensajes.Contenido(TipoMensaje.COMUNICADOS_RESUMEN,
 				PlantillaMensaje.COMUNICADOS, parametros, "familia", familia);
-		LocalDateTime inicio = ahora.minusSeconds(1);
-		Optional<Mensaje> primero = enviar(deLaFamilia, contenido, ahora.toLocalDate().toString(), true, ahora);
-		// Si el resumen de hoy ya existía (salió antes, a la hora del colegio), lo nuevo va en el de mañana.
-		if (primero.isEmpty() || primero.get().getCreadoEn().isBefore(inicio)) {
+		String sufijo = ahora.toLocalDate().toString();
+		// Si el resumen de hoy ya existía (salió antes, a la hora del colegio), lo nuevo va en el de mañana. Se decide por
+		// la clave del día (no por la hora de creación, que depende del reloj de la base).
+		if (mensajes.existsByTipoAndFamiliaIdAndClaveEndingWith(TipoMensaje.COMUNICADOS_RESUMEN, familia, ":" + sufijo)) {
+			return 0;
+		}
+		Optional<Mensaje> primero = enviar(deLaFamilia, contenido, sufijo, true, ahora);
+		if (primero.isEmpty()) {
 			return 0;
 		}
 		Long id = primero.get().getId();

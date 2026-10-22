@@ -76,9 +76,11 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * destinatarios no se reabre; la familia confirma con su sesión; la nómina, Dirección con su sesión (B14); y el resumen
  * de comunicados no habla de cobranza y empieza con el colegio (B6, B7). Y el flujo con los permisos mínimos.
  * <p>
- * Usa UN colegio para toda la clase (la instalación del CI admite 25): cada prueba escribe su propio contenido.
+ * Usa UN colegio para toda la clase: cada prueba escribe su propio contenido. Las clases de MySQL anteriores del job ya
+ * llenan los 25 colegios de la instalación (decisión 138): solo esta clase sube el tope a 30 para su colegio; el tope de
+ * 25 lo prueba {@code TopeInstalacionQaSprint8Test}.
  */
-@SpringBootTest
+@SpringBootTest(properties = "cuentasclaras.plataforma.max-colegios=30")
 @ActiveProfiles({ "test", "mysql" })
 @EnabledIfEnvironmentVariable(named = "CC_PRUEBA_MYSQL", matches = "true")
 class AuditoriaSprint9ComunicadosMySqlTest {
@@ -425,7 +427,7 @@ class AuditoriaSprint9ComunicadosMySqlTest {
 	@Test
 	void docenteNoApruebaSuPdf() {
 		Escuela s = escuela();
-		Long id = como(s.docente(), () -> envio.enviar(aLaSeccion(s, "PDF del docente " + sufijo), pdf(false)));
+		Long id = como(s.docente(), () -> envio.enviar(delDocente(s, "PDF del docente " + sufijo), pdf(false)));
 		assertThat(jdbc.queryForObject("SELECT estado FROM comunicado WHERE id = ?", String.class, id))
 				.isEqualTo("POR_APROBAR");
 		Long solicitud = jdbc.queryForObject("SELECT solicitud_id FROM comunicado WHERE id = ?", Long.class, id);
@@ -612,7 +614,7 @@ class AuditoriaSprint9ComunicadosMySqlTest {
 	@Test
 	void b9FeDeErratasDeRetiradoPorDocenteFalla() {
 		Escuela s = escuela();
-		Long id = como(s.docente(), () -> envio.enviar(aLaSeccion(s, "B9 del docente " + sufijo), null));
+		Long id = como(s.docente(), () -> envio.enviar(delDocente(s, "B9 del docente " + sufijo), null));
 		como(s.directora(), () -> {
 			envio.retirar(id, MOTIVO);
 			return null;
@@ -765,9 +767,13 @@ class AuditoriaSprint9ComunicadosMySqlTest {
 		boolean admite = hoy.getDayOfWeek() != java.time.DayOfWeek.SUNDAY
 				&& !pe.edu.virgenmaria.cuentasclaras.comun.fecha.FeriadosNacionales.es(hoy);
 		if (admite) {
-			assertThat(resultado.resumenes()).isGreaterThanOrEqualTo(1);
+			// La pasada corre con cc_sistema hasta el final (lee comunicados, destinatarios y consentimientos). Los contactos
+			// de estas familias no están verificados (se verifican con su enlace, fase 2b), así que no se crea ningún resumen
+			// y ningún destinatario queda marcado como avisado: sale en la pasada siguiente, cuando haya contacto. El resumen
+			// creado lo prueba AvisosComunicadosTest (H2) y las reglas de trg_mensaje_nace, b6, e37 y e40 de esta clase.
+			assertThat(resultado.resumenes()).isZero();
 			assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM comunicado_destinatario WHERE comunicado_id = ? AND "
-					+ "avisado_mensaje_id IS NOT NULL", Long.class, normal)).isGreaterThanOrEqualTo(1);
+					+ "avisado_mensaje_id IS NULL", Long.class, normal)).isEqualTo(2);
 		}
 	}
 
@@ -928,6 +934,11 @@ class AuditoriaSprint9ComunicadosMySqlTest {
 				false, true);
 	}
 
+	private static BorradorComunicado delDocente(Escuela s, String titulo) {
+		return new BorradorComunicado(EmisorRol.DOCENTE, AlcanceComunicado.SECCION, null, null, s.seccion(), titulo, TEXTO,
+				false, true);
+	}
+
 	private static AdjuntoValidado pdf(boolean revision) {
 		return new AdjuntoValidado(PDF, 1, SHA_PDF, SHA_PDF, revision);
 	}
@@ -947,16 +958,18 @@ class AuditoriaSprint9ComunicadosMySqlTest {
 	private Usuario otraDireccion(Escuela s) {
 		Usuario cuenta = UsuariosDePrueba.guardar(usuarios, codificador, s.colegio(), "dir2.com." + sufijo,
 				UsuariosDePrueba.CLAVE, false, Rol.ADMINISTRACION);
-		Boolean aplicado = como(s.promotora(), () -> servicioUsuarios.cambiarRoles(cuenta.getId(), new CambiarRolesRequest(
+		// Un rol directivo nunca se aplica directo (cambiarRoles devuelve true: quedó pedido): lo aprueba la Dirección actual.
+		como(s.promotora(), () -> servicioUsuarios.cambiarRoles(cuenta.getId(), new CambiarRolesRequest(
 				EnumSet.of(Rol.DIRECTOR), "Subdirección del colegio para las pruebas de comunicados")));
-		if (!Boolean.TRUE.equals(aplicado)) {
-			Long solicitud = jdbc.queryForObject("SELECT MAX(id) FROM solicitud_cambio WHERE colegio_id = ? AND estado = "
-					+ "'PENDIENTE' AND entidad_id = ?", Long.class, s.colegio(), cuenta.getId());
-			como(s.directora(), () -> {
-				bandeja.aprobar(solicitud, null);
-				return null;
-			});
-		}
+		Long solicitud = jdbc.queryForObject("SELECT MAX(id) FROM solicitud_cambio WHERE colegio_id = ? AND estado = "
+				+ "'PENDIENTE' AND entidad_id = ?", Long.class, s.colegio(), cuenta.getId());
+		assertThat(solicitud).as("el cambio de roles quedó pedido").isNotNull();
+		como(s.directora(), () -> {
+			bandeja.aprobar(solicitud, null);
+			return null;
+		});
+		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ?", String.class, cuenta.getId()))
+				.contains("DIRECTOR");
 		return ContextoColegio.en(s.colegio(), () -> usuarios.findById(cuenta.getId()).orElseThrow());
 	}
 
