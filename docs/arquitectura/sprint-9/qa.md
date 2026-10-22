@@ -203,4 +203,18 @@ antes del «Método por sprint»). Su alcance está en la sección «Tanda 1 · 
 
 ## 5. Resultados de la verificación
 
-(Se completa al final de la corrida.)
+- **Las pruebas nuevas contra el código de `5df49f4`** (las correcciones quitadas a mano): 38 pruebas, **13 fallos**, que
+  son exactamente las de las tres correcciones (10 de `QaSprint9FiltroContenidoTest`, 2 de `QaSprint9ComunicadosTest` y 1
+  de `QaSprint9AsistenciaTest`); las otras 25 pasan también sin ellas (cubren reglas que ya estaban bien).
+- **Con las correcciones**, las clases nuevas y las vecinas (`FiltroContenidoTest`, `ContenidoSinCobranzaTest`,
+  `AvisosAsistenciaTest`, `CorreccionAsistenciaTest`, `AvisosComunicadosTest`): 143 pruebas, 0 fallos.
+- **`./mvnw -B verify`** (una vez, en local, sobre `27b6349`): **2801 pruebas, 0 fallos, 0 errores, 199 omitidas** (las de
+  MySQL real); BUILD SUCCESS. La tanda 3 cerró con 2763: las 38 nuevas.
+- **MySQL real** en un contenedor propio (`cc-qa-s9-mysql`, `mysql:8`, puerto 3321), como el job `mysql`: usuarios con
+  `01`, V1–V34 con `cc_migrador` (`java -jar … migrar`), `02`, `03` (**98 triggers**) y el segundo colegio; después, en el
+  orden del job: `MigracionMySqlTest` 2, `PermisosMySqlTest` 94 (7 omitidas por la fecha), `AuditoriaSprint8MySqlTest` 18,
+  `AuditoriaSprint9MySqlTest` 5, `AuditoriaSprint9AsistenciaMySqlTest` 13 y `AuditoriaSprint9ComunicadosMySqlTest` 38:
+  **0 fallos**. Las correcciones no tocan la base: QA-S9-2 crea WhatsApp que `trg_mensaje_nace` ya aceptaba (exige el
+  consentimiento vigente, que es lo que lee el respaldo nuevo). El contenedor se borró al terminar. No se tocaron
+  `cuentas-claras-mysql-1`, `cuentas-claras-app-1`, `smarthr-*`, `supabase_*`, `cc-mysql-s5*` ni el puerto 8098.
+- La suite con `-Duser.timezone=America/Los_Angeles` no se corrió en local: la corre el CI del PR en cada push.
