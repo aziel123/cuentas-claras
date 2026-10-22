@@ -187,7 +187,15 @@ public class AvisosComunicadosFamilias {
 			boolean conTope, LocalDateTime ahora) {
 		Optional<Mensaje> primero = Optional.empty();
 		Optional<Long> elPrincipal = deLaFamilia.isEmpty() ? Optional.empty()
-				: consentimientos.contactoPrincipal(deLaFamilia.get(0).getFamilia().getId());
+				: consentimientos.contactoPrincipal(deLaFamilia.get(0).getFamilia().getId())
+						.filter(id -> deLaFamilia.stream().anyMatch(a -> a.getId().equals(id)));
+		if (elPrincipal.isEmpty()) {
+			// QA-S9-2 (desviación 6 de la tanda 3): sin contacto principal marcado (o si el marcado ya no está activo), el
+			// primer apoderado activo (por id) que dio el «sí» a los comunicados por WhatsApp. Antes nadie recibía por
+			// WhatsApp, ni siquiera un urgente.
+			elPrincipal = deLaFamilia.stream().filter(a -> consentimientos.recibeComunicados(a.getId(), true))
+					.map(Apoderado::getId).findFirst();
+		}
 		for (Apoderado a : deLaFamilia) {
 			boolean principal = elPrincipal.filter(a.getId()::equals).isPresent();
 			boolean porWhatsapp = principal && consentimientos.recibeComunicados(a.getId(), true)

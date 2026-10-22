@@ -107,6 +107,8 @@ public class FiltroContenido {
 
 	private static final Map<Character, Character> HOMOGLIFOS = homoglifos();
 
+	private static final Pattern BLANCOS_INVISIBLES = Pattern.compile("[\\u115F\\u1160\\u3164\\uFFA0\\u2800]+");
+
 	private final Set<String> dominiosPermitidos;
 
 	public FiltroContenido(@Value("${cuentasclaras.mensajeria.url-publica:http://localhost:8080}") String urlPublica,
@@ -169,7 +171,8 @@ public class FiltroContenido {
 	 */
 	public static String normalizar(String texto) {
 		String nfkc = Normalizer.normalize(texto, Normalizer.Form.NFKC);
-		String sinFormato = sinCaracteresDeFormato(nfkc);
+		// QA-S9-1: las «letras en blanco» (relleno hangul, blanco braille) no son \p{Cf} pero no se ven («pago» partido con U+3164).
+		String sinFormato = BLANCOS_INVISIBLES.matcher(sinCaracteresDeFormato(nfkc)).replaceAll("");
 		String nfd = Normalizer.normalize(sinFormato, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
 		StringBuilder salida = new StringBuilder(nfd.length());
 		nfd.codePoints().forEach(cp -> {
@@ -230,8 +233,16 @@ public class FiltroContenido {
 
 	private static Map<Character, Character> homoglifos() {
 		// Cirílico y griego que se ven como latino (minúsculas y mayúsculas).
-		String origen = "аеорсухкмтнвіјѕԁɡАВЕКМНОРСТХУІЈЅ" + "αορεντικυχΑΒΕΖΗΙΚΜΝΟΡΤΥΧ";
-		String destino = "aeopcyxkmthbijsdgABEKMHOPCTXYIJS" + "aopevtikuxABEZHIKMNOPTYX";
+		// QA del sprint 9 (QA-S9-1): también las latinas «raras» que NFKC no lleva a la normal (ı sin punto, alfa latina,
+		// iota latina, ʋ, ȷ), las versalitas fonéticas (ᴅᴇᴜᴅᴀ, ᴘᴇɴsɪᴏɴ), más cirílicas (ӏ, Ӏ, һ, ԛ, ԝ, ү), armenias que
+		// parecen latinas (օ, ս, ո, ց, հ, զ) y las griegas ϲ y ϳ. Con ellas, «pensiօn», «deսda» o «pɑgo» pasaban.
+		String origen = "аеорсухкмтнвіјѕԁɡАВЕКМНОРСТХУІЈЅ" + "αορεντικυχΑΒΕΖΗΙΚΜΝΟΡΤΥΧ"
+				+ "ıɩɑʋȷ" + "ᴀʙᴄᴅᴇɢʜɪᴊᴋʟᴍɴᴏᴘʀꜱᴛᴜᴠᴡʏᴢ" + "ӏӀһԛԝү" + "օսոցհզ" + "ϲϳ";
+		String destino = "aeopcyxkmthbijsdgABEKMHOPCTXYIJS" + "aopevtikuxABEZHIKMNOPTYX"
+				+ "iiauj" + "abcdeghijklmnoprstuvwyz" + "llhqwy" + "ounghq" + "cj";
+		if (origen.length() != destino.length()) {
+			throw new IllegalStateException("La tabla de letras parecidas está descuadrada");
+		}
 		Map<Character, Character> mapa = new java.util.HashMap<>();
 		for (int i = 0; i < origen.length(); i++) {
 			mapa.put(origen.charAt(i), destino.charAt(i));

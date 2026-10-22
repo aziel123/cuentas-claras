@@ -145,6 +145,11 @@ public class AvisosAsistenciaFamilias {
 			if (deHoy && envio == Envio.PRIMERO) {
 				continue;
 			}
+			// QA-S9-3: el primer envío de un colegio (sin marca de agua: recién pasó a producción o recién se activaron los
+			// avisos) no manda como «corrección» toda la asistencia anterior registrada en la preparación: solo la de hoy.
+			if (!deHoy && corte.ultimoEnvio() == null) {
+				continue;
+			}
 			if (deHoy && c.registroNuevo()) {
 				delDia.computeIfAbsent(c.familiaId(), f -> new ArrayList<>()).add(linea(c.primerNombre(), c.ahora(),
 						c.horaLlegada()));
