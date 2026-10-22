@@ -20,6 +20,17 @@ public final class LimpiezaBaseDatos {
 		// Sprint 9, tanda 2 (V33): las marcas apuntan a sí mismas (reemplaza_id), al registro, a la sesión y a la solicitud;
 		// el consentimiento, al apoderado y a la sesión.
 		// La cadena se borra desde la última (nadie la reemplaza) hacia la primera: el CHECK no deja vaciar reemplaza_id.
+		// Sprint 9, tanda 3: comunicados (la confirmacion y los destinatarios antes que el comunicado; la fe de erratas
+		// antes que el original), codigos modulares y exportaciones de la nomina.
+		jdbc.update("DELETE FROM confirmacion_lectura");
+		jdbc.update("DELETE FROM comunicado_destinatario");
+		while (jdbc.update("DELETE FROM comunicado WHERE id NOT IN (SELECT corrige_id FROM comunicado "
+				+ "WHERE corrige_id IS NOT NULL)") > 0) {
+			// la cadena de fe de erratas se borra de la ultima a la primera
+		}
+		jdbc.update("DELETE FROM comunicado_adjunto");
+		jdbc.update("DELETE FROM codigo_modular");
+		jdbc.update("DELETE FROM exportacion_nomina");
 		while (jdbc.update("DELETE FROM marca_asistencia WHERE id NOT IN (SELECT reemplaza_id FROM marca_asistencia "
 				+ "WHERE reemplaza_id IS NOT NULL)") > 0) {
 			// sigue con la marca anterior de cada cadena

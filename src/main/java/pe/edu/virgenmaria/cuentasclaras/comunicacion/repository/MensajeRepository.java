@@ -30,6 +30,16 @@ public interface MensajeRepository extends Repository<Mensaje, Long> {
 
 	Optional<Mensaje> findByClave(String clave);
 
+	/** Sprint 9, tanda 3 (decision 159): cuantos resumenes de comunicados recibio un apoderado por un canal en el mes. */
+	long countByTipoAndApoderadoIdAndCanalAndCreadoEnGreaterThanEqual(TipoMensaje tipo, Long apoderadoId,
+			CanalMensaje canal, LocalDateTime desde);
+
+	/** Sprint 9, tanda 3: los mensajes de varios ids (el estado de entrega de los avisos de comunicados). */
+	List<Mensaje> findByIdIn(java.util.Collection<Long> ids);
+
+	/** Sprint 9, tanda 3: cuantos mensajes de un tipo se crearon desde una fecha (el consumo del mes). */
+	long countByTipoAndCreadoEnGreaterThanEqual(TipoMensaje tipo, LocalDateTime desde);
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select m from Mensaje m where m.id = :id")
 	Optional<Mensaje> bloquear(@Param("id") Long id);

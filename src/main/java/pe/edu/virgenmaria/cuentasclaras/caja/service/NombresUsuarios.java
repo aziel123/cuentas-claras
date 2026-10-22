@@ -38,6 +38,7 @@ public class NombresUsuarios {
 					case DEMO -> "Demostración (automático)";
 					case ACADEMICO -> "Asignaciones docentes (automático)";
 					case ASISTENCIA -> "Avisos de asistencia (automático)";
+					case COMUNICADOS -> "Avisos de comunicados (automático)";
 				};
 			}
 		}

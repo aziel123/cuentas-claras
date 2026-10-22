@@ -10,7 +10,11 @@
    - **En el banco:** en ventanilla, agente o app, con el **código de pago** de tu hijo. Aparece en el portal al día hábil siguiente.
    - **En caja del colegio.**
 4. **Revisa tu aviso:** cada pago, anulación o descuento te llega por WhatsApp o correo con el monto, el concepto y el número de boleta. Tus boletas están en **Mis boletas**.
-5. **Mis datos:** ves los datos tuyos y de tus hijos que guarda el colegio, si tus contactos están verificados, para qué se usa cada dato, a quién se envía y cuánto tiempo se guarda. Lo puedes imprimir.
+5. **Comunicados:** en *Comunicados* lees los del colegio y de los docentes de tus hijos, con su PDF si lo tienen. Si te
+   piden confirmar la lectura, toca **Confirmar que lo leí**. Te avisamos de los urgentes al momento y de los demás en un
+   resumen al final del día (en *Mis avisos* eliges el canal y quién de la familia recibe). Un comunicado nunca te pide
+   pagos ni datos de tu cuenta.
+6. **Mis datos:** ves los datos tuyos y de tus hijos que guarda el colegio, si tus contactos están verificados, para qué se usa cada dato, a quién se envía y cuánto tiempo se guarda. Lo puedes imprimir.
 
 ## Lo que el sistema no te deja hacer, y por qué
 - **Apagar los avisos de tus pagos:** son tu constancia y te permiten comprobar que todo cuadra. Los **recordatorios** de vencimiento sí los puedes apagar (botón **Apagar recordatorios**).

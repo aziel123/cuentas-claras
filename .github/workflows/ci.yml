@@ -123,7 +123,9 @@ jobs:
         run: |
           docker network create --internal cc-demo-interna
           # Por http (sin Caddy): la cookie sin «Secure» (en la VM va por https con __Host-CCSESION).
-          docker run -d --name cc-demo --network cc-demo-interna --read-only --tmpfs /tmp \
+          # Sprint 9, tanda 3: con el límite de memoria y el 55 % de deploy/compose.demo.yml (el hijo del analizador de PDF).
+          docker run -d --name cc-demo --network cc-demo-interna --read-only --tmpfs /tmp --memory 1400m \
+            -e JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=55 \
             -e SPRING_PROFILES_ACTIVE=demo -e CC_MARCA_NOMBRE="Cuentas Claras CI" \
             -e SERVER_SERVLET_SESSION_COOKIE_SECURE=false -e CC_COOKIE_SESION=CCSESION cuentas-claras:ci
           for i in $(seq 1 90); do
@@ -185,6 +187,60 @@ jobs:
           test "$(docker exec cc-demo curl -s -b /tmp/d -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/caja)" = "403"
           test "$(docker exec cc-demo curl -s -b /tmp/d -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/alumnos)" = "403"
           echo "OK: el docente de la demo ve sus dos secciones y los nombres de sus alumnos, sin montos; caja y alumnos: 403"
+
+      - name: "Sprint 9, tanda 3 (B5): el analizador de PDF corre como proceso hijo DENTRO de la imagen (read-only, /tmp)"
+        run: |
+          # 1) Al crear la demo, el comunicado de ejemplo pasó por el hijo (AdjuntosComunicado.validar): sin el aviso de fallo.
+          if docker logs cc-demo 2>&1 | grep -q "No se cargaron los comunicados de la demo"; then
+            docker logs cc-demo 2>&1 | grep -A3 "No se cargaron los comunicados"; exit 1
+          fi
+          # 2) El hijo a mano, con las MISMAS opciones que LanzadorAnalizador.comando, sobre el PDF de ejemplo y una bomba.
+          # Con el entorno vacío (env -i), como ProcessBuilder en LanzadorAnalizador.ejecutar.
+          hijo() {
+            docker exec cc-demo sh -c "exec env -i \"\$JAVA_HOME/bin/java\" -Xmx128m -Xss512k -XX:MaxMetaspaceSize=64m \
+              -XX:ReservedCodeCacheSize=32m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:+ExitOnOutOfMemoryError -Xshare:auto \
+              -Djava.io.tmpdir=$1 -Djava.security.manager=allow -Djava.awt.headless=true -Dfile.encoding=UTF-8 \
+              -cp /app/app.jar -Dloader.main=pe.edu.virgenmaria.cuentasclaras.comunicados.analizador.AnalizadorPdf \
+              org.springframework.boot.loader.launch.PropertiesLauncher $1 -"
+          }
+          docker exec cc-demo mkdir -p /tmp/ci-ejemplo /tmp/ci-bomba
+          docker exec cc-demo curl -sf -o /tmp/ci-ejemplo/entrada.pdf http://127.0.0.1:8080/demo/ejemplos/comunicado-ejemplo.pdf
+          set +e; hijo /tmp/ci-ejemplo; codigo=$?; set -e
+          test "$codigo" = "0" || { echo "ERROR: el PDF de ejemplo salió con $codigo"; docker exec cc-demo ls -la /tmp/ci-ejemplo; exit 1; }
+          docker exec cc-demo test -s /tmp/ci-ejemplo/saneado.pdf
+          docker exec cc-demo test -s /tmp/ci-ejemplo/texto.txt
+          # Una bomba Flate: 400 MB de ceros comprimidos en ~400 KB (el tope de lo descomprimido es 48 MB).
+          python3 - <<'PY'
+          import zlib
+          datos = zlib.compress(b"\0" * (400 * 1024 * 1024), 9)
+          objetos = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                     b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R >>",
+                     b"<< /Length %d /Filter /FlateDecode >>\nstream\n" % len(datos) + datos + b"\nendstream"]
+          salida = bytearray(b"%PDF-1.7\n")
+          posiciones = []
+          for i, o in enumerate(objetos, 1):
+              posiciones.append(len(salida))
+              salida += b"%d 0 obj\n" % i + o + b"\nendobj\n"
+          xref = len(salida)
+          salida += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objetos) + 1)
+          for p in posiciones:
+              salida += b"%010d 00000 n \n" % p
+          salida += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%EOF\n" % (len(objetos) + 1, xref)
+          open("bomba.pdf", "wb").write(salida)
+          PY
+          # Diez bombas seguidas (como diezBombasSeguidasNoDejanSinServicio, con el límite de memoria de compose.demo.yml).
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            docker exec cc-demo sh -c 'rm -rf /tmp/ci-bomba && mkdir -p /tmp/ci-bomba'
+            docker exec -i cc-demo sh -c 'cat > /tmp/ci-bomba/entrada.pdf' < bomba.pdf
+            set +e; timeout 60 bash -c "$(declare -f hijo); hijo /tmp/ci-bomba"; codigo=$?; set -e
+            test "$codigo" = "2" -o "$codigo" = "3" || { echo "ERROR: la bomba $i salió con $codigo (se esperaba 2 o 3)"; exit 1; }
+            docker exec cc-demo test ! -e /tmp/ci-bomba/saneado.pdf
+          done
+          rm -f bomba.pdf
+          # 3) Y la aplicación sigue respondiendo.
+          docker exec cc-demo curl -sf http://127.0.0.1:8080/actuator/health/readiness | grep -q UP
+          docker exec cc-demo rm -rf /tmp/ci-ejemplo /tmp/ci-bomba
+          echo "OK: en la imagen, el hijo acepta el PDF de ejemplo (0) y rechaza diez bombas seguidas; la app sigue arriba"
 
       - name: "E20 y E21: con un secreto en el entorno, una base real o junto a prod, la demo NO arranca"
         run: |
@@ -269,7 +325,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V33): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V34): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -307,6 +363,9 @@ jobs:
 
       - name: "Sprint 9, tanda 2: la asistencia la registra solo el docente asignado, hoy según la base, con su sesión y su firma; no se edita, no se borra ni se bifurca; el personal no justifica; la corrección del día cierra al segundo aviso; la configuración solo Dirección con firma; los avisos sin cobranza y con consentimiento (E1, E2, E7 a E10, E12, E13, E15, E37, E40, E49 a E56, A12)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint9AsistenciaMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 9, tanda 3: un comunicado lo envía una persona con su rol real, su sesión y su firma; no se edita ni se borra; la huella la recalcula la base; sin caracteres invisibles ni cobranza; el PDF que requiere revisión lo aprueba el otro órgano; la fe de erratas llega a todos los del original; la familia confirma con su sesión; la nómina, Dirección con su sesión (E16 a E24, E28, E29, E37, E40, E43, E45, B1 a B4, B6, B7, B9, B13 a B15)"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint9ComunicadosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint6MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
@@ -753,11 +812,27 @@ jobs:
           comprobar 1644 "INSERT INTO registro_asistencia (colegio_id, anio_escolar_id, seccion_id, fecha, origen, fuente, registrado_por, sesion_id, alumnos, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, DATE(UTC_TIMESTAMP() - INTERVAL 29 HOUR), 'DEL_DIA', 'DOCENTE', 'ci', 0, 0, NOW(6), 'ci', NOW(6))"
           comprobar 1644 "INSERT INTO configuracion_academica (colegio_id, actualizado_por, creado_en, creado_por, actualizado_en) VALUES (0, 'ci', NOW(6), 'ci', NOW(6))"
           comprobar_sistema 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, familia_id, apoderado_id, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'ci-asistencia', 'ASISTENCIA_DIA', 'CORREO', 'APODERADO', 0, 0, 'x@y.pe', 'cc_asistencia_v2', 'Mateo: falta. Debe S/ 350.00', 'PENDIENTE', NOW(6), 'sistema.asistencia', NOW(6))"
-          # Huellas (H7): cc_app ve las de los 93 triggers y las 13 funciones con huellas_objetos() (sprint 9, tanda 2).
+          # Sprint 9, tanda 3 (V34, E19, E28, E40, E45, B14): el adjunto, la confirmación y la nómina son de solo inserción
+          # (1142); nada de comunicados se borra (1142); un comunicado enviado no se edita (1143); un comunicado de
+          # Dirección del colegio 0 y una nómina sin sesión (1644) y, con cc_sistema, un resumen con un monto (1644).
+          for tabla in comunicado_adjunto confirmacion_lectura exportacion_nomina; do
+            comprobar 1142 "UPDATE $tabla SET version = version WHERE 1 = 0"
+          done
+          for tabla in comunicado comunicado_adjunto comunicado_destinatario confirmacion_lectura exportacion_nomina codigo_modular; do
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          for columna in titulo cuerpo adjunto_id huella_contenido emisor_rol alcance; do
+            comprobar 1143 "UPDATE comunicado SET $columna = $columna WHERE 1 = 0"
+          done
+          comprobar 1143 "UPDATE comunicado_destinatario SET familia_id = familia_id WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO comunicado (colegio_id, anio_escolar_id, tipo, emisor_usuario_id, emisor_rol, emisor_etiqueta, alcance, titulo, cuerpo, huella_contenido, estado, enviado_en, sesion_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'NORMAL', 0, 'DIRECCION', 'ci', 'COLEGIO', 'Comunicado ci', 'Comunicado del CI', REPEAT('0', 64), 'ENVIADO', NOW(6), 0, NOW(6), 'ci', NOW(6))"
+          comprobar 1644 "INSERT INTO exportacion_nomina (colegio_id, anio_escolar_id, seccion_id, perfil, filas, faltantes, codigo, sha256, sesion_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'SIAGIE_MATRICULA_PROVISIONAL', 0, 0, 'CI-0001', REPEAT('0', 64), 0, NOW(6), 'ci', NOW(6))"
+          comprobar_sistema 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, familia_id, apoderado_id, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'ci-comunicados', 'COMUNICADOS_RESUMEN', 'CORREO', 'APODERADO', 0, 0, 'x@y.pe', 'cc_comunicados_v2', 'Colegio ci\n2 comunicados. Debe S/ 350.00', 'PENDIENTE', NOW(6), 'sistema.comunicados', NOW(6))"
+          # Huellas (H7): cc_app ve las de los 99 triggers y las 13 funciones con huellas_objetos() (correcciones del sprint 9).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
           [ "$objetos" = "$((esperados + 13))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
-          [ "$objetos" = "106" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y la tanda 2 del sprint 9 deja 106"; exit 1; }
-          [ "$esperados" = "93" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 2 del sprint 9 deja 93"; exit 1; }
+          [ "$objetos" = "112" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y las correcciones del sprint 9 dejan 112"; exit 1; }
+          [ "$esperados" = "99" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y las correcciones del sprint 9 dejan 99"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -800,7 +875,7 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 93 triggers y las 13 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 99 triggers y las 13 funciones verificadas" prod.log || { cat prod.log; exit 1; }
           # Sprint 8, tanda 2 (sección 3.6): los conectores (GRANT por columna y triggers) y la clave que descifra todos
           # sus secretos (los que dejaron las pruebas, cifrados con CC_CLAVE_CONECTORES).
           grep -q "Permisos y triggers de los conectores por colegio verificados" prod.log || { cat prod.log; exit 1; }
@@ -1145,7 +1220,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V33, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V34, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \

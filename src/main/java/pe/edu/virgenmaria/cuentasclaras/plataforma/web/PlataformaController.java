@@ -80,6 +80,9 @@ public class PlataformaController {
 			byte[] bytes = logo == null || logo.isEmpty() ? null : logo.getBytes();
 			ColegioCreado creado = alta.crear(solicitud, bytes, logo == null ? null : logo.getOriginalFilename());
 			model.addAttribute("creado", creado);
+			// Sprint 9, tanda 3 (B6): un nombre que calza con la regla de cobranza se avisa.
+			pe.edu.virgenmaria.cuentasclaras.comun.texto.ContenidoSinCobranza.advertenciaNombreColegio(creado.nombre())
+					.ifPresent(a -> model.addAttribute("advertencia", a));
 			return "plataforma/creado";
 		}
 		catch (ReglaNegocioException e) {
@@ -121,6 +124,8 @@ public class PlataformaController {
 		try {
 			alta.corregirFicha(id, ficha);
 			avisos.addFlashAttribute("exito", "Listo: la ficha del colegio quedó corregida.");
+			pe.edu.virgenmaria.cuentasclaras.comun.texto.ContenidoSinCobranza.advertenciaNombreColegio(ficha.nombre())
+					.ifPresent(a -> avisos.addFlashAttribute("advertencia", a));
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());

@@ -67,6 +67,16 @@ public class DemoController {
 
 	@GetMapping("/demo/ejemplos/{archivo}")
 	public ResponseEntity<byte[]> ejemplo(@PathVariable String archivo) throws IOException {
+		// Sprint 9, tanda 3 (E48): el PDF de ejemplo, el único que acepta un comunicado de la demo.
+		if (pe.edu.virgenmaria.cuentasclaras.comunicados.service.PdfEjemplo.ARCHIVO.equals(archivo)) {
+			try (InputStream entrada = new ClassPathResource("demo/" + archivo).getInputStream()) {
+				return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
+						.header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(archivo).build()
+								.toString())
+						.header("X-Content-Type-Options", "nosniff").cacheControl(CacheControl.noStore())
+						.body(entrada.readAllBytes());
+			}
+		}
 		if (!ArchivosPermitidosImportacion.EJEMPLOS.contains(archivo)) {
 			throw new RecursoNoEncontradoException("Archivo de ejemplo no encontrado");
 		}

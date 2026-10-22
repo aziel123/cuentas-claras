@@ -61,8 +61,15 @@ public class ConsentimientosAviso {
 
 	private final Clock reloj;
 
+	/** «FM-2026-0012»: el año y el id de la matrícula registrada (Matricula.codigoFicha). */
+	private static final java.util.regex.Pattern CODIGO_FICHA = java.util.regex.Pattern.compile("FM-([0-9]{4})-([0-9]{4,12})");
+
+	private final pe.edu.virgenmaria.cuentasclaras.alumnos.repository.MatriculaRepository matriculas;
+
 	public ConsentimientosAviso(ConsentimientoAvisoRepository consentimientos, ApoderadoRepository apoderados,
-			ColegioRepository colegios, SesionDeQuienEscribe sesiones, AuditoriaService auditoria, Clock reloj) {
+			ColegioRepository colegios, SesionDeQuienEscribe sesiones, AuditoriaService auditoria, Clock reloj,
+			pe.edu.virgenmaria.cuentasclaras.alumnos.repository.MatriculaRepository matriculas) {
+		this.matriculas = matriculas;
 		this.consentimientos = consentimientos;
 		this.apoderados = apoderados;
 		this.colegios = colegios;
@@ -93,17 +100,19 @@ public class ConsentimientosAviso {
 	public void registrarEnPortal(ConsentimientoRequest pedido) {
 		UsuarioAutenticado persona = PersonaEnSesion.actual();
 		Apoderado yo = apoderadoEnSesion();
-		if (pedido.finalidad() != Finalidad.ASISTENCIA) {
-			throw new ReglaNegocioException("Los avisos de comunicados llegan en la próxima versión.");
-		}
+		// Sprint 9, tanda 3: también los comunicados; el «sí» por WhatsApp a los comunicados puede marcar al apoderado como
+		// el contacto principal de su familia (recibe el resumen diario).
+		boolean principal = pedido.principal() && pedido.finalidad() == Finalidad.COMUNICADOS
+				&& pedido.canal() == Canal.WHATSAPP && pedido.otorga();
 		Optional<ConsentimientoAviso> actual = consentimientos.findFirstByApoderadoIdAndFinalidadAndCanalOrderByIdDesc(
 				yo.getId(), pedido.finalidad(), pedido.canal());
 		boolean vigente = actual.map(ConsentimientoAviso::isOtorgado).orElse(pedido.canal().salvoOposicion());
-		if (actual.isPresent() && vigente == pedido.otorga()) {
+		boolean eraPrincipal = actual.map(ConsentimientoAviso::isContactoPrincipal).orElse(false);
+		if (actual.isPresent() && vigente == pedido.otorga() && eraPrincipal == principal) {
 			return;
 		}
 		ConsentimientoAviso nuevo = consentimientos.saveAndFlush(ConsentimientoAviso.enPortal(yo.getFamilia().getId(),
-				yo.getId(), pedido.finalidad(), pedido.canal(), pedido.otorga(), false, versionAviso(),
+				yo.getId(), pedido.finalidad(), pedido.canal(), pedido.otorga(), principal, versionAviso(),
 				sesiones.de(persona)));
 		auditoria.registrar(AccionAuditoria.CONSENTIMIENTO_AVISO, "consentimiento_aviso", nuevo.getId().toString(),
 				actual.isEmpty() ? null : String.valueOf(vigente), String.valueOf(pedido.otorga()), "El apoderado "
@@ -116,11 +125,9 @@ public class ConsentimientosAviso {
 	@Transactional
 	public void registrarDesdeFicha(ConsentimientoFichaRequest pedido) {
 		UsuarioAutenticado persona = PersonaEnSesion.actual();
-		if (pedido.finalidad() != Finalidad.ASISTENCIA) {
-			throw new ReglaNegocioException("Los avisos de comunicados llegan en la próxima versión.");
-		}
 		Apoderado apoderado = apoderados.findById(pedido.apoderadoId()).filter(Apoderado::isActivo)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Apoderado no encontrado"));
+		exigirFichaDeLaFamilia(pedido.codigoFicha(), apoderado);
 		ConsentimientoAviso nuevo = consentimientos.saveAndFlush(ConsentimientoAviso.desdeFicha(
 				apoderado.getFamilia().getId(), apoderado.getId(), pedido.finalidad(), pedido.canal(), pedido.codigoFicha(),
 				versionAviso(), sesiones.de(persona)));
@@ -134,16 +141,35 @@ public class ConsentimientosAviso {
 								+ "persona." : ""));
 	}
 
+	/**
+	 * Correcciones del sprint 9 (auditoría, 6): el código es el de una ficha de matrícula REGISTRADA de un hijo de esa
+	 * familia (se ve en la ficha del alumno). Un código inventado o de otra familia no sirve de evidencia.
+	 */
+	private void exigirFichaDeLaFamilia(String codigo, Apoderado apoderado) {
+		java.util.regex.Matcher m = CODIGO_FICHA.matcher(codigo == null ? "" : codigo.strip().toUpperCase(java.util.Locale.ROOT));
+		boolean valido = m.matches() && matriculas.findById(Long.parseLong(m.group(2)))
+				.filter(x -> x.getAnioEscolar().getAnio() == Integer.parseInt(m.group(1)))
+				.filter(x -> x.getAlumno().getFamilia() != null
+						&& x.getAlumno().getFamilia().getId().equals(apoderado.getFamilia().getId()))
+				.isPresent();
+		if (!valido) {
+			throw new ReglaNegocioException("El código de la ficha no corresponde a una matrícula registrada de esta "
+					+ "familia. Cópialo de la ficha del alumno (por ejemplo, FM-2026-0012).");
+		}
+	}
+
 	private List<ConsentimientoVista> vistas(Apoderado a) {
 		List<ConsentimientoVista> vistas = new ArrayList<>();
-		for (Canal canal : Canal.values()) {
-			Optional<ConsentimientoAviso> fila = consentimientos.findFirstByApoderadoIdAndFinalidadAndCanalOrderByIdDesc(
-					a.getId(), Finalidad.ASISTENCIA, canal);
-			boolean contacto = canal == Canal.WHATSAPP ? a.telefonoVerificado() : a.correoVerificado();
-			vistas.add(new ConsentimientoVista(Finalidad.ASISTENCIA.name(), Finalidad.ASISTENCIA.etiqueta(), canal.name(),
-					canal.etiqueta(), fila.map(ConsentimientoAviso::isOtorgado).orElse(canal.salvoOposicion()),
-					fila.isEmpty(), fila.map(f -> f.getOrigen() == OrigenConsentimiento.FICHA ? "Ficha de matrícula"
-							: "Portal").orElse(null), fila.map(ConsentimientoAviso::getCreadoEn).orElse(null), contacto));
+		for (Finalidad finalidad : Finalidad.values()) {
+			for (Canal canal : Canal.values()) {
+				Optional<ConsentimientoAviso> fila = consentimientos.findFirstByApoderadoIdAndFinalidadAndCanalOrderByIdDesc(
+						a.getId(), finalidad, canal);
+				boolean contacto = canal == Canal.WHATSAPP ? a.telefonoVerificado() : a.correoVerificado();
+				vistas.add(new ConsentimientoVista(finalidad.name(), finalidad.etiqueta(), canal.name(), canal.etiqueta(),
+						fila.map(ConsentimientoAviso::isOtorgado).orElse(canal.salvoOposicion()), fila.isEmpty(),
+						fila.map(f -> f.getOrigen() == OrigenConsentimiento.FICHA ? "Ficha de matrícula" : "Portal")
+								.orElse(null), fila.map(ConsentimientoAviso::getCreadoEn).orElse(null), contacto));
+			}
 		}
 		return vistas;
 	}

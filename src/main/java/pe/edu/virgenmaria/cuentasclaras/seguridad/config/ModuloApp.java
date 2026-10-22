@@ -149,6 +149,11 @@ public enum ModuloApp {
 			+ "Dirección y lo aprueba otra persona.", "Sprint 9", true, "/academico/asignaciones",
 			new String[] { "/academico/asignaciones", "/academico/asignaciones/**" },
 			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+	// Sprint 9, tanda 3 (sección 3.11, E34, B14): la nómina para el SIAGIE (DNI y fechas de nacimiento de menores) la saca
+	// SOLO Dirección, con su sesión; los datos que faltan y los códigos modulares, también. Va ANTES que ACADEMICO.
+	SIAGIE("Nómina para el SIAGIE", "Los datos que faltan para la matrícula en el SIAGIE, los códigos modulares y la nómina "
+			+ "provisional de cada sección para copiar en la plantilla del SIAGIE.", "Sprint 9", true, "/academico/siagie",
+			new String[] { "/academico/siagie", "/academico/siagie/**" }, EnumSet.of(DIRECTOR)),
 	// Sprint 9, tanda 2 (sección 10, A6): las horas y plazos de la asistencia los cambia SOLO Dirección, con su firma. Va
 	// ANTES que ACADEMICO (la primera regla que coincide gana: /academico/** es también del docente).
 	CONFIGURACION_ACADEMICA("Horas de la asistencia", "A qué hora sale la alerta de secciones sin asistencia y el aviso a "
@@ -173,7 +178,9 @@ public enum ModuloApp {
 	// contactos); Dirección, todas las secciones. Promotoría no ve las listas por alumno (decisión 143).
 	ACADEMICO("Académico", "Tus secciones y la lista de tus alumnos. Nunca muestra deudas, pagos, documentos ni contactos.",
 			"Sprint 9", true, "/academico", new String[] { "/academico", "/academico/**" }, EnumSet.of(DIRECTOR, DOCENTE)),
-	COMUNICADOS("Comunicados", "Envía comunicados a las familias con confirmación de lectura.", "Más adelante", false,
+	// Sprint 9, tanda 3 (sección 3.8): Promotoría y Dirección escriben a todo el colegio, un nivel, un grado o una sección;
+	// el docente, solo a sus secciones (lo exige el servicio: 404). Retirar, solo Dirección y Promotoría (@PreAuthorize).
+	COMUNICADOS("Comunicados", "Envía comunicados a las familias con confirmación de lectura.", "Sprint 9", true,
 			"/comunicados", new String[] { "/comunicados", "/comunicados/**" }, EnumSet.of(PROMOTOR, DIRECTOR, DOCENTE));
 
 	/** Rutas públicas: no exigen sesión. */

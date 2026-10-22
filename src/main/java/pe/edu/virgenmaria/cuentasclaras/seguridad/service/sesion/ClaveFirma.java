@@ -223,6 +223,23 @@ public final class ClaveFirma {
 		return "configuracion_academica:" + id(colegioId) + ":CAMBIADA:" + version;
 	}
 
+	/**
+	 * Sprint 9, tanda 3 (sección 3.8, E17, B2): quien envía un comunicado firma su contenido (los 40 primeros caracteres de
+	 * la huella, también si queda POR_APROBAR). La firma es única por colegio y clave: el mismo contenido no sale dos veces.
+	 */
+	public static String comunicadoEnviar(String huella) {
+		String h = Objects.requireNonNull(huella, "huella");
+		if (!h.matches("[0-9a-f]{64}")) {
+			throw new IllegalArgumentException("La huella de un comunicado son 64 caracteres hexadecimales");
+		}
+		return "comunicado:" + h.substring(0, 40) + ":ENVIAR";
+	}
+
+	/** Sprint 9, tanda 3 (E28): Dirección o Promotoría retira el comunicado {@code comunicadoId} con su firma. */
+	public static String comunicadoRetirado(Long comunicadoId) {
+		return "comunicado:" + id(comunicadoId) + ":RETIRADO";
+	}
+
 	private static Long id(Long id) {
 		return Objects.requireNonNull(id, "id");
 	}

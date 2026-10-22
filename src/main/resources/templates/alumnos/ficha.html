@@ -105,7 +105,8 @@
 			</thead>
 			<tbody>
 				<tr th:each="m : ${ficha.matriculas}">
-					<td data-etiqueta="Año" th:text="${m.anio}">2026</td>
+					<td data-etiqueta="Año"><span th:text="${m.anio}">2026</span>
+						<span class="secundario" th:text="|Ficha FM-${m.anio}-${#numbers.formatInteger(m.id, 4)}|">Ficha FM-2026-0012</span></td>
 					<td data-etiqueta="Sección" th:text="${m.seccion}">5.° Primaria A</td>
 					<td data-etiqueta="Desde" th:text="${#temporals.format(m.fechaMatricula, 'dd/MM/yyyy')}">02/03/2026</td>
 					<td data-etiqueta="Estado">
@@ -179,6 +180,23 @@
 				<span class="secundario" th:text="${h.seccion} ?: 'Sin matrícula este año'">2.° Primaria B · 2026</span>
 			</li>
 		</ul>
+	</section>
+
+	<!--/* Sprint 9, tanda 3 (sección 3.11): sexo y código de estudiante para la matrícula en el SIAGIE. */-->
+	<section class="tarjeta" th:if="${puedeEditar and c.activo()}" aria-labelledby="titulo-siagie">
+		<h2 id="titulo-siagie">Datos para el SIAGIE</h2>
+		<form class="formulario-en-linea" method="post" th:action="@{/alumnos/{id}/datos-siagie(id=${c.id})}">
+			<label for="sexo-siagie">Sexo</label>
+			<select class="input" id="sexo-siagie" name="sexo">
+				<option value="" th:selected="${ficha.sexo() == null}">Sin registrar</option>
+				<option value="M" th:selected="${ficha.sexo() == 'M'}">Hombre</option>
+				<option value="F" th:selected="${ficha.sexo() == 'F'}">Mujer</option>
+			</select>
+			<label for="codigo-siagie">Código de estudiante (solo si no tiene DNI)</label>
+			<input class="input" id="codigo-siagie" name="codigoEstudiante" maxlength="20"
+				th:value="${ficha.codigoEstudiante()}">
+			<button type="submit" class="btn btn-secundario btn-chico">Guardar</button>
+		</form>
 	</section>
 
 	<section class="tarjeta zona-sensible" th:if="${puedeEditar and c.activo()}" aria-labelledby="titulo-retiro">

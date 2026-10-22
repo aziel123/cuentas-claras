@@ -199,7 +199,7 @@ class VerificadorPermisosBaseDatosTest {
 					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora|semilla_muestreo|huella_hora|"
 					+ "resumen_diario|llamada_control|muestra_llamada|delegacion_llamada|configuracion_colegio|respaldo|"
 					+ "firma_operacion|acceso_dato_personal|registro_asistencia|marca_asistencia|consentimiento_aviso|"
-					+ "aviso_asistencia_corte) ");
+					+ "aviso_asistencia_corte|comunicado_adjunto|confirmacion_lectura|exportacion_nomina) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -669,7 +669,8 @@ class VerificadorPermisosBaseDatosTest {
 		// Sprint 8, tanda 1 (V28): 80 con el colegio (nace y cambia), la primera Promotoría y el correo externo de control;
 		// tanda 2 (V29): 82 con los conectores (nacen propuestos y cambian de estado con la aprobación firmada); tanda 3 (V30):
 		// los mismos 82 (los dos del respaldo cambian de versión).
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(93);
+		// Sprint 9: 88 (tanda 1), 93 (tanda 2) y 98 (tanda 3: comunicados, destinatarios, confirmación y nómina).
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(99);
 	}
 
 	/**

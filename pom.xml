@@ -18,6 +18,9 @@
 		<java.version>21</java.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<poi.version>5.5.1</poi.version>
+		<!-- Sprint 9, tanda 3 (decisión 157): PDFBox 3.0.8, nunca anterior a 3.0.7 (CVE-2026-23907). VersionPdfBoxTest lo
+		     exige; Dependabot y OSV-Scanner lo siguen. -->
+		<pdfbox.version>3.0.8</pdfbox.version>
 		<!-- Sprint 7, tanda 3 (A06, decisión 102): OSV-Scanner encontró vulnerabilidades con arreglo en las versiones que
 		     trae Spring Boot 4.1.1 (no hay 4.1.2 publicado). Se suben solo los parches de la misma línea:
 		     - Tomcat 11.0.24 → 11.0.26: CVE-2026-65905, CVE-2026-65182 y CVE-2026-68525 (críticas; corregidas en 11.0.25).
@@ -72,6 +75,14 @@
 			<groupId>org.apache.poi</groupId>
 			<artifactId>poi-ooxml</artifactId>
 			<version>${poi.version}</version>
+		</dependency>
+
+		<!-- PDF de los comunicados (sprint 9, tanda 3, decisión 157): SOLO lo usa comunicados.analizador, que corre en un
+		     proceso hijo con memoria, tiempo y permisos propios (B5; regla ArchUnit). -->
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>${pdfbox.version}</version>
 		</dependency>
 
 		<!-- Base de datos: MySQL en producción, H2 (modo MySQL) en desarrollo y pruebas -->

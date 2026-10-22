@@ -163,7 +163,7 @@ public class JustificacionesFamilia {
 	/** Los últimos N días hábiles, contando hoy (y nunca más de 15 calendario: el tope de la base). */
 	private boolean dentroDelPlazo(LocalDate fecha, LocalDate hoy, ConfiguracionAcademica configuracion) {
 		return !fecha.isAfter(hoy) && !fecha.isBefore(hoy.minusDays(ServicioAsistencia.MAX_DIAS_TARDIO))
-				&& calendario.habilesEntre(fecha, hoy) < configuracion.getDiasJustificacion();
+				&& calendario.dentroDeHabiles(fecha, hoy, configuracion.getDiasJustificacion());
 	}
 
 	private Apoderado apoderadoEnSesion() {

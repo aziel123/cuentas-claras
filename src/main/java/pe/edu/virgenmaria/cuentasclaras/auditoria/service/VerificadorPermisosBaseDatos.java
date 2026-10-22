@@ -426,7 +426,47 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 							+ "de los avisos de asistencia (solo cc_sistema: revisa 02-permisos-tablas.sql)."),
 			sinBorrado("aviso_asistencia_corte"),
 			trigger(VerificadorPermisosBaseDatos.REGISTRO_AYER_IMPOSIBLE, "trg_registro_asistencia_nace"),
-			trigger(VerificadorPermisosBaseDatos.CONFIGURACION_ACADEMICA_IMPOSIBLE, "trg_configuracion_academica_nace"));
+			trigger(VerificadorPermisosBaseDatos.CONFIGURACION_ACADEMICA_IMPOSIBLE, "trg_configuracion_academica_nace"),
+			// Sprint 9, tanda 3 (V34, E19, E28): el adjunto, la confirmación y la exportación de la nómina son de solo
+			// inserción (1142) y nada de comunicados se borra (1142); un comunicado enviado no se edita (título, texto,
+			// adjunto y huella: 1143) ni cambia la familia de un destinatario (1143). Un comunicado de Dirección del colegio
+			// 0 (trg_comunicado_nace) y una nómina sin sesión (trg_exportacion_nomina_nace, B14): 1644.
+			soloInsercion("comunicado_adjunto"), sinBorrado("comunicado_adjunto"),
+			soloInsercion("confirmacion_lectura"), sinBorrado("confirmacion_lectura"),
+			soloInsercion("exportacion_nomina"), sinBorrado("exportacion_nomina"),
+			sinBorrado("comunicado"), sinBorrado("comunicado_destinatario"), sinBorrado("codigo_modular"),
+			columna("UPDATE comunicado SET titulo = titulo WHERE 1 = 0", "comunicado"),
+			columna("UPDATE comunicado SET cuerpo = cuerpo WHERE 1 = 0", "comunicado"),
+			columna("UPDATE comunicado SET adjunto_id = adjunto_id WHERE 1 = 0", "comunicado"),
+			columna("UPDATE comunicado SET huella_contenido = huella_contenido WHERE 1 = 0", "comunicado"),
+			columna("UPDATE comunicado_destinatario SET familia_id = familia_id WHERE 1 = 0", "comunicado_destinatario"),
+			trigger(VerificadorPermisosBaseDatos.COMUNICADO_DIRECCION_IMPOSIBLE, "trg_comunicado_nace"),
+			trigger(VerificadorPermisosBaseDatos.NOMINA_SIN_SESION_IMPOSIBLE, "trg_exportacion_nomina_nace"));
+
+	/**
+	 * Sprint 9, tanda 3 (E17, E45): un comunicado «de Dirección» del colegio 0, sin sesión, sin firma y en un colegio que no
+	 * está en producción (trg_comunicado_nace responde antes que las FK: 1644).
+	 */
+	static final String COMUNICADO_DIRECCION_IMPOSIBLE = "INSERT INTO comunicado (colegio_id, anio_escolar_id, tipo, "
+			+ "emisor_usuario_id, emisor_rol, emisor_etiqueta, alcance, titulo, cuerpo, huella_contenido, estado, enviado_en, "
+			+ "sesion_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'NORMAL', 0, 'DIRECCION', 'Verificador', "
+			+ "'COLEGIO', 'Verificador', 'Verificador de permisos', REPEAT('0', 64), 'ENVIADO', NOW(6), 0, NOW(6), "
+			+ "'verificador', NOW(6))";
+
+	/** Sprint 9, tanda 3 (B14): una exportación de la nómina del colegio 0 sin Dirección ni sesión (1644). */
+	static final String NOMINA_SIN_SESION_IMPOSIBLE = "INSERT INTO exportacion_nomina (colegio_id, anio_escolar_id, "
+			+ "seccion_id, perfil, filas, faltantes, codigo, sha256, sesion_id, creado_en, creado_por, actualizado_en) VALUES "
+			+ "(0, 0, 0, 'SIAGIE_MATRICULA_PROVISIONAL', 0, 0, 'VERIF-0', REPEAT('0', 64), 0, NOW(6), 'verificador', NOW(6))";
+
+	/**
+	 * Sprint 9, tanda 3 (E40, B6 y B7): con cc_sistema, un resumen de comunicados del colegio 0 con «S/ 350.00» en los
+	 * parámetros (1644: la regla del colegio en preparación o la de cobranza de trg_mensaje_nace).
+	 */
+	static final String RESUMEN_COMUNICADOS_CON_MONTO_IMPOSIBLE = "INSERT INTO mensaje (colegio_id, clave, tipo, canal, "
+			+ "destinatario_tipo, familia_id, apoderado_id, destino, plantilla, parametros, estado, creado_en, creado_por, "
+			+ "actualizado_en) VALUES (0, 'verificador-comunicados', 'COMUNICADOS_RESUMEN', 'CORREO', 'APODERADO', 0, 0, "
+			+ "'x@y.pe', 'cc_comunicados_v2', 'Colegio\n2 comunicados. Debe S/ 350.00', 'PENDIENTE', NOW(6), "
+			+ "'sistema.comunicados', NOW(6))";
 
 	/** Sprint 9, tanda 2 (E1): un registro «del día» del colegio 0 con la fecha de ayer, sin sesión ni firma (1644). */
 	static final String REGISTRO_AYER_IMPOSIBLE = "INSERT INTO registro_asistencia (colegio_id, anio_escolar_id, seccion_id, "
@@ -610,7 +650,12 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					"trg_mensaje_nace (versión del sprint 9, tanda 2)"),
 			sinBorrado("aviso_asistencia_corte"),
 			columna("UPDATE aviso_asistencia_corte SET colegio_id = colegio_id WHERE 1 = 0", "aviso_asistencia_corte"),
-			soloInsercion("marca_asistencia"), sinBorrado("marca_asistencia"));
+			soloInsercion("marca_asistencia"), sinBorrado("marca_asistencia"),
+			// Sprint 9, tanda 3 (V34): con cc_sistema, un resumen de comunicados con un monto no nace (1644) y nada de
+			// comunicados se borra (1142).
+			trigger(VerificadorPermisosBaseDatos.RESUMEN_COMUNICADOS_CON_MONTO_IMPOSIBLE,
+					"trg_mensaje_nace (versión del sprint 9, tanda 3)"),
+			sinBorrado("comunicado"), sinBorrado("confirmacion_lectura"));
 
 	/** 1142 (o 1143): solo cc_sistema la escribe. */
 	private static SentenciaProhibida soloSistema(String sql, String riesgo) {
@@ -708,7 +753,11 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_asignacion_docente_nace", "trg_asignacion_docente_estado",
 			// Sprint 9, tanda 2 (V33).
 			"trg_registro_asistencia_nace", "trg_consentimiento_aviso_nace", "trg_marca_asistencia_nace",
-			"trg_configuracion_academica_nace", "trg_configuracion_academica_cambio");
+			"trg_configuracion_academica_nace", "trg_configuracion_academica_cambio",
+			// Sprint 9, tanda 3 (V34).
+			"trg_comunicado_nace", "trg_comunicado_estado", "trg_comunicado_destinatario_nace",
+			"trg_comunicado_destinatario_cambio",
+			"trg_confirmacion_lectura_nace", "trg_exportacion_nomina_nace");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 

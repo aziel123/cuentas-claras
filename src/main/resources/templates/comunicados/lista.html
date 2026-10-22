@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 3 (sección 3.8): los comunicados. Dirección y Promotoría ven todos (también los de los docentes); el
+     docente, los suyos. Sin el texto: el detalle muestra cuántas familias confirmaron. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Comunicados', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="comunicados">
+	<div class="cabecera">
+		<div>
+			<h1>Comunicados</h1>
+			<p class="secundario">Llegan al portal de las familias con confirmación de lectura. Un comunicado enviado no se
+				edita: se corrige con una fe de erratas.</p>
+		</div>
+		<a th:if="${opciones.puedeEscribir}" th:replace="~{fragments/componentes :: enlaceBoton('Nuevo comunicado', @{/comunicados/nuevo}, 'primario')}"></a>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${#lists.isEmpty(comunicados)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay comunicados', 'Cuando envíes uno, aquí verás a cuántas familias llegó y quién confirmó la lectura.')}"></div>
+	</th:block>
+
+	<section class="tarjeta" th:unless="${#lists.isEmpty(comunicados)}">
+		<table class="tabla">
+			<thead>
+				<tr><th>Título</th><th>De</th><th>A</th><th>Estado</th><th>Confirmadas</th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="c : ${comunicados}">
+					<td><a th:href="@{/comunicados/{id}(id=${c.id()})}" th:text="${c.titulo()}">Título</a>
+						<span th:if="${c.urgente()}" th:replace="~{fragments/componentes :: badge('Urgente', 'alerta')}"></span>
+						<span th:if="${c.feDeErratas()}" th:replace="~{fragments/componentes :: badge('Fe de erratas', 'neutro')}"></span></td>
+					<td th:text="${c.emisor()}">Dirección</td>
+					<td th:text="${c.alcance()}">3.° Primaria B</td>
+					<td th:text="${c.estadoTexto()}">Enviado</td>
+					<td th:text="${c.destinatarias() == null} ? '—' : |${c.confirmadas()} de ${c.destinatarias()}|">5 de 30</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

@@ -24,6 +24,13 @@ public interface InasistenciasDelDia {
 	List<Inasistencia> delDia(LocalDate fecha);
 
 	/**
+	 * QA-S9-8: las de la fecha tal como estaban en la marca de agua {@code hastaMarcaId}: de cada alumno, la ÚLTIMA marca
+	 * de su cadena con id menor o igual. Así, una corrección que llega mientras se prepara el primer envío no deja al
+	 * alumno fuera del aviso: sale con lo que había y la corrección va en el envío siguiente.
+	 */
+	List<Inasistencia> delDiaHasta(LocalDate fecha, long hastaMarcaId);
+
+	/**
 	 * Lo que cambió después de la marca de agua (de cualquier día), por alumno y registro: el estado antes del primer
 	 * cambio posterior y el vigente. {@code registroNuevo}: el registro mismo es posterior (no había nada que corregir).
 	 */

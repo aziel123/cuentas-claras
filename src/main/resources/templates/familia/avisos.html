@@ -29,6 +29,8 @@
 					<input type="hidden" name="finalidad" th:value="${c.finalidad}">
 					<input type="hidden" name="canal" th:value="${c.canal}">
 					<input type="hidden" name="otorga" th:value="${!c.otorgado}">
+					<!--/* Sprint 9, tanda 3: el «sí» por WhatsApp a los comunicados hace a este apoderado el contacto principal (recibe el resumen). */-->
+					<input type="hidden" name="principal" value="true" th:if="${c.finalidad == 'COMUNICADOS' and c.canal == 'WHATSAPP' and !c.otorgado}">
 					<button type="submit" class="btn btn-secundario btn-chico" th:text="${c.otorgado} ? 'No quiero recibirlo' : 'Sí, quiero recibirlo'">Cambiar</button>
 				</form>
 			</li>

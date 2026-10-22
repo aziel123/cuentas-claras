@@ -42,6 +42,14 @@ public class Matricula extends BaseEntity {
 	@Column(name = "fecha_matricula", nullable = false)
 	private LocalDate fechaMatricula;
 
+	/**
+	 * Correcciones del sprint 9 (auditoría, 6): el código de la ficha de matrícula registrada, «FM-{año}-{id con 4 cifras}».
+	 * Lo muestra la ficha del alumno y lo exige el consentimiento registrado desde la ficha firmada.
+	 */
+	public static String codigoFicha(int anio, long matriculaId) {
+		return "FM-" + anio + "-" + String.format("%04d", matriculaId);
+	}
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
 	private EstadoMatricula estado;

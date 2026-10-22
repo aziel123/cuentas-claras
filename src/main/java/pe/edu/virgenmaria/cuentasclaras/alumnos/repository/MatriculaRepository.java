@@ -26,6 +26,11 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
 	@Query("select m from Matricula m join fetch m.seccion where m.anioEscolar.id = :anioId and m.alumno.id in :alumnos")
 	List<Matricula> delAnioParaAlumnos(@Param("anioId") Long anioId, @Param("alumnos") Collection<Long> alumnos);
 
+	/** QA-S9-4: las matrículas de esos alumnos en los años ANTERIORES al indicado (en cualquier estado). */
+	@Query("select m from Matricula m join fetch m.seccion join fetch m.anioEscolar where m.alumno.id in :alumnos "
+			+ "and m.anioEscolar.anio < :anio")
+	List<Matricula> anterioresDeAlumnos(@Param("alumnos") Collection<Long> alumnos, @Param("anio") int anio);
+
 	long countBySeccionId(Long seccionId);
 
 	/** Sprint 8, tanda 2 (puesta en marcha): cuántas matrículas en ese estado tiene el año. */
@@ -52,4 +57,8 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
 	@Query("select m.seccion.id, count(m) from Matricula m where m.anioEscolar.id = :anioId and m.estado = ACTIVA "
 			+ "group by m.seccion.id")
 	List<Object[]> contarActivasPorSeccion(@Param("anioId") Long anioId);
+
+	/** QA-S9-6: [id de sección, id del alumno] de las matrículas activas de un año. */
+	@Query("select m.seccion.id, m.alumno.id from Matricula m where m.anioEscolar.id = :anioId and m.estado = ACTIVA")
+	List<Object[]> alumnosActivosPorSeccion(@Param("anioId") Long anioId);
 }

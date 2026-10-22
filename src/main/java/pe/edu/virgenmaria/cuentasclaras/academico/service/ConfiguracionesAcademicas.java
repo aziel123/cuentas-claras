@@ -24,8 +24,8 @@ import java.time.temporal.ChronoUnit;
  * el después. Los rangos los fija también la base (CHECK de V33).
  */
 @Service
-@PreAuthorize("hasAnyRole('DIRECTOR','DOCENTE','APODERADO','SISTEMA_ASISTENCIA','PROMOTOR','SISTEMA_PANEL')")
-public class ConfiguracionesAcademicas {
+@PreAuthorize("hasAnyRole('DIRECTOR','DOCENTE','APODERADO','SISTEMA_ASISTENCIA','SISTEMA_COMUNICADOS','PROMOTOR','SISTEMA_PANEL')")
+public class ConfiguracionesAcademicas implements pe.edu.virgenmaria.cuentasclaras.academico.api.HorarioComunicados {
 
 	private final ConfiguracionAcademicaRepository configuraciones;
 
@@ -41,6 +41,20 @@ public class ConfiguracionesAcademicas {
 		this.firma = firma;
 		this.auditoria = auditoria;
 		this.reloj = reloj;
+	}
+
+	/** Sprint 9, tanda 3: la hora del resumen de comunicados del colegio. */
+	@Override
+	@Transactional(readOnly = true)
+	public java.time.LocalTime horaResumen() {
+		return vigente().getHoraResumenComunicados();
+	}
+
+	/** Sprint 9, tanda 3: el tope mensual de resúmenes por WhatsApp de cada familia. */
+	@Override
+	@Transactional(readOnly = true)
+	public int topeResumenesMes() {
+		return vigente().getTopeResumenesMes();
 	}
 
 	/** La del colegio actual o, sin fila, la de por defecto (sin guardarla). */

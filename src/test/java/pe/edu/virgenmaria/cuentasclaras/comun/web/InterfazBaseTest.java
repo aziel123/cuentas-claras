@@ -120,7 +120,8 @@ class InterfazBaseTest {
 				.andExpect(content().string(containsString("data-modulo=\"AUDITORIA\"")))
 				.andExpect(content().string(not(containsString("data-modulo=\"CAJA_COBRO\""))))
 				.andExpect(content().string(containsString("aria-current=\"page\"")))
-				.andExpect(content().string(containsString("Próximamente")));
+				// Sprint 9, tanda 3: con Comunicados ya no queda ningún módulo «Próximamente».
+				.andExpect(content().string(not(containsString("Próximamente"))));
 	}
 
 	@Test

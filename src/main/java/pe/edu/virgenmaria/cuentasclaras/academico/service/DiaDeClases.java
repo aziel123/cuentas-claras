@@ -41,7 +41,7 @@ class DiaDeClases {
 			return Optional.of("El " + texto(fecha) + " está fuera de las fechas de clases (" + anio.rangoClases() + ").");
 		}
 		if (fecha.getDayOfWeek() == DayOfWeek.SATURDAY || fecha.getDayOfWeek() == DayOfWeek.SUNDAY) {
-			return Optional.of("Hoy no hay clases: es fin de semana.");
+			return Optional.of("El " + texto(fecha) + " es fin de semana: no hay clases.");
 		}
 		if (calendario.esFeriado(fecha)) {
 			return Optional.of("El " + texto(fecha) + " es feriado o día no laborable del colegio.");
