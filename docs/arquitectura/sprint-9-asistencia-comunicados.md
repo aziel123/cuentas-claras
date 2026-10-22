@@ -2184,3 +2184,119 @@ lista de alumnos sin montos, y Caja y Alumnos le responden 403. Operación: `doc
   doble cambio, pero la auditoría del código debería confirmarlo.
 - El contenedor `cc-s9t2-mysql` se borró al terminar. No se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`,
   `smarthr-*`, `supabase_*` ni `cc-mysql-s5*`.
+
+## Tanda 3 · Implementación
+
+> Implementada el 22 de octubre de 2026 en la rama `claude/sprint-9-asistencia-comunicados` (agente `backend-spring`,
+> «Método por sprint»: brief `docs/arquitectura/sprint-9/tanda-3.md`, PR en borrador #18 con el CI como verificación).
+> V34, **98 triggers y 10 funciones en `03` (13 con huella con las 3 de `02`): 111 huellas**, como pedía el brief. PDFBox
+> 3.0.8 solo en el proceso hijo (`AnalizadorPdf`). Los 16 hallazgos de la auditoría en papel (B1 a B16) con su control y su
+> prueba. Resultados de la verificación: al final de esta sección.
+
+### Qué se hizo
+**Base (V34, `02` y `03`).**
+- `V34__comunicados_y_nomina_siagie.sql`: `comunicado`, `comunicado_adjunto` (MEDIUMBLOB, los dos SHA-256 y
+  `requiere_revision`), `comunicado_destinatario`, `confirmacion_lectura`, `codigo_modular`, `exportacion_nomina` (con
+  `sesion_id` obligatorio, B14), `alumno.sexo` y `alumno.codigo_estudiante` (CHECK con la bandera `'c'`, B15) y los tipos
+  `COMUNICADOS_RESUMEN` y `COMUNICADO_URGENTE`. Todos los CHECK con `IS NOT NULL` explícito (la lección de V32 y V33).
+- `02`: bloque «Sprint 9 · tanda 3» (solo INSERT en adjuntos, confirmaciones y exportaciones; UPDATE por columna en
+  `comunicado`, `comunicado_destinatario` y `codigo_modular`; ningún DELETE).
+- `03`: `trg_comunicado_nace`, `trg_comunicado_estado`, `trg_comunicado_destinatario_nace`, `trg_confirmacion_lectura_nace`
+  y `trg_exportacion_nomina_nace`; versión nueva de `trg_mensaje_nace` (los dos tipos de comunicados, B6). La expresión de
+  cobranza (B7) es la misma en Java y en MySQL (`ContenidoSinCobranzaTest` las compara).
+- `VerificadorPermisosBaseDatos` (98 triggers, las tablas nuevas de solo inserción y sin borrado, las columnas inmutables y
+  tres imposibles nuevos), `HuellasObjetosBd` (111) y `tablas-vigiladas.txt` (+5 tablas).
+
+**Aplicación.**
+- `comunicados.analizador`: `AnalizadorPdf` (el `main` del proceso hijo: tamaño, páginas, objetos, lo descomprimido,
+  JavaScript, acciones, anotaciones, formularios, adjuntos, capas; sanea y vuelve a guardar), `PoliticaHijo` (sin red, sin
+  ejecutar, lee solo el classpath y su carpeta, escribe solo en su carpeta) y `FuentesDelJar`.
+- `comunicados.service`: `LanzadorAnalizador` (`-Xmx128m`, entorno vacío, se mata por PID al vencer, B5),
+  `AdjuntosComunicado` (cola de 1 hilo con 4 lugares, 1 por persona y 2 por colegio a la vez, 10 por persona y 30 por
+  colegio por hora desde la bitácora, B12), `FiltroContenido` (B4: NFKC, caracteres de formato, marcas combinantes, dígitos,
+  letras parecidas a latinas, leet), `HuellaComunicado` (la cadena del trigger, B2), `EnvioComunicados` (vista previa,
+  envío, fe de erratas, retiro), `ManejadorPublicarComunicado` (el otro órgano, B3), `ConsultaComunicados`,
+  `EstadisticasComunicado` (B16), `LecturaFamilia`, `IntegridadComunicados` (B11), `AlertasComunicados`,
+  `AvisosDeComunicados`; `comunicacion.service.AvisosComunicadosFamilias` y `proceso.AvisosComunicados`.
+- `academico.siagie`: `NominaSiagie` (datos que faltan, códigos modulares, nómina provisional con usuario y fecha en la
+  primera fila, B14), `PerfilNomina`, `CampoNomina`; `SiagieController` y la ficha del alumno con sexo y código.
+- Pantallas: `comunicados/lista`, `nuevo`, `detalle`; `familia/comunicados` y `comunicado`; `academico/siagie`; la descarga
+  del PDF como adjunto con `nosniff`, CSP `sandbox` y `no-store`. La demo carga un comunicado con el PDF de ejemplo (pasa
+  por el hijo) y su fe de erratas.
+- `compose.prod.yml` y `compose.demo.yml` con `MaxRAMPercentage=55`; despliegue y actas con 98 y 13; manuales de Dirección,
+  docente y familias; `mysql-usuarios.md`; `plantillas-whatsapp-meta.md` (30).
+- CI: V1–V34; paso «Sprint 9, tanda 3» (`AuditoriaSprint9ComunicadosMySqlTest`); `comprobar` con los casos de V34; 111 y
+  98; job `demo` con el hijo **dentro de la imagen** (read-only, `--memory 1400m` y el 55 %): el PDF de ejemplo sale con 0
+  y diez bombas Flate seguidas con 2, y la aplicación sigue respondiendo.
+
+**Pruebas nuevas.**
+- H2: `AnalizadorPdfTest` (8), `AnalizadorHostilesTest` (25 casos), `FiltroContenidoTest` (56 casos), `HuellaComunicadoTest`,
+  `ColaDelAnalizadorTest` (4), `ComunicadosTest` (12), `PortalComunicadosTest` (6), `EstadisticasComunicadoTest` (2),
+  `IntegridadComunicadosTest` (3), `AvisosComunicadosTest` (5), `AdjuntoComunicadoTest` (3, con
+  `diezBombasSeguidasNoDejanSinServicio`), `ColegioNombreConCobranzaAvisaTest`, `VersionPdfBoxTest`, `TmpfsConTamanoTest`,
+  `CampoNominaSinContactosNiCobranzaTest`, `NominaSiagieTest` (5); al día: `ReglasArquitecturaTest`, `RutasIdorTest` y
+  `CatalogoRutasConId` (11 rutas), `ClaveFirmaTest`, `ContenidoSinCobranzaTest`, `ConsentimientosTest`,
+  `InterfazBaseTest`, los verificadores y los conteos.
+- MySQL real: `mysql/AuditoriaSprint9ComunicadosMySqlTest` (38: E16 a E24, E28, E29, E37, E40, E43, E45, los CHECK con
+  NULL, B1 a B4, B6, B7, B9, B13 a B15 y `flujoComunicadosConPermisosMinimos`).
+
+### Desviaciones del diseño
+1. **`OpenAction` con un destino (arreglo)** se quita al sanear en vez de rechazar el PDF (es lo que deja Word al guardar);
+   un `OpenAction` con acción (diccionario) se rechaza.
+2. **«debe» o «deben»** cuentan como cobranza solo junto a una cifra o a una palabra de dinero (si no, «los alumnos deben
+   traer» se rechazaba).
+3. **Los PDF hostiles se generan al correr las pruebas** (`PdfsDePrueba`), no se guardan en `src/test/resources/hostiles`:
+   gitleaks y el antivirus del equipo no los tocan y cada caso dice cómo se construye.
+4. **Tope de lo descomprimido** (16 MB por flujo y 48 MB por PDF, sin contar las imágenes con su formato): no estaba en el
+   diseño. Una bomba Flate de 400 MB se aceptaba en 8 s con la memoria del hijo; ahora se rechaza al medir.
+5. **`flujoComunicadosConPermisosMinimos` va en la clase nueva** y no en `PermisosMySqlTest`, para usar su colegio
+   compartido. La clase sube el tope a 30 colegios solo para sí (`@SpringBootTest(properties = …)`): las clases anteriores
+   del job ya llenan los 25 de la instalación.
+6. **El contacto principal** de una familia es el último consentimiento de COMUNICADOS marcado como principal; sin él, el
+   primer apoderado (por id) que recibe. El correo del resumen no lleva los títulos (solo cuántos y de quién).
+7. **La importación por Excel no trae todavía las columnas sexo y código del estudiante**: se completan en la ficha.
+8. **El resumen ya enviado se reconoce por la clave del día**, no por la hora de creación del mensaje (dependía del reloj
+   de la base: lo encontró la prueba de MySQL).
+9. **La nómina sin año en curso** abre vacía con su mensaje (antes daba error 500; lo encontró `MatrizPermisosTest`).
+10. **En el flujo de MySQL, el resumen no llega a crearse**: los contactos de las familias de la prueba no están
+    verificados (se verifican con su enlace, solo en la fase 2b con la mensajería simulada). La prueba comprueba que la
+    pasada de `sistema.comunicados` corre completa con `cc_sistema` y que, sin contacto, ningún destinatario queda marcado
+    como avisado. El resumen creado lo prueba `AvisosComunicadosTest` (H2) y las reglas de `trg_mensaje_nace` los casos
+    b6, e37 y e40 de MySQL.
+
+### Riesgos y pendientes de la tanda
+- **`SecurityManager`** desaparece en Java 24: al subir de Java, el hijo pasa a un contenedor aparte con `network_mode: none`.
+- **`requiere_revision` lo calcula la aplicación**: con la clave de `cc_app` se podría insertar un adjunto «sin revisión»
+  falso; quedan el GRANT, la bitácora (`ADJUNTO_REVISADO`) y el SHA-256 del original.
+- **`abierto_en`, `avisado_mensaje_id` y `recordado_mensaje_id`** los vigila la aplicación (no el trigger).
+- **El filtro de contenido se burla con creatividad** (una imagen con el número de cuenta solo la ve el otro órgano);
+  PDF sin antivirus; Meta puede clasificar `cc_comunicados_v2` como marketing; la plantilla del SIAGIE (D12) sin
+  confirmar: la nómina sale como PROVISIONAL.
+- **Las pruebas de MySQL que dependen del día** (resumen del día) se omiten en domingo o feriado.
+
+### Resultados de la verificación
+- `./mvnw -B verify` en local (una vez, sobre 2a9cdeb y el trabajo sin commit): **2725 pruebas, 3 fallos y 1 error, 161
+  omitidas** (las de MySQL real); BUILD FAILURE. Los cuatro eran pruebas existentes que la tanda dejó atrás o un error que
+  encontraron: `InterfazBaseTest` (ya no queda ningún módulo «Próximamente»), `ConsentimientosTest` (la finalidad
+  COMUNICADOS), `ClaveFirmaTest` (las dos claves nuevas) y `MatrizPermisosTest` (la nómina sin año en curso daba 500: se
+  corrigió en `NominaSiagie`). Las cuatro clases y `NominaSiagieTest` en local después de corregir: 85 pruebas, 0 fallos.
+- MySQL real en local (contenedor propio `cc-s9t3-mysql`, `mysql:8`, puerto 3317): V1–V34 con `cc_migrador`, `02` y `03`
+  sin error, **98 triggers y 13 funciones**; prod registra «Huellas de los 98 triggers y las 13 funciones verificadas».
+  Primera corrida de `AuditoriaSprint9ComunicadosMySqlTest`: 34 de 38 (el docente enviaba con el rol de Dirección en la
+  prueba, la segunda Dirección no pasaba por la bandeja y el resumen ya enviado se decidía por la hora de creación: ver la
+  desviación 8). Después, en una base limpia y **en el orden del job `mysql`**: `MigracionMySqlTest` 2, `PermisosMySqlTest`
+  94 (7 omitidas por la fecha), `AuditoriaSprint8MySqlTest` 18, `AuditoriaSprint9MySqlTest` 5,
+  `AuditoriaSprint9AsistenciaMySqlTest` 13, **`AuditoriaSprint9ComunicadosMySqlTest` 38**, `AuditoriaSprint6MySqlTest` 3,
+  `AuditoriaSprint7MySqlTest` 12, `QaSprint7MySqlTest` 5, `AuditoriaAnulacionPagoMySqlTest` 1 y
+  `CorreccionesSprint7MySqlTest` 4: 0 fallos.
+- CI del PR #18:
+  - corrida 39844711415 sobre 2a9cdeb: el job `mysql` en verde (V34, 98 y 111); «Compilar y probar» con los cuatro fallos
+    de arriba;
+  - corrida 39847091917 sobre e19652b: «Compilar y probar» en verde; `mysql` falló porque la clase nueva no podía crear su
+    colegio: las clases anteriores del job ya llenan los 25 de la instalación (desviación 5);
+  - **corrida 39848750605 sobre 8aab217: todos los jobs en verde** (compilar y probar, también con la zona de Los
+    Ángeles: 2763 pruebas, 0 fallos, 199 omitidas; MySQL 8 con `AuditoriaSprint9ComunicadosMySqlTest` 38 de 38 y
+    `huellas_objetos()` = 111; respaldo; demo: «en la imagen, el hijo acepta el PDF de ejemplo (0) y rechaza diez bombas
+    seguidas; la app sigue arriba»; dependencias; gitleaks; la imagen en GHCR se omite en un PR).
+- El contenedor `cc-s9t3-mysql` se borró al terminar. No se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`,
+  `smarthr-*`, `supabase_*`, `cc-mysql-s5*` ni `.claude/worktrees/*`.
