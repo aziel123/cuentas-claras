@@ -41,13 +41,22 @@ public class SeccionesDelDocente implements SeccionesDocente {
 
 	private final AsignacionAreaRepository areas;
 
+	private final pe.edu.virgenmaria.cuentasclaras.academico.curriculo.repository.ConfiguracionEvaluacionRepository
+			configuraciones;
+
+	private final pe.edu.virgenmaria.cuentasclaras.academico.curriculo.service.Catalogo catalogo;
+
 	private final Clock reloj;
 
 	public SeccionesDelDocente(AsignacionDocenteRepository asignaciones, SeccionRepository secciones,
-			AsignacionAreaRepository areas, Clock reloj) {
+			AsignacionAreaRepository areas,
+			pe.edu.virgenmaria.cuentasclaras.academico.curriculo.repository.ConfiguracionEvaluacionRepository configuraciones,
+			pe.edu.virgenmaria.cuentasclaras.academico.curriculo.service.Catalogo catalogo, Clock reloj) {
 		this.asignaciones = asignaciones;
 		this.secciones = secciones;
 		this.areas = areas;
+		this.configuraciones = configuraciones;
+		this.catalogo = catalogo;
 		this.reloj = reloj;
 	}
 
@@ -113,16 +122,45 @@ public class SeccionesDelDocente implements SeccionesDocente {
 	@Transactional(readOnly = true)
 	public List<Long> areasDe(long seccionId) {
 		UsuarioAutenticado persona = PersonaEnSesion.actual();
-		if (!persona.roles().contains(Rol.DOCENTE)
-				|| secciones.findById(seccionId).filter(s -> !s.getAnioEscolar().cerrado()).isEmpty()) {
+		Optional<Seccion> seccion = secciones.findById(seccionId).filter(s -> !s.getAnioEscolar().cerrado());
+		if (!persona.roles().contains(Rol.DOCENTE) || seccion.isEmpty()) {
 			return List.of();
 		}
-		List<Long> suyas = vigentesDe(persona.usuarioId()).stream()
+		List<AsignacionDocente> suyas = vigentesDe(persona.usuarioId()).stream()
+				.filter(a -> a.getSeccionId().equals(seccionId) && a.getTipo() != TipoAsignacion.AUXILIAR
+						&& a.getHasta() == null).toList();
+		if (suyas.isEmpty()) {
+			return List.of();
+		}
+		java.util.Set<Long> ids = new java.util.TreeSet<>();
+		areas.findByAsignacionIdInOrderByAreaIdAsc(suyas.stream().map(AsignacionDocente::getId).toList())
+				.forEach(a -> ids.add(a.getAreaId()));
+		// Sprint 10, tanda 2 (S2, decisión 175): las competencias transversales las califica el TUTOR (la misma regla que
+		// cc_docente_de_area en MySQL): su área transversal del nivel, en la versión del año.
+		if (suyas.stream().anyMatch(a -> a.getTipo() == TipoAsignacion.TUTOR)) {
+			configuraciones.findByAnioEscolarId(seccion.get().getAnioEscolar().getId())
+					.ifPresent(c -> catalogo.areasDe(c.getCurriculoVersionId(), seccion.get().nivel()).stream()
+							.filter(pe.edu.virgenmaria.cuentasclaras.academico.curriculo.dto.AreaDelCatalogo::transversal)
+							.forEach(t -> ids.add(t.id())));
+		}
+		return List.copyOf(ids);
+	}
+
+	/**
+	 * Sprint 10, tanda 2 (sección 4 del brief): si el docente en sesión tiene en la sección una asignación VIGENTE de tutor
+	 * o de área sin cobertura pero SIN áreas del catálogo (las del sprint 9): marca asistencia, pero todavía no califica.
+	 */
+	@Override
+	@Transactional(readOnly = true)
+	public boolean sinAreasDelCatalogo(long seccionId) {
+		UsuarioAutenticado persona = PersonaEnSesion.actual();
+		if (!persona.roles().contains(Rol.DOCENTE)) {
+			return false;
+		}
+		return vigentesDe(persona.usuarioId()).stream()
 				.filter(a -> a.getSeccionId().equals(seccionId) && a.getTipo() != TipoAsignacion.AUXILIAR
 						&& a.getHasta() == null)
-				.map(AsignacionDocente::getId).toList();
-		return suyas.isEmpty() ? List.of() : areas.findByAsignacionIdInOrderByAreaIdAsc(suyas).stream()
-				.map(AsignacionArea::getAreaId).distinct().sorted().toList();
+				.anyMatch(a -> !areas.existsByAsignacionId(a.getId()));
 	}
 
 	/** Sprint 9, tanda 2: si el docente en sesión es tutor(a) VIGENTE de la sección (ve las notas y el reporte). */

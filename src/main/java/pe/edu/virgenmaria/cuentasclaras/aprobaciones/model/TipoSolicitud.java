@@ -51,7 +51,15 @@ public enum TipoSolicitud {
 	CORRECCION_ASISTENCIA("Corrección de asistencia"),
 	REGISTRO_ASISTENCIA_TARDIO("Registro de asistencia de un día pasado"),
 	/** Sprint 9, tanda 3 (decisión 157, B3): un comunicado con PDF de un docente o con un PDF que requiere revisión. */
-	PUBLICAR_COMUNICADO("Publicar un comunicado con PDF");
+	PUBLICAR_COMUNICADO("Publicar un comunicado con PDF"),
+	/**
+	 * Sprint 10, tanda 2 (sección 3.6, decisión 173): corregir una nota después del cierre del periodo. La pide el docente del
+	 * área o Dirección; la aprueba OTRA persona de Dirección o Promotoría que no la pidió ni registró la nota. En MySQL lo
+	 * exige trg_calificacion_nace (y la conclusión va en borrador_conclusion, M8).
+	 */
+	CORRECCION_CALIFICACION("Corrección de una nota después del cierre"),
+	/** Sprint 10, tanda 2 (decisión 174): registrar en 48 horas una competencia que quedó sin nota al cerrar el periodo. */
+	CALIFICACION_TARDIA("Nota de un periodo cerrado que quedó sin registrar");
 
 	private final String etiqueta;
 

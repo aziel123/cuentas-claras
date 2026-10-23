@@ -268,6 +268,19 @@ public final class ClaveFirma {
 		return "periodo_evaluacion:" + id(periodoId) + ":CERRADO";
 	}
 
+	/**
+	 * Sprint 10, tanda 2 (H3): un guardado de notas (un POST, un lote). La secuencia lo hace único: el docente guarda muchas
+	 * veces en un periodo y cada firma se usa una vez. trg_lote_calificacion_nace la exige a nombre de quien guarda.
+	 */
+	public static String loteCalificacion(Long periodoId, Long seccionId, Long areaId, int secuencia) {
+		return "lote_calificacion:" + id(periodoId) + ":" + id(seccionId) + ":" + id(areaId) + ":" + secuencia;
+	}
+
+	/** Sprint 10, tanda 2 (A3): Dirección autoriza la exoneración del área para esa matrícula (trg_exoneracion_area_nace). */
+	public static String exoneracionArea(Long matriculaId, Long areaId) {
+		return "exoneracion_area:" + id(matriculaId) + ":" + id(areaId) + ":AUTORIZADA";
+	}
+
 	private static Long id(Long id) {
 		return Objects.requireNonNull(id, "id");
 	}

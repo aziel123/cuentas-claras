@@ -36,6 +36,12 @@ public enum TipoAviso {
 	 * coincide con el jar (alguien cambió una competencia o metió una versión). A Promotoría.
 	 */
 	INTEGRIDAD_CATALOGO("El catálogo del currículo no coincide con el del sistema"),
+	/** Sprint 10, tanda 2 (A5, decisión 186): una corrección de nota subió el nivel o dejó sin nota. A Promotoría. */
+	CORRECCIONES_NOTAS("Se corrigió una nota después del cierre"),
+	/** Sprint 10, tanda 2: 3 días antes del fin, secciones y áreas con competencias sin nota (sin alumnos). A Dirección. */
+	NOTAS_PENDIENTES("Hay competencias sin nota a pocos días del cierre"),
+	/** Sprint 10, tanda 2 (sección 4 del brief): asignaciones sin áreas del catálogo (no califican). A Dirección. */
+	ASIGNACIONES_SIN_AREAS("Hay docentes que todavía no pueden poner notas"),
 	OTRA_CRITICA("Alerta crítica");
 
 	private final String texto;
@@ -53,12 +59,14 @@ public enum TipoAviso {
 	public boolean saleAunqueNoSeaCritica() {
 		return this == CIERRE_NO_REALIZADO || this == ANULACION_PAGO_PENDIENTE || this == LLAMADA_REEMPLAZADA
 				|| this == LLAMADA_POR_DIRECCION || this == SECCION_SIN_ASISTENCIA || this == SOLICITUDES_PENDIENTES
-				|| this == CONSENTIMIENTOS_DESDE_FICHA;
+				|| this == CONSENTIMIENTOS_DESDE_FICHA || this == CORRECCIONES_NOTAS || this == NOTAS_PENDIENTES
+				|| this == ASIGNACIONES_SIN_AREAS;
 	}
 
 	/** Sprint 9, tanda 2 (H10): las que van SOLO a Dirección (no a Promotoría, que no ve la asistencia: decisión 143). */
 	public boolean soloDireccion() {
-		return this == SECCION_SIN_ASISTENCIA || this == CONSENTIMIENTOS_DESDE_FICHA;
+		return this == SECCION_SIN_ASISTENCIA || this == CONSENTIMIENTOS_DESDE_FICHA || this == NOTAS_PENDIENTES
+				|| this == ASIGNACIONES_SIN_AREAS;
 	}
 
 	/**

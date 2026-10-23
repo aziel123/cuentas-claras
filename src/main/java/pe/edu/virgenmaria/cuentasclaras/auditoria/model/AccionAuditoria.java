@@ -436,6 +436,20 @@ public enum AccionAuditoria {
 	/** Se resalta (M10): la revisión diaria encontró que el catálogo de la base no coincide con el del jar. */
 	CATALOGO_NO_COINCIDE("El catálogo del currículo no coincide con el del sistema", true),
 
+	// Sprint 10, tanda 2: notas (sección 8.4). Sin conclusiones (pueden tener datos sensibles): solo su SHA-256.
+	/** Un lote del docente: cuántas filas y su huella. */
+	NOTAS_GUARDADAS("Guardó notas de un área", false),
+	/** Se pidió corregir una nota después del cierre (la aprueba otra persona). */
+	CORRECCION_NOTA_PEDIDA("Pidió corregir una nota después del cierre", false),
+	/** Se resalta: nivel anterior y nuevo, quién pidió, quién aprobó y las huellas de las dos conclusiones. */
+	CALIFICACION_CORREGIDA("Corrigió una nota después del cierre", true),
+	/** Se pidió registrar una nota tardía (competencia sin nota de un periodo cerrado). */
+	CALIFICACION_TARDIA_PEDIDA("Pidió registrar una nota tardía", false),
+	/** Se resalta: notas de un periodo cerrado registradas con su solicitud aprobada. */
+	CALIFICACION_TARDIA_REGISTRADA("Registró notas tardías de un periodo cerrado", true),
+	/** Se resalta: Dirección exoneró a un alumno de Religión o Educación Física desde un periodo. */
+	AREA_EXONERADA("Exoneró a un alumno de un área", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

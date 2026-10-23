@@ -28,7 +28,14 @@ public interface SeccionesDocente {
 	/**
 	 * Sprint 10, tanda 1 (sección 3.4): las áreas del catálogo (ids) que el docente en sesión califica en la sección: las de
 	 * sus asignaciones VIGENTES de tutor o de área, sin cobertura. Vacía si no tiene ninguna (las del sprint 9 sin áreas del
-	 * catálogo no califican hasta que se vuelvan a proponer). Las transversales del tutor las agrega la tanda 2.
+	 * catálogo no califican hasta que se vuelvan a proponer). Sprint 10, tanda 2: al TUTOR, también el área de las
+	 * competencias transversales de su nivel (la misma regla que {@code cc_docente_de_area}).
 	 */
 	java.util.List<Long> areasDe(long seccionId);
+
+	/**
+	 * Sprint 10, tanda 2: si el docente en sesión tiene en la sección una asignación VIGENTE de tutor o de área (sin
+	 * cobertura) SIN áreas del catálogo (las del sprint 9): marca asistencia, pero no califica hasta que se complete.
+	 */
+	boolean sinAreasDelCatalogo(long seccionId);
 }
