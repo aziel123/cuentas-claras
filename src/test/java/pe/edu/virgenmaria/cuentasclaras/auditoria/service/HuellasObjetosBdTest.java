@@ -39,9 +39,11 @@ class HuellasObjetosBdTest {
 		// (99 y 112).
 		// Sprint 10, tanda 1 (V35): 104 triggers (la evaluación del año, los periodos y las áreas de cada asignación) y
 		// cc_rol_activo: 119 huellas (la versión nueva de trg_asignacion_docente_estado no cambia el conteo).
-		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(104)
+		// Sprint 10, tanda 2 (V36): 108 triggers (lotes, notas, exoneraciones y borradores) y cc_docente_de_area: 124.
+		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(108)
 				.isEqualTo(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
-		assertThat(esperadas).hasSize(119).containsKeys("cc_rol_activo", "trg_configuracion_evaluacion_nace",
+		assertThat(esperadas).hasSize(124).containsKeys("cc_docente_de_area", "trg_lote_calificacion_nace",
+				"trg_calificacion_nace", "trg_exoneracion_area_nace", "trg_borrador_conclusion_nace", "cc_rol_activo", "trg_configuracion_evaluacion_nace",
 				"trg_configuracion_evaluacion_cambio", "trg_periodo_evaluacion_nace", "trg_periodo_evaluacion_cambio",
 				"trg_asignacion_area_nace", "cc_texto_plano", "trg_comunicado_destinatario_cambio", "trg_comunicado_nace", "trg_comunicado_estado",
 				"trg_comunicado_destinatario_nace", "trg_confirmacion_lectura_nace", "trg_exportacion_nomina_nace",

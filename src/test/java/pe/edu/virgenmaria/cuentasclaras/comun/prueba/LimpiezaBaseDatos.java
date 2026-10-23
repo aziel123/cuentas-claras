@@ -39,6 +39,15 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM consentimiento_aviso");
 		jdbc.update("DELETE FROM configuracion_academica");
 		jdbc.update("DELETE FROM aviso_asistencia_corte");
+		// Sprint 10, tanda 2 (V36): los borradores apuntan a su nota; las notas, de la última a la primera de cada cadena,
+		// a su lote y a su solicitud; las exoneraciones, al periodo desde el que rigen.
+		jdbc.update("DELETE FROM borrador_conclusion");
+		while (jdbc.update("DELETE FROM calificacion WHERE id NOT IN (SELECT reemplaza_id FROM calificacion "
+				+ "WHERE reemplaza_id IS NOT NULL)") > 0) {
+			// sigue con la nota anterior de cada cadena
+		}
+		jdbc.update("DELETE FROM lote_calificacion");
+		jdbc.update("DELETE FROM exoneracion_area");
 		// Sprint 10, tanda 1 (V35): las áreas de cada asignación, antes que la asignación; los periodos y la configuración de
 		// evaluación apuntan al año. El catálogo (sin colegio) es de la migración: no se borra.
 		jdbc.update("DELETE FROM asignacion_area");

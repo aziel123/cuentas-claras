@@ -288,6 +288,10 @@ cuentasclaras:
     version-por-defecto: CNEB-2016.1                # la que propone la pantalla al configurar un año nuevo
     apertura-periodos: "0 0 6 * * *"                # AperturaPeriodos (sistema.academico) abre los periodos de hoy
     revision-catalogo: "0 0 5 * * *"                # RevisionCatalogo: la huella del catálogo, a diario (M10)
+  notas:
+    # Sprint 10, tanda 2 (sección 8.1). El plazo de la nota tardía (48 h) y el largo máximo de la conclusión (1000) los fija
+    # la base (trg_lote_calificacion_nace y V36): no se configuran aquí.
+    alerta-correcciones-por-persona: 5              # E26: más correcciones aprobadas por una persona en un periodo alertan
   comunicados:
     # Sprint 9, tanda 3 (sección 8). La hora del resumen y el tope mensual de cada colegio están en configuracion_academica.
     revisar-avisos-cada: "30 */5 7-19 * * MON-SAT"  # sistema.comunicados: urgentes pendientes y, a su hora, el resumen

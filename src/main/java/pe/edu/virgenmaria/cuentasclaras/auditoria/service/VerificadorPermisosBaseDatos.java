@@ -461,7 +461,22 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			columna("UPDATE periodo_evaluacion SET numero = numero WHERE 1 = 0", "periodo_evaluacion"),
 			columna("UPDATE configuracion_evaluacion SET anio_escolar_id = anio_escolar_id WHERE 1 = 0",
 					"configuracion_evaluacion"),
-			trigger(VerificadorPermisosBaseDatos.PERIODO_CERRADO_IMPOSIBLE, "trg_periodo_evaluacion_nace"));
+			trigger(VerificadorPermisosBaseDatos.PERIODO_CERRADO_IMPOSIBLE, "trg_periodo_evaluacion_nace"),
+			// Sprint 10, tanda 2 (V36, E7): las notas, sus lotes, las exoneraciones y los borradores son de solo inserción
+			// y nada se borra (1142); una corrección del colegio 0 sin solicitud firmada la rechaza trg_calificacion_nace
+			// antes que las FK (1644).
+			soloInsercion("calificacion"), sinBorrado("calificacion"), soloInsercion("lote_calificacion"),
+			soloInsercion("exoneracion_area"), soloInsercion("borrador_conclusion"),
+			trigger(VerificadorPermisosBaseDatos.CORRECCION_SIN_SOLICITUD_IMPOSIBLE, "trg_calificacion_nace"));
+
+	/**
+	 * Sprint 10, tanda 2 (E4): una corrección de nota del colegio 0, sin solicitud firmada ni periodo cerrado (la rechaza
+	 * trg_calificacion_nace antes que las FK: 1644).
+	 */
+	static final String CORRECCION_SIN_SOLICITUD_IMPOSIBLE = "INSERT INTO calificacion (colegio_id, anio_escolar_id, "
+			+ "periodo_id, seccion_id, matricula_id, alumno_id, competencia_id, nivel_logro, origen, reemplaza_id, "
+			+ "solicitud_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, 0, 0, 0, 'AD', 'CORRECCION_APROBADA', "
+			+ "0, 0, NOW(6), 'verificador', NOW(6))";
 
 	/**
 	 * Sprint 10, tanda 1 (E41): un periodo del colegio 0 que nace CERRADO, sin Dirección ni firma (la rechaza
@@ -800,7 +815,10 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_confirmacion_lectura_nace", "trg_exportacion_nomina_nace",
 			// Sprint 10, tanda 1 (V35).
 			"trg_configuracion_evaluacion_nace", "trg_configuracion_evaluacion_cambio", "trg_periodo_evaluacion_nace",
-			"trg_periodo_evaluacion_cambio", "trg_asignacion_area_nace");
+			"trg_periodo_evaluacion_cambio", "trg_asignacion_area_nace",
+			// Sprint 10, tanda 2 (V36).
+			"trg_lote_calificacion_nace", "trg_calificacion_nace", "trg_exoneracion_area_nace",
+			"trg_borrador_conclusion_nace");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 

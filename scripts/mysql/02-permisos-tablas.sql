@@ -329,6 +329,15 @@ GRANT INSERT, UPDATE (nombre, inicio, fin, estado, abierto_por, abierto_en, cerr
     actualizado_en, version) ON cuentasclaras.periodo_evaluacion TO 'cc_negocio';
 GRANT INSERT ON cuentasclaras.asignacion_area TO 'cc_negocio';                    -- solo inserción (A2)
 
+-- ===================== Sprint 10 · tanda 2 (V36): notas, cierre y corrección aprobada =====================
+-- Libros de SOLO INSERCIÓN: ningún UPDATE ni DELETE (1142). Una nota cambia con otra fila que reemplaza a la vigente;
+-- quién escribe cada fila lo deciden trg_lote_calificacion_nace, trg_calificacion_nace, trg_exoneracion_area_nace y
+-- trg_borrador_conclusion_nace.
+GRANT INSERT ON cuentasclaras.lote_calificacion TO 'cc_negocio';
+GRANT INSERT ON cuentasclaras.calificacion TO 'cc_negocio';
+GRANT INSERT ON cuentasclaras.exoneracion_area TO 'cc_negocio';
+GRANT INSERT ON cuentasclaras.borrador_conclusion TO 'cc_negocio';
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se

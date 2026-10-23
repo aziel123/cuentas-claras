@@ -197,6 +197,15 @@ public class Periodos {
 	 */
 	@Transactional
 	public void cerrar(Long periodoId) {
+		cerrar(periodoId, null);
+	}
+
+	/**
+	 * Sprint 10, tanda 2: igual, con el resumen de lo que faltaba al cerrar (competencias sin nota y asignaciones sin áreas,
+	 * que calcula academico.notas) para la bitácora. No bloquea el cierre.
+	 */
+	@Transactional
+	public void cerrar(Long periodoId, String resumen) {
 		UsuarioAutenticado persona = QuienEnSesion.actual();
 		PeriodoEvaluacion periodo = bloquear(periodoId);
 		AnioEscolar anio = anioDe(periodo);
@@ -225,7 +234,7 @@ public class Periodos {
 		auditoria.registrar(AccionAuditoria.PERIODO_CERRADO, ENTIDAD, periodo.getId().toString(),
 				EstadoPeriodo.ABIERTO.name(), EstadoPeriodo.CERRADO.name(), persona.nombreCompleto() + " cerró el "
 						+ periodo.getNombre() + " de " + anio.getAnio() + ". No se reabre: un cambio de nota después del "
-						+ "cierre va por solicitud y lo aprueba otra persona.");
+						+ "cierre va por solicitud y lo aprueba otra persona." + (resumen == null ? "" : " " + resumen));
 	}
 
 	private PeriodoEvaluacion bloquear(Long periodoId) {

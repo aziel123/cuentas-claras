@@ -71,7 +71,9 @@ class ClaveFirmaTest {
 				ClaveFirma.comunicadoRetirado(1L),
 				// Sprint 10, tanda 1 (V35): la evaluación del año y los periodos (programar, fechas, abrir y cerrar).
 				ClaveFirma.configuracionEvaluacion(1L, 0), ClaveFirma.periodoProgramado(1L, 1),
-				ClaveFirma.periodoFechas(1L, 1), ClaveFirma.periodoAbierto(1L), ClaveFirma.periodoCerrado(1L))
+				ClaveFirma.periodoFechas(1L, 1), ClaveFirma.periodoAbierto(1L), ClaveFirma.periodoCerrado(1L),
+				// Sprint 10, tanda 2 (V36): el lote de notas y la exoneración.
+				ClaveFirma.loteCalificacion(1L, 2L, 3L, 1), ClaveFirma.exoneracionArea(1L, 2L))
 				.forEach(clave -> {
 					// El CHECK de V25 (firma_operacion.clave) y el largo de la columna.
 					assertThat(clave).matches("^[a-z_]+:[A-Za-z0-9:_-]+$").hasSizeLessThanOrEqualTo(120);

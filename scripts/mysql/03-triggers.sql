@@ -9,7 +9,14 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
--- Versión de la migración V35 (sprint 10, tanda 1): 104 triggers y 12 funciones (15 con huella; 119 huellas). Nuevos:
+-- Versión de la migración V36 (sprint 10, tanda 2): 108 triggers y 13 funciones (16 con huella; 124 huellas). Nuevos:
+-- trg_lote_calificacion_nace (el lote lo guarda el docente del área con su sesión y su firma; con el periodo cerrado,
+-- solo con su nota tardía aprobada hace 48 horas o menos), trg_calificacion_nace (la nota: matrícula ACTIVA o RESERVADA,
+-- C1; sin exoneración vigente, A3; la conclusión que exige la norma con su SHA-256 de la base; cadena lineal; la
+-- corrección la aprueba otra persona con su firma y entra lo aprobado, con el texto del borrador, M8),
+-- trg_exoneracion_area_nace (Dirección con su firma, desde un periodo abierto) y trg_borrador_conclusion_nace (M8), y la
+-- función cc_docente_de_area.
+-- Versión anterior (V35, sprint 10, tanda 1): 104 triggers y 12 funciones (15 con huella; 119 huellas). Nuevos:
 -- trg_configuracion_evaluacion_nace y _cambio (la evaluación del año la guarda Dirección con su firma, la versión de a
 -- una; la versión del currículo, el tipo de periodo y los días de cierre anticipado quedan fijos desde que abre un
 -- periodo, M7), trg_periodo_evaluacion_nace y _cambio (un periodo nace PROGRAMADO por Dirección con su firma, dentro del
@@ -229,6 +236,21 @@ CREATE FUNCTION cc_rol_activo(p_colegio BIGINT, p_nombre VARCHAR(60), p_rol VARC
     RETURN EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
         WHERE u.colegio_id = p_colegio AND u.nombre_usuario = p_nombre AND u.activo AND u.apoderado_id IS NULL
           AND r.rol = p_rol)$$
+
+-- Sprint 10, tanda 2 (sección 6.3): ¿esta persona califica esta área en esta sección? Asignación VIGENTE de TUTOR o DOCENTE,
+-- sin cobertura (hasta), con su cuenta activa y el rol DOCENTE; y el área asignada (asignacion_area), o una transversal si
+-- es el TUTOR. La misma regla que SeccionesDocente.areasDe en la aplicación.
+DROP FUNCTION IF EXISTS cc_docente_de_area$$
+CREATE FUNCTION cc_docente_de_area(p_nombre VARCHAR(60), p_seccion BIGINT, p_area BIGINT) RETURNS BOOLEAN
+    NOT DETERMINISTIC READS SQL DATA
+    RETURN EXISTS (SELECT 1 FROM asignacion_docente a
+        JOIN usuario u ON u.id = a.usuario_id AND u.colegio_id = a.colegio_id
+        JOIN usuario_rol r ON r.usuario_id = u.id
+        JOIN area_curricular ar ON ar.id = p_area
+        WHERE a.seccion_id = p_seccion AND a.estado = 'VIGENTE' AND a.hasta IS NULL AND a.tipo IN ('TUTOR', 'DOCENTE')
+          AND u.nombre_usuario = p_nombre AND u.activo AND u.apoderado_id IS NULL AND r.rol = 'DOCENTE'
+          AND ((ar.transversal AND a.tipo = 'TUTOR')
+              OR EXISTS (SELECT 1 FROM asignacion_area x WHERE x.asignacion_id = a.id AND x.area_id = p_area)))$$
 
 -- Un plan nace en BORRADOR (nadie inserta un plan ya aprobado).
 DROP TRIGGER IF EXISTS trg_plan_pension_nace_borrador$$
@@ -3369,5 +3391,214 @@ BEGIN
               AND ar.nivel = SUBSTRING_INDEX(v_grado, '_', 1) AND NOT ar.transversal) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el area no es del nivel ni de la version del anio';
     END IF;
+END$$
+DELIMITER ;
+
+-- ===================== Sprint 10 · tanda 2 (V36): notas, cierre del periodo y corrección aprobada =====================
+-- (La función cc_docente_de_area está al principio de este archivo.) La nota es un libro de SOLO INSERCIÓN en cadena
+-- lineal: cambiar es agregar la fila que reemplaza a la vigente. Con el periodo CERRADO, nada cambia sin una solicitud
+-- aprobada por otra persona. cc_negocio no tiene UPDATE ni DELETE en estas tablas (1142). Comparar siempre con <=>.
+DELIMITER $$
+
+-- Un guardado (un POST, una firma: lote_calificacion:{periodo}:{seccion}:{area}:{secuencia}). La sección es del año del
+-- periodo y el área, de la versión del año y del nivel de la sección; lo guarda el docente del área (el tutor, en las
+-- transversales) con su sesión y su firma; la secuencia es la siguiente. Con el periodo ABIERTO (y su inicio cumplido),
+-- sin solicitud; con el periodo CERRADO, solo con SU CALIFICACION_TARDIA aprobada y firmada por otra persona hace 48 horas
+-- o menos (la hora de la firma de la base), del mismo periodo y área, de su asignación en la sección (E23).
+DROP TRIGGER IF EXISTS trg_lote_calificacion_nace$$
+CREATE TRIGGER trg_lote_calificacion_nace BEFORE INSERT ON lote_calificacion FOR EACH ROW
+BEGIN
+    DECLARE v_anio BIGINT; DECLARE v_estado VARCHAR(10); DECLARE v_inicio DATE; DECLARE v_grado VARCHAR(20);
+    SET v_anio = (SELECT p.anio_escolar_id FROM periodo_evaluacion p WHERE p.id = NEW.periodo_id
+        AND p.colegio_id = NEW.colegio_id);
+    SET v_estado = (SELECT p.estado FROM periodo_evaluacion p WHERE p.id = NEW.periodo_id AND p.colegio_id = NEW.colegio_id);
+    SET v_inicio = (SELECT p.inicio FROM periodo_evaluacion p WHERE p.id = NEW.periodo_id AND p.colegio_id = NEW.colegio_id);
+    SET v_grado = (SELECT s.grado FROM seccion s WHERE s.id = NEW.seccion_id AND s.colegio_id = NEW.colegio_id
+        AND s.anio_escolar_id <=> v_anio);
+    IF v_grado IS NULL OR NOT EXISTS (SELECT 1 FROM area_curricular ar
+            JOIN configuracion_evaluacion c ON c.curriculo_version_id = ar.version_id
+            WHERE ar.id = NEW.area_id AND c.anio_escolar_id = v_anio AND c.colegio_id = NEW.colegio_id
+              AND ar.nivel = SUBSTRING_INDEX(v_grado, '_', 1)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el lote es de una seccion y un area del anio del periodo';
+    END IF;
+    IF NOT cc_docente_de_area(NEW.creado_por, NEW.seccion_id, NEW.area_id)
+            OR NOT cc_sesion_abierta(NEW.sesion_id, NEW.creado_por, NEW.colegio_id)
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('lote_calificacion:', NEW.periodo_id, ':', NEW.seccion_id, ':',
+                NEW.area_id, ':', NEW.secuencia), NEW.creado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el lote lo guarda el docente del area con su sesion y su firma';
+    END IF;
+    IF NOT (NEW.secuencia <=> (SELECT COALESCE(MAX(l.secuencia), 0) + 1 FROM lote_calificacion l
+            WHERE l.periodo_id = NEW.periodo_id AND l.seccion_id = NEW.seccion_id AND l.area_id = NEW.area_id
+              AND l.colegio_id = NEW.colegio_id)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la secuencia del lote es la siguiente';
+    END IF;
+    IF NOT ((v_estado <=> 'ABIERTO' AND v_inicio <= cc_hoy_lima() AND NEW.solicitud_id IS NULL)
+            OR (v_estado <=> 'CERRADO' AND NEW.solicitud_id IS NOT NULL AND cc_solicitud_firmada(NEW.solicitud_id)
+                AND EXISTS (SELECT 1 FROM solicitud_cambio s
+                    JOIN asignacion_docente a ON a.id = s.entidad_id AND a.colegio_id = s.colegio_id
+                    JOIN firma_operacion f ON f.colegio_id = s.colegio_id
+                        AND f.clave = CONCAT('solicitud_cambio:', s.id, ':APROBADA')
+                    WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id AND s.tipo = 'CALIFICACION_TARDIA'
+                      AND s.entidad = 'asignacion_docente' AND a.seccion_id = NEW.seccion_id
+                      AND s.solicitado_por = NEW.creado_por
+                      AND JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.periodo_id')) <=> CAST(NEW.periodo_id AS CHAR)
+                      AND JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.area_id')) <=> CAST(NEW.area_id AS CHAR)
+                      AND f.firmada_bd >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 48 HOUR))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el periodo esta cerrado: la nota va por solicitud';
+    END IF;
+    SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+END$$
+
+-- Cada nota (el control central del sprint 10). Común: la matrícula es del alumno, ACTIVA o RESERVADA (C1: la impaga
+-- recibe nota igual) y en la sección; sección y periodo del año; la competencia es de la versión del año, del nivel y del
+-- grado (solo_grados); sin exoneración del área que rija desde un periodo de número menor o igual (A3); la conclusión que
+-- exige la escala o el colegio, de hasta conclusion_max, con su SHA-256 calculado por la base. Cadena: reemplaza a la
+-- vigente del mismo periodo, matrícula y competencia, y algo cambia. Por origen: REGISTRO y CAMBIO_ABIERTO, de un lote del
+-- periodo ABIERTO de ese docente (10 minutos); REGISTRO_TARDIO, de un lote con su CALIFICACION_TARDIA; CORRECCION_APROBADA,
+-- con el periodo CERRADO, su solicitud firmada en la misma transacción por otra persona de Dirección o Promotoría que no la
+-- pidió ni registró la reemplazada, pedida por el docente del área o Dirección, y lo que entra es lo aprobado: el nivel, la
+-- huella y, con borrador, el texto del borrador de esa misma nota (M8).
+DROP TRIGGER IF EXISTS trg_calificacion_nace$$
+CREATE TRIGGER trg_calificacion_nace BEFORE INSERT ON calificacion FOR EACH ROW
+BEGIN
+    DECLARE v_estado VARCHAR(10); DECLARE v_numero INT; DECLARE v_grado VARCHAR(20); DECLARE v_version BIGINT;
+    DECLARE v_max INT; DECLARE v_siempre BOOLEAN; DECLARE v_area BIGINT;
+    DECLARE v_ant_por VARCHAR(60);
+    DECLARE v_lote_por VARCHAR(60); DECLARE v_lote_solicitud BIGINT; DECLARE v_lote_bd DATETIME(6);
+    DECLARE v_datos VARCHAR(2000);
+    SET NEW.conclusion_sha256 = CASE WHEN NEW.conclusion IS NULL THEN NULL ELSE SHA2(NEW.conclusion, 256) END;
+    SET v_estado = (SELECT p.estado FROM periodo_evaluacion p WHERE p.id = NEW.periodo_id AND p.colegio_id = NEW.colegio_id
+        AND p.anio_escolar_id = NEW.anio_escolar_id);
+    SET v_numero = (SELECT p.numero FROM periodo_evaluacion p WHERE p.id = NEW.periodo_id AND p.colegio_id = NEW.colegio_id);
+    SET v_grado = (SELECT s.grado FROM seccion s WHERE s.id = NEW.seccion_id AND s.colegio_id = NEW.colegio_id
+        AND s.anio_escolar_id = NEW.anio_escolar_id);
+    SET v_version = (SELECT c.curriculo_version_id FROM configuracion_evaluacion c
+        WHERE c.anio_escolar_id = NEW.anio_escolar_id AND c.colegio_id = NEW.colegio_id);
+    SET v_max = (SELECT c.conclusion_max FROM configuracion_evaluacion c
+        WHERE c.anio_escolar_id = NEW.anio_escolar_id AND c.colegio_id = NEW.colegio_id);
+    SET v_siempre = (SELECT c.conclusion_siempre FROM configuracion_evaluacion c
+        WHERE c.anio_escolar_id = NEW.anio_escolar_id AND c.colegio_id = NEW.colegio_id);
+    SET v_area = (SELECT k.area_id FROM competencia k JOIN area_curricular ar ON ar.id = k.area_id
+        WHERE k.id = NEW.competencia_id AND k.version_id <=> v_version AND ar.nivel = SUBSTRING_INDEX(v_grado, '_', 1)
+          AND (k.solo_grados IS NULL OR FIND_IN_SET(v_grado, k.solo_grados) > 0));
+    IF v_estado IS NULL OR v_grado IS NULL OR v_area IS NULL
+            OR NOT EXISTS (SELECT 1 FROM matricula m WHERE m.id = NEW.matricula_id AND m.colegio_id = NEW.colegio_id
+                AND m.alumno_id = NEW.alumno_id AND m.seccion_id = NEW.seccion_id
+                AND m.anio_escolar_id = NEW.anio_escolar_id AND m.estado IN ('ACTIVA', 'RESERVADA')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la nota es de un alumno matriculado en la seccion y de una competencia de su grado';
+    END IF;
+    IF EXISTS (SELECT 1 FROM exoneracion_area e JOIN periodo_evaluacion d ON d.id = e.desde_periodo_id
+            AND d.colegio_id = e.colegio_id
+            WHERE e.matricula_id = NEW.matricula_id AND e.colegio_id = NEW.colegio_id AND e.area_id = v_area
+              AND d.numero <= v_numero) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el alumno esta exonerado del area';
+    END IF;
+    IF NEW.nivel_logro IS NOT NULL AND NEW.conclusion IS NULL AND (v_siempre OR EXISTS (SELECT 1 FROM escala_logro x
+            WHERE x.version_id = v_version AND x.nivel = SUBSTRING_INDEX(v_grado, '_', 1) AND x.valor = NEW.nivel_logro
+              AND x.exige_conclusion)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la norma exige la conclusion descriptiva para ese nivel de logro';
+    END IF;
+    IF NEW.conclusion IS NOT NULL AND NOT (CHAR_LENGTH(NEW.conclusion) <= v_max) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la conclusion pasa el largo maximo del colegio';
+    END IF;
+    IF NEW.reemplaza_id IS NOT NULL THEN
+        SET v_ant_por = (SELECT a.creado_por FROM calificacion a WHERE a.id = NEW.reemplaza_id
+            AND a.colegio_id = NEW.colegio_id AND a.periodo_id = NEW.periodo_id AND a.matricula_id = NEW.matricula_id
+            AND a.competencia_id = NEW.competencia_id
+            AND NOT (a.nivel_logro <=> NEW.nivel_logro AND a.conclusion_sha256 <=> NEW.conclusion_sha256));
+        IF v_ant_por IS NULL OR EXISTS (SELECT 1 FROM calificacion x WHERE x.reemplaza_id = NEW.reemplaza_id) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la nota reemplaza a la vigente de ese alumno y competencia, y cambia algo';
+        END IF;
+    END IF;
+    IF NEW.origen IN ('REGISTRO', 'CAMBIO_ABIERTO', 'REGISTRO_TARDIO') THEN
+        SET v_lote_por = (SELECT l.creado_por FROM lote_calificacion l WHERE l.id = NEW.lote_id
+            AND l.colegio_id = NEW.colegio_id AND l.periodo_id = NEW.periodo_id AND l.seccion_id = NEW.seccion_id
+            AND l.area_id = v_area);
+        SET v_lote_solicitud = (SELECT l.solicitud_id FROM lote_calificacion l WHERE l.id = NEW.lote_id
+            AND l.colegio_id = NEW.colegio_id);
+        SET v_lote_bd = (SELECT l.registrado_bd FROM lote_calificacion l WHERE l.id = NEW.lote_id
+            AND l.colegio_id = NEW.colegio_id);
+        IF v_lote_por IS NULL OR NOT (NEW.creado_por <=> v_lote_por)
+                OR NOT (v_lote_bd >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 10 MINUTE)
+                OR (NEW.origen IN ('REGISTRO', 'CAMBIO_ABIERTO') AND NOT (v_estado <=> 'ABIERTO' AND v_lote_solicitud IS NULL))
+                OR (NEW.origen = 'REGISTRO_TARDIO' AND NOT (v_estado <=> 'CERRADO' AND v_lote_solicitud IS NOT NULL)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el periodo esta cerrado: la nota va por solicitud';
+        END IF;
+    ELSE
+        IF NOT (v_estado <=> 'CERRADO') OR NOT cc_solicitud_firmada(NEW.solicitud_id)
+                OR NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id
+                    AND s.colegio_id = NEW.colegio_id AND s.tipo = 'CORRECCION_CALIFICACION' AND s.entidad = 'calificacion'
+                    AND s.entidad_id = NEW.reemplaza_id AND NEW.creado_por <=> s.resuelto_por
+                    AND NOT (s.resuelto_por <=> s.solicitado_por) AND NOT (s.resuelto_por <=> v_ant_por)
+                    AND cc_firma_valida(s.colegio_id, CONCAT('solicitud_cambio:', s.id, ':APROBADA'), s.resuelto_por)
+                    AND (cc_rol_activo(s.colegio_id, s.resuelto_por, 'DIRECTOR')
+                        OR cc_rol_activo(s.colegio_id, s.resuelto_por, 'PROMOTOR'))
+                    AND (cc_docente_de_area(s.solicitado_por, NEW.seccion_id, v_area)
+                        OR cc_rol_activo(s.colegio_id, s.solicitado_por, 'DIRECTOR'))) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la correccion de una nota la aprueba otra persona con su firma';
+        END IF;
+        SET v_datos = (SELECT s.datos FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id);
+        IF NOT ((CASE WHEN JSON_TYPE(JSON_EXTRACT(v_datos, '$.nivel')) <=> 'NULL' THEN NULL
+                    ELSE JSON_UNQUOTE(JSON_EXTRACT(v_datos, '$.nivel')) END) <=> NEW.nivel_logro)
+                OR NOT ((CASE WHEN JSON_TYPE(JSON_EXTRACT(v_datos, '$.conclusion_sha256')) <=> 'NULL' THEN NULL
+                    ELSE JSON_UNQUOTE(JSON_EXTRACT(v_datos, '$.conclusion_sha256')) END) <=> NEW.conclusion_sha256)
+                OR (JSON_EXTRACT(v_datos, '$.borrador_id') IS NULL AND NEW.conclusion IS NOT NULL)
+                OR (JSON_EXTRACT(v_datos, '$.borrador_id') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM borrador_conclusion b
+                    WHERE b.id = CAST(JSON_UNQUOTE(JSON_EXTRACT(v_datos, '$.borrador_id')) AS UNSIGNED)
+                      AND b.colegio_id = NEW.colegio_id AND b.calificacion_id = NEW.reemplaza_id
+                      AND b.sha256 <=> NEW.conclusion_sha256)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la correccion no es la que se aprobo';
+        END IF;
+    END IF;
+    SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+END$$
+
+-- La exoneración (Religión o Educación Física): el área es exonerable, de la versión del año y del nivel de la sección de
+-- la matrícula, que está ACTIVA o RESERVADA en ese año; rige desde un periodo ABIERTO del año (A3: las notas anteriores
+-- quedan); la autoriza Dirección con su firma (exoneracion_area:{matricula}:{area}:AUTORIZADA).
+DROP TRIGGER IF EXISTS trg_exoneracion_area_nace$$
+CREATE TRIGGER trg_exoneracion_area_nace BEFORE INSERT ON exoneracion_area FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM matricula m JOIN seccion s ON s.id = m.seccion_id AND s.colegio_id = m.colegio_id
+            JOIN configuracion_evaluacion c ON c.anio_escolar_id = m.anio_escolar_id AND c.colegio_id = m.colegio_id
+            JOIN area_curricular ar ON ar.version_id = c.curriculo_version_id
+            WHERE m.id = NEW.matricula_id AND m.colegio_id = NEW.colegio_id AND m.anio_escolar_id = NEW.anio_escolar_id
+              AND m.estado IN ('ACTIVA', 'RESERVADA') AND ar.id = NEW.area_id AND ar.exonerable
+              AND ar.nivel = SUBSTRING_INDEX(s.grado, '_', 1)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el area no es exonerable para esa matricula';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM periodo_evaluacion p WHERE p.id = NEW.desde_periodo_id AND p.colegio_id = NEW.colegio_id
+            AND p.anio_escolar_id = NEW.anio_escolar_id AND p.estado = 'ABIERTO') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la exoneracion rige desde un periodo abierto';
+    END IF;
+    IF NOT cc_rol_activo(NEW.colegio_id, NEW.autorizado_por, 'DIRECTOR')
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('exoneracion_area:', NEW.matricula_id, ':', NEW.area_id,
+                ':AUTORIZADA'), NEW.autorizado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la exoneracion la autoriza Direccion con su firma';
+    END IF;
+END$$
+
+-- M8: el borrador de la conclusión de una corrección lo escribe el docente del área de esa nota en su sección o Dirección,
+-- con su sesión, y solo con el periodo de la nota CERRADO (con el periodo abierto, la nota se cambia en la hoja). La base
+-- calcula el SHA-256 (el que llevará la solicitud).
+DROP TRIGGER IF EXISTS trg_borrador_conclusion_nace$$
+CREATE TRIGGER trg_borrador_conclusion_nace BEFORE INSERT ON borrador_conclusion FOR EACH ROW
+BEGIN
+    DECLARE v_seccion BIGINT; DECLARE v_area BIGINT; DECLARE v_estado VARCHAR(10);
+    SET v_seccion = (SELECT c.seccion_id FROM calificacion c WHERE c.id = NEW.calificacion_id
+        AND c.colegio_id = NEW.colegio_id);
+    SET v_area = (SELECT k.area_id FROM calificacion c JOIN competencia k ON k.id = c.competencia_id
+        WHERE c.id = NEW.calificacion_id AND c.colegio_id = NEW.colegio_id);
+    SET v_estado = (SELECT p.estado FROM calificacion c JOIN periodo_evaluacion p ON p.id = c.periodo_id
+        AND p.colegio_id = c.colegio_id WHERE c.id = NEW.calificacion_id AND c.colegio_id = NEW.colegio_id);
+    IF NOT (v_estado <=> 'CERRADO') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el borrador es de una nota de un periodo cerrado';
+    END IF;
+    IF NOT cc_sesion_abierta(NEW.sesion_id, NEW.creado_por, NEW.colegio_id)
+            OR NOT (cc_docente_de_area(NEW.creado_por, v_seccion, v_area)
+                OR cc_rol_activo(NEW.colegio_id, NEW.creado_por, 'DIRECTOR')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el borrador lo escribe el docente del area o Direccion, con su sesion';
+    END IF;
+    SET NEW.sha256 = SHA2(NEW.texto, 256);
 END$$
 DELIMITER ;

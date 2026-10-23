@@ -139,6 +139,32 @@ class VerificadorPermisosBaseDatosTest {
 		}
 	}
 
+	/** Sprint 10, tanda 2 (E7): si cc_app pudiera editar o borrar una nota, un lote, una exoneración o un borrador, prod no arranca. */
+	@Test
+	void fallaSiSePuedeEditarOBorrarUnaNota() {
+		for (String[] caso : new String[][] {
+				{ "UPDATE calificacion SET version = version WHERE 1 = 0", "calificacion se podrían editar" },
+				{ "DELETE FROM calificacion WHERE 1 = 0", "calificacion se podrían borrar" },
+				{ "UPDATE lote_calificacion SET version = version WHERE 1 = 0", "lote_calificacion se podrían editar" },
+				{ "UPDATE exoneracion_area SET version = version WHERE 1 = 0", "exoneracion_area se podrían editar" },
+				{ "UPDATE borrador_conclusion SET version = version WHERE 1 = 0", "borrador_conclusion se podrían editar" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+	}
+
+	/** Sprint 10, tanda 2 (E4): una corrección sin solicitud firmada debe llegar a su trigger (1644); si llega a la FK, falta. */
+	@Test
+	void fallaSiFaltaElTriggerDeLasNotas() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doThrow(denegado(1452)).when(mysql).update(VerificadorPermisosBaseDatos.CORRECCION_SIN_SOLICITUD_IMPOSIBLE);
+
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("trg_calificacion_nace");
+	}
+
 	/** Sprint 10, tanda 1 (E41): un periodo que nace CERRADO debe llegar a su trigger (1644); si llega a la FK, falta. */
 	@Test
 	void fallaSiFaltaElTriggerDeLosPeriodos() {
@@ -241,7 +267,8 @@ class VerificadorPermisosBaseDatosTest {
 					+ "resumen_diario|llamada_control|muestra_llamada|delegacion_llamada|configuracion_colegio|respaldo|"
 					+ "firma_operacion|acceso_dato_personal|registro_asistencia|marca_asistencia|consentimiento_aviso|"
 					+ "aviso_asistencia_corte|comunicado_adjunto|confirmacion_lectura|exportacion_nomina|asignacion_area|"
-					+ "competencia|escala_logro|curriculo_version|area_curricular) ");
+					+ "competencia|escala_logro|curriculo_version|area_curricular|calificacion|lote_calificacion|exoneracion_area|"
+					+ "borrador_conclusion) ");
 
 	/** Sprint 10, tanda 1 (E12): el catálogo nacional no tiene GRANT de escritura: cc_app no inserta (1142). */
 	private static final java.util.regex.Pattern CATALOGO = java.util.regex.Pattern
@@ -721,7 +748,8 @@ class VerificadorPermisosBaseDatosTest {
 		// los mismos 82 (los dos del respaldo cambian de versión).
 		// Sprint 9: 88 (tanda 1), 93 (tanda 2) y 98 (tanda 3: comunicados, destinatarios, confirmación y nómina).
 		// Sprint 10, tanda 1 (V35): 104 (la evaluación del año, los periodos y las áreas de cada asignación).
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(104);
+		// Sprint 10, tanda 2 (V36): 108 (los lotes, las notas, las exoneraciones y los borradores de conclusión).
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(108);
 	}
 
 	/**
