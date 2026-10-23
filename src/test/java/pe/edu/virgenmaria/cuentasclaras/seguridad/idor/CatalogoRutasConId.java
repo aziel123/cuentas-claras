@@ -273,6 +273,7 @@ final class CatalogoRutasConId {
 		r("GET /academico/siagie/nomina", "seccion", Recurso.SECCION);
 		r("POST /alumnos/{id:\\d+}/datos-siagie", "id", Recurso.ALUMNO);
 		// Sprint 10, tanda 1: la evaluación del año y los periodos (?anio=, el formulario y cada periodo por su id).
+		r("GET /academico/curriculo/{codigo:[A-Z0-9.-]{4,40}}", "codigo", Recurso.CATALOGO);
 		r("GET /academico/evaluacion/configuracion", "anio", Recurso.ANIO);
 		r("POST /academico/evaluacion/configuracion", "anioId", Recurso.ANIO, "curriculoVersionId", Recurso.CATALOGO);
 		r("GET /academico/periodos", "anio", Recurso.ANIO);

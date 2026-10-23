@@ -34,10 +34,10 @@ import java.util.stream.Collectors;
  * Sprint 10, tanda 1 (sección 3.2 y contrato de la sección 6 del brief): la lectura del catálogo nacional. Nada de la norma
  * está escrito en Java: las áreas, las competencias (con {@code solo_grados}), su orden y qué valor de la escala exige
  * conclusión salen de la base, de la versión que eligió el colegio para el año. Solo lectura: el catálogo no tiene datos
- * personales y lo ve todo el personal (también {@code sistema.academico}).
+ * personales y lo ven Promotoría, Dirección, Administración, los docentes y {@code sistema.academico} (Caja no).
  */
 @Service
-@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','CAJA','DOCENTE','SISTEMA_ACADEMICO')")
+@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','DOCENTE','SISTEMA_ACADEMICO')")
 @Transactional(readOnly = true)
 public class Catalogo {
 

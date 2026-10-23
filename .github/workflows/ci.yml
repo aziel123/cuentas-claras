@@ -325,7 +325,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V34): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V35): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -366,6 +366,9 @@ jobs:
 
       - name: "Sprint 9, tanda 3: un comunicado lo envía una persona con su rol real, su sesión y su firma; no se edita ni se borra; la huella la recalcula la base; sin caracteres invisibles ni cobranza; el PDF que requiere revisión lo aprueba el otro órgano; la fe de erratas llega a todos los del original; la familia confirma con su sesión; la nómina, Dirección con su sesión (E16 a E24, E28, E29, E37, E40, E43, E45, B1 a B4, B6, B7, B9, B13 a B15)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint9ComunicadosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 10, tanda 1: el catálogo nacional no se escribe ni con cc_app ni con cc_sistema y no admite el separador de su huella; la evaluación del año la guarda solo Dirección con su firma y queda fija con un periodo abierto; un periodo nace PROGRAMADO, dentro del año y en orden, abre el sistema en su fecha y lo cierra solo Dirección desde fin − 7 según la hora de la base, sin reabrirse; en ABIERTO el fin solo se extiende; las áreas de una asignación van en su propuesta y son las aprobadas (E9 a E12, E24, E25, E41, A2, M7, B13)"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint10CurriculoMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint6MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
@@ -828,11 +831,30 @@ jobs:
           comprobar 1644 "INSERT INTO comunicado (colegio_id, anio_escolar_id, tipo, emisor_usuario_id, emisor_rol, emisor_etiqueta, alcance, titulo, cuerpo, huella_contenido, estado, enviado_en, sesion_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'NORMAL', 0, 'DIRECCION', 'ci', 'COLEGIO', 'Comunicado ci', 'Comunicado del CI', REPEAT('0', 64), 'ENVIADO', NOW(6), 0, NOW(6), 'ci', NOW(6))"
           comprobar 1644 "INSERT INTO exportacion_nomina (colegio_id, anio_escolar_id, seccion_id, perfil, filas, faltantes, codigo, sha256, sesion_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 'SIAGIE_MATRICULA_PROVISIONAL', 0, 0, 'CI-0001', REPEAT('0', 64), 0, NOW(6), 'ci', NOW(6))"
           comprobar_sistema 1644 "INSERT INTO mensaje (colegio_id, clave, tipo, canal, destinatario_tipo, familia_id, apoderado_id, destino, plantilla, parametros, estado, creado_en, creado_por, actualizado_en) VALUES (0, 'ci-comunicados', 'COMUNICADOS_RESUMEN', 'CORREO', 'APODERADO', 0, 0, 'x@y.pe', 'cc_comunicados_v2', 'Colegio ci\n2 comunicados. Debe S/ 350.00', 'PENDIENTE', NOW(6), 'sistema.comunicados', NOW(6))"
-          # Huellas (H7): cc_app ve las de los 99 triggers y las 14 funciones con huellas_objetos() (correcciones del sprint 9).
+          # Sprint 10, tanda 1 (V35, E12, B15, E41): el catálogo nacional no se escribe con cc_app ni con cc_sistema (1142);
+          # asignacion_area es de solo inserción y nada se borra (1142); el número de un periodo y el año de la configuración
+          # no cambian (1143); un periodo del colegio 0 que nace CERRADO lo rechaza su trigger (1644).
+          for sentencia in "INSERT INTO competencia (version_id, area_id, codigo, nombre, orden) VALUES (0, 0, 'PRI-XX-1', 'CI', 1)" \
+              "UPDATE competencia SET nombre = nombre WHERE 1 = 0" "UPDATE escala_logro SET descripcion = descripcion WHERE 1 = 0" \
+              "INSERT INTO curriculo_version (codigo, nombre, normas, vigente_desde, creado_en) VALUES ('CI-0000', 'Version CI', 'Ninguna', '2000-01-01', NOW(6))" \
+              "UPDATE curriculo_version SET nombre = nombre WHERE 1 = 0" \
+              "INSERT INTO area_curricular (version_id, nivel, codigo, nombre, orden) VALUES (0, 'PRIMARIA', 'XX', 'Area CI', 1)" \
+              "UPDATE area_curricular SET nombre = nombre WHERE 1 = 0" "DELETE FROM competencia WHERE 1 = 0"; do
+            comprobar 1142 "$sentencia"
+            comprobar_sistema 1142 "$sentencia"
+          done
+          comprobar 1142 "UPDATE asignacion_area SET version = version WHERE 1 = 0"
+          for tabla in asignacion_area periodo_evaluacion configuracion_evaluacion; do
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          comprobar 1143 "UPDATE periodo_evaluacion SET numero = numero WHERE 1 = 0"
+          comprobar 1143 "UPDATE configuracion_evaluacion SET anio_escolar_id = anio_escolar_id WHERE 1 = 0"
+          comprobar 1644 "INSERT INTO periodo_evaluacion (colegio_id, anio_escolar_id, numero, nombre, inicio, fin, estado, abierto_por, abierto_en, cerrado_por, cerrado_en, actualizado_por, creado_en, creado_por, actualizado_en) VALUES (0, 0, 1, 'I bimestre', '2000-03-01', '2000-05-01', 'CERRADO', 'ci', NOW(6), 'ci', NOW(6), 'ci', NOW(6), 'ci', NOW(6))"
+          # Huellas (H7): cc_app ve las de los 104 triggers y las 15 funciones con huellas_objetos() (sprint 10, tanda 1).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
-          [ "$objetos" = "$((esperados + 14))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
-          [ "$objetos" = "113" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y las correcciones del sprint 9 dejan 113"; exit 1; }
-          [ "$esperados" = "99" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y las correcciones del sprint 9 dejan 99"; exit 1; }
+          [ "$objetos" = "$((esperados + 15))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
+          [ "$objetos" = "119" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y la tanda 1 del sprint 10 deja 119"; exit 1; }
+          [ "$esperados" = "104" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 1 del sprint 10 deja 104"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -875,7 +897,9 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 99 triggers y las 14 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 104 triggers y las 15 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          # Sprint 10, tanda 1 (E13, M10): prod verificó el catálogo del currículo en las dos direcciones.
+          grep -q "logo del curr.culo verificado" prod.log || { cat prod.log; exit 1; }
           # Sprint 8, tanda 2 (sección 3.6): los conectores (GRANT por columna y triggers) y la clave que descifra todos
           # sus secretos (los que dejaron las pruebas, cifrados con CC_CLAVE_CONECTORES).
           grep -q "Permisos y triggers de los conectores por colegio verificados" prod.log || { cat prod.log; exit 1; }
@@ -1220,7 +1244,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V34, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V35, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \
@@ -1294,6 +1318,9 @@ jobs:
 
       - name: "Sprint 9, tanda 2 (H13): un DBA borra una marca de asistencia de UN colegio: el respaldo avisa «faltan filas» solo a ese colegio"
         run: sh scripts/respaldo/pruebas-ci.sh faltan-filas-asistencia
+
+      - name: "Sprint 10, tanda 1: un DBA borra un área de una asignación de UN colegio: el respaldo avisa «faltan filas» solo a ese colegio"
+        run: sh scripts/respaldo/pruebas-ci.sh faltan-filas-areas
 
   imagen:
     name: Imagen en GHCR por el SHA del commit, con su SBOM (solo main)

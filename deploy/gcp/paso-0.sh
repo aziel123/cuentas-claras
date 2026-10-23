@@ -1,5 +1,5 @@
 #!/bin/sh
-# Cuentas Claras · «PASO 0» (sección 6.6 del diseño): ¿acepta Cloud SQL para MySQL 8.4 los 99 triggers, las 14 funciones,
+# Cuentas Claras · «PASO 0» (sección 6.6 del diseño): ¿acepta Cloud SQL para MySQL 8.4 los 104 triggers, las 15 funciones,
 # el rol cc_negocio, permisos_objetos() (lee mysql.*), el TLS sin proxy y el arranque de prod? Corre el job «mysql» del CI
 # COMPLETO contra una instancia de PRUEBA, más las comprobaciones a mano de la sección 6.6 y un respaldo con su
 # restauración. Si algo falla, se cambia de proveedor ANTES de desplegar (AWS RDS en sa-east-1).
@@ -132,7 +132,7 @@ probar)
 				java -jar target/cuentas-claras-*.jar --server.port=18099 > /resultados/prod-tls.log 2>&1 &
 			for i in $(seq 1 90); do curl -sf http://127.0.0.1:18099/actuator/health | grep -q UP && break; sleep 2; done
 			kill %1 || true
-			for linea in "Huellas de los 99 triggers y las 14 funciones verificadas" "Conexiones a MySQL cifradas (TLS) verificadas" \
+			for linea in "Huellas de los 104 triggers y las 15 funciones verificadas" "Conexiones a MySQL cifradas (TLS) verificadas" \
 					"Privilegios verificados"; do
 				grep -q "$linea" /resultados/prod-tls.log || { echo "ERROR: falta «$linea» (ver prod-tls.log)"; exit 1; }
 				echo "OK: $linea"

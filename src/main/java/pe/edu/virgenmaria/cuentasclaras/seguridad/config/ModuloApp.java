@@ -185,12 +185,12 @@ public enum ModuloApp {
 	PERIODOS("Periodos de evaluación", "Programa los bimestres del año, ábrelos antes de tiempo si hace falta y ciérralos "
 			+ "con tu firma. Un periodo cerrado no se reabre.", "Sprint 10", true, "/academico/periodos",
 			new String[] { "/academico/periodos", "/academico/periodos/**" }, EnumSet.of(DIRECTOR)),
-	// Sprint 10, tanda 1: el catálogo nacional del currículo, de solo lectura, para todo el personal (sin datos personales).
-	// Va ANTES que ACADEMICO.
+	// Sprint 10, tanda 1: el catálogo nacional del currículo, de solo lectura, para el personal académico y de gobierno (sin
+	// datos personales). Caja no: solo entra a caja (mínimo acceso). Va ANTES que ACADEMICO.
 	CURRICULO("Currículo nacional", "Las áreas, competencias y la escala de calificación del Currículo Nacional, de solo "
 			+ "lectura.", "Sprint 10", true, "/academico/curriculo",
 			new String[] { "/academico/curriculo", "/academico/curriculo/**" }, EnumSet.of(PROMOTOR, DIRECTOR,
-					ADMINISTRACION, CAJA, DOCENTE)),
+					ADMINISTRACION, DOCENTE)),
 	// Sprint 9, tanda 1: el docente ve sus secciones y los nombres de sus alumnos (nunca deudas, pagos, documentos ni
 	// contactos); Dirección, todas las secciones. Promotoría no ve las listas por alumno (decisión 143).
 	ACADEMICO("Académico", "Tus secciones y la lista de tus alumnos. Nunca muestra deudas, pagos, documentos ni contactos.",

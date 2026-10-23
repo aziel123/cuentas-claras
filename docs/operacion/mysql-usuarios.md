@@ -220,6 +220,19 @@ calza una palabra ambigua (cancelar, «al día con», abono, saldo, regularizar,
 clara de `trg_mensaje_nace` ya no tiene las ambiguas: el aviso de un comunicado aprobado con «cancelar la reunión» sale.
 Prod: «Huellas de los 99 triggers y las 14 funciones verificadas». Una base existente: solo `03`.
 
+**Sprint 10, tanda 1 (V35): 104 triggers y 15 funciones con huella (119).** El catálogo nacional del currículo
+(`curriculo_version`, `area_curricular`, `competencia` y `escala_logro`, sin `colegio_id`) **no tiene ningún GRANT de
+escritura**: solo `cc_migrador` lo inserta con su migración; `cc_app` y `cc_sistema` lo leen con el SELECT de siempre (1142
+al escribir). Su huella la verifica la aplicación al arrancar y a diario contra `curriculo/{codigo}.sha256` del jar, en las
+dos direcciones: en prod, si un DBA cambia una competencia o mete una versión sin su archivo, no arranca («El catálogo
+CNEB-2016.1 no coincide con el del jar»). `configuracion_evaluacion` y `periodo_evaluacion`: INSERT y UPDATE por columna
+(sin el colegio, el año, el número ni quién los creó: 1143), sin DELETE; `asignacion_area`: solo INSERT (está en
+`tablas-vigiladas.txt`). Nuevos: la función `cc_rol_activo`, `trg_configuracion_evaluacion_nace` y `_cambio`,
+`trg_periodo_evaluacion_nace` y `_cambio` (el cierre lo decide la hora de Lima de la base) y `trg_asignacion_area_nace`;
+versión nueva de `trg_asignacion_docente_estado` (al aprobar, las áreas son las de la solicitud). Prod: «Huellas de los 104
+triggers y las 15 funciones verificadas» y «Catálogo del currículo verificado». Una base existente: `migrar`, `02` y `03`,
+en ese orden y con la aplicación detenida; no hay usuarios nuevos.
+
 **Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
 van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
 custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra

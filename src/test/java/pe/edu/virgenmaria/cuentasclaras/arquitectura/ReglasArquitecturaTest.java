@@ -521,7 +521,7 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".academico.curriculo.service.IntegridadCatalogo", "hasRole('SISTEMA_ACADEMICO')"),
 			Map.entry(BASE + ".academico.curriculo.service.AlertasCatalogo", ALERTAS),
 			Map.entry(BASE + ".academico.curriculo.service.Catalogo",
-					"hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','CAJA','DOCENTE','SISTEMA_ACADEMICO')"));
+					"hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','DOCENTE','SISTEMA_ACADEMICO')"));
 
 	/**
 	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para

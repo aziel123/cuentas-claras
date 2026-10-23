@@ -19,6 +19,20 @@
 8. **Nómina para el SIAGIE** (*Académico → SIAGIE*): registra el código modular de cada nivel, completa el sexo y el
    código del estudiante en la ficha de quien falte y descarga la nómina **provisional** de cada sección para copiarla en
    la plantilla oficial del SIAGIE. Cada descarga queda en la bitácora con su código.
+9. **Evaluación del año** (sprint 10, *Evaluación → Evaluación del año*): antes del primer bimestre elige la versión del
+   Currículo Nacional (CNEB-2016.1), cómo se divide el año (bimestres por defecto; trimestres o semestres), desde cuántos días
+   antes del fin puedes cerrar cada periodo (7 por defecto), el largo de la conclusión descriptiva, la lengua materna y, si
+   quieres, la DRE y la UGEL de la libreta. Se guarda con tu firma. **Desde que abre el primer periodo**, la versión, el
+   tipo de periodo y los días de cierre ya no cambian. Nada de esto depende de los pagos de la familia.
+10. **Periodos** (*Evaluación → Periodos de evaluación*): programa los bimestres en orden, dentro de las clases del año y sin
+    que se solapen. Cada uno **abre solo** en su fecha de inicio (a las 6:00); si hace falta, ábrelo antes con tu firma. Lo
+    **cierras tú**, con tu firma, desde 7 días antes de su fin y después de cerrar el anterior. **Un periodo cerrado no se
+    reabre.** Con el periodo abierto puedes **extender** su fin, nunca adelantarlo.
+11. **Áreas de cada docente** (*Configuración → Docentes y secciones*): al proponer una asignación de tutor o de área, marca
+    las áreas del currículo que calificará (al tutor de Inicial o Primaria, «Todas las áreas del grado»). Las áreas se
+    aprueban con la asignación y nadie las agrega después; para cambiarlas, propón otra igual con las nuevas: al aprobarla,
+    la anterior termina sola. Las asignaciones del sprint 9 sin áreas salen en «Asignaciones sin áreas del catálogo»:
+    esas personas marcan asistencia, pero no califican hasta que las vuelvas a proponer.
 
 ## Lo que el sistema no te deja hacer, y por qué
 - **Aprobar algo que pediste o en lo que participaste:** el botón no aparece («La resuelve otra persona»), ni en la computadora ni en el celular.

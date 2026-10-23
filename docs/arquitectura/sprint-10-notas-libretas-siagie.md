@@ -415,7 +415,7 @@ versión nueva); tanda 2, **108, 16 y 124** (+`trg_borrador_conclusion_nace`); t
 | M9 | Medio | Revisar la decisión 177: sin el tutor, imprimir las libretas recaía en Dirección, y el DNI no hacía falta | La libreta muestra el **código de estudiante**, y el DNI solo si no hay código; **el tutor imprime las de su sección** (`entrega_libreta` IMPRESA a su nombre: `trg_entrega_libreta_nace` acepta al TUTOR VIGENTE de la sección); en Inicial, canal **`ENTREVISTA`** (tutor o Dirección) | 3 | MySQL `m9TutorImprimeSoloSuSeccion`; H2 `LibretaPdfTest.codigoAntesQueDni` |
 | M10 | Medio | El verificador solo miraba las versiones del jar: una versión metida en la base sin archivo pasaba | **Las dos direcciones:** cada versión de la base tiene su `.sha256` y cada `.sha256` su versión; además del arranque, `RevisionCatalogo` diaria (05:00) con alerta `INTEGRIDAD_CATALOGO` a Promotoría | 1 | H2 `VerificadorCatalogoCurriculoTest.versionSinArchivoFalla`, `.archivoSinVersionFalla`, `RevisionCatalogoTest` |
 | M11 | Medio | La regla de PDFBox por paquetes dejaba usar en la libreta cualquier clase (imágenes desde archivos, unir PDF, formularios) | `pdfboxEscribeSoloLaLibreta` es una **lista blanca**: `PDDocument` (constructor sin argumentos, `addPage`, `save`, `close`, `getDocumentInformation`), `PDPage`, `PDRectangle`, `PDPageContentStream`, `PDType0Font.load(PDDocument, InputStream, boolean)`, `PDFont`, `LosslessFactory.createFromImage`, `PDImageXObject` (solo como tipo), `PDDocumentInformation`, `MemoryUsageSetting` y `RandomAccessStreamCache`. **Prohibidos expresamente:** `PDImageXObject.createFrom*`, `PDFMergerUtility`, `importPage`, `PDAcroForm`, los paquetes `interactive.action` e `interactive.annotation` y `Loader`. Pruebas excluidas de forma explícita (`ImportOption.DoNotIncludeTests`) | 3 | H2 `ReglasArquitecturaTest.pdfboxEscribeSoloLaLibreta` (una clase de prueba por prohibición) |
-| M12 | Medio | La secretaria que carga en el SIAGIE no tenía acceso propio: usaría la cuenta de Dirección | Tabla **`delegacion_siagie`** (solo inserción): Dirección delega con su firma a una cuenta activa del personal (ADMINISTRACION o CAJA, no DOCENTE) por hasta 15 días (`trg_delegacion_siagie_nace`); `trg_exportacion_calificaciones_nace` acepta DIRECTOR o la delegada vigente, con su sesión; cada descarga, en `acceso_dato_personal` (`CALIFICACIONES_SIAGIE`) | 3 | MySQL `m12SinDelegacionFalla`, `m12DelegacionVencidaFalla`; H2 `DelegacionSiagieTest` |
+| M12 | Medio | La secretaria que carga en el SIAGIE no tenía acceso propio: usaría la cuenta de Dirección | Tabla **`delegacion_siagie`** (solo inserción): Dirección delega con su firma a una cuenta activa del personal **con ADMINISTRACION** (ni CAJA ni DOCENTE; ajuste del coordinador a la decisión 189, ver la nota debajo de la tabla de decisiones) por hasta 15 días (`trg_delegacion_siagie_nace`); `trg_exportacion_calificaciones_nace` acepta DIRECTOR o la delegada vigente, con su sesión; cada descarga, en `acceso_dato_personal` (`CALIFICACIONES_SIAGIE`) | 3 | MySQL `m12SinDelegacionFalla`, `m12DelegacionVencidaFalla`; H2 `DelegacionSiagieTest` |
 | B13 | Bajo | Una barra vertical o un salto de línea en un texto del catálogo alteraba la cadena de la huella | CHECK en `area_curricular.nombre`, `competencia.nombre`, `escala_logro.nombre` y `descripcion`: `INSTR(x, CHAR(124)) = 0 AND INSTR(x, CHAR(10)) = 0 AND INSTR(x, CHAR(13)) = 0` (H2 y MySQL) | 1 | MySQL `b13SeparadorEnElCatalogoFalla` (como `cc_migrador`, 3819) |
 | B14 | Bajo | `PortalSinFiltroDeDeudaTest` solo miraba interceptores y filtros | Cubre también `@ControllerAdvice`, `@ModelAttribute`, los fragmentos del layout de familias y la redirección después del login | 3 | H2 `PortalSinFiltroDeDeudaTest` (4 casos nuevos) |
 | B15 | Bajo | Al verificador de la tanda 1 le faltaban casos | 1142 en `DELETE FROM asignacion_area`, `DELETE FROM configuracion_evaluacion`, `INSERT` y `UPDATE` en `curriculo_version` y `area_curricular` | 1 | `VerificadorPermisosBaseDatosTest`; paso `comprobar` |
@@ -509,7 +509,8 @@ CREATE TABLE delegacion_siagie (
         AND creado_por NOT LIKE 'sistema%')
 );
 -- trg_delegacion_siagie_nace: DIRECTOR con firma delegacion_siagie:{usuario}:{desde}:DELEGADA; hasta <= desde + 15 días;
--- desde >= cc_hoy_lima(); la cuenta delegada está activa, sin apoderado, con ADMINISTRACION o CAJA y sin DOCENTE.
+-- desde >= cc_hoy_lima(); la cuenta delegada está activa, sin apoderado, con ADMINISTRACION, sin CAJA y sin DOCENTE
+-- (ajuste del coordinador a la decisión 189: quien cobra no recibe la nómina de calificaciones de los menores).
 -- trg_exportacion_calificaciones_nace: DIRECTOR, o una delegación con cc_hoy_lima() BETWEEN desde AND hasta.
 ```
 - **GRANT nuevos:** `INSERT` en `borrador_conclusion` (tanda 2) y en `delegacion_siagie` (tanda 3) para `cc_negocio`.
@@ -1552,9 +1553,16 @@ Valor por defecto entre corchetes. Sigue la numeración del sprint 9 (la última
 | 186 | Alerta de correcciones (**revisada por A5**) | **[A Promotoría siempre que una corrección suba el nivel o deje la competencia sin nota, y si una persona aprueba más de 5 en un periodo]** |
 | 187 | Demo |
 | 188 | Libreta cuya huella no coincide (A3) | **[Nunca «sin libreta»: alerta a Promotoría; el portal dice «en revisión, el colegio se la entrega a más tardar el {fecha}» (2 días hábiles); Dirección pide `REEMISION_LIBRETA`, la aprueba Promotoría y `sistema.libretas` emite la versión siguiente con la leyenda «Reemitida tras una revisión de integridad»]** |
-| 189 | Quién carga la exportación al SIAGIE (M12) | **[Dirección, o una persona del personal (ADMINISTRACION o CAJA) a quien Dirección delega con su firma por hasta 15 días; cada descarga con su sesión y en `acceso_dato_personal`]** |
+| 189 | Quién carga la exportación al SIAGIE (M12) (**ajustada por el coordinador**) | **[Dirección, o una persona de Administración (nunca de Caja ni un docente) a quien Dirección delega con su firma por hasta 15 días; cada descarga con su sesión y en `acceso_dato_personal`]** |
 | 190 | Exoneración desde cuándo (A3) | **[Desde el periodo ABIERTO al registrarla; los periodos anteriores conservan sus notas]** |
  **[I bimestre cerrado con libretas, II abierto, una corrección aprobada, la libreta de la familia demo y la exportación DEMO]** |
+
+> **Ajuste del coordinador a la decisión 189 (23 de octubre de 2026, durante la tanda 1).** La delegación de la carga al
+> SIAGIE es **solo para Administración, no para Caja**: quien cobra no debe tener la nómina de calificaciones de los menores
+> (separación de funciones: Caja solo entra a caja; y Ley 29733: acceso mínimo por rol a los datos de menores). Se
+> implementa en la tanda 3: `trg_delegacion_siagie_nace` exige una cuenta activa con ADMINISTRACION, sin CAJA y sin DOCENTE
+> (una cuenta que combine Administración y Caja tampoco recibe la delegación), y `DelegacionSiagieTest` y el MySQL
+> `m12DelegacionACajaFalla` lo prueban. La tanda 1 no toca la delegación: aquí solo queda la nota.
 
 ## Fuentes
 Consultadas el 23 de octubre de 2026. Entre paréntesis, la fecha del documento.
@@ -1607,3 +1615,98 @@ Rutas relativas a `C:/Users/amedina/cuentas-claras/cuentas-claras/`:
   `trg_solicitud_cambio_*`) y `02-permisos-tablas.sql` (bloques del sprint 9)
 - `pom.xml`; clases `TipoSolicitud`, `LogosColegio`, `FuentesDelJar`, `AnalizadorPdf` (importaciones) y la regla
   `pdfboxSoloEnElAnalizador` de `ReglasArquitecturaTest`
+
+## Tanda 1 · Implementación
+
+> Implementada el 23 de octubre de 2026 en la rama `claude/sprint-10-notas-libretas-siagie` (agente `backend-spring`,
+> «Método por sprint»: brief `docs/arquitectura/sprint-10/tanda-1.md`, PR en borrador #20 con el CI como verificación).
+> V35, **104 triggers y 12 funciones en `03` (15 con huella con las 3 de `02`): 119 huellas**, como pedía el brief. Los
+> hallazgos de la auditoría en papel de esta tanda (A2, M7, M10, B13 y B15) con su control y su prueba.
+
+### Qué se hizo
+**Base (V35, `02` y `03`).**
+- `V35__curriculo_periodos_y_escalas.sql`: `curriculo_version`, `area_curricular`, `competencia` y `escala_logro` sin
+  `colegio_id`, con la semilla CNEB-2016.1 (1 versión, 29 áreas, 75 competencias y 12 valores de escala: 117 `INSERT … SELECT`
+  por código, sin `||`); un CHECK de texto por tabla sin la barra vertical ni saltos de línea (B13); `uk_*_orden` por nivel y
+  por área; `configuracion_evaluacion`, `periodo_evaluacion` y `asignacion_area` con FK compuestas; los CHECK con `IS NOT
+  NULL`; y los tres tipos nuevos de `acceso_dato_personal` copiados de V32 (H7).
+- `02`: bloque «Sprint 10 · tanda 1» (ningún GRANT sobre el catálogo; INSERT y UPDATE por columna en la configuración y en
+  los periodos; solo INSERT en `asignacion_area`; ningún DELETE).
+- `03`: `cc_rol_activo`, `trg_configuracion_evaluacion_nace` y `_cambio` (M7: versión, tipo y días de cierre fijos con un
+  periodo no PROGRAMADO), `trg_periodo_evaluacion_nace` y `_cambio` (M7: en ABIERTO el fin solo se extiende; las fechas y el
+  estado no cambian en el mismo UPDATE; el cierre mira `cc_hoy_lima()`), `trg_asignacion_area_nace` (A2: sin la solicitud
+  enlazada) y la versión nueva de `trg_asignacion_docente_estado` (A2: `$.areas` de la solicitud contra el
+  `GROUP_CONCAT` de las áreas). Encabezado con la versión anterior (99, 11, 14 y 113).
+- `VerificadorPermisosBaseDatos` (104 triggers; los 1142 de B15 con `cc_app` y, en el catálogo, también con `cc_sistema`;
+  los 1143 de número y año; el periodo del colegio 0 que nace CERRADO: 1644) y `tablas-vigiladas.txt` (+`asignacion_area`).
+
+**Aplicación (`academico.curriculo`, nuevo).**
+- `model`: las cuatro entidades del catálogo con `@Immutable`, todas sus columnas `updatable = false` y `@PreUpdate` /
+  `@PreRemove` que lanzan; `ConfiguracionEvaluacion` (con `Valores` validados), `PeriodoEvaluacion` (transiciones con
+  intención), `TipoPeriodo` y `EstadoPeriodo`. Repositorios `Repository` sin `save` en el catálogo.
+- `service`: `Catalogo` (`competenciasDe(version, grado)` con `solo_grados` y el orden de la libreta, `areasDe`,
+  `exigeConclusion`, `escalaDe` y la vista), `ConfiguracionesEvaluacion` (lee Dirección, Administración y Promotoría; guarda
+  solo Dirección con su firma), `Periodos` (programar, mover fechas, abrir antes y cerrar, cada uno con su firma y su evento),
+  `AperturaDeSistema` (`sistema.academico`), `IntegridadCatalogo` y `AlertasCatalogo` (CRÍTICA `INTEGRIDAD_CATALOGO`).
+- `config`: `HuellaCatalogo` (la cadena del contrato de la sección 6 del brief) y `VerificadorCatalogoCurriculo` (en las dos
+  direcciones, M10; en prod y piloto no arranca, en dev y pruebas avisa); `curriculo/CNEB-2016.1.sha256`.
+- `proceso`: `AperturaPeriodos` (06:00, cc_sistema, en orden) y `RevisionCatalogo` (05:00).
+- `web` y plantillas: «Evaluación del año», «Periodos de evaluación» y «Currículo nacional» (grupo «Evaluación» del menú).
+- `academico` (existe): `AsignacionArea` y su repositorio; `Asignaciones.proponer` con las áreas del catálogo (validadas por
+  nivel, versión del año y no transversales; «Todas las áreas del grado» para el tutor de Inicial o Primaria) insertadas
+  ANTES de la solicitud, cuyo `datos` lleva `"areas"`; una vigente con las mismas claves se reemplaza si cambian sus áreas;
+  `ManejadorAsignacionDocente` muestra las áreas en la bandeja y, al aprobar, termina la vigente con la firma de quien aprueba
+  y después deja VIGENTE la nueva; «Asignaciones sin áreas del catálogo» en Docentes y secciones;
+  `SeccionesDocente.areasDe(seccion)`.
+- `AccionAuditoria` (+6: las cinco del brief y `CATALOGO_NO_COINCIDE`), `TipoAviso.INTEGRIDAD_CATALOGO`, `TipoAcceso` (+3),
+  `ClaveFirma` (+5), `ModuloApp` (+3), `application.yaml` (`cuentasclaras.curriculo.*`).
+- CI: V1–V35; paso «Sprint 10, tanda 1» (`AuditoriaSprint10CurriculoMySqlTest`); `comprobar` con los casos de 6.4; 119 y 104;
+  el arranque de prod busca «Huellas de los 104 triggers y las 15 funciones verificadas» y la verificación del catálogo;
+  job `respaldo` con `faltan-filas-areas`. `paso-0.sh`, `en-la-vm.sh`, `despliegue-gcp.md`, el acta del paso 0 y
+  `mysql-usuarios.md` con los conteos nuevos; manual de Dirección (evaluación, periodos y áreas).
+
+**Pruebas nuevas.**
+- H2: `CatalogoCurriculoTest` (5: conteos, escala de la RVM 048-2024, `solo_grados`, exonerables y los 75 nombres comparados
+  con la tabla de la sección 3.2), `VerificadorCatalogoCurriculoTest` (6: E13 en prod, piloto y dev; `versionSinArchivoFalla`,
+  `archivoSinVersionFalla`; la cadena del contrato), `RevisionCatalogoTest` (2), `ConfiguracionEvaluacionTest` (6),
+  `PeriodosTest` (8), `AsignacionAreaTest` (6), `ConfiguracionSinDeudaTest`, `CurriculoWebTest`; al día:
+  `InmutabilidadAcademicoTest` (+4), `ReglasArquitecturaTest` (`nadieEscribeElCatalogo` y dos más, el catálogo fuera de
+  `BaseEntity`, las expresiones de los servicios nuevos), `RutasIdorTest` y `CatalogoRutasConId` (8 rutas, recursos PERIODO
+  y CATALOGO), `ClaveFirmaTest`, `VerificadorPermisosBaseDatosTest` (+2), `HuellasObjetosBdTest`, `MigradorBaseDatosTest`,
+  `MigracionMySqlTest`, `VerificadorRespaldoTest` y `AsignacionesUnitarioTest`.
+- MySQL real: `mysql/AuditoriaSprint10CurriculoMySqlTest` (29: E9 con la sesión en `-08:00` y el borde de `fin − 7`, E10,
+  E11, E12 con cc_app y cc_sistema, E24, E25, E41, A2 (las dos), M7 (las dos), B13 como `cc_migrador` (3819), los CHECK con
+  NULL, la apertura del sistema antes de su fecha, el reemplazo de la vigente en una transacción y
+  `flujoCurriculoConPermisosMinimos`); `PermisosMySqlTest.flujoAsignacionDocenteConPermisosMinimos` con la evaluación, el I
+  bimestre y una asignación con áreas aprobada.
+
+### Desviaciones del diseño
+1. **`NivelEducativo` no se creó:** se usa el enum `colegio.model.Nivel`, que ya existía con los mismos tres valores (dos enums
+   iguales se desincronizarían).
+2. **El catálogo no lo ve Caja:** el brief decía «personal»; `MatrizPermisosTest` exige que Caja solo entre a caja (mínimo
+   acceso). Lo ven Promotoría, Dirección, Administración y los docentes.
+3. **El flujo completo con permisos mínimos va en la clase nueva** (con los años anterior, actual y siguiente), como en la
+   tanda 3 del sprint 9: el tope de 25 colegios ya lo llenan las clases anteriores del job. `PermisosMySqlTest` agrega a su
+   flujo de asignaciones la evaluación, el I bimestre y una asignación con áreas (deja las filas para el job `respaldo`).
+4. **El trigger de cambio de periodo no deja cambiar fechas y estado en el mismo UPDATE**, y al cerrar exige que la apertura
+   no cambie (más estricto que el SQL de 6.3; la aplicación los hace por separado).
+5. **`uk_area_curricular_orden` y `uk_competencia_orden`** (no estaban): el orden de la libreta y del SIAGIE no puede tener
+   empates.
+6. **`RevisionCatalogo` deja la diferencia en la bitácora de cada colegio** (`CATALOGO_NO_COINCIDE`, una vez por día, como
+   `sistema.academico`) y de ahí sale la alerta, como la huella de la bitácora (`AlertasHuella`).
+7. **Las casillas del formulario son `Boolean`** (`conclusionSiempre`, `todasLasAreas`): sin marcar, el enlace de Spring no
+   llega a un primitivo y el formulario no fallaba con un 403 sino con un error de validación.
+8. **El tutor no recibe las transversales en `areasDe`:** se agregan en la tanda 2 con `cc_docente_de_area` (el contrato es
+   el mismo).
+9. **Ajuste del coordinador a la decisión 189** (tanda 3): solo Administración recibe la delegación del SIAGIE, nunca Caja.
+   Anotado en la tabla de decisiones; la tanda 1 no toca la delegación.
+
+### Riesgos que quedan
+- **D12 sin confirmar** (periodo del colegio, plantilla del SIAGIE): todo es configurable por colegio y año o versionado.
+- **Textos del catálogo:** los 75 nombres se compararon con la tabla 3.2 del diseño; las descripciones de la escala son las
+  del CNEB citadas en la RVM 094-2020. Un error publicado en V35 solo se corrige con una versión nueva.
+- **Las pruebas de MySQL con fechas relativas a hoy** (el borde de `fin − 7` en el año actual) se omiten del 16 de diciembre
+  al 19 de enero (no caben en un año de clases); los demás casos usan el año anterior y el siguiente y corren siempre.
+- **Un solo director:** «otra persona» que aprueba las áreas puede no existir; vale el aviso A8 del sprint 9.
+- **Docentes del sprint 9 sin áreas:** no califican hasta que Dirección vuelva a proponer sus asignaciones (la pantalla lo
+  dice).
