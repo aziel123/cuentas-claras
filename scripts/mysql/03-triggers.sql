@@ -9,7 +9,16 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
--- Versión de la migración V36 (sprint 10, tanda 2): 108 triggers y 13 funciones (16 con huella; 124 huellas). Nuevos:
+-- Versión de la migración V37 (sprint 10, tanda 3): 112 triggers y 13 funciones (16 con huella; 128 huellas). Nuevos:
+-- trg_libreta_emitida_nace (la libreta la emite SOLO sistema.libretas con cc_sistema, de un periodo cerrado, para una
+-- matrícula ACTIVA o RESERVADA, C1; la versión 1 es lo registrado hasta el cierre; la siguiente, solo con una corrección o
+-- nota tardía aprobada o con la reemisión aprobada por Promotoría, A3), trg_entrega_libreta_nace (la familia con su sesión;
+-- Dirección o el tutor vigente de la sección, M9; la entrevista, solo en Inicial), trg_exportacion_calificaciones_nace
+-- (Dirección o la persona de Administración delegada, M12) y trg_delegacion_siagie_nace (Dirección con su firma, hasta 15
+-- días, a Administración sin Caja ni Docente: decisión 189 ajustada). Versión nueva de trg_mensaje_nace (los avisos de
+-- libretas, con su plantilla, sin cobranza y con el consentimiento LIBRETAS; y la plantilla se acepta con el nombre que
+-- guarda la aplicación).
+-- Versión anterior (V36, sprint 10, tanda 2): 108 triggers y 13 funciones (16 con huella; 124 huellas). Nuevos:
 -- trg_lote_calificacion_nace (el lote lo guarda el docente del área con su sesión y su firma; con el periodo cerrado,
 -- solo con su nota tardía aprobada hace 48 horas o menos), trg_calificacion_nace (la nota: matrícula ACTIVA o RESERVADA,
 -- C1; sin exoneración vigente, A3; la conclusión que exige la norma con su SHA-256 de la base; cadena lineal; la
@@ -1276,14 +1285,26 @@ BEGIN
     -- Tanda 3 (B6): los parámetros empiezan con el nombre del colegio (comparación binaria) y la regla corre SOLO sobre el
     -- resto: un colegio cuyo nombre calza con la regla no se queda sin avisos. (B7): «S/» solo delante de una cifra (las
     -- palabras «padres/madres» pasan) y los decimales sin las horas («7.45 a.m.» pasa).
-    IF NEW.tipo IN ('ASISTENCIA_DIA', 'ASISTENCIA_CORREGIDA', 'COMUNICADOS_RESUMEN', 'COMUNICADO_URGENTE') THEN
+    -- Sprint 10, tanda 3 (sección 6.3): también los avisos de libretas (LIBRETA_DISPONIBLE y LIBRETA_CORREGIDA), que crea
+    -- solo sistema.libretas, con su plantilla y la finalidad LIBRETAS. Corrección de la versión anterior: la plantilla se
+    -- guarda con el NOMBRE del enum de Java (ASISTENCIA, COMUNICADOS, LIBRETA...), no con el de Meta (cc_..._v2): se acepta
+    -- cualquiera de los dos de SU tipo (antes, un aviso legítimo de asistencia o de comunicados creado por la aplicación se
+    -- rechazaba aquí).
+    IF NEW.tipo IN ('ASISTENCIA_DIA', 'ASISTENCIA_CORREGIDA', 'COMUNICADOS_RESUMEN', 'COMUNICADO_URGENTE', 'LIBRETA_DISPONIBLE',
+            'LIBRETA_CORREGIDA') THEN
         -- El respaldo por correo de un WhatsApp FALLIDO lo crea el despacho (sistema.mensajeria; la regla del respaldo,
         -- más abajo, exige que sea del mismo tipo y al mismo apoderado).
         IF NOT (NEW.destinatario_tipo <=> 'APODERADO')
-                OR NOT (NEW.creado_por <=> IF(NEW.tipo LIKE 'ASISTENCIA%', 'sistema.asistencia', 'sistema.comunicados')
+                OR NOT (NEW.creado_por <=> (CASE WHEN NEW.tipo LIKE 'ASISTENCIA%' THEN 'sistema.asistencia'
+                        WHEN NEW.tipo LIKE 'LIBRETA%' THEN 'sistema.libretas' ELSE 'sistema.comunicados' END)
                     OR (NEW.respaldo_de_id IS NOT NULL AND NEW.creado_por <=> 'sistema.mensajeria'))
-                OR NOT (NEW.plantilla LIKE IF(NEW.tipo LIKE 'ASISTENCIA%', 'cc\_asistencia%', 'cc\_comunicado%')) THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los avisos de asistencia y de comunicados los crea su proceso, con su plantilla';
+                OR NOT (CASE WHEN NEW.tipo LIKE 'ASISTENCIA%' THEN NEW.plantilla IN ('ASISTENCIA', 'ASISTENCIA_CORREGIDA')
+                            OR NEW.plantilla LIKE 'cc\_asistencia%'
+                        WHEN NEW.tipo LIKE 'LIBRETA%' THEN NEW.plantilla IN ('LIBRETA', 'LIBRETA_CORREGIDA')
+                            OR NEW.plantilla LIKE 'cc\_libreta%'
+                        ELSE NEW.plantilla IN ('COMUNICADOS', 'COMUNICADO_URGENTE') OR NEW.plantilla LIKE 'cc\_comunicado%'
+                    END) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los avisos de asistencia, comunicados y libretas los crea su proceso, con su plantilla';
         END IF;
         IF NEW.parametros IS NULL OR NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id
                 AND CAST(LEFT(NEW.parametros, CHAR_LENGTH(c.nombre) + 1) AS BINARY) = CAST(CONCAT(c.nombre, CHAR(10)) AS BINARY)
@@ -1295,19 +1316,23 @@ BEGIN
         IF NEW.canal = 'WHATSAPP' AND NOT EXISTS (SELECT 1 FROM consentimiento_aviso c
                 WHERE c.id = (SELECT MAX(c2.id) FROM consentimiento_aviso c2 WHERE c2.colegio_id = NEW.colegio_id
                     AND c2.apoderado_id = NEW.apoderado_id AND c2.canal = 'WHATSAPP'
-                    AND c2.finalidad = IF(NEW.tipo LIKE 'ASISTENCIA%', 'ASISTENCIA', 'COMUNICADOS'))
+                    AND c2.finalidad = (CASE WHEN NEW.tipo LIKE 'ASISTENCIA%' THEN 'ASISTENCIA'
+                        WHEN NEW.tipo LIKE 'LIBRETA%' THEN 'LIBRETAS' ELSE 'COMUNICADOS' END))
                   AND c.otorgado) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: sin el consentimiento del apoderado no se le escribe por WhatsApp';
         END IF;
         IF NEW.canal = 'CORREO' AND EXISTS (SELECT 1 FROM consentimiento_aviso c
                 WHERE c.id = (SELECT MAX(c2.id) FROM consentimiento_aviso c2 WHERE c2.colegio_id = NEW.colegio_id
                     AND c2.apoderado_id = NEW.apoderado_id AND c2.canal = 'CORREO'
-                    AND c2.finalidad = IF(NEW.tipo LIKE 'ASISTENCIA%', 'ASISTENCIA', 'COMUNICADOS'))
+                    AND c2.finalidad = (CASE WHEN NEW.tipo LIKE 'ASISTENCIA%' THEN 'ASISTENCIA'
+                        WHEN NEW.tipo LIKE 'LIBRETA%' THEN 'LIBRETAS' ELSE 'COMUNICADOS' END))
                   AND NOT c.otorgado) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el apoderado se opuso a recibir estos avisos por correo';
         END IF;
-    ELSEIF NEW.plantilla LIKE 'cc\_asistencia%' OR NEW.plantilla LIKE 'cc\_comunicado%' THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una plantilla de asistencia o de comunicados no sirve para otro aviso';
+    ELSEIF NEW.plantilla LIKE 'cc\_asistencia%' OR NEW.plantilla LIKE 'cc\_comunicado%' OR NEW.plantilla LIKE 'cc\_libreta%'
+            OR NEW.plantilla IN ('ASISTENCIA', 'ASISTENCIA_CORREGIDA', 'COMUNICADOS', 'COMUNICADO_URGENTE', 'LIBRETA',
+                'LIBRETA_CORREGIDA') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: una plantilla de asistencia, comunicados o libretas no sirve para otro aviso';
     END IF;
     IF NEW.destinatario_tipo = 'APODERADO' AND NEW.tipo <> 'CONTACTO_CAMBIADO' AND NOT EXISTS (SELECT 1 FROM apoderado a
             WHERE a.id = NEW.apoderado_id AND a.colegio_id = NEW.colegio_id
@@ -3595,5 +3620,167 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el borrador lo escribe el docente del area o Direccion, con su sesion';
     END IF;
     SET NEW.sha256 = SHA2(NEW.texto, 256);
+END$$
+DELIMITER ;
+
+-- ===================== Sprint 10 · tanda 3 (V37): libretas y exportación para el SIAGIE =====================
+-- (La versión nueva de trg_mensaje_nace quedó en su lugar, marcada con «Sprint 10, tanda 3».) La libreta la emite SOLO
+-- sistema.libretas (cc_sistema: cc_app no tiene GRANT sobre libreta_emitida, E14), para toda matrícula ACTIVA o RESERVADA
+-- (C1: la impaga también), de un periodo CERRADO; la versión siguiente solo con un cambio aprobado o una reemisión
+-- aprobada por Promotoría (A3). Las entregas, la exportación y la delegación llevan la sesión de quien las hace. Nada se
+-- edita ni se borra (1142). Comparar siempre con <=>.
+DELIMITER $$
+
+-- La libreta: la emite sistema.libretas con cc_sistema; el periodo está CERRADO y la matrícula es del alumno, del año y de
+-- la sección, ACTIVA o RESERVADA (C1); la versión es la siguiente y reemplaza a la de versión máxima (el trigger lee su
+-- propia tabla); la versión 1 no pasa de lo registrado hasta el cerrado_en del periodo (sección 3 del brief); en las
+-- siguientes las marcas de agua no bajan y hay un cambio aprobado: una CORRECCION_APROBADA o un REGISTRO_TARDIO de esa
+-- matrícula y periodo entre la marca anterior y la nueva (CORRECCION), o la REEMISION_LIBRETA de la vigente firmada,
+-- aprobada por PROMOTOR y pedida por DIRECTOR (REEMISION).
+DROP TRIGGER IF EXISTS trg_libreta_emitida_nace$$
+CREATE TRIGGER trg_libreta_emitida_nace BEFORE INSERT ON libreta_emitida FOR EACH ROW
+BEGIN
+    DECLARE v_estado VARCHAR(10); DECLARE v_cerrado DATETIME(6); DECLARE v_max INT; DECLARE v_ant BIGINT;
+    DECLARE v_ant_cal BIGINT; DECLARE v_ant_marca BIGINT; DECLARE v_ant_exo BIGINT;
+    IF NOT cc_es_sistema() OR NOT (NEW.creado_por <=> 'sistema.libretas') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la libreta la emite el sistema al cierre o por una correccion aprobada';
+    END IF;
+    SET v_estado = (SELECT p.estado FROM periodo_evaluacion p WHERE p.id = NEW.periodo_id AND p.colegio_id = NEW.colegio_id
+        AND p.anio_escolar_id = NEW.anio_escolar_id);
+    SET v_cerrado = (SELECT p.cerrado_en FROM periodo_evaluacion p WHERE p.id = NEW.periodo_id
+        AND p.colegio_id = NEW.colegio_id);
+    IF NOT (v_estado <=> 'CERRADO') OR v_cerrado IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la libreta es de un periodo cerrado';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM matricula m JOIN seccion s ON s.id = m.seccion_id AND s.colegio_id = m.colegio_id
+            WHERE m.id = NEW.matricula_id AND m.colegio_id = NEW.colegio_id AND m.alumno_id = NEW.alumno_id
+              AND m.anio_escolar_id = NEW.anio_escolar_id AND m.seccion_id = NEW.seccion_id
+              AND s.anio_escolar_id = NEW.anio_escolar_id AND m.estado IN ('ACTIVA', 'RESERVADA')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la libreta es de una matricula activa o reservada de la seccion';
+    END IF;
+    SET v_max = (SELECT MAX(l.numero_version) FROM libreta_emitida l WHERE l.periodo_id = NEW.periodo_id
+        AND l.matricula_id = NEW.matricula_id AND l.colegio_id = NEW.colegio_id);
+    SET v_ant = (SELECT l.id FROM libreta_emitida l WHERE l.periodo_id = NEW.periodo_id AND l.matricula_id = NEW.matricula_id
+        AND l.colegio_id = NEW.colegio_id AND l.numero_version <=> v_max);
+    IF NOT (NEW.numero_version <=> COALESCE(v_max, 0) + 1) OR NOT (NEW.reemplaza_id <=> v_ant) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la version de la libreta es la siguiente y reemplaza a la vigente';
+    END IF;
+    IF v_ant IS NULL THEN
+        IF NOT (NEW.motivo <=> 'CIERRE') OR NOT (NEW.hasta_calificacion_id <= COALESCE((SELECT MAX(c.id) FROM calificacion c
+                WHERE c.colegio_id = NEW.colegio_id AND c.matricula_id = NEW.matricula_id AND c.registrado_bd <= v_cerrado), 0)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la version 1 de la libreta es lo registrado hasta el cierre del periodo';
+        END IF;
+    ELSE
+        SET v_ant_cal = (SELECT l.hasta_calificacion_id FROM libreta_emitida l WHERE l.id = v_ant);
+        SET v_ant_marca = (SELECT l.hasta_marca_id FROM libreta_emitida l WHERE l.id = v_ant);
+        SET v_ant_exo = (SELECT l.hasta_exoneracion_id FROM libreta_emitida l WHERE l.id = v_ant);
+        IF NOT (NEW.hasta_calificacion_id >= v_ant_cal AND NEW.hasta_marca_id >= v_ant_marca
+                AND NEW.hasta_exoneracion_id >= v_ant_exo) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las marcas de agua de la libreta no bajan';
+        END IF;
+        IF NEW.motivo <=> 'CORRECCION' THEN
+            IF NOT EXISTS (SELECT 1 FROM calificacion c WHERE c.colegio_id = NEW.colegio_id AND c.matricula_id = NEW.matricula_id
+                    AND c.periodo_id = NEW.periodo_id AND c.origen IN ('CORRECCION_APROBADA', 'REGISTRO_TARDIO')
+                    AND c.id > v_ant_cal AND c.id <= NEW.hasta_calificacion_id) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la libreta la emite el sistema al cierre o por una correccion aprobada';
+            END IF;
+        ELSEIF NEW.motivo <=> 'REEMISION' THEN
+            IF NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id
+                    AND s.tipo = 'REEMISION_LIBRETA' AND s.entidad = 'libreta_emitida' AND s.entidad_id = v_ant
+                    AND cc_solicitud_firmada(s.id) AND cc_rol_activo(s.colegio_id, s.resuelto_por, 'PROMOTOR')
+                    AND cc_rol_activo(s.colegio_id, s.solicitado_por, 'DIRECTOR')) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la reemision de la libreta la aprueba Promotoria con su firma, a pedido de Direccion';
+            END IF;
+        ELSE
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la libreta la emite el sistema al cierre o por una correccion aprobada';
+        END IF;
+    END IF;
+    SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+END$$
+
+-- La constancia de entrega, con la sesión de quien entrega. PORTAL: la cuenta activa del apoderado activo de la familia del
+-- alumno de la libreta (E32). IMPRESA: DIRECTOR o el TUTOR VIGENTE de la sección de la libreta (M9). ENTREVISTA: igual que
+-- IMPRESA y solo en Inicial.
+DROP TRIGGER IF EXISTS trg_entrega_libreta_nace$$
+CREATE TRIGGER trg_entrega_libreta_nace BEFORE INSERT ON entrega_libreta FOR EACH ROW
+BEGIN
+    DECLARE v_seccion BIGINT; DECLARE v_alumno BIGINT; DECLARE v_nivel VARCHAR(20);
+    SET v_seccion = (SELECT l.seccion_id FROM libreta_emitida l WHERE l.id = NEW.libreta_id AND l.colegio_id = NEW.colegio_id);
+    SET v_alumno = (SELECT l.alumno_id FROM libreta_emitida l WHERE l.id = NEW.libreta_id AND l.colegio_id = NEW.colegio_id);
+    SET v_nivel = (SELECT SUBSTRING_INDEX(s.grado, '_', 1) FROM seccion s WHERE s.id = v_seccion
+        AND s.colegio_id = NEW.colegio_id);
+    IF v_seccion IS NULL OR NOT cc_sesion_abierta(NEW.sesion_id, NEW.creado_por, NEW.colegio_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la entrega de la libreta va con la sesion de quien la entrega';
+    END IF;
+    IF NEW.canal <=> 'PORTAL' THEN
+        IF NOT EXISTS (SELECT 1 FROM usuario u JOIN apoderado p ON p.id = u.apoderado_id AND p.colegio_id = u.colegio_id
+                JOIN alumno a ON a.familia_id = p.familia_id AND a.colegio_id = p.colegio_id
+                WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.creado_por AND u.activo
+                  AND p.id = NEW.apoderado_id AND p.activo AND a.id = v_alumno) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la libreta la descarga un apoderado de la familia del alumno, con su sesion';
+        END IF;
+    ELSEIF NEW.canal IN ('IMPRESA', 'ENTREVISTA') THEN
+        IF NOT (cc_rol_activo(NEW.colegio_id, NEW.creado_por, 'DIRECTOR') OR EXISTS (SELECT 1 FROM asignacion_docente d
+                JOIN usuario u ON u.id = d.usuario_id AND u.colegio_id = d.colegio_id
+                JOIN usuario_rol r ON r.usuario_id = u.id
+                WHERE d.seccion_id = v_seccion AND d.colegio_id = NEW.colegio_id AND d.tipo = 'TUTOR'
+                  AND d.estado = 'VIGENTE' AND (d.hasta IS NULL OR d.hasta >= cc_hoy_lima())
+                  AND u.nombre_usuario = NEW.creado_por AND u.activo AND u.apoderado_id IS NULL AND r.rol = 'DOCENTE')) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la libreta la imprime Direccion o el tutor de la seccion';
+        END IF;
+        IF NEW.canal = 'ENTREVISTA' AND NOT (v_nivel <=> 'INICIAL') THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la entrega en la entrevista es solo en Inicial';
+        END IF;
+    ELSE
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la entrega de la libreta es por el portal, impresa o en la entrevista';
+    END IF;
+    SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+END$$
+
+-- La exportación de calificaciones para el SIAGIE: DIRECTOR, o la persona delegada (M12: una delegación con hoy en Lima
+-- entre desde y hasta, con la cuenta activa, con ADMINISTRACION y sin CAJA ni DOCENTE, decisión 189 ajustada), con su
+-- sesión; de un periodo CERRADO y una sección del año del periodo (como trg_exportacion_nomina_nace, B14).
+DROP TRIGGER IF EXISTS trg_exportacion_calificaciones_nace$$
+CREATE TRIGGER trg_exportacion_calificaciones_nace BEFORE INSERT ON exportacion_calificaciones FOR EACH ROW
+BEGIN
+    IF NOT cc_sesion_abierta(NEW.sesion_id, NEW.creado_por, NEW.colegio_id)
+            OR NOT (cc_rol_activo(NEW.colegio_id, NEW.creado_por, 'DIRECTOR')
+                OR (EXISTS (SELECT 1 FROM delegacion_siagie d JOIN usuario u ON u.id = d.usuario_id
+                        AND u.colegio_id = d.colegio_id
+                        WHERE d.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.creado_por AND u.activo
+                          AND u.apoderado_id IS NULL AND cc_hoy_lima() BETWEEN d.desde AND d.hasta)
+                    AND cc_rol_activo(NEW.colegio_id, NEW.creado_por, 'ADMINISTRACION')
+                    AND NOT cc_rol_activo(NEW.colegio_id, NEW.creado_por, 'CAJA')
+                    AND NOT cc_rol_activo(NEW.colegio_id, NEW.creado_por, 'DOCENTE'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las calificaciones del SIAGIE las saca Direccion o la persona delegada, con su sesion';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM periodo_evaluacion p JOIN seccion s ON s.anio_escolar_id = p.anio_escolar_id
+            AND s.colegio_id = p.colegio_id
+            WHERE p.id = NEW.periodo_id AND p.colegio_id = NEW.colegio_id AND p.estado = 'CERRADO' AND s.id = NEW.seccion_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: se exporta un periodo cerrado de una seccion del anio';
+    END IF;
+    SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+END$$
+
+-- M12: la delegación la da una persona activa con DIRECTOR con su firma (delegacion_siagie:{usuario}:{desde}:DELEGADA),
+-- desde hoy en Lima o después y por hasta 15 días, a una cuenta activa del personal con ADMINISTRACION, sin CAJA y sin
+-- DOCENTE (decisión 189 ajustada: quien cobra no recibe la nómina de calificaciones de los menores).
+DROP TRIGGER IF EXISTS trg_delegacion_siagie_nace$$
+CREATE TRIGGER trg_delegacion_siagie_nace BEFORE INSERT ON delegacion_siagie FOR EACH ROW
+BEGIN
+    IF NOT (NEW.creado_por <=> NEW.autorizado_por) OR NOT cc_rol_activo(NEW.colegio_id, NEW.autorizado_por, 'DIRECTOR')
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('delegacion_siagie:', NEW.usuario_id, ':', NEW.desde, ':DELEGADA'),
+                NEW.autorizado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la delegacion del SIAGIE la da Direccion con su firma';
+    END IF;
+    IF NOT (NEW.desde >= cc_hoy_lima()) OR NOT (NEW.hasta >= NEW.desde) OR NOT (NEW.hasta <= NEW.desde + INTERVAL 15 DAY) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la delegacion empieza hoy o despues y dura hasta 15 dias';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM usuario u WHERE u.id = NEW.usuario_id AND u.colegio_id = NEW.colegio_id AND u.activo
+            AND u.apoderado_id IS NULL
+            AND EXISTS (SELECT 1 FROM usuario_rol r WHERE r.usuario_id = u.id AND r.rol = 'ADMINISTRACION')
+            AND NOT EXISTS (SELECT 1 FROM usuario_rol r WHERE r.usuario_id = u.id AND r.rol IN ('CAJA', 'DOCENTE'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la delegacion es para una persona de Administracion sin Caja ni Docente';
+    END IF;
 END$$
 DELIMITER ;

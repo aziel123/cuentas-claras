@@ -57,3 +57,9 @@ lote_calificacion
 calificacion
 exoneracion_area
 borrador_conclusion
+# Sprint 10, tanda 3 (V37): las libretas emitidas, sus entregas, la exportación de calificaciones y la delegación del SIAGIE
+# son de solo inserción: un borrado del DBA (una libreta que desaparece) aparece como «faltan filas» del colegio.
+libreta_emitida
+entrega_libreta
+exportacion_calificaciones
+delegacion_siagie

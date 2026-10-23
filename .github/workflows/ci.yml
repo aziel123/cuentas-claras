@@ -325,7 +325,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V36): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V37): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -372,6 +372,9 @@ jobs:
 
       - name: "Sprint 10, tanda 2: la nota la pone solo el docente del área con su sesión y su firma, en un lote por guardado y con el periodo abierto; la matrícula RESERVADA recibe nota; no se edita, no se borra ni se bifurca; la conclusión que exige la norma con el SHA-256 de la base; después del cierre, solo por una corrección aprobada y firmada por otra persona (con el texto de su borrador) o por una nota tardía en 48 horas; la exoneración la autoriza Dirección desde un periodo abierto; un lote en menos de 2 s y 40 docentes a la vez en menos de 4 s (E1 a E8, E18 a E23, E25, E36, C1, A3, M8)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint10NotasMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 10, tanda 3: la libreta la emite solo sistema.libretas con cc_sistema, para toda matrícula ACTIVA o RESERVADA, también la de la familia que debe (INDECOPI); la versión 1 es lo registrado al cierre y la siguiente solo con un cambio aprobado o la reemisión aprobada por Promotoría; la entrega va con la sesión de la familia, de Dirección o del tutor de la sección (en Inicial, en la entrevista); la exportación para el SIAGIE la saca Dirección o la persona de Administración delegada (nunca Caja); los avisos sin cobranza y con consentimiento; 300 libretas en menos de 60 s (E14, E27, E30, E32, C1, A3, M9, M12)"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint10LibretasMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint6MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
@@ -860,11 +863,24 @@ jobs:
             comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
           done
           comprobar 1644 "INSERT INTO calificacion (colegio_id, anio_escolar_id, periodo_id, seccion_id, matricula_id, alumno_id, competencia_id, nivel_logro, origen, reemplaza_id, solicitud_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, 0, 0, 0, 'AD', 'CORRECCION_APROBADA', 0, 0, NOW(6), 'ci', NOW(6))"
-          # Huellas (H7): cc_app ve las de los 108 triggers y las 16 funciones con huellas_objetos() (sprint 10, tanda 2).
+          # Sprint 10, tanda 3 (V37, E14): cc_app no escribe libretas (1142 en cualquier escritura: la emite solo
+          # sistema.libretas); las entregas, la exportación de calificaciones y la delegación del SIAGIE son de solo
+          # inserción (1142); con cc_sistema, una libreta del colegio 0 en la versión 2 sin corrección la rechaza su trigger
+          # (1644) y tampoco la edita ni la borra (1142).
+          libreta="INSERT INTO libreta_emitida (colegio_id, anio_escolar_id, periodo_id, seccion_id, matricula_id, alumno_id, numero_version, reemplaza_id, motivo, hasta_calificacion_id, hasta_marca_id, hasta_exoneracion_id, alumno_nombre, alumno_codigo, tipo_codigo, director_nombre, huella_contenido, cambios, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, 0, 0, 2, 0, 'CORRECCION', 0, 0, 0, 'Alumno CI', '00000000', 'DNI', 'Direccion CI', REPEAT('0', 64), 'Cambio CI', NOW(6), 'sistema.libretas', NOW(6))"
+          comprobar 1142 "$libreta"
+          comprobar_sistema 1644 "$libreta"
+          for tabla in libreta_emitida entrega_libreta exportacion_calificaciones delegacion_siagie; do
+            comprobar 1142 "UPDATE $tabla SET version = version WHERE 1 = 0"
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          comprobar_sistema 1142 "UPDATE libreta_emitida SET version = version WHERE 1 = 0"
+          comprobar_sistema 1142 "DELETE FROM libreta_emitida WHERE 1 = 0"
+          # Huellas (H7): cc_app ve las de los 112 triggers y las 16 funciones con huellas_objetos() (sprint 10, tanda 3).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
           [ "$objetos" = "$((esperados + 16))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
-          [ "$objetos" = "124" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y la tanda 2 del sprint 10 deja 124"; exit 1; }
-          [ "$esperados" = "108" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 2 del sprint 10 deja 108"; exit 1; }
+          [ "$objetos" = "128" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y la tanda 3 del sprint 10 deja 128"; exit 1; }
+          [ "$esperados" = "112" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 3 del sprint 10 deja 112"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -907,7 +923,7 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 108 triggers y las 16 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 112 triggers y las 16 funciones verificadas" prod.log || { cat prod.log; exit 1; }
           # Sprint 10, tanda 1 (E13, M10): prod verificó el catálogo del currículo en las dos direcciones.
           grep -q "logo del curr.culo verificado" prod.log || { cat prod.log; exit 1; }
           # Sprint 8, tanda 2 (sección 3.6): los conectores (GRANT por columna y triggers) y la clave que descifra todos
@@ -1254,7 +1270,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V36, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V37, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \
@@ -1272,6 +1288,9 @@ jobs:
 
       - name: "Sprint 10, tanda 2: datos de las notas (un lote, una corrección aprobada, una nota tardía y una exoneración)"
         run: ./mvnw -B test -Dtest='AuditoriaSprint10NotasMySqlTest#flujoNotasConPermisosMinimos' -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 10, tanda 3: datos de las libretas (la versión 1, la corregida, su entrega y una exportación para el SIAGIE)"
+        run: ./mvnw -B test -Dtest='AuditoriaSprint10LibretasMySqlTest#flujoLibretasConPermisosMinimos' -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Claves age desechables (Promotoría y responsable técnico)
         run: |
@@ -1337,6 +1356,9 @@ jobs:
 
       - name: "Sprint 10, tanda 2: un DBA borra una nota de UN colegio: el respaldo avisa «faltan filas» solo a ese colegio"
         run: sh scripts/respaldo/pruebas-ci.sh faltan-filas-notas
+
+      - name: "Sprint 10, tanda 3: un DBA borra una libreta emitida de UN colegio: el respaldo avisa «faltan filas» solo a ese colegio"
+        run: sh scripts/respaldo/pruebas-ci.sh faltan-filas-libretas
 
   imagen:
     name: Imagen en GHCR por el SHA del commit, con su SBOM (solo main)

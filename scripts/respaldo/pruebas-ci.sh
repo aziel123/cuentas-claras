@@ -361,8 +361,38 @@ faltan-filas-notas)
 	echo "OK (sprint 10): la nota borrada del colegio $a se avisa solo a ese colegio"
 	;;
 
+faltan-filas-libretas)
+	# Sprint 10, tanda 3: las libretas emitidas son de solo inserción y están en tablas-vigiladas.txt. Un DBA borra la última
+	# de UN colegio (las deja AuditoriaSprint10LibretasMySqlTest.flujoLibretasConPermisosMinimos): el respaldo siguiente
+	# avisa «faltan filas» de libreta_emitida SOLO de ese colegio. Los pasos anteriores pueden dejar otros colegios sin
+	# resolver (código 3).
+	a=$(admin -e "SELECT x.colegio_id FROM libreta_emitida x JOIN colegio c ON c.id = x.colegio_id WHERE c.tipo = 'COLEGIO'
+		GROUP BY x.colegio_id ORDER BY x.colegio_id DESC LIMIT 1")
+	test -n "$a" || { echo "ERROR: el flujo de las libretas no dejó libretas"; exit 1; }
+	set +e
+	sh "$respaldar" > /tmp/cc-respaldo-12a.out 2>&1
+	codigo=$?
+	set -e
+	if [ "$codigo" != "0" ] && [ "$codigo" != "3" ]; then cat /tmp/cc-respaldo-12a.out; exit 1; fi
+	if grep -q "libreta_emitida (faltan" /tmp/cc-respaldo-12a.out; then
+		cat /tmp/cc-respaldo-12a.out; echo "ERROR: faltaban libretas antes de borrar"; exit 1
+	fi
+	grep -q "\"libreta_emitida@$a\": \[" "$(ultimo_manifiesto)" || { echo "ERROR: el manifiesto no cuenta las libretas del colegio $a"; exit 1; }
+	admin -e "SET FOREIGN_KEY_CHECKS = 0; DELETE FROM libreta_emitida WHERE colegio_id = $a ORDER BY id DESC LIMIT 1"
+	set +e
+	sh "$respaldar" > /tmp/cc-respaldo-12b.out 2> /tmp/cc-respaldo-12b.err
+	codigo=$?
+	set -e
+	cat /tmp/cc-respaldo-12b.out /tmp/cc-respaldo-12b.err
+	test "$codigo" = "3"
+	grep -q "libreta_emitida (faltan 1) \[colegio $a\]" /tmp/cc-respaldo-12b.out
+	test "$(grep -o "libreta_emitida (faltan [0-9]*) \[colegio [0-9]*\]" /tmp/cc-respaldo-12b.out | sort -u | wc -l)" = "1" 		|| { echo "ERROR: la falta de las libretas no es solo del colegio $a"; exit 1; }
+	admin -e "SELECT colegios_faltan FROM respaldo ORDER BY id DESC LIMIT 1" | grep -Eq "(\[|, ?)$a(\]|,)" 		|| { echo "ERROR: colegios_faltan no incluye al colegio $a"; exit 1; }
+	echo "OK (sprint 10): la libreta borrada del colegio $a se avisa solo a ese colegio"
+	;;
+
 *)
-	echo "Uso: $0 sin-credenciales|primer-respaldo|e29|restauracion|e31|e30|e32|faltan-filas-sigue|restauracion-sin-clave|permisos-anidados|resuelto|faltan-filas-por-colegio|resuelto-por-colegio|simulado|faltan-filas-asistencia|faltan-filas-areas|faltan-filas-notas" >&2
+	echo "Uso: $0 sin-credenciales|primer-respaldo|e29|restauracion|e31|e30|e32|faltan-filas-sigue|restauracion-sin-clave|permisos-anidados|resuelto|faltan-filas-por-colegio|resuelto-por-colegio|simulado|faltan-filas-asistencia|faltan-filas-areas|faltan-filas-notas|faltan-filas-libretas" >&2
 	exit 2
 	;;
 esac

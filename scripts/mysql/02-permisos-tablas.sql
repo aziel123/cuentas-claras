@@ -338,6 +338,14 @@ GRANT INSERT ON cuentasclaras.calificacion TO 'cc_negocio';
 GRANT INSERT ON cuentasclaras.exoneracion_area TO 'cc_negocio';
 GRANT INSERT ON cuentasclaras.borrador_conclusion TO 'cc_negocio';
 
+-- ===================== Sprint 10 · tanda 3 (V37): libretas y exportación para el SIAGIE =====================
+-- Libros de SOLO INSERCIÓN: ningún UPDATE ni DELETE (1142). libreta_emitida NO está aquí: la emite SOLO sistema.libretas
+-- (cc_sistema, bloque 2); cc_app no la puede crear (E14). Quién escribe cada fila lo deciden trg_entrega_libreta_nace,
+-- trg_exportacion_calificaciones_nace y trg_delegacion_siagie_nace.
+GRANT INSERT ON cuentasclaras.entrega_libreta TO 'cc_negocio';
+GRANT INSERT ON cuentasclaras.exportacion_calificaciones TO 'cc_negocio';
+GRANT INSERT ON cuentasclaras.delegacion_siagie TO 'cc_negocio';
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se
@@ -373,6 +381,8 @@ GRANT INSERT ON cuentasclaras.muestra_llamada TO 'cc_sistema'@'%';              
 GRANT INSERT ON cuentasclaras.resumen_diario TO 'cc_sistema'@'%';                 -- sistema.panel, solo inserción
 GRANT INSERT ON cuentasclaras.huella_bitacora TO 'cc_sistema'@'%';                -- sistema.auditoria, solo inserción
 GRANT INSERT ON cuentasclaras.huella_hora TO 'cc_sistema'@'%';                    -- sistema.auditoria, solo inserción
+--    Sprint 10, tanda 3 (E14): la libreta la emite SOLO sistema.libretas (trg_libreta_emitida_nace). Solo inserción.
+GRANT INSERT ON cuentasclaras.libreta_emitida TO 'cc_sistema'@'%';                -- sistema.libretas, solo inserción
 --    Sprint 9, tanda 2 (A2): la marca de agua de los avisos de asistencia (sistema.asistencia). El colegio y quién la creó
 --    no cambian (1143); nunca DELETE.
 GRANT INSERT, UPDATE (ultima_marca_id, actualizado_en, version)

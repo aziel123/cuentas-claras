@@ -467,7 +467,26 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			// antes que las FK (1644).
 			soloInsercion("calificacion"), sinBorrado("calificacion"), soloInsercion("lote_calificacion"),
 			soloInsercion("exoneracion_area"), soloInsercion("borrador_conclusion"),
-			trigger(VerificadorPermisosBaseDatos.CORRECCION_SIN_SOLICITUD_IMPOSIBLE, "trg_calificacion_nace"));
+			trigger(VerificadorPermisosBaseDatos.CORRECCION_SIN_SOLICITUD_IMPOSIBLE, "trg_calificacion_nace"),
+			// Sprint 10, tanda 3 (V37, E14): cc_app no escribe libretas (cualquier escritura: 1142; la emite solo
+			// sistema.libretas con cc_sistema); las entregas, la exportación de calificaciones y la delegación del SIAGIE son
+			// de solo inserción y nada se borra (1142).
+			soloSistema(VerificadorPermisosBaseDatos.LIBRETA_SIN_CORRECCION_IMPOSIBLE, "La aplicación podría emitir libretas."),
+			soloInsercion("libreta_emitida"), sinBorrado("libreta_emitida"),
+			soloInsercion("entrega_libreta"), sinBorrado("entrega_libreta"),
+			soloInsercion("exportacion_calificaciones"), sinBorrado("exportacion_calificaciones"),
+			soloInsercion("delegacion_siagie"), sinBorrado("delegacion_siagie"));
+
+	/**
+	 * Sprint 10, tanda 3 (E14 y sección 6.4): una libreta del colegio 0 en la versión 2 sin una corrección aprobada. Con
+	 * cc_app, 1142 (sin GRANT); con cc_sistema, la rechaza trg_libreta_emitida_nace antes que las FK (1644).
+	 */
+	static final String LIBRETA_SIN_CORRECCION_IMPOSIBLE = "INSERT INTO libreta_emitida (colegio_id, anio_escolar_id, "
+			+ "periodo_id, seccion_id, matricula_id, alumno_id, numero_version, reemplaza_id, motivo, hasta_calificacion_id, "
+			+ "hasta_marca_id, hasta_exoneracion_id, alumno_nombre, alumno_codigo, tipo_codigo, director_nombre, "
+			+ "huella_contenido, cambios, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, 0, 0, 2, 0, 'CORRECCION', "
+			+ "0, 0, 0, 'Verificador', '00000000', 'DNI', 'Verificador', REPEAT('0', 64), 'Verificador', NOW(6), "
+			+ "'sistema.libretas', NOW(6))";
 
 	/**
 	 * Sprint 10, tanda 2 (E4): una corrección de nota del colegio 0, sin solicitud firmada ni periodo cerrado (la rechaza
@@ -710,7 +729,11 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			sinPermiso("INSERT INTO competencia (version_id, area_id, codigo, nombre, orden) VALUES (0, 0, 'PRI-XX-1', "
 					+ "'Verificador', 1)", "competencia"),
 			sinPermiso("UPDATE escala_logro SET descripcion = descripcion WHERE 1 = 0", "escala_logro"),
-			sinBorrado("periodo_evaluacion"), sinBorrado("asignacion_area"));
+			sinBorrado("periodo_evaluacion"), sinBorrado("asignacion_area"),
+			// Sprint 10, tanda 3 (sección 6.4): con cc_sistema, una libreta del colegio 0 en la versión 2 sin corrección la
+			// rechaza trg_libreta_emitida_nace (1644); ni sistema.libretas la edita ni la borra (1142).
+			trigger(VerificadorPermisosBaseDatos.LIBRETA_SIN_CORRECCION_IMPOSIBLE, "trg_libreta_emitida_nace"),
+			soloInsercion("libreta_emitida"), sinBorrado("libreta_emitida"));
 
 	/** 1142 (o 1143): solo cc_sistema la escribe. */
 	private static SentenciaProhibida soloSistema(String sql, String riesgo) {
@@ -818,7 +841,10 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_periodo_evaluacion_cambio", "trg_asignacion_area_nace",
 			// Sprint 10, tanda 2 (V36).
 			"trg_lote_calificacion_nace", "trg_calificacion_nace", "trg_exoneracion_area_nace",
-			"trg_borrador_conclusion_nace");
+			"trg_borrador_conclusion_nace",
+			// Sprint 10, tanda 3 (V37).
+			"trg_libreta_emitida_nace", "trg_entrega_libreta_nace", "trg_exportacion_calificaciones_nace",
+			"trg_delegacion_siagie_nace");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 

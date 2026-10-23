@@ -749,7 +749,8 @@ class VerificadorPermisosBaseDatosTest {
 		// Sprint 9: 88 (tanda 1), 93 (tanda 2) y 98 (tanda 3: comunicados, destinatarios, confirmación y nómina).
 		// Sprint 10, tanda 1 (V35): 104 (la evaluación del año, los periodos y las áreas de cada asignación).
 		// Sprint 10, tanda 2 (V36): 108 (los lotes, las notas, las exoneraciones y los borradores de conclusión).
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(108);
+		// Sprint 10, tanda 3 (V37): 112 (la libreta, su entrega, la exportación de calificaciones y la delegación del SIAGIE).
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(112);
 	}
 
 	/**

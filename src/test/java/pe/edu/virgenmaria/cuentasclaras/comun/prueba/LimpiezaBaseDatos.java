@@ -39,6 +39,15 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM consentimiento_aviso");
 		jdbc.update("DELETE FROM configuracion_academica");
 		jdbc.update("DELETE FROM aviso_asistencia_corte");
+		// Sprint 10, tanda 3 (V37): las entregas apuntan a su libreta; las libretas, de la última versión a la primera, al
+		// periodo, la matrícula y la solicitud; la exportación y la delegación, a la sesión y la cuenta.
+		jdbc.update("DELETE FROM entrega_libreta");
+		while (jdbc.update("DELETE FROM libreta_emitida WHERE id NOT IN (SELECT reemplaza_id FROM libreta_emitida "
+				+ "WHERE reemplaza_id IS NOT NULL)") > 0) {
+			// sigue con la versión anterior de cada cadena
+		}
+		jdbc.update("DELETE FROM exportacion_calificaciones");
+		jdbc.update("DELETE FROM delegacion_siagie");
 		// Sprint 10, tanda 2 (V36): los borradores apuntan a su nota; las notas, de la última a la primera de cada cadena,
 		// a su lote y a su solicitud; las exoneraciones, al periodo desde el que rigen.
 		jdbc.update("DELETE FROM borrador_conclusion");
