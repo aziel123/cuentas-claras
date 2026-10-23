@@ -31,6 +31,9 @@ public interface PeriodoEvaluacionRepository extends Repository<PeriodoEvaluacio
 
 	Optional<PeriodoEvaluacion> findByAnioEscolarIdAndNumero(Long anioEscolarId, int numero);
 
+	/** Sprint 10, tanda 3: los periodos en ese estado (la emisión de libretas recorre los CERRADOS). */
+	List<PeriodoEvaluacion> findByEstadoOrderByAnioEscolarIdAscNumeroAsc(EstadoPeriodo estado);
+
 	boolean existsByAnioEscolarIdAndEstadoNot(Long anioEscolarId, EstadoPeriodo estado);
 
 	/** Los PROGRAMADOS cuyo inicio ya llegó (AperturaPeriodos), en orden de año y número. */

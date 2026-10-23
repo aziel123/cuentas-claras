@@ -281,6 +281,14 @@ public final class ClaveFirma {
 		return "exoneracion_area:" + id(matriculaId) + ":" + id(areaId) + ":AUTORIZADA";
 	}
 
+	/**
+	 * Sprint 10, tanda 3 (M12): Dirección delega desde {@code desde} la exportación para el SIAGIE a la cuenta
+	 * {@code usuarioId} (trg_delegacion_siagie_nace: {@code delegacion_siagie:{usuario}:{desde}:DELEGADA}, la fecha ISO).
+	 */
+	public static String delegacionSiagie(Long usuarioId, java.time.LocalDate desde) {
+		return "delegacion_siagie:" + id(usuarioId) + ":" + Objects.requireNonNull(desde, "desde") + ":DELEGADA";
+	}
+
 	private static Long id(Long id) {
 		return Objects.requireNonNull(id, "id");
 	}

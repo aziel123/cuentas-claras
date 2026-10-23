@@ -59,7 +59,13 @@ public enum TipoSolicitud {
 	 */
 	CORRECCION_CALIFICACION("Corrección de una nota después del cierre"),
 	/** Sprint 10, tanda 2 (decisión 174): registrar en 48 horas una competencia que quedó sin nota al cerrar el periodo. */
-	CALIFICACION_TARDIA("Nota de un periodo cerrado que quedó sin registrar");
+	CALIFICACION_TARDIA("Nota de un periodo cerrado que quedó sin registrar"),
+	/**
+	 * Sprint 10, tanda 3 (A3, decisión 188): volver a emitir una libreta cuya huella no coincide (alguien tocó la base). La
+	 * pide Dirección; la aprueba Promotoría; la emite {@code sistema.libretas} (motivo REEMISION). En MySQL lo exige
+	 * trg_libreta_emitida_nace.
+	 */
+	REEMISION_LIBRETA("Reemisión de una libreta tras una revisión de integridad");
 
 	private final String etiqueta;
 

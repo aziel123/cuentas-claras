@@ -450,6 +450,26 @@ public enum AccionAuditoria {
 	/** Se resalta: Dirección exoneró a un alumno de Religión o Educación Física desde un periodo. */
 	AREA_EXONERADA("Exoneró a un alumno de un área", true),
 
+	// Sprint 10, tanda 3: libretas y SIAGIE (sección 8.4). Sin notas ni conclusiones: cantidades, versiones y huellas.
+	/** sistema.libretas emitió las libretas de una sección al cierre: UN evento por periodo y sección (decisión 191). */
+	LIBRETAS_EMITIDAS("Emitió las libretas de una sección", false),
+	/** sistema.libretas emitió la versión siguiente de una libreta por una corrección o nota tardía aprobada. */
+	LIBRETA_CORREGIDA_EMITIDA("Emitió una libreta corregida", false),
+	/** Se resalta: sistema.libretas reemitió una libreta con la reemisión aprobada por Promotoría (A3). */
+	LIBRETA_REEMITIDA("Reemitió una libreta tras una revisión de integridad", true),
+	/** Se resalta (E40): al regenerar una libreta su huella no coincide: alguien tocó la base. No se entregó ese PDF. */
+	LIBRETA_HUELLA_NO_COINCIDE("Una libreta no coincide con su huella", true),
+	/** Dirección consultó un código de verificación (A4). */
+	LIBRETA_VERIFICADA("Verificó el código de una libreta", false),
+	/** Dirección o el tutor imprimió libretas (cada una deja su constancia de entrega). */
+	LIBRETAS_IMPRESAS("Imprimió libretas", false),
+	/** sistema.libretas creó los avisos de libretas a las familias. */
+	AVISOS_LIBRETAS_ENVIADOS("Avisó a las familias que su libreta está en el portal", false),
+	/** Se descargó la exportación de calificaciones de una sección para el SIAGIE (con el código y el SHA-256). */
+	CALIFICACIONES_SIAGIE_EXPORTADAS("Descargó las calificaciones de una sección para el SIAGIE", false),
+	/** Se resalta (M12): Dirección delegó con su firma la exportación para el SIAGIE a una persona de Administración. */
+	DELEGACION_SIAGIE_OTORGADA("Delegó la exportación de calificaciones para el SIAGIE", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

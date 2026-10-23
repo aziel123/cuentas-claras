@@ -295,7 +295,8 @@ public class DespachoMensajes {
 							// Sprint 9, tanda 2: los avisos de asistencia llevan a la asistencia, nunca al estado de cuenta.
 							? "\n\nVer en el portal: " + propiedades.urlPublica()
 									+ (mensaje.getPlantilla().deAsistencia() ? "/familia/asistencia"
-									: mensaje.getPlantilla().deComunicados() ? "/familia/comunicados" : "/familia") : "")
+									: mensaje.getPlantilla().deComunicados() ? "/familia/comunicados"
+									: mensaje.getPlantilla().deLibretas() ? "/familia/libretas" : "/familia") : "")
 					+ pieDelCorreo(colegio);
 			return new Envio(parametros, null, cuerpo);
 		}

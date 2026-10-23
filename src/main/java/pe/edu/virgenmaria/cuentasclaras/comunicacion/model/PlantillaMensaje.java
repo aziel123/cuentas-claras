@@ -124,7 +124,18 @@ public enum PlantillaMensaje {
 	COMUNICADOS("cc_comunicados_v2", "Comunicados del colegio", 3, true,
 			"{{1}}: tiene {{2}} en el portal, de {{3}}. Léalos y confirme su lectura allí."),
 	COMUNICADO_URGENTE("cc_comunicado_urgente_v2", "Comunicado urgente", 3, true,
-			"{{1}}: {{2}} le envió un comunicado urgente: «{{3}}». Léalo en el portal.");
+			"{{1}}: {{2}} le envió un comunicado urgente: «{{3}}». Léalo en el portal."),
+	// Sprint 10, tanda 3 (sección 5 del diseño): libretas. El periodo y los primeros nombres; nunca notas, conclusiones,
+	// montos ni palabras de cobranza (INDECOPI: la libreta no se retiene por deuda). El botón lleva a /familia/libretas.
+	LIBRETA("cc_libreta_v1", "Libreta disponible", 3, true,
+			"{{1}}: la libreta del {{2}} de {{3}} ya está en el portal."),
+	LIBRETA_CORREGIDA("cc_libreta_corregida_v1", "Se corrigió la libreta", 3, true,
+			"{{1}}: se corrigió la libreta del {{2}} de {{3}}. Revise el detalle en el portal.");
+
+	/** Sprint 10, tanda 3: las plantillas de libretas (botón a {@code /familia/libretas}). */
+	public boolean deLibretas() {
+		return this == LIBRETA || this == LIBRETA_CORREGIDA;
+	}
 
 	/** Sprint 9, tanda 2: las plantillas de asistencia (botón a {@code /familia/asistencia}). */
 	public boolean deAsistencia() {
