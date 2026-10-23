@@ -325,7 +325,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V35): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V36): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -369,6 +369,9 @@ jobs:
 
       - name: "Sprint 10, tanda 1: el catálogo nacional no se escribe ni con cc_app ni con cc_sistema y no admite el separador de su huella; la evaluación del año la guarda solo Dirección con su firma y queda fija con un periodo abierto; un periodo nace PROGRAMADO, dentro del año y en orden, abre el sistema en su fecha y lo cierra solo Dirección desde fin − 7 según la hora de la base, sin reabrirse; en ABIERTO el fin solo se extiende; las áreas de una asignación van en su propuesta y son las aprobadas (E9 a E12, E24, E25, E41, A2, M7, B13)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint10CurriculoMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 10, tanda 2: la nota la pone solo el docente del área con su sesión y su firma, en un lote por guardado y con el periodo abierto; la matrícula RESERVADA recibe nota; no se edita, no se borra ni se bifurca; la conclusión que exige la norma con el SHA-256 de la base; después del cierre, solo por una corrección aprobada y firmada por otra persona (con el texto de su borrador) o por una nota tardía en 48 horas; la exoneración la autoriza Dirección desde un periodo abierto; 40 docentes guardan a la vez en menos de 2 s (E1 a E8, E18 a E23, E25, E36, C1, A3, M8)"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint10NotasMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint6MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
@@ -850,11 +853,18 @@ jobs:
           comprobar 1143 "UPDATE periodo_evaluacion SET numero = numero WHERE 1 = 0"
           comprobar 1143 "UPDATE configuracion_evaluacion SET anio_escolar_id = anio_escolar_id WHERE 1 = 0"
           comprobar 1644 "INSERT INTO periodo_evaluacion (colegio_id, anio_escolar_id, numero, nombre, inicio, fin, estado, abierto_por, abierto_en, cerrado_por, cerrado_en, actualizado_por, creado_en, creado_por, actualizado_en) VALUES (0, 0, 1, 'I bimestre', '2000-03-01', '2000-05-01', 'CERRADO', 'ci', NOW(6), 'ci', NOW(6), 'ci', NOW(6), 'ci', NOW(6))"
-          # Huellas (H7): cc_app ve las de los 104 triggers y las 15 funciones con huellas_objetos() (sprint 10, tanda 1).
+          # Sprint 10, tanda 2 (V36, E7, E4): las notas, sus lotes, las exoneraciones y los borradores son de solo inserción
+          # (1142); una corrección del colegio 0 sin solicitud firmada la rechaza su trigger antes que las FK (1644).
+          for tabla in calificacion lote_calificacion exoneracion_area borrador_conclusion; do
+            comprobar 1142 "UPDATE $tabla SET version = version WHERE 1 = 0"
+            comprobar 1142 "DELETE FROM $tabla WHERE 1 = 0"
+          done
+          comprobar 1644 "INSERT INTO calificacion (colegio_id, anio_escolar_id, periodo_id, seccion_id, matricula_id, alumno_id, competencia_id, nivel_logro, origen, reemplaza_id, solicitud_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, 0, 0, 0, 'AD', 'CORRECCION_APROBADA', 0, 0, NOW(6), 'ci', NOW(6))"
+          # Huellas (H7): cc_app ve las de los 108 triggers y las 16 funciones con huellas_objetos() (sprint 10, tanda 2).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
-          [ "$objetos" = "$((esperados + 15))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
-          [ "$objetos" = "119" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y la tanda 1 del sprint 10 deja 119"; exit 1; }
-          [ "$esperados" = "104" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 1 del sprint 10 deja 104"; exit 1; }
+          [ "$objetos" = "$((esperados + 16))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
+          [ "$objetos" = "124" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y la tanda 2 del sprint 10 deja 124"; exit 1; }
+          [ "$esperados" = "108" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 2 del sprint 10 deja 108"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -897,7 +907,7 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 104 triggers y las 15 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 108 triggers y las 16 funciones verificadas" prod.log || { cat prod.log; exit 1; }
           # Sprint 10, tanda 1 (E13, M10): prod verificó el catálogo del currículo en las dos direcciones.
           grep -q "logo del curr.culo verificado" prod.log || { cat prod.log; exit 1; }
           # Sprint 8, tanda 2 (sección 3.6): los conectores (GRANT por columna y triggers) y la clave que descifra todos
@@ -1244,7 +1254,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V35, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V36, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \
@@ -1259,6 +1269,9 @@ jobs:
 
       - name: "Datos de todas las pruebas de MySQL (fase 2: cobros, anulaciones, mensajes, bitácora...)"
         run: ./mvnw -B test -Dtest=PermisosMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 10, tanda 2: datos de las notas (un lote, una corrección aprobada, una nota tardía y una exoneración)"
+        run: ./mvnw -B test -Dtest='AuditoriaSprint10NotasMySqlTest#flujoNotasConPermisosMinimos' -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Claves age desechables (Promotoría y responsable técnico)
         run: |
@@ -1321,6 +1334,9 @@ jobs:
 
       - name: "Sprint 10, tanda 1: un DBA borra un área de una asignación de UN colegio: el respaldo avisa «faltan filas» solo a ese colegio"
         run: sh scripts/respaldo/pruebas-ci.sh faltan-filas-areas
+
+      - name: "Sprint 10, tanda 2: un DBA borra una nota de UN colegio: el respaldo avisa «faltan filas» solo a ese colegio"
+        run: sh scripts/respaldo/pruebas-ci.sh faltan-filas-notas
 
   imagen:
     name: Imagen en GHCR por el SHA del commit, con su SBOM (solo main)

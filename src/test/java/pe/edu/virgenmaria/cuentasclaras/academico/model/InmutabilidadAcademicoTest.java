@@ -149,6 +149,43 @@ class InmutabilidadAcademicoTest {
 				.map(Method::getName)).noneMatch(n -> n.startsWith("set"));
 	}
 
+	/**
+	 * Sprint 10, tanda 2 (E7): las notas, sus lotes, las exoneraciones y los borradores son de SOLO INSERCIÓN: solo INSERT en
+	 * el GRANT, ninguna columna actualizable, sin setters y sus @PreUpdate y @PreRemove lanzan.
+	 */
+	@Test
+	void lasNotasSusLotesExoneracionesYBorradoresSonDeSoloInsercion() throws Exception {
+		Class<?>[] entidades = { pe.edu.virgenmaria.cuentasclaras.academico.notas.model.LoteCalificacion.class,
+				pe.edu.virgenmaria.cuentasclaras.academico.notas.model.Calificacion.class,
+				pe.edu.virgenmaria.cuentasclaras.academico.notas.model.ExoneracionArea.class,
+				pe.edu.virgenmaria.cuentasclaras.academico.notas.model.BorradorConclusion.class };
+		String[] tablas = { "lote_calificacion", "calificacion", "exoneracion_area", "borrador_conclusion" };
+		for (int i = 0; i < entidades.length; i++) {
+			Class<?> entidad = entidades[i];
+			assertThat(permisos()).contains("GRANT INSERT ON cuentasclaras." + tablas[i] + " TO 'cc_negocio';")
+					.doesNotContainPattern("GRANT [^;]*(UPDATE|DELETE)[^;]*ON cuentasclaras\\." + tablas[i] + "\\b");
+			assertThat(ColumnasActualizables.de(entidad)).as(entidad.getSimpleName() + ": solo las de BaseEntity")
+					.allMatch(c -> c.equals("actualizado_en") || c.equals("version"));
+			assertThat(Arrays.stream(entidad.getDeclaredMethods()).filter(m -> Modifier.isPublic(m.getModifiers()))
+					.map(Method::getName)).as(entidad.getSimpleName()).noneMatch(n -> n.startsWith("set"));
+			java.lang.reflect.Constructor<?> vacio = entidad.getDeclaredConstructor();
+			vacio.setAccessible(true);
+			Object fila = vacio.newInstance();
+			for (String metodo : new String[] { "impedirCambio", "impedirBorrado" }) {
+				Method m = entidad.getDeclaredMethod(metodo);
+				m.setAccessible(true);
+				assertThatThrownBy(() -> {
+					try {
+						m.invoke(fila);
+					}
+					catch (java.lang.reflect.InvocationTargetException e) {
+						throw e.getCause();
+					}
+				}).as(entidad.getSimpleName() + "." + metodo).isInstanceOf(IllegalStateException.class);
+			}
+		}
+	}
+
 	private static Column columna(Class<?> entidad, String campo) {
 		try {
 			return entidad.getDeclaredField(campo).getAnnotation(Column.class);

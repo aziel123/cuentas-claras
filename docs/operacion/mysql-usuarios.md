@@ -233,6 +233,17 @@ versión nueva de `trg_asignacion_docente_estado` (al aprobar, las áreas son la
 triggers y las 15 funciones verificadas» y «Catálogo del currículo verificado». Una base existente: `migrar`, `02` y `03`,
 en ese orden y con la aplicación detenida; no hay usuarios nuevos.
 
+**Sprint 10, tanda 2 (V36): 108 triggers y 16 funciones con huella (124).** Las notas son un libro de **solo inserción**:
+`lote_calificacion`, `calificacion`, `exoneracion_area` y `borrador_conclusion` tienen solo INSERT para `cc_negocio`
+(ningún UPDATE ni DELETE: 1142) y están en `tablas-vigiladas.txt`. Nuevos: la función `cc_docente_de_area` (la misma regla
+que la aplicación: el área asignada, o la transversal si es el tutor), `trg_lote_calificacion_nace` (el docente del área con
+su sesión y su firma; con el periodo cerrado, solo con su nota tardía aprobada hace 48 horas o menos según la base),
+`trg_calificacion_nace` (matrícula ACTIVA o RESERVADA, sin exoneración vigente, la conclusión que exige la norma con su
+SHA-256 de la base, la cadena lineal y, después del cierre, solo la corrección aprobada y firmada por otra persona, con el
+texto de su borrador), `trg_exoneracion_area_nace` (Dirección con su firma, desde un periodo abierto) y
+`trg_borrador_conclusion_nace`. Prod: «Huellas de los 108 triggers y las 16 funciones verificadas». Una base existente:
+`migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
+
 **Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
 van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
 custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra

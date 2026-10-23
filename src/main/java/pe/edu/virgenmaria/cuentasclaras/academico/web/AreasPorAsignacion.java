@@ -1,4 +1,4 @@
-package pe.edu.virgenmaria.cuentasclaras.academico.dto;
+package pe.edu.virgenmaria.cuentasclaras.academico.web;
 
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 
@@ -11,14 +11,14 @@ import java.util.Map;
  * Sprint 10, tanda 2: las áreas que la persona confirmó en «Completar áreas», por asignación (parámetros
  * {@code areas-{asignacion}} con un valor por área marcada). Lo demás del formulario se ignora.
  */
-public final class AreasPorAsignacion {
+final class AreasPorAsignacion {
 
-	public static final String PREFIJO = "areas-";
+	static final String PREFIJO = "areas-";
 
 	private AreasPorAsignacion() {
 	}
 
-	public static Map<Long, List<Long>> deFormulario(Map<String, List<String>> parametros) {
+	static Map<Long, List<Long>> deFormulario(Map<String, List<String>> parametros) {
 		Map<Long, List<Long>> resultado = new LinkedHashMap<>();
 		for (Map.Entry<String, List<String>> p : parametros.entrySet()) {
 			if (!p.getKey().startsWith(PREFIJO)) {

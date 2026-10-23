@@ -51,3 +51,9 @@ exportacion_nomina
 # VerificadorCatalogoCurriculo con su huella, al arrancar y a diario. La configuración y los periodos cambian de estado (no
 # son de solo inserción), pero nunca se borran (sin DELETE).
 asignacion_area
+# Sprint 10, tanda 2 (V36): las notas, sus lotes, las exoneraciones y los borradores de conclusión son de solo inserción:
+# un borrado del DBA (una nota que desaparece) aparece como «faltan filas» del colegio.
+lote_calificacion
+calificacion
+exoneracion_area
+borrador_conclusion
