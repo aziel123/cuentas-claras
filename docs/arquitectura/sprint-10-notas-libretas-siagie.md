@@ -1773,7 +1773,14 @@ Rutas relativas a `C:/Users/amedina/cuentas-claras/cuentas-claras/`:
 5. **E4 lo frena ya la base al aprobar**: `ck_solicitud_cambio_resolucion` no deja que resuelva quien pidió (3819); la nota
    con la solicitud pendiente la rechaza el trigger (1644).
 6. **La prueba de carga usa 5 secciones de 30 alumnos y las 8 áreas de Primaria** (40 docentes a la vez; Matemática, 120
-   filas): una sección no tiene 40 áreas.
+   filas): una sección no tiene 40 áreas. **El umbral de 2 s se cumple para un lote solo, no para el último de 40
+   simultáneos:** en el CI (runner de 4 vCPU con la aplicación y MySQL juntos) un lote de 120 filas tarda ~120 ms solo y,
+   con los 40 a la vez, el primero termina en ~1 s y el último en ~2,2 s. La espera no está en el trigger (bajarlo a una
+   consulta por fila no movió los tiempos) sino en la cadena de la bitácora (`auditoria_cadena`, una fila para toda la
+   instalación, bloqueada desde el evento hasta el COMMIT): lo confirmó `sys.innodb_lock_waits` en la prueba. La prueba
+   exige el lote solo en menos de 2 s y los 40 a la vez en menos de 4 s. **Decisión abierta para el coordinador:** aceptar
+   ese umbral o rediseñar la cadena (por colegio, o el evento fuera de la transacción de las notas), que afecta a todo el
+   sistema y no es de esta tanda.
 7. **`application.yaml` solo lleva `alerta-correcciones-por-persona`:** el plazo de 48 horas y el tope de 1000 caracteres los
    fija la base.
 
