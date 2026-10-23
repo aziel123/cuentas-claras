@@ -151,6 +151,13 @@ public enum ModuloApp {
 			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 	// Sprint 9, tanda 3 (sección 3.11, E34, B14): la nómina para el SIAGIE (DNI y fechas de nacimiento de menores) la saca
 	// SOLO Dirección, con su sesión; los datos que faltan y los códigos modulares, también. Va ANTES que ACADEMICO.
+	// Sprint 10, tanda 3 (A6, M12, decisión 189): las calificaciones para el SIAGIE las exporta Dirección o la persona de
+	// Administración a quien Dirección delegó con su firma (lo exige el servicio: sin delegación, la pantalla lo dice y la
+	// descarga es 403). Va ANTES que SIAGIE (que es solo de Dirección).
+	SIAGIE_CALIFICACIONES("Calificaciones para el SIAGIE", "Las calificaciones de cada sección y periodo cerrado, desde las "
+			+ "libretas vigentes, para copiar en la plantilla del SIAGIE, con su hoja de control.", "Sprint 10", true,
+			"/academico/siagie/calificaciones", new String[] { "/academico/siagie/calificaciones" },
+			EnumSet.of(DIRECTOR, ADMINISTRACION)),
 	SIAGIE("Nómina para el SIAGIE", "Los datos que faltan para la matrícula en el SIAGIE, los códigos modulares y la nómina "
 			+ "provisional de cada sección para copiar en la plantilla del SIAGIE.", "Sprint 9", true, "/academico/siagie",
 			new String[] { "/academico/siagie", "/academico/siagie/**" }, EnumSet.of(DIRECTOR)),
@@ -191,6 +198,15 @@ public enum ModuloApp {
 			+ "lectura.", "Sprint 10", true, "/academico/curriculo",
 			new String[] { "/academico/curriculo", "/academico/curriculo/**" }, EnumSet.of(PROMOTOR, DIRECTOR,
 					ADMINISTRACION, DOCENTE)),
+	// Sprint 10, tanda 3 (A4): verificar el código de una libreta y pedir su reemisión, SOLO Dirección. Va ANTES que LIBRETAS.
+	LIBRETAS_VERIFICAR("Verificar una libreta", "Comprueba con el código impreso si una libreta es auténtica y vigente, y "
+			+ "compara sus niveles con el papel.", "Sprint 10", true, "/academico/libretas/verificar",
+			new String[] { "/academico/libretas/verificar", "/academico/libretas/*/reemision" }, EnumSet.of(DIRECTOR)),
+	// Sprint 10, tanda 3 (M9): las libretas emitidas para imprimir; Dirección, todas; el tutor, las de su sección (lo exige el
+	// servicio: otra, 404). Va ANTES que ACADEMICO.
+	LIBRETAS("Libretas", "Las libretas de cada sección al cierre del periodo: imprímelas para entregarlas; queda la "
+			+ "constancia de entrega.", "Sprint 10", true, "/academico/libretas",
+			new String[] { "/academico/libretas", "/academico/libretas/**" }, EnumSet.of(DIRECTOR, DOCENTE)),
 	// Sprint 10, tanda 2 (sección 8.3): el avance del registro de notas, SIN alumnos, para Dirección y Promotoría (las
 	// correcciones del periodo, solo Dirección: lo exige el servicio). Va ANTES que NOTAS (que es solo del docente).
 	NOTAS_AVANCE("Avance de notas", "Por sección y área, cuántas notas faltan en el periodo, y las asignaciones que todavía "

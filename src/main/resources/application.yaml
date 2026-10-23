@@ -292,6 +292,16 @@ cuentasclaras:
     # Sprint 10, tanda 2 (sección 8.1). El plazo de la nota tardía (48 h) y el largo máximo de la conclusión (1000) los fija
     # la base (trg_lote_calificacion_nace y V36): no se configuran aquí.
     alerta-correcciones-por-persona: 5              # E26: más correcciones aprobadas por una persona en un periodo alertan
+  libretas:
+    # Sprint 10, tanda 3 (secciones 3.7, 3.9 y 8.1). La libreta se emite para toda matrícula ACTIVA o RESERVADA: no hay ninguna
+    # opción que la retenga por deuda (INDECOPI, ConfiguracionSinDeudaTest).
+    emision-cada: "0 */5 * * * *"                   # EmisionLibretas (sistema.libretas): periodos CERRADOS y correcciones
+    avisos-cada: "45 */5 7-19 * * MON-SAT"          # AvisosLibretas: un aviso por familia y periodo
+    hilos: 2                                        # executor propio del PDF (1 o 2)
+    cola: 8                                         # cola llena: 503 «intente en unos minutos» (E38)
+    max-paginas: 6                                  # una libreta
+    max-alumnos-por-archivo: 45                     # la impresión de una sección
+    reemision-dias-habiles: 2                       # decisión 188: «en revisión, se la entrega el colegio a más tardar…»
   comunicados:
     # Sprint 9, tanda 3 (sección 8). La hora del resumen y el tope mensual de cada colegio están en configuracion_academica.
     revisar-avisos-cada: "30 */5 7-19 * * MON-SAT"  # sistema.comunicados: urgentes pendientes y, a su hora, el resumen
@@ -301,6 +311,8 @@ cuentasclaras:
       max-segundos-validacion: 10                   # el analizador (proceso hijo) se mata por su PID al vencer (B5)
   siagie:
     perfil-nomina: SIAGIE_MATRICULA_PROVISIONAL      # decisión 164; archivo en src/main/resources/siagie/perfiles/
+    perfil-calificaciones: SIAGIE_CALIFICACIONES_PROVISIONAL   # sprint 10, tanda 3 (decisión 181)
+    max-secciones-dia: 10                           # más por persona en un día: «Para revisar» de Promotoría
   monitoreo:
     # Sprint 7, tanda 1 (sección 10): alertas técnicas por correo directo (SMTP de spring.mail y remitente
     # CORREO_REMITENTE) al responsable técnico. Sin CC_OPERADOR_CORREO quedan apagadas y /panel/sistema lo dice en rojo.
