@@ -1710,3 +1710,17 @@ Rutas relativas a `C:/Users/amedina/cuentas-claras/cuentas-claras/`:
 - **Un solo director:** «otra persona» que aprueba las áreas puede no existir; vale el aviso A8 del sprint 9.
 - **Docentes del sprint 9 sin áreas:** no califican hasta que Dirección vuelva a proponer sus asignaciones (la pantalla lo
   dice).
+
+### Resultados de la verificación
+- `./mvnw -B verify` en local (una vez, sobre be15b94): 2925 pruebas, 2 fallos y 1 error (`MatrizPermisosTest`: Caja veía
+  el catálogo; `RutasIdorTest`: faltaba clasificar `/academico/curriculo/{codigo}`), corregidos en b07f0bd y vueltos a correr
+  esas clases con las demás de la tanda (también con `-Duser.timezone=America/Los_Angeles`: 108 pruebas, 0 fallos).
+- MySQL real en local (contenedor propio `cc-s10t1-mysql`, `mysql:8`): V1–V35 con `cc_migrador`, `02` y `03` sin error,
+  119 huellas; `AuditoriaSprint10CurriculoMySqlTest` 29 de 29; `MigracionMySqlTest` 2; `AuditoriaSprint9AsistenciaMySqlTest`
+  13 (1 omitida por la fecha); `AuditoriaSprint9ComunicadosMySqlTest` 43; `PermisosMySqlTest.flujoAsignacionDocente…` 1.
+- CI del PR #20, corrida 39999929355 sobre b07f0bd: **todos los jobs en verde** (compilar y probar: 2954 pruebas, 0 fallos,
+  233 omitidas, también con la zona de Los Ángeles; MySQL 8 con `AuditoriaSprint10CurriculoMySqlTest` 29 de 29,
+  `huellas_objetos()` = 119 y prod «Huellas de los 104 triggers y las 15 funciones verificadas» y «Catálogo del currículo
+  verificado»; respaldo con `faltan-filas-areas`; demo; dependencias; gitleaks).
+- El contenedor `cc-s10t1-mysql` se borró al terminar. No se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`,
+  `smarthr-*`, `supabase_*` ni `cc-mysql-s5*`.
