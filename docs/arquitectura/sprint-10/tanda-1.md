@@ -1,6 +1,6 @@
 # Sprint 10 · Tanda 1 · Currículo, periodos y escalas (brief)
 
-> Léase primero. Diseño completo: `docs/arquitectura/sprint-10-notas-libretas-siagie.md` (secciones **2.3**, 3.1 a 3.4,
+> Léase primero. Diseño completo: `docs/arquitectura/sprint-10-notas-libretas-siagie.md` (secciones **2.3**, **3.13** (auditoría en papel), 3.1 a 3.4,
 > 3.11, 3.12, 4, 5 «V35», 6.2 y 6.3 «Tanda 1», 6.4, 6.5, 7, 8 y 9). Rama `claude/sprint-10-notas-libretas-siagie`, PR en
 > borrador: **la tanda está terminada cuando el CI del PR está en verde.** Antes de codear, la auditoría del diseño en papel
 > (`auditor-seguridad-antifraude`); sus hallazgos críticos y altos se corrigen en el diseño y en este brief.
@@ -13,21 +13,28 @@
 3. **Periodo por defecto BIMESTRE** (decisión 171); TRIMESTRE o SEMESTRE por colegio y año. Versión y tipo de periodo
    **fijos desde que abre el primer periodo**. **CERRADO no se reabre** (decisión 172).
 4. **Las áreas se aprueban con la asignación** (sección 3.4): `asignacion_area` solo se inserta en una asignación PROPUESTA y
-   por quien la propuso. Transversales: el TUTOR (decisión 175), sin `asignacion_area`.
+   por quien la propuso, **en la misma transacción de la propuesta** (A2). Transversales: el TUTOR (decisión 175).
+5. **Auditoría en papel sobre 0b30c57 incorporada** (diseño, sección 3.13, que prevalece). En esta tanda: **A2** (áreas en la
+   transacción de la propuesta y comparadas al aprobar), **M7** (`fin` solo se extiende; días de cierre fijos), **M10**
+   (catálogo verificado en las dos direcciones y a diario), **B13** (sin barra vertical ni saltos de línea en el catálogo) y
+   **B15** (casos nuevos del verificador). C1, A3 a A6, M8, M9, M11, M12 y B14 son de las tandas 2 y 3.
 
 ## 2. Alcance
 - V35 (diseño, sección 5): catálogo `CNEB-2016.1` completo (**29 áreas, 75 competencias, 12 valores de escala**, listas de la
   sección 3.2), `configuracion_evaluacion`, `periodo_evaluacion`, `asignacion_area` y los CHECK de `acceso_dato_personal`
   con `NOTAS_SECCION`, `LIBRETA` y `CALIFICACIONES_SIAGIE` (H7: una sola vez).
-- `VerificadorCatalogoCurriculo` con `src/main/resources/curriculo/CNEB-2016.1.sha256` (en prod, si no coincide, no arranca).
+- `VerificadorCatalogoCurriculo` con `src/main/resources/curriculo/CNEB-2016.1.sha256` (en prod, si no coincide, no arranca),
+  **en las dos direcciones** (cada versión de la base con su `.sha256` y cada `.sha256` con su versión), y `RevisionCatalogo`
+  diaria a las 05:00 con la alerta `INTEGRIDAD_CATALOGO` a Promotoría (M10).
 - Pantallas (skill `sistema-diseno`): «Evaluación del año» (Dirección: versión, tipo de periodo, conclusión máxima, «exigir
   siempre la conclusión», días de cierre anticipado, lengua materna, DRE y UGEL, con firma); «Periodos» (programar, mover
   fechas, abrir antes de tiempo y cerrar, cada acción con firma); catálogo de solo lectura (`/academico/curriculo`); la
   propuesta de asignación con áreas del catálogo y «Todas las áreas del grado» para el tutor de Inicial y Primaria;
   «Asignaciones sin áreas del catálogo» (las vigentes del sprint 9).
 - `AperturaPeriodos` (`sistema.academico`, cc_sistema, 06:00): abre los periodos cuyo inicio llegó.
-- El manejador de `ASIGNACION_DOCENTE`: al aprobar una asignación con las mismas claves (sección, docente, tipo) que una
-  VIGENTE, termina la anterior con la firma de quien aprueba y deja VIGENTE la nueva, en la misma transacción.
+- `Asignaciones.proponer`: inserta la asignación, sus áreas y **después** la solicitud, cuyo `datos` lleva `"areas"` con los
+  ids ordenados y separados por coma (A2). El manejador de `ASIGNACION_DOCENTE`: al aprobar una con las mismas claves
+  (sección, docente, tipo) que una VIGENTE, termina la anterior con la firma de quien aprueba y deja VIGENTE la nueva.
 - Bitácora: `CONFIGURACION_EVALUACION_GUARDADA`, `PERIODO_PROGRAMADO`, `PERIODO_FECHAS_CAMBIADAS`, `PERIODO_ABIERTO`,
   `PERIODO_CERRADO` (sin el resumen de pendientes: tanda 2).
 - `respaldar.sh` y `tablas-vigiladas.txt` con `asignacion_area` (solo inserción, por colegio). El catálogo no se cuenta por
@@ -49,7 +56,11 @@
 - **Comprobar en H2 2.4.240 MODE=MySQL y en MySQL 8.4:** `REGEXP_LIKE(…, 'c')` en los CHECK nuevos; la FK compuesta
   `competencia (area_id, version_id)`; `NOT (transversal AND exonerable)` con BOOLEAN; `DROP CONSTRAINT` y `ADD CONSTRAINT`
   sobre `acceso_dato_personal` con filas existentes; los 117 `INSERT … SELECT` (1 + 29 + 75 + 12) en las dos bases.
-- Lección de V32 a V34: un CHECK que evalúa NULL pasa. Un caso NULL por CHECK: `abierto_por`, `cerrado_por`, `solo_grados`,
+- **B13:** un CHECK por cada texto del catálogo (`area_curricular.nombre`, `competencia.nombre`, `escala_logro.nombre` y
+  `descripcion`): `INSTR(x, CHAR(124)) = 0 AND INSTR(x, CHAR(10)) = 0 AND INSTR(x, CHAR(13)) = 0` (CHAR(124) es la barra
+  vertical, el separador de la huella).
+- Lección de V32 a V34: un CHECK que evalúa NULL pasa.
+ Un caso NULL por CHECK: `abierto_por`, `cerrado_por`, `solo_grados`,
   `reemplaza_id`.
 - Entidades del catálogo con `@Immutable` y repositorios `Repository` (no `CrudRepository`); `AsignacionArea` con
   `updatable = false`; `PeriodoEvaluacion.numero` y `anioEscolar` con `updatable = false`.
@@ -62,19 +73,24 @@
 - `03-triggers.sql` (sección 6.3 «Tanda 1», SQL completo en el diseño):
   - función nueva **`cc_rol_activo(colegio, nombre, rol)`**;
   - triggers nuevos: `trg_configuracion_evaluacion_nace` y `_cambio` (DIRECTOR con firma
-    `configuracion_evaluacion:{anio}:GUARDADA:{version}`, versión de a una; versión del currículo y tipo de periodo fijos con
-    un periodo no PROGRAMADO), `trg_periodo_evaluacion_nace` (nace PROGRAMADO, DIRECTOR con firma
+    `configuracion_evaluacion:{anio}:GUARDADA:{version}`, versión de a una; versión del currículo, tipo de periodo y **días de cierre
+    anticipado** fijos con un periodo no PROGRAMADO, M7), `trg_periodo_evaluacion_nace` (nace PROGRAMADO, DIRECTOR con firma
     `periodo_evaluacion:{anio}:{numero}:PROGRAMADO`, dentro del año y de la configuración, en orden) y `_cambio` (fechas con
-    firma `periodo_evaluacion:{id}:FECHAS:{version}`; ABIERTO por `sistema.academico` en su fecha o DIRECTOR con
+    firma `periodo_evaluacion:{id}:FECHAS:{version}`; **en ABIERTO el fin solo se extiende**, M7; ABIERTO por `sistema.academico` en su fecha o DIRECTOR con
     `…:ABIERTO`; CERRADO por DIRECTOR con `…:CERRADO` desde `fin - dias_cierre_anticipado` en hora de Lima de la base y con
     el anterior CERRADO; `abierto_en` y `cerrado_en` los pone la base; CERRADO no cambia), `trg_asignacion_area_nace`
-    (asignación PROPUESTA, por quien la propuso, TUTOR o DOCENTE sin `hasta`, área del nivel y de la versión, no transversal).
+    (asignación PROPUESTA **y todavía sin su solicitud enlazada** (A2), por quien la propuso, TUTOR o DOCENTE sin `hasta`, área
+    del nivel y de la versión, no transversal);
+  - **versión nueva de `trg_asignacion_docente_estado`** (A2): al pasar de PROPUESTA a VIGENTE, `$.areas` de la solicitud es
+    igual a `GROUP_CONCAT(area_id ORDER BY area_id)` de `asignacion_area` (SQL en la sección 3.13 del diseño).
   - **Comparar siempre con `<=>`** sobre variables de `SELECT … INTO` (si no hay fila quedan NULL y un `<>` no dispara).
   - Encabezado: «Versión anterior (correcciones del sprint 9): 99 triggers y 11 funciones (14 con huella; 113 huellas)».
-- **Conteo esperado:** 99 → **104 triggers** (5 nuevos); funciones con huella 14 → **15** (12 de `03` + 3 de `02`); huellas
-  113 → **119**. Prod: «Huellas de los 104 triggers y las 15 funciones verificadas». Tanda 2: 107 y 123; tanda 3: 110 y 126.
+- **Conteo esperado:** 99 → **104 triggers** (5 nuevos y 1 con versión nueva); funciones con huella 14 → **15** (12 de `03` +
+  3 de `02`); huellas 113 → **119**. Prod: «Huellas de los 104 triggers y las 15 funciones verificadas». Con la auditoría,
+  tanda 2: **108 y 124**; tanda 3: **112 y 128**.
 - `VerificadorPermisosBaseDatos`: `TRIGGERS_ESPERADOS` con los 5; 1142 (`INSERT INTO competencia`, `UPDATE competencia`,
-  `UPDATE escala_logro`, `DELETE FROM periodo_evaluacion`, `UPDATE asignacion_area`); 1143 (`UPDATE periodo_evaluacion SET
+  `UPDATE escala_logro`, `DELETE FROM periodo_evaluacion`, `UPDATE asignacion_area`, y por B15 `DELETE FROM asignacion_area`,
+  `DELETE FROM configuracion_evaluacion`, `INSERT` y `UPDATE` en `curriculo_version` y `area_curricular`); 1143 (`UPDATE periodo_evaluacion SET
   numero = numero`, `UPDATE configuracion_evaluacion SET anio_escolar_id = anio_escolar_id`); 1644 (un `periodo_evaluacion`
   del colegio 0 que nace CERRADO). `HuellasObjetosBd` = 119.
 - **Pruebas MySQL obligatorias (antes «comprobar»):** que un trigger BEFORE UPDATE de `periodo_evaluacion` puede leer su
@@ -123,7 +139,8 @@
   `exige_conclusion` por nivel como la RVM 048-2024 (Inicial A, B y C; Primaria B y C; Secundaria C);
   `competenciasDe(INICIAL_4)` sin transversales ni C2L y `competenciasDe(INICIAL_5)` con ellas; exonerables solo EF y REL.
 - `VerificadorCatalogoCurriculoTest`: la huella coincide; una competencia cambiada en la prueba hace fallar el arranque en el
-  perfil prod y solo avisa en dev (E13).
+  perfil prod y solo avisa en dev (E13); `versionSinArchivoFalla` y `archivoSinVersionFalla` (M10); `RevisionCatalogoTest`
+  (la revisión diaria alerta a Promotoría).
 - `ConfiguracionEvaluacionTest`: solo Dirección con firma (403 para Administración, Promotoría y docente); BIMESTRE por
   defecto; no cambia el tipo con un periodo ABIERTO (E11); `ConfiguracionSinDeudaTest` (la entidad no tiene campos de deuda,
   pago ni bloqueo, por reflexión).
@@ -142,14 +159,16 @@
 salvo que se diga otra cosa:**
 - `e12CatalogoNoSeEscribe` (INSERT y UPDATE en `competencia` y `escala_logro`: 1142).
 - `e11ConfiguracionFijaConPeriodoAbierto`; `configuracionSinDireccionNiFirmaFalla` (INSERT y UPDATE);
-  `configuracionQueSaltaVersionesFalla`.
+  `configuracionQueSaltaVersionesFalla`; `m7DiasDeCierreFijos`; `m7FinAdelantadoFalla` (en ABIERTO).
 - `e41PeriodoQueNaceCerradoFalla`, `e41FechasFueraDelAnioFalla`, `periodosSolapadosFallan`, `periodoDeMasFalla` (número 5
   con BIMESTRE).
 - `e9CierreAntesDeLaFechaFalla` (con la zona de Los Ángeles en la aplicación), `cierreSinFirmaFalla`,
   `cierreConElAnteriorAbiertoFalla`, `e10PeriodoCerradoNoCambia` (fechas, estado y nombre), `aperturaEscritaDosVecesFalla`,
   `aperturaPorSistemaAntesDeSuFechaFalla`, `periodoNumeroNoCambia` (1143).
 - `e24AreaEnAsignacionVigenteFalla`, `e24AreaPorOtroQueQuienProponeFalla`, `areaDeOtroNivelFalla`, `areaTransversalFalla`,
-  `e25CoberturaNoCalifica` (área en asignación con `hasta`), `areaAuxiliarFalla`, `asignacionArea` sin UPDATE (1142).
+  `e25CoberturaNoCalifica` (área en asignación con `hasta`), `areaAuxiliarFalla`, `asignacionArea` sin UPDATE (1142); `a2AreaDespuesDeLaSolicitudFalla`,
+  `a2AreasDistintasALasAprobadasFallan`; `b13SeparadorEnElCatalogoFalla` (como `cc_migrador`: 3819).
+
 - `checksConNull` (los casos de la sección 3); `reemplazoDeAsignacionVigenteEnUnaTransaccion` (pasa).
 - `PermisosMySqlTest`: flujo con permisos mínimos (configurar con firma, programar 4 bimestres, abrir con `cc_sistema` en su
   fecha, mover el fin con firma, cerrar el I con firma, proponer una asignación con áreas y aprobarla con la firma de otra

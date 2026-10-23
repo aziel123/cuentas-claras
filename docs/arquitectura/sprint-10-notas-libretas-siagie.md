@@ -15,11 +15,13 @@
 > - **Normativa leída en su texto (fuentes al final):** la RVM 094-2020-MINEDU completa (72 páginas) y la RVM 048-2024-MINEDU
 >   completa (copia auténtica firmada). Las dos se leyeron desde copias del mismo PDF oficial porque `gob.pe` respondió
 >   403 y 418 a la descarga directa.
-> - **NO probado:** V35, V36 y V37, los GRANT, los 11 triggers nuevos, la versión nueva de `trg_mensaje_nace` y las 2
->   funciones nuevas **no se ejecutaron** en H2 ni en MySQL 8. El primer paso de cada tanda es aplicarlos sobre V1–V34
+> - **NO probado:** V35, V36 y V37, los GRANT, los 13 triggers nuevos, las versiones nuevas de `trg_mensaje_nace` y
+>   `trg_asignacion_docente_estado` y las 2 funciones nuevas **no se ejecutaron** en H2 ni en MySQL 8. El primer paso de cada tanda es aplicarlos sobre V1–V34
 >   reales en las dos bases (hallazgo 1 del sprint 3).
 > - **La D12 sigue sin confirmar con el colegio.** Lo que no se pudo confirmar va marcado **«supuesto pendiente de D12»**
 >   (sección 2.3), con su valor por defecto configurable por colegio o versionado en el catálogo.
+> - **Auditoría en papel sobre 0b30c57** (1 crítico, 5 altos, 6 medios y 3 bajos): incorporada en la **sección 3.13, que
+>   prevalece** sobre el texto y el SQL anteriores donde difieran.
 
 ## 1. Resumen
 - **La nota es un libro de solo inserción, como el pago y la asistencia.** Cada calificación (AD, A, B o C por competencia,
@@ -38,8 +40,9 @@
 - **SIAGIE:** un `.xlsx` por sección y periodo, una hoja por área, con un perfil de columnas versionado y la etiqueta
   PROVISIONAL hasta tener una plantilla real (igual que la nómina del sprint 9). Sale de la **misma foto** que la libreta.
 - **Tres tandas:** (1) currículo, periodos y escalas (V35, 104 triggers, 119 huellas); (2) registro de notas, cierre y
-  correcciones (V36, 107 triggers, 123 huellas); (3) libretas en PDF y exportación para el SIAGIE (V37, 110 triggers, 126
+  correcciones (V36, 108 triggers, 124 huellas); (3) libretas en PDF y exportación para el SIAGIE (V37, 112 triggers, 128
   huellas).
+
 
 ## 2. Normativa vigente a octubre de 2026 (investigación del 23-oct-2026)
 
@@ -172,7 +175,8 @@
 - **`configuracion_evaluacion`** (una por colegio y año): versión del currículo, tipo de periodo (BIMESTRE = 4, TRIMESTRE = 3,
   SEMESTRE = 2), `conclusion_max`, `conclusion_siempre`, `dias_cierre_anticipado`, `lengua_materna`, DRE y UGEL. **Solo
   Dirección, con su firma** (`configuracion_evaluacion:{anio}:GUARDADA:{version}`), como `configuracion_academica` del
-  sprint 9. **La versión y el tipo de periodo no cambian desde que un periodo de ese año está ABIERTO.**
+  sprint 9. **La versión, el tipo de periodo y los días de cierre anticipado no cambian desde que un periodo de ese año está ABIERTO**
+  (M7).
 - **`periodo_evaluacion`** (uno por número dentro del año): nombre («I bimestre»), inicio y fin dentro de
   `inicio_clases`-`fin_clases`, sin solaparse y en orden. Estados:
 
@@ -183,7 +187,7 @@ CERRADO: final. No se reabre: lo que cambie después va por solicitud, nota por 
 ```
   - Pueden estar ABIERTOS dos periodos seguidos (el docente termina el I bimestre en la semana de gestión mientras empieza el
     II). Un periodo no abre si el anterior sigue PROGRAMADO.
-  - Las fechas cambian en PROGRAMADO; en ABIERTO solo se **mueve el fin**, con firma; el número y el año nunca (1143).
+  - Las fechas cambian en PROGRAMADO; en ABIERTO el fin **solo se extiende** (nunca se adelanta, M7), con firma; el número y el año nunca (1143).
   - **Cerrar es publicar:** al cerrar, `sistema.libretas` emite las libretas (tanda 3). La pantalla de cierre muestra, por
     sección y área, las competencias asignadas sin nota («3.° B · Matemática: 2 de 4 competencias sin nota») y pide
     confirmar: según la norma, una competencia no trabajada en el periodo **se deja sin nota**.
@@ -223,7 +227,7 @@ CERRADO: final. No se reabre: lo que cambie después va por solicitud, nota por 
 | `REGISTRO_TARDIO` | Periodo CERRADO, competencia sin nota, con `CALIFICACION_TARDIA` aprobada | El docente que la pidió, dentro de 48 h | Lote firmado con la solicitud |
 | `CORRECCION_APROBADA` | Periodo CERRADO, reemplaza la vigente | El manejador, al aprobar `CORRECCION_CALIFICACION` | Solicitud aprobada y firmada; nivel y huella de la conclusión, los de la solicitud |
 
-- **Matrícula del momento:** la nota es de un alumno con matrícula ACTIVA en esa sección al insertarse; un cambio de sección no
+- **Matrícula del momento:** la nota es de un alumno con matrícula **ACTIVA o RESERVADA** (C1: la RESERVADA, impaga, recibe nota igual) en esa sección al insertarse; un cambio de sección no
   mueve las notas anteriores (cada fila guarda su sección y matrícula, como la asistencia).
 - **Exoneración** (`exoneracion_area`, solo inserción): Religión o Educación Física; la registra **Dirección con su firma**,
   con el código del documento que presentó el padre. Desde ese momento no se califica esa área para ese alumno (trigger) y la
@@ -248,7 +252,9 @@ un docente o por alguien con acceso a la base). Es la regla del dinero: nada se 
    `CAMBIO_ABIERTO` con el periodo ABIERTO. Con la clave de `cc_app` tampoco se puede (1644); UPDATE y DELETE no tienen
    GRANT (1142).
 2. **Corrección = solicitud `CORRECCION_CALIFICACION`** (entidad `calificacion`, la vigente; datos: `nivel` nuevo o `null`,
-   `conclusion_sha256` de la conclusión nueva y motivo de al menos 20 caracteres). La pide **el docente con esa área en la
+   `borrador_id` y `conclusion_sha256` del borrador de la conclusión nueva, y motivo de al menos 20 caracteres). **El texto va
+   en `borrador_conclusion`** (M8), nunca en `datos` ni en la bitácora; el aprobador lo lee ahí.
+ La pide **el docente con esa área en la
    sección** o Dirección.
 3. **La aprueba otra persona** activa de Dirección o Promotoría, con su firma, que **no es quien la pidió ni quien registró la
    nota que se reemplaza** (un director que también enseña no corrige su propia nota). Lo exige el trigger con
@@ -262,11 +268,11 @@ un docente o por alguien con acceso a la base). Es la regla del dinero: nada se 
    quedó sin nota y sí se trabajó. Mismo circuito de aprobación; con ella, el docente guarda un lote `REGISTRO_TARDIO` en las
    48 horas siguientes, solo para competencias sin nota.
 7. **Vigilancia:** Dirección ve «Correcciones de notas del periodo» (quién pidió, quién aprobó, de qué a qué). Promotoría
-   recibe la alerta `CORRECCIONES_NOTAS` si una persona aprueba más de 5 en un periodo o si una corrección sube a A o AD una
-   competencia cuya libreta ya descargó la familia (decisión 186).
+   recibe la alerta `CORRECCIONES_NOTAS` **siempre que una corrección suba el nivel o deje la competencia sin nota** (A5), y
+   además si una persona aprueba más de 5 en un periodo (decisión 186).
 
 ### 3.7 Libreta (informe de progreso) (tanda 3)
-- **Se emite al cerrar el periodo, para toda matrícula ACTIVA** de las secciones del año: `EmisionLibretas` (`sistema.libretas`,
+- **Se emite al cerrar el periodo, para toda matrícula ACTIVA o RESERVADA** (C1) de las secciones del año: `EmisionLibretas` (`sistema.libretas`,
   cc_sistema) recorre los periodos CERRADOS sin libretas y crea una `libreta_emitida` por alumno. No recibe ni puede leer nada
   de cobranza (ArchUnit): **no hay forma de saltarse a quien debe**. `IntegridadLibretas` compara después las libretas
   emitidas con las matrículas activas y alerta a Promotoría si falta alguna.
@@ -284,14 +290,17 @@ un docente o por alguien con acceso a la base). Es la regla del dinero: nada se 
   registrado); transversales; «Exonerado» donde corresponda; resumen de asistencia por periodo (FALTA_JUSTIFICADA =
   inasistencia justificada, FALTA = injustificada, TARDE = tardanza injustificada, S8); leyenda de la escala; nombres del tutor
   y de quien cerró el periodo; «Situación al finalizar el periodo lectivo: se informa al cierre del año» (decisión 178);
-  **código de verificación** `LIB-{id}-{8 primeros caracteres de la huella}` y «Emitida el … · versión N». **Nada de pagos,
+  **código de verificación** `LIB-{id}-{16 primeros caracteres de la huella}` (A4) y «Emitida el … · versión N». **Nada de pagos,
   deudas ni pensiones** (`LibretaSinCobranzaTest` lee el texto del PDF en la prueba).
-- **Quién la descarga:** los apoderados activos de la familia, desde `/familia/libretas` con su sesión, y Dirección (una, o la
-  sección completa para imprimir). **El tutor no** descarga el PDF, porque lleva el DNI (decisión 142): ve la pantalla de su
-  sección sin documentos. Cada entrega queda en `entrega_libreta` (canal PORTAL o IMPRESA, quién y con qué sesión): es la
+- **Quién la descarga:** los apoderados activos de la familia, desde `/familia/libretas` con su sesión; Dirección (una, o la
+  sección completa para imprimir); y **el tutor, las de su sección para imprimirlas** (M9, decisión 177 revisada). La libreta
+  muestra el **código de estudiante**, y el DNI solo si no hay código. En Inicial se entrega en la entrevista con la familia
+  (canal `ENTREVISTA`). Cada entrega queda en `entrega_libreta` (canal PORTAL, IMPRESA o ENTREVISTA, quién y con qué sesión)
+: es la
   constancia de que el colegio **entregó** la libreta, útil ante un reclamo en INDECOPI.
 - **Verificación:** `/academico/libretas/verificar?codigo=` (Dirección) dice si un papel corresponde a una libreta emitida y si
-  es la versión vigente: un papel adulterado se detecta.
+  es la versión vigente, y **muestra los niveles de esa versión** por competencia (sin conclusiones) para compararlos con el
+  papel (A4).
 - **Aviso:** `LIBRETA_DISPONIBLE` (uno por familia y periodo, con los hermanos juntos) y `LIBRETA_CORREGIDA`, por WhatsApp con
   el consentimiento de la finalidad nueva `LIBRETAS` y, sin él, por correo. El aviso solo dice que la libreta está en el
   portal; nunca lleva notas ni conclusiones.
@@ -302,9 +311,12 @@ un docente o por alguien con acceso a la base). Es la regla del dinero: nada se 
    ya existe, ampliada a los paquetes nuevos). `PortalLibretasController` está en `academico.web`.
 2. **Sin configuración que retenga:** `ConfiguracionEvaluacion` no tiene ningún campo de deuda, pago ni bloqueo
    (`ConfiguracionSinDeudaTest`, por reflexión), y ningún filtro ni interceptor del portal lee deudas en `/familia/libretas/**`
-   (`PortalSinFiltroDeDeudaTest` recorre los `HandlerInterceptor` y los filtros registrados).
-3. **La prueba que lo demuestra** (`LibretaConDeudaTest`, obligatoria, en H2 y en MySQL real): dos familias de la misma
-   sección, una con cuotas VENCIDAS y otra al día; se cierra el periodo; las dos tienen su libreta emitida, reciben el mismo
+   (`PortalSinFiltroDeDeudaTest` recorre los `HandlerInterceptor`, los filtros, los `@ControllerAdvice`, los `@ModelAttribute`,
+   los fragmentos del layout de familias y la redirección después del login, B14).
+3. **La prueba que lo demuestra** (`LibretaConDeudaTest`, obligatoria, en H2 y en MySQL real): tres familias de la misma
+   sección, una con cuotas VENCIDAS, otra al día y **otra con la matrícula RESERVADA (impaga, C1)**; se cierra el periodo; las
+   tres tienen notas y su libreta emitida,
+ reciben el mismo
    aviso y la descargan con 200; el texto del PDF y la huella de contenido son los de sus notas, sin diferencia que dependa del
    pago. La versión de MySQL corre en el job `mysql` con `cc_app` y `cc_sistema`.
 4. **Mensajes sin cobranza:** `LIBRETA_*` pasan por la regla de cobranza de `trg_mensaje_nace` (los dos niveles del sprint 9).
@@ -324,8 +336,8 @@ de HTML y CSS. Controles:
 1. **Solo `academico.libreta.pdf` genera, y solo con la API de escritura:** `PDDocument` nuevo, `PDPage`,
    `PDPageContentStream`, `PDType0Font`, `LosslessFactory`. **Fuera de `comunicados.analizador` quedan prohibidos**
    `org.apache.pdfbox.Loader`, `org.apache.pdfbox.pdfparser..`, `PDFTextStripper` y toda carga de un PDF. La regla
-   `pdfboxSoloEnElAnalizador` se divide en `pdfboxParseaSoloElAnalizador` y `pdfboxEscribeSoloLaLibreta`. Las pruebas sí leen
-   el PDF generado.
+   `pdfboxSoloEnElAnalizador` se divide en `pdfboxParseaSoloElAnalizador` y `pdfboxEscribeSoloLaLibreta`, que es una **lista
+   blanca de clases** (M11, sección 3.13). Las pruebas quedan excluidas de forma explícita y sí leen el PDF generado.
 2. **Entradas propias:** solo datos de la base (nombres, niveles, conclusiones de hasta `conclusion_max`) y el logo PNG que el
    sprint 8 ya validó, reescaló a 400 px y volvió a codificar (`LogosColegio`). El texto **se sanea**: sin caracteres de
    control (salvo el salto de línea) ni de formato (`\p{Cf}`), y todo carácter sin glifo en la fuente pasa a «?» (con un
@@ -384,6 +396,127 @@ de HTML y CSS. Controles:
   la exportación con «DEMO · DATOS FICTICIOS». El recorrido `/demo/guia` gana «Pon las notas de Matemática de 3.° B» y
   «Descarga la libreta como familia».
 
+### 3.13 Auditoría en papel del diseño (sobre 0b30c57): 15 hallazgos incorporados
+Revisión de `auditor-seguridad-antifraude` antes de implementar. **Esta sección prevalece** sobre el texto y el SQL de las
+secciones 3 a 9 donde difieran. Conteos nuevos: tanda 1, **104 triggers, 15 funciones y 119 huellas** (sin cambio: A2 es una
+versión nueva); tanda 2, **108, 16 y 124** (+`trg_borrador_conclusion_nace`); tanda 3, **112, 16 y 128**
+(+`trg_delegacion_siagie_nace`).
+
+| # | Nivel | Hallazgo | Resolución | Tanda | Prueba |
+|---|---|---|---|---|---|
+| C1 | Crítico | La matrícula RESERVADA (impaga) quedaba sin nota y sin libreta: retención por deuda de hecho | En `trg_calificacion_nace`, `trg_exoneracion_area_nace`, `trg_libreta_emitida_nace`, `EmisionLibretas`, `IntegridadLibretas` y la exportación, la matrícula vale si está **ACTIVA o RESERVADA** | 2 y 3 | `LibretaConDeudaTest` con **una tercera familia con matrícula RESERVADA** (H2 y MySQL); MySQL `c1NotaAMatriculaReservadaPasa` |
+| A2 | Alto | Las áreas se podían agregar a la propuesta después de crear la solicitud y antes de aprobarla, sin que el aprobador las viera | Las áreas se insertan **en la misma transacción** de la propuesta, antes de enlazar la solicitud (`trg_asignacion_area_nace` exige `asignacion_docente.solicitud_id` NULL); `solicitud_cambio.datos` de `ASIGNACION_DOCENTE` lleva `"areas": "12,15"` (ids ordenados); **versión nueva de `trg_asignacion_docente_estado`**: al pasar a VIGENTE compara esa lista con `GROUP_CONCAT(area_id ORDER BY area_id)` de `asignacion_area` | 1 | MySQL `a2AreaDespuesDeLaSolicitudFalla`, `a2AreasDistintasALasAprobadasFallan` |
+| A3 | Alto | Una exoneración retroactiva borraba notas ya informadas; la cabecera de la libreta podía cambiar sin cambiar la huella; con huella distinta la familia quedaba sin libreta | `exoneracion_area.desde_periodo_id` (un periodo ABIERTO; rige desde ahí; las notas anteriores quedan) y `libreta_emitida.hasta_exoneracion_id`; la **cabecera se guarda en la foto** (`alumno_nombre`, `alumno_codigo`, `tipo_codigo`, `dre`, `ugel`, `tutor_nombre`, `director_nombre`, `codigo_modular`) y entra en la huella; con huella distinta: alerta a Promotoría, el portal dice «en revisión, se la entrega el colegio a más tardar el {fecha}» (2 días hábiles) y Dirección pide `REEMISION_LIBRETA` (aprueba Promotoría) para que `sistema.libretas` emita la versión siguiente con motivo `REEMISION`. **Nunca «sin libreta»** | 2 y 3 | MySQL `a3ExoneracionEnPeriodoCerradoFalla`, `a3ReemisionSinSolicitudFalla`; H2 `FotoLibretaTest.cabeceraEnLaHuella`, `.huellaDistintaDaPlazoYReemision` |
+| A4 | Alto | `/verificar` solo decía «válida»; 8 caracteres de huella se podían adivinar o forzar | `/verificar` **muestra los niveles de esa versión** (sin conclusiones); el código lleva **16 caracteres** de la huella: `LIB-{id}-{16 hex}` | 3 | H2 `VerificacionLibretaTest.muestraLosNiveles`, `.codigoDe16` |
+| A5 | Alto | La alerta de correcciones dependía de umbrales y de si la familia ya había descargado | Alerta a Promotoría **siempre** que una corrección suba el nivel o deje la competencia sin nota (decisión 186 revisada) | 2 | H2 `AlertasNotasTest.subirElNivelSiempreAlerta`, `.dejarSinNotaAlerta` |
+| A6 | Alto | La exportación usaba una marca de agua del periodo, no la libreta de cada alumno, y podía salir con correcciones aún no informadas | Sale de **la foto de la libreta vigente de cada matrícula**; `exportacion_calificaciones.hasta_calificacion_id` pasa a `huella_libretas` (SHA-256 de los ids y huellas de las libretas usadas); **se rechaza** si hay una `CORRECCION_APROBADA` o `REGISTRO_TARDIO` sin libreta nueva; hoja **«Control»** con los conteos de AD, A, B, C, sin nota y EXO por competencia para comparar después de la carga | 3 | H2 `CalificacionesSiagieTest.saleDeLaLibretaVigente`, `.correccionSinLibretaRechaza`, `.hojaDeControl` |
+| M7 | Medio | En ABIERTO se podía adelantar el `fin` (y con él el cierre) y bajar los días de cierre anticipado | Con el periodo ABIERTO el `fin` **solo se extiende**; `dias_cierre_anticipado` fijo desde que abre el primer periodo (los dos triggers de la tanda 1; SQL ya corregido en 6.3) | 1 | MySQL `m7FinAdelantadoFalla`, `m7DiasDeCierreFijos` |
+| M8 | Medio | La conclusión propuesta viajaba en `solicitud_cambio.datos` (visible en la bandeja y copiada a la bitácora) | Tabla **`borrador_conclusion`** (solo inserción): `calificacion_id`, `texto`, `sha256`, `sesion_id`, `creado_por`; la escribe el docente del área o Dirección con su sesión (`trg_borrador_conclusion_nace`, que recalcula el SHA-256); la leen solo quien la escribió y Dirección o Promotoría al aprobar (con registro en `acceso_dato_personal`); `datos` lleva `borrador_id` y el SHA-256; `trg_calificacion_nace` exige que `NEW.conclusion` sea el texto del borrador | 2 | MySQL `m8ConclusionDistintaAlBorradorFalla`; H2 `BitacoraSinConclusionesTest`, `BorradorConclusionTest.soloLoVenQuienLoEscribeYQuienAprueba` |
+| M9 | Medio | Revisar la decisión 177: sin el tutor, imprimir las libretas recaía en Dirección, y el DNI no hacía falta | La libreta muestra el **código de estudiante**, y el DNI solo si no hay código; **el tutor imprime las de su sección** (`entrega_libreta` IMPRESA a su nombre: `trg_entrega_libreta_nace` acepta al TUTOR VIGENTE de la sección); en Inicial, canal **`ENTREVISTA`** (tutor o Dirección) | 3 | MySQL `m9TutorImprimeSoloSuSeccion`; H2 `LibretaPdfTest.codigoAntesQueDni` |
+| M10 | Medio | El verificador solo miraba las versiones del jar: una versión metida en la base sin archivo pasaba | **Las dos direcciones:** cada versión de la base tiene su `.sha256` y cada `.sha256` su versión; además del arranque, `RevisionCatalogo` diaria (05:00) con alerta `INTEGRIDAD_CATALOGO` a Promotoría | 1 | H2 `VerificadorCatalogoCurriculoTest.versionSinArchivoFalla`, `.archivoSinVersionFalla`, `RevisionCatalogoTest` |
+| M11 | Medio | La regla de PDFBox por paquetes dejaba usar en la libreta cualquier clase (imágenes desde archivos, unir PDF, formularios) | `pdfboxEscribeSoloLaLibreta` es una **lista blanca**: `PDDocument` (constructor sin argumentos, `addPage`, `save`, `close`, `getDocumentInformation`), `PDPage`, `PDRectangle`, `PDPageContentStream`, `PDType0Font.load(PDDocument, InputStream, boolean)`, `PDFont`, `LosslessFactory.createFromImage`, `PDImageXObject` (solo como tipo), `PDDocumentInformation`, `MemoryUsageSetting` y `RandomAccessStreamCache`. **Prohibidos expresamente:** `PDImageXObject.createFrom*`, `PDFMergerUtility`, `importPage`, `PDAcroForm`, los paquetes `interactive.action` e `interactive.annotation` y `Loader`. Pruebas excluidas de forma explícita (`ImportOption.DoNotIncludeTests`) | 3 | H2 `ReglasArquitecturaTest.pdfboxEscribeSoloLaLibreta` (una clase de prueba por prohibición) |
+| M12 | Medio | La secretaria que carga en el SIAGIE no tenía acceso propio: usaría la cuenta de Dirección | Tabla **`delegacion_siagie`** (solo inserción): Dirección delega con su firma a una cuenta activa del personal (ADMINISTRACION o CAJA, no DOCENTE) por hasta 15 días (`trg_delegacion_siagie_nace`); `trg_exportacion_calificaciones_nace` acepta DIRECTOR o la delegada vigente, con su sesión; cada descarga, en `acceso_dato_personal` (`CALIFICACIONES_SIAGIE`) | 3 | MySQL `m12SinDelegacionFalla`, `m12DelegacionVencidaFalla`; H2 `DelegacionSiagieTest` |
+| B13 | Bajo | Una barra vertical o un salto de línea en un texto del catálogo alteraba la cadena de la huella | CHECK en `area_curricular.nombre`, `competencia.nombre`, `escala_logro.nombre` y `descripcion`: `INSTR(x, CHAR(124)) = 0 AND INSTR(x, CHAR(10)) = 0 AND INSTR(x, CHAR(13)) = 0` (H2 y MySQL) | 1 | MySQL `b13SeparadorEnElCatalogoFalla` (como `cc_migrador`, 3819) |
+| B14 | Bajo | `PortalSinFiltroDeDeudaTest` solo miraba interceptores y filtros | Cubre también `@ControllerAdvice`, `@ModelAttribute`, los fragmentos del layout de familias y la redirección después del login | 3 | H2 `PortalSinFiltroDeDeudaTest` (4 casos nuevos) |
+| B15 | Bajo | Al verificador de la tanda 1 le faltaban casos | 1142 en `DELETE FROM asignacion_area`, `DELETE FROM configuracion_evaluacion`, `INSERT` y `UPDATE` en `curriculo_version` y `area_curricular` | 1 | `VerificadorPermisosBaseDatosTest`; paso `comprobar` |
+
+**Cambios de SQL que prevalecen sobre la sección 5 y 6.3:**
+```sql
+-- V35 (A2, B13). En trg_asignacion_area_nace, además: la asignación todavía no tiene su solicitud enlazada.
+--     IF NOT (v_solicitud <=> NULL) THEN SIGNAL ... 'las areas van en la misma transaccion de la propuesta';
+-- En area_curricular, competencia y escala_logro, un CHECK por texto (CHAR(124) es la barra vertical):
+CONSTRAINT ck_competencia_texto CHECK (INSTR(nombre, CHAR(124)) = 0 AND INSTR(nombre, CHAR(10)) = 0
+    AND INSTR(nombre, CHAR(13)) = 0)
+
+-- 03, versión nueva de trg_asignacion_docente_estado (A2), en PROPUESTA -> VIGENTE, además de lo de hoy:
+IF NOT (COALESCE(JSON_UNQUOTE(JSON_EXTRACT((SELECT s.datos FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id
+            AND s.colegio_id = NEW.colegio_id), '$.areas')), '')
+        <=> COALESCE((SELECT GROUP_CONCAT(x.area_id ORDER BY x.area_id SEPARATOR ',') FROM asignacion_area x
+            WHERE x.asignacion_id = NEW.id), '')) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las areas no son las que se aprobaron';
+END IF;
+
+-- V36 (A3): la exoneración rige desde un periodo ABIERTO (trg_exoneracion_area_nace lo exige).
+ALTER TABLE exoneracion_area ADD COLUMN desde_periodo_id BIGINT NOT NULL;   -- (en el CREATE TABLE de V36, no en un ALTER)
+--   CONSTRAINT fk_exoneracion_area_periodo FOREIGN KEY (desde_periodo_id, colegio_id) REFERENCES periodo_evaluacion (id, colegio_id)
+-- trg_calificacion_nace: hay exoneración solo si su desde_periodo tiene numero <= el del periodo de la nota.
+
+-- V36 (M8): borrador de la conclusión de una corrección. SOLO INSERCIÓN. El texto nunca va en datos ni en la bitácora.
+CREATE TABLE borrador_conclusion (
+    id               BIGINT        NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    colegio_id       BIGINT        NOT NULL,
+    calificacion_id  BIGINT        NOT NULL,   -- la vigente que se quiere corregir
+    texto            VARCHAR(1000) NOT NULL,
+    sha256           VARCHAR(64)   NOT NULL,   -- trg_borrador_conclusion_nace lo recalcula con SHA2(texto, 256)
+    sesion_id        BIGINT        NOT NULL,
+    creado_en        DATETIME(6)   NOT NULL,
+    creado_por       VARCHAR(60)   NOT NULL,
+    actualizado_en   DATETIME(6)   NOT NULL,
+    version          BIGINT        NOT NULL DEFAULT 0,
+    CONSTRAINT uk_borrador_conclusion_id_colegio UNIQUE (id, colegio_id),
+    CONSTRAINT fk_borrador_conclusion_colegio FOREIGN KEY (colegio_id) REFERENCES colegio (id),
+    CONSTRAINT fk_borrador_conclusion_calificacion FOREIGN KEY (calificacion_id, colegio_id) REFERENCES calificacion (id, colegio_id),
+    CONSTRAINT fk_borrador_conclusion_sesion FOREIGN KEY (sesion_id, colegio_id) REFERENCES sesion_usuario (id, colegio_id),
+    CONSTRAINT ck_borrador_conclusion_valores CHECK (CHAR_LENGTH(TRIM(texto)) >= 10
+        AND REGEXP_LIKE(sha256, '^[0-9a-f]{64}$', 'c') AND creado_por NOT LIKE 'sistema%')
+);
+-- trg_borrador_conclusion_nace: creado_por es docente del área de esa calificación en su sección (cc_docente_de_area) o
+-- DIRECTOR (cc_rol_activo), con cc_sesion_abierta; SET NEW.sha256 = SHA2(NEW.texto, 256).
+-- trg_calificacion_nace, CORRECCION_APROBADA: si datos trae borrador_id, NEW.conclusion = borrador.texto del MISMO
+-- calificacion_id que NEW.reemplaza_id.
+```
+```sql
+-- V37 (A3, A4, M9). libreta_emitida, columnas nuevas (en su CREATE TABLE), todas dentro de la huella del contenido:
+    hasta_exoneracion_id   BIGINT        NOT NULL,   -- marca de agua de las exoneraciones (0 si no hay)
+    alumno_nombre          VARCHAR(190)  NOT NULL,   -- cabecera congelada en la foto
+    alumno_codigo          VARCHAR(20)   NOT NULL,   -- código de estudiante; el DNI solo si no hay código (M9)
+    tipo_codigo            VARCHAR(18)   NOT NULL,   -- CODIGO_ESTUDIANTE | DNI | CE | PASAPORTE
+    codigo_modular         VARCHAR(9),
+    dre                    VARCHAR(80),
+    ugel                   VARCHAR(80),
+    tutor_nombre           VARCHAR(190),
+    director_nombre        VARCHAR(190)  NOT NULL,
+    solicitud_id           BIGINT,                   -- REEMISION_LIBRETA aprobada por Promotoría
+--  motivo IN ('CIERRE', 'CORRECCION', 'REEMISION'); REEMISION exige solicitud_id, cambios = 'Reemitida tras una revision
+--  de integridad' y, en trg_libreta_emitida_nace, cc_solicitud_firmada con resuelto_por PROMOTOR activo.
+--  Código impreso: LIB-{id}-{16 primeros caracteres de huella_contenido} (A4).
+
+-- entrega_libreta (M9): canal IN ('PORTAL', 'IMPRESA', 'ENTREVISTA'); apoderado_id solo en PORTAL.
+--  trg_entrega_libreta_nace: IMPRESA por DIRECTOR o por el TUTOR VIGENTE de la sección de la libreta; ENTREVISTA, igual y
+--  solo en Inicial.
+
+-- exportacion_calificaciones (A6): hasta_calificacion_id se reemplaza por
+    huella_libretas        VARCHAR(64)   NOT NULL,   -- SHA2 de los «id:huella» de las libretas vigentes usadas, en orden
+--  y la aplicación rechaza la exportación si hay una CORRECCION_APROBADA o un REGISTRO_TARDIO de la sección y el periodo
+--  con id mayor que el hasta_calificacion_id de la libreta vigente de esa matrícula.
+
+-- V37 (M12): delegación de la exportación para el SIAGIE. SOLO INSERCIÓN; vence sola (sin revocación: desactivar la cuenta
+-- la corta, porque cc_rol_activo exige la cuenta activa).
+CREATE TABLE delegacion_siagie (
+    id               BIGINT        NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    colegio_id       BIGINT        NOT NULL,
+    usuario_id       BIGINT        NOT NULL,   -- la persona delegada
+    desde            DATE          NOT NULL,
+    hasta            DATE          NOT NULL,
+    autorizado_por   VARCHAR(60)   NOT NULL,
+    creado_en        DATETIME(6)   NOT NULL,
+    creado_por       VARCHAR(60)   NOT NULL,
+    actualizado_en   DATETIME(6)   NOT NULL,
+    version          BIGINT        NOT NULL DEFAULT 0,
+    CONSTRAINT fk_delegacion_siagie_colegio FOREIGN KEY (colegio_id) REFERENCES colegio (id),
+    CONSTRAINT fk_delegacion_siagie_usuario FOREIGN KEY (usuario_id, colegio_id) REFERENCES usuario (id, colegio_id),
+    CONSTRAINT ck_delegacion_siagie_valores CHECK (desde <= hasta AND creado_por = autorizado_por
+        AND creado_por NOT LIKE 'sistema%')
+);
+-- trg_delegacion_siagie_nace: DIRECTOR con firma delegacion_siagie:{usuario}:{desde}:DELEGADA; hasta <= desde + 15 días;
+-- desde >= cc_hoy_lima(); la cuenta delegada está activa, sin apoderado, con ADMINISTRACION o CAJA y sin DOCENTE.
+-- trg_exportacion_calificaciones_nace: DIRECTOR, o una delegación con cc_hoy_lima() BETWEEN desde AND hasta.
+```
+- **GRANT nuevos:** `INSERT` en `borrador_conclusion` (tanda 2) y en `delegacion_siagie` (tanda 3) para `cc_negocio`.
+- **`TipoSolicitud`** gana `REEMISION_LIBRETA` (tanda 3). **`TipoAviso`** gana `INTEGRIDAD_CATALOGO` (tanda 1).
+- **`respaldar.sh` y `tablas-vigiladas.txt`** suman `borrador_conclusion` y `delegacion_siagie`.
+- **Verificador** (tanda 2 y 3): 1142 en `UPDATE borrador_conclusion` y `UPDATE delegacion_siagie`.
+
 ## 4. Modelo
 ```mermaid
 erDiagram
@@ -432,7 +565,7 @@ erDiagram
   (MySQL).
 - **`calificacion`** (tanda 2): solo inserción (1142); una inicial por periodo, matrícula y competencia; una sola sucesora por
   fila; una fila por solicitud (base); nivel AD, A, B o C, o NULL solo en un cambio (base); la competencia es de la versión y
-  del nivel del año, del área del lote (o del área de la solicitud) y aplica al grado; la matrícula está ACTIVA en esa sección;
+  del nivel del año, del área del lote (o del área de la solicitud) y aplica al grado; la matrícula está ACTIVA o RESERVADA en esa sección (C1);
   sin exoneración del área; conclusión cuando la escala o el colegio la exigen y de hasta `conclusion_max` (MySQL); por origen,
   las reglas de 3.5 y 3.6 (MySQL); `registrado_bd` lo pone la base (MySQL).
 - **`exoneracion_area`** (tanda 2): solo inserción (1142); una por matrícula y área; área exonerable (base y MySQL); la registra
@@ -917,7 +1050,7 @@ Regla del sprint 10 para todo trigger nuevo: **comparar siempre con `<=>`**, nun
 quedar en NULL (si el `SELECT … INTO` no encuentra la fila, `v_estado <> 'PROPUESTA'` es NULL y el `IF` no dispara). Los
 mensajes de error empiezan con `cuentasclaras:` y van sin tildes, como los de hoy.
 
-#### Tanda 1 (V35): 1 función y 5 triggers nuevos: 104 triggers
+#### Tanda 1 (V35): 1 función, 5 triggers nuevos y 1 con versión nueva (A2): 104 triggers
 ```sql
 -- Sprint 10, tanda 1: ¿esta persona tiene una cuenta activa del personal con este rol en este colegio? Reemplaza el
 -- EXISTS repetido de los triggers nuevos (los anteriores no se tocan en este sprint).
@@ -953,7 +1086,9 @@ BEGIN
                 NEW.version), NEW.actualizado_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la evaluacion la configura Direccion con su firma';
     END IF;
-    IF (NOT (NEW.curriculo_version_id <=> OLD.curriculo_version_id) OR NOT (NEW.tipo_periodo <=> OLD.tipo_periodo))
+    IF (NOT (NEW.curriculo_version_id <=> OLD.curriculo_version_id) OR NOT (NEW.tipo_periodo <=> OLD.tipo_periodo)
+            OR NOT (NEW.dias_cierre_anticipado <=> OLD.dias_cierre_anticipado))     -- M7
+
             AND EXISTS (SELECT 1 FROM periodo_evaluacion p WHERE p.anio_escolar_id = NEW.anio_escolar_id
                 AND p.colegio_id = NEW.colegio_id AND p.estado <> 'PROGRAMADO') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: con un periodo abierto no cambian el curriculo ni los periodos';
@@ -1001,6 +1136,7 @@ BEGIN
     -- Fechas y nombre: Dirección con firma; el inicio, solo en PROGRAMADO; sin solaparse con el anterior ni el siguiente.
     IF NOT (NEW.inicio <=> OLD.inicio) OR NOT (NEW.fin <=> OLD.fin) OR NOT (NEW.nombre <=> OLD.nombre) THEN
         IF (NOT (NEW.inicio <=> OLD.inicio) AND NOT (OLD.estado <=> 'PROGRAMADO'))
+                OR (OLD.estado <=> 'ABIERTO' AND NEW.fin < OLD.fin)                     -- M7: solo se extiende
                 OR NOT (NEW.version <=> OLD.version + 1)
                 OR NOT cc_rol_activo(NEW.colegio_id, NEW.actualizado_por, 'DIRECTOR')
                 OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('periodo_evaluacion:', NEW.id, ':FECHAS:', NEW.version),
@@ -1070,7 +1206,7 @@ BEGIN
 END$$
 ```
 
-#### Tanda 2 (V36): 1 función y 3 triggers nuevos: 107 triggers
+#### Tanda 2 (V36): 1 función y 4 triggers nuevos (con `trg_borrador_conclusion_nace`, M8): 108 triggers
 ```sql
 -- Sprint 10, tanda 2: ¿esta persona califica esta área en esta sección? Asignación VIGENTE de TUTOR o DOCENTE, sin
 -- cobertura, con su cuenta activa y el rol DOCENTE; y el área asignada, o una transversal si es el TUTOR.
@@ -1101,7 +1237,7 @@ CREATE FUNCTION cc_docente_de_area(p_nombre VARCHAR(60), p_seccion BIGINT, p_are
 5. `SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR`.
 
 **`trg_calificacion_nace`** (BEFORE INSERT, el control central del sprint):
-1. **Coherencia** (común a todo origen): la matrícula es del alumno, está ACTIVA y en `NEW.seccion_id`; la sección y el periodo
+1. **Coherencia** (común a todo origen): la matrícula es del alumno, está ACTIVA o RESERVADA (C1) y en `NEW.seccion_id`; la sección y el periodo
    son del año; la competencia es de la versión del año (`configuracion_evaluacion`), del nivel de la sección y, si tiene
    `solo_grados`, `FIND_IN_SET(grado, solo_grados)`; no hay `exoneracion_area` de esa matrícula para el área de la
    competencia. `NEW.creado_por` no es `sistema.*` (CHECK).
@@ -1126,11 +1262,11 @@ CREATE FUNCTION cc_docente_de_area(p_nombre VARCHAR(60), p_seccion BIGINT, p_are
 5. `SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR`.
 
 **`trg_exoneracion_area_nace`** (BEFORE INSERT): el área es `exonerable`, de la versión del año y del nivel de la sección de la
-matrícula; la matrícula está ACTIVA en ese año; `cc_rol_activo(…, NEW.autorizado_por, 'DIRECTOR')` y
+matrícula; la matrícula está ACTIVA o RESERVADA en ese año; `desde_periodo_id` es un periodo ABIERTO (A3); `cc_rol_activo(…, NEW.autorizado_por, 'DIRECTOR')` y
 `cc_firma_valida(NEW.colegio_id, CONCAT('exoneracion_area:', NEW.matricula_id, ':', NEW.area_id, ':AUTORIZADA'),
 NEW.autorizado_por)`. Mensaje: «la exoneracion la autoriza Direccion con su firma».
 
-#### Tanda 3 (V37): 3 triggers nuevos y 1 con versión nueva: 110 triggers
+#### Tanda 3 (V37): 4 triggers nuevos (con `trg_delegacion_siagie_nace`, M12) y 1 con versión nueva: 112 triggers
 - **`trg_libreta_emitida_nace`:** `cc_es_sistema()` y `NEW.creado_por = 'sistema.libretas'`; periodo CERRADO; matrícula del
   alumno, del año y de esa sección; `numero_version = COALESCE(MAX, 0) + 1` y `reemplaza_id` = la de versión máxima (o NULL en
   la 1); las marcas de agua no bajan respecto de la versión anterior; **en una versión mayor que 1 existe una calificación
@@ -1151,16 +1287,16 @@ NEW.autorizado_por)`. Mensaje: «la exoneracion la autoriza Direccion con su fir
 | Tanda | Nuevos | Con versión nueva | Triggers | Funciones con huella (03 + 02) | Huellas |
 |---|---|---|---|---|---|
 | Hoy (V34 y correcciones del sprint 9) | — | — | 99 | 11 + 3 = 14 | 113 |
-| 1 (V35) | `trg_configuracion_evaluacion_nace` y `_cambio`, `trg_periodo_evaluacion_nace` y `_cambio`, `trg_asignacion_area_nace`; función `cc_rol_activo` | — | **104** | 12 + 3 = 15 | **119** |
-| 2 (V36) | `trg_lote_calificacion_nace`, `trg_calificacion_nace`, `trg_exoneracion_area_nace`; función `cc_docente_de_area` | — | **107** | 13 + 3 = 16 | **123** |
-| 3 (V37) | `trg_libreta_emitida_nace`, `trg_entrega_libreta_nace`, `trg_exportacion_calificaciones_nace` | `trg_mensaje_nace` | **110** | 13 + 3 = 16 | **126** |
+| 1 (V35) | `trg_configuracion_evaluacion_nace` y `_cambio`, `trg_periodo_evaluacion_nace` y `_cambio`, `trg_asignacion_area_nace`; función `cc_rol_activo` | `trg_asignacion_docente_estado` (A2) | **104** | 12 + 3 = 15 | **119** |
+| 2 (V36) | `trg_lote_calificacion_nace`, `trg_calificacion_nace`, `trg_exoneracion_area_nace`, `trg_borrador_conclusion_nace` (M8); función `cc_docente_de_area` | — | **108** | 13 + 3 = 16 | **124** |
+| 3 (V37) | `trg_libreta_emitida_nace`, `trg_entrega_libreta_nace`, `trg_exportacion_calificaciones_nace`, `trg_delegacion_siagie_nace` (M12) | `trg_mensaje_nace` | **112** | 13 + 3 = 16 | **128** |
 
-Prod registra «Huellas de los 104 triggers y las 15 funciones verificadas» (tanda 1), «… 107 y 16» (tanda 2) y «… 110 y 16»
+Prod registra «Huellas de los 104 triggers y las 15 funciones verificadas» (tanda 1), «… 108 y 16» (tanda 2) y «… 112 y 16»
 (tanda 3). Encabezado de `03`: «Versión anterior (correcciones del sprint 9): 99 triggers y 11 funciones (14 con huella;
 113 huellas)».
 
 ### 6.4 `VerificadorPermisosBaseDatos`, `HuellasObjetosBd` y verificadores (prod y piloto)
-1. **`TRIGGERS_ESPERADOS`:** 104, 107 y 110. **Huellas:** 119, 123 y 126 (el valor sale del `03` y el `02` del jar).
+1. **`TRIGGERS_ESPERADOS`:** 104, 108 y 112. **Huellas:** 119, 124 y 128 (el valor sale del `03` y el `02` del jar).
 2. **Nuevas para `cc_app`** (con `WHERE 1 = 0`): 1142 en `INSERT INTO competencia …`, `UPDATE competencia …`, `UPDATE
    escala_logro …`, `DELETE FROM periodo_evaluacion …`, `UPDATE calificacion …`, `DELETE FROM calificacion …`, `UPDATE
    lote_calificacion …`, `UPDATE exoneracion_area …`, `UPDATE asignacion_area …`, **cualquier escritura en `libreta_emitida`**,
@@ -1179,8 +1315,8 @@ Prod registra «Huellas de los 104 triggers y las 15 funciones verificadas» (ta
 ### 6.5 CI y respaldo
 - **Job `mysql`:** V1–V37, `02` y `03` en su versión; clases nuevas `mysql/AuditoriaSprint10CurriculoMySqlTest` (tanda 1),
   `AuditoriaSprint10NotasMySqlTest` (tanda 2) y `AuditoriaSprint10LibretasMySqlTest` (tanda 3) con los escenarios «MySQL» de la
-  sección 9; el paso `comprobar` con los casos de 6.4; `huellas_objetos()` = 119, 123 y 126; arranque prod con 104/15, 107/16
-  y 110/16. Las clases nuevas crean su colegio compartido y suben el tope de colegios solo para sí (desviación 5 del sprint 9).
+  sección 9; el paso `comprobar` con los casos de 6.4; `huellas_objetos()` = 119, 124 y 128; arranque prod con 104/15, 108/16
+  y 112/16. Las clases nuevas crean su colegio compartido y suben el tope de colegios solo para sí (desviación 5 del sprint 9).
 - **Job `respaldo`:** `tablas-vigiladas.txt` y `respaldar.sh` con las tablas de solo inserción nuevas por colegio
   (`asignacion_area`, `lote_calificacion`, `calificacion`, `exoneracion_area`, `libreta_emitida`, `entrega_libreta`,
   `exportacion_calificaciones`); caso nuevo: una `calificacion` borrada como DBA en el colegio A marca solo a A. El catálogo
@@ -1317,7 +1453,7 @@ docente de otra área de la misma sección y una familia de otra sección).
 | E16 | Una libreta impresa adulterada | Código de verificación y huella | H2 `VerificacionLibretaTest` |
 | E17 | Al SIAGIE se carga algo distinto de lo que recibió la familia | Misma marca de agua; aviso de exportación desactualizada | H2 `CalificacionesSiagieTest.mismaFotoQueLaLibreta`, `.avisaCorreccionesPosteriores` |
 | E18 | Nota B en Primaria sin conclusión | `escala_logro.exige_conclusion` en el trigger | MySQL `e18SinConclusionExigidaFalla` (Inicial A, Primaria B, Secundaria C); H2 `NotasTest` |
-| E19 | Nota a un alumno retirado o de otra sección | Matrícula ACTIVA en la sección | MySQL `e19MatriculaRetiradaFalla` |
+| E19 | Nota a un alumno retirado o de otra sección | Matrícula ACTIVA o RESERVADA en la sección (C1) | MySQL `e19MatriculaRetiradaFalla` |
 | E20 | Reusar la firma de un lote | `uk_firma_operacion` y secuencia en la clave | MySQL `e20SecuenciaSaltadaFalla` |
 | E21 | Un docente exonera un área | DIRECTOR con firma | MySQL `e21ExoneracionSinDireccionFalla` |
 | E22 | Nota en un área exonerada | El trigger revisa la exoneración | MySQL `e22NotaEnAreaExoneradaFalla` |
@@ -1356,12 +1492,13 @@ evaluación; periodos con apertura y cierre en la base (la pantalla de cierre ll
 `acceso_dato_personal` con los tipos nuevos. Pantallas: «Evaluación del año» (Dirección), «Periodos», catálogo de solo
 lectura y la propuesta de asignación con áreas.
 
-### Tanda 2 · Registro de notas, cierre y correcciones (V36; 107 triggers; 1.5 semanas)
+### Tanda 2 · Registro de notas, cierre y correcciones (V36; 108 triggers; 1.5 semanas)
 Hoja de notas del docente (celular y escritorio), lotes firmados, cierre con resumen de pendientes, correcciones y notas
 tardías por la bandeja, exoneraciones, avance de registro, alerta de notas pendientes, vista de la sección para el tutor y
 Dirección. Prueba de carga de 40 docentes a la vez.
 
-### Tanda 3 · Libretas en PDF y exportación para el SIAGIE (V37; 110 triggers; 1.5 semanas)
+### Tanda 3 · Libretas en PDF y exportación para el SIAGIE (V37; 112 triggers; 1.5 semanas)
+
 `EmisionLibretas`, foto y huella, `GeneradorLibretaPdf`, portal de familias con versiones, impresión por Dirección,
 verificación, avisos con la finalidad `LIBRETAS`, integridad, exportación provisional para el SIAGIE, **`LibretaConDeudaTest`**
 y la demo.
@@ -1403,7 +1540,7 @@ Valor por defecto entre corchetes. Sigue la numeración del sprint 9 (la última
 | 174 | Nota tardía | **[Por solicitud aprobada; el docente la registra en 48 horas, solo en competencias sin nota]** |
 | 175 | Competencias transversales | **[Las califica el tutor]** (la norma deja que la IE decida) |
 | 176 | Quién ve las notas | **[Docente: sus áreas; tutor: su sección en lectura; Dirección: todo; Promotoría: solo las de una solicitud; familia: solo la libreta al cierre]** |
-| 177 | Quién descarga el PDF | **[La familia y Dirección; el tutor no, porque lleva el DNI]** |
+| 177 | Quién descarga el PDF (**revisada por M9**) | **[La familia, Dirección y el tutor (las de su sección, para imprimir, con `entrega_libreta` IMPRESA a su nombre); la libreta muestra el código de estudiante y el DNI solo si no hay código; en Inicial se entrega en la entrevista]** |
 | 178 | Situación final (PRO, PER, RR) y recuperación | **[Fuera de este sprint; la libreta dice «se informa al cierre del año»; se diseña antes de diciembre de 2027]** |
 | 179 | Exoneraciones | **[Religión y Educación Física, por Dirección con su firma y el código del escrito del padre; sin revocación en este sprint]** |
 | 180 | Aviso de la libreta | **[Finalidad nueva LIBRETAS con WhatsApp si la familia lo acepta; si no, correo; nunca las notas en el mensaje]** |
@@ -1412,8 +1549,12 @@ Valor por defecto entre corchetes. Sigue la numeración del sprint 9 (la última
 | 183 | Firmas en la libreta | **[Nombres impresos del tutor y de quien cerró, código de verificación; firma y sello a mano solo si se imprime]** |
 | 184 | Catálogo | **[Global, de solo inserción por migración, verificado por huella al arrancar; versión fija por año; sin equivalencias a mitad de año]** |
 | 185 | Conclusión | **[Hasta 500 caracteres (100 a 1000 por colegio); el colegio puede exigirla siempre, nunca menos que la norma]** |
-| 186 | Alerta de correcciones | **[A Promotoría si una persona aprueba más de 5 en un periodo o si una corrección sube a A o AD una libreta ya descargada]** |
-| 187 | Demo | **[I bimestre cerrado con libretas, II abierto, una corrección aprobada, la libreta de la familia demo y la exportación DEMO]** |
+| 186 | Alerta de correcciones (**revisada por A5**) | **[A Promotoría siempre que una corrección suba el nivel o deje la competencia sin nota, y si una persona aprueba más de 5 en un periodo]** |
+| 187 | Demo |
+| 188 | Libreta cuya huella no coincide (A3) | **[Nunca «sin libreta»: alerta a Promotoría; el portal dice «en revisión, el colegio se la entrega a más tardar el {fecha}» (2 días hábiles); Dirección pide `REEMISION_LIBRETA`, la aprueba Promotoría y `sistema.libretas` emite la versión siguiente con la leyenda «Reemitida tras una revisión de integridad»]** |
+| 189 | Quién carga la exportación al SIAGIE (M12) | **[Dirección, o una persona del personal (ADMINISTRACION o CAJA) a quien Dirección delega con su firma por hasta 15 días; cada descarga con su sesión y en `acceso_dato_personal`]** |
+| 190 | Exoneración desde cuándo (A3) | **[Desde el periodo ABIERTO al registrarla; los periodos anteriores conservan sus notas]** |
+ **[I bimestre cerrado con libretas, II abierto, una corrección aprobada, la libreta de la familia demo y la exportación DEMO]** |
 
 ## Fuentes
 Consultadas el 23 de octubre de 2026. Entre paréntesis, la fecha del documento.
