@@ -213,6 +213,13 @@ Cambian: `trg_comunicado_nace` (TODO comunicado con PDF nace POR_APROBAR, sea qu
 condicionar un examen y montos en letras después de «S/»). Prod: «Huellas de los 99 triggers y las 13 funciones
 verificadas». Una base existente: solo `03` (con la aplicación detenida).
 
+**Dos niveles del filtro (decisión del usuario, correcciones del sprint 9): 99 triggers y 14 funciones con huella (113).**
+Nueva: `cc_texto_plano` (sin marcas combinantes, con las letras de ancho completo y las parecidas a latinas llevadas a su
+latina: la misma tabla de `FiltroContenido`). `trg_comunicado_nace` rechaza la cobranza clara sobre ese texto plano y, si
+calza una palabra ambigua (cancelar, «al día con», abono, saldo, regularizar, aporte), obliga a POR_APROBAR. La regla
+clara de `trg_mensaje_nace` ya no tiene las ambiguas: el aviso de un comunicado aprobado con «cancelar la reunión» sale.
+Prod: «Huellas de los 99 triggers y las 14 funciones verificadas». Una base existente: solo `03`.
+
 **Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
 van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
 custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra

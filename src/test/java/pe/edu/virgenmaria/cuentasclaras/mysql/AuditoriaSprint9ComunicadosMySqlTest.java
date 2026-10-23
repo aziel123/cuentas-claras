@@ -732,14 +732,78 @@ class AuditoriaSprint9ComunicadosMySqlTest {
 		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").titulo("C2 letras " + sufijo)
 				.cuerpo("Para el paseo traigan S/ treinta en un sobre."))).isEqualTo(1644);
 		String expresion = ContenidoSinCobranza.EXPRESION;
-		for (String no : new String[] { "su saldo", "abonen hoy", "regularicen", "cancelar su deuda", "obligaciones económicas",
-				"S/ trescientos" }) {
+		for (String no : new String[] { "cancelar su deuda", "obligaciones económicas", "S/ trescientos", "en mora" }) {
 			assertThat(jdbc.queryForObject("SELECT REGEXP_LIKE(?, ?, 'i')", Integer.class, no, expresion)).as(no).isEqualTo(1);
 		}
 		for (String pasa : new String[] { "Av. Lima s/n", "padres/madres", "Saldaña y Abondano" }) {
 			assertThat(jdbc.queryForObject("SELECT REGEXP_LIKE(?, ?, 'i')", Integer.class, pasa, expresion)).as(pasa)
 					.isZero();
 		}
+	}
+
+	/**
+	 * Decisión del usuario (dos niveles): una palabra ambigua no se rechaza, pero el comunicado no sale directo: la base lo
+	 * obliga a POR_APROBAR, también escrita con letras parecidas; la cobranza clara se rechaza aunque quede por aprobar.
+	 */
+	@Test
+	void d2AmbiguaVaAAprobacionYLaClaraSeRechaza() {
+		Escuela s = escuela();
+		String cancelar = "Estimadas familias: debemos cancelar la reunión del viernes por el feriado.";
+		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").titulo("D2 directo " + sufijo).cuerpo(cancelar)))
+				.as("ambigua, directo").isEqualTo(1644);
+		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").porAprobar().titulo("D2 por aprobar " + sufijo)
+				.cuerpo(cancelar))).as("ambigua, por aprobar").isNull();
+		assertThat(insertar(Fila.de(s.promotora(), "PROMOTORIA").titulo("D2 promotoría " + sufijo)
+				.cuerpo("Estimadas familias: regularicen la inscripción al taller de música."))).as("Promotoría, directo")
+				.isEqualTo(1644);
+		assertThat(insertar(Fila.de(s.docente(), "DOCENTE").aSeccion(s.seccion()).titulo("D2 docente " + sufijo)
+				.cuerpo("Queridas familias: traigan abono para el biohuerto el jueves."))).as("docente, directo")
+				.isEqualTo(1644);
+		// Con letras parecidas (cirílicas) y de ancho completo: cc_texto_plano las lleva a latinas.
+		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").titulo("D2 parecidas " + sufijo)
+				.cuerpo("Estimadas familias: debemos с\u0430ncelar la reunión del viernes."))).as("cirílicas").isEqualTo(1644);
+		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").titulo("D2 ancho " + sufijo)
+				.cuerpo("Estimadas familias: revisen el ｓａｌｄｏ de horas del taller."))).as("ancho completo").isEqualTo(1644);
+		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").porAprobar().titulo("D2 deuda parecida " + sufijo)
+				.cuerpo("Estimadas familias: paguen la d\u0435uda del mes."))).as("clara con parecidas").isEqualTo(1644);
+		// La cobranza clara se rechaza aunque quede por aprobar.
+		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").porAprobar().titulo("D2 mensualidad " + sufijo)
+				.cuerpo("Los alumnos que no estén al día con la mensualidad no podrán rendir el examen."))).isEqualTo(1644);
+		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").porAprobar().titulo("D2 soles " + sufijo)
+				.cuerpo("Para el paseo traigan S/ 300 en un sobre."))).isEqualTo(1644);
+		// Sin ambiguas ni cobranza, sale directo.
+		assertThat(insertar(Fila.de(s.directora(), "DIRECCION").titulo("D2 normal " + sufijo))).isNull();
+		// El aviso automático (trg_mensaje_nace usa la regla clara) no lo bloquea una palabra ambigua.
+		for (String pasa : new String[] { "Debemos cancelar la reunión", "al día con las tareas", "abono para el biohuerto",
+				"regularicen la inscripción" }) {
+			assertThat(jdbc.queryForObject("SELECT REGEXP_LIKE(?, ?, 'i')", Integer.class, pasa,
+					ContenidoSinCobranza.EXPRESION)).as(pasa).isZero();
+			assertThat(jdbc.queryForObject("SELECT REGEXP_LIKE(?, ?, 'i')", Integer.class, pasa,
+					ContenidoSinCobranza.EXPRESION_AMBIGUA)).as(pasa).isEqualTo(1);
+		}
+	}
+
+	/** Por la aplicación: «cancelar la reunión» de Dirección queda por aprobar, Promotoría lo aprueba y sale. */
+	@Test
+	void d2AmbiguaPorLaAplicacionSaleAlAprobarse() {
+		Escuela s = escuela();
+		Long id = como(s.directora(), () -> envio.enviar(new BorradorComunicado(EmisorRol.DIRECCION,
+				AlcanceComunicado.SECCION, null, null, s.seccion(), "Reunión cancelada " + sufijo, "Estimadas familias: "
+						+ "debemos cancelar la reunión del viernes por el feriado.", false, true), null));
+		assertThat(jdbc.queryForObject("SELECT estado FROM comunicado WHERE id = ?", String.class, id))
+				.isEqualTo("POR_APROBAR");
+		Long solicitud = jdbc.queryForObject("SELECT solicitud_id FROM comunicado WHERE id = ?", Long.class, id);
+		assertThatThrownBy(() -> como(s.directora(), () -> {
+			bandeja.aprobar(solicitud, null);
+			return null;
+		})).as("Dirección no aprueba el suyo").isInstanceOf(RuntimeException.class);
+		como(s.promotora(), () -> {
+			bandeja.aprobar(solicitud, null);
+			return null;
+		});
+		assertThat(jdbc.queryForObject("SELECT estado FROM comunicado WHERE id = ?", String.class, id))
+				.isEqualTo("ENVIADO");
+		assertThat(jdbc.queryForObject("SELECT destinatarios FROM comunicado WHERE id = ?", Integer.class, id)).isEqualTo(2);
 	}
 
 	/** Correcciones del sprint 9 (auditoría, 3): la versión de la configuración académica sube de a una. */

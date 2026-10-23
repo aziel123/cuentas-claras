@@ -30,16 +30,34 @@
 | QA-S9-11 | `docs/arquitectura/sprint-9/tanda-1.md`: resumen breve que apunta a «Tanda 1 · Implementación». | e7f9be2 | — |
 
 ## Decisiones tomadas en las correcciones (para confirmar con el usuario)
-- **Falsos positivos aceptados de la regla de INDECOPI**: «abono» para el biohuerto, «estén al día con las tareas» y
-  «cancelar la reunión» no salen. El comunicado se rechaza con su motivo y queda en la bitácora; quien lo escribe lo
-  redacta de otra forma. No hay un camino «a aprobación» para el texto: la base lo rechaza siempre (el filtro de texto no
-  tiene excepciones).
+- **Falsos positivos de la regla de INDECOPI**: RESUELTO por el usuario con dos niveles (ver la sección siguiente).
 - **El código de la ficha** es el de la matrícula registrada (`FM-{año}-{id}`), porque el sistema no guardaba un número
   de ficha en papel. Si el colegio numera sus fichas de otra forma, se agrega ese número a la matrícula en una migración.
 - **Situación de matrícula** de quien saltó o bajó de grado: PROMOVIDO si sube y REPITENTE si no (provisional hasta tener
   la plantilla real del SIAGIE, D12).
 - **ToUnicode falso**: el analizador no lo puede detectar (el texto extraído no es el que se ve); lo cubre que todo PDF lo
   apruebe otra persona leyéndolo.
+
+## Dos niveles del filtro (decisión del usuario, después de la primera ronda)
+
+El usuario decidió sobre los falsos positivos de la regla de INDECOPI (hallazgo 2 de la auditoría y el riesgo 7 del
+informe de la primera ronda): **quedan resueltos con dos niveles**.
+
+| Nivel | Qué | Dónde | Pruebas |
+|---|---|---|---|
+| Cobranza clara: se RECHAZA | deuda, mensualidad, pensión y cuotas, mora («en/de/la/su/por mora») y morosidad, pagos, cobros, vencimientos, Yape y Plin, «S/» con un monto en cifras o en letras, dólares, decimales, «obligaciones/compromisos económicos» y «no podrá(n) rendir/dar (el) examen» | `ContenidoSinCobranza.EXPRESION`, `trg_comunicado_nace` (sobre el texto plano) y `trg_mensaje_nace` | `CobranzaIndecopiTest.debeRechazarLaCobranzaClara`, `FiltroDosNivelesTest.debeRechazarLaCobranzaClara` («al día con la mensualidad» y «S/ 300»), MySQL `d2AmbiguaVaAAprobacionYLaClaraSeRechaza` |
+| Ambiguas: van a APROBACIÓN | cancelar/cancelen/cancelación, «al día con» y «ponerse al día», abono/abonar/abonen, saldo(s), regularizar/regularicen, aporte(s) | `ContenidoSinCobranza.EXPRESION_AMBIGUA`; `FiltroContenido.paraAprobacion` (con la normalización del filtro); `EnvioComunicados` deja el comunicado POR_APROBAR con su `PUBLICAR_COMUNICADO` aunque lo envíe Dirección o Promotoría; `trg_comunicado_nace` lo exige con `cc_texto_plano` (nueva: marcas combinantes, ancho completo y letras parecidas) | `FiltroDosNivelesTest` («cancelar la reunión», «al día con las tareas» y «abono para el biohuerto» van a aprobación y, aprobados, salen; Dirección con «regularicen» necesita a Promotoría; el urgente aprobado llega a las familias); MySQL `d2AmbiguaVaAAprobacionYLaClaraSeRechaza` y `d2AmbiguaPorLaAplicacionSaleAlAprobarse` |
+
+- Quien aprueba ve la palabra en la advertencia de la bandeja («El texto dice «cancelar», que puede referirse a cobranza…»)
+  y en una línea resaltada del detalle («Palabra que lo envió a aprobación: …»).
+- La regla de «deben + verbo» de `FiltroContenido` ya no incluye cancelar, regularizar ni ponerse al día (son ambiguas);
+  «deben pagar» y «deben abonar» siguen siendo cobranza clara.
+- Los avisos automáticos usan solo la regla clara: el aviso de un comunicado aprobado con «cancelar la reunión» sale.
+- Conteos: 99 triggers y **14 funciones** (113 huellas) en el verificador, `HuellasObjetosBdTest`, el CI, `paso-0.sh`,
+  `en-la-vm.sh`, el acta del paso 0, `despliegue-gcp.md` y `mysql-usuarios.md`. Manuales de docente y de Dirección: qué
+  palabras mandan a aprobación.
+- `ContenidoSinCobranzaTest.laReglaAmbiguaYLasLetrasParecidasSonLasDeLaBase` comprueba que la regla ambigua y la tabla de
+  letras parecidas de la base son las de Java.
 
 ## Resultados de la verificación
 - `./mvnw -B verify` en local (una vez, sobre e7f9be2): **2845 pruebas, 0 fallos, 0 errores, 202 omitidas** (las de MySQL
@@ -56,5 +74,9 @@
   Los Ángeles: 2846 pruebas, 0 fallos, 202 omitidas; MySQL 8 con `AuditoriaSprint9ComunicadosMySqlTest` 41 de 41,
   `huellas_objetos()` = 112 y prod «Huellas de los 99 triggers y las 13 funciones verificadas»; respaldo; demo, con el PDF
   de ejemplo aprobado por Promotoría y las diez bombas; dependencias; gitleaks).
+- Dos niveles (en local): las clases tocadas en H2, 361 pruebas, 0 fallos; MySQL real en una base limpia y en el orden del
+  job `mysql`: todas sin fallos y `AuditoriaSprint9ComunicadosMySqlTest` **43 de 43** (la primera vez, 42: `cc_app` no
+  tiene EXECUTE sobre `cc_texto_plano`, que solo usan los triggers; la prueba ya no la llama). El CI del PR #18 queda
+  en el PR.
 - No se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`, `smarthr-*`, `supabase_*`, `cc-mysql-s5*`,
   `.claude/worktrees/*` ni el puerto 8098.

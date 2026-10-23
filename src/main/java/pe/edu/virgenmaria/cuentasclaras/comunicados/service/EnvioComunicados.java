@@ -23,6 +23,7 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.SeccionRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.ContenidoSinCobranza;
 import pe.edu.virgenmaria.cuentasclaras.comunicados.dto.AdjuntoValidado;
 import pe.edu.virgenmaria.cuentasclaras.comunicados.dto.BorradorComunicado;
 import pe.edu.virgenmaria.cuentasclaras.comunicados.dto.OpcionSeccionComunicado;
@@ -168,7 +169,7 @@ public class EnvioComunicados {
 		return transaccion.execute(t -> {
 			t.setRollbackOnly();
 			Preparado p = preparar(borrador, adjunto, corrigeId);
-			boolean porAprobar = adjunto != null;
+			boolean porAprobar = adjunto != null || p.ambigua() != null;
 			return new VistaPrevia(p.etiqueta(), textoAlcance(p.alcance()), p.familias().size(), p.titulo(),
 					parrafos(p.cuerpo()), pie.texto(), borrador.urgente(), borrador.requiereConfirmacion(),
 					adjunto == null ? null : adjunto.paginas(), porAprobar, porAprobar ? quienAprueba(p.emisor()) : null);
@@ -262,7 +263,7 @@ public class EnvioComunicados {
 			throw new ReglaNegocioException("Ya se envió un comunicado con este mismo contenido a este alcance: para "
 					+ "corregirlo, envía una fe de erratas.");
 		}
-		boolean porAprobar = adjunto != null;
+		boolean porAprobar = adjunto != null || p.ambigua() != null;
 		firma.firmar(ClaveFirma.comunicadoEnviar(huella));
 		Comunicado c = comunicados.saveAndFlush(Comunicado.nuevo(p.anio().getId(), original == null ? null
 				: original.getId(), new Comunicado.Emisor(p.persona().usuarioId(), p.emisor(), p.etiqueta(),
@@ -275,15 +276,23 @@ public class EnvioComunicados {
 			if (shaAdjunto != null) {
 				datos.put("adjunto", shaAdjunto);
 			}
+			if (p.ambigua() != null) {
+				datos.put(DATO_PALABRA, p.ambigua());
+			}
+			String porque = (adjunto == null ? "" : "con PDF")
+					+ (adjunto != null && p.ambigua() != null ? " y " : "")
+					+ (p.ambigua() == null ? "" : "con «" + p.ambigua() + "»: " + ContenidoSinCobranza.MOTIVO_AMBIGUO);
 			SolicitudCambio solicitud = solicitudes.crear(TipoSolicitud.PUBLICAR_COMUNICADO, ENTIDAD, c.getId(),
-					"Publicar «" + p.titulo() + "» de " + p.etiqueta() + " a " + textoAlcance(alcance) + " (con PDF)",
-					datos, (adjunto.requiereRevision() ? "El PDF tiene poco texto o imágenes. " : "")
-							+ "Todo PDF lo revisa " + quienAprueba(p.emisor()) + " antes de salir.");
+					"Publicar «" + p.titulo() + "» de " + p.etiqueta() + " a " + textoAlcance(alcance) + " (" + porque + ")",
+					datos, (adjunto != null && adjunto.requiereRevision() ? "El PDF tiene poco texto o imágenes. " : "")
+							+ (p.ambigua() == null ? "" : "El texto dice «" + p.ambigua() + "», que "
+									+ ContenidoSinCobranza.MOTIVO_AMBIGUO + ". ")
+							+ "Lo revisa " + quienAprueba(p.emisor()) + " antes de salir.");
 			c.ligarSolicitud(solicitud.getId());
 			comunicados.saveAndFlush(c);
 			auditoria.registrar(AccionAuditoria.COMUNICADO_POR_APROBAR, ENTIDAD, c.getId().toString(), null, huella,
-					p.etiqueta() + " dejó un comunicado con PDF a " + textoAlcance(alcance) + " por aprobar (solicitud "
-							+ solicitud.getId() + "; lo aprueba " + quienAprueba(p.emisor()) + ").");
+					p.etiqueta() + " dejó un comunicado " + porque + " a " + textoAlcance(alcance) + " por aprobar "
+							+ "(solicitud " + solicitud.getId() + "; lo aprueba " + quienAprueba(p.emisor()) + ").");
 			return c.getId();
 		}
 		congelarDestinatarios(c);
@@ -343,8 +352,9 @@ public class EnvioComunicados {
 			throw new ReglaNegocioException("No hay familias con alumnos matriculados en ese alcance.");
 		}
 		String etiqueta = etiquetas.de(persona, emisor, alcance.seccionId());
+		String ambigua = filtro.paraAprobacion(titulo + "\n" + cuerpo).orElse(null);
 		return new Preparado(persona, emisor, etiqueta, anio, alcance, titulo, cuerpo, borrador.urgente(),
-				borrador.requiereConfirmacion(), familias, original);
+				borrador.requiereConfirmacion(), familias, original, ambigua);
 	}
 
 	private Map<Long, Integer> familiasDelOriginal(Comunicado original) {
@@ -459,6 +469,9 @@ public class EnvioComunicados {
 
 	private record Preparado(UsuarioAutenticado persona, EmisorRol emisor, String etiqueta, AnioEscolar anio,
 			AlcanceDeFamilias.Alcance alcance, String titulo, String cuerpo, boolean urgente, boolean requiereConfirmacion,
-			Map<Long, Integer> familias, Comunicado original) {
+			Map<Long, Integer> familias, Comunicado original, String ambigua) {
 	}
+
+	/** La palabra ambigua que mandó el comunicado a aprobación (en los datos de su solicitud). */
+	static final String DATO_PALABRA = "palabra";
 }

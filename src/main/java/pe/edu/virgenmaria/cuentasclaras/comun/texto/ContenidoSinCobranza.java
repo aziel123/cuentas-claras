@@ -30,7 +30,7 @@ public final class ContenidoSinCobranza {
 
 	private static final String PAGO = "\\bpag(o|os|ar|ue|ues)\\b";
 
-	private static final String MOROSIDAD = "\\bmoros";
+	private static final String MOROSIDAD = "\\bmoros|\\b(en|de|la|su|por)\\s+mora\\b";
 
 	private static final String COBRO = "\\bcobr";
 
@@ -42,33 +42,43 @@ public final class ContenidoSinCobranza {
 	private static final String MENSUALIDAD = "\\bmensualidad";
 
 	/** Correcciones del sprint 9 (INDECOPI). */
-	private static final String AL_DIA = "\\bal\\s+d[ií]a\\s+con\\b";
-
-	/** Correcciones del sprint 9 (INDECOPI). */
 	private static final String OBLIGACIONES = "\\b(obligaciones|compromisos)\\s+econ[oó]mic";
-
-	/** Correcciones del sprint 9 (INDECOPI). */
-	private static final String SALDO = "\\bsaldos?\\b";
-
-	/** Correcciones del sprint 9 (INDECOPI). */
-	private static final String ABONO = "\\babon(o|os|ó|ar|e|en|ad[oa]s?|ando)\\b";
-
-	/** Correcciones del sprint 9 (INDECOPI). */
-	private static final String REGULARIZAR = "\\bregulari[zc]";
-
-	/** Correcciones del sprint 9 (INDECOPI). */
-	private static final String CANCELAR = "\\bcancel(ar|en)\\s+(la|su)\\b";
 
 	/** Correcciones del sprint 9 (INDECOPI). */
 	private static final String EXAMEN = "\\bno\\s+podr[aá]n?\\s+(rendir|dar)\\s+(el\\s+)?ex[aá]men";
 
 	/** La expresión, tal cual va (con las barras sin duplicar) en los REGEXP_LIKE de trg_mensaje_nace y trg_comunicado_nace. */
 	public static final String EXPRESION = String.join("|", SOLES, DOLARES, DECIMALES, DEUDA, PENSION, PAGO, MOROSIDAD,
-			COBRO, VENCIDO, MEDIOS, MENSUALIDAD, AL_DIA, OBLIGACIONES, SALDO, ABONO, REGULARIZAR, CANCELAR, EXAMEN);
+			COBRO, VENCIDO, MEDIOS, MENSUALIDAD, OBLIGACIONES, EXAMEN);
+
+	// Decisión del usuario (correcciones del sprint 9): las palabras AMBIGUAS no rechazan el comunicado; lo mandan a
+	// aprobación de otra persona de Dirección o Promotoría, que las ve resaltadas («puede referirse a cobranza»).
+	private static final String CANCELAR = "\\bcancel(ar|en|e|aci[oó]n)\\b";
+
+	private static final String AL_DIA = "\\bal\\s+d[ií]a\\s+con\\b|\\bponerse\\s+al\\s+d[ií]a\\b";
+
+	private static final String ABONO = "\\babon(o|os|ó|ar|e|en|ad[oa]s?|ando)\\b";
+
+	private static final String SALDO = "\\bsaldos?\\b";
+
+	private static final String REGULARIZAR = "\\bregulari[zc]";
+
+	private static final String APORTE = "\\baportes?\\b";
+
+	/**
+	 * Las palabras que PUEDEN referirse a cobranza («cancelar la reunión», «al día con las tareas», «abono para el
+	 * biohuerto»): la misma expresión del REGEXP_LIKE de trg_comunicado_nace que obliga a POR_APROBAR.
+	 */
+	public static final String EXPRESION_AMBIGUA = String.join("|", CANCELAR, AL_DIA, ABONO, SALDO, REGULARIZAR, APORTE);
+
+	/** El motivo que ve quien aprueba. */
+	public static final String MOTIVO_AMBIGUO = "puede referirse a cobranza";
 
 	private static final int BANDERAS = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS;
 
 	private static final Pattern PATRON = Pattern.compile(EXPRESION, BANDERAS);
+
+	private static final Pattern PATRON_AMBIGUO = Pattern.compile(EXPRESION_AMBIGUA, BANDERAS);
 
 	/** Cada parte con el motivo que ve quien escribe (en el orden en que se revisan). */
 	private static final List<Regla> REGLAS = List.of(new Regla(SOLES, "menciona un monto en soles"),
@@ -78,15 +88,22 @@ public final class ContenidoSinCobranza {
 			new Regla(COBRO, "menciona cobros o cobranza"), new Regla(VENCIDO, "menciona un vencimiento"),
 			new Regla(MEDIOS, "menciona Yape o Plin"),
 			new Regla(MENSUALIDAD, "menciona la mensualidad"),
-			new Regla(AL_DIA, "pide estar al día con algo"),
 			new Regla(OBLIGACIONES, "menciona obligaciones económicas"),
-			new Regla(SALDO, "menciona un saldo"),
-			new Regla(ABONO, "menciona un abono"),
-			new Regla(REGULARIZAR, "pide regularizar algo"),
-			new Regla(CANCELAR, "pide cancelar algo"),
 			new Regla(EXAMEN, "condiciona un examen"));
 
 	private ContenidoSinCobranza() {
+	}
+
+	/**
+	 * La primera palabra ambigua del texto (para resaltarla a quien aprueba), o vacío. No rechaza: el comunicado queda por
+	 * aprobar.
+	 */
+	public static Optional<String> ambigua(String texto) {
+		if (texto == null) {
+			return Optional.empty();
+		}
+		java.util.regex.Matcher m = PATRON_AMBIGUO.matcher(texto);
+		return m.find() ? Optional.of(m.group().strip()) : Optional.empty();
 	}
 
 	/** Si el texto habla de cobranza (y entonces el aviso académico o el comunicado no debe salir con él). */

@@ -77,7 +77,7 @@ public class FiltroContenido {
 
 	private static final Pattern COBRANZA = Pattern.compile("\\b(deuda\\w*|adeud\\w*|moros\\w*|pensi[oó]n(es)?|cuotas?"
 			+ "|pagos?|pagar\\w*|pague\\w*|pagad[oa]s?|vencid[oa]s?|cobranzas?|cobros?|cobrar\\w*|atrasad[oa]s? en (sus )?pagos"
-			+ "|deben? (pagar|abonar|cancelar|regularizar|ponerse al dia|\\S+ (pensi|cuota|mes|monto|sol)))\\b", BANDERAS);
+			+ "|deben? (pagar|abonar|\\S+ (pensi|cuota|mes|monto|sol)))\\b", BANDERAS);
 
 	private static final Pattern MONTO_PALABRAS = Pattern.compile("\\b(nuevos soles|soles|dolares|us dolares)\\b",
 			BANDERAS);
@@ -123,6 +123,21 @@ public class FiltroContenido {
 	/** Los dominios a los que un comunicado o su PDF pueden enlazar (el de la plataforma y la lista permitida). */
 	public Set<String> dominiosPermitidos() {
 		return dominiosPermitidos;
+	}
+
+	/**
+	 * Decisión del usuario (correcciones del sprint 9): la palabra AMBIGUA del texto («cancelar», «al día con», «abono»,
+	 * «saldo», «regularicen», «aporte»), con la misma normalización que {@link #revisar}. No rechaza: el comunicado queda por
+	 * aprobar y quien aprueba la ve resaltada. Vacío si no hay.
+	 */
+	public Optional<String> paraAprobacion(String texto) {
+		if (texto == null || texto.isBlank()) {
+			return Optional.empty();
+		}
+		// Primero en el texto tal cual (la palabra se resalta como la escribió quien envía), luego normalizado.
+		String base = normalizar(texto);
+		return ContenidoSinCobranza.ambigua(texto).or(() -> ContenidoSinCobranza.ambigua(base))
+				.or(() -> ContenidoSinCobranza.ambigua(paraPalabras(base)));
 	}
 
 	/** Revisa un texto (título, texto del comunicado o texto extraído del PDF). */
@@ -231,15 +246,23 @@ public class FiltroContenido {
 		}
 	}
 
+	/**
+	 * Las letras parecidas y su latina (la MISMA tabla que usa cc_texto_plano en 03-triggers.sql: ContenidoSinCobranzaTest
+	 * lo comprueba).
+	 */
+	public static final String ORIGEN_PARECIDAS = "аеорсухкмтнвіјѕԁɡАВЕКМНОРСТХУІЈЅ" + "αορεντικυχΑΒΕΖΗΙΚΜΝΟΡΤΥΧ"
+			+ "ıɩɑʋȷ" + "ᴀʙᴄᴅᴇɢʜɪᴊᴋʟᴍɴᴏᴘʀꜱᴛᴜᴠᴡʏᴢ" + "ӏӀһԛԝү" + "օսոցհզ" + "ϲϳ";
+
+	public static final String DESTINO_PARECIDAS = "aeopcyxkmthbijsdgABEKMHOPCTXYIJS" + "aopevtikuxABEZHIKMNOPTYX"
+			+ "iiauj" + "abcdeghijklmnoprstuvwyz" + "llhqwy" + "ounghq" + "cj";
+
 	private static Map<Character, Character> homoglifos() {
 		// Cirílico y griego que se ven como latino (minúsculas y mayúsculas).
 		// QA del sprint 9 (QA-S9-1): también las latinas «raras» que NFKC no lleva a la normal (ı sin punto, alfa latina,
 		// iota latina, ʋ, ȷ), las versalitas fonéticas (ᴅᴇᴜᴅᴀ, ᴘᴇɴsɪᴏɴ), más cirílicas (ӏ, Ӏ, һ, ԛ, ԝ, ү), armenias que
 		// parecen latinas (օ, ս, ո, ց, հ, զ) y las griegas ϲ y ϳ. Con ellas, «pensiօn», «deսda» o «pɑgo» pasaban.
-		String origen = "аеорсухкмтнвіјѕԁɡАВЕКМНОРСТХУІЈЅ" + "αορεντικυχΑΒΕΖΗΙΚΜΝΟΡΤΥΧ"
-				+ "ıɩɑʋȷ" + "ᴀʙᴄᴅᴇɢʜɪᴊᴋʟᴍɴᴏᴘʀꜱᴛᴜᴠᴡʏᴢ" + "ӏӀһԛԝү" + "օսոցհզ" + "ϲϳ";
-		String destino = "aeopcyxkmthbijsdgABEKMHOPCTXYIJS" + "aopevtikuxABEZHIKMNOPTYX"
-				+ "iiauj" + "abcdeghijklmnoprstuvwyz" + "llhqwy" + "ounghq" + "cj";
+		String origen = ORIGEN_PARECIDAS;
+		String destino = DESTINO_PARECIDAS;
 		if (origen.length() != destino.length()) {
 			throw new IllegalStateException("La tabla de letras parecidas está descuadrada");
 		}
