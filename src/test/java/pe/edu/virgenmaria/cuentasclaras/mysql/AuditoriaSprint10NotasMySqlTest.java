@@ -830,7 +830,7 @@ class AuditoriaSprint10NotasMySqlTest {
 		// El brief pide menos de 2 s por guardado. Un lote solo (120 filas) tarda ~120 ms en el CI; con los 40 a la vez en un
 		// runner de 4 vCPU (aplicación y MySQL en la misma máquina) el último espera la cadena de la bitácora, que es una sola
 		// para toda la instalación y serializa el final de cada transacción (como los cobros): ~2,2 s. Se exige el lote solo
-		// en menos de 2 s y los 40 a la vez en menos de 4 s (desviación 6 de la tanda 2, riesgo 3).
+		// en menos de 2 s y los 40 a la vez en menos de 4 s (decisión 191, confirmada por el usuario; riesgo 3).
 		assertThat(msSolo).as("un lote de 120 filas, solo, en milisegundos").isLessThan(2000);
 		assertThat(maximo).as("el guardado más lento de los 40 a la vez, en milisegundos").isLessThan(4000);
 	}

@@ -1555,6 +1555,7 @@ Valor por defecto entre corchetes. Sigue la numeración del sprint 9 (la última
 | 188 | Libreta cuya huella no coincide (A3) | **[Nunca «sin libreta»: alerta a Promotoría; el portal dice «en revisión, el colegio se la entrega a más tardar el {fecha}» (2 días hábiles); Dirección pide `REEMISION_LIBRETA`, la aprueba Promotoría y `sistema.libretas` emite la versión siguiente con la leyenda «Reemitida tras una revisión de integridad»]** |
 | 189 | Quién carga la exportación al SIAGIE (M12) (**ajustada por el coordinador**) | **[Dirección, o una persona de Administración (nunca de Caja ni un docente) a quien Dirección delega con su firma por hasta 15 días; cada descarga con su sesión y en `acceso_dato_personal`]** |
 | 190 | Exoneración desde cuándo (A3) | **[Desde el periodo ABIERTO al registrarla; los periodos anteriores conservan sus notas]** |
+| 191 | Tiempo de guardado de las notas con carga (riesgo 3) (**confirmada por el usuario el 23-oct-2026, tanda 2**) | **[Un lote solo (30 alumnos × 4 competencias) se guarda en menos de 2 s; con 40 docentes guardando a la vez se acepta hasta 4 s en el peor caso. La cadena única de la bitácora no se rediseña en este sprint]** |
  **[I bimestre cerrado con libretas, II abierto, una corrección aprobada, la libreta de la familia demo y la exportación DEMO]** |
 
 > **Ajuste del coordinador a la decisión 189 (23 de octubre de 2026, durante la tanda 1).** La delegación de la carga al
@@ -1778,9 +1779,9 @@ Rutas relativas a `C:/Users/amedina/cuentas-claras/cuentas-claras/`:
    con los 40 a la vez, el primero termina en ~1 s y el último en ~2,2 s. La espera no está en el trigger (bajarlo a una
    consulta por fila no movió los tiempos) sino en la cadena de la bitácora (`auditoria_cadena`, una fila para toda la
    instalación, bloqueada desde el evento hasta el COMMIT): lo confirmó `sys.innodb_lock_waits` en la prueba. La prueba
-   exige el lote solo en menos de 2 s y los 40 a la vez en menos de 4 s. **Decisión abierta para el coordinador:** aceptar
-   ese umbral o rediseñar la cadena (por colegio, o el evento fuera de la transacción de las notas), que afecta a todo el
-   sistema y no es de esta tanda.
+   exige el lote solo en menos de 2 s y los 40 a la vez en menos de 4 s. **Decisión 191, confirmada por el usuario el 23 de
+   octubre de 2026:** se acepta hasta 4 s en el peor caso con 40 docentes a la vez y el lote solo sigue por debajo de 2 s;
+   la cadena de la bitácora no se rediseña en este sprint.
 7. **`application.yaml` solo lleva `alerta-correcciones-por-persona`:** el plazo de 48 horas y el tope de 1000 caracteres los
    fija la base.
 
