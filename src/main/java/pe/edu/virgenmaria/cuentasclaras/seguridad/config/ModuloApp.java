@@ -67,6 +67,11 @@ public enum ModuloApp {
 			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 	COLEGIO("Colegio", "Años escolares, grados y secciones.", "Sprint 2", true, "/colegio",
 			new String[] { "/colegio", "/colegio/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+	// Sprint 9, tanda 2 (E38): el consentimiento de la ficha de matrícula firmada lo registran Administración o Dirección
+	// (lo exige el servicio). Va ANTES que ALUMNOS (que también es de Promotoría).
+	CONSENTIMIENTOS_FICHA("Consentimientos de la ficha", "Registra el «sí» a los avisos de asistencia que la familia firmó "
+			+ "en la ficha de matrícula.", "Sprint 9", true, "/alumnos/consentimientos",
+			new String[] { "/alumnos/consentimientos" }, EnumSet.of(DIRECTOR, ADMINISTRACION)),
 	ALUMNOS("Alumnos y apoderados", "Fichas de alumnos y familias, y matrícula en cada año.", "Sprint 2", true,
 			"/alumnos", new String[] { "/alumnos", "/alumnos/**" }, EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 	PENSIONES("Pensiones", "Configura las pensiones y genera el cronograma de cuotas de cada alumno.", "Sprint 2",
@@ -136,9 +141,46 @@ public enum ModuloApp {
 			"Sprint 4 (automática)", true, "/conciliacion", new String[] { "/conciliacion", "/conciliacion/**" },
 			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 
-	ACADEMICO("Académico", "Asistencia, notas por competencias y exportación al SIAGIE.", "Más adelante", false,
-			"/academico", new String[] { "/academico", "/academico/**" }, EnumSet.of(DIRECTOR, DOCENTE)),
-	COMUNICADOS("Comunicados", "Envía comunicados a las familias con confirmación de lectura.", "Más adelante", false,
+	// Sprint 9, tanda 1 (sección 3.2 y 10): las asignaciones de docentes, tutores y auxiliares a las secciones. Ver y
+	// proponer: Administración y Dirección (los servicios lo exigen también); terminar, Dirección y Promotoría; aprobar, otra
+	// persona en la bandeja. Va ANTES que ACADEMICO (la primera regla que coincide gana: /academico/** es de Dirección y
+	// Docente, y el docente no ve las asignaciones de los demás).
+	ASIGNACIONES("Docentes y secciones", "Quién es tutor, docente o auxiliar de cada sección: lo propone Administración o "
+			+ "Dirección y lo aprueba otra persona.", "Sprint 9", true, "/academico/asignaciones",
+			new String[] { "/academico/asignaciones", "/academico/asignaciones/**" },
+			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
+	// Sprint 9, tanda 3 (sección 3.11, E34, B14): la nómina para el SIAGIE (DNI y fechas de nacimiento de menores) la saca
+	// SOLO Dirección, con su sesión; los datos que faltan y los códigos modulares, también. Va ANTES que ACADEMICO.
+	SIAGIE("Nómina para el SIAGIE", "Los datos que faltan para la matrícula en el SIAGIE, los códigos modulares y la nómina "
+			+ "provisional de cada sección para copiar en la plantilla del SIAGIE.", "Sprint 9", true, "/academico/siagie",
+			new String[] { "/academico/siagie", "/academico/siagie/**" }, EnumSet.of(DIRECTOR)),
+	// Sprint 9, tanda 2 (sección 10, A6): las horas y plazos de la asistencia los cambia SOLO Dirección, con su firma. Va
+	// ANTES que ACADEMICO (la primera regla que coincide gana: /academico/** es también del docente).
+	CONFIGURACION_ACADEMICA("Horas de la asistencia", "A qué hora sale la alerta de secciones sin asistencia y el aviso a "
+			+ "las familias, y los plazos para justificar y registrar tarde. Solo Dirección, con su firma.", "Sprint 9",
+			true, "/academico/configuracion", new String[] { "/academico/configuracion" }, EnumSet.of(DIRECTOR)),
+	// Sprint 9, tanda 2 (E5, E13): Dirección no registra ni corrige marcas (decisión 144): ve los cambios del día y revierte
+	// las justificaciones con su firma. Va ANTES que ASISTENCIA (que es solo del docente).
+	ASISTENCIA_DIRECCION("Cambios de la asistencia", "Las correcciones y justificaciones del día, resaltando las de después "
+			+ "del aviso a las familias; revierte una justificación con tu firma.", "Sprint 9", true,
+			"/academico/asistencia/cambios", new String[] { "/academico/asistencia/cambios",
+					"/academico/asistencia/marcas/*/revertir-justificacion" }, EnumSet.of(DIRECTOR)),
+	// Sprint 9, tanda 2: el reporte mensual lo ven el tutor (lo exige el servicio) y Dirección.
+	REPORTE_ASISTENCIA("Reporte de asistencia", "Por sección y mes: presentes, tardanzas, faltas y faltas justificadas de "
+			+ "cada alumno.", "Sprint 9", true, "/academico/asistencia/reporte",
+			new String[] { "/academico/asistencia/reporte" }, EnumSet.of(DIRECTOR, DOCENTE)),
+	// Sprint 9, tanda 2 (decisión 144): la hoja del día, la corrección y las solicitudes son SOLO del docente (E49: Dirección,
+	// 403). Va ANTES que ACADEMICO.
+	ASISTENCIA("Asistencia de hoy", "Marca la asistencia de tu sección en un minuto: todos en «Presente» y un toque por "
+			+ "alumno.", "Sprint 9", true, "/academico/asistencia",
+			new String[] { "/academico/asistencia", "/academico/asistencia/**" }, EnumSet.of(DOCENTE)),
+	// Sprint 9, tanda 1: el docente ve sus secciones y los nombres de sus alumnos (nunca deudas, pagos, documentos ni
+	// contactos); Dirección, todas las secciones. Promotoría no ve las listas por alumno (decisión 143).
+	ACADEMICO("Académico", "Tus secciones y la lista de tus alumnos. Nunca muestra deudas, pagos, documentos ni contactos.",
+			"Sprint 9", true, "/academico", new String[] { "/academico", "/academico/**" }, EnumSet.of(DIRECTOR, DOCENTE)),
+	// Sprint 9, tanda 3 (sección 3.8): Promotoría y Dirección escriben a todo el colegio, un nivel, un grado o una sección;
+	// el docente, solo a sus secciones (lo exige el servicio: 404). Retirar, solo Dirección y Promotoría (@PreAuthorize).
+	COMUNICADOS("Comunicados", "Envía comunicados a las familias con confirmación de lectura.", "Sprint 9", true,
 			"/comunicados", new String[] { "/comunicados", "/comunicados/**" }, EnumSet.of(PROMOTOR, DIRECTOR, DOCENTE));
 
 	/** Rutas públicas: no exigen sesión. */

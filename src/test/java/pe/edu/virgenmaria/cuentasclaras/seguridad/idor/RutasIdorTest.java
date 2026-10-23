@@ -469,9 +469,55 @@ class RutasIdorTest {
 		ids.put(Recurso.LOTE_RECAUDACION, lote.toString());
 		ids.put(Recurso.LINEA_RECAUDACION, texto("SELECT MIN(id) FROM linea_recaudacion WHERE colegio_id = 1"));
 		ids.put(Recurso.USUARIO, usuarioA.toString());
+		// Sprint 9, tanda 1: el docente usuario.a es tutor VIGENTE de la sección del colegio A (Dirección y el docente del
+		// colegio B no ven su lista ni terminan su asignación: 404).
+		jdbc.update("INSERT INTO asignacion_docente (colegio_id, anio_escolar_id, seccion_id, usuario_id, tipo, estado, vigente, "
+				+ "tutor_vigente, propuesto_por, resuelto_por, resuelto_en, creado_en, creado_por, actualizado_en) VALUES (1, "
+				+ "(SELECT anio_escolar_id FROM seccion WHERE id = ?), ?, ?, 'TUTOR', 'VIGENTE', TRUE, TRUE, 'administracion', "
+				+ "'directora', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'administracion', CURRENT_TIMESTAMP)", seccion, seccion,
+				usuarioA);
+		ids.put(Recurso.ASIGNACION, texto("SELECT MIN(id) FROM asignacion_docente WHERE colegio_id = 1"));
+		// Sprint 9, tanda 2: una marca de asistencia de Mateo en el colegio A (H2, sin triggers: con una sesión de la base).
+		jdbc.update("INSERT INTO sesion_usuario (colegio_id, usuario_id, hash_token, abierta_en, vence_en, creado_en, "
+				+ "creado_por, actualizado_en) VALUES (1, ?, ?, CURRENT_TIMESTAMP, DATEADD('HOUR', 8, CURRENT_TIMESTAMP), "
+				+ "CURRENT_TIMESTAMP, 'prueba', CURRENT_TIMESTAMP)", usuarioA, "e".repeat(64));
+		Long sesionA = jdbc.queryForObject("SELECT MAX(id) FROM sesion_usuario WHERE colegio_id = 1", Long.class);
+		Long seccionMateo = jdbc.queryForObject("SELECT seccion_id FROM matricula WHERE id = ?", Long.class, matriculaMateo);
+		jdbc.update("INSERT INTO registro_asistencia (colegio_id, anio_escolar_id, seccion_id, fecha, origen, fuente, "
+				+ "registrado_por, sesion_id, alumnos, creado_en, creado_por, actualizado_en) VALUES (1, (SELECT "
+				+ "anio_escolar_id FROM seccion WHERE id = ?), ?, CURRENT_DATE, 'DEL_DIA', 'DOCENTE', 'usuario.a', ?, 1, "
+				+ "CURRENT_TIMESTAMP, 'usuario.a', CURRENT_TIMESTAMP)", seccionMateo, seccionMateo, sesionA);
+		jdbc.update("INSERT INTO marca_asistencia (colegio_id, registro_id, seccion_id, fecha, alumno_id, matricula_id, "
+				+ "estado, fuente, origen, primera, sesion_id, creado_en, creado_por, actualizado_en) VALUES (1, (SELECT "
+				+ "MAX(id) FROM registro_asistencia), ?, CURRENT_DATE, ?, ?, 'FALTA', 'DOCENTE', 'REGISTRO', TRUE, ?, "
+				+ "CURRENT_TIMESTAMP, 'usuario.a', CURRENT_TIMESTAMP)", seccionMateo, f.mateo(), matriculaMateo, sesionA);
+		ids.put(Recurso.MARCA, texto("SELECT MIN(id) FROM marca_asistencia WHERE colegio_id = 1"));
+		// Sprint 9, tanda 3: un comunicado del docente usuario.a a la sección de Mateo (destinataria: la familia Quispe).
+		ids.put(Recurso.COMUNICADO, comunicado(seccionMateo, usuarioA, sesionA, f.quispe(), "a").toString());
 		assertThat(ids.values()).as("hay un recurso real de cada tipo en el colegio A").doesNotContainNull();
 
 		Map<Recurso, String> deFlores = new EnumMap<>(Recurso.class);
+		// Sprint 9, tanda 2: una falta de Sebastián (de la familia Flores) en su sección (la familia Quispe no la justifica).
+		Long matriculaDeSebastian = jdbc.queryForObject("SELECT MAX(id) FROM matricula WHERE alumno_id = ?", Long.class,
+				f.sebastian());
+		Long seccionSebastian = jdbc.queryForObject("SELECT seccion_id FROM matricula WHERE id = ?", Long.class,
+				matriculaDeSebastian);
+		if (jdbc.queryForObject("SELECT COUNT(*) FROM registro_asistencia WHERE seccion_id = ? AND fecha = CURRENT_DATE",
+				Long.class, seccionSebastian) == 0) {
+			jdbc.update("INSERT INTO registro_asistencia (colegio_id, anio_escolar_id, seccion_id, fecha, origen, fuente, "
+					+ "registrado_por, sesion_id, alumnos, creado_en, creado_por, actualizado_en) VALUES (1, (SELECT "
+					+ "anio_escolar_id FROM seccion WHERE id = ?), ?, CURRENT_DATE, 'DEL_DIA', 'DOCENTE', 'usuario.a', ?, 1, "
+					+ "CURRENT_TIMESTAMP, 'usuario.a', CURRENT_TIMESTAMP)", seccionSebastian, seccionSebastian, sesionA);
+		}
+		jdbc.update("INSERT INTO marca_asistencia (colegio_id, registro_id, seccion_id, fecha, alumno_id, matricula_id, "
+				+ "estado, fuente, origen, primera, sesion_id, creado_en, creado_por, actualizado_en) VALUES (1, (SELECT id "
+				+ "FROM registro_asistencia WHERE seccion_id = ? AND fecha = CURRENT_DATE), ?, CURRENT_DATE, ?, ?, 'FALTA', "
+				+ "'DOCENTE', 'REGISTRO', TRUE, ?, CURRENT_TIMESTAMP, 'usuario.a', CURRENT_TIMESTAMP)", seccionSebastian,
+				seccionSebastian, f.sebastian(), matriculaDeSebastian, sesionA);
+		deFlores.put(Recurso.MARCA, texto("SELECT id FROM marca_asistencia WHERE alumno_id = ?", f.sebastian()));
+		// Sprint 9, tanda 3: un comunicado a la sección de Sebastián que solo recibe la familia Flores.
+		deFlores.put(Recurso.COMUNICADO, comunicado(seccionSebastian, usuarioA, sesionA,
+				id("SELECT familia_id FROM alumno WHERE id = ?", f.sebastian()), "b").toString());
 		deFlores.put(Recurso.COMPROBANTE, texto("SELECT comprobante_id FROM pago WHERE id = ?", pagoFlores));
 		deFlores.put(Recurso.RENOVACION, texto("SELECT id FROM renovacion_matricula WHERE alumno_id = ?", f.sebastian()));
 		deFlores.put(Recurso.REFERENCIA_ORDEN, ordenFlores);
@@ -486,6 +532,21 @@ class RutasIdorTest {
 		List<String> marcasFlores = List.of("Flores", "Sebastián", EscenarioCaja.DNI_SEBASTIAN, EscenarioCaja.DNI_PEDRO,
 				comprobanteFlores);
 		return new Datos(f, ids, deFlores, marcas, marcasFlores);
+	}
+
+	/** Sprint 9, tanda 3: un comunicado ENVIADO a una sección con UNA familia destinataria (H2: sin triggers). */
+	private Long comunicado(Long seccionId, Long emisor, Long sesion, Long familia, String letra) {
+		jdbc.update("INSERT INTO comunicado (colegio_id, anio_escolar_id, tipo, emisor_usuario_id, emisor_rol, "
+				+ "emisor_etiqueta, alcance, seccion_id, titulo, cuerpo, huella_contenido, estado, enviado_en, destinatarios, "
+				+ "sesion_id, creado_en, creado_por, actualizado_en) VALUES (1, (SELECT anio_escolar_id FROM seccion WHERE "
+				+ "id = ?), 'NORMAL', ?, 'DOCENTE', 'Prof. IDOR', 'SECCION', ?, 'Comunicado IDOR', 'Texto del comunicado "
+				+ "IDOR', ?, 'ENVIADO', CURRENT_TIMESTAMP, 1, ?, CURRENT_TIMESTAMP, 'usuario.a', CURRENT_TIMESTAMP)",
+				seccionId, emisor, seccionId, letra.repeat(64), sesion);
+		Long id = jdbc.queryForObject("SELECT MAX(id) FROM comunicado WHERE colegio_id = 1", Long.class);
+		jdbc.update("INSERT INTO comunicado_destinatario (colegio_id, comunicado_id, familia_id, alumnos, creado_en, "
+				+ "creado_por, actualizado_en) VALUES (1, ?, ?, 1, CURRENT_TIMESTAMP, 'usuario.a', CURRENT_TIMESTAMP)", id,
+				familia);
+		return id;
 	}
 
 	private Long id(String sql, Object... argumentos) {

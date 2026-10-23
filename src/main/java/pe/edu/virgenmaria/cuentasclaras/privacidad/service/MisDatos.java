@@ -37,7 +37,13 @@ public class MisDatos {
 							+ "los tienes encendidos) y el enlace para activar tu cuenta."),
 			new VistaMisDatos.Uso("RUC y razón social (si los registraste)", "Emitir factura en lugar de boleta."),
 			new VistaMisDatos.Uso("Pagos, cuotas y comprobantes",
-					"Llevar tu estado de cuenta y cumplir las obligaciones tributarias del colegio."));
+					"Llevar tu estado de cuenta y cumplir las obligaciones tributarias del colegio."),
+			// Sprint 9, tanda 2 (sección 3.12): la asistencia, las justificaciones y los consentimientos de avisos (el
+			// detalle está en Asistencia y en Mis avisos del portal).
+			new VistaMisDatos.Uso("Asistencia de tus hijos y las faltas que justificaste (motivo y nota)",
+					"Llevar el registro de asistencia del colegio y avisarte el mismo día. Lo ves en «Asistencia»."),
+			new VistaMisDatos.Uso("Tus preferencias de avisos (asistencia por WhatsApp o correo)",
+					"Enviarte el aviso de asistencia solo por donde aceptaste. Las cambias en «Mis avisos»."));
 
 	/** A quién se envía cada dato (decisión 100: el flujo transfronterizo lo declara el colegio). */
 	static final List<VistaMisDatos.Destinatario> DESTINATARIOS = List.of(
@@ -62,6 +68,9 @@ public class MisDatos {
 			new VistaMisDatos.Plazo("Celular y correo, si la familia deja el colegio sin deuda",
 					"Hasta 1 año después del retiro o del egreso."),
 			new VistaMisDatos.Plazo("Registro de quién del colegio vio tus datos", "2 años."),
+			new VistaMisDatos.Plazo("Asistencia y justificaciones", "El año escolar y los 2 años siguientes; la nota de "
+					+ "una justificación se anonimiza al año (queda el motivo de la lista)."),
+			new VistaMisDatos.Plazo("Preferencias de avisos", "Mientras la familia esté en el colegio y 2 años después."),
 			new VistaMisDatos.Plazo("Copias de respaldo", "35 copias diarias y 12 mensuales, cifradas."));
 
 	private final SesionApoderado sesion;

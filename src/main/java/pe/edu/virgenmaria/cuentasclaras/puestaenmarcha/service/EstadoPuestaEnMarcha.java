@@ -191,11 +191,25 @@ public class EstadoPuestaEnMarcha {
 		long promotores = usuarios.contarActivosConRol(Rol.PROMOTOR);
 		long directores = sinPromotoria(Rol.DIRECTOR);
 		long cajas = sinPromotoria(Rol.CAJA);
-		boolean equipo = activado && promotores >= 1 && directores >= 1 && cajas >= 1;
+		// Sprint 9, tanda 1 (decisión 141): una cuenta de antes de V32 con DOCENTE y CAJA o ADMINISTRACION queda pendiente
+		// hasta que Promotoría la corrija (el docente no ve deudas).
+		long docentesConCobranza = usuarios.activosConRol(Rol.DOCENTE).stream()
+				.filter(u -> u.getRoles().contains(Rol.CAJA) || u.getRoles().contains(Rol.ADMINISTRACION)).count();
+		// Sprint 9, tanda 2 (A8): con menos de 2 personas activas de Promotoría o Dirección, nadie distinto aprueba lo que
+		// otra pide (la segregación no se cumple).
+		long gobierno = usuarios.activosConRol(Rol.PROMOTOR).stream().filter(u -> u.getApoderadoId() == null)
+				.map(Usuario::getId).collect(Collectors.toSet()).size() + usuarios.activosConRol(Rol.DIRECTOR).stream()
+				.filter(u -> u.getApoderadoId() == null && !u.getRoles().contains(Rol.PROMOTOR)).count();
+		boolean equipo = activado && promotores >= 1 && directores >= 1 && cajas >= 1 && docentesConCobranza == 0
+				&& gobierno >= 2;
 		puntos.add(new PuntoLista(EQUIPO, "Equipo con segregación", estado(equipo), "Promotoría: " + promotores
 				+ (activado ? "" : " (el titular aún no activa su cuenta)") + "; Dirección: " + directores + "; Caja: " + cajas
 				+ (directores >= 1 && cajas >= 1 ? "" : " (hace falta una Dirección y una Caja activas, distintas de la "
-						+ "Promotoría: quien cobra no aprueba)"), "/usuarios"));
+						+ "Promotoría: quien cobra no aprueba)")
+				+ (docentesConCobranza == 0 ? "" : "; " + docentesConCobranza + " cuenta(s) combinan Docente con Caja o "
+						+ "Administración: corrígelas (el docente no ve deudas)")
+				+ (gobierno >= 2 ? "" : "; hay menos de 2 personas de Promotoría o Dirección: nadie distinto aprueba lo "
+						+ "que la otra pide"), "/usuarios"));
 
 		// 3. Año escolar y secciones: el año vigente con al menos una sección por nivel ofrecido.
 		Optional<AnioEscolar> vigente = anios.findByEstado(EstadoAnioEscolar.EN_CURSO)

@@ -154,6 +154,72 @@ el INSERT y el UPDATE por columna de `cambio_contacto_titular` y `cambio_correo_
 detenida; no hay usuarios nuevos. En una instalación COMPARTIDA, quita del entorno `CAJA_CUENTAS_DEPOSITO` y las variables de
 recaudación y conciliación (`CUENTASCLARAS_RECAUDACION_*`, `CUENTASCLARAS_CONCILIACION_*`): son de cada colegio (S8-B5).
 
+**Sprint 9, tanda 1 (V32): 88 triggers y 11 funciones con huella (99).** Nuevos: `trg_asignacion_docente_nace` (una
+asignación de docente, tutor o auxiliar a una sección nace PROPUESTA, la propone Promotoría, Dirección o Administración,
+para una cuenta activa con el rol DOCENTE, en un año que no está cerrado) y `trg_asignacion_docente_estado` (pasa a VIGENTE
+solo con SU `ASIGNACION_DOCENTE` aprobada y firmada por otra persona de Dirección o Promotoría que no es el docente; la
+termina Dirección o Promotoría con su firma o `sistema.academico` con `cc_sistema`; una resuelta no reescribe quién la
+aprobó), y la función `cc_docente_de_seccion` (la usarán la asistencia y los comunicados). Versión nueva de
+`trg_usuario_rol_alta`: DOCENTE no se combina con CAJA ni ADMINISTRACION. `02` da a `cc_negocio` el INSERT y el UPDATE por
+columna de `asignacion_docente` (docente, sección, año, tipo, áreas y quién la propuso: 1143; sin DELETE). Las cuentas que
+ya combinaban DOCENTE con CAJA o ADMINISTRACION no se tocan: prod arranca y escribe en el log «Hay N cuentas con DOCENTE
+combinado con CAJA o ADMINISTRACION», y la puesta en marcha deja el paso «Equipo» pendiente hasta que Promotoría las
+corrija. Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
+
+**Sprint 9, tanda 2 (V33): 93 triggers y 13 funciones con huella (106).** Nuevos: `trg_registro_asistencia_nace` (la
+asistencia la registra solo un docente con asignación VIGENTE en la sección, con su sesión abierta y la firma
+`asistencia:{seccion}:{fecha}:REGISTRADA`, un día de clases del año en curso, HOY según el reloj de la base; otro día, con
+su `REGISTRO_ASISTENCIA_TARDIO` aprobada y firmada; la fuente MARCADOR se rechaza), `trg_marca_asistencia_nace` (cada marca
+con la sesión de quien la escribe; la inicial a nombre de quien registró; la corrección del día antes de la hora del segundo
+aviso, con firma y nunca sobre una justificación; otro día, con su `CORRECCION_ASISTENCIA` pedida por un docente de la
+sección; la justificación, el apoderado de la familia con su firma y nunca sobre una reversión; la reversión, Dirección con
+su firma y sin asignación en la sección), `trg_consentimiento_aviso_nace`, `trg_configuracion_academica_nace` y `_cambio`
+(solo Dirección con la firma `configuracion_academica:{colegio}:CAMBIADA:{version}`), y las funciones `cc_hoy_lima` y
+`cc_sesion_abierta`. Versión nueva de `cc_docente_de_seccion` (una cobertura vencida no da acceso),
+`trg_asignacion_docente_nace` (una cobertura dura como máximo 10 días calendario) y `trg_mensaje_nace` (los avisos de
+asistencia los crea solo `sistema.asistencia`, con su plantilla, sin palabras de cobranza y, por WhatsApp, con el último
+consentimiento otorgado; su respaldo por correo, `sistema.mensajeria`). `02` da a `cc_negocio` solo INSERT en
+`registro_asistencia`, `marca_asistencia` y `consentimiento_aviso` (1142 al editar o borrar), INSERT y UPDATE por columna
+en `configuracion_academica`, y a `cc_sistema` la marca de agua `aviso_asistencia_corte` (cc_app: 1142);
+`asignacion_docente.hasta` queda fuera del UPDATE (1143). Prod: «Huellas de los 93 triggers y las 13 funciones
+verificadas». Prod avisa en el log si un colegio en producción tiene menos de 2 personas activas de Promotoría o Dirección
+(A8). Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
+
+**Sprint 9, tanda 3 (V34): 98 triggers y 13 funciones con huella (111).** Nuevos: `trg_comunicado_nace` (el comunicado lo
+escribe quien lo firma: Dirección o Promotoría al colegio, nivel o grado; un docente, solo a su sección como tutor o de
+curso, nunca urgente; con su sesión abierta y la firma `comunicado:{huella}:ENVIAR`; la base RECALCULA la huella del
+contenido (B2), que es única por colegio; rechaza caracteres invisibles y palabras de cobranza (B4); un adjunto que requiere
+revisión deja el comunicado POR_APROBAR (B3) y el adjunto es de quien envía; la fe de erratas tiene el alcance del original y,
+si el original está retirado, solo Dirección (B9)), `trg_comunicado_estado` (lo enviado no se edita: 1143 en el contenido;
+la aprobación la da otro órgano; los destinatarios se cierran una vez y cuadran con las filas (B1); el retiro con motivo y la
+firma `comunicado:{id}:RETIRADO`, y no se reescribe), `trg_comunicado_destinatario_nace` (lista cerrada),
+`trg_confirmacion_lectura_nace` (la familia destinataria con su sesión) y `trg_exportacion_nomina_nace` (Dirección con su
+sesión, B14). Versión nueva de `trg_mensaje_nace`: los avisos de comunicados (`COMUNICADOS_RESUMEN`, `COMUNICADO_URGENTE`)
+los crea solo `sistema.comunicados`, con su plantilla, los parámetros empiezan con el nombre del colegio y la regla de
+cobranza corre sobre lo que va después (B6), y por WhatsApp con el consentimiento de COMUNICADOS. `02` da a `cc_negocio` solo
+INSERT en `comunicado_adjunto`, `confirmacion_lectura` y `exportacion_nomina`; INSERT y UPDATE por columna en `comunicado`
+(estado, aprobación, envío, retiro), `comunicado_destinatario` (apertura y mensajes) y `codigo_modular`; ninguna tabla de V34
+admite DELETE (1142). Prod: «Huellas de los 98 triggers y las 13 funciones verificadas». Las cinco tablas están en
+`tablas-vigiladas.txt`. Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios
+nuevos.
+
+**Correcciones del sprint 9 (sin migración nueva): 99 triggers y 13 funciones con huella (112).** Nuevo:
+`trg_comunicado_destinatario_cambio` (la apertura de un comunicado se marca una vez, con la hora de la base ±5 minutos; el
+aviso y el recordatorio, una vez y solo con `cc_sistema`, con un mensaje de comunicados a un apoderado de esa familia).
+Cambian: `trg_comunicado_nace` (TODO comunicado con PDF nace POR_APROBAR, sea quien sea el emisor, sin mirar
+`requiere_revision`), `trg_comunicado_estado` (el PDF de un docente sale solo si el docente sigue con la sección),
+`trg_configuracion_academica_cambio` (la versión sube de a una) y la regla de cobranza de `trg_mensaje_nace` y
+`trg_comunicado_nace` (mensualidad, «al día con», obligaciones económicas, saldo, abonos, regularizar, «cancelar la/su»,
+condicionar un examen y montos en letras después de «S/»). Prod: «Huellas de los 99 triggers y las 13 funciones
+verificadas». Una base existente: solo `03` (con la aplicación detenida).
+
+**Dos niveles del filtro (decisión del usuario, correcciones del sprint 9): 99 triggers y 14 funciones con huella (113).**
+Nueva: `cc_texto_plano` (sin marcas combinantes, con las letras de ancho completo y las parecidas a latinas llevadas a su
+latina: la misma tabla de `FiltroContenido`). `trg_comunicado_nace` rechaza la cobranza clara sobre ese texto plano y, si
+calza una palabra ambigua (cancelar, «al día con», abono, saldo, regularizar, aporte), obliga a POR_APROBAR. La regla
+clara de `trg_mensaje_nace` ya no tiene las ambiguas: el aviso de un comunicado aprobado con «cancelar la reunión» sale.
+Prod: «Huellas de los 99 triggers y las 14 funciones verificadas». Una base existente: solo `03`.
+
 **Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
 van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
 custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra

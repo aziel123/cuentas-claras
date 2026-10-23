@@ -88,6 +88,14 @@
 		</table>
 	</section>
 
+	<!--/* Sprint 9, tanda 3: los mensajes del mes por grupo (para estimar el costo de WhatsApp). Solo conteos. */-->
+	<section class="tarjeta panel-bloque" aria-labelledby="titulo-consumo" data-seccion="consumo" th:if="${consumo != null}">
+		<h2 id="titulo-consumo" class="etiqueta">Mensajes del mes</h2>
+		<ul class="lista-simple">
+			<li th:each="g : ${consumo}" th:text="|${g.nombre()}: ${g.mensajes()}|">Comunicados: 12</li>
+		</ul>
+	</section>
+
 	<section class="tarjeta panel-bloque" aria-labelledby="titulo-servidor" data-seccion="servidor">
 		<h2 id="titulo-servidor" class="etiqueta">Servidor</h2>
 		<ul class="lista-simple">

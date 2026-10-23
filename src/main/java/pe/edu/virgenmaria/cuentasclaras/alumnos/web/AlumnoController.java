@@ -210,6 +210,14 @@ public class AlumnoController {
 						+ "Aprobaciones; hasta entonces se cobra al responsable actual.");
 	}
 
+	/** Sprint 9, tanda 3 (sección 3.11): sexo y código de estudiante para el SIAGIE (Dirección y Administración). */
+	@PostMapping("/{id:\\d+}/datos-siagie")
+	public String datosSiagie(@PathVariable Long id, @Valid pe.edu.virgenmaria.cuentasclaras.alumnos.dto.DatosSiagieRequest
+			solicitud, BindingResult validacion, RedirectAttributes avisos) {
+		return ejecutar(id, validacion, avisos, () -> alumnos.cambiarDatosSiagie(id, solicitud),
+				"Listo: los datos para el SIAGIE quedaron guardados.");
+	}
+
 	@PostMapping("/{id:\\d+}/retirar")
 	public String retirar(@PathVariable Long id, @Valid RetirarAlumnoRequest solicitud, BindingResult validacion,
 			RedirectAttributes avisos) {

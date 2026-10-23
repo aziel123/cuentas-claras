@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 3 (sección 3.11): los datos que faltan para la matrícula en el SIAGIE, los códigos modulares y la
+     nómina provisional por sección. La nómina OFICIAL la genera el SIAGIE: este archivo se copia en su plantilla. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Nómina para el SIAGIE', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="siagie">
+	<div class="cabecera">
+		<div>
+			<h1>Nómina para el SIAGIE</h1>
+			<p class="secundario">El archivo de cada sección es PROVISIONAL: copia sus columnas en la plantilla de matrícula
+				masiva que descargas del SIAGIE. Cada descarga queda registrada con tu nombre, la fecha y un código.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-label="Códigos modulares">
+		<h2>Códigos modulares</h2>
+		<p class="secundario" th:unless="${#lists.isEmpty(faltantes.nivelesSinCodigo())}"
+			th:text="|Falta el código modular de: ${#strings.listJoin(faltantes.nivelesSinCodigo(), ', ')}.|">Faltan</p>
+		<table class="tabla">
+			<thead><tr><th>Nivel</th><th>Código</th><th>Anexo</th></tr></thead>
+			<tbody>
+				<tr th:each="c : ${codigos}">
+					<td th:text="${c.nivel()}">PRIMARIA</td>
+					<td th:text="${c.codigo() == null} ? '—' : ${c.codigo()}">0000001</td>
+					<td th:text="${c.anexo() == null} ? '—' : ${c.anexo()}">0</td>
+				</tr>
+			</tbody>
+		</table>
+		<form class="formulario-en-linea" method="post" th:action="@{/academico/siagie/codigos-modulares}">
+			<label class="solo-lectores" for="nivel">Nivel</label>
+			<select class="input" id="nivel" name="nivel" required>
+				<option th:each="n : ${niveles}" th:value="${n.name()}" th:text="${n.name()}">PRIMARIA</option>
+			</select>
+			<label class="solo-lectores" for="codigo">Código modular</label>
+			<input class="input" id="codigo" name="codigo" maxlength="7" inputmode="numeric" placeholder="7 dígitos" required>
+			<label class="solo-lectores" for="anexo">Anexo</label>
+			<input class="input" id="anexo" name="anexo" maxlength="1" inputmode="numeric" placeholder="Anexo">
+			<button type="submit" class="btn btn-secundario btn-chico">Guardar</button>
+		</form>
+	</section>
+
+	<section class="tarjeta" aria-label="Secciones">
+		<h2>Secciones</h2>
+		<th:block th:if="${#lists.isEmpty(faltantes.secciones())}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('No hay secciones en el año en curso', 'Créalas en Colegio.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(faltantes.secciones())}">
+			<thead><tr><th>Sección</th><th>Alumnos</th><th>Datos que faltan</th><th></th></tr></thead>
+			<tbody>
+				<tr th:each="s : ${faltantes.secciones()}">
+					<td th:text="${s.etiqueta()}">3.° Primaria B</td>
+					<td th:text="${s.alumnos()}">30</td>
+					<td>
+						<span th:if="${s.faltantes() == 0}">Ninguno</span>
+						<th:block th:if="${s.faltantes() > 0}">
+							<span th:if="${!#lists.isEmpty(s.sinSexo())}" th:text="|Sin sexo: ${#strings.listJoin(s.sinSexo(), '; ')}.|">Sin sexo</span>
+							<span th:if="${!#lists.isEmpty(s.sinDocumento())}" th:text="|Sin DNI ni código de estudiante: ${#strings.listJoin(s.sinDocumento(), '; ')}.|">Sin DNI</span>
+						</th:block>
+					</td>
+					<td><a th:href="@{/academico/siagie/nomina(seccion=${s.seccionId()})}" th:if="${s.alumnos() > 0}">Descargar nómina</a></td>
+				</tr>
+			</tbody>
+		</table>
+		<p class="ayuda">Puedes descargar con datos que faltan: complétalos en la ficha del alumno o en el SIAGIE.</p>
+	</section>
+</main>
+</body>
+</html>

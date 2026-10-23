@@ -292,7 +292,10 @@ public class DespachoMensajes {
 			List<String> parametros = mensaje.parametrosLista();
 			String cuerpo = mensaje.getPlantilla().componer(parametros)
 					+ (mensaje.getDestinatarioTipo() == DestinatarioTipo.APODERADO
-							? "\n\nVer en el portal: " + propiedades.urlPublica() + "/familia" : "")
+							// Sprint 9, tanda 2: los avisos de asistencia llevan a la asistencia, nunca al estado de cuenta.
+							? "\n\nVer en el portal: " + propiedades.urlPublica()
+									+ (mensaje.getPlantilla().deAsistencia() ? "/familia/asistencia"
+									: mensaje.getPlantilla().deComunicados() ? "/familia/comunicados" : "/familia") : "")
 					+ pieDelCorreo(colegio);
 			return new Envio(parametros, null, cuerpo);
 		}

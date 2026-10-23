@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 3 (sección 3.10): los comunicados de la familia. Igual para todas, con deuda o sin ella (E39). */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Comunicados', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-comunicados">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/familia}">Mi familia</a></p>
+			<h1>Comunicados</h1>
+			<p class="secundario">Del colegio y de los docentes de tus hijos. Si te piden confirmar, hazlo aquí.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${#lists.isEmpty(comunicados)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('No tienes comunicados', 'Cuando el colegio envíe uno a la sección de tus hijos, aparecerá aquí.')}"></div>
+	</th:block>
+
+	<ul class="lista-simple" th:unless="${#lists.isEmpty(comunicados)}">
+		<li th:each="c : ${comunicados}" class="fila entre">
+			<span>
+				<a th:href="@{/familia/comunicados/{id}(id=${c.id()})}" th:text="${c.titulo()}">Título</a>
+				<span class="secundario" th:text="|${c.emisor()} · ${#temporals.format(c.enviadoEn(), 'dd/MM/yyyy')}|">De</span>
+			</span>
+			<span>
+				<span th:if="${c.nuevo()}" th:replace="~{fragments/componentes :: badge('Nuevo', 'info')}"></span>
+				<span th:if="${c.urgente()}" th:replace="~{fragments/componentes :: badge('Urgente', 'alerta')}"></span>
+				<span th:if="${c.retirado()}" th:replace="~{fragments/componentes :: badge('Retirado', 'neutro')}"></span>
+				<span th:if="${c.requiereConfirmacion() and !c.confirmado()}" th:replace="~{fragments/componentes :: badge('Por confirmar', 'alerta')}"></span>
+				<span th:if="${c.confirmado()}" th:replace="~{fragments/componentes :: badge('Confirmado', 'exito')}"></span>
+			</span>
+		</li>
+	</ul>
+</main>
+</body>
+</html>

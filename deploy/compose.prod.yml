@@ -19,8 +19,9 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       TZ: America/Lima
-      # La JVM usa hasta el 75 % del límite del contenedor.
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75"
+      # Sprint 9, tanda 3 (B5): la JVM usa hasta el 55 % del límite del contenedor; el resto queda para el analizador de
+      # PDF (un proceso hijo con -Xmx128m, uno a la vez) y el tmpfs.
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=55"
     # Endurecimiento (sección 7.1): sistema de archivos de solo lectura (Tomcat escribe en /tmp, en memoria), sin
     # capacidades ni escalada de privilegios, con el usuario sin privilegios del Dockerfile (uid 10001).
     read_only: true

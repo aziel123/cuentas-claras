@@ -274,6 +274,46 @@ GRANT INSERT, UPDATE (estado, vigente, solicitud_id, resuelto_por, resuelto_en, 
 -- cc_negocio) ya inserta en resolucion_respaldo. Por colegio lo deciden trg_respaldo_registro y
 -- trg_resolucion_respaldo_registro.
 
+-- ===================== Sprint 9 · tanda 1 (V32): asignaciones docentes =====================
+-- Se proponen (INSERT) y cambian de estado; docente, sección, año, tipo, áreas y quién la propuso NO cambian (1143). Nunca
+-- DELETE. Qué transición vale lo decide trg_asignacion_docente_estado (la aprobación firmada de otra persona de Dirección
+-- o Promotoría que no es el docente; terminar, Dirección o Promotoría con su firma o sistema.academico con cc_sistema, que
+-- recibe estas columnas por el rol). acceso_dato_personal: sin cambios (ya tiene INSERT; V32 solo agrega tipos al CHECK).
+GRANT INSERT, UPDATE (estado, pendiente, vigente, tutor_vigente, solicitud_id, resuelto_por, resuelto_en, terminada_por,
+    terminada_en, motivo_fin, actualizado_en, version) ON cuentasclaras.asignacion_docente TO 'cc_negocio';
+
+-- ===================== Sprint 9 · tanda 2 (V33): asistencia y consentimientos =====================
+-- La asistencia es un libro de SOLO INSERCIÓN, como los pagos: corregir es insertar una marca que reemplaza a la vigente.
+-- Con cc_app, UPDATE o DELETE de un registro o una marca: 1142. El consentimiento, igual (vale la última fila). La
+-- configuración académica la cambia SOLO Dirección con su firma (trg_configuracion_academica_nace y _cambio, A6); el
+-- colegio y quién la creó no cambian (1143).
+GRANT INSERT, UPDATE (hora_alerta, hora_aviso, hora_segundo_aviso, dias_justificacion, dias_registro_tardio,
+    hora_resumen_comunicados, tope_resumenes_mes, actualizado_por, actualizado_en, version)
+    ON cuentasclaras.configuracion_academica TO 'cc_negocio';
+GRANT INSERT ON cuentasclaras.registro_asistencia TO 'cc_negocio';                -- solo inserción
+GRANT INSERT ON cuentasclaras.marca_asistencia TO 'cc_negocio';                   -- solo inserción
+GRANT INSERT ON cuentasclaras.consentimiento_aviso TO 'cc_negocio';               -- solo inserción
+-- mensaje: sin cambios (los tipos nuevos usan las mismas columnas; el estado lo sigue cambiando solo cc_sistema).
+-- asignacion_docente.hasta (A7): NO entra en el UPDATE por columna de la tanda 1 (1143): una cobertura no se alarga.
+-- aviso_asistencia_corte (A2): la marca de agua de los avisos la escribe solo cc_sistema (bloque 2); cc_app, 1142.
+
+-- ===================== Sprint 9 · tanda 3 (V34): comunicados y nómina para el SIAGIE =====================
+-- comunicado: título, texto, alcance, emisor, urgente, requiere_confirmacion, corrige_id, adjunto_id, sesion_id y
+-- huella_contenido NO están en el UPDATE (1143): un comunicado enviado no se edita (se corrige con una fe de erratas). Qué
+-- transición vale lo decide trg_comunicado_estado. Ninguna tabla de comunicados tiene DELETE: retirar no borra.
+GRANT INSERT, UPDATE (codigo, anexo, actualizado_por, actualizado_en, version) ON cuentasclaras.codigo_modular
+    TO 'cc_negocio';
+GRANT INSERT ON cuentasclaras.comunicado_adjunto TO 'cc_negocio';                 -- solo inserción
+GRANT INSERT, UPDATE (estado, solicitud_id, enviado_en, destinatarios, retirado_por, retirado_en, motivo_retiro,
+    actualizado_en, version) ON cuentasclaras.comunicado TO 'cc_negocio';
+-- La familia (comunicado_id, familia_id) no cambia (1143); abierto_en lo marca el portal y los dos mensajes, el proceso de
+-- avisos (sistema.comunicados, con cc_sistema por el rol).
+GRANT INSERT, UPDATE (abierto_en, avisado_mensaje_id, recordado_mensaje_id, actualizado_en, version)
+    ON cuentasclaras.comunicado_destinatario TO 'cc_negocio';
+GRANT INSERT ON cuentasclaras.confirmacion_lectura TO 'cc_negocio';               -- solo inserción
+GRANT INSERT ON cuentasclaras.exportacion_nomina TO 'cc_negocio';                 -- solo inserción
+-- alumno: sin cambios (mantiene su UPDATE por tabla; sexo y codigo_estudiante se auditan con el antes y el después).
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se
@@ -309,6 +349,10 @@ GRANT INSERT ON cuentasclaras.muestra_llamada TO 'cc_sistema'@'%';              
 GRANT INSERT ON cuentasclaras.resumen_diario TO 'cc_sistema'@'%';                 -- sistema.panel, solo inserción
 GRANT INSERT ON cuentasclaras.huella_bitacora TO 'cc_sistema'@'%';                -- sistema.auditoria, solo inserción
 GRANT INSERT ON cuentasclaras.huella_hora TO 'cc_sistema'@'%';                    -- sistema.auditoria, solo inserción
+--    Sprint 9, tanda 2 (A2): la marca de agua de los avisos de asistencia (sistema.asistencia). El colegio y quién la creó
+--    no cambian (1143); nunca DELETE.
+GRANT INSERT, UPDATE (ultima_marca_id, actualizado_en, version)
+    ON cuentasclaras.aviso_asistencia_corte TO 'cc_sistema'@'%';
 GRANT INSERT ON cuentasclaras.liquidacion_pasarela TO 'cc_sistema'@'%';           -- sistema.pasarela, solo inserción
 GRANT INSERT ON cuentasclaras.liquidacion_linea TO 'cc_sistema'@'%';              -- sistema.pasarela, solo inserción
 GRANT INSERT, UPDATE (estado, intentos, resultado, procesado_en, actualizado_en, version)

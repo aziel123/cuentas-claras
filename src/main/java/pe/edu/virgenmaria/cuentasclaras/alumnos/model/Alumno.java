@@ -65,6 +65,14 @@ public class Alumno extends BaseEntity {
 	@Column(name = "motivo_retiro", length = 500)
 	private String motivoRetiro;
 
+	/** Sprint 9, tanda 3 (sección 3.11): M o F, opcional (para la matrícula en el SIAGIE). */
+	@Column(length = 1)
+	private String sexo;
+
+	/** Sprint 9, tanda 3: el código de estudiante del SIAGIE, solo para quien no tiene DNI (mayúsculas y dígitos, B15). */
+	@Column(name = "codigo_estudiante", length = 20)
+	private String codigoEstudiante;
+
 	protected Alumno() {
 		// requerido por JPA
 	}
@@ -189,5 +197,41 @@ public class Alumno extends BaseEntity {
 
 	public String getMotivoRetiro() {
 		return motivoRetiro;
+	}
+
+	public String getSexo() {
+		return sexo;
+	}
+
+	public String getCodigoEstudiante() {
+		return codigoEstudiante;
+	}
+
+	/**
+	 * Sprint 9, tanda 3 (sección 3.11): el sexo ({@code M}, {@code F} o vacío) y el código de estudiante (de 8 a 20
+	 * mayúsculas y dígitos, o vacío). Devuelve los cambios («Sexo: — → F») para la bitácora; vacía si no cambió nada.
+	 */
+	public List<String> cambiarDatosSiagie(String nuevoSexo, String nuevoCodigo) {
+		String s = nuevoSexo == null || nuevoSexo.isBlank() ? null : nuevoSexo.strip().toUpperCase(java.util.Locale.ROOT);
+		if (s != null && !s.equals("M") && !s.equals("F")) {
+			throw new pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException("El sexo es M o F (o vacío).");
+		}
+		String c = nuevoCodigo == null || nuevoCodigo.isBlank() ? null
+				: nuevoCodigo.strip().toUpperCase(java.util.Locale.ROOT);
+		if (c != null && !c.matches("[0-9A-Z]{8,20}")) {
+			throw new pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException("El código de estudiante tiene de "
+					+ "8 a 20 letras mayúsculas o dígitos.");
+		}
+		List<String> cambios = new java.util.ArrayList<>();
+		if (!java.util.Objects.equals(sexo, s)) {
+			cambios.add("Sexo: " + (sexo == null ? "—" : sexo) + " → " + (s == null ? "—" : s));
+			sexo = s;
+		}
+		if (!java.util.Objects.equals(codigoEstudiante, c)) {
+			cambios.add("Código de estudiante: " + (codigoEstudiante == null ? "—" : codigoEstudiante) + " → "
+					+ (c == null ? "—" : c));
+			codigoEstudiante = c;
+		}
+		return cambios;
 	}
 }

@@ -56,6 +56,14 @@ public class VerificadorIntegridadAuditoria {
 
 	private final TransactionTemplate transaccion;
 
+	/** Sprint 9, tanda 3 (E19): lo guardado coincide con su huella de la bitácora (los comunicados). */
+	private List<VerificacionDeContenido> contenidos = List.of();
+
+	@org.springframework.beans.factory.annotation.Autowired(required = false)
+	void setContenidos(List<VerificacionDeContenido> contenidos) {
+		this.contenidos = contenidos == null ? List.of() : List.copyOf(contenidos);
+	}
+
 	public VerificadorIntegridadAuditoria(EventoAuditoriaRepository eventos, EslabonCadenaRepository cadena,
 			SelladorAuditoria sellador, AuditoriaService auditoria, PlatformTransactionManager transacciones) {
 		this.eventos = eventos;
@@ -86,6 +94,14 @@ public class VerificadorIntegridadAuditoria {
 		Long colegioActual = ContextoColegio.actual();
 		Long visor = colegioActual != null && colegioActual > 0 ? colegioActual : null;
 		ResultadoVerificacion resultado = transaccion.execute(estado -> revisarCadena(visor, huellaAnotada));
+		if (resultado.integra() && visor != null && !contenidos.isEmpty()) {
+			List<String> problemas = transaccion.execute(estado -> contenidos.stream()
+					.flatMap(c -> c.problemas().stream()).toList());
+			if (problemas != null && !problemas.isEmpty()) {
+				resultado = ResultadoVerificacion.alterada(resultado.eventosRevisados(), null, "La cadena de la bitácora "
+						+ "está completa, pero lo guardado no coincide con ella: " + String.join(" ", problemas));
+			}
+		}
 		if (!resultado.integra()) {
 			LOG.error("ALERTA: la bitácora de auditoría fue alterada. {}", resultado.detalle());
 		}

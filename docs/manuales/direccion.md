@@ -9,6 +9,16 @@
 4. **Personal:** apruebas los cambios de celular o correo del personal, los cambios de roles de Promotoría o Dirección y las desactivaciones o reactivaciones de esas cuentas que pidió otra persona.
 5. **Pedidos sobre datos personales** (*Avisos de las familias*, tipo «Mis datos personales»): la familia ejerce su derecho de acceso, rectificación, cancelación u oposición. Responde por escrito dentro del plazo: 20 días hábiles para el acceso y 10 para los demás (plazos a confirmar por el asesor legal). A los 7 días hábiles sin respuesta aparece una alerta y, al vencer el plazo, una alerta crítica.
 6. **Llamadas de control:** solo la semana que Promotoría te las delega. Pregunta primero cuánto y cuándo pagó la familia y después compara.
+7. **Comunicados** (sprint 9): envías al colegio, a un nivel, a un grado o a una sección; los urgentes salen al momento
+   (de 07:00 a 20:00) y los demás en el resumen del día. Apruebas los PDF por aprobar de los docentes; todo comunicado tuyo
+   con PDF lo aprueba Promotoría. Un comunicado no se edita: envía una **fe de erratas** o **retíralo** con su motivo.
+   En el detalle ves quién lo abrió y quién confirmó la lectura. La cobranza clara (deuda, mensualidad, pensión, mora,
+   montos con «S/», condicionar un examen) no sale nunca. Las palabras que **pueden** referirse a cobranza («cancelar»,
+   «al día con», «abono», «saldo», «regularicen», «aporte») mandan el comunicado a aprobación, también si lo escribes tú:
+   el tuyo lo aprueba Promotoría y en la bandeja ve resaltada la palabra («puede referirse a cobranza»).
+8. **Nómina para el SIAGIE** (*Académico → SIAGIE*): registra el código modular de cada nivel, completa el sexo y el
+   código del estudiante en la ficha de quien falte y descarga la nómina **provisional** de cada sección para copiarla en
+   la plantilla oficial del SIAGIE. Cada descarga queda en la bitácora con su código.
 
 ## Lo que el sistema no te deja hacer, y por qué
 - **Aprobar algo que pediste o en lo que participaste:** el botón no aparece («La resuelve otra persona»), ni en la computadora ni en el celular.

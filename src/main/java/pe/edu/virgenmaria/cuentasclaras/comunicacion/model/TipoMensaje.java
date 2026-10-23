@@ -33,7 +33,15 @@ public enum TipoMensaje {
 	// Correcciones del sprint 8 (S8-A1, S8-A2 y S8-M5): lo que el operador de la plataforma cambia en un colegio se avisa
 	// al titular, al correo institucional, al correo externo de control y a la Promotoría, en la misma transacción.
 	AVISO_ALTA("Aviso del alta del colegio", false),
-	CORREO_CONTROL("Cambio del correo externo de control", false);
+	CORREO_CONTROL("Cambio del correo externo de control", false),
+	// Sprint 9, tanda 2 (sección 3.6): avisos de asistencia a las familias, con tipos y plantillas propios (nunca mezclados
+	// con la cobranza: INDECOPI). Los crea solo sistema.asistencia (trg_mensaje_nace).
+	ASISTENCIA_DIA("Aviso de asistencia del día", false),
+	ASISTENCIA_CORREGIDA("Corrección de asistencia", false),
+	// Sprint 9, tanda 3 (sección 3.10): el resumen diario de comunicados y el urgente. Los crea solo sistema.comunicados
+	// (trg_mensaje_nace); nunca llevan el texto del comunicado (el título, solo el urgente).
+	COMUNICADOS_RESUMEN("Resumen de comunicados", false),
+	COMUNICADO_URGENTE("Comunicado urgente", false);
 
 	private final String etiqueta;
 

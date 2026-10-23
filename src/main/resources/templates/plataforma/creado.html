@@ -15,6 +15,9 @@
 	<th:block th:unless="${creado.completo()}">
 		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${creado.pendiente})}"></div>
 	</th:block>
+	<th:block th:if="${advertencia != null}">
+		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${advertencia})}"></div>
+	</th:block>
 
 	<section class="tarjeta" aria-labelledby="titulo-siguiente">
 		<h2 id="titulo-siguiente">Qué sigue</h2>

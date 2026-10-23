@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 3 (sección 3.8): escribir un comunicado (o la fe de erratas de uno) con vista previa. La firma que ve la
+     familia la pone el sistema; el texto es plano (se muestra escapado) y pasa por el filtro de contenido. El PDF lo revisa
+     el analizador en un proceso aparte y TODO comunicado con PDF lo aprueba el otro órgano (correcciones del sprint 9). */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Nuevo comunicado', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="comunicado-nuevo">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/comunicados}">Comunicados</a></p>
+			<h1 th:text="${original != null} ? 'Fe de erratas' : 'Nuevo comunicado'">Nuevo comunicado</h1>
+			<p class="secundario" th:if="${original != null}"
+				th:text="|Corrige «${original.resumen.titulo}». Llega a las mismas ${original.resumen.destinatarias} familias: el original no se edita.|">Corrige</p>
+			<p class="secundario" th:if="${original == null}">Llega al portal de las familias del alcance que elijas. Nunca
+				trates cobranzas ni pidas pagos, cuentas, contactos o datos: el sistema no lo deja enviar.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" th:if="${!opciones.puedeEscribir}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('No puedes enviar comunicados', 'Los envían Dirección, Promotoría y los docentes con una asignación vigente de tutor o de área.')}"></div>
+	</section>
+
+	<section class="tarjeta" th:if="${opciones.puedeEscribir}">
+		<form class="formulario" method="post" enctype="multipart/form-data"
+			th:action="${original != null} ? @{/comunicados/{id}/fe-de-erratas(id=${original.resumen.id})} : @{/comunicados/nuevo}">
+			<div class="formulario-doble">
+				<div class="campo">
+					<label for="emisor">Firma como</label>
+					<select class="input" id="emisor" name="emisor" required>
+						<option th:each="e : ${opciones.emisores}" th:value="${e.name()}" th:text="${e.etiqueta()}"
+							th:selected="${borrador != null and borrador.emisor() == e}">Dirección</option>
+					</select>
+					<p class="ayuda">La firma la arma el sistema con tu cuenta (por ejemplo, «Dirección del Colegio…»).</p>
+				</div>
+				<th:block th:if="${original == null}">
+					<div class="campo">
+						<label for="alcance">A quién va</label>
+						<select class="input" id="alcance" name="alcance" required>
+							<option th:each="a : ${opciones.alcances}" th:value="${a.name()}"
+								th:text="${a.name() == 'COLEGIO'} ? 'Todo el colegio' : (${a.name() == 'NIVEL'} ? 'Un nivel' : (${a.name() == 'GRADO'} ? 'Un grado' : 'Una sección'))"
+								th:selected="${borrador != null and borrador.alcance() == a}">Una sección</option>
+						</select>
+						<p class="ayuda">Nunca a una familia sola: el alcance mínimo es una sección.</p>
+					</div>
+					<div class="campo" th:if="${opciones.alcances.size() > 1}">
+						<label for="nivel">Nivel (si va a un nivel)</label>
+						<select class="input" id="nivel" name="nivel">
+							<option value="">—</option>
+							<option th:each="n : ${opciones.niveles}" th:value="${n.name()}" th:text="${n.name()}"
+								th:selected="${borrador != null and borrador.nivel() == n}">PRIMARIA</option>
+						</select>
+					</div>
+					<div class="campo" th:if="${opciones.alcances.size() > 1}">
+						<label for="grado">Grado (si va a un grado)</label>
+						<select class="input" id="grado" name="grado">
+							<option value="">—</option>
+							<option th:each="g : ${opciones.grados}" th:value="${g.name()}" th:text="${g.etiqueta()}"
+								th:selected="${borrador != null and borrador.grado() == g}">3.° de Primaria</option>
+						</select>
+					</div>
+					<div class="campo">
+						<label for="seccionId">Sección (si va a una sección)</label>
+						<select class="input" id="seccionId" name="seccionId">
+							<option value="" th:if="${opciones.alcances.size() > 1}">—</option>
+							<option th:each="s : ${opciones.secciones}" th:value="${s.id()}" th:text="${s.etiqueta()}"
+								th:selected="${borrador != null and borrador.seccionId() == s.id()}">3.° Primaria B</option>
+						</select>
+					</div>
+				</th:block>
+				<th:block th:if="${original != null}">
+					<input type="hidden" name="alcance" value="COLEGIO">
+					<p class="secundario" th:text="|Alcance: ${original.resumen.alcance} (el del original).|">Alcance</p>
+				</th:block>
+			</div>
+			<div class="campo">
+				<label for="titulo">Título</label>
+				<input class="input" id="titulo" name="titulo" maxlength="120" required
+					th:value="${borrador != null} ? ${borrador.titulo()} : ''">
+				<p class="ayuda">De 5 a 120 caracteres.</p>
+			</div>
+			<div class="campo">
+				<label for="cuerpo">Texto</label>
+				<textarea class="input" id="cuerpo" name="cuerpo" rows="8" maxlength="4000" required
+					th:text="${borrador != null} ? ${borrador.cuerpo()} : ''"></textarea>
+				<p class="ayuda">Texto plano, de 10 a 4,000 caracteres. Al final va siempre el aviso de que el colegio nunca
+					pide pagos por un comunicado.</p>
+			</div>
+			<div class="campo">
+				<label for="archivo">PDF (opcional)</label>
+				<input class="input" id="archivo" name="archivo" type="file" accept="application/pdf,.pdf">
+				<p class="ayuda" th:if="${adjunto == null}">Hasta 2 MB y 10 páginas, exportado «como PDF» y sin formularios,
+					adjuntos ni enlaces a otros sitios. Todo comunicado con PDF lo aprueba otra persona antes de salir.</p>
+				<p class="ayuda" th:if="${adjunto != null}"
+					th:text="|Adjunto revisado: ${adjunto.paginas()} página(s)${adjunto.requiereRevision() ? ', con poco texto o imágenes' : ''}. Todo comunicado con PDF lo aprueba otra persona antes de salir.|">Adjunto</p>
+			</div>
+			<div class="fila">
+				<label class="opcion" th:if="${opciones.urgentePermitido and original == null}">
+					<input type="checkbox" name="urgente" value="true" th:checked="${borrador != null and borrador.urgente()}">
+					Urgente (avisa al momento por WhatsApp)
+				</label>
+				<label class="opcion">
+					<input type="checkbox" name="requiereConfirmacion" value="true"
+						th:checked="${borrador == null or borrador.requiereConfirmacion()}">
+					Pedir «Confirmo que lo leí»
+				</label>
+			</div>
+			<div class="acciones">
+				<button type="submit" name="accion" value="previsualizar" class="btn btn-secundario">Ver vista previa</button>
+				<button type="submit" name="accion" value="quitar-adjunto" class="btn btn-texto" th:if="${adjunto != null}">Quitar el PDF</button>
+			</div>
+		</form>
+	</section>
+
+	<section class="tarjeta" th:if="${previa != null}" aria-label="Vista previa">
+		<p class="etiqueta">Así lo verá la familia</p>
+		<h2 th:text="${previa.titulo()}">Título</h2>
+		<p class="secundario" th:text="|${previa.etiqueta()} · ${previa.alcance()} · ${previa.destinatarias()} familia(s)|">De</p>
+		<span th:if="${previa.urgente()}" th:replace="~{fragments/componentes :: badge('Urgente', 'alerta')}"></span>
+		<p th:each="p : ${previa.parrafos()}" th:text="${p}">Párrafo</p>
+		<p class="secundario" th:if="${previa.paginasAdjunto() != null}" th:text="|PDF adjunto: ${previa.paginasAdjunto()} página(s).|">PDF</p>
+		<p class="ayuda" th:text="${previa.pie()}">Pie</p>
+		<div th:if="${previa.porAprobar()}" th:replace="~{fragments/componentes :: alerta('advertencia', |Con este PDF, el comunicado queda por aprobar: lo revisa ${previa.quienAprueba()} antes de que salga.|)}"></div>
+		<form class="formulario" method="post"
+			th:action="${original != null} ? @{/comunicados/{id}/fe-de-erratas(id=${original.resumen.id})} : @{/comunicados/nuevo}">
+			<input type="hidden" name="emisor" th:value="${borrador.emisor()}">
+			<input type="hidden" name="alcance" th:value="${borrador.alcance()}">
+			<input type="hidden" name="nivel" th:if="${borrador.nivel() != null}" th:value="${borrador.nivel()}">
+			<input type="hidden" name="grado" th:if="${borrador.grado() != null}" th:value="${borrador.grado()}">
+			<input type="hidden" name="seccionId" th:if="${borrador.seccionId() != null}" th:value="${borrador.seccionId()}">
+			<input type="hidden" name="titulo" th:value="${borrador.titulo()}">
+			<input type="hidden" name="cuerpo" th:value="${borrador.cuerpo()}">
+			<input type="hidden" name="urgente" th:if="${borrador.urgente()}" value="true">
+			<input type="hidden" name="requiereConfirmacion" th:if="${borrador.requiereConfirmacion()}" value="true">
+			<div class="acciones">
+				<button type="submit" name="accion" value="enviar" class="btn btn-primario"
+					th:text="${previa.porAprobar()} ? 'Enviar a aprobación con mi firma' : 'Enviar con mi firma'">Enviar con mi firma</button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

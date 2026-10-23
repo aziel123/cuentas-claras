@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 3 (sección 3.10): un comunicado con sus estadísticas. Los pendientes van con el nombre del alumno (nunca
+     el apoderado ni su contacto) y solo para quien tiene derecho (B16). Retirar no borra: las familias ven la constancia. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Comunicado', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="comunicado">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/comunicados}">Comunicados</a></p>
+			<h1 th:text="${c.resumen().titulo()}">Título</h1>
+			<p class="secundario" th:text="|${c.resumen().emisor()} · ${c.resumen().alcance()} · ${c.resumen().estadoTexto()}|">De</p>
+			<p class="secundario" th:if="${c.resumen().enviadoEn() != null}"
+				th:text="|Enviado el ${#temporals.format(c.resumen().enviadoEn(), 'dd/MM/yyyy HH:mm')}|">Enviado</p>
+			<p class="secundario" th:if="${c.corrigeId() != null}">
+				Es la fe de erratas de <a th:href="@{/comunicados/{id}(id=${c.corrigeId()})}">otro comunicado</a>.
+			</p>
+		</div>
+		<div class="fila">
+			<a th:if="${c.puedeCorregir()}" th:replace="~{fragments/componentes :: enlaceBoton('Fe de erratas', @{/comunicados/{id}/fe-de-erratas(id=${c.resumen().id()})}, 'secundario')}"></a>
+			<th:block th:if="${c.puedeRetirar()}" th:replace="~{fragments/componentes :: modalMotivo('retirar', 'Retirar el comunicado', 'Las familias verán que se retiró, con el motivo. El texto queda para Dirección y en la bitácora.', @{/comunicados/{id}/retirar(id=${c.resumen().id()})}, 'Retirar', 'secundario', 'Retirar con mi firma')}"></th:block>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<div th:if="${c.motivoRetiro() != null}" th:replace="~{fragments/componentes :: alerta('advertencia', |Retirado por ${c.retiradoPor()} el ${#temporals.format(c.retiradoEn(), 'dd/MM/yyyy HH:mm')}. Motivo: ${c.motivoRetiro()}|)}"></div>
+
+	<section class="tarjeta" aria-label="Estadísticas">
+		<div class="indicadores">
+			<p><strong th:text="${c.estadisticas().destinatarias()}">30</strong> destinatarias</p>
+			<p><strong th:text="${c.estadisticas().avisadas()}">28</strong> avisadas</p>
+			<p><strong th:text="${c.estadisticas().entregadas()}">27</strong> entregadas</p>
+			<p><strong th:text="${c.estadisticas().leidas()}">20</strong> leídas</p>
+			<p th:if="${c.requiereConfirmacion()}"><strong th:text="${c.estadisticas().confirmadas()}">15</strong> confirmadas</p>
+			<p><strong th:text="${c.estadisticas().sinPortal()}">3</strong> sin portal</p>
+		</div>
+		<th:block th:if="${c.estadisticas().pendientesVisibles() and c.requiereConfirmacion()}">
+			<h2>Falta que confirmen</h2>
+			<p class="ayuda">El sistema les recuerda a las 48 horas en su resumen. No hace falta escribirles.</p>
+			<ul class="lista-simple">
+				<li th:each="p : ${c.estadisticas().pendientes()}" th:text="${p}">Mateo Quispe (3.° Primaria B)</li>
+			</ul>
+		</th:block>
+	</section>
+
+	<section class="tarjeta" aria-label="Texto">
+		<p th:each="p : ${c.parrafos()}" th:text="${p}">Párrafo</p>
+		<p th:if="${c.adjuntoDescargable()}"><a th:href="@{/comunicados/{id}/adjunto(id=${c.resumen().id()})}">Descargar el PDF</a></p>
+		<p class="ayuda" th:text="${c.pie()}">Pie</p>
+	</section>
+
+	<section class="tarjeta" th:unless="${#lists.isEmpty(c.feDeErratas())}" aria-label="Fe de erratas">
+		<h2>Fe de erratas</h2>
+		<ul class="lista-simple">
+			<li th:each="f : ${c.feDeErratas()}"><a th:href="@{/comunicados/{id}(id=${f.id()})}" th:text="${f.titulo()}">Fe</a>
+				<span class="secundario" th:text="${f.estadoTexto()}">Enviado</span></li>
+		</ul>
+	</section>
+</main>
+</body>
+</html>

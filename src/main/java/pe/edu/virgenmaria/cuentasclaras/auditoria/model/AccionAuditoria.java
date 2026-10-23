@@ -371,6 +371,57 @@ public enum AccionAuditoria {
 	/** Se resalta: al reactivar un operador, su correo pasó a ser el de CC_OPERADORES. */
 	OPERADOR_CORREO_ACTUALIZADO("Se actualizó el correo de un operador de la plataforma", true),
 
+	// Sprint 9, tanda 1 (asignaciones docentes, sección 12)
+	/** Administración o Dirección propuso asignar un docente, tutor o auxiliar a una sección (lo aprueba otra persona). */
+	ASIGNACION_DOCENTE_PROPUESTA("Propuso asignar un docente a una sección", false),
+	/** Otra persona de Dirección o Promotoría aprobó la asignación con su firma: el docente ve la sección. */
+	ASIGNACION_DOCENTE_APROBADA("Aprobó la asignación de un docente a una sección", false),
+	/** Se rechazó la propuesta de asignación. */
+	ASIGNACION_DOCENTE_RECHAZADA("Rechazó la asignación de un docente a una sección", false),
+	/** Dirección o Promotoría (con su firma) o sistema.academico terminó una asignación: el docente deja de ver la sección. */
+	ASIGNACION_DOCENTE_TERMINADA("Terminó la asignación de un docente a una sección", false),
+
+	// Sprint 9, tanda 2 (asistencia, sección 12). Sin nombres de alumnos ni notas de justificación: conteos, ids y estados.
+	/** Un docente registró la asistencia de su sección (del día o de un día pasado con su solicitud aprobada). */
+	ASISTENCIA_REGISTRADA("Registró la asistencia de una sección", false),
+	/** Un docente corrigió el mismo día, antes del aviso a las familias. */
+	ASISTENCIA_CORREGIDA("Corrigió la asistencia del día", false),
+	/** Se resalta: corrección después del aviso a las familias, o de otro día con la aprobación de Dirección. */
+	ASISTENCIA_CORREGIDA_DESPUES_DEL_AVISO("Corrigió la asistencia después del aviso o de otro día", true),
+	/** La familia justificó una falta desde el portal (el motivo de la lista; nunca la nota). */
+	ASISTENCIA_JUSTIFICADA("La familia justificó una falta", false),
+	/** Se resalta: Dirección revirtió una justificación de la familia, con motivo y su firma. */
+	JUSTIFICACION_REVERTIDA("Revirtió la justificación de una falta", true),
+	/** Un apoderado (portal) o Administración (ficha firmada) registró un consentimiento de avisos. */
+	CONSENTIMIENTO_AVISO("Registró el consentimiento de avisos de un apoderado", false),
+	/** Se resalta: Dirección cambió las horas o plazos de la asistencia (antes y después). */
+	CONFIGURACION_ACADEMICA_CAMBIADA("Cambió las horas y plazos de la asistencia", true),
+	/** Se pidió una corrección de otro día o un registro tardío (los aprueba otra persona). */
+	ASISTENCIA_SOLICITADA("Pidió corregir o registrar la asistencia de otro día", false),
+	/** sistema.asistencia creó los avisos de asistencia a las familias y subió la marca de agua. */
+	AVISOS_ASISTENCIA_ENVIADOS("Preparó los avisos de asistencia a las familias", false),
+
+	// Sprint 9, tanda 3: comunicados y nómina para el SIAGIE (sección 12)
+	/** Cada PDF que se revisó en el proceso hijo, aceptado o no (resultado y SHA-256, sin texto). B12: límite por hora. */
+	ADJUNTO_REVISADO("Subió un PDF para un comunicado", false),
+	/** Emisor, alcance, destinatarios, huella del contenido y del PDF. */
+	COMUNICADO_ENVIADO("Envió un comunicado a las familias", false),
+	COMUNICADO_POR_APROBAR("Dejó un comunicado con PDF por aprobar", false),
+	COMUNICADO_RECHAZADO("Se rechazó un comunicado por aprobar", false),
+	/** La regla que coincidió (sin el texto); se resalta siempre: el detalle dice si es de cobranza o de pagos. */
+	COMUNICADO_RECHAZADO_POR_CONTENIDO("Intentó enviar un comunicado que el filtro rechazó", true),
+	FE_DE_ERRATAS_ENVIADA("Envió la fe de erratas de un comunicado", false),
+	/** Se resalta (E28): quién y motivo. */
+	COMUNICADO_RETIRADO("Retiró un comunicado enviado", true),
+	/** B11: los destinatarios congelados no coinciden con las matrículas ACTIVAS del alcance al enviarse. */
+	COMUNICADO_DESTINATARIOS_DESCUADRADOS("Los destinatarios de un comunicado no coinciden con su alcance", true),
+	/** sistema.comunicados creó los resúmenes, urgentes y recordatorios de comunicados. */
+	AVISOS_COMUNICADOS_ENVIADOS("Preparó los avisos de comunicados a las familias", false),
+	DATOS_SIAGIE_CAMBIADOS("Cambió el sexo o el código de estudiante de un alumno", false),
+	CODIGO_MODULAR_CAMBIADO("Registró o cambió un código modular del colegio", true),
+	/** Sección, perfil, filas, faltantes, código y SHA-256 del archivo (sin su contenido). */
+	NOMINA_SIAGIE_EXPORTADA("Descargó la nómina de una sección para el SIAGIE", false),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

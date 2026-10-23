@@ -36,7 +36,22 @@ public enum ActorSistema {
 	 * Sprint 8, tanda 3 (sección 8.2): solo en el perfil {@code demo}. Crea el colegio ficticio de cada visitante de la demo
 	 * («Crear mi demo») y lo deja en producción con sus cuentas y sus datos de ejemplo.
 	 */
-	DEMO("sistema.demo");
+	DEMO("sistema.demo"),
+	/**
+	 * Sprint 9, tanda 1 (sección 3.2): termina las asignaciones docentes de un año cerrado o de una cuenta desactivada (o
+	 * que ya no tiene el rol DOCENTE). Con la conexión de {@code cc_sistema}: trg_asignacion_docente_estado lo exige.
+	 */
+	ACADEMICO("sistema.academico"),
+	/**
+	 * Sprint 9, tanda 2 (sección 3.6): crea los avisos de asistencia a las familias a la hora fija de cada colegio y sube la
+	 * marca de agua de los avisos (A2). Con la conexión de {@code cc_sistema}: trg_mensaje_nace lo exige.
+	 */
+	ASISTENCIA("sistema.asistencia"),
+	/**
+	 * Sprint 9, tanda 3 (sección 3.10): crea el resumen diario de comunicados, los urgentes y el recordatorio de las 48
+	 * horas a las familias, y anota qué mensaje avisó cada comunicado. Con {@code cc_sistema}: trg_mensaje_nace lo exige.
+	 */
+	COMUNICADOS("sistema.comunicados");
 
 	/** Prefijo reservado: ninguna persona puede tener un nombre de usuario que empiece así. */
 	public static final String PREFIJO_RESERVADO = "sistema";

@@ -80,7 +80,9 @@ public class EstadoTecnico {
 			Map.entry("ImportadorLiquidaciones.importarDiario", "Liquidaciones de la pasarela"),
 			Map.entry("AplicadorRecaudacion.aplicarPendientes", "Recaudación bancaria"),
 			Map.entry("AlertasTecnicas.revisar", "Alertas técnicas"),
-			Map.entry("AlertasTecnicas.resumenDiario", "Resumen técnico diario"));
+			Map.entry("AlertasTecnicas.resumenDiario", "Resumen técnico diario"),
+			// Sprint 9, tanda 1: termina las asignaciones de años cerrados y de cuentas que ya no son docentes activos.
+			Map.entry("FinAsignaciones.ejecutar", "Fin de asignaciones docentes"));
 
 	/** Una tarea por intervalo se da por atrasada si no late en 4 intervalos (2 minutos como mínimo). */
 	static final Duration VENTANA_MINIMA = Duration.ofMinutes(2);

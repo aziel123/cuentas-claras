@@ -32,7 +32,13 @@ final class CatalogoRutasConId {
 		/** Correcciones del sprint 8 (S8-A1): el cambio del contacto del titular (rutas del operador). */
 		CAMBIO_CONTACTO,
 		/** Correcciones del sprint 8 (S8-A2): el cambio del correo de control que aprueba la Promotoría. */
-		CAMBIO_CORREO
+		CAMBIO_CORREO,
+		/** Sprint 9, tanda 1: una asignación docente (Docentes y secciones). */
+		ASIGNACION,
+		/** Sprint 9, tanda 2: una marca de asistencia (corregir, pedir corrección, justificar, revertir). */
+		MARCA,
+		/** Sprint 9, tanda 3: un comunicado (detalle, fe de erratas, retiro, PDF y el portal de la familia). */
+		COMUNICADO
 	}
 
 	static final Map<String, Map<String, Recurso>> CATALOGO = new LinkedHashMap<>();
@@ -225,6 +231,39 @@ final class CatalogoRutasConId {
 		// Sprint 8, tanda 2: los conectores del colegio (proponer un tipo y probar uno propuesto).
 		r("POST /conectores/{tipo:[a-z-]{3,20}}", "tipo", Recurso.TIPO_CONECTOR);
 		r("POST /conectores/{id:\\d{1,12}}/probar", "id", Recurso.CONECTOR);
+		// Sprint 9, tanda 1: la lista de una sección (Dirección o un docente con asignación vigente) y Docentes y secciones.
+		r("GET /academico/secciones/{id:\\d+}", "id", Recurso.SECCION);
+		r("GET /academico/asignaciones", "anio", Recurso.ANIO);
+		r("POST /academico/asignaciones", "anio", Recurso.ANIO, "seccionId", Recurso.SECCION, "docenteId", Recurso.USUARIO);
+		r("POST /academico/asignaciones/copiar-anio-anterior", "anioId", Recurso.ANIO);
+		r("POST /academico/asignaciones/{id:\\d+}/terminar", "id", Recurso.ASIGNACION, "anio", Recurso.ANIO);
+		// Sprint 9, tanda 2: la asistencia (hoja, correcciones, registro tardío, reversión y reporte con ?seccion=, A11),
+		// la justificación de la familia y el consentimiento desde la ficha (?apoderado=).
+		r("GET /academico/asistencia/{seccionId:\\d+}/hoy", "seccionId", Recurso.SECCION);
+		r("POST /academico/asistencia/{seccionId:\\d+}/hoy", "seccionId", Recurso.SECCION);
+		r("GET /academico/asistencia/{seccionId:\\d+}/tardio/{solicitudId:\\d+}", "seccionId", Recurso.SECCION, "solicitudId", Recurso.SOLICITUD);
+		r("POST /academico/asistencia/{seccionId:\\d+}/tardio/{solicitudId:\\d+}", "seccionId", Recurso.SECCION, "solicitudId", Recurso.SOLICITUD);
+		r("POST /academico/asistencia/marcas/{id:\\d+}/corregir-hoy", "id", Recurso.MARCA, "seccion", Recurso.SECCION);
+		r("POST /academico/asistencia/marcas/{id:\\d+}/pedir-correccion", "id", Recurso.MARCA, "seccion", Recurso.SECCION);
+		r("POST /academico/asistencia/{seccionId:\\d+}/pedir-registro-tardio", "seccionId", Recurso.SECCION);
+		r("POST /academico/asistencia/marcas/{id:\\d+}/revertir-justificacion", "id", Recurso.MARCA);
+		r("GET /academico/asistencia/reporte", "seccion", Recurso.SECCION);
+		r("POST /familia/asistencia/marcas/{id:\\d+}/justificar", "id", Recurso.MARCA);
+		r("GET /alumnos/consentimientos", "apoderado", Recurso.APODERADO);
+		r("POST /alumnos/consentimientos", "apoderadoId", Recurso.APODERADO);
+		// Sprint 9, tanda 3: los comunicados del personal (de otro colegio u otro docente: 404), los del portal (de otra
+		// familia: 404), la nómina del SIAGIE por sección (?seccion=, A11) y los datos del SIAGIE de un alumno.
+		r("POST /comunicados/nuevo", "seccionId", Recurso.SECCION);
+		r("GET /comunicados/{id:\\d+}", "id", Recurso.COMUNICADO);
+		r("GET /comunicados/{id:\\d+}/fe-de-erratas", "id", Recurso.COMUNICADO);
+		r("POST /comunicados/{id:\\d+}/fe-de-erratas", "id", Recurso.COMUNICADO, "seccionId", Recurso.SECCION);
+		r("POST /comunicados/{id:\\d+}/retirar", "id", Recurso.COMUNICADO);
+		r("GET /comunicados/{id:\\d+}/adjunto", "id", Recurso.COMUNICADO);
+		r("GET /familia/comunicados/{id:\\d+}", "id", Recurso.COMUNICADO);
+		r("POST /familia/comunicados/{id:\\d+}/confirmar", "id", Recurso.COMUNICADO);
+		r("GET /familia/comunicados/{id:\\d+}/adjunto", "id", Recurso.COMUNICADO);
+		r("GET /academico/siagie/nomina", "seccion", Recurso.SECCION);
+		r("POST /alumnos/{id:\\d+}/datos-siagie", "id", Recurso.ALUMNO);
 	}
 
 	private CatalogoRutasConId() {

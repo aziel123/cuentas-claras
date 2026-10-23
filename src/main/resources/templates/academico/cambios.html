@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 2 (E5, E13): los cambios de la asistencia del día para Dirección, resaltando los de después del
+     aviso a las familias. Dirección no corrige marcas: revierte una justificación con motivo y su firma. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cambios de la asistencia', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="cambios-asistencia">
+	<div class="cabecera">
+		<div>
+			<h1>Cambios de la asistencia</h1>
+			<p class="secundario">Correcciones, justificaciones de las familias y reversiones del día. Las de después del aviso
+				ya llegaron (o llegarán) a la familia.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<form class="filtros" method="get" th:action="@{/academico/asistencia/cambios}">
+		<div class="campo">
+			<label for="fecha">Día</label>
+			<input class="input" id="fecha" type="date" name="fecha" th:value="${fecha}">
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Ver el día', 'secundario')}"></button>
+	</form>
+
+	<section class="tarjeta" aria-labelledby="titulo-cambios">
+		<h2 id="titulo-cambios">Cambios</h2>
+		<th:block th:if="${#lists.isEmpty(cambios)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('No hay cambios ese día', 'Las correcciones y justificaciones aparecen aquí.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(cambios)}">
+			<caption class="solo-lectores">Cambios de la asistencia del día</caption>
+			<thead>
+				<tr><th scope="col">Sección</th><th scope="col">Alumno</th><th scope="col">Antes</th><th scope="col">Ahora</th>
+					<th scope="col">Quién y por qué</th><th scope="col">Acción</th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="c : ${cambios}" th:classappend="${c.despuesDelAviso} ? 'fila-resaltada'">
+					<td data-etiqueta="Sección" th:text="${c.seccion}">3.° A</td>
+					<td data-etiqueta="Alumno" th:text="${c.alumno}">Mateo Quispe</td>
+					<td data-etiqueta="Antes" th:text="${c.antes}">Falta</td>
+					<td data-etiqueta="Ahora">
+						<span th:text="${c.ahora}">Presente</span>
+						<th:block th:if="${c.despuesDelAviso}"><span th:replace="~{fragments/componentes :: badge('Después del aviso', 'alerta')}"></span></th:block>
+					</td>
+					<td data-etiqueta="Quién y por qué">
+						<span th:text="|${c.origen}: ${c.quien}|">Corrección del día: Ana Torres</span>
+						<p class="ayuda" th:if="${c.motivo != null}" th:text="${c.motivo}">Motivo</p>
+					</td>
+					<td data-etiqueta="Acción">
+						<th:block th:if="${c.revertible}">
+							<th:block th:replace="~{fragments/componentes :: modalMotivo(|revertir-${c.marcaId}|, 'Revertir la justificación', 'La falta vuelve a figurar sin justificar y la familia recibe el aviso. Queda a tu nombre con tu firma.', @{/academico/asistencia/marcas/{id}/revertir-justificacion(id=${c.marcaId})}, 'Revertir', 'secundario', 'Revertir con mi firma')}"></th:block>
+						</th:block>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

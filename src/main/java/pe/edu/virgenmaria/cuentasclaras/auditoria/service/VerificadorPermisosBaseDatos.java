@@ -405,7 +405,101 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					"la aplicación podría proponer o aplicar el cambio del contacto del titular de un colegio."),
 			soloSistema(VerificadorPermisosBaseDatos.CAMBIO_CORREO_IMPOSIBLE,
 					"la aplicación podría proponer el cambio del correo de control de un colegio."),
-			trigger(VerificadorPermisosBaseDatos.ORDEN_EN_PREPARACION_IMPOSIBLE, "trg_orden_pago_nace (versión de V31)"));
+			trigger(VerificadorPermisosBaseDatos.ORDEN_EN_PREPARACION_IMPOSIBLE, "trg_orden_pago_nace (versión de V31)"),
+			// Sprint 9, tanda 1 (V32, E4): una asignación docente no se borra (1142), no cambia de docente ni de sección
+			// (1143) y no nace VIGENTE (trg_asignacion_docente_nace: 1644).
+			sinBorrado("asignacion_docente"),
+			columna("UPDATE asignacion_docente SET usuario_id = usuario_id WHERE 1 = 0", "asignacion_docente"),
+			columna("UPDATE asignacion_docente SET seccion_id = seccion_id WHERE 1 = 0", "asignacion_docente"),
+			trigger(VerificadorPermisosBaseDatos.ASIGNACION_VIGENTE_IMPOSIBLE, "trg_asignacion_docente_nace"),
+			// Sprint 9, tanda 2 (V33, E7): la asistencia y el consentimiento son de solo inserción (1142); una cobertura no
+			// se alarga (hasta: 1143); la marca de agua de los avisos la escribe solo cc_sistema (1142, A2); un registro de
+			// ayer «del día» (E1) y una configuración académica sin Dirección ni firma (E55): 1644 de sus triggers.
+			soloInsercion("registro_asistencia"), sinBorrado("registro_asistencia"),
+			soloInsercion("marca_asistencia"), sinBorrado("marca_asistencia"),
+			soloInsercion("consentimiento_aviso"), sinBorrado("consentimiento_aviso"),
+			columna("UPDATE asignacion_docente SET hasta = hasta WHERE 1 = 0", "asignacion_docente"),
+			soloSistema(VerificadorPermisosBaseDatos.CORTE_AVISOS_IMPOSIBLE,
+					"la aplicación podría mover la marca de agua de los avisos de asistencia (las familias no se enterarían)."),
+			new SentenciaProhibida("UPDATE aviso_asistencia_corte SET ultima_marca_id = ultima_marca_id WHERE 1 = 0",
+					Set.of(MYSQL_COMANDO_DENEGADO, MYSQL_COLUMNA_DENEGADA), "la aplicación podría mover la marca de agua "
+							+ "de los avisos de asistencia (solo cc_sistema: revisa 02-permisos-tablas.sql)."),
+			sinBorrado("aviso_asistencia_corte"),
+			trigger(VerificadorPermisosBaseDatos.REGISTRO_AYER_IMPOSIBLE, "trg_registro_asistencia_nace"),
+			trigger(VerificadorPermisosBaseDatos.CONFIGURACION_ACADEMICA_IMPOSIBLE, "trg_configuracion_academica_nace"),
+			// Sprint 9, tanda 3 (V34, E19, E28): el adjunto, la confirmación y la exportación de la nómina son de solo
+			// inserción (1142) y nada de comunicados se borra (1142); un comunicado enviado no se edita (título, texto,
+			// adjunto y huella: 1143) ni cambia la familia de un destinatario (1143). Un comunicado de Dirección del colegio
+			// 0 (trg_comunicado_nace) y una nómina sin sesión (trg_exportacion_nomina_nace, B14): 1644.
+			soloInsercion("comunicado_adjunto"), sinBorrado("comunicado_adjunto"),
+			soloInsercion("confirmacion_lectura"), sinBorrado("confirmacion_lectura"),
+			soloInsercion("exportacion_nomina"), sinBorrado("exportacion_nomina"),
+			sinBorrado("comunicado"), sinBorrado("comunicado_destinatario"), sinBorrado("codigo_modular"),
+			columna("UPDATE comunicado SET titulo = titulo WHERE 1 = 0", "comunicado"),
+			columna("UPDATE comunicado SET cuerpo = cuerpo WHERE 1 = 0", "comunicado"),
+			columna("UPDATE comunicado SET adjunto_id = adjunto_id WHERE 1 = 0", "comunicado"),
+			columna("UPDATE comunicado SET huella_contenido = huella_contenido WHERE 1 = 0", "comunicado"),
+			columna("UPDATE comunicado_destinatario SET familia_id = familia_id WHERE 1 = 0", "comunicado_destinatario"),
+			trigger(VerificadorPermisosBaseDatos.COMUNICADO_DIRECCION_IMPOSIBLE, "trg_comunicado_nace"),
+			trigger(VerificadorPermisosBaseDatos.NOMINA_SIN_SESION_IMPOSIBLE, "trg_exportacion_nomina_nace"));
+
+	/**
+	 * Sprint 9, tanda 3 (E17, E45): un comunicado «de Dirección» del colegio 0, sin sesión, sin firma y en un colegio que no
+	 * está en producción (trg_comunicado_nace responde antes que las FK: 1644).
+	 */
+	static final String COMUNICADO_DIRECCION_IMPOSIBLE = "INSERT INTO comunicado (colegio_id, anio_escolar_id, tipo, "
+			+ "emisor_usuario_id, emisor_rol, emisor_etiqueta, alcance, titulo, cuerpo, huella_contenido, estado, enviado_en, "
+			+ "sesion_id, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'NORMAL', 0, 'DIRECCION', 'Verificador', "
+			+ "'COLEGIO', 'Verificador', 'Verificador de permisos', REPEAT('0', 64), 'ENVIADO', NOW(6), 0, NOW(6), "
+			+ "'verificador', NOW(6))";
+
+	/** Sprint 9, tanda 3 (B14): una exportación de la nómina del colegio 0 sin Dirección ni sesión (1644). */
+	static final String NOMINA_SIN_SESION_IMPOSIBLE = "INSERT INTO exportacion_nomina (colegio_id, anio_escolar_id, "
+			+ "seccion_id, perfil, filas, faltantes, codigo, sha256, sesion_id, creado_en, creado_por, actualizado_en) VALUES "
+			+ "(0, 0, 0, 'SIAGIE_MATRICULA_PROVISIONAL', 0, 0, 'VERIF-0', REPEAT('0', 64), 0, NOW(6), 'verificador', NOW(6))";
+
+	/**
+	 * Sprint 9, tanda 3 (E40, B6 y B7): con cc_sistema, un resumen de comunicados del colegio 0 con «S/ 350.00» en los
+	 * parámetros (1644: la regla del colegio en preparación o la de cobranza de trg_mensaje_nace).
+	 */
+	static final String RESUMEN_COMUNICADOS_CON_MONTO_IMPOSIBLE = "INSERT INTO mensaje (colegio_id, clave, tipo, canal, "
+			+ "destinatario_tipo, familia_id, apoderado_id, destino, plantilla, parametros, estado, creado_en, creado_por, "
+			+ "actualizado_en) VALUES (0, 'verificador-comunicados', 'COMUNICADOS_RESUMEN', 'CORREO', 'APODERADO', 0, 0, "
+			+ "'x@y.pe', 'cc_comunicados_v2', 'Colegio\n2 comunicados. Debe S/ 350.00', 'PENDIENTE', NOW(6), "
+			+ "'sistema.comunicados', NOW(6))";
+
+	/** Sprint 9, tanda 2 (E1): un registro «del día» del colegio 0 con la fecha de ayer, sin sesión ni firma (1644). */
+	static final String REGISTRO_AYER_IMPOSIBLE = "INSERT INTO registro_asistencia (colegio_id, anio_escolar_id, seccion_id, "
+			+ "fecha, origen, fuente, registrado_por, sesion_id, alumnos, creado_en, creado_por, actualizado_en) VALUES (0, 0, "
+			+ "0, DATE(UTC_TIMESTAMP() - INTERVAL 29 HOUR), 'DEL_DIA', 'DOCENTE', 'verificador', 0, 0, NOW(6), 'verificador', "
+			+ "NOW(6))";
+
+	/** Sprint 9, tanda 2 (E55, A6): la configuración académica del colegio 0, sin Dirección ni firma (1644). */
+	static final String CONFIGURACION_ACADEMICA_IMPOSIBLE = "INSERT INTO configuracion_academica (colegio_id, "
+			+ "actualizado_por, creado_en, creado_por, actualizado_en) VALUES (0, 'verificador', NOW(6), 'verificador', "
+			+ "NOW(6))";
+
+	/** Sprint 9, tanda 2 (A2): la marca de agua de los avisos del colegio 0 (cc_app no la escribe: 1142). */
+	static final String CORTE_AVISOS_IMPOSIBLE = "INSERT INTO aviso_asistencia_corte (colegio_id, ultima_marca_id, "
+			+ "creado_en, creado_por, actualizado_en) VALUES (0, 0, NOW(6), 'sistema.asistencia', NOW(6))";
+
+	/**
+	 * Sprint 9, tanda 2 (E40, sección 3.13): con cc_sistema, un aviso de asistencia del colegio 0 con un monto en los
+	 * parámetros (1644: lo rechaza la regla del colegio en preparación o la de cobranza de trg_mensaje_nace).
+	 */
+	static final String AVISO_ASISTENCIA_CON_MONTO_IMPOSIBLE = "INSERT INTO mensaje (colegio_id, clave, tipo, canal, "
+			+ "destinatario_tipo, familia_id, apoderado_id, destino, plantilla, parametros, estado, creado_en, creado_por, "
+			+ "actualizado_en) VALUES (0, 'verificador-asistencia', 'ASISTENCIA_DIA', 'CORREO', 'APODERADO', 0, 0, 'x@y.pe', "
+			+ "'cc_asistencia_v2', 'Mateo: falta. Debe S/ 350.00', 'PENDIENTE', NOW(6), 'sistema.asistencia', NOW(6))";
+
+	/**
+	 * Sprint 9, tanda 1 (E4): una asignación docente del colegio 0 que nace VIGENTE, sin solicitud ni firma (la rechaza
+	 * trg_asignacion_docente_nace antes que las FK: 1644).
+	 */
+	static final String ASIGNACION_VIGENTE_IMPOSIBLE = "INSERT INTO asignacion_docente (colegio_id, anio_escolar_id, "
+			+ "seccion_id, usuario_id, tipo, estado, vigente, tutor_vigente, propuesto_por, resuelto_por, resuelto_en, "
+			+ "creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, 'TUTOR', 'VIGENTE', TRUE, TRUE, 'verificador', "
+			+ "'otro.verificador', NOW(6), NOW(6), 'verificador', NOW(6))";
 
 	/** Correcciones del sprint 8 (S8-A1): un cambio del contacto del titular del colegio 0, sin firma (1142 o 1644). */
 	static final String CAMBIO_CONTACTO_IMPOSIBLE = "INSERT INTO cambio_contacto_titular (colegio_id, usuario_id, "
@@ -546,7 +640,22 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			sinBorrado("cambio_contacto_titular"), sinBorrado("cambio_correo_control"),
 			columna("UPDATE cambio_contacto_titular SET telefono_nuevo = telefono_nuevo WHERE 1 = 0",
 					"cambio_contacto_titular"),
-			columna("UPDATE cambio_correo_control SET correo_nuevo = correo_nuevo WHERE 1 = 0", "cambio_correo_control"));
+			columna("UPDATE cambio_correo_control SET correo_nuevo = correo_nuevo WHERE 1 = 0", "cambio_correo_control"),
+			// Sprint 9, tanda 1 (V32): tampoco con cc_sistema nace una asignación VIGENTE (1644) ni se borra (1142).
+			trigger(VerificadorPermisosBaseDatos.ASIGNACION_VIGENTE_IMPOSIBLE, "trg_asignacion_docente_nace"),
+			sinBorrado("asignacion_docente"),
+			// Sprint 9, tanda 2 (V33): con cc_sistema, un aviso de asistencia con un monto no nace (1644); la marca de agua
+			// no se borra (1142) ni cambia de colegio (1143); la asistencia tampoco se edita ni se borra (1142).
+			trigger(VerificadorPermisosBaseDatos.AVISO_ASISTENCIA_CON_MONTO_IMPOSIBLE,
+					"trg_mensaje_nace (versión del sprint 9, tanda 2)"),
+			sinBorrado("aviso_asistencia_corte"),
+			columna("UPDATE aviso_asistencia_corte SET colegio_id = colegio_id WHERE 1 = 0", "aviso_asistencia_corte"),
+			soloInsercion("marca_asistencia"), sinBorrado("marca_asistencia"),
+			// Sprint 9, tanda 3 (V34): con cc_sistema, un resumen de comunicados con un monto no nace (1644) y nada de
+			// comunicados se borra (1142).
+			trigger(VerificadorPermisosBaseDatos.RESUMEN_COMUNICADOS_CON_MONTO_IMPOSIBLE,
+					"trg_mensaje_nace (versión del sprint 9, tanda 3)"),
+			sinBorrado("comunicado"), sinBorrado("confirmacion_lectura"));
 
 	/** 1142 (o 1143): solo cc_sistema la escribe. */
 	private static SentenciaProhibida soloSistema(String sql, String riesgo) {
@@ -639,7 +748,16 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_conector_colegio_nace", "trg_conector_colegio_estado",
 			// Correcciones del sprint 8 (V31).
 			"trg_cambio_contacto_titular_nace", "trg_cambio_contacto_titular_estado", "trg_cambio_correo_control_nace",
-			"trg_cambio_correo_control_estado");
+			"trg_cambio_correo_control_estado",
+			// Sprint 9, tanda 1 (V32).
+			"trg_asignacion_docente_nace", "trg_asignacion_docente_estado",
+			// Sprint 9, tanda 2 (V33).
+			"trg_registro_asistencia_nace", "trg_consentimiento_aviso_nace", "trg_marca_asistencia_nace",
+			"trg_configuracion_academica_nace", "trg_configuracion_academica_cambio",
+			// Sprint 9, tanda 3 (V34).
+			"trg_comunicado_nace", "trg_comunicado_estado", "trg_comunicado_destinatario_nace",
+			"trg_comunicado_destinatario_cambio",
+			"trg_confirmacion_lectura_nace", "trg_exportacion_nomina_nace");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -740,6 +858,8 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		verificarTls();
 		verificarPlataforma();
 		avisarConfiguracionVieja();
+		avisarDocentesConCobranza();
+		avisarColegiosSinGobierno();
 	}
 
 	static final String SQL_PLATAFORMAS = "SELECT COUNT(*) FROM colegio WHERE tipo = 'PLATAFORMA'";
@@ -996,6 +1116,54 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 	}
 
 	/** Sprint 7, tanda 2 (H5): la fila vieja del correo de la huella ya no se usa (ahora es por colegio). */
+	/**
+	 * Sprint 9, tanda 1 (decisión 141): las cuentas activas que combinan DOCENTE con CAJA o ADMINISTRACION (de antes de V32:
+	 * desde V32 trg_usuario_rol_alta no lo permite). No impide arrancar (no las creó esta versión): quedan en el log y la
+	 * lista de puesta en marcha las muestra como pendientes hasta que Promotoría las corrija.
+	 */
+	static final String SQL_DOCENTES_CON_COBRANZA = "SELECT COUNT(DISTINCT u.id) FROM usuario u "
+			+ "JOIN usuario_rol d ON d.usuario_id = u.id AND d.rol = 'DOCENTE' "
+			+ "JOIN usuario_rol c ON c.usuario_id = u.id AND c.rol IN ('CAJA', 'ADMINISTRACION') WHERE u.activo";
+
+	void avisarDocentesConCobranza() {
+		try {
+			Integer cuentas = jdbc.queryForObject(SQL_DOCENTES_CON_COBRANZA, Integer.class);
+			if (cuentas != null && cuentas > 0) {
+				LOG.warn("Hay {} cuentas con DOCENTE combinado con CAJA o ADMINISTRACION: corrígelas en Usuarios (el docente "
+						+ "no ve deudas; decisión 141).", cuentas);
+			}
+		}
+		catch (DataAccessException e) {
+			LOG.warn("No se pudieron contar las cuentas con DOCENTE y CAJA o ADMINISTRACION: {}",
+					e.getClass().getSimpleName());
+		}
+	}
+
+	/**
+	 * Sprint 9, tanda 2 (A8): los colegios en producción con menos de 2 personas activas de Promotoría o Dirección. Ahí la
+	 * segregación («quien pide no aprueba») no se puede cumplir. No impide arrancar: queda en el log, y la lista de puesta
+	 * en marcha lo muestra pendiente; el alta de esos roles va por CAMBIO_ROLES aprobada por la otra persona.
+	 */
+	static final String SQL_COLEGIOS_SIN_GOBIERNO = "SELECT COUNT(*) FROM colegio c WHERE c.tipo = 'COLEGIO' "
+			+ "AND c.estado = 'PRODUCCION' AND (SELECT COUNT(DISTINCT u.id) FROM usuario u JOIN usuario_rol r "
+			+ "ON r.usuario_id = u.id WHERE u.colegio_id = c.id AND u.activo AND u.apoderado_id IS NULL "
+			+ "AND r.rol IN ('PROMOTOR', 'DIRECTOR')) < 2";
+
+	void avisarColegiosSinGobierno() {
+		try {
+			Integer colegios = jdbc.queryForObject(SQL_COLEGIOS_SIN_GOBIERNO, Integer.class);
+			if (colegios != null && colegios > 0) {
+				LOG.warn("Hay {} colegio(s) en producción con menos de 2 personas activas de Promotoría o Dirección: la "
+						+ "segregación de funciones no se cumple (quien pide no aprueba). Revisa la puesta en marcha.",
+						colegios);
+			}
+		}
+		catch (DataAccessException e) {
+			LOG.warn("No se pudieron contar los colegios con menos de 2 personas de gobierno: {}",
+					e.getClass().getSimpleName());
+		}
+	}
+
 	private void avisarConfiguracionVieja() {
 		try {
 			Integer filas = jdbc.queryForObject(SQL_HUELLA_CORREO_VIEJA, Integer.class);

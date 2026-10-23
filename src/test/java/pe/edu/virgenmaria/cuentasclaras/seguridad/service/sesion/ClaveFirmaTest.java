@@ -60,7 +60,15 @@ class ClaveFirmaTest {
 				ClaveFirma.conectorPropuesto("0f0e0d0c-0b0a-4908-8706-050403020100"), ClaveFirma.conectorRechazado(1L),
 				// Correcciones del sprint 8 (V31): el contacto del titular, la ficha y el correo de control.
 				ClaveFirma.cambioContactoTitular(1L, EstadoSolicitud.APROBADA), ClaveFirma.fichaColegio(1L, 0),
-				ClaveFirma.cambioCorreoControlPropuesto(1L, 1), ClaveFirma.cambioCorreoControl(1L, EstadoSolicitud.APROBADA))
+				ClaveFirma.cambioCorreoControlPropuesto(1L, 1), ClaveFirma.cambioCorreoControl(1L, EstadoSolicitud.APROBADA),
+				// Sprint 9, tanda 1 (V32): terminar una asignación docente.
+				ClaveFirma.asignacionTerminada(1L),
+				// Sprint 9, tanda 2 (V33): registrar, corregir, justificar y revertir la asistencia; la configuración.
+				ClaveFirma.asistenciaRegistrada(1L, LocalDate.of(2026, 10, 5)), ClaveFirma.marcaCorregida(1L),
+				ClaveFirma.marcaJustificada(1L), ClaveFirma.marcaRevertida(1L), ClaveFirma.configuracionAcademica(1L, 0),
+				// Sprint 9, tanda 3 (V34): enviar un comunicado (por la huella de su contenido) y retirarlo.
+				ClaveFirma.comunicadoEnviar("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+				ClaveFirma.comunicadoRetirado(1L))
 				.forEach(clave -> {
 					// El CHECK de V25 (firma_operacion.clave) y el largo de la columna.
 					assertThat(clave).matches("^[a-z_]+:[A-Za-z0-9:_-]+$").hasSizeLessThanOrEqualTo(120);

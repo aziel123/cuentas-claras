@@ -1,0 +1,22 @@
+{
+  "nombre": "SIAGIE_MATRICULA_PROVISIONAL",
+  "hoja": "Nomina provisional",
+  "columnas": [
+    { "encabezado": "N°", "campo": "ORDEN" },
+    { "encabezado": "Tipo de documento", "campo": "TIPO_DOCUMENTO" },
+    { "encabezado": "Número de documento", "campo": "NUMERO_DOCUMENTO" },
+    { "encabezado": "Código de estudiante", "campo": "CODIGO_ESTUDIANTE" },
+    { "encabezado": "Apellido paterno", "campo": "APELLIDO_PATERNO" },
+    { "encabezado": "Apellido materno", "campo": "APELLIDO_MATERNO" },
+    { "encabezado": "Nombres", "campo": "NOMBRES" },
+    { "encabezado": "Sexo", "campo": "SEXO", "valores": { "M": "Hombre", "F": "Mujer" } },
+    { "encabezado": "Fecha de nacimiento", "campo": "FECHA_NACIMIENTO" },
+    { "encabezado": "Nivel", "campo": "NIVEL" },
+    { "encabezado": "Grado", "campo": "GRADO" },
+    { "encabezado": "Sección", "campo": "SECCION" },
+    { "encabezado": "Código modular", "campo": "CODIGO_MODULAR" },
+    { "encabezado": "Anexo", "campo": "ANEXO" },
+    { "encabezado": "Situación", "campo": "SITUACION" },
+    { "encabezado": "Fecha de matrícula", "campo": "FECHA_MATRICULA" }
+  ]
+}

@@ -17,5 +17,17 @@ public record FichaAlumno(CabeceraAlumno cabecera, String tipoDocumento, String 
 		String apellidoPaterno, String apellidoMaterno, String nombres, LocalDate fechaNacimiento, int edad,
 		ApoderadoVista responsable, List<ApoderadoVista> otrosApoderados, List<HermanoVista> hermanos,
 		List<MatriculaVista> matriculas, LocalDate retiradoEn, String retiradoPor, String motivoRetiro,
-		List<SeccionOpcion> seccionesParaMatricular, List<String> solicitudesPendientes) {
+		List<SeccionOpcion> seccionesParaMatricular, List<String> solicitudesPendientes, String sexo,
+		String codigoEstudiante) {
+
+	/** Sin los datos del SIAGIE (sprint 9, tanda 3). */
+	public FichaAlumno(CabeceraAlumno cabecera, String tipoDocumento, String numeroDocumento, String apellidoPaterno,
+			String apellidoMaterno, String nombres, LocalDate fechaNacimiento, int edad, ApoderadoVista responsable,
+			List<ApoderadoVista> otrosApoderados, List<HermanoVista> hermanos, List<MatriculaVista> matriculas,
+			LocalDate retiradoEn, String retiradoPor, String motivoRetiro, List<SeccionOpcion> seccionesParaMatricular,
+			List<String> solicitudesPendientes) {
+		this(cabecera, tipoDocumento, numeroDocumento, apellidoPaterno, apellidoMaterno, nombres, fechaNacimiento, edad,
+				responsable, otrosApoderados, hermanos, matriculas, retiradoEn, retiradoPor, motivoRetiro,
+				seccionesParaMatricular, solicitudesPendientes, null, null);
+	}
 }

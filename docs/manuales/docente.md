@@ -11,6 +11,32 @@
 4. **Revisa tu celular y tu correo** en *Mi celular y correo*: ahí te llegan los avisos de tu cuenta. Si cambiaste de número, pide el cambio; lo aprueba otra persona.
 5. **Desde marzo** (fase académica): pasarás asistencia, registrarás notas por competencias y enviarás comunicados a tus secciones. Las notas oficiales se siguen registrando en el SIAGIE; la plataforma ayuda a exportarlas.
 
+## La asistencia de hoy, en un minuto (sprint 9)
+1. En **Académico → Asistencia de hoy** elige tu sección. Todos los alumnos aparecen en «Presente».
+2. Toca **Falta** o **Tarde** solo en quien corresponde (con la hora de llegada, si la sabes).
+3. Toca **Guardar asistencia** una sola vez: queda a tu nombre, con la hora del servidor y tu firma de sesión.
+4. ¿Te equivocaste? Hasta la hora del segundo aviso (16:00 por defecto) corriges cada marca con su motivo. Si el aviso de
+   las 10:30 ya salió, la familia recibe la corrección. Después de esa hora, o para otro día, toca **Pedir corrección**: la
+   aprueba otra persona de Dirección.
+5. ¿Un día sin internet? Anota en papel y pide **registrar ese día** (hasta 5 días hábiles atrás). Cuando Dirección lo
+   apruebe, aparece en «Días pasados aprobados para registrar».
+6. Una falta que la familia justificó en su portal no la cambias tú: si hay un error, pide la corrección. Si eres tutor(a),
+   ves el motivo y la nota de la familia; si no, solo que está justificada.
+7. El **Reporte del mes** lo ven el tutor(a) de la sección y Dirección.
+
+## Un comunicado a tu sección (sprint 9)
+1. En **Comunicados → Nuevo** elige tu sección (solo aparecen las tuyas, como tutor(a) o de curso), escribe el título y el
+   texto y, si quieres, adjunta un PDF (máximo 10 páginas).
+2. Toca **Revisar** y lee la vista previa: así lo verán las familias, con tu nombre y tu curso.
+3. Toca **Enviar**. Con PDF, queda **por aprobar** y lo aprueba Dirección o Promotoría en su bandeja.
+4. ¿Te equivocaste? Un comunicado enviado no se edita: pide a Dirección una **fe de erratas** (llega a las mismas familias)
+   o que lo retire con su motivo.
+5. Un comunicado no habla de pagos, deudas, mensualidades, pensiones, moras, montos («S/ 300» o «S/ trescientos»),
+   cuentas ni medios de pago, ni condiciona un examen: el sistema no lo deja salir. Para eso está Administración.
+6. Algunas palabras **pueden** referirse a cobranza: «cancelar» o «cancelen», «al día con», «abono» o «abonar», «saldo»,
+   «regularizar» o «regularicen» y «aporte». Con ellas el comunicado no se rechaza: queda **por aprobar** y lo revisa
+   Dirección o Promotoría, que ve resaltada la palabra. Si no es de cobranza («cancelar la reunión»), lo aprueban y sale.
+
 ## Lo que el sistema no te deja hacer, y por qué
 - **Ver pagos, deudas ni boletas de las familias:** no los necesitas para enseñar y la ley protege esos datos. Además, la deuda nunca puede afectar las notas ni los exámenes de un alumno.
 - **Ver alumnos de otras secciones:** solo verás tus secciones (acceso mínimo por rol).

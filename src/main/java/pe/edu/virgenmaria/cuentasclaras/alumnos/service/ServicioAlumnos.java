@@ -198,7 +198,8 @@ public class ServicioAlumnos {
 				Period.between(alumno.getFechaNacimiento(), hoy).getYears(), responsable, otros, otrosHermanos,
 				matriculasVista, alumno.getRetiradoEn(), alumno.getRetiradoPor(), alumno.getMotivoRetiro(),
 				paraMatricular, java.util.stream.Stream.concat(vistas.pendientes("alumno", List.of(alumno.getId())).stream(),
-						vistas.pendientes("matricula", suyas.stream().map(Matricula::getId).toList()).stream()).toList());
+						vistas.pendientes("matricula", suyas.stream().map(Matricula::getId).toList()).stream()).toList(),
+				alumno.getSexo(), enmascarar ? null : alumno.getCodigoEstudiante());
 	}
 
 	/** Listas del formulario de alumno nuevo (solo quien puede registrar). */
@@ -317,6 +318,28 @@ public class ServicioAlumnos {
 	 * Pide el retiro del alumno (auditoría A6): lo aprueba otra persona de Promotoría o Dirección. La fecha no es
 	 * futura ni anterior a su matrícula.
 	 */
+	/**
+	 * Sprint 9, tanda 3 (sección 3.11): el sexo y el código de estudiante del SIAGIE, con el antes y el después en la
+	 * bitácora ({@code DATOS_SIAGIE_CAMBIADOS}).
+	 */
+	@PreAuthorize("hasAnyRole('DIRECTOR','ADMINISTRACION')")
+	@Transactional
+	public void cambiarDatosSiagie(Long alumnoId, pe.edu.virgenmaria.cuentasclaras.alumnos.dto.DatosSiagieRequest pedido) {
+		Alumno alumno = alumnos.findById(alumnoId)
+				.orElseThrow(() -> new RecursoNoEncontradoException("Alumno no encontrado"));
+		String antes = (alumno.getSexo() == null ? "—" : alumno.getSexo()) + " / "
+				+ (alumno.getCodigoEstudiante() == null ? "—" : alumno.getCodigoEstudiante());
+		List<String> cambios = alumno.cambiarDatosSiagie(pedido.sexo(), pedido.codigoEstudiante());
+		if (cambios.isEmpty()) {
+			return;
+		}
+		alumnos.saveAndFlush(alumno);
+		auditoria.registrar(AccionAuditoria.DATOS_SIAGIE_CAMBIADOS, "alumno", alumno.getId().toString(), antes,
+				(alumno.getSexo() == null ? "—" : alumno.getSexo()) + " / "
+						+ (alumno.getCodigoEstudiante() == null ? "—" : alumno.getCodigoEstudiante()),
+				"Datos para el SIAGIE del alumno " + alumno.getId() + ": " + String.join("; ", cambios) + ".");
+	}
+
 	@PreAuthorize("hasAnyRole('DIRECTOR','ADMINISTRACION')")
 	@Transactional
 	public void retirar(Long alumnoId, RetirarAlumnoRequest solicitud) {

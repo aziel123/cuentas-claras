@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 1 (sección 3.3): la lista de una sección. Solo el número de orden y el nombre de cada alumno:
+     nunca documento, fecha de nacimiento, apoderados, contactos, deudas ni pagos (DocenteSinDatosTest y
+     DocenteSinCobranzaTest). Queda en «Quién vio datos personales». */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Lista de la sección', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/academico}">Académico</a></p>
+			<h1 th:text="|${lista.seccion} · ${lista.anio}|">3.° Primaria A · 2027</h1>
+			<p class="fila">
+				<span class="badge badge-info" th:text="${lista.miRol}">Tutor(a)</span>
+				<span class="secundario" th:text="${lista.tutor != null} ? |Tutor(a): ${lista.tutor}| : 'Sin tutor(a) asignado'">Tutor(a)</span>
+			</p>
+		</div>
+	</div>
+
+	<section class="tarjeta" aria-labelledby="titulo-alumnos">
+		<div class="fila entre">
+			<h2 id="titulo-alumnos">Alumnos</h2>
+			<span class="secundario num" th:text="|${lista.cantidad()} ${lista.cantidad() == 1 ? 'alumno' : 'alumnos'}|">28 alumnos</span>
+		</div>
+		<th:block th:if="${lista.cantidad() == 0}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('La sección todavía no tiene alumnos matriculados', 'Administración los matricula.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${lista.cantidad() == 0}">
+			<caption class="solo-lectores">Alumnos de la sección en orden alfabético</caption>
+			<thead>
+				<tr>
+					<th scope="col">N.°</th>
+					<th scope="col">Apellidos</th>
+					<th scope="col">Nombres</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr th:each="a : ${lista.alumnos}">
+					<td data-etiqueta="N.°" class="num" th:text="${a.numero}">1</td>
+					<td data-etiqueta="Apellidos" th:text="${a.apellidos}">Quispe Huamán</td>
+					<td data-etiqueta="Nombres" th:text="${a.nombres}">Mateo</td>
+				</tr>
+			</tbody>
+		</table>
+		<p class="ayuda">Esta lista solo muestra los nombres. Los datos de contacto de las familias los tiene Dirección.</p>
+	</section>
+</main>
+</body>
+</html>

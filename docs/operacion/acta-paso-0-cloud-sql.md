@@ -22,7 +22,7 @@ Copia aquí el «Resumen del job mysql» (cada paso con OK o FALLÓ).
 | `migrar` con `cc_migrador` (V1 a V30) | |
 | Fase 1: Hibernate valida el esquema | |
 | `02-permisos-tablas.sql` como root (REVOKE ALL, roles, GRANT por columna, funciones `DEFINER`) | |
-| `03-triggers.sql` como `cc_migrador` (86 triggers y 7 funciones) **sin** `SET PERSIST` (la marca es de la instancia) | |
+| `03-triggers.sql` como `cc_migrador` (99 triggers y 11 funciones) **sin** `SET PERSIST` (la marca es de la instancia) | |
 | Fase 2 con los permisos mínimos y las pruebas de los sprints 6, 7 y 8 | |
 | `comprobar` (1142, 1143 y 1644) | |
 | Arranque de prod con su verificador (huellas, privilegios, TLS, plataforma) | |
@@ -50,7 +50,7 @@ Copia aquí el «Resumen del job mysql» (cada paso con OK o FALLÓ).
 |---|---|
 | `gcloud sql instances patch --ssl-mode ENCRYPTED_ONLY` | |
 | Sin TLS no conecta | |
-| Prod arranca con `sslMode=VERIFY_CA`: «Huellas de los 86 triggers y las 10 funciones verificadas» | |
+| Prod arranca con `sslMode=VERIFY_CA`: «Huellas de los 99 triggers y las 14 funciones verificadas» | |
 | «Conexiones a MySQL cifradas (TLS) verificadas» y «Privilegios verificados» | |
 
 ## 5. Lo que este paso no prueba

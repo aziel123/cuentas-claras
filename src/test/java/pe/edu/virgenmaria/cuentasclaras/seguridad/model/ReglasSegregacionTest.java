@@ -43,7 +43,24 @@ class ReglasSegregacionTest {
 				Stream.of(
 						EnumSet.of(Rol.PROMOTOR, Rol.DIRECTOR),
 						EnumSet.of(Rol.DIRECTOR, Rol.DOCENTE),
-						EnumSet.of(Rol.CAJA, Rol.DOCENTE)));
+						EnumSet.of(Rol.PROMOTOR, Rol.DOCENTE)));
+	}
+
+	/** Sprint 9, tanda 1 (decisión 141, E46): el docente no ve deudas: DOCENTE no se combina con CAJA ni ADMINISTRACION. */
+	@ParameterizedTest
+	@EnumSource(value = Rol.class, names = { "CAJA", "ADMINISTRACION" })
+	void docenteNoSeCombinaConCajaNiAdministracion(Rol otro) {
+		assertThatThrownBy(() -> ReglasSegregacion.validar(EnumSet.of(Rol.DOCENTE, otro)))
+				.isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("el docente no ve deudas");
+	}
+
+	@Test
+	void docenteConDireccionVeDeudasYLaPantallaLoAvisa() {
+		org.assertj.core.api.Assertions.assertThat(ReglasSegregacion.docenteQueVeDeudas(EnumSet.of(Rol.DIRECTOR,
+				Rol.DOCENTE))).isTrue();
+		org.assertj.core.api.Assertions.assertThat(ReglasSegregacion.docenteQueVeDeudas(EnumSet.of(Rol.DOCENTE))).isFalse();
+		org.assertj.core.api.Assertions.assertThat(ReglasSegregacion.docenteQueVeDeudas(EnumSet.of(Rol.DIRECTOR))).isFalse();
 	}
 
 	@Test

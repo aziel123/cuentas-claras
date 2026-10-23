@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 2 (sección 3.4): el reporte mensual por sección (tutor y Dirección). Queda en «Quién vio datos
+     personales». Sin exportación en este sprint (se imprime desde el navegador). */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Reporte de asistencia', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="reporte-asistencia">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/academico}">Académico</a></p>
+			<h1>Reporte de asistencia</h1>
+		</div>
+	</div>
+
+	<form class="filtros" method="get" th:action="@{/academico/asistencia/reporte}">
+		<div class="campo">
+			<label for="seccion">Sección</label>
+			<select class="input" id="seccion" name="seccion" required>
+				<option value="">Elige la sección</option>
+				<option th:each="s : ${secciones}" th:value="${s.id}" th:text="${s.etiqueta}" th:selected="${seccion == s.id}">3.° A</option>
+			</select>
+		</div>
+		<div class="campo">
+			<label for="mes">Mes</label>
+			<input class="input" id="mes" type="month" name="mes" th:value="${mes}">
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Ver el reporte', 'secundario')}"></button>
+	</form>
+
+	<th:block th:if="${#lists.isEmpty(secciones)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('No tienes secciones para el reporte', 'El reporte lo ven el tutor(a) de la sección y Dirección.')}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-reporte" th:if="${reporte != null}">
+		<div class="fila entre">
+			<h2 id="titulo-reporte" th:text="|${reporte.seccion} · ${reporte.mes}|">3.° A · octubre de 2026</h2>
+			<span class="secundario num" th:text="|${reporte.diasRegistrados} días registrados|">18 días</span>
+		</div>
+		<th:block th:if="${#lists.isEmpty(reporte.filas)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay asistencia registrada ese mes', 'Aparece apenas se registra un día.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(reporte.filas)}">
+			<caption class="solo-lectores">Asistencia del mes por alumno</caption>
+			<thead>
+				<tr><th scope="col">N.°</th><th scope="col">Alumno</th><th scope="col">Presentes</th><th scope="col">Tardanzas</th>
+					<th scope="col">Faltas</th><th scope="col">Justificadas</th><th scope="col">Inasistencia injustificada</th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="f : ${reporte.filas}">
+					<td data-etiqueta="N.°" class="num" th:text="${f.numero}">1</td>
+					<td data-etiqueta="Alumno" th:text="${f.alumno}">Quispe Huamán, Mateo</td>
+					<td data-etiqueta="Presentes" class="num" th:text="${f.presentes}">17</td>
+					<td data-etiqueta="Tardanzas" class="num" th:text="${f.tardes}">1</td>
+					<td data-etiqueta="Faltas" class="num" th:text="${f.faltas}">0</td>
+					<td data-etiqueta="Justificadas" class="num" th:text="${f.justificadas}">0</td>
+					<td data-etiqueta="Inasistencia injustificada" class="num" th:text="${f.inasistenciaInjustificada}">0.0 %</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

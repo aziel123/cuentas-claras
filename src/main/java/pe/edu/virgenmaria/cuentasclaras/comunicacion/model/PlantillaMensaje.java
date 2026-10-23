@@ -108,7 +108,33 @@ public enum PlantillaMensaje {
 					+ "que lo apruebe una persona de Promotoría del colegio. Si no lo reconoces, avisa hoy a la Promotoría."),
 	CORREO_CONTROL_CAMBIADO("cc_correo_control_cambiado_v2", "Cambió el correo de control", 3, false,
 			"{{1}}: el correo externo de control del colegio ahora es {{2}} (lo cambió {{3}}). Desde hoy recibe la huella "
-					+ "de la bitácora y el resumen diario. Si no lo reconoces, avisa hoy a la Promotoría y al proveedor.");
+					+ "de la bitácora y el resumen diario. Si no lo reconoces, avisa hoy a la Promotoría y al proveedor."),
+	// Sprint 9, tanda 2 (sección 11): asistencia. Solo el primer nombre del alumno (minimización), estados fijos y horas;
+	// nunca montos ni palabras de cobranza (lo exigen ContenidoSinCobranza y trg_mensaje_nace). El botón lleva a
+	// /familia/asistencia, nunca al estado de cuenta.
+	ASISTENCIA("cc_asistencia_v2", "Asistencia de hoy", 3, true,
+			"{{1}}: asistencia del {{2}}. {{3}}. Si hay un error o desea justificar una falta, ingrese al portal."),
+	ASISTENCIA_CORREGIDA("cc_asistencia_corregida_v2", "Se corrigió la asistencia", 6, true,
+			"{{1}}: se corrigió la asistencia de {{2}} del {{3}}: ahora figura {{4}} (antes: {{5}}). Lo registró {{6}}. "
+					+ "Si no lo reconoce, avísenos desde el portal."),
+	// Sprint 9, tanda 3 (sección 11): comunicados. El resumen no lleva títulos (texto libre de una persona: Meta lo
+	// clasificaría como marketing); el urgente, el título que escribió Dirección o Promotoría (pasó por el filtro). Sin
+	// montos ni palabras de cobranza; el pie fijo («nunca le pedirá pagos») va en el portal y en el correo, no aquí. El
+	// botón lleva a /familia/comunicados.
+	COMUNICADOS("cc_comunicados_v2", "Comunicados del colegio", 3, true,
+			"{{1}}: tiene {{2}} en el portal, de {{3}}. Léalos y confirme su lectura allí."),
+	COMUNICADO_URGENTE("cc_comunicado_urgente_v2", "Comunicado urgente", 3, true,
+			"{{1}}: {{2}} le envió un comunicado urgente: «{{3}}». Léalo en el portal.");
+
+	/** Sprint 9, tanda 2: las plantillas de asistencia (botón a {@code /familia/asistencia}). */
+	public boolean deAsistencia() {
+		return this == ASISTENCIA || this == ASISTENCIA_CORREGIDA;
+	}
+
+	/** Sprint 9, tanda 3: las plantillas de comunicados (botón a {@code /familia/comunicados}). */
+	public boolean deComunicados() {
+		return this == COMUNICADOS || this == COMUNICADO_URGENTE;
+	}
 
 	private static final Pattern MARCADOR = Pattern.compile("\\{\\{(\\d+)}}");
 

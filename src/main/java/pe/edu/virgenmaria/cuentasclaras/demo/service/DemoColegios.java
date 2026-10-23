@@ -85,6 +85,18 @@ public class DemoColegios {
 
 	private final LimiteDemos limite;
 
+	private final pe.edu.virgenmaria.cuentasclaras.academico.inicial.AsignacionesDemo asignaciones;
+
+	private org.springframework.beans.factory.ObjectProvider<pe.edu.virgenmaria.cuentasclaras.comunicados.inicial.ComunicadosDemo>
+			comunicados;
+
+	/** Sprint 9, tanda 3: los comunicados de la demo (opcionales: la demo sale igual sin ellos). */
+	@org.springframework.beans.factory.annotation.Autowired
+	void setComunicados(org.springframework.beans.factory.ObjectProvider<
+			pe.edu.virgenmaria.cuentasclaras.comunicados.inicial.ComunicadosDemo> comunicados) {
+		this.comunicados = comunicados;
+	}
+
 	private final TransactionTemplate transaccion;
 
 	private final Clock reloj;
@@ -93,7 +105,9 @@ public class DemoColegios {
 
 	public DemoColegios(ColegioRepository colegios, LogosColegio logos, AuditoriaService auditoria, CuentasDemo cuentas,
 			FamiliasDemo familias, AccesoApoderadoDemo apoderado, PensionesDemo pensiones, CajaDemo caja, LimiteDemos limite,
+			pe.edu.virgenmaria.cuentasclaras.academico.inicial.AsignacionesDemo asignaciones,
 			PlatformTransactionManager transacciones, Clock reloj) {
+		this.asignaciones = asignaciones;
 		this.colegios = colegios;
 		this.logos = logos;
 		this.auditoria = auditoria;
@@ -157,6 +171,15 @@ public class DemoColegios {
 			deudores.add(new Deudor(f.alumnos().getFirst().dni(), f.alumnos().getFirst().grado().nivel()));
 		}
 		pensiones.cargar(colegioId, prefijo + ".administracion", prefijo + ".direccion", creadas.anio(), hoy, deudores);
+		// Sprint 9, tanda 1: el docente es tutor de 3.° Primaria A y docente de Matemática de 4.° Primaria A (aprobado por
+		// Dirección con su firma): ve sus dos secciones y los nombres de sus alumnos, nunca deudas.
+		asignaciones.cargar(colegioId, prefijo + ".administracion", prefijo + ".direccion", prefijo + ".docente",
+				creadas.anio());
+		// Sprint 9, tanda 3 (sección 3.14): tres comunicados (uno con el PDF de ejemplo y su fe de erratas, y uno de la
+		// tutora) y los códigos modulares ficticios.
+		if (comunicados != null) {
+			comunicados.ifAvailable(c -> c.cargar(colegioId, prefijo + ".promotoria", prefijo + ".direccion", prefijo + ".docente"));
+		}
 		// QA-S8-9: el primer cobro es de la familia de la cuenta «apoderado»: quien entra como padre ve su pago, su boleta
 		// «DEMO · SIN VALOR» y el aviso que le llegó.
 		caja.cargar(colegioId, prefijo, List.of(cobro(lista.getFirst()), cobro(lista.get(2)), cobro(lista.get(3))),

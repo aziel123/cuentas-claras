@@ -32,3 +32,17 @@ firma_operacion
 sesion_usuario
 acceso_dato_personal
 respaldo
+# Sprint 9, tanda 1 (V32): las asignaciones docentes no se borran (sin DELETE): se terminan o se rechazan.
+asignacion_docente
+# Sprint 9, tanda 2 (V33): la asistencia y el consentimiento son de solo inserción (H13): un borrado del DBA aparece como
+# «faltan filas» del colegio de esa fila.
+registro_asistencia
+marca_asistencia
+consentimiento_aviso
+# Sprint 9, tanda 3 (V34): los comunicados, sus adjuntos, destinatarios y confirmaciones, y las exportaciones de la
+# nómina del SIAGIE no se borran (sin DELETE): un borrado del DBA aparece como «faltan filas» del colegio.
+comunicado
+comunicado_adjunto
+comunicado_destinatario
+confirmacion_lectura
+exportacion_nomina

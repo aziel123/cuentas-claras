@@ -116,13 +116,29 @@ class ServicioUsuariosTest {
 	/** Sprint 7, tanda 2: un rol del personal (sin Promotoría ni Dirección) se aplica directo, sin solicitud. */
 	@Test
 	void losRolesDelPersonalSeAplicanSinSolicitud() {
-		assertThat(servicio.cambiarRoles(caja.getId(), new CambiarRolesRequest(EnumSet.of(Rol.CAJA, Rol.DOCENTE),
-				"También dicta talleres por las tardes"))).isFalse();
+		assertThat(servicio.cambiarRoles(caja.getId(), new CambiarRolesRequest(EnumSet.of(Rol.ADMINISTRACION),
+				"Pasa a llevar la administración del colegio"))).isFalse();
 
 		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ? ORDER BY rol", String.class,
-				caja.getId())).containsExactly("CAJA", "DOCENTE");
+				caja.getId())).containsExactly("ADMINISTRACION");
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM solicitud_cambio WHERE tipo = 'CAMBIO_ROLES'", Long.class))
 				.isZero();
+	}
+
+	/**
+	 * Sprint 9, tanda 1 (decisión 141, E46): el docente no ve deudas. DOCENTE no se da junto con CAJA ni con ADMINISTRACION
+	 * (ni al cambiar los roles ni al crear la cuenta); en MySQL lo exige también trg_usuario_rol_alta.
+	 */
+	@Test
+	void docenteNoSeCombinaConCaja() {
+		assertThatThrownBy(() -> servicio.cambiarRoles(caja.getId(), new CambiarRolesRequest(EnumSet.of(Rol.CAJA,
+				Rol.DOCENTE), "También dicta talleres por las tardes"))).isInstanceOf(
+						pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException.class)
+				.hasMessageContaining("el docente no ve deudas");
+		assertThatThrownBy(() -> servicio.crear(solicitud("docente.y.admin", Rol.DOCENTE, Rol.ADMINISTRACION)))
+				.isInstanceOf(pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException.class);
+		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ?", String.class, caja.getId()))
+				.containsExactly("CAJA");
 	}
 
 	@Test

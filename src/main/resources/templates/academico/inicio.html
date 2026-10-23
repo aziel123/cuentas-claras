@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<!--/* Sprint 9, tanda 1: el inicio académico. El docente ve sus secciones; Dirección, además, las del año con su tutor.
+     Nada de cobranza: ni montos, ni deudas, ni pagos (DocenteSinCobranzaTest). */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Académico', ~{::main})}">
+<body>
+<main id="contenido" class="contenido">
+	<div class="cabecera">
+		<div>
+			<h1>Académico</h1>
+			<p class="secundario" th:unless="${inicio.direccion}">Tus secciones y la lista de tus alumnos.</p>
+			<p class="secundario" th:if="${inicio.direccion}"
+				th:text="${inicio.anio != null} ? |Secciones del año ${inicio.anio} y sus tutores.| : 'Todavía no hay un año escolar abierto.'">Secciones del año</p>
+		</div>
+		<a class="btn btn-secundario" th:if="${inicio.direccion}" th:href="@{/academico/asignaciones}">Docentes y secciones</a>
+		<a class="btn btn-secundario" th:if="${inicio.direccion}" th:href="@{/academico/asistencia/cambios}">Cambios de la asistencia</a>
+		<a class="btn btn-secundario" th:if="${inicio.direccion}" th:href="@{/academico/asistencia/reporte}">Reporte de asistencia</a>
+		<a class="btn btn-secundario" th:if="${inicio.direccion}" th:href="@{/academico/configuracion}">Horas de la asistencia</a>
+		<a class="btn btn-primario" th:unless="${inicio.direccion and #lists.isEmpty(inicio.mias)}" th:href="@{/academico/asistencia}">Asistencia de hoy</a>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-mias" th:if="${!inicio.direccion or !#lists.isEmpty(inicio.mias)}">
+		<h2 id="titulo-mias">Mis secciones</h2>
+		<th:block th:if="${#lists.isEmpty(inicio.mias)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no tienes secciones asignadas',
+				'Dirección o Administración te asignan a tus secciones y otra persona de Dirección lo aprueba. Cuando esté aprobado, aparecerán aquí.')}"></div>
+		</th:block>
+		<ul class="lista-simple" th:unless="${#lists.isEmpty(inicio.mias)}">
+			<li th:each="s : ${inicio.mias}" th:data-seccion="${s.seccion}">
+				<a th:href="@{/academico/secciones/{id}(id=${s.seccionId})}" th:text="|${s.seccion} · ${s.anio}|">3.° Primaria A · 2027</a>
+				<span class="badge" th:classappend="${s.tutor} ? 'badge-exito' : 'badge-info'" th:text="${s.funcion}">Tutor(a)</span>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-colegio" th:if="${inicio.direccion and inicio.anio != null}">
+		<div class="fila entre">
+			<h2 id="titulo-colegio">Secciones del año</h2>
+			<span class="secundario num" th:if="${inicio.sinTutor() > 0}" th:text="|${inicio.sinTutor()} sin tutor(a)|">2 sin tutor</span>
+		</div>
+		<th:block th:if="${#lists.isEmpty(inicio.colegio)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Este año todavía no tiene secciones', 'Agrégalas en Colegio.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(inicio.colegio)}">
+			<caption class="solo-lectores">Secciones del año con su tutor</caption>
+			<thead>
+				<tr>
+					<th scope="col">Sección</th>
+					<th scope="col">Tutor(a)</th>
+					<th scope="col">Docentes vigentes</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr th:each="s : ${inicio.colegio}">
+					<td data-etiqueta="Sección">
+						<a th:href="@{/academico/secciones/{id}(id=${s.seccionId})}" th:text="${s.seccion}">3.° Primaria A</a>
+						<span th:unless="${s.activa}" class="badge badge-neutro">Desactivada</span>
+					</td>
+					<td data-etiqueta="Tutor(a)" th:text="${s.tutor} ?: 'Sin tutor(a)'">Ana Torres</td>
+					<td data-etiqueta="Docentes vigentes" class="num" th:text="${s.docentes}">3</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>
