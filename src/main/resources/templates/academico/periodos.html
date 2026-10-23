@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 1 (sección 3.3): los periodos de evaluación del año. Solo Dirección, con su firma en cada acción.
+     Abren solos en su fecha (sistema.academico); los cierra Dirección desde fin − días de cierre; cerrado no se reabre. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Periodos de evaluación', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="periodos">
+	<div class="cabecera">
+		<div>
+			<h1>Periodos de evaluación</h1>
+			<p class="secundario">Cada periodo abre solo en su fecha de inicio y lo cierras tú, con tu firma, desde unos días
+				antes de su fin. Un periodo cerrado no se reabre: un cambio de nota después va por solicitud.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<form class="filtros" method="get" th:action="@{/academico/periodos}" th:unless="${#lists.isEmpty(vista.anios)}">
+		<div class="campo">
+			<label for="anio">Año escolar</label>
+			<select class="input" id="anio" name="anio">
+				<option th:each="a : ${vista.anios}" th:value="${a.id}" th:text="${a.etiqueta}" th:selected="${vista.anioId == a.id}">2027</option>
+			</select>
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Ver el año', 'secundario')}"></button>
+	</form>
+
+	<th:block th:if="${vista.anioId == null}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay años escolares', 'Créalos en Colegio con sus secciones.')}"></div>
+	</th:block>
+
+	<th:block th:if="${vista.anioId != null}">
+		<p class="secundario" th:text="|Clases de ${vista.anio}: del ${#temporals.format(vista.inicioClases, 'dd/MM/yyyy')} al ${#temporals.format(vista.finClases, 'dd/MM/yyyy')}.|">Clases</p>
+		<th:block th:if="${!vista.configurada}">
+			<div class="alerta alerta-info" role="status">
+				<p>Primero guarda la evaluación del año (cómo se divide el año): los periodos salen de ahí.
+					<a th:href="@{/academico/evaluacion/configuracion(anio=${vista.anioId})}">Ir a Evaluación del año</a></p>
+			</div>
+		</th:block>
+
+		<section class="tarjeta" aria-labelledby="titulo-periodos" th:if="${vista.configurada}">
+			<h2 id="titulo-periodos" th:text="|${vista.numeroPeriodos} periodos (${vista.tipoPeriodo}); cierre desde ${vista.diasCierreAnticipado} días antes del fin|">Periodos</h2>
+			<p class="secundario" th:if="${#lists.isEmpty(vista.periodos)}">Todavía no hay periodos programados.</p>
+			<table class="tabla" th:unless="${#lists.isEmpty(vista.periodos)}">
+				<thead><tr><th>Periodo</th><th>Fechas</th><th>Estado</th><th>Quién</th><th>Acciones</th></tr></thead>
+				<tbody>
+					<tr th:each="p : ${vista.periodos}" th:data-periodo="${p.id}">
+						<td th:text="${p.nombre}">I bimestre</td>
+						<td th:text="|${#temporals.format(p.inicio, 'dd/MM/yyyy')} al ${#temporals.format(p.fin, 'dd/MM/yyyy')}|">fechas</td>
+						<td><span class="badge" th:classappend="'badge-' + ${p.estadoVariante}" th:text="${p.estadoEtiqueta}">Programado</span></td>
+						<td>
+							<span class="secundario" th:if="${p.abiertoPor != null}" th:text="|Abrió ${p.abiertoPor}|">Abrió</span>
+							<span class="secundario" th:if="${p.cerradoPor != null}" th:text="|; cerró ${p.cerradoPor}|">Cerró</span>
+							<span class="secundario" th:if="${p.estado == 'ABIERTO'}" th:text="|Se puede cerrar desde el ${#temporals.format(p.cierreDesde, 'dd/MM/yyyy')}|">Cierre desde</span>
+						</td>
+						<td>
+							<th:block th:if="${p.puedeAbrir}">
+								<th:block th:replace="~{fragments/componentes :: modalConfirmacion(${'modal-abrir-' + p.id},
+									|¿Abrir el ${p.nombre} antes de su fecha?|,
+									'Desde ahora los docentes registran sus notas. Se firma con tu sesión y queda en la bitácora.',
+									@{/academico/periodos/{id}/abrir(id=${p.id}, anio=${vista.anioId})}, 'Abrir ahora', false)}"></th:block>
+							</th:block>
+							<th:block th:if="${p.puedeCerrar}">
+								<th:block th:replace="~{fragments/componentes :: modalConfirmacion(${'modal-cerrar-' + p.id},
+									|¿Cerrar el ${p.nombre}?|,
+									'No se reabre. Una competencia no trabajada en el periodo queda sin nota; un cambio después va por solicitud. Se firma con tu sesión.',
+									@{/academico/periodos/{id}/cerrar(id=${p.id}, anio=${vista.anioId})}, 'Cerrar periodo', false)}"></th:block>
+							</th:block>
+							<form class="formulario-en-linea" method="post" th:if="${p.puedeMoverFin}"
+								th:action="@{/academico/periodos/{id}/fechas(id=${p.id}, anio=${vista.anioId})}">
+								<label class="solo-lectores" th:for="${'inicio-' + p.id}">Inicio</label>
+								<input class="input" type="date" name="inicio" th:id="${'inicio-' + p.id}" th:value="${p.inicio}"
+									th:readonly="${!p.puedeMoverInicio}" required>
+								<label class="solo-lectores" th:for="${'fin-' + p.id}">Fin</label>
+								<input class="input" type="date" name="fin" th:id="${'fin-' + p.id}" th:value="${p.fin}"
+									th:min="${p.estado == 'ABIERTO'} ? ${p.fin}" required>
+								<button type="submit" class="btn btn-secundario btn-chico">Cambiar fechas con mi firma</button>
+							</form>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<p class="ayuda">Con el periodo abierto, su fin solo se extiende: adelantarlo adelantaría también el cierre.</p>
+		</section>
+
+		<section class="tarjeta formulario-angosto" aria-labelledby="titulo-programar"
+			th:if="${vista.configurada and vista.siguienteNumero != null}">
+			<h2 id="titulo-programar" th:text="|Programar el ${vista.siguienteNombre}|">Programar el I bimestre</h2>
+			<form class="formulario" method="post" th:action="@{/academico/periodos}" th:object="${nuevo}">
+				<input type="hidden" th:field="*{anioId}">
+				<div class="formulario-doble">
+					<div th:replace="~{fragments/componentes :: campoDe('inicio', 'Inicio', 'Dentro de las clases del año.', 'date', true)}"></div>
+					<div th:replace="~{fragments/componentes :: campoDe('fin', 'Fin', 'Después del fin del periodo anterior.', 'date', true)}"></div>
+				</div>
+				<div class="acciones">
+					<button th:replace="~{fragments/componentes :: boton('Programar con mi firma', 'primario')}"></button>
+				</div>
+			</form>
+		</section>
+	</th:block>
+</main>
+</body>
+</html>

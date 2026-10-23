@@ -9,8 +9,17 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
--- Versión de los dos niveles del filtro (correcciones del sprint 9, decisión del usuario): 99 triggers y 11 funciones
--- (14 con huella; 113 huellas). Nueva: cc_texto_plano (la normalización del filtro de la aplicación). Cambia
+-- Versión de la migración V35 (sprint 10, tanda 1): 104 triggers y 12 funciones (15 con huella; 119 huellas). Nuevos:
+-- trg_configuracion_evaluacion_nace y _cambio (la evaluación del año la guarda Dirección con su firma, la versión de a
+-- una; la versión del currículo, el tipo de periodo y los días de cierre anticipado quedan fijos desde que abre un
+-- periodo, M7), trg_periodo_evaluacion_nace y _cambio (un periodo nace PROGRAMADO por Dirección con su firma, dentro del
+-- año, en orden y sin solaparse; abre sistema.academico en su fecha o Dirección con su firma; lo cierra solo Dirección
+-- con su firma desde fin - dias_cierre_anticipado según la hora de la base y con el anterior CERRADO; en ABIERTO el fin
+-- solo se extiende, M7; CERRADO no cambia) y trg_asignacion_area_nace (las áreas de una asignación van en su propuesta,
+-- por quien la propuso y antes de enlazar su solicitud, A2), y la función cc_rol_activo. Versión nueva de
+-- trg_asignacion_docente_estado (A2: al pasar a VIGENTE, las áreas son las que se aprobaron).
+-- Versión anterior (correcciones del sprint 9): 99 triggers y 11 funciones (14 con huella; 113 huellas). Los dos niveles
+-- del filtro (decisión del usuario). Nueva: cc_texto_plano (la normalización del filtro de la aplicación). Cambia
 -- trg_comunicado_nace: la cobranza clara se rechaza sobre el texto plano; las palabras ambiguas obligan a POR_APROBAR.
 -- Versión anterior (correcciones del sprint 9): 99 triggers y 10 funciones (13 con huella; 112 huellas). Nuevo:
 -- trg_comunicado_destinatario_cambio (la apertura se marca una vez con la hora de la base; el aviso y el recordatorio,
@@ -211,6 +220,15 @@ CREATE FUNCTION cc_docente_de_seccion(p_nombre VARCHAR(60), p_seccion BIGINT, p_
         WHERE a.seccion_id = p_seccion AND a.estado = 'VIGENTE' AND u.nombre_usuario = p_nombre AND u.activo
           AND u.apoderado_id IS NULL AND r.rol = 'DOCENTE' AND (p_con_auxiliar OR a.tipo <> 'AUXILIAR')
           AND (a.hasta IS NULL OR a.hasta >= cc_hoy_lima()))$$
+
+-- Sprint 10, tanda 1 (sección 6.3): ¿esta persona tiene una cuenta activa del personal con este rol en este colegio?
+-- Reemplaza el EXISTS repetido en los triggers nuevos del sprint 10 (los anteriores no se tocan).
+DROP FUNCTION IF EXISTS cc_rol_activo$$
+CREATE FUNCTION cc_rol_activo(p_colegio BIGINT, p_nombre VARCHAR(60), p_rol VARCHAR(30)) RETURNS BOOLEAN
+    NOT DETERMINISTIC READS SQL DATA
+    RETURN EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
+        WHERE u.colegio_id = p_colegio AND u.nombre_usuario = p_nombre AND u.activo AND u.apoderado_id IS NULL
+          AND r.rol = p_rol)$$
 
 -- Un plan nace en BORRADOR (nadie inserta un plan ya aprobado).
 DROP TRIGGER IF EXISTS trg_plan_pension_nace_borrador$$
@@ -2716,6 +2734,8 @@ END$$
 -- Dar acceso: SU solicitud aprobada y firmada por otra persona de Dirección o Promotoría que NO es el docente. Quitarlo:
 -- Dirección o Promotoría con su firma (asignacion_docente:{id}:TERMINADA), o sistema.academico con cc_sistema. Rechazar:
 -- con su solicitud rechazada. Nada más cambia de estado; una asignación resuelta no cambia de solicitud.
+-- Sprint 10, tanda 1 (A2): al pasar a VIGENTE, las áreas de la asignación (asignacion_area) son EXACTAMENTE las que pidió la
+-- solicitud aprobada ("areas" de su datos, ids ordenados y separados por coma; sin áreas, las dos vacías).
 DROP TRIGGER IF EXISTS trg_asignacion_docente_estado$$
 CREATE TRIGGER trg_asignacion_docente_estado BEFORE UPDATE ON asignacion_docente FOR EACH ROW
 BEGIN
@@ -2731,6 +2751,12 @@ BEGIN
                 AND EXISTS (SELECT 1 FROM usuario d JOIN usuario_rol r ON r.usuario_id = d.id WHERE d.id = NEW.usuario_id
                     AND d.colegio_id = NEW.colegio_id AND d.activo AND r.rol = 'DOCENTE')) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la asignacion la aprueba otra persona de Direccion con su firma, nunca el docente';
+        END IF;
+        IF NOT (COALESCE(JSON_UNQUOTE(JSON_EXTRACT((SELECT s.datos FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id
+                    AND s.colegio_id = NEW.colegio_id), '$.areas')), '')
+                <=> COALESCE((SELECT GROUP_CONCAT(x.area_id ORDER BY x.area_id SEPARATOR ',') FROM asignacion_area x
+                    WHERE x.asignacion_id = NEW.id AND x.colegio_id = NEW.colegio_id), '')) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las areas no son las que se aprobaron';
         END IF;
     ELSEIF OLD.estado = 'PROPUESTA' AND NEW.estado = 'RECHAZADA' THEN
         IF NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id
@@ -3172,6 +3198,176 @@ BEGIN
                 WHERE u.colegio_id = NEW.colegio_id AND u.nombre_usuario = NEW.creado_por AND u.activo
                   AND u.apoderado_id IS NULL AND r.rol = 'DIRECTOR') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la nomina del SIAGIE la saca Direccion con su sesion';
+    END IF;
+END$$
+DELIMITER ;
+
+-- ===================== Sprint 10 · tanda 1 (V35): currículo, periodos y escalas =====================
+-- (La función cc_rol_activo está al principio de este archivo; la versión nueva de trg_asignacion_docente_estado quedó en
+-- su lugar, marcada con «Sprint 10, tanda 1».) El catálogo (curriculo_version, area_curricular, competencia y escala_logro)
+-- no tiene triggers: cc_negocio no tiene GRANT de escritura (1142) y su huella la verifica la aplicación. Regla del sprint
+-- 10: comparar siempre con <=> (una variable de SELECT ... INTO que no encontró la fila queda en NULL y un <> no dispara).
+DELIMITER $$
+
+-- La evaluación del año la guarda una persona activa con DIRECTOR, con su firma (configuracion_evaluacion:{anio}:GUARDADA:
+-- {version}), nace en la versión 0 y en un año que no está cerrado. MySQL no tiene un trigger para INSERT y UPDATE a la
+-- vez: por eso son dos.
+DROP TRIGGER IF EXISTS trg_configuracion_evaluacion_nace$$
+CREATE TRIGGER trg_configuracion_evaluacion_nace BEFORE INSERT ON configuracion_evaluacion FOR EACH ROW
+BEGIN
+    IF NOT (NEW.creado_por <=> NEW.actualizado_por) OR NOT (NEW.version <=> 0)
+            OR NOT cc_rol_activo(NEW.colegio_id, NEW.actualizado_por, 'DIRECTOR')
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('configuracion_evaluacion:', NEW.anio_escolar_id, ':GUARDADA:',
+                NEW.version), NEW.actualizado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la evaluacion la configura Direccion con su firma';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM anio_escolar a WHERE a.id = NEW.anio_escolar_id AND a.colegio_id = NEW.colegio_id
+            AND a.estado IN ('PLANIFICADO', 'EN_CURSO')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el anio escolar esta cerrado';
+    END IF;
+END$$
+
+-- Cambiarla: Dirección con su firma y la versión de a una. Con un periodo del año que ya no está PROGRAMADO, la versión del
+-- currículo, el tipo de periodo y los días de cierre anticipado no cambian (E11 y M7); un tipo con menos periodos que los
+-- programados, tampoco. El colegio, el año y quién la creó no cambian (también 1143).
+DROP TRIGGER IF EXISTS trg_configuracion_evaluacion_cambio$$
+CREATE TRIGGER trg_configuracion_evaluacion_cambio BEFORE UPDATE ON configuracion_evaluacion FOR EACH ROW
+BEGIN
+    IF NOT (NEW.colegio_id <=> OLD.colegio_id) OR NOT (NEW.anio_escolar_id <=> OLD.anio_escolar_id)
+            OR NOT (NEW.creado_por <=> OLD.creado_por) OR NOT (NEW.version <=> OLD.version + 1)
+            OR NOT cc_rol_activo(NEW.colegio_id, NEW.actualizado_por, 'DIRECTOR')
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('configuracion_evaluacion:', NEW.anio_escolar_id, ':GUARDADA:',
+                NEW.version), NEW.actualizado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la evaluacion la configura Direccion con su firma';
+    END IF;
+    IF (NOT (NEW.curriculo_version_id <=> OLD.curriculo_version_id) OR NOT (NEW.tipo_periodo <=> OLD.tipo_periodo)
+            OR NOT (NEW.dias_cierre_anticipado <=> OLD.dias_cierre_anticipado))
+            AND EXISTS (SELECT 1 FROM periodo_evaluacion p WHERE p.anio_escolar_id = NEW.anio_escolar_id
+                AND p.colegio_id = NEW.colegio_id AND p.estado <> 'PROGRAMADO') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: con un periodo abierto no cambian el curriculo ni los periodos';
+    END IF;
+    IF EXISTS (SELECT 1 FROM periodo_evaluacion p WHERE p.anio_escolar_id = NEW.anio_escolar_id
+            AND p.colegio_id = NEW.colegio_id AND p.numero > NEW.numero_periodos) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: hay periodos de mas para ese tipo de periodo';
+    END IF;
+END$$
+
+-- Un periodo nace PROGRAMADO, por una persona activa con DIRECTOR y su firma (periodo_evaluacion:{anio}:{numero}:PROGRAMADO),
+-- dentro de las clases del año (que no está cerrado), con un número dentro de la configuración del año y después del fin
+-- del anterior (en orden y sin solaparse). E41: uno que nace ABIERTO o CERRADO, o fuera del año, falla.
+DROP TRIGGER IF EXISTS trg_periodo_evaluacion_nace$$
+CREATE TRIGGER trg_periodo_evaluacion_nace BEFORE INSERT ON periodo_evaluacion FOR EACH ROW
+BEGIN
+    DECLARE v_inicio DATE; DECLARE v_fin DATE; DECLARE v_estado VARCHAR(20); DECLARE v_n INT;
+    SELECT a.inicio_clases, a.fin_clases, a.estado INTO v_inicio, v_fin, v_estado
+        FROM anio_escolar a WHERE a.id = NEW.anio_escolar_id AND a.colegio_id = NEW.colegio_id;
+    SELECT c.numero_periodos INTO v_n FROM configuracion_evaluacion c
+        WHERE c.anio_escolar_id = NEW.anio_escolar_id AND c.colegio_id = NEW.colegio_id;
+    IF NOT (NEW.estado <=> 'PROGRAMADO') OR NOT (NEW.creado_por <=> NEW.actualizado_por)
+            OR NOT cc_rol_activo(NEW.colegio_id, NEW.creado_por, 'DIRECTOR')
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('periodo_evaluacion:', NEW.anio_escolar_id, ':', NEW.numero,
+                ':PROGRAMADO'), NEW.creado_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un periodo nace PROGRAMADO, por Direccion con su firma';
+    END IF;
+    IF v_n IS NULL OR v_estado IS NULL OR v_estado <=> 'CERRADO' OR NEW.numero > v_n
+            OR NEW.inicio < v_inicio OR NEW.fin > v_fin THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el periodo esta fuera del anio o de la configuracion';
+    END IF;
+    IF NEW.numero > 1 AND NOT EXISTS (SELECT 1 FROM periodo_evaluacion p WHERE p.anio_escolar_id = NEW.anio_escolar_id
+            AND p.colegio_id = NEW.colegio_id AND p.numero = NEW.numero - 1 AND p.fin < NEW.inicio) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los periodos van en orden y sin solaparse';
+    END IF;
+END$$
+
+-- Fechas: Dirección con su firma (periodo_evaluacion:{id}:FECHAS:{version}) y la versión de a una; el inicio, solo en
+-- PROGRAMADO; en ABIERTO el fin solo se extiende (M7); sin solaparse con el anterior ni el siguiente y dentro del año.
+-- Estado: PROGRAMADO -> ABIERTO por sistema.academico (cc_sistema) desde su inicio según la base, o por Dirección con su
+-- firma (…:ABIERTO), con el anterior ya no PROGRAMADO; ABIERTO -> CERRADO solo por Dirección con su firma (…:CERRADO), desde
+-- fin - dias_cierre_anticipado en hora de Lima de la BASE (E9) y con el anterior CERRADO. abierto_en y cerrado_en los pone
+-- la base. CERRADO no cambia (E10). La apertura y el cierre se escriben una vez.
+DROP TRIGGER IF EXISTS trg_periodo_evaluacion_cambio$$
+CREATE TRIGGER trg_periodo_evaluacion_cambio BEFORE UPDATE ON periodo_evaluacion FOR EACH ROW
+BEGIN
+    DECLARE v_dias INT;
+    IF NOT (NEW.colegio_id <=> OLD.colegio_id) OR NOT (NEW.anio_escolar_id <=> OLD.anio_escolar_id)
+            OR NOT (NEW.numero <=> OLD.numero) OR NOT (NEW.creado_por <=> OLD.creado_por) OR OLD.estado <=> 'CERRADO' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un periodo cerrado no cambia';
+    END IF;
+    IF NOT (NEW.inicio <=> OLD.inicio) OR NOT (NEW.fin <=> OLD.fin) OR NOT (NEW.nombre <=> OLD.nombre) THEN
+        IF (NOT (NEW.inicio <=> OLD.inicio) AND NOT (OLD.estado <=> 'PROGRAMADO'))
+                OR (OLD.estado <=> 'ABIERTO' AND NEW.fin < OLD.fin)
+                OR NOT (NEW.estado <=> OLD.estado)
+                OR NOT (NEW.version <=> OLD.version + 1)
+                OR NOT cc_rol_activo(NEW.colegio_id, NEW.actualizado_por, 'DIRECTOR')
+                OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('periodo_evaluacion:', NEW.id, ':FECHAS:', NEW.version),
+                    NEW.actualizado_por)
+                OR EXISTS (SELECT 1 FROM periodo_evaluacion p WHERE p.anio_escolar_id = NEW.anio_escolar_id
+                    AND p.colegio_id = NEW.colegio_id AND ((p.numero = NEW.numero - 1 AND p.fin >= NEW.inicio)
+                        OR (p.numero = NEW.numero + 1 AND p.inicio <= NEW.fin)))
+                OR NOT EXISTS (SELECT 1 FROM anio_escolar a WHERE a.id = NEW.anio_escolar_id
+                    AND a.colegio_id = NEW.colegio_id AND NEW.inicio >= a.inicio_clases AND NEW.fin <= a.fin_clases) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las fechas del periodo las cambia Direccion con su firma';
+        END IF;
+    END IF;
+    IF NOT (NEW.estado <=> OLD.estado) THEN
+        IF OLD.estado <=> 'PROGRAMADO' AND NEW.estado <=> 'ABIERTO' THEN
+            IF NOT ((NEW.abierto_por <=> 'sistema.academico' AND cc_es_sistema() AND NEW.inicio <= cc_hoy_lima())
+                    OR (cc_rol_activo(NEW.colegio_id, NEW.abierto_por, 'DIRECTOR')
+                        AND cc_firma_valida(NEW.colegio_id, CONCAT('periodo_evaluacion:', NEW.id, ':ABIERTO'), NEW.abierto_por)))
+                    OR (NEW.numero > 1 AND NOT EXISTS (SELECT 1 FROM periodo_evaluacion p
+                        WHERE p.anio_escolar_id = NEW.anio_escolar_id AND p.colegio_id = NEW.colegio_id
+                          AND p.numero = NEW.numero - 1 AND p.estado <> 'PROGRAMADO'))
+                    OR NOT (NEW.cerrado_por <=> NULL) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el periodo no se puede abrir';
+            END IF;
+            SET NEW.abierto_en = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+        ELSEIF OLD.estado <=> 'ABIERTO' AND NEW.estado <=> 'CERRADO' THEN
+            SELECT c.dias_cierre_anticipado INTO v_dias FROM configuracion_evaluacion c
+                WHERE c.anio_escolar_id = NEW.anio_escolar_id AND c.colegio_id = NEW.colegio_id;
+            IF v_dias IS NULL OR cc_hoy_lima() < NEW.fin - INTERVAL v_dias DAY
+                    OR NOT (NEW.abierto_por <=> OLD.abierto_por) OR NOT (NEW.abierto_en <=> OLD.abierto_en)
+                    OR NOT cc_rol_activo(NEW.colegio_id, NEW.cerrado_por, 'DIRECTOR')
+                    OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('periodo_evaluacion:', NEW.id, ':CERRADO'), NEW.cerrado_por)
+                    OR (NEW.numero > 1 AND NOT EXISTS (SELECT 1 FROM periodo_evaluacion p
+                        WHERE p.anio_escolar_id = NEW.anio_escolar_id AND p.colegio_id = NEW.colegio_id
+                          AND p.numero = NEW.numero - 1 AND p.estado = 'CERRADO')) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el periodo lo cierra Direccion con su firma, en su fecha';
+            END IF;
+            SET NEW.cerrado_en = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+        ELSE
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: transicion de periodo no permitida';
+        END IF;
+    ELSEIF NOT (NEW.abierto_por <=> OLD.abierto_por) OR NOT (NEW.abierto_en <=> OLD.abierto_en)
+            OR NOT (NEW.cerrado_por <=> OLD.cerrado_por) OR NOT (NEW.cerrado_en <=> OLD.cerrado_en) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la apertura y el cierre se escriben una vez';
+    END IF;
+END$$
+
+-- Las áreas de una asignación (A2, E24 y E25): solo en una asignación PROPUESTA y TODAVÍA SIN su solicitud enlazada (en la
+-- misma transacción de la propuesta), por quien la propuso; de TUTOR o DOCENTE y sin cobertura (hasta); el área es del
+-- nivel de la sección, de la versión del currículo del año y no transversal.
+DROP TRIGGER IF EXISTS trg_asignacion_area_nace$$
+CREATE TRIGGER trg_asignacion_area_nace BEFORE INSERT ON asignacion_area FOR EACH ROW
+BEGIN
+    DECLARE v_estado VARCHAR(12); DECLARE v_tipo VARCHAR(10); DECLARE v_propuso VARCHAR(60); DECLARE v_hasta DATE;
+    DECLARE v_grado VARCHAR(20); DECLARE v_anio BIGINT; DECLARE v_solicitud BIGINT;
+    SELECT a.estado, a.tipo, a.propuesto_por, a.hasta, s.grado, a.anio_escolar_id, a.solicitud_id
+        INTO v_estado, v_tipo, v_propuso, v_hasta, v_grado, v_anio, v_solicitud
+        FROM asignacion_docente a JOIN seccion s ON s.id = a.seccion_id AND s.colegio_id = a.colegio_id
+        WHERE a.id = NEW.asignacion_id AND a.colegio_id = NEW.colegio_id;
+    IF NOT (v_estado <=> 'PROPUESTA') OR NOT (NEW.creado_por <=> v_propuso) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las areas van en la propuesta, por quien la propuso';
+    END IF;
+    IF NOT (v_solicitud <=> NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las areas van en la misma transaccion de la propuesta';
+    END IF;
+    IF NOT (v_tipo <=> 'TUTOR' OR v_tipo <=> 'DOCENTE') OR NOT (v_hasta <=> NULL) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: ni el auxiliar ni una cobertura califican';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM area_curricular ar JOIN configuracion_evaluacion c ON c.curriculo_version_id = ar.version_id
+            WHERE ar.id = NEW.area_id AND c.anio_escolar_id = v_anio AND c.colegio_id = NEW.colegio_id
+              AND ar.nivel = SUBSTRING_INDEX(v_grado, '_', 1) AND NOT ar.transversal) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el area no es del nivel ni de la version del anio';
     END IF;
 END$$
 DELIMITER ;

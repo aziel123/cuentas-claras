@@ -494,6 +494,18 @@ class RutasIdorTest {
 		ids.put(Recurso.MARCA, texto("SELECT MIN(id) FROM marca_asistencia WHERE colegio_id = 1"));
 		// Sprint 9, tanda 3: un comunicado del docente usuario.a a la sección de Mateo (destinataria: la familia Quispe).
 		ids.put(Recurso.COMUNICADO, comunicado(seccionMateo, usuarioA, sesionA, f.quispe(), "a").toString());
+		// Sprint 10, tanda 1: la evaluación de 2027 del colegio A con su I bimestre ABIERTO (H2: sin triggers). El colegio B
+		// no lo ve, no le mueve las fechas, no lo abre ni lo cierra (404).
+		Long version = id("SELECT id FROM curriculo_version WHERE codigo = 'CNEB-2016.1'");
+		jdbc.update("INSERT INTO configuracion_evaluacion (colegio_id, anio_escolar_id, curriculo_version_id, actualizado_por, "
+				+ "creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'director', CURRENT_TIMESTAMP, 'director', "
+				+ "CURRENT_TIMESTAMP)", f.anio2027(), version);
+		jdbc.update("INSERT INTO periodo_evaluacion (colegio_id, anio_escolar_id, numero, nombre, inicio, fin, estado, "
+				+ "abierto_por, abierto_en, actualizado_por, creado_en, creado_por, actualizado_en) VALUES (1, ?, 1, "
+				+ "'IDOR-A bimestre', DATE '2027-03-01', DATE '2027-05-07', 'ABIERTO', 'director', CURRENT_TIMESTAMP, "
+				+ "'director', CURRENT_TIMESTAMP, 'director', CURRENT_TIMESTAMP)", f.anio2027());
+		ids.put(Recurso.PERIODO, texto("SELECT MIN(id) FROM periodo_evaluacion WHERE colegio_id = 1"));
+		ids.put(Recurso.CATALOGO, version.toString());
 		assertThat(ids.values()).as("hay un recurso real de cada tipo en el colegio A").doesNotContainNull();
 
 		Map<Recurso, String> deFlores = new EnumMap<>(Recurso.class);

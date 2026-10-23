@@ -422,6 +422,20 @@ public enum AccionAuditoria {
 	/** Sección, perfil, filas, faltantes, código y SHA-256 del archivo (sin su contenido). */
 	NOMINA_SIAGIE_EXPORTADA("Descargó la nómina de una sección para el SIAGIE", false),
 
+	// Sprint 10, tanda 1: currículo, periodos y escalas (sección 8.4). Sin nombres de alumnos: años, periodos y valores.
+	/** Se resalta: Dirección guardó (con su firma) cómo se evalúa el año, con el antes y el después. */
+	CONFIGURACION_EVALUACION_GUARDADA("Guardó la configuración de evaluación del año", true),
+	/** Dirección programó un periodo de evaluación (con su firma). */
+	PERIODO_PROGRAMADO("Programó un periodo de evaluación", false),
+	/** Se resalta: Dirección movió las fechas de un periodo (con su firma), con el antes y el después. */
+	PERIODO_FECHAS_CAMBIADAS("Cambió las fechas de un periodo de evaluación", true),
+	/** sistema.academico abrió un periodo en su fecha, o Dirección antes de tiempo con su firma. */
+	PERIODO_ABIERTO("Abrió un periodo de evaluación", false),
+	/** Dirección cerró un periodo con su firma (no se reabre). */
+	PERIODO_CERRADO("Cerró un periodo de evaluación", true),
+	/** Se resalta (M10): la revisión diaria encontró que el catálogo de la base no coincide con el del jar. */
+	CATALOGO_NO_COINCIDE("El catálogo del currículo no coincide con el del sistema", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

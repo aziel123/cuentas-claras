@@ -5,9 +5,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.academico.api.SeccionesDocente;
 import pe.edu.virgenmaria.cuentasclaras.academico.dto.SeccionDocente;
+import pe.edu.virgenmaria.cuentasclaras.academico.model.AsignacionArea;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.AsignacionDocente;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.EstadoAsignacion;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.TipoAsignacion;
+import pe.edu.virgenmaria.cuentasclaras.academico.repository.AsignacionAreaRepository;
 import pe.edu.virgenmaria.cuentasclaras.academico.repository.AsignacionDocenteRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Seccion;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.SeccionRepository;
@@ -37,11 +39,15 @@ public class SeccionesDelDocente implements SeccionesDocente {
 
 	private final SeccionRepository secciones;
 
+	private final AsignacionAreaRepository areas;
+
 	private final Clock reloj;
 
-	public SeccionesDelDocente(AsignacionDocenteRepository asignaciones, SeccionRepository secciones, Clock reloj) {
+	public SeccionesDelDocente(AsignacionDocenteRepository asignaciones, SeccionRepository secciones,
+			AsignacionAreaRepository areas, Clock reloj) {
 		this.asignaciones = asignaciones;
 		this.secciones = secciones;
+		this.areas = areas;
 		this.reloj = reloj;
 	}
 
@@ -101,6 +107,22 @@ public class SeccionesDelDocente implements SeccionesDocente {
 		return secciones.findById(seccionId).filter(s -> !s.getAnioEscolar().cerrado()).isPresent()
 				&& vigentesDe(usuarioId).stream().anyMatch(a -> a.getSeccionId().equals(seccionId)
 						&& a.getTipo() != TipoAsignacion.AUXILIAR);
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public List<Long> areasDe(long seccionId) {
+		UsuarioAutenticado persona = PersonaEnSesion.actual();
+		if (!persona.roles().contains(Rol.DOCENTE)
+				|| secciones.findById(seccionId).filter(s -> !s.getAnioEscolar().cerrado()).isEmpty()) {
+			return List.of();
+		}
+		List<Long> suyas = vigentesDe(persona.usuarioId()).stream()
+				.filter(a -> a.getSeccionId().equals(seccionId) && a.getTipo() != TipoAsignacion.AUXILIAR
+						&& a.getHasta() == null)
+				.map(AsignacionDocente::getId).toList();
+		return suyas.isEmpty() ? List.of() : areas.findByAsignacionIdInOrderByAreaIdAsc(suyas).stream()
+				.map(AsignacionArea::getAreaId).distinct().sorted().toList();
 	}
 
 	/** Sprint 9, tanda 2: si el docente en sesión es tutor(a) VIGENTE de la sección (ve las notas y el reporte). */

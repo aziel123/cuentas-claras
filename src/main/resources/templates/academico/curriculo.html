@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 1 (sección 3.2): el catálogo nacional del currículo (CNEB), de solo lectura, para todo el personal.
+     Lo carga la migración; corregirlo es una versión nueva. Su huella la verifica el sistema al arrancar y a diario. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Currículo nacional', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="curriculo">
+	<div class="cabecera">
+		<div>
+			<h1>Currículo nacional</h1>
+			<p class="secundario">Las áreas, las competencias y la escala de calificación con las que se evalúa. Es el catálogo
+				del Ministerio de Educación y nadie del colegio lo cambia: una corrección llega como una versión nueva.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${vista.version == null}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay un catálogo cargado', 'Lo carga la actualización del sistema.')}"></div>
+	</th:block>
+
+	<th:block th:if="${vista.version != null}">
+		<section class="tarjeta" aria-labelledby="titulo-version">
+			<h2 id="titulo-version" th:text="|${vista.version.codigo} · ${vista.version.nombre}|">CNEB-2016.1</h2>
+			<p class="secundario" th:text="${vista.version.normas}">RM 281-2016-MINEDU</p>
+			<p class="secundario" th:text="|Vale desde el ${#temporals.format(vista.version.vigenteDesde, 'dd/MM/yyyy')}: ${vista.areas} áreas, ${vista.competencias} competencias y ${vista.valores} valores de escala.|">Vale desde</p>
+			<p class="secundario" th:if="${vista.version.reemplaza != null}" th:text="|Corrige la versión ${vista.version.reemplaza}.|">Corrige</p>
+			<ul class="lista-simple" th:if="${#lists.size(vista.versiones) > 1}">
+				<li th:each="v : ${vista.versiones}">
+					<a th:href="@{/academico/curriculo/{codigo}(codigo=${v.codigo})}" th:text="${v.codigo}"
+						th:attr="aria-current=${v.codigo == vista.version.codigo} ? 'page'">CNEB-2016.1</a>
+				</li>
+			</ul>
+		</section>
+
+		<section class="tarjeta" th:each="n : ${vista.niveles}" th:attr="aria-labelledby=${'titulo-nivel-' + n.nivel.name()}">
+			<h2 th:id="${'titulo-nivel-' + n.nivel.name()}" th:text="${n.nivel.etiqueta()}">Primaria</h2>
+			<div th:each="g : ${n.areas}" class="bloque">
+				<h3>
+					<span th:text="${g.area.nombre}">Matemática</span>
+					<span class="badge badge-info" th:if="${g.area.transversal}">Las califica el tutor(a)</span>
+					<span class="badge badge-neutro" th:if="${g.area.exonerable}">Exonerable</span>
+				</h3>
+				<table class="tabla">
+					<thead><tr><th>Código</th><th>Competencia</th><th>Grados</th></tr></thead>
+					<tbody>
+						<tr th:each="c : ${g.competencias}">
+							<td class="num" th:text="${c.codigo}">PRI-MAT-1</td>
+							<td th:text="${c.nombre}">Resuelve problemas de cantidad</td>
+							<td th:text="${c.soloGrados == null} ? 'Todos' : (${c.soloGrados == 'INICIAL_5'} ? 'Solo 5 años' : ${c.soloGrados})">Todos</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+			<h3>Escala de calificación</h3>
+			<table class="tabla">
+				<thead><tr><th>Valor</th><th>Nombre</th><th>Qué significa</th><th>Conclusión descriptiva</th></tr></thead>
+				<tbody>
+					<tr th:each="e : ${n.escala}">
+						<td th:text="${e.valor}">AD</td>
+						<td th:text="${e.nombre}">Logro destacado</td>
+						<td th:text="${e.descripcion}">Descripción</td>
+						<td th:text="${e.exigeConclusion} ? 'Obligatoria' : 'Opcional'">Opcional</td>
+					</tr>
+				</tbody>
+			</table>
+		</section>
+	</th:block>
+</main>
+</body>
+</html>

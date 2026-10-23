@@ -174,6 +174,23 @@ public enum ModuloApp {
 	ASISTENCIA("Asistencia de hoy", "Marca la asistencia de tu sección en un minuto: todos en «Presente» y un toque por "
 			+ "alumno.", "Sprint 9", true, "/academico/asistencia",
 			new String[] { "/academico/asistencia", "/academico/asistencia/**" }, EnumSet.of(DOCENTE)),
+	// Sprint 10, tanda 1 (sección 8.3): cómo se evalúa el año. La leen Dirección, Administración y Promotoría; la guarda SOLO
+	// Dirección con su firma (lo exige el servicio: 403 para los demás). Va ANTES que ACADEMICO.
+	EVALUACION("Evaluación del año", "Con qué currículo se califica, cómo se divide el año y desde cuándo se cierra cada "
+			+ "periodo. Solo Dirección la guarda, con su firma.", "Sprint 10", true, "/academico/evaluacion/configuracion",
+			new String[] { "/academico/evaluacion", "/academico/evaluacion/**" }, EnumSet.of(PROMOTOR, DIRECTOR,
+					ADMINISTRACION)),
+	// Sprint 10, tanda 1: los periodos de evaluación (programar, mover fechas, abrir antes y cerrar), SOLO Dirección con su
+	// firma; abren solos en su fecha (sistema.academico). Va ANTES que ACADEMICO.
+	PERIODOS("Periodos de evaluación", "Programa los bimestres del año, ábrelos antes de tiempo si hace falta y ciérralos "
+			+ "con tu firma. Un periodo cerrado no se reabre.", "Sprint 10", true, "/academico/periodos",
+			new String[] { "/academico/periodos", "/academico/periodos/**" }, EnumSet.of(DIRECTOR)),
+	// Sprint 10, tanda 1: el catálogo nacional del currículo, de solo lectura, para todo el personal (sin datos personales).
+	// Va ANTES que ACADEMICO.
+	CURRICULO("Currículo nacional", "Las áreas, competencias y la escala de calificación del Currículo Nacional, de solo "
+			+ "lectura.", "Sprint 10", true, "/academico/curriculo",
+			new String[] { "/academico/curriculo", "/academico/curriculo/**" }, EnumSet.of(PROMOTOR, DIRECTOR,
+					ADMINISTRACION, CAJA, DOCENTE)),
 	// Sprint 9, tanda 1: el docente ve sus secciones y los nombres de sus alumnos (nunca deudas, pagos, documentos ni
 	// contactos); Dirección, todas las secciones. Promotoría no ve las listas por alumno (decisión 143).
 	ACADEMICO("Académico", "Tus secciones y la lista de tus alumnos. Nunca muestra deudas, pagos, documentos ni contactos.",

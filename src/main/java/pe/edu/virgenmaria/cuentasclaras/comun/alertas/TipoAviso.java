@@ -31,6 +31,11 @@ public enum TipoAviso {
 	SOLICITUDES_PENDIENTES("Hay solicitudes por aprobar hace más de 2 días"),
 	/** Correcciones del sprint 9 (auditoría, 6): más de 30 consentimientos desde la ficha por una persona en un día. */
 	CONSENTIMIENTOS_DESDE_FICHA("Muchos consentimientos registrados hoy desde la ficha"),
+	/**
+	 * Sprint 10, tanda 1 (M10, CRÍTICA): la revisión diaria del catálogo nacional del currículo encontró que la base no
+	 * coincide con el jar (alguien cambió una competencia o metió una versión). A Promotoría.
+	 */
+	INTEGRIDAD_CATALOGO("El catálogo del currículo no coincide con el del sistema"),
 	OTRA_CRITICA("Alerta crítica");
 
 	private final String texto;

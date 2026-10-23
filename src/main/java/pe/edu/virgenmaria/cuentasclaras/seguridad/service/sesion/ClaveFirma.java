@@ -240,6 +240,34 @@ public final class ClaveFirma {
 		return "comunicado:" + id(comunicadoId) + ":RETIRADO";
 	}
 
+	/**
+	 * Sprint 10, tanda 1 (sección 3.3): Dirección guarda la configuración de evaluación del año {@code anioId}.
+	 * {@code version}: la que tendrá la fila (0 al crearla); trg_configuracion_evaluacion_nace y _cambio la exigen.
+	 */
+	public static String configuracionEvaluacion(Long anioId, long version) {
+		return "configuracion_evaluacion:" + id(anioId) + ":GUARDADA:" + version;
+	}
+
+	/** Sprint 10, tanda 1: Dirección programa el periodo {@code numero} del año (trg_periodo_evaluacion_nace). */
+	public static String periodoProgramado(Long anioId, int numero) {
+		return "periodo_evaluacion:" + id(anioId) + ":" + numero + ":PROGRAMADO";
+	}
+
+	/** Sprint 10, tanda 1 (M7): Dirección mueve las fechas del periodo; {@code version} es la que tendrá la fila. */
+	public static String periodoFechas(Long periodoId, long version) {
+		return "periodo_evaluacion:" + id(periodoId) + ":FECHAS:" + version;
+	}
+
+	/** Sprint 10, tanda 1: Dirección abre el periodo antes de su fecha (el sistema no firma: lo abre cc_sistema). */
+	public static String periodoAbierto(Long periodoId) {
+		return "periodo_evaluacion:" + id(periodoId) + ":ABIERTO";
+	}
+
+	/** Sprint 10, tanda 1: Dirección cierra el periodo (desde {@code fin − dias_cierre_anticipado}). */
+	public static String periodoCerrado(Long periodoId) {
+		return "periodo_evaluacion:" + id(periodoId) + ":CERRADO";
+	}
+
 	private static Long id(Long id) {
 		return Objects.requireNonNull(id, "id");
 	}

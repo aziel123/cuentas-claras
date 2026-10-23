@@ -39,6 +39,11 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM consentimiento_aviso");
 		jdbc.update("DELETE FROM configuracion_academica");
 		jdbc.update("DELETE FROM aviso_asistencia_corte");
+		// Sprint 10, tanda 1 (V35): las áreas de cada asignación, antes que la asignación; los periodos y la configuración de
+		// evaluación apuntan al año. El catálogo (sin colegio) es de la migración: no se borra.
+		jdbc.update("DELETE FROM asignacion_area");
+		jdbc.update("DELETE FROM periodo_evaluacion");
+		jdbc.update("DELETE FROM configuracion_evaluacion");
 		// Sprint 9, tanda 1 (V32): la asignación docente apunta a su solicitud, a la sección, al año y a la cuenta.
 		jdbc.update("DELETE FROM asignacion_docente");
 		// Correcciones del sprint 7 (V27): la resolución de una alerta apunta al respaldo y a la cuenta; la primera Dirección,

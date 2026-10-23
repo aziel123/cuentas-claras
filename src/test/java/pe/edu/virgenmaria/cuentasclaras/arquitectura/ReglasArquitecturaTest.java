@@ -136,7 +136,13 @@ class ReglasArquitecturaTest {
 					// Sprint 9, tanda 2: la clave de estas dos ES el colegio (una fila por colegio); se leen siempre con el
 					// colegio del contexto.
 					pe.edu.virgenmaria.cuentasclaras.academico.model.ConfiguracionAcademica.class,
-					pe.edu.virgenmaria.cuentasclaras.academico.model.AvisoAsistenciaCorte.class)
+					pe.edu.virgenmaria.cuentasclaras.academico.model.AvisoAsistenciaCorte.class,
+					// Sprint 10, tanda 1 (decisión 184): el catálogo nacional del currículo no es de un colegio (como el enum
+					// Grado): solo lo inserta la migración y la aplicación lo lee.
+					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.CurriculoVersion.class,
+					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.AreaCurricular.class,
+					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.Competencia.class,
+					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.EscalaLogro.class)
 			.should().beAssignableTo(BaseEntity.class)
 			.because("BaseEntity aporta colegioId (@TenantId), autoría y versión");
 
@@ -504,7 +510,18 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".comunicados.service.AlertasComunicados", ALERTAS),
 			Map.entry(BASE + ".comunicacion.service.AvisosComunicadosFamilias", "hasRole('SISTEMA_COMUNICADOS')"),
 			Map.entry(BASE + ".comunicacion.service.ConsumoMensajes", "hasRole('PROMOTOR')"),
-			Map.entry(BASE + ".academico.siagie.NominaSiagie", "hasRole('DIRECTOR')"));
+			Map.entry(BASE + ".academico.siagie.NominaSiagie", "hasRole('DIRECTOR')"),
+			// Sprint 10, tanda 1 (sección 8.3): la evaluación del año la leen Promotoría, Dirección y Administración y la
+			// guarda SOLO Dirección; los periodos, SOLO Dirección; la apertura en su fecha y la revisión del catálogo, solo
+			// sistema.academico; el catálogo lo lee el personal.
+			Map.entry(BASE + ".academico.curriculo.service.ConfiguracionesEvaluacion", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".academico.curriculo.service.ConfiguracionesEvaluacion#guardar", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.curriculo.service.Periodos", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.curriculo.service.AperturaDeSistema", "hasRole('SISTEMA_ACADEMICO')"),
+			Map.entry(BASE + ".academico.curriculo.service.IntegridadCatalogo", "hasRole('SISTEMA_ACADEMICO')"),
+			Map.entry(BASE + ".academico.curriculo.service.AlertasCatalogo", ALERTAS),
+			Map.entry(BASE + ".academico.curriculo.service.Catalogo",
+					"hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','CAJA','DOCENTE','SISTEMA_ACADEMICO')"));
 
 	/**
 	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para
@@ -923,6 +940,37 @@ class ReglasArquitecturaTest {
 			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
 			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
 			.because("una asignación solo cambia por sus métodos (y en MySQL el UPDATE está limitado por columna)");
+
+	/**
+	 * Sprint 10, tanda 1 (E12, regla {@code nadieEscribeElCatalogo}): los repositorios del catálogo nacional y de la evaluación
+	 * no heredan {@code save} ni {@code delete*} (no extienden CrudRepository); los del catálogo, además, no declaran
+	 * {@code save}: la aplicación nunca lo escribe (y en MySQL no tiene GRANT: 1142).
+	 */
+	@ArchTest
+	static final ArchRule nadieEscribeElCatalogo = classes()
+			.that().resideInAPackage(BASE + ".academico.curriculo.repository..")
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("el catálogo y la evaluación cambian solo por la migración o por sus métodos con firma");
+
+	@ArchTest
+	static final ArchRule repositoriosDelCatalogoSinSave = noMethods()
+			.that().areDeclaredInClassesThat().haveSimpleNameEndingWith("Repository")
+			.and().areDeclaredInClassesThat().resideInAPackage(BASE + ".academico.curriculo.repository..")
+			.and().areDeclaredInClassesThat(DescribedPredicate.describe("son del catálogo nacional",
+					(JavaClass c) -> Set.of("CurriculoVersionRepository", "AreaCurricularRepository", "CompetenciaRepository",
+							"EscalaLogroRepository").contains(c.getSimpleName())))
+			.should().haveNameMatching("(?i)(save|delete|remove|update|insert).*")
+			.orShould().beAnnotatedWith(Modifying.class)
+			.because("el catálogo nacional lo inserta solo la migración (cc_migrador): una corrección es una versión nueva");
+
+	@ArchTest
+	static final ArchRule repositoriosDelCurriculoSinModifyingNiBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAPackage(BASE + ".academico.curriculo.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("la evaluación y los periodos cambian solo por sus métodos con la firma de Dirección");
 
 	@ArchTest
 	static final ArchRule repositoriosDeAcademicoNoHeredanBorrados = classes()

@@ -3,15 +3,23 @@ package pe.edu.virgenmaria.cuentasclaras.academico.service;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.virgenmaria.cuentasclaras.academico.curriculo.dto.AreaDelCatalogo;
+import pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.ConfiguracionEvaluacion;
+import pe.edu.virgenmaria.cuentasclaras.academico.curriculo.repository.ConfiguracionEvaluacionRepository;
+import pe.edu.virgenmaria.cuentasclaras.academico.curriculo.service.Catalogo;
+import pe.edu.virgenmaria.cuentasclaras.academico.dto.AreasDelAnio;
+import pe.edu.virgenmaria.cuentasclaras.academico.dto.AsignacionSinAreas;
 import pe.edu.virgenmaria.cuentasclaras.academico.dto.AsignacionVista;
 import pe.edu.virgenmaria.cuentasclaras.academico.dto.AsignacionesVista;
 import pe.edu.virgenmaria.cuentasclaras.academico.dto.OpcionAcademica;
 import pe.edu.virgenmaria.cuentasclaras.academico.dto.ProponerAsignacionRequest;
 import pe.edu.virgenmaria.cuentasclaras.academico.dto.ResultadoCopia;
 import pe.edu.virgenmaria.cuentasclaras.academico.dto.SeccionConAsignaciones;
+import pe.edu.virgenmaria.cuentasclaras.academico.model.AsignacionArea;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.AsignacionDocente;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.EstadoAsignacion;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.TipoAsignacion;
+import pe.edu.virgenmaria.cuentasclaras.academico.repository.AsignacionAreaRepository;
 import pe.edu.virgenmaria.cuentasclaras.academico.repository.AsignacionDocenteRepository;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.SolicitudCambio;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.TipoSolicitud;
@@ -20,6 +28,7 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoAnioEscolar;
+import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Seccion;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.SeccionRepository;
@@ -47,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Sprint 9, tanda 1 (sección 3.2, decisiones 139 y 140): las asignaciones de docentes, tutores y auxiliares a las secciones.
@@ -61,6 +71,13 @@ import java.util.Set;
  *       Terminar no borra nada: lo que registró ese docente sigue a su nombre.</li>
  * </ul>
  * Todo queda en la bitácora. En MySQL lo exigen trg_asignacion_docente_nace y trg_asignacion_docente_estado.
+ * <p>
+ * Sprint 10, tanda 1 (sección 3.4, A2, E24 y E25): la propuesta lleva las ÁREAS DEL CATÁLOGO que calificará el docente,
+ * del nivel de la sección y de la versión del currículo del año (sin la transversal: la califica el tutor). Se insertan en
+ * la MISMA transacción, después de la asignación y ANTES de su solicitud, cuyo {@code datos} lleva {@code "areas"} con los
+ * ids ordenados: la base compara esa lista con las áreas al aprobarla. Nadie las agrega después. Una cobertura y el auxiliar
+ * no llevan áreas. Cambiar las áreas de una asignación vigente es proponer otra igual con las nuevas: al aprobarla, el
+ * manejador termina la anterior con la firma de quien aprueba.
  */
 @Service
 @PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION')")
@@ -91,10 +108,20 @@ public class Asignaciones {
 
 	private final CalendarioHabil calendario;
 
+	private final AsignacionAreaRepository areasAsignadas;
+
+	private final ConfiguracionEvaluacionRepository configuraciones;
+
+	private final Catalogo catalogo;
+
 	public Asignaciones(AsignacionDocenteRepository asignaciones, SeccionRepository secciones, AnioEscolarRepository anios,
 			UsuarioRepository usuarios, RegistroSolicitudes solicitudes, FirmaSesion firma, AuditoriaService auditoria,
-			Clock reloj, CalendarioHabil calendario) {
+			Clock reloj, CalendarioHabil calendario, AsignacionAreaRepository areasAsignadas,
+			ConfiguracionEvaluacionRepository configuraciones, Catalogo catalogo) {
 		this.calendario = calendario;
+		this.areasAsignadas = areasAsignadas;
+		this.configuraciones = configuraciones;
+		this.catalogo = catalogo;
 		this.asignaciones = asignaciones;
 		this.secciones = secciones;
 		this.anios = anios;
@@ -123,19 +150,41 @@ public class Asignaciones {
 				+ a.getEstado().name().replace('_', ' ').toLowerCase(java.util.Locale.ROOT))).toList();
 		if (elegido.isEmpty()) {
 			return new AsignacionesVista(opciones, null, null, false, List.of(), List.of(), puedeProponer, puedeTerminar,
-					false);
+					false, List.of(), List.of(), false);
 		}
 		AnioEscolar anio = elegido.get();
+		List<AsignacionDocente> delAnio = asignaciones.findByAnioEscolarIdOrderBySeccionIdAscIdAsc(anio.getId());
+		Map<Long, List<Long>> areasPorAsignacion = areasDe(delAnio);
+		Map<Long, String> nombresDeAreas = catalogo.areas(areasPorAsignacion.values().stream().flatMap(List::stream)
+				.collect(Collectors.toSet())).stream().collect(Collectors.toMap(AreaDelCatalogo::id, AreaDelCatalogo::nombre));
 		Map<Long, Optional<Usuario>> personas = new LinkedHashMap<>();
 		Map<Long, List<AsignacionVista>> porSeccion = new LinkedHashMap<>();
-		for (AsignacionDocente a : asignaciones.findByAnioEscolarIdOrderBySeccionIdAscIdAsc(anio.getId())) {
+		Map<Long, Seccion> seccionesDelAnio = new LinkedHashMap<>();
+		List<Seccion> todasLasSecciones = secciones.findByAnioEscolarIdOrderByGradoAscNombreAsc(anio.getId());
+		todasLasSecciones.forEach(s -> seccionesDelAnio.put(s.getId(), s));
+		List<AsignacionSinAreas> sinAreas = new ArrayList<>();
+		for (AsignacionDocente a : delAnio) {
 			Optional<Usuario> docente = personas.computeIfAbsent(a.getUsuarioId(), usuarios::findById);
+			List<Long> suyas = areasPorAsignacion.getOrDefault(a.getId(), List.of());
+			String textoAreas = suyas.isEmpty() ? a.getAreas()
+					: suyas.stream().map(id -> nombresDeAreas.getOrDefault(id, "área " + id)).collect(Collectors.joining(", "));
 			porSeccion.computeIfAbsent(a.getSeccionId(), id -> new ArrayList<>()).add(new AsignacionVista(a.getId(),
 					docente.map(Usuario::getNombreCompleto).orElse("—"), docente.map(Usuario::getNombreUsuario).orElse("—"),
-					a.getTipo().etiqueta(), a.getAreas(), a.getEstado().etiqueta(), a.getEstado().variante(), a.esVigente(),
+					a.getTipo().etiqueta(), textoAreas, a.getEstado().etiqueta(), a.getEstado().variante(), a.esVigente(),
 					a.getPropuestoPor(), a.getResueltoPor(), a.getResueltoEn(), a.getTerminadaPor(), a.getMotivoFin()));
+			// «Asignaciones sin áreas del catálogo» (las vigentes del sprint 9): marcan asistencia, pero no califican.
+			if (a.esVigente() && a.getTipo() != TipoAsignacion.AUXILIAR && a.getHasta() == null && suyas.isEmpty()) {
+				Seccion s = seccionesDelAnio.get(a.getSeccionId());
+				sinAreas.add(new AsignacionSinAreas(a.getId(), docente.map(Usuario::getNombreCompleto).orElse("—"),
+						a.getTipo().etiqueta(), s == null ? "—" : s.etiqueta(), a.getAreas()));
+			}
 		}
-		List<SeccionConAsignaciones> conAsignaciones = secciones.findByAnioEscolarIdOrderByGradoAscNombreAsc(anio.getId())
+		Optional<ConfiguracionEvaluacion> configuracion = configuraciones.findByAnioEscolarId(anio.getId());
+		List<AreasDelAnio> areasDelAnio = configuracion.map(c -> java.util.Arrays.stream(Nivel.values())
+				.map(n -> new AreasDelAnio(n, n.etiqueta(), catalogo.areasDe(c.getCurriculoVersionId(), n).stream()
+						.filter(x -> !x.transversal()).toList()))
+				.filter(g -> !g.areas().isEmpty()).toList()).orElse(List.of());
+		List<SeccionConAsignaciones> conAsignaciones = todasLasSecciones
 				.stream().map(s -> new SeccionConAsignaciones(s.getId(), s.etiqueta(), s.isActiva(),
 						ordenadas(porSeccion.getOrDefault(s.getId(), List.of())))).toList();
 		List<OpcionAcademica> docentes = usuarios.activosConRol(Rol.DOCENTE).stream()
@@ -145,7 +194,17 @@ public class Asignaciones {
 		boolean anterior = anios.findByAnio(anio.getAnio() - 1).map(a -> !asignaciones
 				.findByAnioEscolarIdAndEstadoInOrderBySeccionIdAscIdAsc(a.getId(), copiables()).isEmpty()).orElse(false);
 		return new AsignacionesVista(opciones, anio.getId(), anio.getAnio(), anio.cerrado(), conAsignaciones, docentes,
-				puedeProponer, puedeTerminar, anterior);
+				puedeProponer, puedeTerminar, anterior, areasDelAnio, sinAreas, configuracion.isPresent());
+	}
+
+	/** Las áreas del catálogo (ids, ordenados) de cada asignación. */
+	private Map<Long, List<Long>> areasDe(List<AsignacionDocente> lista) {
+		if (lista.isEmpty()) {
+			return Map.of();
+		}
+		return areasAsignadas.findByAsignacionIdInOrderByAreaIdAsc(lista.stream().map(AsignacionDocente::getId).toList())
+				.stream().collect(Collectors.groupingBy(AsignacionArea::getAsignacionId,
+						Collectors.mapping(AsignacionArea::getAreaId, Collectors.toList())));
 	}
 
 	/** Propone una asignación: queda PROPUESTA, con su solicitud para que otra persona la apruebe. @return su id */
@@ -156,7 +215,8 @@ public class Asignaciones {
 				.orElseThrow(() -> new RecursoNoEncontradoException("Sección no encontrada"));
 		Usuario docente = usuarios.findById(pedido.docenteId())
 				.orElseThrow(() -> new RecursoNoEncontradoException("Docente no encontrado"));
-		return proponerEn(seccion, docente, pedido.tipo(), pedido.areas(), pedido.motivo(), pedido.hasta());
+		return proponerEn(seccion, docente, pedido.tipo(), pedido.areas(), pedido.motivo(), pedido.hasta(),
+				pedido.areaIds(), pedido.todasLasAreas());
 	}
 
 	/**
@@ -193,7 +253,8 @@ public class Asignaciones {
 				saltadas++;
 				continue;
 			}
-			proponerEn(destino.get(), docente.get(), previa.getTipo(), previa.getAreas(), motivo, null);
+			proponerEn(destino.get(), docente.get(), previa.getTipo(), previa.getAreas(), motivo, null,
+					areasCopiables(previa, anterior, anio), false);
 			propuestas++;
 		}
 		return new ResultadoCopia(propuestas, saltadas);
@@ -222,7 +283,7 @@ public class Asignaciones {
 	}
 
 	private Long proponerEn(Seccion seccion, Usuario docente, TipoAsignacion tipo, String areas, String motivo,
-			LocalDate hasta) {
+			LocalDate hasta, List<Long> areaIds, boolean todasLasAreas) {
 		AnioEscolar anio = seccion.getAnioEscolar();
 		exigirAbierto(anio);
 		exigirCoberturaValida(tipo, hasta);
@@ -242,17 +303,39 @@ public class Asignaciones {
 		if (tipo == null) {
 			throw new ReglaNegocioException("Elige qué hará en la sección: tutor(a), docente de área o auxiliar.");
 		}
-		if (asignaciones.existsByUsuarioIdAndSeccionIdAndTipoAndEstadoIn(docente.getId(), seccion.getId(), tipo, ABIERTAS)) {
+		if (asignaciones.existsByUsuarioIdAndSeccionIdAndTipoAndEstadoIn(docente.getId(), seccion.getId(), tipo,
+				EnumSet.of(EstadoAsignacion.PROPUESTA))) {
 			throw new ReglaNegocioException(docente.getNombreCompleto() + " ya es " + tipo.etiqueta().toLowerCase(
-					java.util.Locale.ROOT) + " de " + seccion.etiqueta() + " (o está por aprobarse).");
+					java.util.Locale.ROOT) + " de " + seccion.etiqueta() + " por aprobarse: apruébala o recházala antes de "
+					+ "proponer otra.");
 		}
-		if (tipo == TipoAsignacion.TUTOR && tutorVigente(seccion.getId())) {
+		List<AreaDelCatalogo> delCatalogo = areasValidas(seccion, tipo, hasta, areaIds, todasLasAreas);
+		List<Long> idsDeAreas = delCatalogo.stream().map(AreaDelCatalogo::id).sorted().toList();
+		// Sprint 10 (sección 3.4): una vigente con las mismas claves se reemplaza al aprobar esta, si cambian sus áreas.
+		Optional<AsignacionDocente> vigente = asignaciones.findFirstByUsuarioIdAndSeccionIdAndTipoAndEstado(docente.getId(),
+				seccion.getId(), tipo, EstadoAsignacion.VIGENTE);
+		if (vigente.isPresent()) {
+			List<Long> actuales = areasAsignadas.findByAsignacionIdOrderByAreaIdAsc(vigente.get().getId()).stream()
+					.map(AsignacionArea::getAreaId).sorted().toList();
+			if (actuales.equals(idsDeAreas) || hasta != null || vigente.get().getHasta() != null) {
+				throw new ReglaNegocioException(docente.getNombreCompleto() + " ya es " + tipo.etiqueta().toLowerCase(
+						java.util.Locale.ROOT) + " de " + seccion.etiqueta() + (actuales.equals(idsDeAreas)
+								? " con esas mismas áreas." : ": una cobertura no reemplaza una asignación vigente."));
+			}
+		}
+		if (tipo == TipoAsignacion.TUTOR && asignaciones.findFirstBySeccionIdAndTipoAndEstado(seccion.getId(),
+				TipoAsignacion.TUTOR, EstadoAsignacion.VIGENTE).filter(t -> !docente.getId().equals(t.getUsuarioId()))
+				.isPresent()) {
 			throw new ReglaNegocioException(seccion.etiqueta() + " ya tiene tutor(a): termina esa asignación antes de "
 					+ "proponer otra.");
 		}
 		UsuarioAutenticado persona = PersonaEnSesion.actual();
 		AsignacionDocente asignacion = asignaciones.saveAndFlush(AsignacionDocente.propuesta(anio.getId(), seccion.getId(),
-				docente.getId(), tipo, areas, persona.getUsername(), hasta));
+				docente.getId(), tipo, delCatalogo.isEmpty() ? areas : null, persona.getUsername(), hasta));
+		// A2: las áreas, en la MISMA transacción y ANTES de enlazar la solicitud (trg_asignacion_area_nace lo exige).
+		for (Long area : idsDeAreas) {
+			areasAsignadas.saveAndFlush(AsignacionArea.de(asignacion.getId(), area));
+		}
 		Map<String, String> datos = new LinkedHashMap<>();
 		datos.put("seccion", seccion.getId().toString());
 		datos.put("docente", docente.getId().toString());
@@ -260,18 +343,75 @@ public class Asignaciones {
 		if (hasta != null) {
 			datos.put("hasta", hasta.toString());
 		}
+		if (!idsDeAreas.isEmpty()) {
+			// A2: la base compara esta lista con las áreas de la asignación al pasarla a VIGENTE.
+			datos.put("areas", idsDeAreas.stream().map(String::valueOf).collect(Collectors.joining(",")));
+		}
+		String textoAreas = delCatalogo.isEmpty() ? asignacion.getAreas()
+				: delCatalogo.stream().map(AreaDelCatalogo::nombre).collect(Collectors.joining(", "));
 		SolicitudCambio solicitud = solicitudes.crear(TipoSolicitud.ASIGNACION_DOCENTE, ENTIDAD, asignacion.getId(),
-				resumen(docente, tipo, asignacion.getAreas(), seccion), datos, motivo);
+				resumen(docente, tipo, textoAreas, seccion), datos, motivo);
 		asignacion.enlazarSolicitud(solicitud.getId());
 		asignaciones.saveAndFlush(asignacion);
 		auditoria.registrar(AccionAuditoria.ASIGNACION_DOCENTE_PROPUESTA, ENTIDAD, asignacion.getId().toString(), null,
 				EstadoAsignacion.PROPUESTA.name(), persona.nombreCompleto() + " propuso a " + docente.getNombreCompleto()
 						+ " (" + docente.getNombreUsuario() + ") como " + tipo.etiqueta().toLowerCase(java.util.Locale.ROOT)
-						+ " de " + seccion.etiqueta() + " " + anio.getAnio() + (asignacion.getAreas() == null ? ""
-								: " (" + asignacion.getAreas() + ")") + (hasta == null ? "" : ", como cobertura hasta el "
-										+ hasta) + ". Motivo: " + solicitud.getMotivo()
+						+ " de " + seccion.etiqueta() + " " + anio.getAnio() + (textoAreas == null ? ""
+								: " (" + textoAreas + ")") + (hasta == null ? "" : ", como cobertura hasta el "
+										+ hasta) + (vigente.isPresent() ? ", en reemplazo de su asignación vigente "
+												+ vigente.get().getId() : "") + ". Motivo: " + solicitud.getMotivo()
 						+ ". Debe aprobarla otra persona de Dirección o Promotoría, que no sea el docente.");
 		return asignacion.getId();
+	}
+
+	/**
+	 * Las áreas pedidas, validadas: del catálogo de la versión del año (configuración de evaluación), del nivel de la
+	 * sección y no transversales; ninguna para el auxiliar ni para una cobertura (E25). «Todas las áreas del grado», solo para
+	 * el tutor de Inicial o Primaria.
+	 */
+	private List<AreaDelCatalogo> areasValidas(Seccion seccion, TipoAsignacion tipo, LocalDate hasta, List<Long> areaIds,
+			boolean todasLasAreas) {
+		List<Long> pedidas = areaIds == null ? List.of() : areaIds;
+		if (pedidas.isEmpty() && !todasLasAreas) {
+			return List.of();
+		}
+		if (tipo == TipoAsignacion.AUXILIAR || hasta != null) {
+			throw new ReglaNegocioException("El auxiliar y una cobertura no califican: no llevan áreas.");
+		}
+		ConfiguracionEvaluacion configuracion = configuraciones.findByAnioEscolarId(seccion.getAnioEscolar().getId())
+				.orElseThrow(() -> new ReglaNegocioException("Para dar áreas, Dirección guarda primero la evaluación del año "
+						+ seccion.getAnioEscolar().getAnio() + " (con la versión del currículo)."));
+		Nivel nivel = seccion.nivel();
+		List<AreaDelCatalogo> delNivel = catalogo.areasDe(configuracion.getCurriculoVersionId(), nivel).stream()
+				.filter(a -> !a.transversal()).toList();
+		if (todasLasAreas) {
+			if (tipo != TipoAsignacion.TUTOR || nivel == Nivel.SECUNDARIA) {
+				throw new ReglaNegocioException("«Todas las áreas del grado» es para el tutor(a) de Inicial o Primaria.");
+			}
+			return delNivel;
+		}
+		Set<Long> validas = delNivel.stream().map(AreaDelCatalogo::id).collect(Collectors.toSet());
+		if (!validas.containsAll(pedidas)) {
+			throw new ReglaNegocioException("Elige áreas de " + nivel.etiqueta() + " del currículo del año (las "
+					+ "competencias transversales las califica el tutor y no se asignan).");
+		}
+		return delNivel.stream().filter(a -> pedidas.contains(a.id())).toList();
+	}
+
+	/** Al copiar las del año anterior: sus áreas, si el año nuevo usa la misma versión del currículo (si no, ninguna). */
+	private List<Long> areasCopiables(AsignacionDocente previa, AnioEscolar anterior, AnioEscolar nuevo) {
+		if (previa.getTipo() == TipoAsignacion.AUXILIAR || previa.getHasta() != null) {
+			return List.of();
+		}
+		Optional<Long> versionAnterior = configuraciones.findByAnioEscolarId(anterior.getId())
+				.map(ConfiguracionEvaluacion::getCurriculoVersionId);
+		Optional<Long> versionNueva = configuraciones.findByAnioEscolarId(nuevo.getId())
+				.map(ConfiguracionEvaluacion::getCurriculoVersionId);
+		if (versionAnterior.isEmpty() || !versionAnterior.equals(versionNueva)) {
+			return List.of();
+		}
+		return areasAsignadas.findByAsignacionIdOrderByAreaIdAsc(previa.getId()).stream().map(AsignacionArea::getAreaId)
+				.toList();
 	}
 
 	static String resumen(Usuario docente, TipoAsignacion tipo, String areas, Seccion seccion) {

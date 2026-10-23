@@ -441,7 +441,42 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			columna("UPDATE comunicado SET huella_contenido = huella_contenido WHERE 1 = 0", "comunicado"),
 			columna("UPDATE comunicado_destinatario SET familia_id = familia_id WHERE 1 = 0", "comunicado_destinatario"),
 			trigger(VerificadorPermisosBaseDatos.COMUNICADO_DIRECCION_IMPOSIBLE, "trg_comunicado_nace"),
-			trigger(VerificadorPermisosBaseDatos.NOMINA_SIN_SESION_IMPOSIBLE, "trg_exportacion_nomina_nace"));
+			trigger(VerificadorPermisosBaseDatos.NOMINA_SIN_SESION_IMPOSIBLE, "trg_exportacion_nomina_nace"),
+			// Sprint 10, tanda 1 (V35, E12, B15): el catálogo nacional no se escribe con cc_app (1142 en las cuatro tablas);
+			// asignacion_area es de solo inserción y nada se borra (1142); el número de un periodo y el año de la
+			// configuración no cambian (1143); un periodo del colegio 0 que nace CERRADO lo rechaza
+			// trg_periodo_evaluacion_nace antes que las FK (1644).
+			sinPermiso("INSERT INTO competencia (version_id, area_id, codigo, nombre, orden) VALUES (0, 0, 'PRI-XX-1', "
+					+ "'Verificador', 1)", "competencia"),
+			sinPermiso("UPDATE competencia SET nombre = nombre WHERE 1 = 0", "competencia"),
+			sinPermiso("UPDATE escala_logro SET descripcion = descripcion WHERE 1 = 0", "escala_logro"),
+			sinPermiso("INSERT INTO curriculo_version (codigo, nombre, normas, vigente_desde, creado_en) VALUES ('VERIF-0', "
+					+ "'Verificador', 'Verificador', '2000-01-01', NOW(6))", "curriculo_version"),
+			sinPermiso("UPDATE curriculo_version SET nombre = nombre WHERE 1 = 0", "curriculo_version"),
+			sinPermiso("INSERT INTO area_curricular (version_id, nivel, codigo, nombre, orden) VALUES (0, 'PRIMARIA', 'XX', "
+					+ "'Verificador', 1)", "area_curricular"),
+			sinPermiso("UPDATE area_curricular SET nombre = nombre WHERE 1 = 0", "area_curricular"),
+			sinBorrado("periodo_evaluacion"), sinBorrado("configuracion_evaluacion"),
+			soloInsercion("asignacion_area"), sinBorrado("asignacion_area"),
+			columna("UPDATE periodo_evaluacion SET numero = numero WHERE 1 = 0", "periodo_evaluacion"),
+			columna("UPDATE configuracion_evaluacion SET anio_escolar_id = anio_escolar_id WHERE 1 = 0",
+					"configuracion_evaluacion"),
+			trigger(VerificadorPermisosBaseDatos.PERIODO_CERRADO_IMPOSIBLE, "trg_periodo_evaluacion_nace"));
+
+	/**
+	 * Sprint 10, tanda 1 (E41): un periodo del colegio 0 que nace CERRADO, sin Dirección ni firma (la rechaza
+	 * trg_periodo_evaluacion_nace antes que las FK: 1644).
+	 */
+	static final String PERIODO_CERRADO_IMPOSIBLE = "INSERT INTO periodo_evaluacion (colegio_id, anio_escolar_id, numero, "
+			+ "nombre, inicio, fin, estado, abierto_por, abierto_en, cerrado_por, cerrado_en, actualizado_por, creado_en, "
+			+ "creado_por, actualizado_en) VALUES (0, 0, 1, 'I bimestre', '2000-03-01', '2000-05-01', 'CERRADO', "
+			+ "'verificador', NOW(6), 'verificador', NOW(6), 'verificador', NOW(6), 'verificador', NOW(6))";
+
+	/** Sprint 10, tanda 1 (E12, B15): el catálogo nacional no tiene GRANT de escritura para cc_negocio (1142). */
+	private static SentenciaProhibida sinPermiso(String sql, String tabla) {
+		return new SentenciaProhibida(sql, Set.of(MYSQL_COMANDO_DENEGADO), "la aplicación podría escribir el catálogo "
+				+ "nacional (" + tabla + "): solo lo inserta la migración con cc_migrador (revisa 02-permisos-tablas.sql).");
+	}
 
 	/**
 	 * Sprint 9, tanda 3 (E17, E45): un comunicado «de Dirección» del colegio 0, sin sesión, sin firma y en un colegio que no
@@ -655,7 +690,12 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			// comunicados se borra (1142).
 			trigger(VerificadorPermisosBaseDatos.RESUMEN_COMUNICADOS_CON_MONTO_IMPOSIBLE,
 					"trg_mensaje_nace (versión del sprint 9, tanda 3)"),
-			sinBorrado("comunicado"), sinBorrado("confirmacion_lectura"));
+			sinBorrado("comunicado"), sinBorrado("confirmacion_lectura"),
+			// Sprint 10, tanda 1 (E12): tampoco cc_sistema escribe el catálogo nacional (1142); ni borra periodos (1142).
+			sinPermiso("INSERT INTO competencia (version_id, area_id, codigo, nombre, orden) VALUES (0, 0, 'PRI-XX-1', "
+					+ "'Verificador', 1)", "competencia"),
+			sinPermiso("UPDATE escala_logro SET descripcion = descripcion WHERE 1 = 0", "escala_logro"),
+			sinBorrado("periodo_evaluacion"), sinBorrado("asignacion_area"));
 
 	/** 1142 (o 1143): solo cc_sistema la escribe. */
 	private static SentenciaProhibida soloSistema(String sql, String riesgo) {
@@ -757,7 +797,10 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			// Sprint 9, tanda 3 (V34).
 			"trg_comunicado_nace", "trg_comunicado_estado", "trg_comunicado_destinatario_nace",
 			"trg_comunicado_destinatario_cambio",
-			"trg_confirmacion_lectura_nace", "trg_exportacion_nomina_nace");
+			"trg_confirmacion_lectura_nace", "trg_exportacion_nomina_nace",
+			// Sprint 10, tanda 1 (V35).
+			"trg_configuracion_evaluacion_nace", "trg_configuracion_evaluacion_cambio", "trg_periodo_evaluacion_nace",
+			"trg_periodo_evaluacion_cambio", "trg_asignacion_area_nace");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 

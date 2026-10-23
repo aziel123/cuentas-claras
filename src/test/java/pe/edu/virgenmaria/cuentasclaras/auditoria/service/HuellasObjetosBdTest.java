@@ -37,9 +37,13 @@ class HuellasObjetosBdTest {
 		// Sprint 9, tanda 3 (V34): 98 triggers (los comunicados, sus destinatarios, la confirmación de lectura y la
 		// exportación de la nómina) y las mismas 13 funciones: 111. Correcciones del sprint 9: + trg_comunicado_destinatario_cambio
 		// (99 y 112).
-		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(99)
+		// Sprint 10, tanda 1 (V35): 104 triggers (la evaluación del año, los periodos y las áreas de cada asignación) y
+		// cc_rol_activo: 119 huellas (la versión nueva de trg_asignacion_docente_estado no cambia el conteo).
+		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(104)
 				.isEqualTo(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
-		assertThat(esperadas).hasSize(113).containsKeys("cc_texto_plano", "trg_comunicado_destinatario_cambio", "trg_comunicado_nace", "trg_comunicado_estado",
+		assertThat(esperadas).hasSize(119).containsKeys("cc_rol_activo", "trg_configuracion_evaluacion_nace",
+				"trg_configuracion_evaluacion_cambio", "trg_periodo_evaluacion_nace", "trg_periodo_evaluacion_cambio",
+				"trg_asignacion_area_nace", "cc_texto_plano", "trg_comunicado_destinatario_cambio", "trg_comunicado_nace", "trg_comunicado_estado",
 				"trg_comunicado_destinatario_nace", "trg_confirmacion_lectura_nace", "trg_exportacion_nomina_nace",
 				"trg_registro_asistencia_nace", "trg_marca_asistencia_nace",
 				"trg_consentimiento_aviso_nace", "trg_configuracion_academica_nace", "trg_configuracion_academica_cambio",

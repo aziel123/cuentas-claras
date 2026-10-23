@@ -283,6 +283,11 @@ cuentasclaras:
     revisar-avisos-cada: "0 */5 7-19 * * MON-FRI"   # sistema.asistencia mira cada 5 min si a un colegio le toca su envío
     avisos-activos: true
     max-apoderados-aviso: 2                         # decisión 151 (no se sube sin cambiar la decisión)
+  curriculo:
+    # Sprint 10, tanda 1 (sección 8.1). El catálogo es nacional y versionado: cada colegio y año elige su versión.
+    version-por-defecto: CNEB-2016.1                # la que propone la pantalla al configurar un año nuevo
+    apertura-periodos: "0 0 6 * * *"                # AperturaPeriodos (sistema.academico) abre los periodos de hoy
+    revision-catalogo: "0 0 5 * * *"                # RevisionCatalogo: la huella del catálogo, a diario (M10)
   comunicados:
     # Sprint 9, tanda 3 (sección 8). La hora del resumen y el tope mensual de cada colegio están en configuracion_academica.
     revisar-avisos-cada: "30 */5 7-19 * * MON-SAT"  # sistema.comunicados: urgentes pendientes y, a su hora, el resumen

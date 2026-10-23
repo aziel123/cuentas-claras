@@ -108,6 +108,47 @@ class VerificadorPermisosBaseDatosTest {
 				.isInstanceOf(IllegalStateException.class).hasMessageContaining("trg_asignacion_docente_nace");
 	}
 
+	/**
+	 * Sprint 10, tanda 1 (E12, B15): si cc_app pudiera escribir el catálogo nacional, borrar una configuración o un periodo, o
+	 * editar o borrar las áreas de una asignación, prod no arranca.
+	 */
+	@Test
+	void fallaSiSePuedeEscribirElCatalogoOLasAreas() {
+		for (String[] caso : new String[][] {
+				{ "INSERT INTO competencia (version_id, area_id, codigo, nombre, orden) VALUES (0, 0, 'PRI-XX-1', 'Verificador', 1)",
+						"catálogo nacional (competencia)" },
+				{ "UPDATE competencia SET nombre = nombre WHERE 1 = 0", "catálogo nacional (competencia)" },
+				{ "UPDATE escala_logro SET descripcion = descripcion WHERE 1 = 0", "catálogo nacional (escala_logro)" },
+				{ "INSERT INTO curriculo_version (codigo, nombre, normas, vigente_desde, creado_en) VALUES ('VERIF-0', "
+						+ "'Verificador', 'Verificador', '2000-01-01', NOW(6))", "catálogo nacional (curriculo_version)" },
+				{ "UPDATE curriculo_version SET nombre = nombre WHERE 1 = 0", "catálogo nacional (curriculo_version)" },
+				{ "INSERT INTO area_curricular (version_id, nivel, codigo, nombre, orden) VALUES (0, 'PRIMARIA', 'XX', "
+						+ "'Verificador', 1)", "catálogo nacional (area_curricular)" },
+				{ "UPDATE area_curricular SET nombre = nombre WHERE 1 = 0", "catálogo nacional (area_curricular)" },
+				{ "DELETE FROM periodo_evaluacion WHERE 1 = 0", "periodo_evaluacion se podrían borrar" },
+				{ "DELETE FROM configuracion_evaluacion WHERE 1 = 0", "configuracion_evaluacion se podrían borrar" },
+				{ "DELETE FROM asignacion_area WHERE 1 = 0", "asignacion_area se podrían borrar" },
+				{ "UPDATE asignacion_area SET version = version WHERE 1 = 0", "asignacion_area se podrían editar" },
+				{ "UPDATE periodo_evaluacion SET numero = numero WHERE 1 = 0", "periodo_evaluacion" },
+				{ "UPDATE configuracion_evaluacion SET anio_escolar_id = anio_escolar_id WHERE 1 = 0",
+						"configuracion_evaluacion" } }) {
+			JdbcTemplate mysql = mysqlQueDeniega();
+			doReturn(0).when(mysql).update(caso[0]);
+			assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+					.as(caso[0]).isInstanceOf(IllegalStateException.class).hasMessageContaining(caso[1]);
+		}
+	}
+
+	/** Sprint 10, tanda 1 (E41): un periodo que nace CERRADO debe llegar a su trigger (1644); si llega a la FK, falta. */
+	@Test
+	void fallaSiFaltaElTriggerDeLosPeriodos() {
+		JdbcTemplate mysql = mysqlQueDeniega();
+		doThrow(denegado(1452)).when(mysql).update(VerificadorPermisosBaseDatos.PERIODO_CERRADO_IMPOSIBLE);
+
+		assertThatThrownBy(() -> new VerificadorPermisosBaseDatos(mysql, fuenteDatos).verificarPermisos())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("trg_periodo_evaluacion_nace");
+	}
+
 	@Test
 	void fallaSiFaltanLosTriggers() {
 		JdbcTemplate mysql = mysqlQueDeniega();
@@ -199,7 +240,12 @@ class VerificadorPermisosBaseDatosTest {
 					+ "liquidacion_pasarela|liquidacion_linea|reembolso_pasarela|huella_bitacora|semilla_muestreo|huella_hora|"
 					+ "resumen_diario|llamada_control|muestra_llamada|delegacion_llamada|configuracion_colegio|respaldo|"
 					+ "firma_operacion|acceso_dato_personal|registro_asistencia|marca_asistencia|consentimiento_aviso|"
-					+ "aviso_asistencia_corte|comunicado_adjunto|confirmacion_lectura|exportacion_nomina) ");
+					+ "aviso_asistencia_corte|comunicado_adjunto|confirmacion_lectura|exportacion_nomina|asignacion_area|"
+					+ "competencia|escala_logro|curriculo_version|area_curricular) ");
+
+	/** Sprint 10, tanda 1 (E12): el catálogo nacional no tiene GRANT de escritura: cc_app no inserta (1142). */
+	private static final java.util.regex.Pattern CATALOGO = java.util.regex.Pattern
+			.compile("^INSERT INTO (competencia|curriculo_version|area_curricular|escala_logro) ");
 
 	/** Sprint 3: el libro de pagos es de solo inserción; si cc_app pudiera editarlo, no arranca. */
 	@Test
@@ -324,7 +370,8 @@ class VerificadorPermisosBaseDatosTest {
 		when(mysql.update(anyString())).thenAnswer(invocacion -> {
 			String sql = invocacion.getArgument(0);
 			if (sql.startsWith("INSERT INTO configuracion_bd") || sql.startsWith("INSERT INTO configuracion_colegio")
-					|| sql.startsWith("INSERT INTO respaldo") || SOLO_SISTEMA.matcher(sql).find()) {
+					|| sql.startsWith("INSERT INTO respaldo") || SOLO_SISTEMA.matcher(sql).find()
+					|| CATALOGO.matcher(sql).find()) {
 				throw denegado(1142);
 			}
 			if (sql.startsWith("INSERT")) {
@@ -389,6 +436,9 @@ class VerificadorPermisosBaseDatosTest {
 		JdbcTemplate sistema = mock(JdbcTemplate.class);
 		when(sistema.update(anyString())).thenAnswer(invocacion -> {
 			String sql = invocacion.getArgument(0);
+			if (CATALOGO.matcher(sql).find()) {
+				throw denegado(1142);
+			}
 			if (sql.startsWith("INSERT")) {
 				throw denegado(1644);
 			}
@@ -670,7 +720,8 @@ class VerificadorPermisosBaseDatosTest {
 		// tanda 2 (V29): 82 con los conectores (nacen propuestos y cambian de estado con la aprobación firmada); tanda 3 (V30):
 		// los mismos 82 (los dos del respaldo cambian de versión).
 		// Sprint 9: 88 (tanda 1), 93 (tanda 2) y 98 (tanda 3: comunicados, destinatarios, confirmación y nómina).
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(99);
+		// Sprint 10, tanda 1 (V35): 104 (la evaluación del año, los periodos y las áreas de cada asignación).
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(104);
 	}
 
 	/**
