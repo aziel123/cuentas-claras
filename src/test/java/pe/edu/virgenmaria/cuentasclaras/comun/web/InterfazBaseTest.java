@@ -160,6 +160,20 @@ class InterfazBaseTest {
 				.andExpect(content().string(containsString("Cerrar sesión")));
 	}
 
+	/** Rediseño: el menú va en grupos plegables por tarea y el inicio ya no repite los módulos en una rejilla. */
+	@Test
+	void elMenuVaAgrupadoYElInicioNoRepiteLosModulos() throws Exception {
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(Rol.PROMOTOR)))
+				.andExpect(content().string(containsString("data-grupo=\"DINERO_DE_HOY\"")))
+				.andExpect(content().string(containsString("data-grupo=\"CONTROL_Y_AUDITORIA\"")))
+				.andExpect(content().string(not(containsString("Lo que podrás hacer aquí"))));
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(Rol.CAJA)))
+				.andExpect(content().string(containsString("data-grupo=\"DINERO_DE_HOY\"")))
+				.andExpect(content().string(not(containsString("data-grupo=\"CONTROL_Y_AUDITORIA\""))))
+				.andExpect(content().string(containsString("role=\"search\"")))
+				.andExpect(content().string(not(containsString("Lo que podrás hacer aquí"))));
+	}
+
 	@Test
 	void conVariosRolesManaElDeMayorPrioridadYElMenuLosSuma() throws Exception {
 		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(Rol.DIRECTOR, Rol.DOCENTE)))

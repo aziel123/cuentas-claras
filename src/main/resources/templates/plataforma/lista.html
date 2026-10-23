@@ -32,7 +32,7 @@
 			</thead>
 			<tbody>
 				<tr th:each="c : ${colegios}">
-					<td data-etiqueta="Colegio"><a th:href="@{/plataforma/colegios/{id}(id=${c.id})}" th:text="${c.nombre}">Colegio</a></td>
+					<td data-etiqueta="Colegio"><a class="tactil" th:href="@{/plataforma/colegios/{id}(id=${c.id})}" th:text="${c.nombre}">Colegio</a></td>
 					<td data-etiqueta="RUC" class="num" th:text="${c.ruc} ?: '—'">20123456789</td>
 					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${c.estado.etiqueta()},
 						${c.estado.name() == 'PRODUCCION'} ? 'exito' : 'alerta')}"></span></td>

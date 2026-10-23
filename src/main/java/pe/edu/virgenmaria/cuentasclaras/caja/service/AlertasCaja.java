@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.caja.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Plural;
 import pe.edu.virgenmaria.cuentasclaras.comun.muestreo.SemillasMuestreo;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil;
 import org.springframework.core.annotation.Order;
@@ -174,8 +175,8 @@ public class AlertasCaja implements AlertasRevision {
 		}
 		long cuadrados = porRevisar.stream().filter(c -> !c.conDiferencia() && !c.isTrasReapertura()).count();
 		if (cuadrados > 0) {
-			alertas.add(new AlertaRevision(Gravedad.INFORMATIVA, MODULO, cuadrados + " cierre(s) de caja sin diferencia "
-					+ "esperan tu aprobación (un clic).", "/aprobaciones"));
+			alertas.add(new AlertaRevision(Gravedad.INFORMATIVA, MODULO, Plural.de(cuadrados, "cierre", "cierres") + " de caja sin diferencia "
+					+ Plural.segun(cuadrados, "espera", "esperan") + " tu aprobación (un clic).", "/aprobaciones"));
 		}
 	}
 
@@ -246,14 +247,14 @@ public class AlertasCaja implements AlertasRevision {
 		for (SerieComprobante serie : series.findAll()) {
 			if (!configuradas.contains(serie.getSerie())) {
 				alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "Existe la serie " + serie.getSerie() + " con "
-						+ serie.getUltimoNumero() + " comprobante(s), que no es ninguna de las configuradas ("
+						+ Plural.de(serie.getUltimoNumero(), "comprobante", "comprobantes") + ", que no es ninguna de las configuradas ("
 						+ String.join(", ", new java.util.TreeSet<>(configuradas)) + "): alguien emitió fuera del sistema. "
 						+ "Revísalo con soporte.", null, new Aviso(TipoAviso.OTRA_CRITICA, "SERIE:" + serie.getId())));
 			}
 			long emitidos = comprobantes.countBySerie(serie.getSerie());
 			if (emitidos != serie.getUltimoNumero()) {
 				alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, "La serie " + serie.getSerie() + " va en el "
-						+ serie.getUltimoNumero() + " pero tiene " + emitidos + " comprobante(s): hay un hueco o un "
+						+ serie.getUltimoNumero() + " pero tiene " + Plural.de(emitidos, "comprobante", "comprobantes") + ": hay un hueco o un "
 						+ "número repetido. Revísalo con soporte.", null,
 						new Aviso(TipoAviso.OTRA_CRITICA, "HUECO:" + serie.getId() + ":" + serie.getUltimoNumero())));
 			}
@@ -271,8 +272,9 @@ public class AlertasCaja implements AlertasRevision {
 		List<Pago> criticos = pendientes.stream().filter(p -> !ahora.isBefore(
 				calendario.siguienteDiaHabil(p.getFecha()).atTime(propiedades.horaLimiteCierre()))).toList();
 		if (!criticos.isEmpty()) {
-			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, criticos.size() + " pago(s) digital(es) por "
-					+ Dinero.formatear(Dinero.sumar(criticos.stream().map(Pago::getTotal).toList())) + " siguen sin "
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, Plural.de(criticos.size(), "pago digital", "pagos digitales") + " por "
+					+ Dinero.formatear(Dinero.sumar(criticos.stream().map(Pago::getTotal).toList())) + " "
+					+ Plural.segun(criticos.size(), "sigue", "siguen") + " sin "
 					+ "verificarse en el banco pasado el día hábil siguiente al cobro (el más antiguo, del "
 					+ Calendario.formatear(criticos.getFirst().getFecha()) + ").", "/conciliacion",
 					new Aviso(TipoAviso.OTRA_CRITICA, "SINVERIF:" + criticos.stream().mapToLong(Pago::getId).max().orElse(0))));
@@ -283,15 +285,15 @@ public class AlertasCaja implements AlertasRevision {
 		List<Pago> atrasados = pendientes.stream().filter(p -> !criticos.contains(p)
 				&& !java.time.Duration.between(p.getCreadoEn(), ahora).minusDays(dias).isNegative()).toList();
 		if (!atrasados.isEmpty()) {
-			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, atrasados.size() + " pago(s) digital(es) por "
-					+ Dinero.formatear(Dinero.sumar(atrasados.stream().map(Pago::getTotal).toList())) + " llevan más de "
-					+ dias + " día(s) sin verificarse en el banco.", "/conciliacion"));
+			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, Plural.de(atrasados.size(), "pago digital", "pagos digitales") + " por "
+					+ Dinero.formatear(Dinero.sumar(atrasados.stream().map(Pago::getTotal).toList())) + " "
+					+ Plural.segun(atrasados.size(), "lleva", "llevan") + " más de " + Plural.de(dias, "día", "días") + " sin verificarse en el banco.", "/conciliacion"));
 		}
 		List<DepositoCaja> depositosAtrasados = depositos.sinVerificar().stream()
 				.filter(d -> !java.time.Duration.between(d.getCreadoEn(), ahora).minusDays(dias).isNegative()).toList();
 		if (!depositosAtrasados.isEmpty()) {
-			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, depositosAtrasados.size() + " depósito(s) llevan "
-					+ "más de " + dias + " día(s) sin verificarse en el banco.", "/conciliacion"));
+			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, Plural.de(depositosAtrasados.size(), "depósito", "depósitos") + " "
+					+ Plural.segun(depositosAtrasados.size(), "lleva", "llevan") + " más de " + Plural.de(dias, "día", "días") + " sin verificarse en el banco.", "/conciliacion"));
 		}
 	}
 
@@ -331,8 +333,8 @@ public class AlertasCaja implements AlertasRevision {
 			java.util.Set<String> excluidos = new java.util.HashSet<>();
 			pendientes.forEach(s -> excluidos.add(s.getSolicitadoPor()));
 			delPago.forEach(p -> excluidos.add(p.getCajero()));
-			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, ids.size() + " anulación(es) de pago por "
-					+ Dinero.formatear(monto) + " esperan aprobación.", "/aprobaciones",
+			alertas.add(new AlertaRevision(Gravedad.ATENCION, MODULO, Plural.de(ids.size(), "anulación", "anulaciones") + " de pago por "
+					+ Dinero.formatear(monto) + " " + Plural.segun(ids.size(), "espera", "esperan") + " aprobación.", "/aprobaciones",
 					new Aviso(TipoAviso.ANULACION_PAGO_PENDIENTE, "S:" + hoy, Dinero.formatear(monto), excluidos)));
 		}
 	}

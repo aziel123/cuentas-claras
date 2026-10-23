@@ -92,7 +92,12 @@ class CajaControllerTest {
 		mvc.perform(get("/caja/familias/{id}", f.quispe()).with(UsuariosDePrueba.como(CAJA)))
 				.andExpect(status().isOk()).andExpect(view().name("caja/familia"))
 				.andExpect(content().string(containsString("Pensión marzo 2027")))
-				.andExpect(content().string(containsString("name=\"cuotaIds\" value=\"" + marzoMateo + "\"")));
+				.andExpect(content().string(containsString("name=\"cuotaIds\" value=\"" + marzoMateo + "\"")))
+				// Rediseño (cobro en dos columnas): el resumen a la derecha con el total marcado y el script propio.
+				.andExpect(content().string(containsString("class=\"cobro-resumen\"")))
+				.andExpect(content().string(containsString("data-total-marcado")))
+				.andExpect(content().string(containsString("data-saldo=\"")))
+				.andExpect(content().string(containsString("src=\"/js/cobro.js\"")));
 
 		MvcResult revisar = mvc.perform(post("/caja/familias/{id}/revisar", f.quispe()).with(csrf())
 						.with(UsuariosDePrueba.como(CAJA)).param("cuotaIds", marzoMateo.toString(), marzoValeria.toString())

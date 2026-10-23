@@ -29,7 +29,7 @@
 			<tbody>
 				<tr th:each="p : ${lista.puntos}" th:data-paso="${p.clave}">
 					<td data-etiqueta="Paso">
-						<a th:if="${p.enlace != null}" th:href="@{${p.enlace}}" th:text="${p.paso}">Paso</a>
+						<a class="tactil" th:if="${p.enlace != null}" th:href="@{${p.enlace}}" th:text="${p.paso}">Paso</a>
 						<span th:unless="${p.enlace != null}" th:text="${p.paso}">Paso</span>
 					</td>
 					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${p.estado.etiqueta()},

@@ -146,7 +146,7 @@ class AlertasCajaTest {
 		anulaciones.solicitarDevolucion(pago, EscenarioAprobaciones.MOTIVO_ANULACION);
 		como(PROMOTORIA);
 		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.ATENCION
-				&& a.texto().equals("1 anulación(es) de pago por S/ 450.00 esperan aprobación."));
+				&& a.texto().equals("1 anulación de pago por S/ 450.00 espera aprobación."));
 	}
 
 	@Test
@@ -158,7 +158,7 @@ class AlertasCajaTest {
 
 		reloj.avanzar(Duration.ofDays(1));
 		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.ATENCION
-				&& a.texto().equals("1 pago(s) digital(es) por S/ 450.00 llevan más de 1 día(s) sin verificarse en el banco."));
+				&& a.texto().equals("1 pago digital por S/ 450.00 lleva más de 1 día sin verificarse en el banco."));
 	}
 
 	@Test
@@ -167,7 +167,7 @@ class AlertasCajaTest {
 		assertThat(alertas.alertas()).noneMatch(a -> a.texto().contains("La serie"));
 		jdbc.update("UPDATE serie_comprobante SET ultimo_numero = ultimo_numero + 1 WHERE serie = 'B001'");
 		assertThat(alertas.alertas()).anyMatch(a -> a.gravedad() == Gravedad.CRITICA
-				&& a.texto().startsWith("La serie B001 va en el 2 pero tiene 1 comprobante(s)"));
+				&& a.texto().startsWith("La serie B001 va en el 2 pero tiene 1 comprobante"));
 	}
 
 	@Test
@@ -212,12 +212,12 @@ class AlertasCajaTest {
 		assertThat(indicadores.titulo()).isEqualTo("Hoy en caja · 02/10/2026");
 		assertThat(indicadores.indicadores()).extracting(IndicadoresInicio.Indicador::etiqueta,
 				IndicadoresInicio.Indicador::valor, IndicadoresInicio.Indicador::detalle).containsExactly(
-				org.assertj.core.groups.Tuple.tuple("Cobrado hoy", "S/ 900.00", "2 pago(s)"),
+				org.assertj.core.groups.Tuple.tuple("Cobrado hoy", "S/ 900.00", "2 pagos"),
 				// Sprint 4: lo que entró por la pasarela (o la recaudación) sin que nadie lo digite.
-				org.assertj.core.groups.Tuple.tuple("Entró solo (en línea y por banco)", "S/ 0.00", "0 pago(s) sin que nadie digite"),
-				org.assertj.core.groups.Tuple.tuple("Efectivo", "S/ 450.00", "1 pago(s)"),
+				org.assertj.core.groups.Tuple.tuple("Entró solo (en línea y por banco)", "S/ 0.00", "0 pagos sin que nadie digite"),
+				org.assertj.core.groups.Tuple.tuple("Efectivo", "S/ 450.00", "1 pago"),
 				org.assertj.core.groups.Tuple.tuple("Digital", "S/ 450.00", "50 % del total"),
-				org.assertj.core.groups.Tuple.tuple("Cajas", "1 abierta(s) · 0 cerrada(s)", "Sin diferencias"));
+				org.assertj.core.groups.Tuple.tuple("Cajas", "1 abierta · 0 cerradas", "Sin diferencias"));
 	}
 
 	/** Sprint 5, tanda 3 (G21): dos Yape del viernes verificados; el lunes Promotoría ve su muestra al azar. */

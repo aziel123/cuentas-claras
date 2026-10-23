@@ -42,7 +42,11 @@
 						<button th:replace="~{fragments/componentes :: boton('Aprobar', 'primario')}"></button>
 					</form>
 					<th:block th:if="${s.apruebaConVentana()}">
-						<button type="button" class="btn btn-primario" th:popovertarget="|modal-aprobar-${s.id}|">Aprobar</button>
+						<!--/* Rediseño (clarify): con diferencia en caja o tras reabrir, lo primero es revisar el detalle;
+						     «Aprobar» deja de ser el botón principal y pide la nota antes de aprobar. Solo cambia la interfaz. */-->
+						<a th:if="${s.pideComentario}" class="btn btn-primario" th:href="@{/aprobaciones/{id}(id=${s.id})}">Revisar el detalle</a>
+						<button type="button" class="btn" th:classappend="${s.pideComentario} ? 'btn-cuidado' : 'btn-primario'"
+							th:popovertarget="|modal-aprobar-${s.id}|" th:text="${s.pideComentario} ? 'Aprobar con nota' : 'Aprobar'">Aprobar</button>
 						<div class="modal" th:id="|modal-aprobar-${s.id}|" popover role="dialog" aria-modal="true"
 							th:aria-labelledby="|modal-aprobar-${s.id}-titulo|">
 							<form method="post" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}" class="modal-cuerpo">

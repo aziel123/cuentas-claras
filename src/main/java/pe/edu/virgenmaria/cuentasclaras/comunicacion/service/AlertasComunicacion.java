@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.comunicacion.service;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Plural;
 import org.springframework.core.env.Environment;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -75,7 +76,7 @@ public class AlertasComunicacion implements AlertasRevision {
 		List<Long> sinAviso = mensajes.pagosSinAvisoEnviado(ahora.minusDays(DIAS_PAGO_SIN_AVISO),
 				ahora.minusMinutes(propiedades.alertaPagoSinEntregarMinutos()), SALIERON);
 		if (!sinAviso.isEmpty()) {
-			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, sinAviso.size() + " pago(s) sin aviso enviado a su "
+			alertas.add(new AlertaRevision(Gravedad.CRITICA, MODULO, Plural.de(sinAviso.size(), "pago", "pagos") + " sin aviso enviado a su "
 					+ "responsable de pago después de " + propiedades.alertaPagoSinEntregarMinutos() + " minutos: la familia no se "
 					+ "enteró. Revisa la bandeja de envíos.", "/mensajes", new Aviso(TipoAviso.OTRA_CRITICA, "SINAVISO:"
 							+ sinAviso.stream().mapToLong(Long::longValue).max().orElse(0))));

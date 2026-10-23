@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cierre de caja', ~{::main})}">
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cerrar mi caja', ~{::main})}">
 <body>
 <main id="contenido" class="contenido" data-pantalla="caja-cierre" th:with="k=${cierre}">
 	<div class="cabecera">
 		<div>
 			<p class="etiqueta"><a th:href="@{/caja}">Caja</a></p>
-			<h1>Cierre de caja</h1>
+			<h1>Cerrar mi caja</h1>
 			<p class="secundario" th:text="|${k.cajera} · ${#temporals.format(k.hoy, 'dd/MM/yyyy')}|">Lucía Ramos · 02/10/2026</p>
 		</div>
 		<div class="fila">
@@ -26,8 +26,9 @@
 			<h2 id="titulo-conteo" th:text="|Cuenta el efectivo de tu caja del ${#temporals.format(c.fecha, 'dd/MM')}|">Cuenta el efectivo</h2>
 			<p class="secundario">
 				Cuenta todo el efectivo, incluido el fondo fijo de <span th:replace="~{fragments/componentes :: monto(${c.fondo})}"></span>.
-				Verás lo registrado recién después de registrar tu conteo: así el cierre es a ciegas y nadie puede acomodarlo.
 			</p>
+			<div th:replace="~{fragments/componentes :: alerta('info',
+				'¿Por qué no ves cuánto deberías tener? Es un cierre a ciegas: si vieras el monto registrado, cualquiera podría acomodar su conteo para que cuadre. Cuentas primero y, en cuanto registras tu conteo, ves lo registrado y la diferencia. Así tu conteo te protege a ti.')}"></div>
 			<form method="post" th:action="@{/caja/cierre/conteo}" class="formulario">
 				<div class="campo">
 					<label for="contado">Total contado (S/)</label>

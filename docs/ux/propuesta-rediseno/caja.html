@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caja · Cobrar · Cuotaria</title>
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<a class="saltar" href="#contenido">Saltar al contenido</a>
+<nav class="maqueta-nav" aria-label="Pantallas de la maqueta"><div><strong>Maqueta:</strong>
+  <a href="index.html">Inicio Promotoría</a>
+  <a href="caja.html" aria-current="page">Caja (rol Caja)</a>
+  <a href="familia.html">Portal de la familia</a></div></nav>
+
+<header class="barra"><div class="barra-in">
+  <a class="marca" href="caja.html"><span class="monograma" aria-hidden="true">VM</span>
+    <span>Cuotaria<small>Colegio Virgen María</small></span></a>
+  <div class="barra-sesion"><span class="nombre">Pedro Huanca</span><span class="rol">Caja</span>
+    <a class="btn btn-secundario" href="#">Salir</a></div>
+</div></header>
+
+<div class="armazon">
+  <!-- Menú filtrado por rol: Caja solo ve 2 grupos -->
+  <details class="menu menu-movil">
+    <summary>Menú</summary>
+    <nav aria-label="Menú principal">
+      <a class="menu-inicio" href="#">Inicio</a>
+      <details class="grupo" open><summary>Mi caja</summary><ul>
+        <li><a href="caja.html" aria-current="page">Cobrar</a></li>
+        <li><a href="#">Cobros de hoy</a></li>
+        <li><a href="#">Cerrar mi caja</a></li>
+      </ul></details>
+      <details class="grupo"><summary>Mi cuenta</summary><ul>
+        <li><a href="#">Cambiar clave</a></li>
+      </ul></details>
+    </nav>
+  </details>
+
+  <main id="contenido" class="contenido">
+    <div class="encabezado">
+      <div><h1>Cobrar</h1><p>Caja abierta desde las 7:45 a. m. · Cobrado hoy <span class="monto">S/ 480.00</span> en 3 cobros</p></div>
+      <a class="btn btn-secundario" href="#">Cerrar mi caja</a>
+    </div>
+
+    <section class="tarjeta">
+      <form class="buscador" action="#" role="search">
+        <div><label for="buscar">Buscar alumno</label>
+          <input id="buscar" type="search" value="Mendoza" aria-describedby="buscar-ayuda">
+          <p id="buscar-ayuda" class="ayuda">Escribe el DNI, el nombre o el código del alumno.</p></div>
+        <button class="btn btn-secundario" type="submit">Buscar</button>
+      </form>
+    </section>
+
+    <div class="dos-col">
+      <section class="tarjeta" aria-labelledby="t-cuotas">
+        <div class="ficha"><p><strong>Lucía Mendoza Ríos</strong> · 3.° de primaria B · Código 2026-0142</p>
+          <span class="badge badge-peligro">1 cuota vencida</span></div>
+        <h2 id="t-cuotas">Cuotas pendientes</h2>
+        <table class="tabla-tarjetas">
+          <thead><tr><th scope="col"><span class="solo-lector">Elegir</span></th><th scope="col">Concepto</th><th scope="col">Vence</th><th scope="col">Estado</th><th scope="col" class="num">Monto</th></tr></thead>
+          <tbody>
+            <tr><td><input class="chip-check" type="checkbox" id="c1" checked aria-label="Cobrar pensión de setiembre"></td><td><label for="c1">Pensión setiembre</label></td><td>30/09</td><td><span class="badge badge-peligro">Vencido</span></td><td class="num monto">S/ 450.00</td></tr>
+            <tr><td><input class="chip-check" type="checkbox" id="c2" checked aria-label="Cobrar pensión de octubre"></td><td><label for="c2">Pensión octubre</label></td><td>31/10</td><td><span class="badge badge-alerta">Pendiente</span></td><td class="num monto">S/ 450.00</td></tr>
+            <tr><td><input class="chip-check" type="checkbox" id="c3" aria-label="Cobrar pensión de noviembre"></td><td><label for="c3">Pensión noviembre</label></td><td>30/11</td><td><span class="badge badge-info">Por vencer</span></td><td class="num monto">S/ 450.00</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tarjeta resumen-cobro" aria-labelledby="t-res">
+        <h2 id="t-res">Resumen del cobro</h2>
+        <fieldset class="medios"><legend>Medio de pago</legend>
+          <div class="medio"><input type="radio" name="medio" id="m1" checked><label for="m1">Efectivo</label></div>
+          <div class="medio"><input type="radio" name="medio" id="m2"><label for="m2">Yape</label></div>
+          <div class="medio"><input type="radio" name="medio" id="m3"><label for="m3">Plin</label></div>
+          <div class="medio"><input type="radio" name="medio" id="m4"><label for="m4">Tarjeta</label></div>
+        </fieldset>
+        <p class="total"><span>Total a cobrar (2 cuotas)</span><span class="monto">S/ 900.00</span></p>
+        <button class="btn btn-primario btn-grande btn-bloque" type="button">Registrar pago de S/ 900.00</button>
+        <p class="ayuda">Se emite la boleta al momento y se avisa a la familia por WhatsApp.</p>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>

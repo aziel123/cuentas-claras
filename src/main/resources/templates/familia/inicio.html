@@ -42,15 +42,23 @@
 		</section>
 	</th:block>
 
-	<section class="tarjeta total-cobro" aria-labelledby="titulo-total">
-		<h2 id="titulo-total" class="etiqueta">Total por pagar</h2>
-		<p class="total-cobro-monto" data-total-por-pagar
-			th:text="|S/ ${#numbers.formatDecimal(k.totalPorPagar, 1, 'COMMA', 2, 'POINT')}|">S/ 900.00</p>
+	<!--/* Rediseño (hallazgo 8): el total grande con el botón «Cómo pagar» al lado, que lleva al pago en línea de abajo. */-->
+	<section class="tarjeta deuda-hoy" th:classappend="${inicio != null and inicio.conDeudaVencida()} ? 'con-vencido'" aria-labelledby="titulo-total">
+		<h2 id="titulo-total" class="kpi-etiqueta">Total por pagar</h2>
+		<div class="deuda-total">
+			<div>
+				<p class="kpi-cifra total-cobro-monto" data-total-por-pagar
+					th:text="|S/ ${#numbers.formatDecimal(k.totalPorPagar, 1, 'COMMA', 2, 'POINT')}|">S/ 900.00</p>
+				<p th:if="${inicio != null and inicio.conDeudaVencida()}"><span class="badge badge-peligro">Vencido</span></p>
+			</div>
+			<a class="btn btn-primario btn-grande" th:href="${k.pagoEnLineaDisponible} ? '#pagar' : '#pagar-banco'" th:unless="${k.sinDeuda()}"
+				th:text="${k.pagoEnLineaDisponible} ? 'Cómo pagar' : 'Cómo pagar en el banco'">Cómo pagar</a>
+		</div>
 		<p class="ayuda" th:unless="${k.pagoEnLineaDisponible}">El pago en línea todavía no está disponible. Puedes pagar en caja o en el banco con el código de pago de tu hijo.</p>
 	</section>
 
 	<form method="post" th:action="@{/familia/pagar/revisar}" class="formulario">
-		<section class="tarjeta" aria-labelledby="titulo-cuotas">
+		<section class="tarjeta" id="pagar" aria-labelledby="titulo-cuotas">
 			<h2 id="titulo-cuotas">Lo que debes</h2>
 			<th:block th:if="${k.sinDeuda()}">
 				<div th:replace="~{fragments/componentes :: estadoVacio('Estás al día',
@@ -82,7 +90,7 @@
 		</section>
 	</form>
 
-	<section class="tarjeta" aria-labelledby="titulo-banco">
+	<section class="tarjeta" id="pagar-banco" aria-labelledby="titulo-banco">
 		<h2 id="titulo-banco">Pagar en el banco</h2>
 		<p class="secundario">En la ventanilla, agente o app de tu banco, paga con el código de pago de tu hijo. El pago aparece aquí al día hábil siguiente.</p>
 		<ul class="lista-simple">
@@ -137,7 +145,7 @@
 			algo está mal o quieres pedir algo sobre ellos, avísanos.</p>
 		<p class="fila">
 			<a class="btn btn-secundario" th:href="@{/familia/mis-datos}">Mis datos</a>
-			<a class="btn btn-texto" th:href="@{/familia/privacidad}">Aviso de privacidad</a>
+			<a class="btn btn-secundario" th:href="@{/familia/privacidad}">Aviso de privacidad</a>
 		</p>
 	</section>
 </main>

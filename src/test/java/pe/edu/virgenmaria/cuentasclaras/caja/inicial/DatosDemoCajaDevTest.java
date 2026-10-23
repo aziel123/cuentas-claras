@@ -98,9 +98,10 @@ class DatosDemoCajaDevTest {
 		assertThat((BigDecimal) descuento.get("total_estimado")).isEqualByComparingTo("45.00");
 		assertThat(jdbc.queryForObject("SELECT SUM(monto) FROM ajuste_cuota", BigDecimal.class))
 				.isEqualByComparingTo("45.00");
-		assertThat(jdbc.queryForObject("SELECT c.monto - c.monto_descuento FROM cuota c JOIN alumno a ON a.id = c.alumno_id "
-				+ "WHERE a.numero_documento = ?", BigDecimal.class, DatosDemoCajaDev.DNI_VALERIA))
-				.isEqualByComparingTo("405.00");
+		// El descuento va a una sola cuota de Valeria (la primera por pagar): 450 − 45.
+		assertThat(jdbc.queryForList("SELECT c.monto - c.monto_descuento FROM cuota c JOIN alumno a ON a.id = c.alumno_id "
+				+ "WHERE a.numero_documento = ? AND c.monto_descuento > 0", BigDecimal.class, DatosDemoCajaDev.DNI_VALERIA))
+				.singleElement().satisfies(neto -> assertThat(neto).isEqualByComparingTo("405.00"));
 
 		Map<String, Object> solicitud = jdbc.queryForMap("SELECT * FROM solicitud_cambio WHERE estado = 'PENDIENTE' "
 				+ "AND tipo = 'ANULACION_PAGO'");

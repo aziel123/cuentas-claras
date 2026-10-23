@@ -130,6 +130,19 @@ public class BandejaAprobaciones {
 		return solicitudes.countByEstado(EstadoSolicitud.PENDIENTE);
 	}
 
+	/**
+	 * Rediseño de la interfaz (auditoría del PR #19, hallazgo 2): el contador del menú. Solo las pendientes que quien está
+	 * en sesión puede resolver: la misma regla que {@code puedeResolver} de la bandeja (no las que pidió ni en las que
+	 * participó). Mismos roles que el módulo Aprobaciones.
+	 */
+	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
+	@Transactional(readOnly = true)
+	public long contarPorResolver() {
+		String usuario = usuario();
+		return solicitudes.findByEstadoOrderByIdAsc(EstadoSolicitud.PENDIENTE).stream()
+				.filter(s -> !participantesDe(s).contains(usuario)).count();
+	}
+
 	/** Aprueba una solicitud que no pide llamadas. */
 	public void aprobar(Long id, String comentario) {
 		aprobar(id, comentario, false, List.of());

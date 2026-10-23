@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mi familia · Cuotaria</title>
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<a class="saltar" href="#contenido">Saltar al contenido</a>
+<nav class="maqueta-nav" aria-label="Pantallas de la maqueta"><div><strong>Maqueta:</strong>
+  <a href="index.html">Inicio Promotoría</a>
+  <a href="caja.html">Caja</a>
+  <a href="familia.html" aria-current="page">Familia</a></div></nav>
+
+<header class="barra"><div class="barra-in">
+  <a class="marca" href="familia.html"><span class="monograma" aria-hidden="true">VM</span>
+    <span>Mi familia<small>Colegio Virgen María</small></span></a>
+  <div class="barra-sesion"><span class="nombre">Carmen Ríos</span><a class="btn btn-secundario" href="#">Salir</a></div>
+</div></header>
+
+<main id="contenido" class="portal">
+  <section class="deuda" aria-labelledby="t-deuda">
+    <p id="t-deuda" class="kpi-etiqueta">Lo que debes hoy · Lucía Mendoza Ríos</p>
+    <p class="kpi-cifra monto"><small>S/</small> 450.00</p>
+    <p><span class="badge badge-peligro">Vencido</span> Pensión de setiembre, venció el 30/09</p>
+    <a class="btn btn-primario btn-grande btn-bloque" href="#">Pagar ahora con Yape o tarjeta</a>
+  </section>
+
+  <section aria-labelledby="t-cuotas">
+    <h2 id="t-cuotas" class="kpi-etiqueta">Tus cuotas</h2>
+    <ul class="cuotas">
+      <li class="cuota"><p><strong>Pensión setiembre</strong></p><p class="monto">S/ 450.00</p>
+        <p><span class="badge badge-peligro">Vencido</span> 30/09</p><a href="#">Pagar</a></li>
+      <li class="cuota"><p><strong>Pensión octubre</strong></p><p class="monto">S/ 450.00</p>
+        <p><span class="badge badge-alerta">Pendiente</span> vence 31/10</p></li>
+      <li class="cuota"><p><strong>Pensión agosto</strong></p><p class="monto">S/ 450.00</p>
+        <p><span class="badge badge-exito">Pagado</span> 28/08</p><a href="#">Ver boleta</a></li>
+    </ul>
+  </section>
+
+  <a class="btn btn-secundario btn-bloque" href="#">¿Algo no cuadra? Avísanos</a>
+</main>
+
+<nav class="barra-inferior" aria-label="Secciones del portal">
+  <a href="familia.html" aria-current="page">Inicio</a>
+  <a href="#">Boletas</a>
+  <a href="#">Mensajes</a>
+  <a href="#">Mis datos</a>
+</nav>
+</body>
+</html>

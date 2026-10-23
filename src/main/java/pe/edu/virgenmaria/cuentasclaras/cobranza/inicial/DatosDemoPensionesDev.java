@@ -32,17 +32,18 @@ import java.util.function.Supplier;
  * Pensiones de demostración (solo perfil {@code dev}, después de {@code DatosDemoColegioDev}), creadas con los mismos
  * servicios que usa la aplicación, como si las hicieran las personas:
  * <ul>
- *   <li>Planes 2026 (cobra desde el 01/12/2026: lo anterior es saldo inicial) y 2027: los propone
- *       «administracion» y los aprueba «director». Inicial S/ 380, Primaria S/ 450, Secundaria S/ 480; matrícula
- *       S/ 350. Al aprobarse, se generan los cronogramas de las matrículas 2026.</li>
- *   <li>Un lote de saldo inicial 2026 (deudas al 30/09/2026) que cuadra y está ENVIADO por «administracion», sin
- *       confirmar: para que Promotoría lo confirme en la demostración.</li>
+ *   <li>Planes 2026 (cobra las pensiones desde marzo: el colegio usa el sistema desde el inicio de clases; la matrícula,
+ *       que venció en febrero, se cobró antes) y 2027: los propone «administracion» y los aprueba «director». Inicial
+ *       S/ 380, Primaria S/ 450, Secundaria S/ 480; matrícula S/ 350. Al aprobarse, se generan los cronogramas de las
+ *       matrículas 2026 (de marzo a diciembre).</li>
+ *   <li>Un lote de saldo inicial 2026 con las matrículas 2026 que quedaron debiendo (corte 28/02/2026) que cuadra y está
+ *       ENVIADO por «administracion», sin confirmar: para que Promotoría lo confirme en la demostración.</li>
  * </ul>
  * Los montos son de ejemplo, no los del colegio.
  */
 @Component
 @Profile("dev")
-@Order(3)
+@Order(4)
 public class DatosDemoPensionesDev implements ApplicationRunner {
 
 	private static final Logger LOG = LoggerFactory.getLogger(DatosDemoPensionesDev.class);
@@ -52,23 +53,26 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 	static final Map<Nivel, BigDecimal> PENSIONES = Map.of(Nivel.INICIAL, new BigDecimal("380.00"), Nivel.PRIMARIA,
 			new BigDecimal("450.00"), Nivel.SECUNDARIA, new BigDecimal("480.00"));
 
-	static final LocalDate COBRO_DESDE_2026 = LocalDate.of(2026, 12, 1);
+	/**
+	 * Rediseño (datos con historia): el plan 2026 cobra las pensiones desde marzo. La matrícula vence el 28/02, antes de
+	 * ese día, así que el plan no la genera: la que quedó debiendo entra como saldo inicial.
+	 */
+	static final LocalDate COBRO_DESDE_2026 = LocalDate.of(2026, 3, 1);
 
-	/** DNI del alumno, mes de la pensión adeudada y monto. Todos deben setiembre; algunos también agosto. */
-	record DeudaDemo(String dni, int mes, String monto) {
+	/** Corte del saldo inicial: el día antes de que el sistema empiece a cobrar. */
+	static final LocalDate CORTE_SALDO_INICIAL = LocalDate.of(2026, 2, 28);
+
+	/** DNI del alumno que debe su matrícula 2026 y el monto (seis de los diez alumnos de las historias). */
+	record DeudaDemo(String dni, String monto) {
 	}
 
 	static final List<DeudaDemo> DEUDAS = List.of(
-			new DeudaDemo("78451236", 8, "450.00"), new DeudaDemo("78451236", 9, "450.00"),
-			new DeudaDemo("80127745", 9, "450.00"),
-			new DeudaDemo("75330981", 9, "480.00"),
-			new DeudaDemo("82345671", 9, "380.00"),
-			new DeudaDemo("81554203", 8, "380.00"), new DeudaDemo("81554203", 9, "380.00"),
-			new DeudaDemo("76902114", 9, "480.00"),
-			new DeudaDemo("79876543", 9, "450.00"),
-			new DeudaDemo("79215560", 9, "450.00"),
-			new DeudaDemo("74018832", 9, "480.00"),
-			new DeudaDemo("77640391", 9, "450.00"));
+			new DeudaDemo("75330981", "350.00"),
+			new DeudaDemo("81554203", "350.00"),
+			new DeudaDemo("76902114", "350.00"),
+			new DeudaDemo("79215560", "350.00"),
+			new DeudaDemo("74018832", "350.00"),
+			new DeudaDemo("77640391", "350.00"));
 
 	private final ServicioPlanesPension planes;
 
@@ -138,15 +142,15 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 	}
 
 	private void crearLote(AnioOpcion anio) {
-		LocalDate corte = LocalDate.of(2026, 9, 30);
+		LocalDate corte = CORTE_SALDO_INICIAL;
 		LocalDate hoy = LocalDate.now(reloj);
 		BigDecimal total = DEUDAS.stream().map(d -> new BigDecimal(d.monto())).reduce(BigDecimal.ZERO, BigDecimal::add);
 		como("administracion", () -> {
 			Long lote = saldoInicial.crearLote(new LoteRequest(anio.id(), corte.isAfter(hoy) ? hoy : corte,
 					"Informe del contador N.° 014-2026 (ejemplo)", total));
 			for (DeudaDemo deuda : DEUDAS) {
-				saldoInicial.agregarLinea(lote, new LineaSaldoRequest(deuda.dni(), ConceptoSaldo.PENSION, 2026,
-						deuda.mes(), null, new BigDecimal(deuda.monto()), null));
+				saldoInicial.agregarLinea(lote, new LineaSaldoRequest(deuda.dni(), ConceptoSaldo.MATRICULA, 2026, null,
+						null, new BigDecimal(deuda.monto()), CORTE_SALDO_INICIAL));
 			}
 			saldoInicial.enviar(lote);
 			return lote;

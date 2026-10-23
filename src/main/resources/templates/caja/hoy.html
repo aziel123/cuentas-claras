@@ -10,7 +10,7 @@
 		</div>
 		<div class="fila">
 			<a th:replace="~{fragments/componentes :: enlaceBoton('Nuevo cobro', @{/caja}, 'primario')}"></a>
-			<a th:replace="~{fragments/componentes :: enlaceBoton('Cerrar caja', @{/caja/cierre}, 'secundario')}"></a>
+			<a th:replace="~{fragments/componentes :: enlaceBoton('Cerrar mi caja', @{/caja/cierre}, 'secundario')}"></a>
 		</div>
 	</div>
 
@@ -30,7 +30,7 @@
 			<tbody>
 				<tr th:each="p : ${d.pagos}" th:classappend="${p.anulado} ? 'fila-quitada'" th:data-pago="${p.id}">
 					<td data-etiqueta="Hora" class="num" th:text="${#temporals.format(p.hora, 'HH:mm')}">09:15</td>
-					<td data-etiqueta="Comprobante"><a class="num" th:href="@{/caja/pagos/{id}(id=${p.id})}" th:text="${p.comprobante}">B001-00000001</a></td>
+					<td data-etiqueta="Comprobante"><a class="num tactil" th:href="@{/caja/pagos/{id}(id=${p.id})}" th:text="${p.comprobante}">B001-00000001</a></td>
 					<td data-etiqueta="Alumnos" th:text="${p.alumnos}">Mateo Quispe Huamán</td>
 					<td data-etiqueta="Conceptos" th:text="${p.conceptos}">Pensión diciembre 2026</td>
 					<td data-etiqueta="Medio" th:text="${p.medio}">Efectivo</td>

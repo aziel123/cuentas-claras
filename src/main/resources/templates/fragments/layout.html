@@ -14,6 +14,7 @@
 	<meta th:if="${recargarCada != null}" http-equiv="refresh" th:content="${recargarCada}">
 	<link rel="stylesheet" th:href="@{/css/tokens.css}">
 	<link rel="stylesheet" th:href="@{/css/app.css}">
+	<link rel="stylesheet" th:href="@{/css/rediseno.css}">
 </head>
 <body>
 	<a class="saltar" href="#contenido">Saltar al contenido</a>
@@ -25,10 +26,8 @@
 				<!--/* Sprint 8, tanda 1 (decisión 123): el logo del colegio de la sesión si lo subió; si no, el monograma.
 				     Los colores no cambian por colegio (contraste AA). */-->
 				<img class="logo-colegio" th:if="${marcaColegio != null and marcaColegio.conLogo}" th:src="@{/marca/logo}" alt="">
-				<!--/* Monograma: iniciales de las dos últimas palabras del colegio (o del producto si no hay sesión). */-->
-				<span class="monograma" aria-hidden="true" th:unless="${marcaColegio != null and marcaColegio.conLogo}"
-					th:with="pm=${((usuarioActual != null ? usuarioActual.colegio : null) ?: (nombreInstitucional ?: marca?.nombre) ?: 'C').trim().split(' +')}"
-					th:text="${#strings.toUpperCase(pm.length > 1 ? pm[pm.length - 2].substring(0, 1) + pm[pm.length - 1].substring(0, 1) : pm[0].substring(0, 1))}">C</span>
+				<!--/* Monograma: iniciales calculadas en ModeloSesionAdvice (colegio de la sesión o, sin sesión, el producto). */-->
+				<span class="monograma" aria-hidden="true" th:unless="${marcaColegio != null and marcaColegio.conLogo}" th:text="${monograma} ?: 'C'">C</span>
 				<span class="marca-texto">
 					<strong th:text="${usuarioActual != null} ? ${usuarioActual.colegio} : ${nombreInstitucional}">Nombre del colegio</strong>
 					<small th:text="|Plataforma ${marca?.nombre}|">Plataforma</small>
@@ -49,7 +48,7 @@
 
 	<div class="armazon" th:classappend="${#lists.isEmpty(menu)} ? 'sin-menu'">
 		<nav class="menu-lateral" aria-label="Menú principal" th:unless="${#lists.isEmpty(menu)}">
-			<ul th:replace="~{fragments/layout :: menuLista}"></ul>
+			<div th:replace="~{fragments/layout :: menuLista}"></div>
 		</nav>
 		<!--/* Celular: el menú y las acciones de la cuenta van juntos en un desplegable para que la cabecera sea corta. */-->
 		<details class="menu-movil" th:if="${usuarioActual != null}">
@@ -58,7 +57,7 @@
 				<span class="menu-movil-usuario" th:text="${usuarioActual.nombreCompleto}">Nombre</span>
 			</summary>
 			<nav aria-label="Menú principal" th:unless="${#lists.isEmpty(menu)}">
-				<ul th:replace="~{fragments/layout :: menuLista}"></ul>
+				<div th:replace="~{fragments/layout :: menuLista}"></div>
 			</nav>
 			<div class="sesion-movil">
 				<p><strong th:text="${usuarioActual.nombreCompleto}">Nombre</strong>
@@ -73,6 +72,27 @@
 		<main id="contenido" class="contenido" th:replace="${contenido}">Contenido</main>
 	</div>
 
+	<!--/* Rediseño (portal de familias en celular): barra inferior con lo que más usa una familia. Solo en celular (CSS);
+	     cada destino de 48 px de alto, con ícono y texto, y aria-current en la página actual. */-->
+	<nav class="barra-inferior" aria-label="Accesos rápidos de la familia" th:if="${esFamilia == true}" data-barra-inferior>
+		<a th:href="@{/familia}" th:aria-current="${rutaActual == '/familia'} ? 'page'">
+			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+			<span>Inicio</span></a>
+		<a th:href="@{/familia/estado-de-cuenta}" th:aria-current="${rutaActual == '/familia/estado-de-cuenta'} ? 'page'">
+			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h6M9 16h6M9 8h3"/></svg>
+			<span>Estado de cuenta</span></a>
+		<a th:href="@{/familia#pagar}" class="barra-inferior-pagar">
+			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>
+			<span>Pagar</span></a>
+		<a th:href="@{/familia/mensajes}" th:aria-current="${rutaActual == '/familia/mensajes'} ? 'page'">
+			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+			<span>Avisos</span></a>
+	</nav>
+
 	<footer class="pie" th:text="|${marca?.nombre} · gestión escolar transparente|">Pie</footer>
 </body>
 </html>
@@ -86,6 +106,7 @@
 	<title th:text="|${entornoDemo == true ? '[DEMO] ' : ''}${titulo} · ${marca?.nombre}|">Título</title>
 	<link rel="stylesheet" th:href="@{/css/tokens.css}">
 	<link rel="stylesheet" th:href="@{/css/app.css}">
+	<link rel="stylesheet" th:href="@{/css/rediseno.css}">
 </head>
 <body class="publica">
 	<div class="franja-entorno" role="status" th:if="${franjaEntorno != null}"><span th:text="${franjaEntorno}">PILOTO</span>
@@ -93,9 +114,7 @@
 	<header class="barra">
 		<div class="barra-in">
 			<span class="marca">
-				<span class="monograma" aria-hidden="true"
-					th:with="pm=${((nombreInstitucional ?: marca?.nombre) ?: 'C').trim().split(' +')}"
-					th:text="${#strings.toUpperCase(pm.length > 1 ? pm[pm.length - 2].substring(0, 1) + pm[pm.length - 1].substring(0, 1) : pm[0].substring(0, 1))}">C</span>
+				<span class="monograma" aria-hidden="true" th:text="${monograma} ?: 'C'">C</span>
 				<span class="marca-texto">
 					<strong th:text="${nombreInstitucional} ?: ${marca?.nombre}">Marca</strong>
 					<small th:text="|Plataforma ${marca?.nombre}|">Plataforma</small>
@@ -108,14 +127,34 @@
 </body>
 </html>
 
-<!--/* Lista del menú: se usa en el menú lateral y en el desplegable del celular. */-->
-<ul class="menu" th:fragment="menuLista">
-	<li th:each="m : ${menu}">
-		<a th:if="${m.disponible}" class="menu-enlace" th:href="@{${m.ruta}}" th:data-modulo="${m.codigo}"
-			th:aria-current="${rutaActual == m.ruta or #strings.startsWith(rutaActual, m.ruta + '/')} ? 'page'" th:text="${m.etiqueta}">Inicio</a>
-		<span th:unless="${m.disponible}" class="menu-proximo" th:data-modulo="${m.codigo}">
-			<span th:text="${m.etiqueta}">Módulo</span>
-			<span class="badge badge-neutro">Próximamente</span>
-		</span>
-	</li>
-</ul>
+<!--/* Menú agrupado (rediseño, hallazgo 3): Inicio arriba y luego los grupos plegables con <details>/<summary>
+     nativos (teclado y lector de pantalla sin JavaScript). Solo los grupos con algún módulo del rol. Se usa en el menú
+     lateral y en el desplegable del celular. Los contadores llevan su texto para lectores de pantalla. */-->
+<div class="menu-grupos" th:fragment="menuLista">
+	<ul class="menu" th:each="m : ${menu}" th:if="${m.codigo == 'INICIO'}">
+		<li><a class="menu-enlace" th:href="@{${m.ruta}}" th:data-modulo="${m.codigo}"
+			th:aria-current="${rutaActual == m.ruta or rutaActual == '/'} ? 'page'" th:text="${m.etiqueta}">Inicio</a></li>
+	</ul>
+	<details class="grupo-menu" th:each="g : ${menuGrupos}" th:open="${g.abierto}" th:data-grupo="${g.codigo}">
+		<summary>
+			<span th:text="${g.etiqueta}">Dinero de hoy</span>
+			<span class="contador" th:if="${g.pendientes > 0}" th:text="${g.pendientes}"
+				th:aria-label="|${g.pendientes} pendientes|">3</span>
+		</summary>
+		<ul class="menu">
+			<li th:each="m : ${g.elementos}">
+				<a th:if="${m.disponible}" class="menu-enlace" th:href="@{${m.ruta}}" th:data-modulo="${m.codigo}"
+					th:aria-current="${rutaActual == m.ruta or #strings.startsWith(rutaActual, m.ruta + '/')} ? 'page'"><span
+					th:text="${m.etiqueta}">Aprobaciones</span><span th:if="${m.contador > 0}" class="contador"
+					th:classappend="${!m.urgente} ? 'contador-aviso'" th:text="${m.contador}"
+					th:aria-label="${m.contadorTexto}">3</span></a>
+				<span th:unless="${m.disponible}" class="menu-proximo" th:data-modulo="${m.codigo}">
+					<span th:text="${m.etiqueta}">Módulo</span>
+					<span class="badge badge-neutro">Próximamente</span>
+				</span>
+			</li>
+			<li th:if="${g.codigo == 'MI_CUENTA'}"><a class="menu-enlace" th:href="@{/cuenta/cambiar-clave}"
+				th:aria-current="${rutaActual == '/cuenta/cambiar-clave'} ? 'page'">Cambiar mi clave</a></li>
+		</ul>
+	</details>
+</div>

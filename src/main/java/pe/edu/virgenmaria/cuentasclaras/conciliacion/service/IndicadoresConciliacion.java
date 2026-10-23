@@ -11,6 +11,7 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.MovimientoBancario;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.TipoMovimiento;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.MovimientoBancarioRepository;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Plural;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
@@ -58,7 +59,7 @@ public class IndicadoresConciliacion implements IndicadoresInicio {
 				.filter(m -> m.getTipo() == TipoMovimiento.ABONO).toList();
 		Optional<DiferenciasConciliacion.Cobertura> cobertura = diferencias.cobertura();
 		return List.of(
-				new Indicador("Conciliado (30 días)", porcentaje + " %", conciliados + " de " + total + " movimiento(s)"),
+				new Indicador("Conciliado (30 días)", porcentaje + " %", conciliados + " de " + Plural.de(total, "movimiento", "movimientos")),
 				new Indicador("Debía estar en el banco y no está", String.valueOf(faltantes.size()),
 						faltantes.isEmpty() ? "Nada" : Dinero.formatear(Dinero.sumar(faltantes.stream()
 								.map(f -> f.objeto().monto()).toList()))),

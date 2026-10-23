@@ -176,12 +176,12 @@ class CadenaExtractosQaTest {
 		// Martes 06/10: 2 días hábiles después del viernes (lunes y martes); todavía es ATENCIÓN.
 		reloj.fijar(Instant.parse("2026-10-06T14:00:00Z"));
 		como(PROMOTORIA);
-		assertThat(alertas.alertas()).filteredOn(a -> a.texto().contains("abono(s) en el banco"))
+		assertThat(alertas.alertas()).filteredOn(a -> a.texto().startsWith("1 abono en el banco por S/ 77.00"))
 				.extracting(AlertaRevision::gravedad).containsExactly(Gravedad.ATENCION);
 
 		// Miércoles 07/10: 3 días hábiles; ya es CRÍTICA.
 		reloj.fijar(Instant.parse("2026-10-07T14:00:00Z"));
-		assertThat(alertas.alertas()).filteredOn(a -> a.texto().contains("abono(s) en el banco"))
+		assertThat(alertas.alertas()).filteredOn(a -> a.texto().startsWith("1 abono en el banco por S/ 77.00"))
 				.extracting(AlertaRevision::gravedad).containsExactly(Gravedad.CRITICA);
 	}
 

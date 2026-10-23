@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inicio · Promotoría · Cuotaria</title>
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<a class="saltar" href="#contenido">Saltar al contenido</a>
+<nav class="maqueta-nav" aria-label="Pantallas de la maqueta"><div><strong>Maqueta:</strong>
+  <a href="index.html" aria-current="page">Inicio Promotoría</a>
+  <a href="caja.html">Caja (rol Caja)</a>
+  <a href="familia.html">Portal de la familia</a></div></nav>
+
+<header class="barra"><div class="barra-in">
+  <a class="marca" href="index.html"><span class="monograma" aria-hidden="true">VM</span>
+    <span>Cuotaria<small>Colegio Virgen María</small></span></a>
+  <div class="barra-sesion"><span class="nombre">Rosa Quispe</span><span class="rol">Promotoría</span>
+    <a class="btn btn-secundario" href="#">Salir</a></div>
+</div></header>
+
+<div class="armazon">
+  <details class="menu menu-movil">
+    <summary>Menú</summary>
+    <nav aria-label="Menú principal">
+      <a class="menu-inicio" href="index.html" aria-current="page">Inicio</a>
+      <details class="grupo" open><summary>Dinero de hoy</summary><ul>
+        <li><a href="#">Aprobaciones <span class="contador" aria-label="3 pendientes">3</span></a></li>
+        <li><a href="#">Panel del colegio</a></li>
+        <li><a href="#">Pagos en línea <span class="contador contador-suave" aria-label="1 por revisar">1</span></a></li>
+        <li><a href="#">Conciliación bancaria</a></li>
+        <li><a href="#">Recaudación bancaria</a></li>
+      </ul></details>
+      <details class="grupo" open><summary>Familias y alumnos</summary><ul>
+        <li><a href="#">Alumnos y apoderados</a></li>
+        <li><a href="#">Avisos de las familias <span class="contador contador-suave" aria-label="2 nuevos">2</span></a></li>
+        <li><a href="#">Mensajes a las familias</a></li>
+        <li><a href="#">Renovación de matrícula</a></li>
+        <li><a href="#">Llamadas de control</a></li>
+      </ul></details>
+      <details class="grupo"><summary>Cobranza</summary><ul>
+        <li><a href="#">Pensiones</a></li>
+        <li><a href="#">Descuentos y becas</a></li>
+        <li><a href="#">Comprobantes electrónicos</a></li>
+        <li><a href="#">Reportes</a></li>
+      </ul></details>
+      <details class="grupo"><summary>Control y auditoría</summary><ul>
+        <li><a href="#">Bitácora de auditoría</a></li>
+        <li><a href="#">Quién vio datos personales</a></li>
+      </ul></details>
+      <details class="grupo"><summary>Configuración</summary><ul>
+        <li><a href="#">Colegio (años, grados, secciones)</a></li>
+        <li><a href="#">Docentes y secciones</a></li>
+        <li><a href="#">Usuarios y roles</a></li>
+        <li><a href="#">Marca del colegio</a></li>
+        <li><a href="#">Conectores</a></li>
+        <li><a href="#">Feriados</a></li>
+        <li><a href="#">Puesta en marcha</a></li>
+      </ul></details>
+      <details class="grupo"><summary>Mi cuenta</summary><ul>
+        <li><a href="#">Mi celular y correo</a></li>
+        <li><a href="#">Cambiar clave</a></li>
+      </ul></details>
+    </nav>
+  </details>
+
+  <main id="contenido" class="contenido">
+    <div class="encabezado">
+      <div><h1>Buenos días, Rosa</h1><p>Jueves 15 de octubre de 2026 · Resumen del colegio</p></div>
+      <a class="btn btn-secundario" href="#">Descargar reporte del día</a>
+    </div>
+
+    <section class="revisar" aria-labelledby="t-revisar">
+      <h2 id="t-revisar">Para revisar <span class="badge badge-peligro">3 pendientes</span></h2>
+      <ul class="lista-revisar">
+        <li class="item-revisar">
+          <span class="badge badge-peligro">Faltante</span>
+          <div><p><strong>Caja de Pedro Huanca cerró con faltante de <span class="monto">S/ 50.00</span></strong></p>
+            <p class="detalle">Cierre de ayer 14/10 · Esperado <span class="monto">S/ 1,230.00</span>, contado <span class="monto">S/ 1,180.00</span></p></div>
+          <a class="btn btn-primario" href="#">Revisar el cierre</a>
+        </li>
+        <li class="item-revisar">
+          <span class="badge badge-alerta">Anulación</span>
+          <div><p><strong>Anular pago de <span class="monto">S/ 450.00</span> · Familia Mendoza Ríos</strong></p>
+            <p class="detalle">Solicita Pedro Huanca · Motivo: “Se cobró dos veces la pensión de setiembre”</p></div>
+          <a class="btn btn-secundario" href="#">Ver la solicitud</a>
+        </li>
+        <li class="item-revisar">
+          <span class="badge badge-info">Descuento</span>
+          <div><p><strong>Beca por hermanos (10 %) · Familia Torres Vega</strong></p>
+            <p class="detalle">Solicita Administración · Hace 2 días</p></div>
+          <a class="btn btn-secundario" href="#">Ver la solicitud</a>
+        </li>
+      </ul>
+    </section>
+
+    <section class="seccion" aria-labelledby="t-hoy">
+      <h2 id="t-hoy">Dinero de hoy</h2>
+      <div class="kpis">
+        <article class="kpi"><p class="kpi-etiqueta">Cobrado hoy</p>
+          <p class="kpi-cifra monto"><small>S/</small> 480.00</p>
+          <p class="kpi-nota baja">↓ S/ 320.00 menos que ayer</p></article>
+        <article class="kpi"><p class="kpi-etiqueta">Cobrado en octubre</p>
+          <p class="kpi-cifra monto"><small>S/</small> 18,740.00</p>
+          <p class="kpi-nota">62 % de lo esperado del mes</p></article>
+        <article class="kpi kpi-peligro"><p class="kpi-etiqueta">Deuda vencida</p>
+          <p class="kpi-cifra monto"><small>S/</small> 9,350.00</p>
+          <p class="kpi-nota">23 familias · morosidad 11.4 %</p></article>
+        <article class="kpi"><p class="kpi-etiqueta">Cajas abiertas</p>
+          <p class="kpi-cifra">1 <small>de 2</small></p>
+          <p class="kpi-nota">Pedro Huanca abrió a las 7:45 a. m.</p></article>
+      </div>
+    </section>
+
+    <div class="dos-col">
+      <section class="tarjeta" aria-labelledby="t-ult">
+        <h2 id="t-ult">Últimos cobros de hoy</h2>
+        <table class="tabla-tarjetas">
+          <thead><tr><th scope="col">Hora</th><th scope="col">Familia</th><th scope="col">Medio</th><th scope="col" class="num">Monto</th></tr></thead>
+          <tbody>
+            <tr><td>10:12</td><td>Quispe Mamani</td><td>Yape</td><td class="num monto">S/ 250.00</td></tr>
+            <tr><td>09:40</td><td>Flores Ccori</td><td>Efectivo</td><td class="num monto">S/ 150.00</td></tr>
+            <tr><td>08:05</td><td>Salas Huamán</td><td>Tarjeta</td><td class="num monto">S/ 80.00</td></tr>
+          </tbody>
+          <tfoot><tr><td colspan="3">Total</td><td class="num monto">S/ 480.00</td></tr></tfoot>
+        </table>
+      </section>
+      <section class="tarjeta" aria-labelledby="t-otros">
+        <h2 id="t-otros">Controles de la semana</h2>
+        <ul class="lista-revisar">
+          <li><span class="badge badge-exito">Al día</span> Conciliación bancaria hasta el 14/10</li>
+          <li><span class="badge badge-alerta">Pendiente</span> 4 llamadas de control por hacer</li>
+          <li><span class="badge badge-exito">Íntegra</span> Bitácora verificada hoy 6:00 a. m.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -13,16 +13,19 @@ body {
   font-family: var(--fuente);
   font-size: 15px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3 { margin: 0; line-height: 1.25; text-wrap: balance; }
-h1 { font-size: var(--texto-xl); font-weight: 700; }
-h2 { font-size: var(--texto-lg); font-weight: 600; }
+/* typeset (rediseño): escala de títulos marcada. h1 28 px · h2 20 px · h3 16 px, con pesos que bajan. */
+h1, h2, h3 { margin: 0; line-height: 1.25; text-wrap: balance; color: var(--color-texto); }
+h1 { font-size: var(--texto-titulo); font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+h2 { font-size: 1.25rem; font-weight: 650; letter-spacing: -0.01em; }
 h3 { font-size: var(--texto-base); font-weight: 600; }
+::selection { background: var(--color-celeste-suave); color: var(--color-primario-hover); }
 p { margin: 0; }
 a { color: var(--color-primario-texto); }
 button, input, select, textarea { font: inherit; color: inherit; }
-:focus-visible { outline: 2px solid var(--color-primario-texto); outline-offset: 2px; border-radius: 4px; }
-.num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 3px solid var(--color-primario-texto); outline-offset: 2px; border-radius: 4px; }
+.num, .monto { font-variant-numeric: tabular-nums; }
 .secundario { color: var(--color-texto-secundario); }
 .etiqueta {
   font-size: var(--texto-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
@@ -94,20 +97,48 @@ button, input, select, textarea { font: inherit; color: inherit; }
   width: 100%;
   max-width: var(--ancho-max);
   margin: 0 auto;
-  padding: var(--esp-6) var(--esp-4) var(--esp-12);
+  padding: var(--esp-6) var(--esp-6) var(--esp-12);
   display: grid;
   grid-template-columns: var(--ancho-menu) minmax(0, 1fr);
-  gap: var(--esp-6);
+  gap: var(--esp-8);
   align-items: start;
 }
 .armazon.sin-menu { grid-template-columns: minmax(0, 1fr); }
 .menu-lateral {
   position: sticky; top: var(--esp-4);
+  max-height: calc(100vh - var(--esp-8)); overflow-y: auto; overscroll-behavior: contain;
   background: var(--color-superficie);
   border: 1px solid var(--color-borde);
   border-radius: var(--radio);
   padding: var(--esp-2);
 }
+/* Grupos plegables del menú (details/summary nativos) */
+.menu-grupos { display: grid; gap: var(--esp-1); }
+.grupo-menu { border-top: 1px solid var(--color-borde); padding-top: var(--esp-1); }
+.grupo-menu > summary {
+  list-style: none; cursor: pointer;
+  min-height: 44px; padding: var(--esp-2) var(--esp-3);
+  display: flex; align-items: center; gap: var(--esp-2);
+  border-radius: 6px;
+  font-size: var(--texto-sm); font-weight: 650; color: var(--color-texto-secundario);
+}
+.grupo-menu > summary::-webkit-details-marker { display: none; }
+.grupo-menu > summary > span:first-child { flex: 1; }
+.grupo-menu > summary::after {
+  content: ""; width: 8px; height: 8px; flex: none; margin-right: 2px;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg); transition: transform 0.15s ease-out;
+}
+.grupo-menu[open] > summary::after { transform: rotate(45deg); }
+.grupo-menu > summary:hover { background: var(--color-superficie-2); color: var(--color-texto); }
+.grupo-menu > .menu { padding-bottom: var(--esp-1); }
+.contador {
+  display: inline-grid; place-items: center; min-width: 24px; height: 22px; padding: 0 7px; flex: none;
+  border-radius: 99px; background: var(--color-peligro); color: var(--color-sobre-primario);
+  font-size: var(--texto-xs); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.contador-aviso { background: var(--color-alerta-suave); color: var(--color-alerta); }
+@media (prefers-reduced-motion: reduce) { .grupo-menu > summary::after { transition: none; } }
 .menu-movil { display: none; }
 /* minmax(0, 1fr): una etiqueta larga ("Conciliación bancaria" + "Próximamente") no ensancha la columna
    y el resaltado del elemento activo no se sale del contenedor. */
@@ -121,12 +152,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .menu-enlace { color: var(--color-texto); text-decoration: none; font-weight: 500; }
 .menu-enlace:hover { background: var(--color-superficie-2); }
 .menu-enlace[aria-current="page"] {
-  background: var(--color-celeste-suave); color: var(--color-celeste-texto); font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--color-celeste);
+  background: var(--color-celeste-suave); color: var(--color-primario-texto); font-weight: 650;
+  box-shadow: inset 3px 0 0 var(--color-primario);
 }
 .menu-proximo { color: var(--color-texto-secundario); }
 @media (max-width: 860px) {
-  .armazon { grid-template-columns: minmax(0, 1fr); gap: var(--esp-4); padding-top: var(--esp-4); }
+  .armazon { grid-template-columns: minmax(0, 1fr); gap: var(--esp-4); padding: var(--esp-4) var(--esp-4) var(--esp-12); }
+  h1 { font-size: var(--texto-xl); }
   .menu-lateral { display: none; }
   /* Cabecera corta en celular: el usuario, "Cambiar clave" y "Cerrar sesión" pasan al desplegable. */
   .barra .sesion { display: none; }
@@ -138,8 +170,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
     border: 1px solid var(--color-borde);
     border-radius: var(--radio);
   }
-  .menu-movil summary {
-    min-height: 44px; padding: var(--esp-2) var(--esp-4);
+  .menu-movil > summary {
+    min-height: 48px; padding: var(--esp-2) var(--esp-4);
     display: flex; align-items: center; justify-content: space-between; gap: var(--esp-3);
     cursor: pointer; font-weight: 600; color: var(--color-primario-texto);
   }
@@ -160,6 +192,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .contenido { display: grid; gap: var(--esp-4); min-width: 0; align-content: start; }
 .cabecera { display: flex; flex-wrap: wrap; gap: var(--esp-2) var(--esp-4); align-items: flex-end; justify-content: space-between; }
 .cabecera > div { display: grid; gap: var(--esp-1); }
+.cabecera > div > .secundario { max-width: 72ch; }
 .tarjeta {
   background: var(--color-superficie);
   border: 1px solid var(--color-borde);

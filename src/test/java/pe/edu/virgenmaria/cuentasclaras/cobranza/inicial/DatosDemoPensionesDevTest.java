@@ -86,20 +86,28 @@ class DatosDemoPensionesDevTest {
 				"2027 PRIMARIA 450.00 APROBADO administracion→director",
 				"2027 SECUNDARIA 480.00 APROBADO administracion→director");
 		assertThat(jdbc.queryForList("SELECT DISTINCT cobro_desde FROM plan_pension p JOIN anio_escolar a "
-				+ "ON a.id = p.anio_escolar_id WHERE a.anio = 2026", String.class)).containsExactly("2026-12-01");
-		// Las 10 matrículas 2026 tienen su pensión de diciembre (lo anterior es saldo inicial).
-		assertThat(jdbc.queryForList("SELECT DISTINCT descripcion FROM cuota", String.class))
-				.containsExactly("Pensión diciembre 2026");
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cuota", Long.class)).isEqualTo(10);
+				+ "ON a.id = p.anio_escolar_id WHERE a.anio = 2026", String.class)).containsExactly("2026-03-01");
+		// Las 10 matrículas 2026 tienen sus pensiones de marzo a diciembre; la matrícula (vence el 28/02, antes de que el
+		// sistema cobre) no está en el cronograma: la que se debe entra como saldo inicial.
+		assertThat(jdbc.queryForList("SELECT DISTINCT descripcion FROM cuota", String.class)).containsExactlyInAnyOrder(
+				"Pensión marzo 2026", "Pensión abril 2026", "Pensión mayo 2026", "Pensión junio 2026", "Pensión julio 2026",
+				"Pensión agosto 2026", "Pensión setiembre 2026", "Pensión octubre 2026", "Pensión noviembre 2026",
+				"Pensión diciembre 2026");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cuota", Long.class)).isEqualTo(100);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cuota WHERE tipo = 'MATRICULA'", Long.class)).isZero();
 
 		Map<String, Object> lote = jdbc.queryForMap("SELECT * FROM lote_saldo_inicial");
 		assertThat(lote).containsEntry("estado", "ENVIADO").containsEntry("creado_por", "administracion")
 				.containsEntry("enviado_por", "administracion");
-		assertThat((BigDecimal) lote.get("total_declarado")).isEqualByComparingTo("5280.00");
+		assertThat((BigDecimal) lote.get("total_declarado")).isEqualByComparingTo("2100.00");
+		assertThat(lote.get("fecha_corte").toString()).isEqualTo("2026-02-28");
 		assertThat(jdbc.queryForObject("SELECT SUM(monto) FROM linea_saldo_inicial", BigDecimal.class))
-				.isEqualByComparingTo("5280.00");
-		assertThat(jdbc.queryForObject("SELECT COUNT(DISTINCT alumno_id) FROM linea_saldo_inicial WHERE mes = 9",
-				Long.class)).isEqualTo(10);
+				.isEqualByComparingTo("2100.00");
+		// Seis alumnos deben su matrícula 2026 (S/ 350 cada una); ninguna línea es de pensión (la cobra el plan).
+		assertThat(jdbc.queryForObject("SELECT COUNT(DISTINCT alumno_id) FROM linea_saldo_inicial "
+				+ "WHERE concepto = 'MATRICULA' AND monto = 350.00", Long.class)).isEqualTo(6);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM linea_saldo_inicial WHERE concepto <> 'MATRICULA'",
+				Long.class)).isZero();
 		// El colegio B no recibe planes ni lotes.
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plan_pension WHERE colegio_id = ?", Long.class, colegioB))
 				.isZero();

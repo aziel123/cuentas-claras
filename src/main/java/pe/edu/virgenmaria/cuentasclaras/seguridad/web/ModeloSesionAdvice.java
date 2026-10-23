@@ -1,17 +1,23 @@
 package pe.edu.virgenmaria.cuentasclaras.seguridad.web;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.MarcaColegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.marca.Marca;
+import pe.edu.virgenmaria.cuentasclaras.comun.texto.Monograma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.config.GrupoMenu;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.ModuloApp;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -25,10 +31,16 @@ public class ModeloSesionAdvice {
 
 	private final Marca marca;
 
-	public ModeloSesionAdvice(ColegioService colegios, Marca marca) {
+	private final ObjectProvider<ContadorMenu> contadores;
+
+	public ModeloSesionAdvice(ColegioService colegios, Marca marca, ObjectProvider<ContadorMenu> contadores) {
 		this.colegios = colegios;
 		this.marca = marca;
+		this.contadores = contadores;
 	}
+
+	/** Con pocas opciones (Caja, Docente, la familia) todos los grupos van abiertos: no hay nada que esconder. */
+	static final int OPCIONES_PARA_PLEGAR = 8;
 
 	@ModelAttribute("usuarioActual")
 	public SesionVista usuarioActual(@AuthenticationPrincipal UsuarioAutenticado usuario) {
@@ -40,12 +52,68 @@ public class ModeloSesionAdvice {
 				colegios.nombreDe(usuario.colegioId()), usuario.debeCambiarClave());
 	}
 
+	/**
+	 * Rediseño (portal de familias en celular): si quien está en sesión es solo apoderado. Con eso el armazón muestra la
+	 * barra inferior (Inicio, Estado de cuenta, Pagar y Avisos). No da permisos: solo decide qué navegación se ve.
+	 */
+	@ModelAttribute("esFamilia")
+	public boolean esFamilia(@AuthenticationPrincipal UsuarioAutenticado usuario) {
+		return usuario != null && usuario.roles().size() == 1 && usuario.roles().contains(Rol.APODERADO);
+	}
+
 	@ModelAttribute("menu")
 	public List<ElementoMenu> menu(@AuthenticationPrincipal UsuarioAutenticado usuario) {
 		if (usuario == null) {
 			return List.of();
 		}
 		return ModuloApp.para(usuario.getAuthorities()).stream().map(ElementoMenu::de).toList();
+	}
+
+	/**
+	 * Rediseño de la interfaz (hallazgo 3): el mismo menú agrupado en secciones plegables ({@link GrupoMenu}). Solo los
+	 * grupos con algún módulo del rol; abierto el grupo de la página actual y el primero. Los contadores salen de los
+	 * {@link ContadorMenu} de los módulos que ya están en el menú del rol.
+	 */
+	@ModelAttribute("menuGrupos")
+	public List<GrupoVista> menuGrupos(@AuthenticationPrincipal UsuarioAutenticado usuario, HttpServletRequest request) {
+		if (usuario == null) {
+			return List.of();
+		}
+		List<ModuloApp> visibles = ModuloApp.para(usuario.getAuthorities());
+		Set<ModuloApp> enMenu = Set.copyOf(visibles);
+		Map<ModuloApp, ElementoMenu> conContador = new java.util.EnumMap<>(ModuloApp.class);
+		contadores.orderedStream().filter(c -> enMenu.contains(c.modulo()) && c.modulo().disponible()).forEach(c -> {
+			long n = c.contar();
+			if (n > 0) {
+				conContador.put(c.modulo(), ElementoMenu.de(c.modulo()).conContador(n, c.descripcion(n), c.urgente()));
+			}
+		});
+		String ruta = request.getRequestURI();
+		boolean todoAbierto = visibles.size() <= OPCIONES_PARA_PLEGAR;
+		List<GrupoVista> grupos = new ArrayList<>();
+		for (GrupoMenu grupo : GrupoMenu.values()) {
+			List<ElementoMenu> elementos = grupo.modulos().stream().filter(enMenu::contains)
+					.map(m -> conContador.getOrDefault(m, ElementoMenu.de(m))).toList();
+			if (elementos.isEmpty()) {
+				continue;
+			}
+			boolean actual = elementos.stream().anyMatch(e -> e.disponible()
+					&& (ruta.equals(e.ruta()) || ruta.startsWith(e.ruta() + "/")));
+			long pendientes = elementos.stream().filter(ElementoMenu::urgente).mapToLong(ElementoMenu::contador).sum();
+			grupos.add(new GrupoVista(grupo.name(), grupo.etiqueta(), todoAbierto || actual || grupos.isEmpty()
+					|| pendientes > 0, elementos, pendientes));
+		}
+		return grupos;
+	}
+
+	/**
+	 * Las iniciales de la barra cuando no hay logo: del colegio de la sesión o, sin sesión (ingreso, errores), del producto.
+	 * Auditoría del PR #19 (hallazgo 3): se calculan aquí, con salida por defecto si el nombre está vacío.
+	 */
+	@ModelAttribute("monograma")
+	public String monograma(@AuthenticationPrincipal UsuarioAutenticado usuario) {
+		String colegio = usuario == null ? null : colegios.nombreDe(usuario.colegioId());
+		return Monograma.de(colegio, marca.nombre());
 	}
 
 	@ModelAttribute("rutaActual")

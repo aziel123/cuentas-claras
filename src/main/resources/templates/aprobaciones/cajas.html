@@ -20,7 +20,7 @@
 	</ul>
 
 	<section class="tarjeta" aria-labelledby="titulo-cajas">
-		<h2 id="titulo-cajas" th:text="|${#lists.size(d.cajas)} caja(s)|">2 cajas</h2>
+		<h2 id="titulo-cajas" th:text="${#lists.size(d.cajas) == 1} ? '1 caja' : |${#lists.size(d.cajas)} cajas|">2 cajas</h2>
 		<th:block th:if="${#lists.isEmpty(d.cajas)}">
 			<div th:replace="~{fragments/componentes :: estadoVacio('No hubo cajas ese día', 'Una caja se abre con el primer cobro de cada cajera.')}"></div>
 		</th:block>
