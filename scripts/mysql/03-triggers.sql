@@ -3461,37 +3461,43 @@ END$$
 DROP TRIGGER IF EXISTS trg_calificacion_nace$$
 CREATE TRIGGER trg_calificacion_nace BEFORE INSERT ON calificacion FOR EACH ROW
 BEGIN
-    DECLARE v_estado VARCHAR(10); DECLARE v_numero INT; DECLARE v_grado VARCHAR(20); DECLARE v_version BIGINT;
-    DECLARE v_max INT; DECLARE v_siempre BOOLEAN; DECLARE v_area BIGINT;
+    DECLARE v_estado VARCHAR(10); DECLARE v_numero INT; DECLARE v_grado VARCHAR(20);
+    DECLARE v_max INT; DECLARE v_siempre BOOLEAN; DECLARE v_area BIGINT; DECLARE v_exige BOOLEAN;
+    DECLARE v_exonerado BOOLEAN;
     DECLARE v_ant_por VARCHAR(60);
     DECLARE v_lote_por VARCHAR(60); DECLARE v_lote_solicitud BIGINT; DECLARE v_lote_bd DATETIME(6);
     DECLARE v_datos VARCHAR(2000);
     SET NEW.conclusion_sha256 = CASE WHEN NEW.conclusion IS NULL THEN NULL ELSE SHA2(NEW.conclusion, 256) END;
-    -- Una consulta por tabla (riesgo 3: 120 filas por guardado). Sin fila, las variables quedan en NULL y se rechaza abajo.
-    SELECT p.estado, p.numero, s.grado, c.curriculo_version_id, c.conclusion_max, c.conclusion_siempre
-        INTO v_estado, v_numero, v_grado, v_version, v_max, v_siempre
+    -- Riesgo 3 (120 filas por guardado): UNA consulta por fila lee el periodo, la sección, la evaluación, la matrícula, la
+    -- competencia con su área, el valor de la escala, la exoneración y el lote. Sin fila (matrícula de otra sección, RETIRADA,
+    -- competencia de otro grado...), las variables quedan en NULL y se rechaza abajo.
+    SELECT p.estado, p.numero, s.grado, c.conclusion_max, c.conclusion_siempre, k.area_id, x.exige_conclusion,
+            EXISTS (SELECT 1 FROM exoneracion_area e JOIN periodo_evaluacion d ON d.id = e.desde_periodo_id
+                AND d.colegio_id = e.colegio_id
+                WHERE e.matricula_id = m.id AND e.colegio_id = m.colegio_id AND e.area_id = k.area_id
+                  AND d.numero <= p.numero),
+            l.creado_por, l.solicitud_id, l.registrado_bd
+        INTO v_estado, v_numero, v_grado, v_max, v_siempre, v_area, v_exige, v_exonerado, v_lote_por, v_lote_solicitud,
+            v_lote_bd
         FROM periodo_evaluacion p
         JOIN seccion s ON s.id = NEW.seccion_id AND s.colegio_id = NEW.colegio_id AND s.anio_escolar_id = p.anio_escolar_id
         JOIN configuracion_evaluacion c ON c.anio_escolar_id = p.anio_escolar_id AND c.colegio_id = p.colegio_id
+        JOIN matricula m ON m.id = NEW.matricula_id AND m.colegio_id = NEW.colegio_id AND m.alumno_id = NEW.alumno_id
+            AND m.seccion_id = NEW.seccion_id AND m.anio_escolar_id = NEW.anio_escolar_id AND m.estado IN ('ACTIVA', 'RESERVADA')
+        JOIN competencia k ON k.id = NEW.competencia_id AND k.version_id = c.curriculo_version_id
+            AND (k.solo_grados IS NULL OR FIND_IN_SET(s.grado, k.solo_grados) > 0)
+        JOIN area_curricular ar ON ar.id = k.area_id AND ar.nivel = SUBSTRING_INDEX(s.grado, '_', 1)
+        LEFT JOIN escala_logro x ON x.version_id = c.curriculo_version_id AND x.nivel = ar.nivel AND x.valor = NEW.nivel_logro
+        LEFT JOIN lote_calificacion l ON l.id = NEW.lote_id AND l.colegio_id = NEW.colegio_id
+            AND l.periodo_id = NEW.periodo_id AND l.seccion_id = NEW.seccion_id AND l.area_id = k.area_id
         WHERE p.id = NEW.periodo_id AND p.colegio_id = NEW.colegio_id AND p.anio_escolar_id = NEW.anio_escolar_id;
-    SET v_area = (SELECT k.area_id FROM competencia k JOIN area_curricular ar ON ar.id = k.area_id
-        WHERE k.id = NEW.competencia_id AND k.version_id <=> v_version AND ar.nivel = SUBSTRING_INDEX(v_grado, '_', 1)
-          AND (k.solo_grados IS NULL OR FIND_IN_SET(v_grado, k.solo_grados) > 0));
-    IF v_estado IS NULL OR v_grado IS NULL OR v_area IS NULL
-            OR NOT EXISTS (SELECT 1 FROM matricula m WHERE m.id = NEW.matricula_id AND m.colegio_id = NEW.colegio_id
-                AND m.alumno_id = NEW.alumno_id AND m.seccion_id = NEW.seccion_id
-                AND m.anio_escolar_id = NEW.anio_escolar_id AND m.estado IN ('ACTIVA', 'RESERVADA')) THEN
+    IF v_estado IS NULL OR v_area IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la nota es de un alumno matriculado en la seccion y de una competencia de su grado';
     END IF;
-    IF EXISTS (SELECT 1 FROM exoneracion_area e JOIN periodo_evaluacion d ON d.id = e.desde_periodo_id
-            AND d.colegio_id = e.colegio_id
-            WHERE e.matricula_id = NEW.matricula_id AND e.colegio_id = NEW.colegio_id AND e.area_id = v_area
-              AND d.numero <= v_numero) THEN
+    IF v_exonerado THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el alumno esta exonerado del area';
     END IF;
-    IF NEW.nivel_logro IS NOT NULL AND NEW.conclusion IS NULL AND (v_siempre OR EXISTS (SELECT 1 FROM escala_logro x
-            WHERE x.version_id = v_version AND x.nivel = SUBSTRING_INDEX(v_grado, '_', 1) AND x.valor = NEW.nivel_logro
-              AND x.exige_conclusion)) THEN
+    IF NEW.nivel_logro IS NOT NULL AND NEW.conclusion IS NULL AND (v_siempre OR v_exige <=> TRUE) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la norma exige la conclusion descriptiva para ese nivel de logro';
     END IF;
     IF NEW.conclusion IS NOT NULL AND NOT (CHAR_LENGTH(NEW.conclusion) <= v_max) THEN
@@ -3507,9 +3513,6 @@ BEGIN
         END IF;
     END IF;
     IF NEW.origen IN ('REGISTRO', 'CAMBIO_ABIERTO', 'REGISTRO_TARDIO') THEN
-        SELECT l.creado_por, l.solicitud_id, l.registrado_bd INTO v_lote_por, v_lote_solicitud, v_lote_bd
-            FROM lote_calificacion l WHERE l.id = NEW.lote_id AND l.colegio_id = NEW.colegio_id
-              AND l.periodo_id = NEW.periodo_id AND l.seccion_id = NEW.seccion_id AND l.area_id = v_area;
         IF v_lote_por IS NULL OR NOT (NEW.creado_por <=> v_lote_por)
                 OR NOT (v_lote_bd >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 10 MINUTE)
                 OR (NEW.origen IN ('REGISTRO', 'CAMBIO_ABIERTO') AND NOT (v_estado <=> 'ABIERTO' AND v_lote_solicitud IS NULL))

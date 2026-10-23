@@ -1724,3 +1724,61 @@ Rutas relativas a `C:/Users/amedina/cuentas-claras/cuentas-claras/`:
   verificado»; respaldo con `faltan-filas-areas`; demo; dependencias; gitleaks).
 - El contenedor `cc-s10t1-mysql` se borró al terminar. No se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`,
   `smarthr-*`, `supabase_*` ni `cc-mysql-s5*`.
+
+## Tanda 2 · Implementación
+
+> Implementada el 23 de octubre de 2026 en la rama `claude/sprint-10-notas-libretas-siagie` (agente `backend-spring`,
+> «Método por sprint»: brief `docs/arquitectura/sprint-10/tanda-2.md`, PR en borrador #20 con el CI como verificación).
+> V36, **108 triggers y 13 funciones en `03` (16 con huella con las 3 de `02`): 124 huellas**, como pedía el brief. Los
+> hallazgos C1, A3, A5, M7 y M8 con su control y su prueba.
+
+### Qué se hizo
+**Base (V36, `02` y `03`).**
+- `V36__calificaciones_y_cierre.sql`: `lote_calificacion`, `calificacion` (cadena lineal con `uk_calificacion_inicial`,
+  `uk_calificacion_reemplaza` y `uk_calificacion_solicitud`; FK a la sección también por colegio), `exoneracion_area` con
+  `desde_periodo_id` y su FK (A3) y `borrador_conclusion` (M8). CHECK de orígenes, de la conclusión (10 caracteres o más,
+  con su SHA-256 de 64 hexadecimales) y del actor, todos con `IS NOT NULL`.
+- `02`: solo `INSERT` en las 4 tablas. `03`: `cc_docente_de_area` y `trg_lote_calificacion_nace`,
+  `trg_calificacion_nace`, `trg_exoneracion_area_nace` y `trg_borrador_conclusion_nace` (sección 6.3 con la 3.13).
+- `VerificadorPermisosBaseDatos` (108; 1142 al editar o borrar las 4 tablas; 1644 en una corrección del colegio 0) y
+  `tablas-vigiladas.txt` (+4).
+
+**Aplicación (`academico.notas`, nuevo).**
+- `model` de solo inserción (`@PreUpdate`/`@PreRemove` lanzan), repositorios `Repository` sin borrados.
+- `RegistroNotas` (hoja y guardado: un POST, un lote, una firma; solo las celdas que cambian; «sin nota»; nota tardía con
+  su solicitud), `CorreccionesNota` (corrección con su borrador y nota tardía), `ManejadorCorreccionCalificacion` (entra lo
+  aprobado, con el texto del borrador; el autor de la nota es involucrado), `ManejadorCalificacionTardia`, `Exoneraciones`,
+  `AvanceRegistro` (avance sin alumnos, cierre con resumen, correcciones del periodo), `NotasDeSeccion` (tutor y
+  Dirección), `AlertasNotas` (A5, E26, `NOTAS_PENDIENTES` y `ASIGNACIONES_SIN_AREAS`).
+- `SeccionesDocente.areasDe` con las transversales del tutor y `sinAreasDelCatalogo`; «Completar áreas»
+  (`CompletarAreas`: sugerencia desde el texto de V32 y la propuesta de reemplazo de la tanda 1); la puesta en marcha con
+  el punto 15 «Áreas de cada docente» (no bloquea).
+- Web: `NotasController`, `NotasSeccionController`, `AvanceNotasController` (avance, correcciones, cierre y
+  exoneraciones) y `CompletarAreasController`; 10 plantillas (la hoja pensada para el celular, sin JS ni estilos en línea);
+  `ModuloApp` (+4, antes de ACADEMICO) y el grupo «Evaluación».
+- La bandeja deja `NOTAS_SECCION` en «Quién vio datos personales» al abrir una corrección (el borrador).
+- CI: V1–V36, paso «Sprint 10, tanda 2», `comprobar` con 1142 y 1644, 124/108/16; respaldo con el flujo de las notas y
+  `faltan-filas-notas`. Conteos en `paso-0.sh`, `en-la-vm.sh`, `despliegue-gcp.md`, el acta del paso 0 y
+  `mysql-usuarios.md`; manuales de docente y de Dirección.
+
+### Desviaciones del diseño
+1. **`CALIFICACION_TARDIA` es de la asignación docente** (`entidad = asignacion_docente`, datos `periodo_id` y `area_id`),
+   no de `asignacion_area`: el área transversal del tutor no tiene fila en `asignacion_area`.
+2. **La ventana de 48 horas se mide con la firma de la aprobación** (`firma_operacion.firmada_bd`, hora de la base), no con
+   `resuelto_en` (que escribe la aplicación).
+3. **La conclusión de un «sin nota» no existe:** la solicitud omite la clave `nivel` (el trigger trata igual una clave
+   ausente y un `null` JSON).
+4. **E8 responde el trigger (1644)** antes que `uk_calificacion_reemplaza` (1062): la segunda sucesora ya no reemplaza a la
+   vigente. La prueba acepta los dos.
+5. **E4 lo frena ya la base al aprobar**: `ck_solicitud_cambio_resolucion` no deja que resuelva quien pidió (3819); la nota
+   con la solicitud pendiente la rechaza el trigger (1644).
+6. **La prueba de carga usa 5 secciones de 30 alumnos y las 8 áreas de Primaria** (40 docentes a la vez; Matemática, 120
+   filas): una sección no tiene 40 áreas.
+7. **`application.yaml` solo lleva `alerta-correcciones-por-persona`:** el plazo de 48 horas y el tope de 1000 caracteres los
+   fija la base.
+
+### Riesgos que quedan
+- **Corrección sin libreta hasta la tanda 3** y **docentes del sprint 9 sin áreas** (riesgos 1 y 2 del brief).
+- **Rendimiento:** cada nota pasa por su trigger; el trigger lee el periodo, la sección y la evaluación en una consulta. La
+  cadena de la bitácora serializa el final de cada guardado (como los cobros).
+- **La sugerencia de áreas** desde el texto libre puede equivocarse: la persona la revisa y otra la aprueba.
