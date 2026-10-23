@@ -118,13 +118,19 @@
 		<p class="secundario">Estas personas marcan asistencia, pero no pueden poner notas hasta que se proponga de nuevo su
 			asignación con las áreas del currículo (al aprobarla, la anterior termina sola).</p>
 		<table class="tabla">
-			<thead><tr><th>Docente</th><th>Qué hace</th><th>Sección</th><th>Áreas (texto anterior)</th></tr></thead>
+			<thead><tr><th>Docente</th><th>Qué hace</th><th>Sección</th><th>Áreas (texto anterior)</th><th>Completar</th></tr></thead>
 			<tbody>
 				<tr th:each="a : ${vista.sinAreas}" th:data-asignacion="${a.id()}">
 					<td th:text="${a.docente()}">Ana Torres</td>
 					<td th:text="${a.tipo()}">Docente de área</td>
 					<td th:text="${a.seccion()}">3.° Primaria A</td>
 					<td th:text="${a.areasTexto() == null} ? '—' : ${a.areasTexto()}">Matemática</td>
+					<td>
+						<th:block th:if="${vista.puedeProponer}">
+							<a class="btn btn-secundario btn-chico" th:href="@{/academico/asignaciones/completar(asignacion=${a.id()})}">Completar áreas</a>
+							<a class="secundario" th:href="@{/academico/asignaciones/completar(seccion=${a.seccionId()})}">Completar todas las de esta sección</a>
+						</th:block>
+					</td>
 				</tr>
 			</tbody>
 		</table>

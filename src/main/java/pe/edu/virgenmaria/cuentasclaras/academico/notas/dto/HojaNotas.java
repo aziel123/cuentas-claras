@@ -27,8 +27,8 @@ public record HojaNotas(Long seccionId, String seccion, Long areaId, String area
 			List<Celda> celdas) {
 	}
 
-	/** La nota vigente de una celda ({@code nivel} null: sin nota). */
-	public record Celda(Long competenciaId, String nivel, String conclusion, boolean conNota) {
+	/** La nota vigente de una celda ({@code nivel} null: sin nota; {@code calificacionId} null: nunca se registró). */
+	public record Celda(Long competenciaId, Long calificacionId, String nivel, String conclusion, boolean conNota) {
 
 		public String clave(Long matriculaId) {
 			return matriculaId + "-" + competenciaId;

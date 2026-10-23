@@ -151,7 +151,7 @@ class EstadosColegioQaSprint8Test {
 		List<PuntoLista> puntos = estado.paraOperador(1L).puntos();
 
 		assertThat(puntos).extracting(PuntoLista::clave).containsExactlyElementsOf(EstadoPuestaEnMarcha.PASOS);
-		assertThat(puntos).hasSize(14);
+		assertThat(puntos).hasSize(15);
 		assertThat(puntos.stream().filter(PuntoLista::obligatorio).count()).isEqualTo(12L);
 		assertThat(puntos).filteredOn(p -> !p.obligatorio()).extracting(PuntoLista::clave)
 				.containsExactly(EstadoPuestaEnMarcha.PASARELA, EstadoPuestaEnMarcha.RECAUDACION);

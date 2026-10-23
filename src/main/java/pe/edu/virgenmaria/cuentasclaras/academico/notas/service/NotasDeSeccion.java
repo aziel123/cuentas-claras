@@ -43,11 +43,36 @@ public class NotasDeSeccion {
 
 	private final AsignacionDocenteRepository asignaciones;
 
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository anios;
+
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.repository.SeccionRepository secciones;
+
 	public NotasDeSeccion(ContextoNotas contexto, CalificacionRepository calificaciones,
-			AsignacionDocenteRepository asignaciones) {
+			AsignacionDocenteRepository asignaciones,
+			pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository anios,
+			pe.edu.virgenmaria.cuentasclaras.colegio.repository.SeccionRepository secciones) {
+		this.anios = anios;
+		this.secciones = secciones;
 		this.contexto = contexto;
 		this.calificaciones = calificaciones;
 		this.asignaciones = asignaciones;
+	}
+
+	/** Las secciones que puede ver: Dirección, las activas del año en curso; el docente, donde es tutor. */
+	@Transactional(readOnly = true)
+	public List<HojaNotas.OpcionPeriodo> secciones() {
+		UsuarioAutenticado persona = Personas.actual();
+		if (persona.roles().contains(Rol.DIRECTOR)) {
+			return anios.findByEstado(pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoAnioEscolar.EN_CURSO)
+					.map(a -> secciones.findByAnioEscolarIdOrderByGradoAscNombreAsc(a.getId()).stream()
+							.filter(Seccion::isActiva)
+							.map(x -> new HojaNotas.OpcionPeriodo(x.getId(), x.etiqueta(), "")).toList())
+					.orElse(List.of());
+		}
+		return asignaciones.findByUsuarioIdAndEstadoOrderBySeccionIdAsc(persona.usuarioId(), EstadoAsignacion.VIGENTE)
+				.stream().filter(a -> a.getTipo() == TipoAsignacion.TUTOR)
+				.map(a -> contexto.seccion(a.getSeccionId()))
+				.map(x -> new HojaNotas.OpcionPeriodo(x.getId(), x.etiqueta(), "")).toList();
 	}
 
 	@Transactional(readOnly = true)
@@ -84,7 +109,7 @@ public class NotasDeSeccion {
 				List<HojaNotas.Celda> celdas = delArea.stream().map(k -> {
 					Calificacion v = vigentes.get(m.getId() + ":" + k.id());
 					boolean conNota = v != null && v.getNivelLogro() != null;
-					return new HojaNotas.Celda(k.id(), conNota ? v.getNivelLogro().name() : null,
+					return new HojaNotas.Celda(k.id(), v == null ? null : v.getId(), conNota ? v.getNivelLogro().name() : null,
 							v == null ? null : v.getConclusion(), conNota);
 				}).toList();
 				Alumno a = m.getAlumno();
@@ -97,6 +122,6 @@ public class NotasDeSeccion {
 		AccesoMostrado.filas(matriculas.size());
 		return new NotasSeccionVista(seccion.getId(), seccion.etiqueta(), contexto.periodosDe(seccion).stream()
 				.map(p -> new HojaNotas.OpcionPeriodo(p.getId(), p.getNombre(), p.getEstado().etiqueta())).toList(),
-				periodo.getId(), periodo.getNombre(), areas);
+				periodo.getId(), periodo.getNombre(), areas, direccion);
 	}
 }

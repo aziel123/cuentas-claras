@@ -15,6 +15,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -45,6 +46,23 @@ class TardiasAprobadas {
 		this.asignaciones = asignaciones;
 		this.lotes = lotes;
 		this.reloj = reloj;
+	}
+
+	/** Las del docente en sesión, aprobadas hace 48 horas o menos y todavía sin su lote. */
+	List<pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.MisNotasVista.TardiaPorRegistrar> porRegistrar() {
+		String yo = Personas.actual().getUsername();
+		LocalDateTime desde = LocalDateTime.now(reloj).minusHours(HORAS);
+		return solicitudes.findByTipoOrderByIdDesc(TipoSolicitud.CALIFICACION_TARDIA).stream()
+				.filter(s -> s.getEstado() == EstadoSolicitud.APROBADA && yo.equals(s.getSolicitadoPor())
+						&& s.getResueltoEn() != null && !s.getResueltoEn().isBefore(desde)
+						&& !lotes.existsBySolicitudId(s.getId()))
+				.flatMap(s -> asignaciones.findById(s.getEntidadId()).map(a -> {
+					Map<String, String> datos = DatosSolicitud.leer(s.getDatos());
+					return new pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.MisNotasVista.TardiaPorRegistrar(
+							s.getId(), a.getSeccionId(), Long.valueOf(datos.get("area_id")),
+							Long.valueOf(datos.get("periodo_id")), s.getResumen());
+				}).stream())
+				.toList();
 	}
 
 	SolicitudCambio de(long solicitudId, Seccion seccion, long areaId, PeriodoEvaluacion periodo) {

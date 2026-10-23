@@ -15,6 +15,7 @@ import pe.edu.virgenmaria.cuentasclaras.academico.model.EstadoAsignacion;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.TipoAsignacion;
 import pe.edu.virgenmaria.cuentasclaras.academico.repository.AsignacionAreaRepository;
 import pe.edu.virgenmaria.cuentasclaras.academico.repository.AsignacionDocenteRepository;
+import pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.CorreccionFormulario;
 import pe.edu.virgenmaria.cuentasclaras.academico.notas.model.BorradorConclusion;
 import pe.edu.virgenmaria.cuentasclaras.academico.notas.model.Calificacion;
 import pe.edu.virgenmaria.cuentasclaras.academico.notas.model.NivelLogro;
@@ -94,6 +95,31 @@ public class CorreccionesNota {
 		this.auditoria = auditoria;
 	}
 
+	/** El formulario para pedir corregir la nota vigente {@code calificacionId} (404 si no es del área del docente). */
+	@Transactional(readOnly = true)
+	public CorreccionFormulario formulario(long calificacionId) {
+		UsuarioAutenticado persona = Personas.actual();
+		Calificacion vigente = calificaciones.findById(calificacionId)
+				.orElseThrow(() -> new RecursoNoEncontradoException("Nota no encontrada"));
+		Seccion seccion = contexto.seccion(vigente.getSeccionId());
+		ConfiguracionEvaluacion configuracion = contexto.configuracion(seccion);
+		CompetenciaDelCatalogo competencia = competencia(seccion, configuracion, vigente.getCompetenciaId());
+		if (!persona.roles().contains(Rol.DIRECTOR)
+				&& !seccionesDocente.areasDe(seccion.getId()).contains(competencia.areaId())) {
+			throw new RecursoNoEncontradoException("Nota no encontrada");
+		}
+		AreaDelCatalogo area = contexto.area(seccion, configuracion, competencia.areaId());
+		PeriodoEvaluacion periodo = periodos.findById(vigente.getPeriodoId()).orElseThrow();
+		Matricula matricula = matriculas.findById(vigente.getMatriculaId()).orElseThrow();
+		pe.edu.virgenmaria.cuentasclaras.comun.privacidad.AccesoMostrado.filas(1);
+		return new CorreccionFormulario(vigente.getId(), seccion.getId(), seccion.etiqueta(), area.id(), area.nombre(),
+				competencia.codigo() + " · " + competencia.nombre(), RegistroNotas.nombre(matricula), periodo.getNombre(),
+				vigente.getNivelLogro() == null ? null : vigente.getNivelLogro().name(), vigente.getConclusion(),
+				contexto.catalogo().escalaDe(configuracion.getCurriculoVersionId(), seccion.nivel()).stream()
+						.filter(v -> v.exigeConclusion()).map(v -> v.valor()).toList(),
+				configuracion.isConclusionSiempre(), configuracion.getConclusionMax());
+	}
+
 	/**
 	 * Pide corregir la nota vigente {@code calificacionId} (periodo CERRADO): a {@code nivel} (o «sin nota», {@code null}) y
 	 * con la conclusión nueva, que va en su borrador. @return el id de la solicitud
@@ -117,7 +143,13 @@ public class CorreccionesNota {
 		if (periodo.getEstado() != EstadoPeriodo.CERRADO) {
 			throw new ReglaNegocioException("El " + periodo.getNombre() + " está abierto: cambia la nota en la hoja.");
 		}
-		NivelLogro nivel = NivelLogro.de(nivelPedido);
+		NivelLogro nivel;
+		try {
+			nivel = nivelPedido == null || "SIN".equals(nivelPedido) ? null : NivelLogro.de(nivelPedido);
+		}
+		catch (IllegalArgumentException e) {
+			throw new ReglaNegocioException("Elige AD, A, B, C o «sin nota».");
+		}
 		String conclusion = nivel == null || conclusionPedida == null || conclusionPedida.isBlank() ? null
 				: conclusionPedida.strip();
 		boolean exige = nivel != null && (configuracion.isConclusionSiempre() || contexto.catalogo()

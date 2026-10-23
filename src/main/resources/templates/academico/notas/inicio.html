@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 2 (sección 3.5): la entrada «Notas» del docente: sus áreas por sección (el tutor, también las
+     transversales), dónde todavía no puede calificar y sus notas tardías aprobadas por registrar. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Notas', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="notas">
+	<div class="cabecera">
+		<div>
+			<h1>Notas</h1>
+			<p class="secundario">Elige la sección y el área. Registras por competencias, un toque por nivel, y guardas una
+				sola vez con tu firma.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:each="s : ${mias.sinAreas}">
+		<div th:replace="~{fragments/componentes :: alerta('alerta', |Tu asignación en ${s} todavía no tiene áreas del catálogo. Pide a Dirección que la complete.|)}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-tardias" th:unless="${#lists.isEmpty(mias.tardias)}">
+		<h2 id="titulo-tardias">Notas tardías aprobadas</h2>
+		<p class="secundario">Tienes 48 horas desde que se aprobaron, solo para las competencias que quedaron sin nota.</p>
+		<ul class="lista-simple">
+			<li th:each="t : ${mias.tardias}">
+				<a th:href="@{/academico/notas/{s}/{a}(s=${t.seccionId}, a=${t.areaId}, periodo=${t.periodoId}, solicitud=${t.solicitudId})}"
+					th:text="${t.resumen}">Registrar notas pendientes</a>
+			</li>
+		</ul>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-areas">
+		<h2 id="titulo-areas">Tus áreas</h2>
+		<th:block th:if="${#lists.isEmpty(mias.areas)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no calificas ninguna área', 'Dirección asigna las áreas que calificas en cada sección.')}"></div>
+		</th:block>
+		<ul class="lista-simple" th:unless="${#lists.isEmpty(mias.areas)}">
+			<li th:each="a : ${mias.areas}" th:data-area="${a.areaId}">
+				<a th:href="@{/academico/notas/{s}/{a}(s=${a.seccionId}, a=${a.areaId})}" th:text="|${a.seccion} · ${a.area}|">3.° Primaria A · Matemática</a>
+				<span class="secundario" th:if="${a.transversal}">(como tutor)</span>
+			</li>
+		</ul>
+	</section>
+</main>
+</body>
+</html>

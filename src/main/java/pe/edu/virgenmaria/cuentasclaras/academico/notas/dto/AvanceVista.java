@@ -5,10 +5,11 @@ import java.util.List;
 /**
  * Sprint 10, tanda 2: el avance del registro de notas de un periodo para Dirección y Promotoría, SIN alumnos: por sección y
  * área, cuántas notas se esperan (competencias por alumnos no exonerados) y cuántas hay. {@code sinAreas}: las asignaciones
- * vigentes sin áreas del catálogo (no pueden calificar).
+ * vigentes sin áreas del catálogo (no pueden calificar); {@code verCorrecciones}: Dirección
+ * (la vigilancia de las correcciones es suya).
  */
 public record AvanceVista(List<HojaNotas.OpcionPeriodo> periodos, Long periodoId, String periodo, String estadoPeriodo,
-		List<FilaAvance> filas, List<SinAreas> sinAreas, int esperadas, int conNota) {
+		List<FilaAvance> filas, List<SinAreas> sinAreas, int esperadas, int conNota, boolean verCorrecciones) {
 
 	public AvanceVista {
 		periodos = List.copyOf(periodos);

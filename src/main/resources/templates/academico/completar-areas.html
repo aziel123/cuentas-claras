@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 2 (sección 4 del brief): «Completar áreas». La propuesta de reemplazo ya llenada, con las áreas
+     SUGERIDAS desde el texto anterior: la persona las revisa y confirma; otra persona la aprueba en la bandeja. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Completar áreas', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="completar-areas">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/academico/asignaciones}">Docentes y secciones</a></p>
+			<h1>Completar áreas</h1>
+			<p class="secundario">Marcamos las áreas que coinciden con lo que se escribió antes: revísalas. Cada asignación va
+				a la bandeja y la aprueba otra persona; al aprobarla, reemplaza a la anterior. Hasta entonces, ese docente no
+				puede poner notas.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${#lists.isEmpty(vista.propuestas)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('No hay asignaciones sin áreas', 'Todas las asignaciones vigentes ya tienen sus áreas del catálogo.')}"></div>
+	</th:block>
+
+	<form method="post" class="formulario" th:action="@{/academico/asignaciones/completar}" th:unless="${#lists.isEmpty(vista.propuestas)}">
+		<fieldset class="tarjeta grupo-opciones" th:each="p : ${vista.propuestas}" th:data-asignacion="${p.asignacionId}">
+			<legend th:text="|${p.seccion}: ${p.docente} (${p.tipo})|">3.° Primaria A: Ana Torres</legend>
+			<p class="secundario" th:text="${p.textoAnterior != null} ? |Antes decía: «${p.textoAnterior}»| : 'Antes no tenía áreas escritas.'">Antes decía</p>
+			<label class="opcion" th:each="a : ${p.areas}">
+				<input type="checkbox" th:name="|areas-${p.asignacionId}|" th:value="${a.id}" th:checked="${a.sugerida}">
+				<span th:text="${a.nombre}">Matemática</span>
+			</label>
+		</fieldset>
+		<div class="campo tarjeta">
+			<label for="motivo">Motivo</label>
+			<textarea class="input" id="motivo" name="motivo" required minlength="10" maxlength="500">Completar las áreas del catálogo de la asignación del sprint 9.</textarea>
+		</div>
+		<div class="acciones">
+			<button type="submit" class="btn btn-primario" th:text="${#lists.size(vista.propuestas) == 1} ? 'Proponer con estas áreas' : 'Proponer todas con estas áreas'">Proponer</button>
+		</div>
+	</form>
+</main>
+</body>
+</html>

@@ -521,7 +521,22 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".academico.curriculo.service.IntegridadCatalogo", "hasRole('SISTEMA_ACADEMICO')"),
 			Map.entry(BASE + ".academico.curriculo.service.AlertasCatalogo", ALERTAS),
 			Map.entry(BASE + ".academico.curriculo.service.Catalogo",
-					"hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','DOCENTE','SISTEMA_ACADEMICO')"));
+					"hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','DOCENTE','SISTEMA_ACADEMICO')"),
+			// Sprint 10, tanda 2 (sección 6 del brief): pone y cambia notas SOLO el docente (Dirección no califica); pide una
+			// corrección el docente o Dirección, y una nota tardía solo el docente; exonera SOLO Dirección; el avance lo ven
+			// Dirección y Promotoría (sin alumnos) y el cierre es de Dirección; las notas de la sección, Dirección y el tutor
+			// (lo exige el servicio).
+			Map.entry(BASE + ".academico.notas.service.RegistroNotas", "hasRole('DOCENTE')"),
+			Map.entry(BASE + ".academico.notas.service.CorreccionesNota", "hasAnyRole('DIRECTOR','DOCENTE')"),
+			Map.entry(BASE + ".academico.notas.service.CorreccionesNota#pedirTardia", "hasRole('DOCENTE')"),
+			Map.entry(BASE + ".academico.notas.service.Exoneraciones", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.notas.service.AvanceRegistro", "hasAnyRole('DIRECTOR','PROMOTOR')"),
+			Map.entry(BASE + ".academico.notas.service.AvanceRegistro#resumenCierre", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.notas.service.AvanceRegistro#cerrar", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.notas.service.AvanceRegistro#correccionesDelPeriodo", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.notas.service.NotasDeSeccion", "hasAnyRole('DIRECTOR','DOCENTE')"),
+			Map.entry(BASE + ".academico.notas.service.AlertasNotas", ALERTAS),
+			Map.entry(BASE + ".academico.service.CompletarAreas", "hasAnyRole('DIRECTOR','ADMINISTRACION')"));
 
 	/**
 	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para
@@ -696,6 +711,8 @@ class ReglasArquitecturaTest {
 					BASE + ".conectores.service..",
 					// Sprint 9, tanda 1: la propuesta de una asignación (DIRECTOR o ADMINISTRACION) crea su ASIGNACION_DOCENTE.
 					BASE + ".academico.service..",
+					// Sprint 10, tanda 2: la corrección de una nota y la nota tardía crean su solicitud.
+					BASE + ".academico.notas.service..",
 					// Sprint 9, tanda 3: el comunicado con PDF (de un docente o que requiere revisión) crea su
 					// PUBLICAR_COMUNICADO.
 					BASE + ".comunicados.service..")
@@ -971,6 +988,36 @@ class ReglasArquitecturaTest {
 			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
 			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
 			.because("la evaluación y los periodos cambian solo por sus métodos con la firma de Dirección");
+
+	/**
+	 * Sprint 10, tanda 2 (E7): las notas, sus lotes, las exoneraciones y los borradores son de SOLO INSERCIÓN: sus
+	 * repositorios no heredan {@code delete*} ni declaran borrados, cambios ni {@code @Modifying} (en MySQL, 1142).
+	 */
+	@ArchTest
+	static final ArchRule repositoriosDeNotasSoloInsercion = classes()
+			.that().resideInAPackage(BASE + ".academico.notas.repository..")
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("una nota no se edita ni se borra: se agrega la fila que reemplaza a la vigente");
+
+	@ArchTest
+	static final ArchRule repositoriosDeNotasSinBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAPackage(BASE + ".academico.notas.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("las notas son un libro de solo inserción (sección 3.5)");
+
+	/**
+	 * Sprint 10, tanda 2 (sección 3 del brief): lo que pide el docente para una nota NO trae el origen, el autor, el lote ni
+	 * la huella de la conclusión: los decide el servicio (y la base los vuelve a exigir).
+	 */
+	@ArchTest
+	static void notaPedidaSinOrigen(JavaClasses clases) {
+		assertThat(java.util.Arrays.stream(pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.NotaPedida.class
+				.getRecordComponents()).map(java.lang.reflect.RecordComponent::getName).toList())
+				.containsExactly("matriculaId", "competenciaId", "nivel", "conclusion");
+	}
 
 	@ArchTest
 	static final ArchRule repositoriosDeAcademicoNoHeredanBorrados = classes()

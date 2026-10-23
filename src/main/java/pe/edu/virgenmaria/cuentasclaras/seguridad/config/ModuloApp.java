@@ -191,6 +191,27 @@ public enum ModuloApp {
 			+ "lectura.", "Sprint 10", true, "/academico/curriculo",
 			new String[] { "/academico/curriculo", "/academico/curriculo/**" }, EnumSet.of(PROMOTOR, DIRECTOR,
 					ADMINISTRACION, DOCENTE)),
+	// Sprint 10, tanda 2 (sección 8.3): el avance del registro de notas, SIN alumnos, para Dirección y Promotoría (las
+	// correcciones del periodo, solo Dirección: lo exige el servicio). Va ANTES que NOTAS (que es solo del docente).
+	NOTAS_AVANCE("Avance de notas", "Por sección y área, cuántas notas faltan en el periodo, y las asignaciones que todavía "
+			+ "no pueden calificar.", "Sprint 10", true, "/academico/notas/avance",
+			new String[] { "/academico/notas/avance", "/academico/notas/avance/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
+	// Sprint 10, tanda 2 (E21): las exoneraciones de Religión o Educación Física, SOLO Dirección con su firma.
+	EXONERACIONES("Exoneraciones", "Exonera a un alumno de Religión o Educación Física con el escrito del padre; rige desde "
+			+ "el periodo abierto.", "Sprint 10", true, "/academico/notas/exoneraciones",
+			new String[] { "/academico/notas/exoneraciones" }, EnumSet.of(DIRECTOR)),
+	// Sprint 10, tanda 2 (secciones 3.5 y 3.6): las notas de toda la sección, de solo lectura, para su tutor y Dirección (lo
+	// exige el servicio: 404 a otro docente), y la solicitud de corrección de una nota de un periodo cerrado (el docente del
+	// área o Dirección). Va ANTES que NOTAS.
+	NOTAS_SECCION("Notas de la sección", "Las notas de toda la sección, de solo lectura (tutor y Dirección), y la corrección "
+			+ "de una nota después del cierre (la aprueba otra persona).", "Sprint 10", true, "/academico/notas/secciones",
+			new String[] { "/academico/notas/secciones", "/academico/notas/secciones/*", "/academico/notas/correcciones/*" },
+			EnumSet.of(DIRECTOR, DOCENTE)),
+	// Sprint 10, tanda 2 (decisión 173 y sección 6 del brief): la hoja de notas es SOLO del docente del área (el tutor, en las
+	// transversales). Dirección y Promotoría no ponen notas (403). Va ANTES que ACADEMICO.
+	NOTAS("Notas", "Registra las notas de tu área por competencias, desde el celular: un toque por nivel y un solo guardado "
+			+ "con tu firma.", "Sprint 10", true, "/academico/notas",
+			new String[] { "/academico/notas", "/academico/notas/**" }, EnumSet.of(DOCENTE)),
 	// Sprint 9, tanda 1: el docente ve sus secciones y los nombres de sus alumnos (nunca deudas, pagos, documentos ni
 	// contactos); Dirección, todas las secciones. Promotoría no ve las listas por alumno (decisión 143).
 	ACADEMICO("Académico", "Tus secciones y la lista de tus alumnos. Nunca muestra deudas, pagos, documentos ni contactos.",

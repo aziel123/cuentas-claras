@@ -506,6 +506,20 @@ class RutasIdorTest {
 				+ "'director', CURRENT_TIMESTAMP, 'director', CURRENT_TIMESTAMP)", f.anio2027());
 		ids.put(Recurso.PERIODO, texto("SELECT MIN(id) FROM periodo_evaluacion WHERE colegio_id = 1"));
 		ids.put(Recurso.CATALOGO, version.toString());
+		// Sprint 10, tanda 2: una nota de Mateo en el I bimestre del colegio A, con su lote (H2: sin triggers). El colegio B
+		// no la ve ni pide su corrección (404).
+		Long competencia = id("SELECT MIN(id) FROM competencia");
+		Long area = id("SELECT area_id FROM competencia WHERE id = ?", competencia);
+		Long periodo = Long.valueOf(ids.get(Recurso.PERIODO));
+		jdbc.update("INSERT INTO lote_calificacion (colegio_id, periodo_id, seccion_id, area_id, secuencia, sesion_id, filas, "
+				+ "creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, ?, 1, ?, 1, CURRENT_TIMESTAMP, 'usuario.a', "
+				+ "CURRENT_TIMESTAMP)", periodo, seccionMateo, area, sesionA);
+		jdbc.update("INSERT INTO calificacion (colegio_id, anio_escolar_id, periodo_id, seccion_id, matricula_id, alumno_id, "
+				+ "competencia_id, nivel_logro, origen, inicial, lote_id, creado_en, creado_por, actualizado_en) VALUES (1, "
+				+ "(SELECT anio_escolar_id FROM seccion WHERE id = ?), ?, ?, ?, ?, ?, 'A', 'REGISTRO', TRUE, (SELECT MAX(id) "
+				+ "FROM lote_calificacion), CURRENT_TIMESTAMP, 'usuario.a', CURRENT_TIMESTAMP)", seccionMateo, periodo,
+				seccionMateo, matriculaMateo, f.mateo(), competencia);
+		ids.put(Recurso.CALIFICACION, texto("SELECT MIN(id) FROM calificacion WHERE colegio_id = 1"));
 		assertThat(ids.values()).as("hay un recurso real de cada tipo en el colegio A").doesNotContainNull();
 
 		Map<Recurso, String> deFlores = new EnumMap<>(Recurso.class);

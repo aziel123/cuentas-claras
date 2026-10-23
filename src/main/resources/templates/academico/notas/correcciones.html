@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 2 (sección 3.6, vigilancia): las correcciones aprobadas del periodo para Dirección: dónde, de qué a qué,
+     quién pidió y quién aprobó. Sin el texto de las conclusiones. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Correcciones de notas', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="correcciones-notas">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/academico/notas/avance(periodo=${vista.periodoId})}">Avance de notas</a></p>
+			<h1 th:text="|Correcciones de notas del ${vista.periodo}|">Correcciones de notas</h1>
+			<p class="secundario">Cada una la pidió una persona y la aprobó otra. Promotoría recibe la alerta de las que suben el
+				nivel o dejan sin nota.</p>
+		</div>
+	</div>
+
+	<th:block th:if="${#lists.isEmpty(correcciones)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Sin correcciones en este periodo', 'Una corrección después del cierre aparece aquí al aprobarse.')}"></div>
+	</th:block>
+	<table class="tabla tarjeta" th:unless="${#lists.isEmpty(correcciones)}">
+		<caption class="solo-lectores">Correcciones aprobadas</caption>
+		<thead><tr><th scope="col">Cuándo</th><th scope="col">Sección</th><th scope="col">Competencia</th><th scope="col">De → a</th><th scope="col">Pidió</th><th scope="col">Aprobó</th></tr></thead>
+		<tbody>
+			<tr th:each="c : ${correcciones}" th:data-calificacion="${c.calificacionId}">
+				<td data-etiqueta="Cuándo" th:text="${#temporals.format(c.cuando, 'dd/MM/yyyy HH:mm')}">01/06/2027</td>
+				<td data-etiqueta="Sección" th:text="${c.seccion}">3.° Primaria A</td>
+				<td data-etiqueta="Competencia" th:text="${c.competencia}">PRI-MAT-1</td>
+				<td data-etiqueta="De → a" th:text="|${c.de} → ${c.a}|">B → A</td>
+				<td data-etiqueta="Pidió" th:text="${c.pidio}">docente</td>
+				<td data-etiqueta="Aprobó" th:text="${c.aprobo}">director</td>
+			</tr>
+		</tbody>
+	</table>
+</main>
+</body>
+</html>

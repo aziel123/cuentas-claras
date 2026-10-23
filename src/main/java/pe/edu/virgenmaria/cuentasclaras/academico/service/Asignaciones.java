@@ -176,7 +176,7 @@ public class Asignaciones {
 			if (a.esVigente() && a.getTipo() != TipoAsignacion.AUXILIAR && a.getHasta() == null && suyas.isEmpty()) {
 				Seccion s = seccionesDelAnio.get(a.getSeccionId());
 				sinAreas.add(new AsignacionSinAreas(a.getId(), docente.map(Usuario::getNombreCompleto).orElse("—"),
-						a.getTipo().etiqueta(), s == null ? "—" : s.etiqueta(), a.getAreas()));
+						a.getTipo().etiqueta(), s == null ? "—" : s.etiqueta(), a.getAreas(), a.getSeccionId()));
 			}
 		}
 		Optional<ConfiguracionEvaluacion> configuracion = configuraciones.findByAnioEscolarId(anio.getId());

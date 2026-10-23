@@ -34,6 +34,9 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
+import pe.edu.virgenmaria.cuentasclaras.academico.dto.SeccionDocente;
+import pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.MisNotasVista;
+
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -97,6 +100,35 @@ public class RegistroNotas {
 		this.reloj = reloj;
 	}
 
+	/** Lo que califica el docente en sesión, dónde le faltan áreas del catálogo y sus notas tardías por registrar. */
+	@Transactional(readOnly = true)
+	public MisNotasVista mias() {
+		List<MisNotasVista.AreaDeSeccion> areas = new ArrayList<>();
+		List<String> sinAreas = new ArrayList<>();
+		for (SeccionDocente s : seccionesDocente.mias()) {
+			List<Long> suyas = seccionesDocente.areasDe(s.seccionId());
+			if (suyas.isEmpty()) {
+				if (seccionesDocente.sinAreasDelCatalogo(s.seccionId())) {
+					sinAreas.add(s.seccion());
+				}
+				continue;
+			}
+			Seccion seccion = contexto.seccion(s.seccionId());
+			ConfiguracionEvaluacion configuracion;
+			try {
+				configuracion = contexto.configuracion(seccion);
+			}
+			catch (ReglaNegocioException e) {
+				continue;
+			}
+			contexto.catalogo().areasDe(configuracion.getCurriculoVersionId(), seccion.nivel()).stream()
+					.filter(a -> suyas.contains(a.id()))
+					.forEach(a -> areas.add(new MisNotasVista.AreaDeSeccion(seccion.getId(), seccion.etiqueta(), a.id(),
+							a.nombre(), a.transversal())));
+		}
+		return new MisNotasVista(areas, sinAreas, tardias.porRegistrar());
+	}
+
 	/** La hoja de la sección, el área y el periodo (por defecto, el abierto); con {@code solicitudId}, la de la tardía. */
 	@Transactional(readOnly = true)
 	public HojaNotas hoja(long seccionId, long areaId, Long periodoId, Long solicitudId) {
@@ -125,7 +157,7 @@ public class RegistroNotas {
 				if (!conNota && !exonerados.contains(m.getId())) {
 					sinNota++;
 				}
-				celdas.add(new HojaNotas.Celda(c.id(), v == null || v.getNivelLogro() == null ? null : v.getNivelLogro().name(),
+				celdas.add(new HojaNotas.Celda(c.id(), v == null ? null : v.getId(), v == null || v.getNivelLogro() == null ? null : v.getNivelLogro().name(),
 						v == null ? null : v.getConclusion(), conNota));
 			}
 			Alumno a = m.getAlumno();

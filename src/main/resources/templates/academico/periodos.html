@@ -59,12 +59,9 @@
 									'Desde ahora los docentes registran sus notas. Se firma con tu sesión y queda en la bitácora.',
 									@{/academico/periodos/{id}/abrir(id=${p.id}, anio=${vista.anioId})}, 'Abrir ahora', false)}"></th:block>
 							</th:block>
-							<th:block th:if="${p.puedeCerrar}">
-								<th:block th:replace="~{fragments/componentes :: modalConfirmacion(${'modal-cerrar-' + p.id},
-									|¿Cerrar el ${p.nombre}?|,
-									'No se reabre. Una competencia no trabajada en el periodo queda sin nota; un cambio después va por solicitud. Se firma con tu sesión.',
-									@{/academico/periodos/{id}/cerrar(id=${p.id}, anio=${vista.anioId})}, 'Cerrar periodo', false)}"></th:block>
-							</th:block>
+							<!--/* Sprint 10, tanda 2: el cierre pasa por su resumen (lo que falta) y se confirma ahí. */-->
+							<a class="btn btn-primario btn-chico" th:if="${p.puedeCerrar}"
+								th:href="@{/academico/periodos/{id}/cierre(id=${p.id})}">Revisar y cerrar</a>
 							<form class="formulario-en-linea" method="post" th:if="${p.puedeMoverFin}"
 								th:action="@{/academico/periodos/{id}/fechas(id=${p.id}, anio=${vista.anioId})}">
 								<label class="solo-lectores" th:for="${'inicio-' + p.id}">Inicio</label>

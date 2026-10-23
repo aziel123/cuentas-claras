@@ -14,7 +14,15 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoAnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 
+import pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.CorreccionVista;
+import pe.edu.virgenmaria.cuentasclaras.academico.notas.model.Calificacion;
+import pe.edu.virgenmaria.cuentasclaras.academico.notas.model.OrigenCalificacion;
+import pe.edu.virgenmaria.cuentasclaras.academico.notas.repository.CalificacionRepository;
+import pe.edu.virgenmaria.cuentasclaras.aprobaciones.repository.SolicitudCambioRepository;
+
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,8 +43,18 @@ public class AvanceRegistro {
 
 	private final Periodos cierre;
 
+	private final CalificacionRepository calificaciones;
+
+	private final SolicitudCambioRepository solicitudes;
+
+	private final ContextoNotas contexto;
+
 	public AvanceRegistro(CalculoAvance calculo, PeriodoEvaluacionRepository periodos, AnioEscolarRepository anios,
-			Periodos cierre) {
+			Periodos cierre, CalificacionRepository calificaciones, SolicitudCambioRepository solicitudes,
+			ContextoNotas contexto) {
+		this.calificaciones = calificaciones;
+		this.solicitudes = solicitudes;
+		this.contexto = contexto;
 		this.calculo = calculo;
 		this.periodos = periodos;
 		this.anios = anios;
@@ -60,7 +78,7 @@ public class AvanceRegistro {
 							.max(Comparator.comparingInt(PeriodoEvaluacion::getNumero)));
 			if (elegido.isEmpty()) {
 				return new AvanceVista(opciones(delAnio), null, null, null, List.of(),
-						anio.map(a -> calculo.sinAreas(a.getId())).orElse(List.of()), 0, 0);
+						anio.map(a -> calculo.sinAreas(a.getId())).orElse(List.of()), 0, 0, direccion());
 			}
 			periodo = elegido.get();
 		}
@@ -88,12 +106,40 @@ public class AvanceRegistro {
 						+ resumen.sinAreas().size() + " asignaciones sin áreas del catálogo (van por nota tardía).");
 	}
 
+	/** «Correcciones de notas del periodo» (vigilancia de Dirección): de qué a qué, quién pidió y quién aprobó. */
+	@PreAuthorize("hasRole('DIRECTOR')")
+	@Transactional(readOnly = true)
+	public List<CorreccionVista> correccionesDelPeriodo(long periodoId) {
+		Map<Long, String> secciones = new HashMap<>();
+		Map<Long, String> competencias = new HashMap<>();
+		return calificaciones.findByPeriodoIdAndOrigenOrderByIdAsc(periodoId, OrigenCalificacion.CORRECCION_APROBADA)
+				.stream().map(c -> {
+					String seccion = secciones.computeIfAbsent(c.getSeccionId(), id -> contexto.seccion(id).etiqueta());
+					String competencia = competencias.computeIfAbsent(c.getCompetenciaId(), id -> {
+						var s = contexto.seccion(c.getSeccionId());
+						return contexto.catalogo().competenciasDe(contexto.configuracion(s).getCurriculoVersionId(),
+								s.getGrado()).stream().filter(k -> k.id().equals(id)).map(k -> k.codigo()).findFirst()
+								.orElse("—");
+					});
+					String de = calificaciones.findById(c.getReemplazaId()).map(Calificacion::getNivelLogro)
+							.map(Enum::name).orElse("sin nota");
+					String pidio = solicitudes.findById(c.getSolicitudId()).map(s -> s.getSolicitadoPor()).orElse("—");
+					return new CorreccionVista(c.getId(), seccion, competencia, de,
+							c.getNivelLogro() == null ? "sin nota" : c.getNivelLogro().name(), pidio, c.getCreadoPor(),
+							c.getCreadoEn());
+				}).toList();
+	}
+
 	private AvanceVista vista(PeriodoEvaluacion periodo) {
 		List<AvanceVista.FilaAvance> filas = calculo.filas(periodo);
 		return new AvanceVista(opciones(periodos.findByAnioEscolarIdOrderByNumeroAsc(periodo.getAnioEscolarId())),
 				periodo.getId(), periodo.getNombre(), periodo.getEstado().etiqueta(), filas,
 				calculo.sinAreas(periodo.getAnioEscolarId()), filas.stream().mapToInt(AvanceVista.FilaAvance::esperadas).sum(),
-				filas.stream().mapToInt(AvanceVista.FilaAvance::conNota).sum());
+				filas.stream().mapToInt(AvanceVista.FilaAvance::conNota).sum(), direccion());
+	}
+
+	private static boolean direccion() {
+		return Personas.actual().roles().contains(pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.DIRECTOR);
 	}
 
 	private static List<HojaNotas.OpcionPeriodo> opciones(List<PeriodoEvaluacion> delAnio) {

@@ -45,7 +45,9 @@ final class CatalogoRutasConId {
 		 * Sprint 10, tanda 1: un id del catálogo nacional del currículo (una versión o un área). No es de un colegio: es el
 		 * mismo para todos (no hay nada de otro colegio que ver), pero la ruta igual se pide con el resto de ids del A.
 		 */
-		CATALOGO
+		CATALOGO,
+		/** Sprint 10, tanda 2: una nota (la corrección después del cierre). */
+		CALIFICACION
 	}
 
 	static final Map<String, Map<String, Recurso>> CATALOGO = new LinkedHashMap<>();
@@ -281,6 +283,26 @@ final class CatalogoRutasConId {
 		r("POST /academico/periodos/{id:\\d+}/fechas", "id", Recurso.PERIODO, "anio", Recurso.ANIO);
 		r("POST /academico/periodos/{id:\\d+}/abrir", "id", Recurso.PERIODO, "anio", Recurso.ANIO);
 		r("POST /academico/periodos/{id:\\d+}/cerrar", "id", Recurso.PERIODO, "anio", Recurso.ANIO);
+		// Sprint 10, tanda 2: la hoja de notas (sección, área del catálogo, ?periodo= y ?solicitud= de la nota tardía), la
+		// vista de la sección, la corrección de una nota, el avance y el cierre de un periodo, las exoneraciones y
+		// «Completar áreas» (una asignación o una sección).
+		r("GET /academico/notas/{seccionId:\\d+}/{areaId:\\d+}", "seccionId", Recurso.SECCION, "areaId", Recurso.CATALOGO,
+				"periodo", Recurso.PERIODO, "solicitud", Recurso.SOLICITUD);
+		r("POST /academico/notas/{seccionId:\\d+}/{areaId:\\d+}", "seccionId", Recurso.SECCION, "areaId", Recurso.CATALOGO,
+				"periodo", Recurso.PERIODO, "solicitud", Recurso.SOLICITUD);
+		r("POST /academico/notas/{seccionId:\\d+}/{areaId:\\d+}/tardia", "seccionId", Recurso.SECCION, "areaId",
+				Recurso.CATALOGO, "periodo", Recurso.PERIODO);
+		r("GET /academico/notas/secciones/{seccionId:\\d+}", "seccionId", Recurso.SECCION, "periodo", Recurso.PERIODO);
+		r("GET /academico/notas/correcciones/{calificacionId:\\d+}", "calificacionId", Recurso.CALIFICACION);
+		r("POST /academico/notas/correcciones/{calificacionId:\\d+}", "calificacionId", Recurso.CALIFICACION);
+		r("GET /academico/notas/avance", "periodo", Recurso.PERIODO);
+		r("GET /academico/notas/avance/correcciones", "periodo", Recurso.PERIODO);
+		r("GET /academico/periodos/{id:\\d+}/cierre", "id", Recurso.PERIODO);
+		r("POST /academico/periodos/{id:\\d+}/cierre", "id", Recurso.PERIODO);
+		r("GET /academico/notas/exoneraciones", "seccion", Recurso.SECCION);
+		r("POST /academico/notas/exoneraciones", "seccion", Recurso.SECCION, "matriculaId", Recurso.MATRICULA, "areaId",
+				Recurso.CATALOGO);
+		r("GET /academico/asignaciones/completar", "asignacion", Recurso.ASIGNACION, "seccion", Recurso.SECCION);
 	}
 
 	private CatalogoRutasConId() {
