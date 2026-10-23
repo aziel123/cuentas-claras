@@ -3467,17 +3467,13 @@ BEGIN
     DECLARE v_lote_por VARCHAR(60); DECLARE v_lote_solicitud BIGINT; DECLARE v_lote_bd DATETIME(6);
     DECLARE v_datos VARCHAR(2000);
     SET NEW.conclusion_sha256 = CASE WHEN NEW.conclusion IS NULL THEN NULL ELSE SHA2(NEW.conclusion, 256) END;
-    SET v_estado = (SELECT p.estado FROM periodo_evaluacion p WHERE p.id = NEW.periodo_id AND p.colegio_id = NEW.colegio_id
-        AND p.anio_escolar_id = NEW.anio_escolar_id);
-    SET v_numero = (SELECT p.numero FROM periodo_evaluacion p WHERE p.id = NEW.periodo_id AND p.colegio_id = NEW.colegio_id);
-    SET v_grado = (SELECT s.grado FROM seccion s WHERE s.id = NEW.seccion_id AND s.colegio_id = NEW.colegio_id
-        AND s.anio_escolar_id = NEW.anio_escolar_id);
-    SET v_version = (SELECT c.curriculo_version_id FROM configuracion_evaluacion c
-        WHERE c.anio_escolar_id = NEW.anio_escolar_id AND c.colegio_id = NEW.colegio_id);
-    SET v_max = (SELECT c.conclusion_max FROM configuracion_evaluacion c
-        WHERE c.anio_escolar_id = NEW.anio_escolar_id AND c.colegio_id = NEW.colegio_id);
-    SET v_siempre = (SELECT c.conclusion_siempre FROM configuracion_evaluacion c
-        WHERE c.anio_escolar_id = NEW.anio_escolar_id AND c.colegio_id = NEW.colegio_id);
+    -- Una consulta por tabla (riesgo 3: 120 filas por guardado). Sin fila, las variables quedan en NULL y se rechaza abajo.
+    SELECT p.estado, p.numero, s.grado, c.curriculo_version_id, c.conclusion_max, c.conclusion_siempre
+        INTO v_estado, v_numero, v_grado, v_version, v_max, v_siempre
+        FROM periodo_evaluacion p
+        JOIN seccion s ON s.id = NEW.seccion_id AND s.colegio_id = NEW.colegio_id AND s.anio_escolar_id = p.anio_escolar_id
+        JOIN configuracion_evaluacion c ON c.anio_escolar_id = p.anio_escolar_id AND c.colegio_id = p.colegio_id
+        WHERE p.id = NEW.periodo_id AND p.colegio_id = NEW.colegio_id AND p.anio_escolar_id = NEW.anio_escolar_id;
     SET v_area = (SELECT k.area_id FROM competencia k JOIN area_curricular ar ON ar.id = k.area_id
         WHERE k.id = NEW.competencia_id AND k.version_id <=> v_version AND ar.nivel = SUBSTRING_INDEX(v_grado, '_', 1)
           AND (k.solo_grados IS NULL OR FIND_IN_SET(v_grado, k.solo_grados) > 0));
@@ -3511,13 +3507,9 @@ BEGIN
         END IF;
     END IF;
     IF NEW.origen IN ('REGISTRO', 'CAMBIO_ABIERTO', 'REGISTRO_TARDIO') THEN
-        SET v_lote_por = (SELECT l.creado_por FROM lote_calificacion l WHERE l.id = NEW.lote_id
-            AND l.colegio_id = NEW.colegio_id AND l.periodo_id = NEW.periodo_id AND l.seccion_id = NEW.seccion_id
-            AND l.area_id = v_area);
-        SET v_lote_solicitud = (SELECT l.solicitud_id FROM lote_calificacion l WHERE l.id = NEW.lote_id
-            AND l.colegio_id = NEW.colegio_id);
-        SET v_lote_bd = (SELECT l.registrado_bd FROM lote_calificacion l WHERE l.id = NEW.lote_id
-            AND l.colegio_id = NEW.colegio_id);
+        SELECT l.creado_por, l.solicitud_id, l.registrado_bd INTO v_lote_por, v_lote_solicitud, v_lote_bd
+            FROM lote_calificacion l WHERE l.id = NEW.lote_id AND l.colegio_id = NEW.colegio_id
+              AND l.periodo_id = NEW.periodo_id AND l.seccion_id = NEW.seccion_id AND l.area_id = v_area;
         IF v_lote_por IS NULL OR NOT (NEW.creado_por <=> v_lote_por)
                 OR NOT (v_lote_bd >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 10 MINUTE)
                 OR (NEW.origen IN ('REGISTRO', 'CAMBIO_ABIERTO') AND NOT (v_estado <=> 'ABIERTO' AND v_lote_solicitud IS NULL))

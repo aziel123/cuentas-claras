@@ -37,6 +37,24 @@
    «regularizar» o «regularicen» y «aporte». Con ellas el comunicado no se rechaza: queda **por aprobar** y lo revisa
    Dirección o Promotoría, que ve resaltada la palabra. Si no es de cobranza («cancelar la reunión»), lo aprueban y sale.
 
+## Las notas de tu área (sprint 10)
+1. En **Evaluación → Notas** elige la sección y el área. Ves tus alumnos (solo sus nombres) y, debajo de cada uno, las
+   competencias del área. El tutor(a) también ve las **competencias transversales**.
+2. Toca **AD, A, B o C** en cada competencia. Cuando la norma lo exige (en Primaria con B o C; en Inicial con A, B o C; en
+   Secundaria con C), escribe la **conclusión descriptiva**: qué logró y qué le recomiendas.
+3. Toca **Guardar notas** una sola vez: se guarda solo lo que cambió, a tu nombre y con tu firma de sesión.
+4. Con el periodo **abierto** puedes cambiar una nota las veces que haga falta, o dejarla **«Sin nota»** si esa competencia
+   no se trabajó en el periodo.
+5. Cuando Dirección **cierra** el periodo, la hoja queda de solo lectura. Para cambiar una nota toca **Pedir corrección**
+   (con el motivo; la aprueba otra persona de Dirección o Promotoría). Si quedaron competencias **sin nota** que sí se
+   trabajaron, pide **registrar las notas pendientes**: cuando lo aprueben, tienes **48 horas** (aparece en «Notas tardías
+   aprobadas»).
+6. Si ves «Tu asignación en … todavía no tiene áreas del catálogo», pide a Dirección que la complete: hasta que otra persona
+   la apruebe, no puedes poner notas en esa sección.
+7. Un alumno **exonerado** de Religión o Educación Física aparece marcado: no se califica desde el periodo en que Dirección
+   lo exoneró.
+8. Las notas de un alumno nunca dependen de lo que deba su familia: el sistema no lo sabe ni lo muestra.
+
 ## Lo que el sistema no te deja hacer, y por qué
 - **Ver pagos, deudas ni boletas de las familias:** no los necesitas para enseñar y la ley protege esos datos. Además, la deuda nunca puede afectar las notas ni los exámenes de un alumno.
 - **Ver alumnos de otras secciones:** solo verás tus secciones (acceso mínimo por rol).

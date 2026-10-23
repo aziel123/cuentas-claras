@@ -187,8 +187,9 @@ class AsignacionAreaTest extends PruebaCurriculo {
 				.isEqualTo("VIGENTE");
 		assertThat(jdbc.queryForList("SELECT clave FROM firma_operacion WHERE clave = ?", String.class,
 				"asignacion_docente:" + anterior + ":TERMINADA")).hasSize(1);
+		// Sprint 10, tanda 2 (desviación 8 de la tanda 1): al tutor, también el área de las competencias transversales.
 		assertThat(como(UsuariosDePrueba.autenticado(docente), () -> seccionesDocente.areasDe(escuela.primaria5A2026())))
-				.containsExactlyInAnyOrder(matematica, ciencia);
+				.containsExactlyInAnyOrder(matematica, ciencia, area(Nivel.PRIMARIA, "TRV"));
 	}
 
 	/** Las vigentes del sprint 9 (con el texto libre de entonces) salen en «Asignaciones sin áreas del catálogo». */
