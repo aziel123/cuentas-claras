@@ -1790,3 +1790,18 @@ Rutas relativas a `C:/Users/amedina/cuentas-claras/cuentas-claras/`:
 - **Rendimiento:** cada nota pasa por su trigger; el trigger lee el periodo, la sección y la evaluación en una consulta. La
   cadena de la bitácora serializa el final de cada guardado (como los cobros).
 - **La sugerencia de áreas** desde el texto libre puede equivocarse: la persona la revisa y otra la aprueba.
+
+### Resultados de la verificación
+- `./mvnw -B verify` en local (una vez, sobre 5336803): 3002 pruebas, 1 fallo (`AsignacionAreaTest`: el tutor ya recibe las
+  transversales, desviación 8 de la tanda 1), corregido en 55d8e29. Las pruebas de la tanda en H2 (notas, correcciones,
+  alertas, exoneraciones, cierre, «Completar áreas», borrador, bitácora, web, inmutabilidad, DTO, ArchUnit, IDOR, matriz,
+  verificador y huellas) se corrieron por clase: 0 fallos.
+- MySQL real en local (contenedor propio `cc-s10t2-mysql`, `mysql:8`, puerto 3317): V1–V36 con `cc_migrador`, `02` y `03`
+  sin error, `huellas_objetos()` = 124; `AuditoriaSprint10NotasMySqlTest` 24 de 24; `MigracionMySqlTest` 2 de 2.
+- CI del PR #20, corrida 40033637720 sobre 4b585fb: **todos los jobs en verde** (compilar y probar: 3026 pruebas, 0 fallos,
+  257 omitidas, también con la zona de Los Ángeles; MySQL 8 con `AuditoriaSprint10NotasMySqlTest` 24 de 24, 108 triggers,
+  124 huellas y prod «Huellas de los 108 triggers y las 16 funciones verificadas»; carga: un lote solo de 120 filas en
+  194 ms y los 40 a la vez entre 1,3 y 2,3 s, dentro de la decisión 191; respaldo con `faltan-filas-notas`; demo;
+  dependencias; gitleaks). La corrida anterior (40031544024) falló en el respaldo por una descarga de Maven Central.
+- El contenedor `cc-s10t2-mysql` se borró al terminar. No se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`,
+  `smarthr-*`, `supabase_*` ni `cc-mysql-s5*`.
