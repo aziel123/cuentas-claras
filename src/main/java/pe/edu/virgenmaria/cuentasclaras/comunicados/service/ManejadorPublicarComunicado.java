@@ -47,9 +47,13 @@ public class ManejadorPublicarComunicado implements ManejadorSolicitud {
 
 	private final SeccionesDocente seccionesDocente;
 
+	private final FiltroContenido filtro;
+
 	public ManejadorPublicarComunicado(ComunicadoRepository comunicados, ComunicadoAdjuntoRepository adjuntos,
-			EnvioComunicados envio, AuditoriaService auditoria, Clock reloj, SeccionesDocente seccionesDocente) {
+			EnvioComunicados envio, AuditoriaService auditoria, Clock reloj, SeccionesDocente seccionesDocente,
+			FiltroContenido filtro) {
 		this.seccionesDocente = seccionesDocente;
+		this.filtro = filtro;
 		this.comunicados = comunicados;
 		this.adjuntos = adjuntos;
 		this.envio = envio;
@@ -104,6 +108,8 @@ public class ManejadorPublicarComunicado implements ManejadorSolicitud {
 		comunicados.findById(solicitud.getEntidadId()).ifPresent(c -> {
 			lineas.add("De: " + c.getEmisorEtiqueta());
 			lineas.add("Título: " + c.getTitulo());
+			palabra(c).ifPresent(x -> lineas.add(LINEA_PALABRA + "«" + x + "» ("
+					+ pe.edu.virgenmaria.cuentasclaras.comun.texto.ContenidoSinCobranza.MOTIVO_AMBIGUO + ")"));
 			java.util.Optional.ofNullable(c.getAdjuntoId()).flatMap(adjuntos::findById).ifPresent(a -> lineas.add("PDF: " + a.getPaginas() + " página(s)"
 					+ (a.isRequiereRevision() ? ", con poco texto o imágenes" : "") + ". Ábrelo en /comunicados/"
 					+ c.getId() + "/adjunto antes de aprobar."));
@@ -113,8 +119,21 @@ public class ManejadorPublicarComunicado implements ManejadorSolicitud {
 
 	@Override
 	public String advertencia(SolicitudCambio solicitud) {
-		return "Abre el PDF y léelo completo antes de aprobar: si pide pagos, muestra un código QR, una cuenta o un "
-				+ "celular, o habla de deudas, recházalo. Al aprobar, sale a todas las familias del alcance.";
+		java.util.Optional<Comunicado> c = comunicados.findById(solicitud.getEntidadId());
+		String palabra = c.flatMap(this::palabra).map(x -> "El texto dice «" + x + "», que "
+				+ pe.edu.virgenmaria.cuentasclaras.comun.texto.ContenidoSinCobranza.MOTIVO_AMBIGUO + ": léelo completo y, "
+				+ "si pide pagos o habla de deudas, recházalo. ").orElse("");
+		boolean conPdf = c.map(Comunicado::getAdjuntoId).isPresent();
+		return palabra + (conPdf ? "Abre el PDF y léelo completo antes de aprobar: si pide pagos, muestra un código QR, "
+				+ "una cuenta o un celular, o habla de deudas, recházalo. " : "")
+				+ "Al aprobar, sale a todas las familias del alcance.";
+	}
+
+	/** La línea del detalle que la bandeja resalta (la palabra que mandó el comunicado a aprobación). */
+	public static final String LINEA_PALABRA = "Palabra que lo envió a aprobación: ";
+
+	private java.util.Optional<String> palabra(Comunicado c) {
+		return filtro.paraAprobacion(c.getTitulo() + "\n" + c.getCuerpo());
 	}
 
 	private Comunicado delaSolicitud(SolicitudCambio solicitud) {

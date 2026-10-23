@@ -39,7 +39,7 @@ class HuellasObjetosBdTest {
 		// (99 y 112).
 		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(99)
 				.isEqualTo(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
-		assertThat(esperadas).hasSize(112).containsKeys("trg_comunicado_destinatario_cambio", "trg_comunicado_nace", "trg_comunicado_estado",
+		assertThat(esperadas).hasSize(113).containsKeys("cc_texto_plano", "trg_comunicado_destinatario_cambio", "trg_comunicado_nace", "trg_comunicado_estado",
 				"trg_comunicado_destinatario_nace", "trg_confirmacion_lectura_nace", "trg_exportacion_nomina_nace",
 				"trg_registro_asistencia_nace", "trg_marca_asistencia_nace",
 				"trg_consentimiento_aviso_nace", "trg_configuracion_academica_nace", "trg_configuracion_academica_cambio",

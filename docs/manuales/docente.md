@@ -31,8 +31,11 @@
 3. Toca **Enviar**. Con PDF, queda **por aprobar** y lo aprueba Dirección o Promotoría en su bandeja.
 4. ¿Te equivocaste? Un comunicado enviado no se edita: pide a Dirección una **fe de erratas** (llega a las mismas familias)
    o que lo retire con su motivo.
-5. Un comunicado no habla de pagos, deudas, montos, cuentas ni medios de pago: el sistema no lo deja salir. Para eso está
-   Administración.
+5. Un comunicado no habla de pagos, deudas, mensualidades, pensiones, moras, montos («S/ 300» o «S/ trescientos»),
+   cuentas ni medios de pago, ni condiciona un examen: el sistema no lo deja salir. Para eso está Administración.
+6. Algunas palabras **pueden** referirse a cobranza: «cancelar» o «cancelen», «al día con», «abono» o «abonar», «saldo»,
+   «regularizar» o «regularicen» y «aporte». Con ellas el comunicado no se rechaza: queda **por aprobar** y lo revisa
+   Dirección o Promotoría, que ve resaltada la palabra. Si no es de cobranza («cancelar la reunión»), lo aprueban y sale.
 
 ## Lo que el sistema no te deja hacer, y por qué
 - **Ver pagos, deudas ni boletas de las familias:** no los necesitas para enseñar y la ley protege esos datos. Además, la deuda nunca puede afectar las notas ni los exámenes de un alumno.

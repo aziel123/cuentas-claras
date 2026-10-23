@@ -36,6 +36,25 @@ class ContenidoSinCobranzaTest {
 				.allMatch(ContenidoSinCobranza.EXPRESION::equals);
 	}
 
+	/**
+	 * Decisión del usuario (dos niveles): la regla AMBIGUA de trg_comunicado_nace es la misma de Java, y cc_texto_plano usa
+	 * la misma tabla de letras parecidas que FiltroContenido.
+	 */
+	@Test
+	void laReglaAmbiguaYLasLetrasParecidasSonLasDeLaBase() throws IOException {
+		String script = Files.readString(Path.of("scripts/mysql/03-triggers.sql"));
+		Matcher m = Pattern.compile("'(\\\\\\\\bcancel\\([^']+)',\\s*'i'\\)").matcher(script);
+		List<String> encontradas = new ArrayList<>();
+		while (m.find()) {
+			encontradas.add(m.group(1).replace("\\\\", "\\"));
+		}
+		assertThat(encontradas).as("el REGEXP_LIKE ambiguo de trg_comunicado_nace").hasSize(1)
+				.allMatch(ContenidoSinCobranza.EXPRESION_AMBIGUA::equals);
+		assertThat(script).contains("DEFAULT '" + pe.edu.virgenmaria.cuentasclaras.comunicados.service.FiltroContenido
+				.ORIGEN_PARECIDAS).contains("DEFAULT '" + pe.edu.virgenmaria.cuentasclaras.comunicados.service
+						.FiltroContenido.DESTINO_PARECIDAS);
+	}
+
 	@ParameterizedTest
 	@ValueSource(strings = { "Mateo: falta. Debe S/ 350.00", "su deuda", "la pensión de marzo", "Pensión", "3 cuotas",
 			"pago pendiente", "PAGAR hoy", "es moroso", "cobranza", "cuota vencida", "por Yape", "plin", "US$ 20",

@@ -9,7 +9,10 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
--- Versión de las correcciones del sprint 9 (V34): 99 triggers y 10 funciones (13 con huella; 112 huellas). Nuevo:
+-- Versión de los dos niveles del filtro (correcciones del sprint 9, decisión del usuario): 99 triggers y 11 funciones
+-- (14 con huella; 113 huellas). Nueva: cc_texto_plano (la normalización del filtro de la aplicación). Cambia
+-- trg_comunicado_nace: la cobranza clara se rechaza sobre el texto plano; las palabras ambiguas obligan a POR_APROBAR.
+-- Versión anterior (correcciones del sprint 9): 99 triggers y 10 funciones (13 con huella; 112 huellas). Nuevo:
 -- trg_comunicado_destinatario_cambio (la apertura se marca una vez con la hora de la base; el aviso y el recordatorio,
 -- una vez y solo con cc_sistema, con un mensaje de comunicados a un apoderado de esa familia). Cambian:
 -- trg_comunicado_nace (TODO comunicado con PDF nace POR_APROBAR, sea quien sea el emisor), trg_comunicado_estado (el
@@ -148,6 +151,35 @@ DROP FUNCTION IF EXISTS cc_cuenta_activada$$
 CREATE FUNCTION cc_cuenta_activada(p_usuario BIGINT) RETURNS BOOLEAN NOT DETERMINISTIC READS SQL DATA
     RETURN EXISTS (SELECT 1 FROM enlace_activacion e WHERE e.usuario_id = p_usuario AND e.usado_en IS NOT NULL)
         OR EXISTS (SELECT 1 FROM sesion_usuario s WHERE s.usuario_id = p_usuario)$$
+
+-- Correcciones del sprint 9 (decisión del usuario sobre los dos niveles del filtro): el texto de un comunicado como lo lee
+-- el filtro de la aplicación (FiltroContenido.normalizar): sin marcas combinantes, con las letras de ancho completo y las
+-- parecidas a latinas (cirílicas, griegas, armenias, versalitas…) llevadas a su latina. La tabla de parecidas es la MISMA
+-- de FiltroContenido (ContenidoSinCobranzaTest lo comprueba). Los caracteres de formato ya los rechaza el trigger.
+DROP FUNCTION IF EXISTS cc_texto_plano$$
+CREATE FUNCTION cc_texto_plano(p_texto TEXT CHARACTER SET utf8mb4) RETURNS TEXT CHARACTER SET utf8mb4 DETERMINISTIC NO SQL
+BEGIN
+    DECLARE v_raras TEXT CHARACTER SET utf8mb4 DEFAULT 'аеорсухкмтнвіјѕԁɡАВЕКМНОРСТХУІЈЅαορεντικυχΑΒΕΖΗΙΚΜΝΟΡΤΥΧıɩɑʋȷᴀʙᴄᴅᴇɢʜɪᴊᴋʟᴍɴᴏᴘʀꜱᴛᴜᴠᴡʏᴢӏӀһԛԝүօսոցհզϲϳＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ０１２３４５６７８９';
+    DECLARE v_latinas TEXT CHARACTER SET utf8mb4 DEFAULT 'aeopcyxkmthbijsdgABEKMHOPCTXYIJSaopevtikuxABEZHIKMNOPTYXiiaujabcdeghijklmnoprstuvwyzllhqwyounghqcjABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    DECLARE v_texto TEXT CHARACTER SET utf8mb4;
+    DECLARE v_salida TEXT CHARACTER SET utf8mb4 DEFAULT '';
+    DECLARE v_letra VARCHAR(1) CHARACTER SET utf8mb4;
+    DECLARE v_i INT DEFAULT 1;
+    DECLARE v_n INT;
+    DECLARE v_p INT;
+    IF p_texto IS NULL THEN
+        RETURN NULL;
+    END IF;
+    SET v_texto = REGEXP_REPLACE(p_texto, '\\p{M}', '');
+    SET v_n = CHAR_LENGTH(v_texto);
+    WHILE v_i <= v_n DO
+        SET v_letra = SUBSTRING(v_texto, v_i, 1);
+        SET v_p = LOCATE(v_letra COLLATE utf8mb4_bin, v_raras COLLATE utf8mb4_bin);
+        SET v_salida = CONCAT(v_salida, IF(v_p > 0, SUBSTRING(v_latinas, v_p, 1), v_letra));
+        SET v_i = v_i + 1;
+    END WHILE;
+    RETURN v_salida;
+END$$
 
 -- Sprint 9, tanda 2 (sección 7.3): el día de hoy en Lima según el reloj de la BASE (Perú no tiene horario de verano). Mismo
 -- criterio que cc_firma_valida (UTC menos 5 horas). El servidor de la aplicación no decide qué día es (E9).
@@ -1216,7 +1248,7 @@ BEGIN
         IF NEW.parametros IS NULL OR NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id
                 AND CAST(LEFT(NEW.parametros, CHAR_LENGTH(c.nombre) + 1) AS BINARY) = CAST(CONCAT(c.nombre, CHAR(10)) AS BINARY)
                 AND NOT REGEXP_LIKE(SUBSTRING(NEW.parametros, CHAR_LENGTH(c.nombre) + 2),
-                    '(^|[^a-z])s/\\.?\\s*([0-9]|(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieci[a-zéá]*|veinte|veinti[a-zéá]*|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos|mil)\\b)|US[$]|[0-9][.,][0-9]{2}(?![0-9]|\\s*([ap]\\.?\\s?m|h)\\b)|\\bdeud|\\bpensi[oó]n|\\bcuotas?\\b|\\bpag(o|os|ar|ue|ues)\\b|\\bmoros|\\bcobr|\\bvencid|\\byape\\b|\\bplin\\b|\\bmensualidad|\\bal\\s+d[ií]a\\s+con\\b|\\b(obligaciones|compromisos)\\s+econ[oó]mic|\\bsaldos?\\b|\\babon(o|os|ó|ar|e|en|ad[oa]s?|ando)\\b|\\bregulari[zc]|\\bcancel(ar|en)\\s+(la|su)\\b|\\bno\\s+podr[aá]n?\\s+(rendir|dar)\\s+(el\\s+)?ex[aá]men',
+                    '(^|[^a-z])s/\\.?\\s*([0-9]|(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieci[a-zéá]*|veinte|veinti[a-zéá]*|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos|mil)\\b)|US[$]|[0-9][.,][0-9]{2}(?![0-9]|\\s*([ap]\\.?\\s?m|h)\\b)|\\bdeud|\\bpensi[oó]n|\\bcuotas?\\b|\\bpag(o|os|ar|ue|ues)\\b|\\bmoros|\\b(en|de|la|su|por)\\s+mora\\b|\\bcobr|\\bvencid|\\byape\\b|\\bplin\\b|\\bmensualidad|\\b(obligaciones|compromisos)\\s+econ[oó]mic|\\bno\\s+podr[aá]n?\\s+(rendir|dar)\\s+(el\\s+)?ex[aá]men',
                     'i')) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un aviso de asistencia o de comunicados no habla de cobranza y empieza con el colegio';
         END IF;
@@ -2932,6 +2964,8 @@ DROP TRIGGER IF EXISTS trg_comunicado_nace$$
 CREATE TRIGGER trg_comunicado_nace BEFORE INSERT ON comunicado FOR EACH ROW
 BEGIN
     DECLARE v_sha_adjunto CHAR(64);
+    DECLARE v_plano TEXT CHARACTER SET utf8mb4;
+    DECLARE v_ambigua BOOLEAN DEFAULT FALSE;
     IF NEW.estado NOT IN ('ENVIADO', 'POR_APROBAR') OR NEW.solicitud_id IS NOT NULL OR NEW.retirado_por IS NOT NULL
             OR NEW.destinatarios IS NOT NULL
             OR NOT cc_colegio_en_produccion(NEW.colegio_id)
@@ -2956,20 +2990,27 @@ BEGIN
             IFNULL(NEW.seccion_id, ''), NEW.titulo, NEW.cuerpo, IFNULL(v_sha_adjunto, '')), 256) <=> NEW.huella_contenido) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la huella del comunicado no corresponde a su contenido';
     END IF;
+    SET v_plano = cc_texto_plano(CONCAT_WS(CHAR(10), NEW.titulo, NEW.cuerpo));
     IF REGEXP_LIKE(CONCAT(NEW.titulo, NEW.cuerpo), '\\p{Cf}')
-            OR REGEXP_LIKE(CONCAT_WS(CHAR(10), NEW.titulo, NEW.cuerpo),
-                '(^|[^a-z])s/\\.?\\s*([0-9]|(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieci[a-zéá]*|veinte|veinti[a-zéá]*|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos|mil)\\b)|US[$]|[0-9][.,][0-9]{2}(?![0-9]|\\s*([ap]\\.?\\s?m|h)\\b)|\\bdeud|\\bpensi[oó]n|\\bcuotas?\\b|\\bpag(o|os|ar|ue|ues)\\b|\\bmoros|\\bcobr|\\bvencid|\\byape\\b|\\bplin\\b|\\bmensualidad|\\bal\\s+d[ií]a\\s+con\\b|\\b(obligaciones|compromisos)\\s+econ[oó]mic|\\bsaldos?\\b|\\babon(o|os|ó|ar|e|en|ad[oa]s?|ando)\\b|\\bregulari[zc]|\\bcancel(ar|en)\\s+(la|su)\\b|\\bno\\s+podr[aá]n?\\s+(rendir|dar)\\s+(el\\s+)?ex[aá]men',
+            OR REGEXP_LIKE(v_plano,
+                '(^|[^a-z])s/\\.?\\s*([0-9]|(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieci[a-zéá]*|veinte|veinti[a-zéá]*|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos|mil)\\b)|US[$]|[0-9][.,][0-9]{2}(?![0-9]|\\s*([ap]\\.?\\s?m|h)\\b)|\\bdeud|\\bpensi[oó]n|\\bcuotas?\\b|\\bpag(o|os|ar|ue|ues)\\b|\\bmoros|\\b(en|de|la|su|por)\\s+mora\\b|\\bcobr|\\bvencid|\\byape\\b|\\bplin\\b|\\bmensualidad|\\b(obligaciones|compromisos)\\s+econ[oó]mic|\\bno\\s+podr[aá]n?\\s+(rendir|dar)\\s+(el\\s+)?ex[aá]men',
                 'i') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un comunicado no lleva caracteres invisibles ni habla de cobranza';
     END IF;
+    -- Decisión del usuario: las palabras AMBIGUAS (cancelar, «al día con», abono, saldo, regularizar, aporte) no
+    -- rechazan el comunicado, pero lo obligan a esperar la aprobación del otro órgano.
+    SET v_ambigua = REGEXP_LIKE(v_plano,
+        '\\bcancel(ar|en|e|aci[oó]n)\\b|\\bal\\s+d[ií]a\\s+con\\b|\\bponerse\\s+al\\s+d[ií]a\\b|\\babon(o|os|ó|ar|e|en|ad[oa]s?|ando)\\b|\\bsaldos?\\b|\\bregulari[zc]|\\baportes?\\b',
+        'i');
     IF NEW.emisor_rol = 'DOCENTE' AND NOT (NEW.alcance = 'SECCION'
             AND cc_docente_de_seccion(NEW.creado_por, NEW.seccion_id, FALSE)
-            AND ((NEW.adjunto_id IS NULL AND NEW.estado = 'ENVIADO')
-                OR (NEW.adjunto_id IS NOT NULL AND NEW.estado = 'POR_APROBAR'))) THEN
+            AND NEW.estado IN ('ENVIADO', 'POR_APROBAR')) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el docente escribe solo a sus secciones; con PDF, lo aprueba Direccion';
     END IF;
-    IF NOT (NEW.estado <=> IF(NEW.adjunto_id IS NOT NULL, 'POR_APROBAR', 'ENVIADO')) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: todo comunicado con PDF espera la aprobacion de otra persona; sin PDF, sale al enviarse';
+    -- Con PDF o con una palabra ambigua, POR_APROBAR. Sin ninguno, sale al enviarse (o, si la aplicación vio una palabra
+    -- ambigua que este texto plano no ve, por ejemplo escrita con números, también puede quedar por aprobar).
+    IF (NEW.adjunto_id IS NOT NULL OR v_ambigua) AND NOT (NEW.estado <=> 'POR_APROBAR') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: con PDF o con una palabra que puede referirse a cobranza, el comunicado espera la aprobacion de otra persona';
     END IF;
     IF NOT cc_firma_valida(NEW.colegio_id, CONCAT('comunicado:', LEFT(NEW.huella_contenido, 40), ':ENVIAR'),
             NEW.creado_por) THEN

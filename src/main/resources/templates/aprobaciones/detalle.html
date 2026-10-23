@@ -21,7 +21,7 @@
 			<div th:replace="~{fragments/componentes :: alerta('advertencia', ${s.advertencia})}"></div>
 		</th:block>
 		<ul class="detalle-solicitud" th:unless="${#lists.isEmpty(s.detalle)}">
-			<li th:each="linea : ${s.detalle}" th:text="${linea}">Efectivo · cobró Lucía Ramos</li>
+			<li th:each="linea : ${s.detalle}" th:text="${linea}" th:classappend="${#strings.startsWith(linea, 'Palabra que lo envió a aprobación')} ? 'linea-resaltada'">Efectivo · cobró Lucía Ramos</li>
 		</ul>
 		<p class="texto-largo" th:text="|Motivo: ${s.motivo}|">Motivo</p>
 		<p class="secundario" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM/yyyy HH:mm')}|">Pedida por caja</p>
