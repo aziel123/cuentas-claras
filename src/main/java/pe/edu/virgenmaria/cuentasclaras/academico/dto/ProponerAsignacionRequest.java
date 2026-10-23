@@ -27,10 +27,11 @@ public record ProponerAsignacionRequest(
 		@Size(min = 10, max = 500, message = "El motivo debe tener entre 10 y 500 caracteres.") String motivo,
 		@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
 		@Size(max = 15, message = "Elige hasta 15 áreas.") List<Long> areaIds,
-		boolean todasLasAreas) {
+		Boolean todasLasAreas) {
 
 	public ProponerAsignacionRequest {
 		areaIds = areaIds == null ? List.of() : areaIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+		todasLasAreas = Boolean.TRUE.equals(todasLasAreas);
 	}
 
 	/** Sprint 9, tanda 1: sin fecha de fin (no es una cobertura) ni áreas del catálogo. */

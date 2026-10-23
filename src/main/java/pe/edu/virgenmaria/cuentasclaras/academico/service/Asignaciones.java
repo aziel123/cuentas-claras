@@ -216,7 +216,7 @@ public class Asignaciones {
 		Usuario docente = usuarios.findById(pedido.docenteId())
 				.orElseThrow(() -> new RecursoNoEncontradoException("Docente no encontrado"));
 		return proponerEn(seccion, docente, pedido.tipo(), pedido.areas(), pedido.motivo(), pedido.hasta(),
-				pedido.areaIds(), pedido.todasLasAreas());
+				pedido.areaIds(), Boolean.TRUE.equals(pedido.todasLasAreas()));
 	}
 
 	/**

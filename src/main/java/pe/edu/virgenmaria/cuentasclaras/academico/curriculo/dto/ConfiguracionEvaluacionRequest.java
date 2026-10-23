@@ -19,7 +19,7 @@ public record ConfiguracionEvaluacionRequest(
 		@NotNull(message = "Escribe el largo máximo de la conclusión.")
 		@Min(value = 100, message = "De 100 a 1000 caracteres.") @Max(value = 1000, message = "De 100 a 1000 caracteres.")
 		Integer conclusionMax,
-		boolean conclusionSiempre,
+		Boolean conclusionSiempre,
 		@NotNull(message = "Escribe los días de cierre anticipado.")
 		@Min(value = 0, message = "De 0 a 15 días.") @Max(value = 15, message = "De 0 a 15 días.") Integer diasCierreAnticipado,
 		@NotBlank(message = "Escribe la lengua materna.") @Size(min = 3, max = 30, message = "De 3 a 30 caracteres.")
@@ -34,6 +34,7 @@ public record ConfiguracionEvaluacionRequest(
 
 	public ConfiguracionEvaluacion.Valores valores() {
 		return new ConfiguracionEvaluacion.Valores(curriculoVersionId, tipoPeriodo, conclusionMax == null ? 0 : conclusionMax,
-				conclusionSiempre, diasCierreAnticipado == null ? -1 : diasCierreAnticipado, lenguaMaterna, dre, ugel);
+				Boolean.TRUE.equals(conclusionSiempre), diasCierreAnticipado == null ? -1 : diasCierreAnticipado, lenguaMaterna,
+				dre, ugel);
 	}
 }
