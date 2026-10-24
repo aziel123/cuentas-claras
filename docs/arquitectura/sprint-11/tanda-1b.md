@@ -38,8 +38,22 @@
   recaudación («Confirmar lote») y renovación.
 - **Puesta en marcha** (`puesta-en-marcha/lista.html`): número, título, estado con texto e ícono, responsable, conteo, «Ir» o
   «Lo hace …», «Siguiente» marcado con texto, «Pasar a producción» deshabilitado con el motivo.
+- **Una falla de interfaz de la demo (sección 2b):** la tarjeta de Secundaria desalineada en Pensiones.
 - **Fuera de alcance:** cambios de lógica de los pasos (son de la tanda 1); avisos por WhatsApp o correo de los pasos
   pendientes (después, si el usuario lo pide); la guía para el operador (ya ve la lista como sí o no).
+
+## 2b. Falla de la demo que se corrige en esta tanda
+**F-D1. Tarjeta de Secundaria desalineada en Pensiones.** «Sin plan aprobado» baja a una segunda línea junto a «Secundaria» y su
+botón queda más abajo que los de Inicial y Primaria.
+- **Corrección (CSS con los tokens de `sistema-diseno`, sin colores nuevos):** `.lista-tarjetas` en grilla con filas de la
+  misma altura (`align-items: stretch`); cada `.tarjeta` como columna flexible (`display: flex; flex-direction: column`); la
+  cabecera en dos filas fijas: **el título en la primera y la etiqueta en la segunda**, siempre, para cualquier largo de
+  palabra (no un `flex-wrap` que depende del ancho); la etiqueta con `white-space: nowrap`; el bloque de acciones al final con
+  `margin-top: auto` y botones con la misma altura mínima (44 px) y el mismo ancho en la tarjeta. Así los tres botones quedan a
+  la misma altura en escritorio, y en celular (una columna) siguen en el mismo lugar de cada tarjeta.
+- **Pruebas:** `PensionesTarjetasTest` (renderiza el resumen con los tres niveles: cada tarjeta tiene la misma estructura,
+  `.tarjeta-titulo`, `.tarjeta-etiqueta` y `.tarjeta-acciones`, en ese orden, sin importar el estado del plan) y revisión visual
+  con `disenador-ui` en 360, 768 y 1280 px con «Secundaria» y la etiqueta más larga («Sin plan aprobado»).
 
 ## 3. Textos (microcopy; revisar con `investigador-ux` antes de cerrar)
 - Banner, le toca: «Tu colegio está en preparación: faltan 6 de 15 pasos.» · «Siguiente: Crear las secciones del año 2026 — lo
@@ -84,6 +98,7 @@
   `pensiones/…`, `alumnos/…`, `conectores/…`, `usuarios/…`, el saldo inicial); `caja/hoy` y `caja/familia` («Cobrar»
   deshabilitado), `comunicados/…`, `recaudacion/lote` y la campaña de renovación; `familia/…` (texto del portal en preparación).
 - **CSS:** `static/css/` (banner, barra, estado de paso).
+- **F-D1:** `templates/pensiones/resumen.html` y su CSS.
 - **Documentos:** `docs/manuales/promotoria.md`, `direccion.md`, `administracion.md`, `caja.md` y `docente.md` («Qué ves mientras tu colegio
   está en preparación»); sección «Tanda 1b · Implementación» del diseño.
 
@@ -94,7 +109,8 @@
 4. La Puesta en marcha con responsable, estado e «Ir».
 5. `ColegioEnPreparacionException`, `PreparacionAdvice`, traducción de los 1644 y botones deshabilitados.
 6. Los 7 estados vacíos.
-7. Accesibilidad, microcopy con `investigador-ux`, revisión en celular con `disenador-ui`, manuales y CI en verde.
+7. F-D1 (tarjetas de Pensiones).
+8. Accesibilidad, microcopy con `investigador-ux`, revisión en celular con `disenador-ui`, manuales y CI en verde.
 
 ## 7. Pruebas obligatorias
 **H2 (`./mvnw -B verify`, también con `-DargLine=-Duser.timezone=America/Los_Angeles`). Sin pruebas de MySQL nuevas: la tanda no
@@ -142,5 +158,6 @@ toca la base; el job `mysql` del CI debe seguir en verde igual.**
 Mientras el colegio está en preparación, cada persona del personal ve en su inicio cuántos pasos faltan, cuál es el siguiente
 y quién lo hace, con un botón que la lleva a la pantalla correcta solo si puede usarla; las 7 pantallas vacías dicen qué falta y
 cómo seguir; cobrar o enviar algo bloqueado explica por qué y enlaza a la Puesta en marcha; la Puesta en marcha muestra estado,
-responsable e «Ir» de los 15 pasos; las familias no ven nada de esto; la revisión de accesibilidad pasa; y el CI del PR en
+responsable e «Ir» de los 15 pasos; las familias no ven nada de esto; las tres tarjetas de Pensiones quedan
+alineadas; la revisión de accesibilidad pasa; y el CI del PR en
 borrador está en verde, con los conteos de la tanda 1 sin cambios (117 triggers, 19 funciones, 136 huellas).
