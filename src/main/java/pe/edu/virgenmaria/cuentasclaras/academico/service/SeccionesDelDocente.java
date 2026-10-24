@@ -171,11 +171,37 @@ public class SeccionesDelDocente implements SeccionesDocente {
 				.anyMatch(a -> a.getSeccionId().equals(seccionId) && a.getTipo() == TipoAsignacion.TUTOR);
 	}
 
-	/** «Tutor(a)», «Docente de área: Matemática», «Auxiliar de educación» (varias, unidas con « · »). */
-	static String funcion(List<AsignacionDocente> asignaciones) {
+	/**
+	 * «Tutor(a)», «Docente de área: Matemática», «Auxiliar de educación» (varias, unidas con « · »). Sprint 10, tanda 3: con
+	 * los nombres de las áreas del catálogo de la asignación (las del sprint 10 no tienen texto libre); sin ellas, el texto
+	 * del sprint 9.
+	 */
+	private String funcion(List<AsignacionDocente> asignaciones) {
+		Map<Long, List<Long>> delCatalogo = areas.findByAsignacionIdInOrderByAreaIdAsc(asignaciones.stream()
+				.map(AsignacionDocente::getId).toList()).stream().collect(java.util.stream.Collectors.groupingBy(
+						pe.edu.virgenmaria.cuentasclaras.academico.model.AsignacionArea::getAsignacionId,
+						java.util.stream.Collectors.mapping(
+								pe.edu.virgenmaria.cuentasclaras.academico.model.AsignacionArea::getAreaId,
+								java.util.stream.Collectors.toList())));
+		Map<Long, String> nombres = new java.util.HashMap<>();
+		if (!delCatalogo.isEmpty()) {
+			catalogo.areas(delCatalogo.values().stream().flatMap(List::stream).collect(java.util.stream.Collectors.toSet()))
+					.forEach(x -> nombres.put(x.id(), x.nombre()));
+		}
+		return funcion(asignaciones, delCatalogo, nombres);
+	}
+
+	static String funcion(List<AsignacionDocente> asignaciones, Map<Long, List<Long>> delCatalogo,
+			Map<Long, String> nombres) {
 		return String.join(" · ", asignaciones.stream().sorted(Comparator.comparing(AsignacionDocente::getTipo))
-				.map(a -> a.getAreas() == null ? a.getTipo().etiqueta() : a.getTipo().etiqueta() + ": " + a.getAreas())
-				.toList());
+				.map(a -> {
+					// El tutor queda «Tutor(a)» (con todas las áreas del grado, la lista sería larga).
+					List<Long> suyas = a.getTipo() == TipoAsignacion.TUTOR ? List.of()
+							: delCatalogo.getOrDefault(a.getId(), List.of());
+					String texto = suyas.isEmpty() ? a.getAreas() : String.join(", ", suyas.stream()
+							.map(id -> nombres.getOrDefault(id, "área " + id)).toList());
+					return texto == null ? a.getTipo().etiqueta() : a.getTipo().etiqueta() + ": " + texto;
+				}).toList());
 	}
 
 	static RecursoNoEncontradoException noEncontrada() {
