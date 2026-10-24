@@ -6,7 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import pe.edu.virgenmaria.cuentasclaras.academico.inicial.LibretasDemo;
+import pe.edu.virgenmaria.cuentasclaras.academico.inicial.EjemploAcademico;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.ConfiguracionRelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.demo.dto.DemoCreada;
@@ -67,11 +67,11 @@ class DemoLibretasTest {
 	void lasFechasDeLosBimestres() {
 		LocalDate inicio = LocalDate.of(2026, 3, 9);
 		LocalDate fin = LocalDate.of(2026, 12, 18);
-		assertThat(LibretasDemo.bimestres(inicio, fin,
+		assertThat(EjemploAcademico.bimestres(inicio, fin,
 				LocalDate.of(2026, 3, 20))).isNull();
-		assertThat(LibretasDemo.bimestres(inicio, fin,
+		assertThat(EjemploAcademico.bimestres(inicio, fin,
 				LocalDate.of(2026, 10, 21))).isNotNull();
-		assertThat(LibretasDemo.bimestres(inicio, fin,
+		assertThat(EjemploAcademico.bimestres(inicio, fin,
 				LocalDate.of(2026, 12, 30))).isNull();
 	}
 
