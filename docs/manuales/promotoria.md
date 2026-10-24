@@ -4,7 +4,8 @@
 
 ## Tu día con Cuentas Claras
 1. **Abre el panel** en el celular (*Panel del colegio*). Las cifras salen de los pagos y cuotas registrados: nadie las escribe a mano. Mira primero las **alertas en rojo** y toca **Revisar**. Las críticas también te llegan al celular, una vez cada una y sin nombres.
-2. **«Para aprobar»** abre las solicitudes. Si la pediste tú o participaste, la resuelve otra persona.
+2. **«Para aprobar»** abre las solicitudes de tu equipo: las apruebas tú o Dirección. Lo que pides tú se aplica directo
+   (ver «Lo que haces directo y lo que te pide un código»).
 3. **A las 19:30 te llega el resumen del día** con la huella de la bitácora. **Si a las 20:00 no llegó, avisa** al responsable técnico; el panel también marca «El resumen no salió».
 4. **Cada semana, la llamada de control** (*Llamadas de control*): el sistema elige al azar hasta 3 familias que pagaron en efectivo o deben. Llama, **pregunta primero** cuánto y qué día pagaron, toca **«Ya me dijo: ver lo registrado»** y registra Confirma, No confirma (con lo que te dijo) o No contesta. Si no contesta, vuelve a llamar una hora después; si tampoco, el sistema elige otra familia. Si no puedes una semana, delega en Dirección. Hazlas antes de que termine el domingo.
 5. **Datos personales:** en la ficha de cada familia ves «Quién consultó estos datos» (últimos 90 días); en la bitácora, los accesos por persona y fechas. Una vez al mes, revisa el reporte «Datos con plazo vencido».
@@ -14,9 +15,11 @@
 - **Aprobar desde un enlace:** los enlaces solo abren la pantalla y piden tu sesión.
 - **Corregir cifras ya enviadas:** si cambian sin explicación, es una alerta crítica.
 - **Cambiar un registro de la llamada de control:** queda tal cual.
-- **Dar Promotoría o Dirección sin otra firma:** ese cambio de roles lo aprueba otra persona, nunca quien lo pidió ni el titular.
-- **Desactivar o reactivar de un solo paso una cuenta de Promotoría o Dirección:** se pide y lo aprueba otra persona; el colegio nunca queda sin Promotoría activa.
-- **Cambiar tu celular o correo sin una solicitud aprobada** por otra persona.
+- **Dar o quitar Promotoría o Dirección sin tu código:** son acciones sensibles (abajo). Dar Promotoría en producción,
+  quitarla o desactivar a otra Promotoría esperan además 24 horas; el colegio nunca queda sin Promotoría activa.
+- **Cambiar tu celular o correo de un solo paso:** lo confirmas desde tu contacto ANTERIOR (te llega un código ahí) y lo
+  aprueba otra Promotoría. Si perdiste tu celular, lo cambian dos operadores de la plataforma después de verificarte.
+- **Ser Caja ni cobrar:** quien cobra no aprueba.
 - **Tener dos sesiones:** entrar desde el celular cierra la de la computadora; también a los 30 minutos sin actividad y a las 10 horas.
 
 ## Si algo no cuadra
@@ -47,6 +50,22 @@
   personas). Tú compruebas tu bitácora con la huella diaria por WhatsApp y una vez por trimestre eliges 3 huellas que el
   operador busca contigo en un respaldo restaurado ([acta](../operacion/acta-verificacion-trimestral.md)). Si
   `/panel/sistema` dice «Faltan filas», es de TU colegio: revisa con el responsable técnico y resuélvelo con motivo.
+
+## Lo que haces directo y lo que te pide un código (sprint 11)
+- **Directo, en un paso:** lo que tú haces se aplica al momento, con la firma de tu sesión: plan de pensiones, saldo
+  inicial, días no laborables, comunicados y lo que pides en «Para aprobar». **Cada acción directa avisa al momento** a todas
+  las Promotorías (también a ti) y al correo externo de control. Si no reconoces un aviso, cambia tu clave y avisa hoy.
+- **Con tu código por WhatsApp (6 dígitos, 10 minutos, una sola vez):** anular o devolver un pago o una cuota, descuentos y
+  becas, partidas manuales, el contacto o el responsable de pago de una familia, los roles o la cuenta de Promotoría o
+  Dirección y todo conector. Pulsa **«Enviar código»**: el WhatsApp dice exactamente qué autoriza y el código no sirve para
+  otra cosa. **Nunca llega por correo**: si no tienes celular registrado, no hay código.
+- **Con espera de 24 horas:** la cuenta bancaria, el pago en línea y la recaudación nuevos; dar Promotoría en producción,
+  quitarla o desactivar a otra Promotoría. Durante la espera la frena **otra Promotoría con 30 días o más en el rol**, la
+  persona afectada o un operador de la plataforma; tu socia (30 días o más) puede aprobar al instante un conector con SU
+  código. Si nadie la frena, se aplica sola al terminar.
+- **Lo de tu equipo** (Administración, Caja, Docentes, Dirección) sigue con dos personas: lo apruebas tú o Dirección. La
+  Dirección que creó una cuenta no aprueba lo de esa cuenta; tú sí.
+- **Extractos del banco:** si cambiaste la cuenta bancaria hace menos de 30 días, el extracto lo confirma otra persona.
 
 ## Dónde ver el video
 | Video 5 · El panel y el resumen | Video 6 · La llamada de control | Video 4 · Aprobar desde el celular |

@@ -36,6 +36,15 @@ concilia con el banco, deja cada operación en una bitácora que no se puede edi
 - El colegio decide sus pensiones, moras y reglamento conforme a la ley (el proveedor no da asesoría legal ni tributaria).
 - La plataforma **no bloquea evaluaciones ni notas por deuda** (Código de Protección y Defensa del Consumidor e INDECOPI).
 
+### 3.1 La Promotoría aplica directo; la espera y el freno (sprint 11, para revisión del abogado)
+- Las acciones de la Promotoría del colegio se aplican directo, con su firma y aviso inmediato a las demás Promotorías y al
+  correo externo de control; las sensibles piden además un código de un solo uso enviado a su celular registrado.
+- Los cambios que mueven el dinero del colegio (cuenta bancaria, pago en línea, recaudación) y los que dan o quitan la
+  Promotoría esperan **24 horas** antes de aplicarse. Durante la espera los puede **frenar** otra Promotoría del colegio con
+  30 días o más en el rol, la persona afectada o un operador de la plataforma.
+- **El operador de la plataforma interviene en el dinero del colegio solo para frenar, nunca para aplicar.** Lo hace con su
+  sesión firmada y un motivo, y queda en la bitácora del colegio y en la de la plataforma.
+
 ## 4. Datos
 Los datos de las familias, alumnos y personal son **del colegio**. El colegio es el **responsable del tratamiento** y el
 proveedor, el **encargado**: el contrato de encargo de tratamiento (anexo A, `contrato-encargo-tratamiento-datos.md`) es

@@ -14,7 +14,7 @@
 -- firma y, si es sensible, su código atado a la acción). Funciones nuevas: cc_codigo_promotoria (el código de esa persona,
 -- de esa acción, de 10 minutos, con lo escrito como SHA-256; por correo solo con el WhatsApp fallido y nunca en conectores
 -- ni roles directivos) y cc_promotoria_antigua (30 días en el rol para frenar y aprobar al instante). Versión nueva de
--- cc_solicitud_firmada (acepta la directa, sin freno y con su espera vencida) y de 18 triggers: trg_solicitud_cambio_resuelta
+-- cc_solicitud_firmada (acepta la directa, sin freno y con su espera vencida) y de 22 triggers: trg_solicitud_cambio_resuelta
 -- (la directa, su código, la espera de 24 horas de dar Promotoría en producción, quitarla o desactivar a una Promotoría, el
 -- freno y la confirmación del contacto anterior de una cuenta directiva), trg_conector_colegio_estado (el OSE directo; la
 -- cuenta bancaria, la pasarela y la recaudación en espera; el socio antiguo con su código; el freno de otra Promotoría
@@ -25,7 +25,9 @@
 -- trg_usuario_rol_alta y _baja y trg_usuario_identidad (la espera; usuario_rol.desde), trg_extracto_bancario_estado y
 -- trg_lote_recaudacion_estado (quien cambió la cuenta no confirma la conciliación en 30 días) y
 -- trg_configuracion_colegio_registro y _cambio y trg_cambio_correo_control_nace (el correo de control no es el de una
--- Promotoría). aplica_desde y frenado_en los pone solo la base (ningún GRANT).
+-- Promotoría), y trg_plan_pension_inmutable, trg_lote_saldo_inicial_cerrado, trg_descuento_resuelto y
+-- trg_anulacion_pago_registro (la directa de un paso: solo la Promotoría activa que lo armó o lo pidió; desviación del
+-- diseño, cuyos CHECK la impedían). aplica_desde y frenado_en los pone solo la base (ningún GRANT).
 -- Versión anterior (V39, sprint 11, tanda 1): 117 triggers y 16 funciones (19 con huella; 136 huellas). Nuevos:
 -- trg_cambio_estado_colegio_nace y _estado (el estado del colegio y el bloqueo de la facultad del titular los propone un
 -- operador y los aprueba OTRO, con firma; la base pone las fechas: la suspensión a los 30 días; la baja sin dinero ni

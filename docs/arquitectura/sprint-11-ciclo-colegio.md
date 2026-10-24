@@ -1880,6 +1880,62 @@ camino, baja y bloqueo de dos operadores, F2, F6, 1142, 1143, cambio que nace ap
 pruebas de MySQL de la suspensión aplicada (`a4…`, `h3…`, `f10…`, `a5…` en SUSPENDIDO), que en esta tanda cubre H2 con la
 misma lógica; en MySQL la suspensión no se puede proponer hasta V41.
 
+## Tanda 1c · Implementación
+Rama `claude/sprint-11-ciclo-colegio`, PR #22 en borrador. Commits: `f07f211` (V40, `02`, `03`, verificador, CI y huellas),
+`c638e29` (aplicación, pantallas y pruebas de H2), el merge del PR #23 (`claude/demo-persistente`, sin conflictos) y los de
+las pruebas de MySQL y este documento.
+
+**Paso 1 (comprobado en MySQL 8.4 antes de seguir):** un trigger cuyo definidor es `cc_migrador` fija `NEW.aplica_desde` sin
+que el usuario de la conexión tenga GRANT sobre la columna. Con `cc_app` o `cc_sistema`, `UPDATE … SET aplica_desde` da
+**1143**; como DBA, **1644** (el trigger rechaza todo cambio de `aplica_desde` y `frenado_en`). Lo prueba
+`aplicaDesdeManipuladoFalla` en las dos tablas.
+
+**Desviaciones respecto del diseño (anotadas en el código):**
+1. `cc_codigo_promotoria` recibe 6 parámetros (`mensaje, colegio, nombre, huella, escrito, con_correo`): la base compara
+   también lo que escribió la persona (`codigo_escrito_sha256`) y sabe si el tipo admite el correo (A1c-7).
+2. `conector_colegio.codigo_mensaje_id` y `codigo_escrito_sha256` (el código del socio que aprueba al instante) y
+   `uso_facultad_titular.codigo_escrito_sha256` (la facultad usa la misma función). Las columnas SHA-256 son `VARCHAR(64)`
+   (Hibernate valida `varchar`).
+3. **Los CHECK de los flujos de un paso impedían la directa** y el diseño no los listaba: V40 reemplaza (copiando sus listas)
+   `ck_plan_pension_aprobacion`, `ck_lote_saldo_inicial_doble_control`, `ck_descuento_estado`, `ck_anulacion_pago_segregacion`
+   y `ck_feriado_aprobacion`, con una columna `directa` en las cuatro primeras; `trg_plan_pension_inmutable`,
+   `trg_lote_saldo_inicial_cerrado`, `trg_descuento_resuelto` y `trg_anulacion_pago_registro` exigen que la directa sea de una
+   Promotoría activa (en el descuento y la anulación, con su solicitud directa). Son 22 triggers con versión nueva, no 18; los
+   conteos no cambian (117, 21 y 138).
+4. `ck_solicitud_cambio_freno` y `ck_conector_colegio_resolucion` no exigen `aplica_desde` ni `frenado_en`: los pone el
+   trigger de MySQL y H2 (sin triggers) los deja nulos; en H2 la aplicación calcula el fin de la espera desde la resolución.
+5. **Lo sensible va en dos pasos:** la solicitud queda PENDIENTE y la Promotoría la aplica con «Aprobar y aplicar» y su
+   código. Lo no sensible se aplica al final de la MISMA transacción en que se pidió (`beforeCommit`), salvo lo de identidad
+   (contacto del personal), que se aplica desde la bandeja en la ruta de `cc_sistema`.
+6. **Extractos y lotes de recaudación (A1c-4):** la Promotoría no confirma lo que ella misma subió (las tablas tienen su
+   propio doble control) y nadie que haya cambiado la cuenta bancaria en los últimos 30 días confirma el extracto. La
+   confirmación propia con código de 3.16 queda para una decisión del usuario.
+7. Sin respaldo por correo del código en la aplicación (la base ya lo admite fuera de conectores y roles): el código va solo
+   por WhatsApp. La alerta a los operadores de A1c-4 no se implementó (la reciben las Promotorías y el correo de control).
+8. El freno de la persona afectada está en el servicio (`BandejaAprobaciones.frenar`, abierto al personal); la pantalla para
+   un docente afectado queda para la 1b (hoy la ve desde el aviso y la frena la Promotoría o el operador).
+
+**Pruebas que cambiaron de sentido** (cada una con su motivo en el código): `ServicioPlanesPensionTest` (la Promotoría crea
+el borrador), `ServicioSaldoInicialTest` (la Promotoría arma el lote), `ServicioFeriadosTest` (el día de la Promotoría queda
+aprobado), `CambioConectorTest` (la Promotoría aprueba lo suyo solo con código), `EscenariosFraudeAnulacionesTest`
+(el descuento propio pide código), `MatrizPermisosTest`, `AltaACobroTest` (pasos 4 y 10), `AprobacionesMovilTest` (lo pide
+Dirección), `ContactoPersonalTest` y `ContactoPersonalBordesTest` (el contacto directivo se confirma desde el anterior),
+`AuditoriaSprint11CicloMySqlTest` (el código de la facultad) y `ReglasArquitecturaTest` (plan y saldo con
+`ADMINISTRACION_O_PROMOTORIA`, y la regla nueva `soloSegundaFirmaConsultaLosParticipantes`).
+
+**Pruebas nuevas.** H2 (`aprobaciones/directa`): `PromotoriaDirectaTest`, `AccionesSensiblesTest` (incluye
+`unaSolaPromotoriaAvisaALosOperadores` y la f16b ajustada), `DarPromotorEsperaTest`, `QuitarPromotorEsperaTest`,
+`PromotoriaAntiguaTest`, `ContactoPropioNoDirectoTest`, `ContactoDirectivoTest`, `CorreoDeControlNoEsDePromotoriaTest`,
+`CodigoAtadoTest`, `CodigoSinCorreoTest`, `AvisoAQuienActuaTest`, `DireccionSigueConDosPersonasTest`,
+`DemasRolesSinCambioTest`, `ConciliacionTrasCambioDeConectorTest`; y `conectores/ConectorEsperaTest`. MySQL:
+`AuditoriaSprint11PromotoriaMySqlTest` (`aplicaDesdeManipuladoFalla`, f16b con el código atado, la directa fuera de su
+camino, la espera de la cuenta bancaria con el socio de paja, la espera vencida y el freno del operador, quitar la
+Promotoría y la aplica `sistema.roles`, plan y feriado directos).
+
+**Quedan para las correcciones:** las pruebas de MySQL de partida y comunicado directos, `codigoVencidoFalla` (el reloj
+real de la base no se adelanta; lo cubre H2), el descuento y la anulación directos en MySQL (los triggers están; los cubre
+H2) y el flujo del titular en `PermisosMySqlTest`.
+
 ## 13. Decisiones abiertas para el usuario
 Valor por defecto entre corchetes; se implementa el valor por defecto mientras el usuario no diga otra cosa (salvo la 202,
 que no entra en las tandas sin su confirmación). Sigue la numeración del sprint 10 (la última es la 191).
