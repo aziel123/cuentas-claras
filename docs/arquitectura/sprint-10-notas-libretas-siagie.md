@@ -1805,3 +1805,98 @@ Rutas relativas a `C:/Users/amedina/cuentas-claras/cuentas-claras/`:
   dependencias; gitleaks). La corrida anterior (40031544024) falló en el respaldo por una descarga de Maven Central.
 - El contenedor `cc-s10t2-mysql` se borró al terminar. No se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`,
   `smarthr-*`, `supabase_*` ni `cc-mysql-s5*`.
+
+## Tanda 3 · Implementación
+
+> Implementada el 23 de octubre de 2026 en la rama `claude/sprint-10-notas-libretas-siagie` (agente `backend-spring`,
+> «Método por sprint»: brief `docs/arquitectura/sprint-10/tanda-3.md`, PR en borrador #20 con el CI como verificación).
+> V37, **112 triggers y 13 funciones en `03` (16 con huella con las 3 de `02`): 128 huellas**, como pedía el brief. La
+> libreta nunca se retiene por deuda (3 familias en H2 y en MySQL real), A3, A4, A6, M9, M11, M12, B14 y la decisión 189
+> ajustada con su control y su prueba.
+
+### Qué se hizo
+**Base (V37, `02` y `03`).**
+- `V37__libretas_y_exportacion_siagie.sql`: `libreta_emitida` (cabecera congelada, marcas de agua `hasta_calificacion_id`,
+  `hasta_marca_id` y `hasta_exoneracion_id`, motivo `CIERRE`, `CORRECCION` o `REEMISION`, `solicitud_id` con
+  `uk_libreta_emitida_solicitud`, `ck_libreta_emitida_cadena` con `IS NOT NULL`), `entrega_libreta` (`PORTAL`, `IMPRESA`,
+  `ENTREVISTA`), `delegacion_siagie`, `exportacion_calificaciones` (con `huella_libretas` y `registrado_bd`), la finalidad
+  `LIBRETAS` del consentimiento y los tipos de mensaje `LIBRETA_DISPONIBLE` y `LIBRETA_CORREGIDA`.
+- `02`: `libreta_emitida` con INSERT **solo para `cc_sistema`** (E14: `cc_app` responde 1142); INSERT de las otras 3 para
+  `cc_negocio`; ningún UPDATE ni DELETE. `03`: `trg_libreta_emitida_nace`, `trg_entrega_libreta_nace`,
+  `trg_exportacion_calificaciones_nace`, `trg_delegacion_siagie_nace` y la versión nueva de `trg_mensaje_nace`.
+- `VerificadorPermisosBaseDatos` (112; la libreta solo del sistema; 1644 de una versión 2 sin corrección en el colegio 0),
+  `tablas-vigiladas.txt` (+4) y el caso `faltan-filas-libretas` del respaldo.
+
+**Aplicación (`academico.libreta` y `academico.siagie`).**
+- `FotoLibreta` (el contenido con las marcas de agua al cierre, la cabecera y la huella `LIBRETA-1` en SHA-256),
+  `EmisorLibretas` y `EmisionLibretas` (`sistema.libretas`, cc_sistema, un evento `LIBRETAS_EMITIDAS` por sección, decisión
+  191), `RegeneracionLibreta` (al descargar, compara la huella; si no coincide, «en revisión» y la alerta una vez),
+  `IntegridadLibretas` (faltantes y huellas; repite a diario después del plazo de 2 días hábiles), `ReemisionLibretas` y su
+  manejador (la pide Dirección, la aprueba Promotoría: A3), `VerificacionLibreta` (código `LIB-{id}-{16}`).
+- `GeneradorLibretaPdf` (PDFBox 3.0.8 solo para escribir, 2 hilos y cola de 8: con la cola llena, 503 «Intente en unos
+  minutos»), `TextoSeguroPdf`; la lista blanca de PDFBox (M11) con `ListaBlancaPdfbox` y sus 7 casos prohibidos.
+- Portal `/familia/libretas` (todas las versiones y «qué cambió»; descarga con `entrega_libreta` PORTAL);
+  `/academico/libretas` (Dirección y el tutor vigente: una o la sección, IMPRESA; ENTREVISTA en Inicial), verificación y
+  reemisión.
+- `CalificacionesSiagie` (perfil provisional, hoja «Control» y la huella de las libretas vigentes: A6), `DelegacionesSiagie`
+  (solo Administración sin Caja ni Docente, hasta 15 días, con la firma de Dirección: M12 y decisión 189), `AlertasSiagie`
+  (descarga masiva).
+- Avisos: `AvisosLibretas` y `AvisosLibretasFamilias` (plantillas `cc_libreta_v1` y `cc_libreta_corregida_v1`, sin
+  cobranza, WhatsApp solo con el consentimiento `LIBRETAS`), `plantillas-whatsapp-meta.md` (31 y 32).
+- B14 completo (`PortalSinFiltroDeDeudaTest`: interceptores, filtros, advices y sus `@ModelAttribute`, el layout de la
+  familia que debe y la redirección después del ingreso, también de forma transitiva).
+- Demo (`LibretasDemo`): evaluación por bimestres, el área de Matemática de la cuenta «docente» en 4.° Primaria A, el I
+  bimestre cerrado con sus notas, libretas de todas las secciones, una versión 2 por una corrección que aprueba Promotoría
+  y el II bimestre abierto; `/demo/guia` con 10 pasos.
+- Muestras revisadas a ojo: `docs/ux/libretas-muestra/` (Primaria, 2 páginas; Inicial, 1 página).
+- CI: V1–V37, paso «Sprint 10, tanda 3» con `AuditoriaSprint10LibretasMySqlTest`, `comprobar` con 1142 y 1644, 128/112/16;
+  respaldo con el flujo de las libretas y `faltan-filas-libretas`. Conteos en `paso-0.sh` (112 y 128), `en-la-vm.sh`,
+  `despliegue-gcp.md`, el acta del paso 0 y `mysql-usuarios.md`; manuales de familias, docente, Dirección y Administración.
+
+### Desviaciones del diseño
+1. **La C1 en MySQL real usa una sección del año siguiente:** la base solo admite una matrícula RESERVADA en un año
+   PLANIFICADO, así que la familia RESERVADA de `AuditoriaSprint10LibretasMySqlTest` está en la sección del año 2028, con su
+   periodo cerrado y su nota. En H2 (`LibretaConDeudaTest`) las 3 familias son de la misma sección.
+2. **La «delegación vencida» de MySQL se prueba con una que aún no rige** (empieza mañana): la base no deja crear una con
+   `desde` en el pasado, así que no se puede fabricar una vencida sin esperar. La vencida de verdad la prueba
+   `DelegacionSiagieTest` en H2 con el reloj ajustable.
+3. **`trg_mensaje_nace` acepta la plantilla con el nombre del enum o con el de Meta (`cc_...`):** corrige un defecto
+   anterior por el que un aviso de asistencia o de comunicados creado por la aplicación con el nombre del enum se habría
+   rechazado en MySQL.
+4. **Las conclusiones en el PDF son solo las del periodo de la libreta**; las de periodos anteriores no se repiten.
+5. **La reemisión conserva las marcas de agua de la versión que reemplaza** (se reemite lo mismo, no «lo que haya hoy»), y
+   una corrección solo genera versión en la libreta de su mismo periodo.
+6. **La demo usa 4.° Primaria A (Matemática), no 3.° B:** es la sección donde la cuenta «docente» ya era docente de área; la
+   asignación de texto libre del sprint 9 se reemplaza por la del catálogo (propone Administración, aprueba Dirección). Si la
+   fecha no deja un I bimestre de 3 semanas ya terminado (enero a marzo, o diciembre), la demo sale sin libretas.
+7. **`AlertasSiagie` es una alerta nueva** (como la de la nómina del sprint 9): Promotoría ve en «Para revisar» a quien
+   exportó las calificaciones de más de `max-secciones-dia` secciones (10) en un día.
+8. **«Mis secciones» del docente muestra las áreas del catálogo** (`SeccionesDelDocente`): una asignación de la tanda 1 sin
+   texto libre se veía solo como «Docente de área». El tutor sigue como «Tutor(a)». Lo cubre `MisSeccionesConAreasTest`.
+
+### Riesgos que quedan
+- **El perfil de columnas del SIAGIE es provisional** (decisión 181): el Excel lleva «PROVISIONAL» hasta tener la plantilla
+  oficial.
+- **La emisión masiva** depende de la cadena de la bitácora solo por sección (un evento por sección): 300 libretas en ~5 s
+  en local.
+- **La huella detecta, no impide:** si un DBA altera una calificación por fuera, la libreta queda «en revisión» y la
+  reemisión exige a Promotoría.
+
+### Resultados de la verificación
+- `./mvnw -B verify` en local (una vez, sobre 7be9c84): 3099 pruebas, 0 fallos, 1 error (`ColaDeLibretasTest`: en la suite
+  completa una tarea de otra prueba seguía en el generador y la cola no se llenaba con 10), corregido en 745f5d1 y 7e009b8
+  (se llena hasta el rechazo, se espera a que los 2 hilos corran tareas de la prueba y se vuelve a llenar). Las pruebas de
+  la tanda en H2 (libretas con deuda, emisión, foto, verificación, entrega, PDF y muestras, cola, SIAGIE, delegación,
+  integridad, B14, ArchUnit 108 y lista blanca de PDFBox, IDOR, verificador, plantillas, consentimientos, demo) se
+  corrieron por clase: 0 fallos.
+- MySQL real en local (contenedor propio `cc-s10t3-mysql`, `mysql:8`, puerto 3318): V1–V37 con `cc_migrador`, `02` y `03`
+  sin error, 112 triggers y `huellas_objetos()` = 128; `AuditoriaSprint10LibretasMySqlTest` 21 de 21 (la carga: 300
+  libretas en 5,2 s); `MigracionMySqlTest` 2 de 2.
+- CI del PR #20, corrida 40050577941 sobre 69d77e4: **todos los jobs en verde** (compilar y probar: 3100 pruebas, 0 fallos,
+  278 omitidas, también con la zona de Los Ángeles; MySQL 8 con `AuditoriaSprint10LibretasMySqlTest` 21 de 21 y la carga
+  de 300 libretas en 1,6 s, prod «Huellas de los 112 triggers y las 16 funciones verificadas»; respaldo con el flujo de las
+  libretas y `faltan-filas-libretas`; demo con el docente que ve «Docente de área: Matemática»; dependencias; gitleaks).
+  Las corridas anteriores fallaron por la cola de libretas (40046044663, 40047431094, 40048812684), el respaldo antes de
+  existir el flujo de MySQL (40046044663) y el paso del docente de la demo (40048812684, 40050044644).
+- El contenedor `cc-s10t3-mysql` se borró al terminar. No se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`,
+  `smarthr-*`, `supabase_*` ni `cc-mysql-s5*`.
