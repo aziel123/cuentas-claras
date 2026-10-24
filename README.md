@@ -26,7 +26,7 @@ Salud de la aplicación: `GET /actuator/health`.
 No hay perfil por defecto: `./mvnw spring-boot:run` ya usa `dev`, pero el jar necesita el perfil explícito (`SPRING_PROFILES_ACTIVE=dev java -jar ...` en local). Sin perfil, o en producción con la clave HMAC de desarrollo, la aplicación no arranca.
 
 ### Usuarios de demostración (solo perfil `dev`)
-Al arrancar con H2 en memoria y sin usuarios se crean estos usuarios, todos con la clave `demo-cuentas-claras-2026` (se cambia con la variable `CC_DEMO_CLAVE`):
+Al arrancar con H2 (en memoria o la demo persistente) y sin usuarios se crean estos usuarios, todos con la clave `demo-cuentas-claras-2026` (se cambia con la variable `CC_DEMO_CLAVE`):
 
 | Usuario | Rol | Colegio |
 |---|---|---|
@@ -37,6 +37,18 @@ Al arrancar con H2 en memoria y sin usuarios se crean estos usuarios, todos con 
 | `docente` | Docente | Colegio Virgen María |
 | `apoderado` | Apoderado | Colegio Virgen María |
 | `promotor.b` | Promotoría | Colegio de Prueba B (para ver el aislamiento entre colegios) |
+
+### Demo persistente (perfil `dev,persistente`)
+Con `dev` solo, la base es H2 en memoria y todo se pierde al reiniciar. Para practicar el alta de un colegio de punta a punta en varios días, agrega el perfil `persistente`: la misma H2 en modo MySQL, pero en el archivo `.demo-db/cuentasclaras.mv.db` (en la carpeta desde donde arrancas; está en `.gitignore`).
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev,persistente
+# o con el jar:
+SPRING_PROFILES_ACTIVE=dev,persistente java -jar target/cuentas-claras-*.jar
+```
+- El primer arranque crea los usuarios y los datos de demostración. Espera a que el log termine de cargarlos antes de detener la aplicación. Los siguientes arranques los detectan («Ya hay usuarios») y no duplican nada.
+- **Empezar de cero:** detén la aplicación y borra la carpeta `.demo-db/` (`rm -rf .demo-db`).
+- El perfil `persistente` solo va junto a `dev`: con `prod`, `piloto`, `demo` o `test` la aplicación no arranca.
+- **Respaldo en la demo:** en `dev` (en memoria o persistente) la aplicación registra un respaldo *simulado* al arrancar y cada hora revisa si hace falta otro, para que siga al día según `respaldo-max-horas`. Así, el paso «Respaldo» de la Puesta en marcha sale «Hecho» y un colegio nuevo puede pasar a producción. En `prod` no existe (y `aceptar-respaldo-simulado` es `false`).
 
 ## Producción
 Perfil `prod` con MySQL 8 (base `cuentasclaras`, `utf8mb4`). La primera vez, crea los usuarios `cc_migrador` y `cc_app` con los scripts de `scripts/mysql/` (`docs/operacion/mysql-usuarios.md`). En cada despliegue hay dos pasos separados, y la aplicación nunca recibe la clave del migrador:
