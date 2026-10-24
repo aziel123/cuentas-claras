@@ -33,8 +33,8 @@
 		<table class="tabla" th:unless="${#lists.isEmpty(colegios)}">
 			<caption class="solo-lectores">Colegios de la instalación con su estado y su última actividad.</caption>
 			<thead>
-				<tr><th scope="col">Colegio</th><th scope="col">RUC</th><th scope="col">Estado</th><th scope="col">Titular</th>
-					<th scope="col">Cuentas</th><th scope="col">Última actividad</th></tr>
+				<tr><th scope="col">Colegio</th><th scope="col" class="num">RUC</th><th scope="col">Estado</th><th scope="col">Titular</th>
+					<th scope="col" class="num">Cuentas</th><th scope="col" class="num">Última actividad</th></tr>
 			</thead>
 			<tbody>
 				<tr th:each="c : ${colegios}">

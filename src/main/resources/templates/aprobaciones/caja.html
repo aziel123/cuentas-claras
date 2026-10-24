@@ -32,7 +32,7 @@
 			<div th:replace="~{fragments/componentes :: estadoVacio('Aún sin cerrar', 'La cajera cierra su caja con un conteo a ciegas.')}"></div>
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(c.cierres)}">
-			<thead><tr><th scope="col">N.°</th><th scope="col" class="num">Esperado</th><th scope="col" class="num">Primer conteo</th>
+			<thead><tr><th scope="col" class="num">N.°</th><th scope="col" class="num">Esperado</th><th scope="col" class="num">Primer conteo</th>
 				<th scope="col" class="num">Contado</th><th scope="col">Diferencia</th><th scope="col">Explicación</th>
 				<th scope="col">Revisión</th></tr></thead>
 			<tbody>
@@ -71,7 +71,7 @@
 			<div th:replace="~{fragments/componentes :: estadoVacio('Sin pagos', 'Esta caja no registró pagos.')}"></div>
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(c.pagos)}">
-			<thead><tr><th scope="col">Hora</th><th scope="col">Comprobante</th><th scope="col">Familia</th><th scope="col">Medio</th>
+			<thead><tr><th scope="col" class="num">Hora</th><th scope="col" class="num">Comprobante</th><th scope="col">Familia</th><th scope="col">Medio</th>
 				<th scope="col" class="num">Monto</th><th scope="col">Estado</th><th scope="col">Banco</th></tr></thead>
 			<tbody>
 				<tr th:each="p : ${c.pagos}" th:classappend="${p.estado == 'Anulado'} ? 'fila-quitada'">

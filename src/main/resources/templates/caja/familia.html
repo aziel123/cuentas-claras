@@ -104,7 +104,7 @@
 		<h2 id="titulo-recientes">Pagos recientes de la familia</h2>
 		<p class="secundario" th:if="${#lists.isEmpty(k.pagosRecientes)}">Todavía no hay pagos registrados en el sistema.</p>
 		<table class="tabla" th:unless="${#lists.isEmpty(k.pagosRecientes)}">
-			<thead><tr><th scope="col">Fecha</th><th scope="col">Comprobante</th><th scope="col">Medio</th>
+			<thead><tr><th scope="col">Fecha</th><th scope="col" class="num">Comprobante</th><th scope="col">Medio</th>
 				<th scope="col" class="num">Total</th><th scope="col">Estado</th></tr></thead>
 			<tbody>
 				<tr th:each="p : ${k.pagosRecientes}">

@@ -143,7 +143,7 @@
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(accesosRecientes)}">
 			<caption class="solo-lectores">Consultas a los datos de la familia, de la más reciente a la más antigua.</caption>
-			<thead><tr><th scope="col">Fecha y hora</th><th scope="col">Quién</th><th scope="col">Pantalla</th></tr></thead>
+			<thead><tr><th scope="col" class="num">Fecha y hora</th><th scope="col">Quién</th><th scope="col">Pantalla</th></tr></thead>
 			<tbody>
 				<tr th:each="a : ${accesosRecientes}">
 					<td data-etiqueta="Fecha y hora" class="num" th:text="${#temporals.format(a.fecha, 'dd/MM/yyyy HH:mm')}">02/10/2026 08:15</td>

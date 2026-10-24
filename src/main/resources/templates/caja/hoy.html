@@ -24,7 +24,7 @@
 			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay pagos hoy', 'Cuando cobres, aparecerán aquí con su comprobante.')}"></div>
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(d.pagos)}">
-			<thead><tr><th scope="col">Hora</th><th scope="col">Comprobante</th><th scope="col">Alumnos</th>
+			<thead><tr><th scope="col" class="num">Hora</th><th scope="col">Comprobante</th><th scope="col">Alumnos</th>
 				<th scope="col">Conceptos</th><th scope="col">Medio</th><th scope="col" class="num">Monto</th><th scope="col">Estado</th>
 				<th scope="col">Acciones</th></tr></thead>
 			<tbody>

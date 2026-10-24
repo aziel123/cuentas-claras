@@ -41,7 +41,7 @@
 					<span class="badge badge-neutro" th:if="${g.area.exonerable}">Exonerable</span>
 				</h3>
 				<table class="tabla">
-					<thead><tr><th>Código</th><th>Competencia</th><th>Grados</th></tr></thead>
+					<thead><tr><th class="num">Código</th><th>Competencia</th><th>Grados</th></tr></thead>
 					<tbody>
 						<tr th:each="c : ${g.competencias}">
 							<td class="num" th:text="${c.codigo}">PRI-MAT-1</td>

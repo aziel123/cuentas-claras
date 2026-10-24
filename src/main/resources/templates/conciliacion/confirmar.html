@@ -25,7 +25,7 @@
 		<h2 id="titulo-pendientes">Extractos por confirmar</h2>
 		<p class="secundario">Se confirman de uno en uno, del más antiguo al más nuevo, cada uno con el saldo de su último día.</p>
 		<table class="tabla">
-			<thead><tr><th scope="col">N.°</th><th scope="col">Días</th><th scope="col">Movimientos</th><th scope="col">Subido por</th></tr></thead>
+			<thead><tr><th scope="col" class="num">N.°</th><th scope="col">Días</th><th scope="col" class="num">Movimientos</th><th scope="col">Subido por</th></tr></thead>
 			<tbody>
 				<tr th:each="p : ${c.pendientes}">
 					<td data-etiqueta="N.°" class="num" th:text="${p.secuencia}">3</td>

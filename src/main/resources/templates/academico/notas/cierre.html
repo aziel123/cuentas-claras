@@ -25,7 +25,7 @@
 			<p class="secundario" th:if="${#lists.isEmpty(vista.pendientes())}">No falta ninguna nota.</p>
 			<table class="tabla" th:unless="${#lists.isEmpty(vista.pendientes())}">
 				<caption class="solo-lectores">Secciones y áreas con notas pendientes</caption>
-				<thead><tr><th scope="col">Sección</th><th scope="col">Área</th><th scope="col">Quién califica</th><th scope="col">Faltan</th></tr></thead>
+				<thead><tr><th scope="col">Sección</th><th scope="col">Área</th><th scope="col">Quién califica</th><th scope="col" class="num">Faltan</th></tr></thead>
 				<tbody>
 					<tr th:each="f : ${vista.pendientes()}" th:data-seccion="${f.seccionId}">
 						<td data-etiqueta="Sección" th:text="${f.seccion}">3.° Primaria A</td>

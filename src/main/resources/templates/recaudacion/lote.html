@@ -47,7 +47,7 @@
 	<section class="tarjeta" aria-labelledby="titulo-lineas">
 		<h2 id="titulo-lineas">Pagos del archivo</h2>
 		<table class="tabla">
-			<thead><tr><th scope="col">N.°</th><th scope="col">Fecha</th><th scope="col">Código</th><th scope="col">Alumno</th><th scope="col" class="num">Monto</th><th scope="col">Operación</th><th scope="col">Estado</th><th scope="col">Boleta</th></tr></thead>
+			<thead><tr><th scope="col" class="num">N.°</th><th scope="col">Fecha</th><th scope="col" class="num">Código</th><th scope="col">Alumno</th><th scope="col" class="num">Monto</th><th scope="col">Operación</th><th scope="col">Estado</th><th scope="col">Boleta</th></tr></thead>
 			<tbody>
 				<tr th:each="x : ${l.detalle}" th:data-linea="${x.id}" th:attr="data-estado=${x.estado}" th:classappend="${x.enExcepcion()} ? 'fila-atencion'">
 					<td data-etiqueta="N.°" class="num" th:text="${x.numero}">1</td>
