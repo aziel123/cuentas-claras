@@ -176,16 +176,18 @@ jobs:
             --data-urlencode "usuario=$docente" --data-urlencode "clave=$clave" http://127.0.0.1:8080/login
           docker exec cc-demo curl -s -b /tmp/d -o /tmp/academico.html http://127.0.0.1:8080/academico
           docker exec cc-demo grep -q "Mis secciones" /tmp/academico.html || { docker exec cc-demo cat /tmp/academico.html; exit 1; }
-          docker exec cc-demo grep -q "3.° Primaria A" /tmp/academico.html
-          docker exec cc-demo grep -q "Matemática" /tmp/academico.html
+          docker exec cc-demo grep -q "3.° Primaria A" /tmp/academico.html || { echo "ERROR: sin 3.° Primaria A"; docker exec cc-demo cat /tmp/academico.html; exit 1; }
+          docker exec cc-demo grep -q "Matemática" /tmp/academico.html || { echo "ERROR: sin Matemática"; docker exec cc-demo cat /tmp/academico.html; exit 1; }
           seccion=$(docker exec cc-demo grep -o 'href="/academico/secciones/[0-9]*"' /tmp/academico.html | head -1 | sed 's/.*secciones\///; s/"$//')
           docker exec cc-demo curl -s -b /tmp/d -o /tmp/seccion.html "http://127.0.0.1:8080/academico/secciones/$seccion"
-          docker exec cc-demo grep -q "Alumnos" /tmp/seccion.html
+          docker exec cc-demo grep -q "Alumnos" /tmp/seccion.html || { echo "ERROR: la sección $seccion sin Alumnos"; docker exec cc-demo cat /tmp/seccion.html; exit 1; }
           if docker exec cc-demo grep -q "S/ " /tmp/academico.html /tmp/seccion.html; then
             echo "ERROR: una pantalla del docente muestra montos"; exit 1
           fi
-          test "$(docker exec cc-demo curl -s -b /tmp/d -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/caja)" = "403"
-          test "$(docker exec cc-demo curl -s -b /tmp/d -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/alumnos)" = "403"
+          for ruta in caja alumnos; do
+            codigo=$(docker exec cc-demo curl -s -b /tmp/d -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080/$ruta")
+            test "$codigo" = "403" || { echo "ERROR: /$ruta respondió $codigo al docente"; exit 1; }
+          done
           echo "OK: el docente de la demo ve sus dos secciones y los nombres de sus alumnos, sin montos; caja y alumnos: 403"
 
       - name: "Sprint 9, tanda 3 (B5): el analizador de PDF corre como proceso hijo DENTRO de la imagen (read-only, /tmp)"
