@@ -1388,12 +1388,15 @@ Brief: `docs/arquitectura/sprint-11/tanda-1.md`. Pasos pequeños y verificables:
 7. Pruebas H2 y MySQL del brief; CI en verde.
 
 ### Tanda 1b · Guía de puesta en marcha (solo interfaz; sin migración; 117, 19 y 136 sin cambios)
-Brief: `docs/arquitectura/sprint-11/tanda-1b.md`. Sección 3.14.
+Briefs: `docs/arquitectura/sprint-11/tanda-1b.md` (la guía, sección 3.14) y `tanda-1b-interfaz.md` (correcciones de
+interfaz F-D1 a F-D6: tarjetas, vencimientos, fechas y textos de Pensiones; bandeja de Aprobaciones con lo que hoy se aprueba en
+otras pantallas; ancho de 1760 px y tableros).
 1. `PasoPuestaEnMarcha` y `GuiaPuestaEnMarcha` sobre `EstadoPuestaEnMarcha`, con sus pruebas.
 2. Banner en los inicios del personal.
 3. Estados vacíos de las 7 pantallas.
 4. `ColegioEnPreparacionException` y `PreparacionAdvice`; botones deshabilitados con su motivo.
 5. Puesta en marcha con estado, responsable e «Ir»; revisión en celular con `disenador-ui`; CI en verde.
+6. Correcciones de `tanda-1b-interfaz.md` (F-D1 a F-D6), con revisión visual en 390, 1280, 1600 y 1920 px.
 
 ### Tanda 2 · Exportación, cierre y supresión (V40; 124 triggers; 20 funciones; 144 huellas)
 1. Inventario `scripts/fin-de-colegio/inventario.txt` (tablas con `colegio_id`, datos personales, triggers que las protegen).
@@ -1430,6 +1433,9 @@ que no entra en las tandas sin su confirmación). Sigue la numeración del sprin
 | 205 | Objeción del titular (AP-10) | **[El titular objeta con su firma; la resuelve otro operador con respuesta escrita; sin resolver, no se aplica]** |
 | 206 | Texto del avance de la guía | **[«Faltan N de 15 pasos», con N = obligatorios pendientes, y «(y 2 opcionales)» si faltan; barra sobre los 13 obligatorios]** |
 | 207 | Dónde va la guía | **[Banner en el inicio del personal (no en el portal de las familias), estados vacíos en 7 pantallas y mensaje con enlace al intentar algo bloqueado; tanda corta 1b, sin cambios en la base]** |
+| 208 | Ancho del armazón | **[Fluido hasta 1760 px, margen lateral de 24 a 32 px, encabezado alineado; texto corrido a unos 70 caracteres]** |
+| 209 | Bandeja de Aprobaciones | **[Lista y cuenta también lo que se aprueba en otra pantalla (8 tipos), con «Revisar» a esa pantalla y la regla de `puedeResolver`; la aprobación sigue en su pantalla]** |
+| 210 | Inicio en preparación | **[Domina la guía; sin cifras ni gráficos hasta producción; en producción, estados vacíos por gráfico sin datos]** |
 
 ## Fuentes
 - Código Tributario, art. 87 num. 7 (texto del DL 1315) y art. 43: resumen en [Noticiero Contable](https://noticierocontable.com/guardar-los-libros-contables/),
