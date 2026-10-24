@@ -142,4 +142,18 @@ Los marcados con **(nueva)** son pruebas de este QA; los demás ya estaban cubie
 
 ## 5. Resultados
 
-(Se completa al terminar las corridas.)
+- **Las pruebas de los errores contra el código de `83928f0`** (antes de corregir): `QaSprint10NotasTest` y
+  `QaSprint10LibretasTest`, 32 pruebas, **8 fallan** (las 8 de QA-S10-1 a QA-S10-6, cada una con el síntoma descrito:
+  «sin nota» del trasladado, avance 8 de 8, «Todas las competencias… tienen nota», «Hay correcciones… que todavía no
+  llegan», «1 alumno(s) todavía no tienen su libreta», `IndexOutOfBounds`, «desactualizada»).
+- **Con las correcciones** (`./mvnw -B test -Dtest=QaSprint10*`): 43 pruebas, 0 fallos (Notas 22, Libretas 11, PDF 6,
+  Periodos 3, Demo 1).
+- **`./mvnw -B verify`** (una vez, sobre `7ee4541` más este informe): **3144 pruebas, 0 fallos, 0 errores, 279 omitidas
+  (las de MySQL y las de fechas fuera de ventana), BUILD SUCCESS.**
+- **MySQL real** en un contenedor propio (`cc-qa-s10-mysql`, `mysql:8`, puerto 3319): `01`, migración V1–V37 con
+  `cc_migrador`, `02` y `03` sin error (112 triggers); `AuditoriaSprint10NotasMySqlTest` **25 de 25** (con el caso nuevo
+  del traslado) y `AuditoriaSprint10LibretasMySqlTest` **21 de 21** (la exportación cambiada sigue pasando con los
+  permisos mínimos). El contenedor se borró al terminar. No se tocaron `cuentas-claras-mysql-1`, `cuentas-claras-app-1`,
+  `smarthr-*`, `supabase_*`, `cc-mysql-s5*` ni el puerto 8098.
+- No se corrió la zona de Los Ángeles en local (la corre el CI); las pruebas nuevas usan el `RelojAjustable` en hora de
+  Lima y una de ellas prueba el borde Lima frente a UTC.
