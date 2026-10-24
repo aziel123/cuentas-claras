@@ -60,8 +60,10 @@ class QaSprint10LibretaPdfTest {
 				+ "Abigail Valentina").substring(0, 190);
 		assertThat(nombre).hasSize(190);
 		byte[] pdf = una(conNombre(ContenidosDePrueba.primaria(), nombre), null);
-		String t = texto(pdf);
-		assertThat(t).contains("Apellidomuylargo De La Santísima Trinidad").contains("…");
+		String t = texto(pdf).replace("\r", "").replace("\n", " ");
+		// Correcciones del sprint 10 (P-3): el nombre pasa a otra línea y sale COMPLETO (sin «…»).
+		assertThat(t).contains("Apellidomuylargo De La Santísima Trinidad").contains(nombre.substring(150).strip())
+				.doesNotContain(nombre.substring(0, 60) + "…");
 		assertThat(paginas(pdf)).isBetween(1, 6);
 	}
 

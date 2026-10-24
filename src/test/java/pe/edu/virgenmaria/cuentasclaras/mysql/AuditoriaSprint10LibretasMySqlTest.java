@@ -112,8 +112,8 @@ class AuditoriaSprint10LibretasMySqlTest {
 	private static final String INSERTAR_LIBRETA = "INSERT INTO libreta_emitida (colegio_id, anio_escolar_id, periodo_id, "
 			+ "seccion_id, matricula_id, alumno_id, numero_version, reemplaza_id, motivo, solicitud_id, hasta_calificacion_id, "
 			+ "hasta_marca_id, hasta_exoneracion_id, alumno_nombre, alumno_codigo, tipo_codigo, director_nombre, "
-			+ "huella_contenido, cambios, creado_en, creado_por, actualizado_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, "
-			+ "'Alumno de prueba', '00000000', 'DNI', 'Dirección de prueba', REPEAT('a', 64), ?, NOW(6), 'sistema.libretas', "
+			+ "huella_contenido, niveles, cambios, creado_en, creado_por, actualizado_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, "
+			+ "'Alumno de prueba', '00000000', 'DNI', 'Dirección de prueba', REPEAT('a', 64), 'niveles de prueba', ?, NOW(6), 'sistema.libretas', "
 			+ "NOW(6))";
 
 	private static final String INSERTAR_ENTREGA = "INSERT INTO entrega_libreta (colegio_id, libreta_id, canal, apoderado_id, "
@@ -220,6 +220,9 @@ class AuditoriaSprint10LibretasMySqlTest {
 	@Autowired
 	private pe.edu.virgenmaria.cuentasclaras.comun.prueba.CuentasDePrueba cuentasDePrueba;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.academico.notas.service.IntegridadNotas integridadNotas;
+
 	/** El colegio de la clase. */
 	private record Escuela(EscuelaConDocentesMySql.Escuela e, long anio, long seccion, long otraSeccion, long mateo,
 			long lucas, long sofia, long alumnoMateo, long alumnoLucas, long alumnoSofia, long apoderadoMateo,
@@ -248,6 +251,10 @@ class AuditoriaSprint10LibretasMySqlTest {
 	}
 
 	private static Escuela compartida;
+
+	private static EmisorLibretas.Resultado primeraEmision;
+
+	private static long msPrimeraEmision;
 
 	@AfterEach
 	void limpiar() {
@@ -320,6 +327,9 @@ class AuditoriaSprint10LibretasMySqlTest {
 			return null;
 		});
 		guardar(e.docente(), seccion, "MAT", p1, List.of(mateo, lucas, sofia), "A", null);
+		// La carga (riesgo 1, decisión 191): 10 secciones de 30 alumnos matriculados ANTES del cierre (P-6: una matrícula
+		// posterior al cierre no tiene libreta de ese periodo). Se emiten en la primera pasada, que se mide.
+		cargarTrescientos(e, anio);
 		como(e.equipo().directora(), () -> {
 			avance.cerrar(p1);
 			return null;
@@ -338,7 +348,7 @@ class AuditoriaSprint10LibretasMySqlTest {
 		long seccionSiguiente = como(e.equipo().administracion(), () -> estructura.crearSeccion(siguiente,
 				new CrearSeccionRequest(Grado.PRIMARIA_5, "R" + sufijo.substring(sufijo.length() - 4))));
 		jdbc.update("INSERT INTO matricula (colegio_id, alumno_id, anio_escolar_id, seccion_id, fecha_matricula, estado, "
-				+ "creado_en, creado_por, actualizado_en) VALUES (?, ?, ?, ?, ?, 'RESERVADA', NOW(6), ?, NOW(6))", e.colegioId(),
+				+ "creado_en, creado_por, actualizado_en) VALUES (?, ?, ?, ?, ?, 'RESERVADA', UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, ?, NOW(6))", e.colegioId(),
 				ids[2], siguiente, seccionSiguiente, hoy, e.equipo().administracion().getNombreUsuario());
 		long reservada = jdbc.queryForObject("SELECT id FROM matricula WHERE alumno_id = ? AND anio_escolar_id = ?", Long.class,
 				ids[2], siguiente);
@@ -364,8 +374,12 @@ class AuditoriaSprint10LibretasMySqlTest {
 				periodoSiguiente);
 		// En producción (los avisos a las familias solo salen de un colegio en producción: S8-M2).
 		cuentasDePrueba.pasarAProduccion(e.colegioId(), e.equipo().promotora());
-		// La emisión de sistema.libretas (cc_sistema): la deja la primera pasada.
-		emitir(compartida);
+		// La emisión de sistema.libretas (cc_sistema): la deja la primera pasada (con las 300 de la carga, medida).
+		long inicio = System.nanoTime();
+		primeraEmision = emitir(compartida);
+		msPrimeraEmision = (System.nanoTime() - inicio) / 1_000_000;
+		org.slf4j.LoggerFactory.getLogger(getClass()).info("Carga de libretas: {} emitidas en {} ms", primeraEmision.total(),
+				msPrimeraEmision);
 		return compartida;
 	}
 
@@ -720,11 +734,11 @@ class AuditoriaSprint10LibretasMySqlTest {
 		long alumno = jdbc.queryForObject("SELECT alumno_id FROM matricula WHERE id = ?", Long.class, nueva);
 		// Versión 1 con cambios (debe ser NULL), con solicitud (debe ser NULL): el trigger la deja pasar, el CHECK no.
 		assertThat(codigoAl(() -> sistema().update(INSERTAR_LIBRETA, s.colegio(), s.anio(), s.p1(), s.seccion(), nueva, alumno,
-				1, null, "CIERRE", null, 0, "No va en la versión 1"))).isEqualTo(3819);
+				1, null, "CIERRE", null, 0, "No va en la versión 1"))).isIn(1644, 3819); // P-6: la matrícula es posterior al cierre (1644 antes que el CHECK)
 		Long unaSolicitud = jdbc.queryForObject("SELECT MIN(id) FROM solicitud_cambio WHERE colegio_id = ?", Long.class,
 				s.colegio());
 		assertThat(codigoAl(() -> sistema().update(INSERTAR_LIBRETA, s.colegio(), s.anio(), s.p1(), s.seccion(), nueva, alumno,
-				1, null, "CIERRE", unaSolicitud, 0, null))).isEqualTo(3819);
+				1, null, "CIERRE", unaSolicitud, 0, null))).isIn(1644, 3819);
 		// Una versión 2 sin reemplaza (NULL) ni cambios (NULL): 1644 (el trigger) o 3819 (el CHECK).
 		long v = vigente(s.sofia(), s.p1());
 		assertThat(codigoAl(() -> sistema().update(INSERTAR_LIBRETA, s.colegio(), s.anio(), s.p1(), s.seccion(), s.sofia(),
@@ -801,29 +815,260 @@ class AuditoriaSprint10LibretasMySqlTest {
 	@Test
 	void cargaTrescientasLibretasEnMenosDeUnMinuto() {
 		Escuela s = escuela();
+		assertThat(primeraEmision.alCierre()).isGreaterThanOrEqualTo(300);
+		assertThat(msPrimeraEmision).as("300 libretas en milisegundos").isLessThan(60_000);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM libreta_emitida l JOIN seccion x ON x.id = l.seccion_id WHERE "
+				+ "l.colegio_id = ? AND x.grado = 'SECUNDARIA_1'", Long.class, s.colegio())).isEqualTo(300);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE colegio_id = ? AND accion = "
+				+ "'LIBRETAS_EMITIDAS'", Long.class, s.colegio())).as("un evento por sección (decisión 191)")
+				.isLessThan(primeraEmision.alCierre());
+	}
+
+	/** 10 secciones de 1.° de Secundaria con 30 alumnos cada una (sin plan de Secundaria: sin cuotas). */
+	private void cargarTrescientos(EscuelaConDocentesMySql.Escuela e, long anio) {
 		String base = numero(3);
 		for (int sec = 0; sec < 10; sec++) {
 			int n = sec;
-			long seccion = como(s.administracion(), () -> estructura.crearSeccion(s.anio(), new CrearSeccionRequest(
+			long seccion = como(e.equipo().administracion(), () -> estructura.crearSeccion(anio, new CrearSeccionRequest(
 					Grado.SECUNDARIA_1, "Q" + n + sufijo.substring(sufijo.length() - 3))));
 			for (int a = 0; a < 30; a++) {
 				int k = n * 30 + a;
 				String letras = "" + (char) ('a' + k / 26 % 26) + (char) ('a' + k % 26);
-				como(s.administracion(), () -> alumnos.registrar(EscenarioEscolar.conApoderadoNuevo("8" + base
+				como(e.equipo().administracion(), () -> alumnos.registrar(EscenarioEscolar.conApoderadoNuevo("8" + base
 						+ String.format("%04d", k), "Carga", "Libreta", "Alumn" + letras, LocalDate.of(2013, 5, 5), "5" + base
 						+ String.format("%04d", k), "Carga", "Padre", "Padr" + letras, null, "cargalib" + k + "." + sufijo
 						+ "@correo.pe", seccion)));
 			}
 		}
-		long inicio = System.nanoTime();
-		EmisorLibretas.Resultado r = emitir(s);
-		long ms = (System.nanoTime() - inicio) / 1_000_000;
-		org.slf4j.LoggerFactory.getLogger(getClass()).info("Carga de libretas: {} emitidas en {} ms", r.total(), ms);
-		assertThat(r.alCierre()).isGreaterThanOrEqualTo(300);
-		assertThat(ms).as("300 libretas en milisegundos").isLessThan(60_000);
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE colegio_id = ? AND accion = "
-				+ "'LIBRETAS_EMITIDAS'", Long.class, s.colegio())).as("un evento por sección (decisión 191)")
-				.isLessThan(r.alCierre());
+	}
+
+	// ------------------------------------------------------------------------------------------------ Correcciones del sprint 10
+
+	private static final String INSERTAR_LOTE = "INSERT INTO lote_calificacion (colegio_id, periodo_id, seccion_id, area_id, "
+			+ "secuencia, solicitud_id, sesion_id, filas, creado_en, creado_por, actualizado_en) VALUES (?, ?, ?, ?, ?, ?, ?, 1, "
+			+ "NOW(6), ?, NOW(6))";
+
+	private static final String INSERTAR_NOTA = "INSERT INTO calificacion (colegio_id, anio_escolar_id, periodo_id, seccion_id, "
+			+ "matricula_id, alumno_id, competencia_id, nivel_logro, origen, inicial, lote_id, creado_en, creado_por, "
+			+ "actualizado_en) VALUES (?, ?, ?, ?, ?, ?, ?, 'A', 'REGISTRO', TRUE, ?, NOW(6), ?, NOW(6))";
+
+	/**
+	 * Hallazgo 1 (alto): con el lote de la docente (guardado y confirmado con su conexión), una nota desde OTRA conexión
+	 * (otra persona con la clave de cc_app) no entra (1644). Y en la misma conexión, no más notas que las filas del lote.
+	 */
+	@Test
+	void h1NotaDesdeOtraConexionConElLoteDeLaDocenteFallaYNoPasaDeSusFilas() {
+		Escuela s = escuela();
+		long area = area("MAT");
+		long competencia = competencias("MAT").get(3);
+		long lote = enTransaccionComprometida(s.ana(), () -> {
+			int secuencia = siguienteSecuencia(s.p2(), s.seccion(), area);
+			firma.firmar(ClaveFirma.loteCalificacion(s.p2(), s.seccion(), area, secuencia));
+			jdbc.update(INSERTAR_LOTE, s.colegio(), s.p2(), s.seccion(), area, secuencia, null, sesion(s.ana()),
+					s.ana().getNombreUsuario());
+			return jdbc.queryForObject("SELECT MAX(id) FROM lote_calificacion WHERE periodo_id = ? AND seccion_id = ?",
+					Long.class, s.p2(), s.seccion());
+		});
+		assertThat(jdbc.queryForObject("SELECT conexion_id FROM lote_calificacion WHERE id = ?", Long.class, lote))
+				.as("la base guardó la conexión del lote").isNotNull();
+		JdbcTemplate otra = conexionApp();
+		assertThat(codigoAl(() -> otra.update(INSERTAR_NOTA, s.colegio(), s.anio(), s.p2(), s.seccion(), s.lucas(),
+				s.alumnoLucas(), competencia, lote, s.ana().getNombreUsuario()))).isEqualTo(1644);
+		// En su propia conexión, el lote de 1 fila admite una nota y no la segunda.
+		Integer segunda = enTransaccion(s.ana(), () -> {
+			int secuencia = siguienteSecuencia(s.p2(), s.seccion(), area);
+			firma.firmar(ClaveFirma.loteCalificacion(s.p2(), s.seccion(), area, secuencia));
+			jdbc.update(INSERTAR_LOTE, s.colegio(), s.p2(), s.seccion(), area, secuencia, null, sesion(s.ana()),
+					s.ana().getNombreUsuario());
+			long propio = jdbc.queryForObject("SELECT MAX(id) FROM lote_calificacion WHERE periodo_id = ? AND seccion_id = ?",
+					Long.class, s.p2(), s.seccion());
+			assertThat(codigoAl(() -> jdbc.update(INSERTAR_NOTA, s.colegio(), s.anio(), s.p2(), s.seccion(), s.lucas(),
+					s.alumnoLucas(), competencia, propio, s.ana().getNombreUsuario()))).isNull();
+			return codigoAl(() -> jdbc.update(INSERTAR_NOTA, s.colegio(), s.anio(), s.p2(), s.seccion(), s.sofia(),
+					s.alumnoSofia(), competencia, propio, s.ana().getNombreUsuario()));
+		});
+		assertThat(segunda).isEqualTo(1644);
+	}
+
+	/**
+	 * Hallazgo 1 (alto): un DBA cambia una nota del I bimestre (cc_migrador, por fuera de la aplicación): Promotoría recibe
+	 * la alerta CRÍTICA y la emisión de esa sección se detiene (la corrección aprobada de Lucas no sale). Restaurada, sale.
+	 */
+	@Test
+	void h1LoteAlteradoDetieneLaEmisionDeLaSeccion() {
+		Escuela s = escuela();
+		long notaLucas = vigenteNota(s.lucas(), competencias("MAT").get(1), s.p1());
+		Long solicitud = como(s.ana(), () -> correcciones.pedir(notaLucas, "AD", null, MOTIVO_CORRECCION));
+		como(s.promotora(), () -> {
+			bandeja.aprobar(solicitud, null);
+			return null;
+		});
+		long antes = jdbc.queryForObject("SELECT COUNT(*) FROM libreta_emitida WHERE matricula_id = ? AND periodo_id = ?",
+				Long.class, s.lucas(), s.p1());
+		long notaMateo = vigenteNota(s.mateo(), competencias("MAT").get(2), s.p1());
+		String original = jdbc.queryForObject("SELECT nivel_logro FROM calificacion WHERE id = ?", String.class, notaMateo);
+		JdbcTemplate migrador = migrador();
+		migrador.update("UPDATE calificacion SET nivel_logro = 'C' WHERE id = ?", notaMateo);
+		try {
+			emitir(s);
+			assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM libreta_emitida WHERE matricula_id = ? AND periodo_id = ?",
+					Long.class, s.lucas(), s.p1())).as("emisión detenida").isEqualTo(antes);
+			assertThat(como(s.promotora(), () -> integridadNotas.alertas())).anySatisfy(a -> assertThat(a.aviso().tipo())
+					.isEqualTo(pe.edu.virgenmaria.cuentasclaras.comun.alertas.TipoAviso.INTEGRIDAD_NOTAS));
+		}
+		finally {
+			migrador.update("UPDATE calificacion SET nivel_logro = ? WHERE id = ?", original, notaMateo);
+		}
+		emitir(s);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM libreta_emitida WHERE matricula_id = ? AND periodo_id = ?",
+				Long.class, s.lucas(), s.p1())).isEqualTo(antes + 1);
+	}
+
+	/** Hallazgo 2 (alto): la reemisión aprobada por Promotoría vuelve a emitir los niveles emitidos; otros, 1644. */
+	@Test
+	void h2ReemisionConOtrosNivelesFalla() {
+		Escuela s = escuela();
+		long v = vigente(s.sofia(), s.p1());
+		assertThat(jdbc.queryForObject("SELECT niveles FROM libreta_emitida WHERE id = ?", String.class, v)).isNotBlank();
+		int version = jdbc.queryForObject("SELECT numero_version FROM libreta_emitida WHERE id = ?", Integer.class, v);
+		long hasta = jdbc.queryForObject("SELECT hasta_calificacion_id FROM libreta_emitida WHERE id = ?", Long.class, v);
+		Long solicitud = enTransaccionComprometida(s.directora(), () -> {
+			jdbc.update("INSERT INTO solicitud_cambio (colegio_id, tipo, entidad, entidad_id, resumen, datos, motivo, estado, "
+					+ "pendiente, solicitado_por, creado_en, creado_por, actualizado_en) VALUES (?, 'REEMISION_LIBRETA', "
+					+ "'libreta_emitida', ?, 'Reemitir la libreta', '{}', 'Revisión de integridad de la prueba', 'PENDIENTE', "
+					+ "TRUE, ?, NOW(6), ?, NOW(6))", s.colegio(), v, s.directora().getNombreUsuario(),
+					s.directora().getNombreUsuario());
+			return jdbc.queryForObject("SELECT MAX(id) FROM solicitud_cambio WHERE colegio_id = ? AND tipo = "
+					+ "'REEMISION_LIBRETA'", Long.class, s.colegio());
+		});
+		aprobarCrudo(solicitud, s.promotora());
+		SecurityContextHolder.clearContext();
+		assertThat(mensajeDe(() -> sistema().update(INSERTAR_LIBRETA.replace("'niveles de prueba'", "'1|PRI-MAT-1|AD\n'"),
+				s.colegio(), s.anio(), s.p1(), s.seccion(), s.sofia(), s.alumnoSofia(), version + 1, v, "REEMISION", solicitud,
+				hasta, "Reemitida tras una revisión de integridad"))).contains("1644").contains("niveles emitidos");
+	}
+
+	/**
+	 * Hallazgo 6 (bajo): la nota tardía la aprueba alguien con rol activo de Dirección o Promotoría; aprobada (con su firma)
+	 * por una persona de Administración, el lote no nace (1644).
+	 */
+	@Test
+	void h6NotaTardiaAprobadaPorAdministracionFalla() {
+		Escuela s = escuela();
+		long area = area("MAT");
+		long asignacion = jdbc.queryForObject("SELECT id FROM asignacion_docente WHERE usuario_id = ? AND seccion_id = ? AND "
+				+ "estado = 'VIGENTE' AND tipo = 'DOCENTE'", Long.class, s.ana().getId(), s.seccion());
+		Long solicitud = enTransaccionComprometida(s.ana(), () -> {
+			jdbc.update("INSERT INTO solicitud_cambio (colegio_id, tipo, entidad, entidad_id, resumen, datos, motivo, estado, "
+					+ "pendiente, solicitado_por, creado_en, creado_por, actualizado_en) VALUES (?, 'CALIFICACION_TARDIA', "
+					+ "'asignacion_docente', ?, 'Nota tardía', ?, 'Faltó registrar una competencia trabajada', 'PENDIENTE', "
+					+ "TRUE, ?, NOW(6), ?, NOW(6))", s.colegio(), asignacion, "{\"periodo_id\":\"" + s.p1() + "\",\"area_id\":\""
+					+ area + "\"}", s.ana().getNombreUsuario(), s.ana().getNombreUsuario());
+			return jdbc.queryForObject("SELECT MAX(id) FROM solicitud_cambio WHERE colegio_id = ? AND tipo = "
+					+ "'CALIFICACION_TARDIA'", Long.class, s.colegio());
+		});
+		Integer aprobacion = codigoAl(() -> aprobarCrudo(solicitud, s.administracion()));
+		SecurityContextHolder.clearContext();
+		org.slf4j.LoggerFactory.getLogger(getClass()).info("Aprobación de la nota tardía por Administración: {}",
+				aprobacion == null ? "la base la aceptó (la frena el lote)" : "rechazada con " + aprobacion);
+		Integer lote = enTransaccion(s.ana(), () -> {
+			int secuencia = siguienteSecuencia(s.p1(), s.seccion(), area);
+			firma.firmar(ClaveFirma.loteCalificacion(s.p1(), s.seccion(), area, secuencia));
+			return codigoAl(() -> jdbc.update(INSERTAR_LOTE, s.colegio(), s.p1(), s.seccion(), area, secuencia, solicitud,
+					sesion(s.ana()), s.ana().getNombreUsuario()));
+		});
+		assertThat(lote).isEqualTo(1644);
+	}
+
+	/**
+	 * Hallazgo 8 y P-1 (MySQL real): en un periodo del año siguiente, X (con nota) se traslada a otra sección y Y se retira
+	 * DESPUÉS del cierre y antes de la pasada. La base deja su historia; las dos reciben la libreta de la sección del cierre,
+	 * y la corrección de X (en la sección de su nota) se emite como versión 2 en esa misma sección.
+	 */
+	@Test
+	void h8YP1TrasladoYRetiroDespuesDelCierre() {
+		Escuela s = escuela();
+		LocalDate hoy = hoy();
+		long seccionB = como(s.administracion(), () -> estructura.crearSeccion(s.siguiente(), new CrearSeccionRequest(
+				Grado.PRIMARIA_5, "T" + sufijo.substring(sufijo.length() - 4))));
+		long periodo = como(s.directora(), () -> periodos.programar(s.siguiente(), hoy.minusDays(19), hoy.minusDays(2)));
+		como(s.directora(), () -> {
+			periodos.abrir(periodo);
+			return null;
+		});
+		long x = reservadaEnElSiguiente(s, alumnoNuevo(s, "Trasladado"));
+		long y = reservadaEnElSiguiente(s, alumnoNuevo(s, "Retirado"));
+		guardar(s.ana(), s.seccionSiguiente(), "MAT", periodo, List.of(x), "A", null);
+		como(s.directora(), () -> {
+			avance.cerrar(periodo);
+			return null;
+		});
+		jdbc.update("UPDATE matricula SET seccion_id = ? WHERE id = ?", seccionB, x);
+		jdbc.update("UPDATE matricula SET estado = 'RETIRADA', retirada_en = ? WHERE id = ?", hoy, y);
+		assertThat(jdbc.queryForList("SELECT CONCAT(estado_anterior, '>', estado_nuevo) FROM matricula_historial WHERE "
+				+ "matricula_id IN (?, ?) ORDER BY id", String.class, x, y)).containsExactly("RESERVADA>RESERVADA",
+						"RESERVADA>RETIRADA");
+		emitir(s);
+		assertThat(jdbc.queryForObject("SELECT seccion_id FROM libreta_emitida WHERE matricula_id = ? AND periodo_id = ?",
+				Long.class, x, periodo)).isEqualTo(s.seccionSiguiente());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM libreta_emitida WHERE matricula_id = ? AND periodo_id = ?",
+				Long.class, y, periodo)).as("hallazgo 8: la retirada después del cierre tiene su libreta").isEqualTo(1);
+		// P-1: la corrección del trasladado va en la sección de su nota y su versión 2, en la sección del cierre.
+		long nota = vigenteNota(x, competencias("MAT").get(0), periodo);
+		Long solicitud = como(s.ana(), () -> correcciones.pedir(nota, "AD", null, MOTIVO_CORRECCION));
+		como(s.promotora(), () -> {
+			bandeja.aprobar(solicitud, null);
+			return null;
+		});
+		assertThat(jdbc.queryForObject("SELECT seccion_id FROM calificacion WHERE reemplaza_id = ?", Long.class, nota))
+				.isEqualTo(s.seccionSiguiente());
+		emitir(s);
+		assertThat(jdbc.queryForMap("SELECT numero_version, seccion_id, motivo FROM libreta_emitida WHERE matricula_id = ? "
+				+ "AND periodo_id = ? ORDER BY numero_version DESC LIMIT 1", x, periodo)).containsEntry("numero_version", 2)
+				.containsEntry("seccion_id", s.seccionSiguiente()).containsEntry("motivo", "CORRECCION");
+	}
+
+	/** La historia de la matrícula la escribe solo la base: con cc_app, 1142. */
+	@Test
+	void historiaDeLaMatriculaSoloLaEscribeLaBase() {
+		Escuela s = escuela();
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO matricula_historial (colegio_id, matricula_id, "
+				+ "seccion_anterior_id, seccion_nueva_id, estado_anterior, estado_nuevo, cambiado_bd, creado_en, creado_por, "
+				+ "actualizado_en) VALUES (?, ?, ?, ?, 'ACTIVA', 'ACTIVA', NOW(6), NOW(6), 'base', NOW(6))", s.colegio(),
+				s.mateo(), s.seccion(), s.otraSeccion()))).isEqualTo(1142);
+		assertThat(codigoAl(() -> sistema().update("DELETE FROM matricula_historial WHERE 1 = 0"))).isEqualTo(1142);
+	}
+
+	/** Una matrícula RESERVADA del año siguiente para el alumno de esa matrícula del año en curso. @return su id */
+	private long reservadaEnElSiguiente(Escuela s, long matriculaDelAnio) {
+		long alumno = jdbc.queryForObject("SELECT alumno_id FROM matricula WHERE id = ?", Long.class, matriculaDelAnio);
+		jdbc.update("INSERT INTO matricula (colegio_id, alumno_id, anio_escolar_id, seccion_id, fecha_matricula, estado, "
+				+ "creado_en, creado_por, actualizado_en) VALUES (?, ?, ?, ?, ?, 'RESERVADA', UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, ?, NOW(6))", s.colegio(),
+				alumno, s.siguiente(), s.seccionSiguiente(), hoy(), s.administracion().getNombreUsuario());
+		return jdbc.queryForObject("SELECT id FROM matricula WHERE alumno_id = ? AND anio_escolar_id = ?", Long.class, alumno,
+				s.siguiente());
+	}
+
+	private int siguienteSecuencia(long periodo, long seccion, long area) {
+		return jdbc.queryForObject("SELECT COALESCE(MAX(secuencia), 0) + 1 FROM lote_calificacion WHERE periodo_id = ? AND "
+				+ "seccion_id = ? AND area_id = ?", Integer.class, periodo, seccion, area);
+	}
+
+	/** Una conexión NUEVA con la clave de cc_app (otra persona con la misma clave). */
+	private static JdbcTemplate conexionApp() {
+		String clave = System.getenv("CC_MYSQL_CLAVE_APP");
+		assumeTrue(clave != null && !clave.isBlank(), "Falta CC_MYSQL_CLAVE_APP");
+		return new JdbcTemplate(new org.springframework.jdbc.datasource.DriverManagerDataSource(System.getenv()
+				.getOrDefault("CC_MYSQL_URL", "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&"
+						+ "useSSL=false"), "cc_app", clave));
+	}
+
+	private static JdbcTemplate migrador() {
+		String clave = System.getenv("CC_MYSQL_CLAVE_MIGRADOR");
+		assumeTrue(clave != null && !clave.isBlank(), "Falta CC_MYSQL_CLAVE_MIGRADOR");
+		return new JdbcTemplate(new org.springframework.jdbc.datasource.DriverManagerDataSource(System.getenv()
+				.getOrDefault("CC_MYSQL_URL", "jdbc:mysql://127.0.0.1:3306/cuentasclaras?allowPublicKeyRetrieval=true&"
+						+ "useSSL=false"), "cc_migrador", clave));
 	}
 
 	// ------------------------------------------------------------------------------------------------ Ayudas

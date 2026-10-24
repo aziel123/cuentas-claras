@@ -86,12 +86,14 @@ class FotoLibretaTest extends PruebaLibretas {
 		// Alguien cambia la nota de Mateo directo en la base (H2 no tiene triggers).
 		jdbc.update("UPDATE calificacion SET nivel_logro = 'C' WHERE id = ?", vigente(mateo, competencias("MAT").get(0)));
 		hoyEs(LocalDate.of(2026, 5, 7));
-		MockHttpServletResponse r = mvc.perform(get("/familia/libretas/" + id + ".pdf").with(UsuariosDePrueba.como(
-				rosaEnLinea()))).andReturn().getResponse();
+		org.springframework.test.web.servlet.MvcResult descarga = mvc.perform(get("/familia/libretas/" + id + ".pdf")
+				.with(UsuariosDePrueba.como(rosaEnLinea()))).andReturn();
+		MockHttpServletResponse r = descarga.getResponse();
 		assertThat(r.getStatus()).isEqualTo(303);
-		assertThat(r.getRedirectedUrl()).isEqualTo("/familia/libretas?revision=2026-05-11");
-		String pagina = mvc.perform(get(r.getRedirectedUrl()).with(UsuariosDePrueba.como(rosaEnLinea()))).andReturn()
-				.getResponse().getContentAsString();
+		// Correcciones del sprint 10 (hallazgo 5): el aviso viaja en el flash que calcula el servidor, no en la URL.
+		assertThat(r.getRedirectedUrl()).isEqualTo("/familia/libretas");
+		String pagina = mvc.perform(get(r.getRedirectedUrl()).flashAttrs(descarga.getFlashMap())
+				.with(UsuariosDePrueba.como(rosaEnLinea()))).andReturn().getResponse().getContentAsString();
 		assertThat(pagina).contains("Su libreta está en revisión. El colegio se la entregará a más tardar el 11/05/2026.");
 		assertThat(contar("SELECT COUNT(*) FROM entrega_libreta")).isZero();
 		assertThat(contar("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'LIBRETA_HUELLA_NO_COINCIDE'")).isEqualTo(1);
@@ -116,6 +118,18 @@ class FotoLibretaTest extends PruebaLibretas {
 				org.springframework.security.core.context.SecurityContextHolder.clearContext();
 			}
 		}).isInstanceOf(RuntimeException.class);
+		// Correcciones del sprint 10 (hallazgo 2): con la nota alterada, Promotoría tampoco puede aprobarla (la reemisión
+		// vuelve a emitir los niveles emitidos). Revisado con el responsable técnico, la nota vuelve a lo emitido y entonces
+		// sí se reemite (con los mismos niveles).
+		assertThatThrownBy(() -> {
+			try {
+				EscenarioAprobaciones.aprueba(EscenarioCobranza.PROMOTORIA, bandeja, jdbc, "libreta_emitida", id);
+			}
+			finally {
+				org.springframework.security.core.context.SecurityContextHolder.clearContext();
+			}
+		}).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("No se puede reemitir");
+		jdbc.update("UPDATE calificacion SET nivel_logro = 'A' WHERE id = ?", vigente(mateo, competencias("MAT").get(0)));
 		try {
 			EscenarioAprobaciones.aprueba(EscenarioCobranza.PROMOTORIA, bandeja, jdbc, "libreta_emitida", id);
 		}

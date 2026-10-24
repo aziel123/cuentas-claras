@@ -163,10 +163,12 @@ class QaSprint10LibretasTest extends PruebaLibretas {
 		Long id = libreta(mateo);
 		jdbc.update("UPDATE calificacion SET nivel_logro = 'C' WHERE id = ?", vigente(mateo, competencias("MAT").get(0)));
 		hoyEs(LocalDate.of(2026, 7, 27));
-		MockHttpServletResponse r = mvc.perform(get("/familia/libretas/" + id + ".pdf").with(UsuariosDePrueba.como(
-				rosaEnLinea()))).andReturn().getResponse();
+		org.springframework.test.web.servlet.MvcResult descarga = mvc.perform(get("/familia/libretas/" + id + ".pdf")
+				.with(UsuariosDePrueba.como(rosaEnLinea()))).andReturn();
+		MockHttpServletResponse r = descarga.getResponse();
 		assertThat(r.getStatus()).isEqualTo(303);
-		assertThat(r.getRedirectedUrl()).isEqualTo("/familia/libretas?revision=2026-07-31");
+		assertThat(r.getRedirectedUrl()).isEqualTo("/familia/libretas");
+		assertThat((String) descarga.getFlashMap().get("error")).contains("a más tardar el 31/07/2026");
 	}
 
 	// ------------------------------------------------------------------ PDF real y verificación

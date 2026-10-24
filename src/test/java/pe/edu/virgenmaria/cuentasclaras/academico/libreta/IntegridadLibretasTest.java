@@ -33,15 +33,14 @@ class IntegridadLibretasTest extends PruebaLibretas {
 		});
 		emitir();
 		assertThat(como(EscenarioCobranza.PROMOTORIA, () -> integridad.alertas())).isEmpty();
-		// Una alumna nueva (o una RESERVADA) sin libreta vuelve a alertar hasta la pasada siguiente.
+		// Correcciones del sprint 10 (P-6): una alumna matriculada DESPUÉS del cierre no tiene libreta de ese periodo, ni
+		// la integridad la exige.
 		Long nueva = como(EscenarioCobranza.ADMINISTRACION, () -> alumnos.registrar(EscenarioEscolar.conApoderadoNuevo(
 				"71234571", "Ríos", "Vela", "Lucía", LocalDate.of(2015, 6, 1), "41234571", "Vela", "Paz", "Julia",
 				"987777888", "julia.vela@gmail.com", seccion)).alumnoId());
 		jdbc.update("UPDATE matricula SET estado = 'RESERVADA' WHERE id = ?", matricula(nueva));
-		assertThat(como(EscenarioCobranza.PROMOTORIA, () -> integridad.alertas())).singleElement()
-				.satisfies(a -> assertThat(a.texto()).contains("1 matrícula(s)"));
-		emitir();
-		assertThat(contar("SELECT COUNT(*) FROM libreta_emitida WHERE matricula_id = ?", matricula(nueva))).isEqualTo(1);
 		assertThat(como(EscenarioCobranza.PROMOTORIA, () -> integridad.alertas())).isEmpty();
+		emitir();
+		assertThat(contar("SELECT COUNT(*) FROM libreta_emitida WHERE matricula_id = ?", matricula(nueva))).isZero();
 	}
 }
