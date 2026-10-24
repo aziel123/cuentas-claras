@@ -62,7 +62,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * (trg_anio_escolar_nace), el plan que aprueba Dirección y el cierre que aprueba Dirección; y lo que la base rechaza.
  * Corre después de la fase 2 del job mysql ({@code CC_PRUEBA_MYSQL=true}). Usa nombres únicos y no limpia.
  */
-@SpringBootTest
+// Corre después de las del sprint 10, que ya llegan a 30 colegios en la base del job (decisión 138: el tope).
+@SpringBootTest(properties = "cuentasclaras.plataforma.max-colegios=40")
 @ActiveProfiles({ "test", "mysql" })
 @EnabledIfEnvironmentVariable(named = "CC_PRUEBA_MYSQL", matches = "true")
 class AuditoriaSprint11CicloMySqlTest {
@@ -135,7 +136,7 @@ class AuditoriaSprint11CicloMySqlTest {
 	private Nuevo colegioNuevo(String ruc, String dni, String celular) {
 		UsuariosDePrueba.iniciarSesion(EscenarioPlataforma.operador(usuarios, codificador, colegios, "operador.s11"));
 		ColegioCreado creado = alta.crear(EscenarioPlataforma.alta("Colegio S11 " + sufijo + " " + celular, ruc,
-				"titular." + sufijo + "." + celular, dni, celular), null, null);
+				"t" + celular.substring(5) + "." + sufijo, dni, celular), null, null);
 		assertThat(creado.completo()).as(creado.pendiente()).isTrue();
 		alta.registrarCorreoControl(creado.colegioId(), "contador." + sufijo + "." + celular + "@estudio.pe");
 		SecurityContextHolder.clearContext();
@@ -181,7 +182,7 @@ class AuditoriaSprint11CicloMySqlTest {
 	 */
 	@Test
 	void delAltaAlCobroConElEquipoQueArmaElTitular() {
-		Nuevo n = colegioNuevo(EscenarioPlataforma.RUC_B, "4" + String.format("%07d", Math.floorMod(sufijo.hashCode(),
+		Nuevo n = colegioNuevo("20600000064", "4" + String.format("%07d", Math.floorMod(sufijo.hashCode(),
 				10_000_000)), "987661001");
 		long colegio = n.colegio();
 		Usuario titular = n.titular();
@@ -281,7 +282,7 @@ class AuditoriaSprint11CicloMySqlTest {
 	 */
 	@Test
 	void laBaseRechazaLaFacultadFueraDeSuCamino() {
-		Nuevo n = colegioNuevo(EscenarioPlataforma.RUC_C, "4" + String.format("%07d", Math.floorMod(("c" + sufijo).hashCode(),
+		Nuevo n = colegioNuevo("20600000072", "4" + String.format("%07d", Math.floorMod(("c" + sufijo).hashCode(),
 				10_000_000)), "987662001");
 		long colegio = n.colegio();
 		Usuario titular = n.titular();
