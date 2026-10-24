@@ -244,6 +244,18 @@ texto de su borrador), `trg_exoneracion_area_nace` (Dirección con su firma, des
 `trg_borrador_conclusion_nace`. Prod: «Huellas de los 108 triggers y las 16 funciones verificadas». Una base existente:
 `migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
 
+**Sprint 10, tanda 3 (V37): 112 triggers y 16 funciones con huella (128).** Las libretas son de **solo inserción**:
+`libreta_emitida` la crea SOLO `cc_sistema` (proceso `sistema.libretas`; `cc_app` no tiene GRANT: 1142), y
+`entrega_libreta`, `exportacion_calificaciones` y `delegacion_siagie` tienen solo INSERT para `cc_negocio`; las cuatro están
+en `tablas-vigiladas.txt`. Nuevos: `trg_libreta_emitida_nace` (periodo CERRADO, matrícula ACTIVA o RESERVADA, la versión 1
+con lo registrado hasta el cierre y la siguiente solo con una corrección aprobada o la reemisión aprobada por Promotoría),
+`trg_entrega_libreta_nace` (la familia con su sesión, Dirección o el tutor vigente de la sección; la entrevista solo en
+Inicial), `trg_exportacion_calificaciones_nace` (periodo cerrado, Dirección o la persona de Administración con delegación
+vigente) y `trg_delegacion_siagie_nace` (Dirección con su firma, solo a Administración sin Caja, hasta 15 días); versión
+nueva de `trg_mensaje_nace` (los avisos de libretas sin cobranza y con el consentimiento LIBRETAS). Prod: «Huellas de los
+112 triggers y las 16 funciones verificadas». Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación
+detenida; no hay usuarios nuevos.
+
 **Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
 van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
 custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra

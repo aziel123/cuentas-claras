@@ -46,6 +46,14 @@
     periodo** ves quién pidió, quién aprobó y de qué a qué.
 14. **Exoneraciones** (*Evaluación → Exoneraciones*): Religión o Educación Física, con el código del escrito del padre y tu
     firma. Rige desde el periodo **abierto**: las notas de los periodos anteriores quedan.
+15. **Libretas** (*Evaluación → Libretas*, sprint 10): al cerrar el periodo el sistema emite la libreta de cada alumno
+    (también de quien debe: la ley prohíbe retenerla) y avisa a las familias sin mencionar pagos. Puedes imprimir una o
+    la sección. En **Verificar una libreta** escribes el código LIB-… del pie y ves si es la versión vigente y coincide
+    con lo registrado. Si no coincide, pide la **reemisión** con el motivo: la aprueba Promotoría.
+16. **Calificaciones para el SIAGIE** (*Académico → SIAGIE · Calificaciones*): con el periodo cerrado, descargas el Excel
+    de cada sección con las notas de las libretas vigentes y su hoja de control. Puedes **delegar** la descarga, con tu
+    firma y por hasta 15 días, a una persona de Administración (nunca a Caja ni a un docente). Cada descarga queda en la
+    bitácora con su código.
 
 ## Lo que el sistema no te deja hacer, y por qué
 - **Aprobar algo que pediste o en lo que participaste:** el botón no aparece («La resuelve otra persona»), ni en la computadora ni en el celular.

@@ -54,6 +54,10 @@
 7. Un alumno **exonerado** de Religión o Educación Física aparece marcado: no se califica desde el periodo en que Dirección
    lo exoneró.
 8. Las notas de un alumno nunca dependen de lo que deba su familia: el sistema no lo sabe ni lo muestra.
+9. **Libretas** (*Evaluación → Libretas*): si eres **tutor** de la sección, cuando Dirección cierra el periodo puedes
+   imprimir la libreta de cada alumno o la de toda la sección (cada impresión queda a tu nombre). Las libretas las arma el
+   sistema con lo registrado hasta el cierre: no se editan. Una corrección aprobada genera la versión 2 y la familia
+   recibe el aviso. En Inicial, marca la entrega en la entrevista con la familia.
 
 ## Lo que el sistema no te deja hacer, y por qué
 - **Ver pagos, deudas ni boletas de las familias:** no los necesitas para enseñar y la ley protege esos datos. Además, la deuda nunca puede afectar las notas ni los exámenes de un alumno.
