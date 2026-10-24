@@ -642,6 +642,94 @@
 | `{{2}}` | 482915 |
 | `{{3}}` | 10:42 |
 
+## 43. `cc_codigo_promotoria_v2` · Su código para una acción en el colegio
+
+> Sprint 11, tanda 1c (decisión 216, A1c-5). El código de 6 dígitos de una acción sensible de Promotoría, atado a esa acción (el texto dice qué autoriza). Va solo a la Promotoría que lo pidió, a su WhatsApp registrado; la base guarda solo su SHA-256.
+
+```text
+{{1}}: código {{2}} para: {{3}}. Vence a las {{4}}. Si usted no lo pidió, no lo comparta y escriba hoy al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | 482913 |
+| `{{3}}` | Dar Promotoría a j.perez |
+| `{{4}}` | 10:42 |
+
+## 44. `cc_codigo_contacto_v2` · Confirme el cambio de su celular o correo
+
+> Sprint 11, tanda 1c (A1c-1). El cambio del celular o el correo de una cuenta de Promotoría o Dirección lo confirma su dueña desde su contacto ANTERIOR, con este código (o lo aplican dos operadores).
+
+```text
+{{1}}: código {{2}} para confirmar: {{3}}. Vence a las {{4}}. Si usted no lo pidió, no lo comparta y avise hoy al colegio.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | 305118 |
+| `{{3}}` | el celular de diana.rojas pasa a ···0712 |
+| `{{4}}` | 10:42 |
+
+## 45. `cc_accion_directa_v2` · Una Promotoría aplicó un cambio directo
+
+> Sprint 11, tanda 1c (sección 3.16, A1c-8). Cada acción que una Promotoría aplica directo (sin segunda aprobación) avisa al momento a todas las Promotorías (también a quien la hizo) y al correo externo de control.
+
+```text
+{{1}}: {{2}} aplicó directo: {{3}}. Si no lo reconoce, cambie su clave y avise hoy al colegio y al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | María Torres |
+| `{{3}}` | Plan de pensiones 2027 aprobado |
+
+## 46. `cc_directa_en_espera_v2` · Un cambio espera 24 horas
+
+> Sprint 11, tanda 1c (decisión 218, A1c-2 y A1c-3). La cuenta bancaria, la pasarela o la recaudación que aprobó directo una Promotoría, y dar o quitar Promotoría, esperan 24 horas: las puede frenar otra Promotoría antigua, la persona afectada o un operador.
+
+```text
+{{1}}: {{2}} pidió {{3}}. Se aplica el {{4}} si nadie lo frena. Si no lo reconoce, frénelo desde el sistema o escriba hoy al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | María Torres |
+| `{{3}}` | cambiar la cuenta bancaria a BCP ···2022 |
+| `{{4}}` | 26/10/2026 10:42 |
+
+## 47. `cc_directa_frenada_v2` · Se frenó un cambio en espera
+
+> Sprint 11, tanda 1c. Un cambio que esperaba sus 24 horas se frenó (con el motivo de quien lo frenó).
+
+```text
+{{1}}: {{2}} frenó {{3}}. Motivo: {{4}}. No se aplica: se puede volver a pedir.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | Jorge Pérez |
+| `{{3}}` | cambiar la cuenta bancaria a BCP ···2022 |
+| `{{4}}` | No reconocemos esta cuenta |
+
+## 48. `cc_conciliacion_bloqueada_v2` · Alerta: confirmación rechazada
+
+> Sprint 11, tanda 1c (A1c-4). En los 30 días siguientes a un cambio de cuenta bancaria o de recaudación, quien lo propuso o lo aprobó no confirma el extracto ni el lote: si lo intenta, sale esta alerta CRÍTICA.
+
+```text
+{{1}}: {{2}} intentó confirmar {{3}} después de cambiar la cuenta del colegio. Se rechazó: la confirma otra persona. Revíselo hoy.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | María Torres |
+| `{{3}}` | el extracto del 25/10/2026 |
+
 ## Después de la aprobación
 1. Anotar en `docs/estado-del-proyecto.md` la fecha de aprobación de cada plantilla.
 2. Con el número de WhatsApp Business de la plataforma verificado, cargar su id y su token en Secret Manager (`whatsapp-token`, `whatsapp-secreto-app`, `whatsapp-token-verificacion`) y `WHATSAPP_NUMERO_ID` en `/etc/cc/instalacion.env` (docs/operacion/despliegue-gcp.md).

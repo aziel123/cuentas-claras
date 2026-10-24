@@ -16,6 +16,10 @@ cuentasclaras:
   plataforma:
     # Sprint 8, tanda 1: las pruebas dan de alta colegios nuevos junto al colegio 1 (instalación compartida).
     instalacion: COMPARTIDA
+  directa:
+    # Sprint 11, tanda 1c (decisiones 218 y 223): sistema.roles y sistema.conectores aplican lo que esperaba 24 horas.
+    aplicacion-cron: "-"
+    conectores-cron: "-"
   ciclo:
     # Sprint 11, tanda 1 (AP-8): en H2 se prueba el flujo de la suspensión (en MySQL la base lo rechaza sin V40). Las
     # tareas programadas no corren solas: las pruebas llaman a cada pasada.

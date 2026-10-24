@@ -300,6 +300,13 @@ public class DespachoMensajes {
 					vence);
 			return new Envio(parametros, null, PlantillaMensaje.CODIGO_FACULTAD.componer(parametros) + pieDelCorreo(colegio));
 		}
+		if (mensaje.getTipo() == TipoMensaje.CODIGO_PROMOTORIA || mensaje.getTipo() == TipoMensaje.CODIGO_CONTACTO) {
+			// Sprint 11, tanda 1c (A1c-5): el código se deriva AQUÍ de la clave del mensaje (la base guarda solo su SHA-256).
+			List<String> guardados = mensaje.parametrosLista();
+			List<String> parametros = List.of(colegio, derivador.codigoPromotoria(ContextoColegio.actual(), mensaje.getClave()),
+					guardados.size() > 2 ? guardados.get(2) : "", guardados.size() > 3 ? guardados.get(3) : "");
+			return new Envio(parametros, null, mensaje.getPlantilla().componer(parametros) + pieDelCorreo(colegio));
+		}
 		if (mensaje.getTipo() != TipoMensaje.ACTIVACION_CUENTA) {
 			List<String> parametros = mensaje.parametrosLista();
 			String cuerpo = mensaje.getPlantilla().componer(parametros)

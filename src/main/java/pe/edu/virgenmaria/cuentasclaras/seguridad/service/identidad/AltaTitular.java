@@ -224,6 +224,15 @@ public class AltaTitular {
 	 */
 	public IntentoCambio siguienteIntentoDeCambio(long colegioId, String telefonoWhatsapp, String correo, String motivo,
 			OperadorFirmante operador) {
+		return siguienteIntentoDeCambio(colegioId, null, telefonoWhatsapp, correo, motivo, operador);
+	}
+
+	/**
+	 * Sprint 11, tanda 1c (A1c-1): lo mismo para cualquier cuenta de Promotoría o Dirección del colegio que perdió su
+	 * contacto ({@code cuenta}: su nombre de usuario; {@code null}, el titular sin activar).
+	 */
+	public IntentoCambio siguienteIntentoDeCambio(long colegioId, String cuenta, String telefonoWhatsapp, String correo,
+			String motivo, OperadorFirmante operador) {
 		String telefono = telefono(telefonoWhatsapp);
 		String nuevoCorreo = correo == null || correo.isBlank() ? null : correo.strip();
 		if (telefono == null && nuevoCorreo == null) {
@@ -238,9 +247,9 @@ public class AltaTitular {
 					+ "pidió y cómo lo confirmaste con el titular.");
 		}
 		return ContextoColegio.en(colegioId, () -> lectura.execute(t -> {
-			Usuario titular = titularSinActivar();
+			Usuario titular = objetivo(cuenta);
 			if (Objects.equals(telefono, titular.getTelefonoWhatsapp()) && Objects.equals(nuevoCorreo, titular.getCorreo())) {
-				throw new ReglaNegocioException("Ese es el contacto que ya tiene el titular: usa «Reenviar el enlace».");
+				throw new ReglaNegocioException("Ese es el contacto que ya tiene esa cuenta: no hay nada que cambiar.");
 			}
 			if (cambios.findFirstByUsuarioIdAndEstado(titular.getId(), CambioContactoTitular.Estado.PROPUESTO).isPresent()) {
 				throw new ReglaNegocioException("Ya hay un cambio del contacto del titular por aplicar: que otro operador lo "
@@ -265,7 +274,7 @@ public class AltaTitular {
 				if (Objects.equals(operador.nombreUsuario(), cambio.getPropuestoPor())) {
 					throw new ReglaNegocioException("Tú propusiste este cambio: lo aplica otro operador, con su propia sesión.");
 				}
-				titularSinActivar();
+				objetivoDe(cambio);
 			}
 		}));
 	}
@@ -282,6 +291,12 @@ public class AltaTitular {
 	 */
 	public Long proponerContacto(long colegioId, String telefonoWhatsapp, String correo, String motivo,
 			OperadorFirmante operador) {
+		return proponerContacto(colegioId, null, telefonoWhatsapp, correo, motivo, operador);
+	}
+
+	/** Sprint 11, tanda 1c (A1c-1): lo mismo para cualquier cuenta de Promotoría o Dirección ({@code cuenta}). */
+	public Long proponerContacto(long colegioId, String cuenta, String telefonoWhatsapp, String correo, String motivo,
+			OperadorFirmante operador) {
 		String telefono = telefono(telefonoWhatsapp);
 		String nuevoCorreo = correo == null || correo.isBlank() ? null : correo.strip();
 		if (telefono == null && nuevoCorreo == null) {
@@ -291,9 +306,9 @@ public class AltaTitular {
 			throw new ReglaNegocioException("Ese correo es tuyo: el enlace debe llegar solo al titular del contrato.");
 		}
 		return ContextoColegio.en(colegioId, () -> identidad.como(() -> {
-			Usuario titular = titularSinActivar();
+			Usuario titular = objetivo(cuenta);
 			if (Objects.equals(telefono, titular.getTelefonoWhatsapp()) && Objects.equals(nuevoCorreo, titular.getCorreo())) {
-				throw new ReglaNegocioException("Ese es el contacto que ya tiene el titular: usa «Reenviar el enlace».");
+				throw new ReglaNegocioException("Ese es el contacto que ya tiene esa cuenta: no hay nada que cambiar.");
 			}
 			if (cambios.findFirstByUsuarioIdAndEstado(titular.getId(), CambioContactoTitular.Estado.PROPUESTO).isPresent()) {
 				throw new ReglaNegocioException("Ya hay un cambio del contacto del titular por aplicar: que otro operador lo "
@@ -319,7 +334,10 @@ public class AltaTitular {
 		return ContextoColegio.en(colegioId, () -> identidad.como(() -> {
 			CambioContactoTitular cambio = cambios.bloquear(cambioId)
 					.orElseThrow(() -> new ReglaNegocioException("Ese cambio del contacto del titular no existe."));
-			Usuario titular = titularSinActivar();
+			Usuario titular = objetivoDe(cambio);
+			// Sprint 11, tanda 1c (A1c-1): el titular sin activar recibe su enlace nuevo; otra cuenta directiva (o el
+			// titular ya activado) solo cambia su contacto, con el aviso al anterior.
+			boolean sinActivar = titular.isDebeCambiarClave() && !cuentaActivada(titular.getId());
 			if (!titular.getId().equals(cambio.getUsuarioId())
 					|| !Objects.equals(titular.getTelefonoWhatsapp(), cambio.getTelefonoAnterior())
 					|| !Objects.equals(titular.getCorreo(), cambio.getCorreoAnterior())) {
@@ -333,7 +351,12 @@ public class AltaTitular {
 					cambio.getId(), null, titular.getId(), true, true, false));
 			// El cambio queda APLICADO antes que la cuenta: trg_usuario_contacto exige esa fila (con su firma).
 			cambios.saveAndFlush(cambio);
-			titular.corregirContactoDelTitular(cambio.getTelefonoNuevo(), cambio.getCorreoNuevo());
+			if (sinActivar) {
+				titular.corregirContactoDelTitular(cambio.getTelefonoNuevo(), cambio.getCorreoNuevo());
+			}
+			else {
+				titular.corregirContactoPorDosOperadores(cambio.getTelefonoNuevo(), cambio.getCorreoNuevo());
+			}
 			usuarios.saveAndFlush(titular);
 			enlaces.anularVigentes(titular.getId());
 			auditoria.registrar(AccionAuditoria.TITULAR_CONTACTO_CORREGIDO, "usuario", titular.getId().toString(), anterior,
@@ -341,9 +364,36 @@ public class AltaTitular {
 							+ titular.getNombreUsuario() + " que propuso " + cambio.getPropuestoPor() + " (motivo: "
 							+ cambio.getMotivo() + "). Se avisó al contacto anterior (" + anterior + "), al correo "
 							+ "institucional y al correo externo de control. Si el titular no lo pidió, es un incidente.");
-			eventos.publishEvent(new EnvioEnlaceSolicitado(titular.getId(), PropositoEnlace.PERSONAL, null));
+			if (sinActivar) {
+				eventos.publishEvent(new EnvioEnlaceSolicitado(titular.getId(), PropositoEnlace.PERSONAL, null));
+			}
 			return new TitularCreado(titular.getId(), titular.getNombreUsuario(), canal(titular), destino(titular));
 		}));
+	}
+
+	/** La cuenta del cambio: el titular sin activar ({@code null}) o una cuenta directiva del colegio por su nombre. */
+	private Usuario objetivo(String cuenta) {
+		if (cuenta == null) {
+			return titularSinActivar();
+		}
+		Usuario usuario = usuarios.findByNombreUsuario(Usuario.normalizarNombreUsuario(cuenta))
+				.filter(u -> u.getApoderadoId() == null)
+				.orElseThrow(() -> new ReglaNegocioException("Esa cuenta no existe en el colegio."));
+		if (!usuario.getRoles().contains(Rol.PROMOTOR) && !usuario.getRoles().contains(Rol.DIRECTOR)) {
+			throw new ReglaNegocioException("Los operadores cambian solo el contacto de una cuenta de Promotoría o Dirección "
+					+ "(las demás lo cambian en el colegio, con la aprobación de una Promotoría).");
+		}
+		return usuario;
+	}
+
+	/** La cuenta de un cambio propuesto: el titular sin activar o la cuenta directiva del cambio. */
+	private Usuario objetivoDe(CambioContactoTitular cambio) {
+		Usuario usuario = usuarios.findById(cambio.getUsuarioId())
+				.orElseThrow(() -> new ReglaNegocioException("La cuenta del cambio ya no existe."));
+		if (!usuario.getRoles().contains(Rol.PROMOTOR) && !usuario.getRoles().contains(Rol.DIRECTOR)) {
+			throw new ReglaNegocioException("La cuenta del cambio ya no es de Promotoría ni de Dirección: recházalo.");
+		}
+		return usuario;
 	}
 
 	/**
@@ -364,8 +414,9 @@ public class AltaTitular {
 
 	/** El cambio del contacto del titular por aplicar, si hay (para la ficha del operador: contactos enmascarados). */
 	public Optional<ContactoPorAplicar> contactoPorAplicar(long colegioId) {
-		return ContextoColegio.en(colegioId, () -> lectura.execute(t -> primeras.findFirstByIdNotNull()
-				.flatMap(p -> cambios.findFirstByUsuarioIdAndEstado(p.getUsuarioId(), CambioContactoTitular.Estado.PROPUESTO))
+		// Sprint 11, tanda 1c (A1c-1): el del titular o el de cualquier cuenta directiva del colegio.
+		return ContextoColegio.en(colegioId, () -> lectura.execute(t -> cambios
+				.findFirstByEstadoOrderByIdAsc(CambioContactoTitular.Estado.PROPUESTO)
 				.map(c -> new ContactoPorAplicar(c.getId(), destinoDe(c.getTelefonoAnterior(), c.getCorreoAnterior()),
 						destinoDe(c.getTelefonoNuevo(), c.getCorreoNuevo()), c.getMotivo(), c.getPropuestoPor(),
 						c.getCreadoEn()))));

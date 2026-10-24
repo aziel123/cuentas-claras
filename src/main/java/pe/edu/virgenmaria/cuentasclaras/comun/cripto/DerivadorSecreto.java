@@ -53,6 +53,18 @@ public class DerivadorSecreto {
 		return String.format("%06d", valor % 1_000_000L);
 	}
 
+	/**
+	 * Sprint 11, tanda 1c (decisión 216, A1c-1 y A1c-5): el código de 6 dígitos de una acción de Promotoría (o de la
+	 * confirmación del contacto anterior), derivado de la clave del mensaje que lo lleva. El mensaje guarda solo su SHA-256
+	 * (la base la compara con la de lo que escribió la persona); el envío lo vuelve a calcular.
+	 */
+	public String codigoPromotoria(long colegioId, String claveMensaje) {
+		Objects.requireNonNull(claveMensaje, "claveMensaje");
+		byte[] huella = hmac("codigo_promotoria|" + colegioId + "|" + claveMensaje);
+		long valor = ByteBuffer.wrap(huella, 0, Long.BYTES).getLong() & Long.MAX_VALUE;
+		return String.format("%06d", valor % 1_000_000L);
+	}
+
 	private byte[] hmac(String mensaje) {
 		try {
 			Mac mac = Mac.getInstance(ALGORITMO);

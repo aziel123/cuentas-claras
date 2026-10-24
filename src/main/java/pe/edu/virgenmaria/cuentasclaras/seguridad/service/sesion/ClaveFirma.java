@@ -23,6 +23,29 @@ public final class ClaveFirma {
 		return "solicitud_cambio:" + id(id) + ":" + estado.name();
 	}
 
+	/**
+	 * Sprint 11, tanda 1c (A1c-1): la persona dueña de una cuenta directiva confirma el cambio de su contacto con el código
+	 * de su contacto anterior.
+	 */
+	public static String solicitudConfirmada(Long id) {
+		return "solicitud_cambio:" + Objects.requireNonNull(id, "id") + ":CONFIRMADA";
+	}
+
+	/** Sprint 11, tanda 1c (A1c-2, A1c-3): frenar una directa que espera (otra Promotoría, la persona afectada o un operador). */
+	public static String solicitudFrenada(Long id) {
+		return "solicitud_cambio:" + Objects.requireNonNull(id, "id") + ":FRENADA";
+	}
+
+	/** Sprint 11, tanda 1c (decisión 218): el socio aprueba al instante un conector en espera. */
+	public static String conectorAprobadoAhora(Long id) {
+		return "conector_colegio:" + Objects.requireNonNull(id, "id") + ":VIGENTE";
+	}
+
+	/** Sprint 11, tanda 1c (decisión 218): frenar un conector en espera (otra Promotoría o un operador). */
+	public static String conectorFrenado(Long id) {
+		return "conector_colegio:" + Objects.requireNonNull(id, "id") + ":FRENADO";
+	}
+
 	public static String descuento(Long id, Enum<?> estado) {
 		return "descuento:" + id(id) + ":" + estado.name();
 	}

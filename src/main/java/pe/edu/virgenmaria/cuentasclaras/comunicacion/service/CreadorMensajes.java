@@ -212,6 +212,25 @@ public class CreadorMensajes {
 				new Mensaje.Destinatario(DestinatarioTipo.USUARIO, null, null, usuario.getId(), canal, destino), null);
 	}
 
+	/**
+	 * Sprint 11, tanda 1c (A1c-5 y A1c-7): el mensaje de un código a una persona del personal, SOLO por WhatsApp (a su
+	 * celular registrado; vacío si no tiene), con la SHA-256 del código (que se deriva de la clave del mensaje) y la huella
+	 * de la acción que autoriza.
+	 */
+	public Optional<Mensaje> codigoPorWhatsapp(Usuario usuario, Contenido contenido, String claveBase,
+			java.util.function.UnaryOperator<String> shaDelCodigo, String huella) {
+		Objects.requireNonNull(claveBase, "claveBase");
+		String destino = usuario.getTelefonoWhatsapp();
+		if (destino == null || destino.isBlank()) {
+			return Optional.empty();
+		}
+		String clave = claveBase + ":U" + usuario.getId() + ":" + CanalMensaje.WHATSAPP.name();
+		Mensaje mensaje = Mensaje.nuevo(clave, contenido.tipo(), contenido.plantilla(), new Mensaje.Destinatario(
+				DestinatarioTipo.USUARIO, null, null, usuario.getId(), CanalMensaje.WHATSAPP, destino),
+				conNombreDelColegio(contenido.parametros()), contenido.entidad(), contenido.entidadId(), null, null);
+		return Optional.of(mensajes.saveAndFlush(mensaje.conCodigo(shaDelCodigo.apply(mensaje.getClave()), huella)));
+	}
+
 	/** Sprint 6: si a esa persona ya se le creó el mensaje de esa clave por algún canal (se avisa una sola vez). */
 	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
 	public boolean yaExisteParaUsuario(String claveBase, Long usuarioId) {

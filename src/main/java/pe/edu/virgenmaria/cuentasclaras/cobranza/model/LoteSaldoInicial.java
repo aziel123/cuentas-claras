@@ -80,6 +80,10 @@ public class LoteSaldoInicial extends BaseEntity {
 	@Column(name = "confirmado_por", length = 60)
 	private String confirmadoPor;
 
+	/** Sprint 11, tanda 1c (sección 3.16): TRUE si lo resolvió directo la Promotoría que lo hizo (si no, nulo). */
+	@Column
+	private Boolean directa;
+
 	@Column(name = "confirmado_en")
 	private LocalDateTime confirmadoEn;
 
@@ -298,19 +302,29 @@ public class LoteSaldoInicial extends BaseEntity {
 	 *                     declarado
 	 */
 	public void confirmar(String por, BigDecimal totalInforme, LocalDateTime ahora) {
+		confirmar(por, totalInforme, ahora, false);
+	}
+
+	/**
+	 * Sprint 11, tanda 1c (sección 3.16): {@code promotoria} si quien confirma es una Promotoría activa (la aplicación
+	 * ya lo comprobó; en MySQL lo exige trg_lote_saldo_inicial_cerrado). Si además lo armó ella, es una directa.
+	 */
+	public void confirmar(String por, BigDecimal totalInforme, LocalDateTime ahora, boolean promotoria) {
 		if (estado != EstadoLote.ENVIADO) {
 			throw new ReglaNegocioException("Solo se confirma un lote enviado (está " + estado.etiqueta().toLowerCase()
 					+ ").");
 		}
-		if (participantes().contains(por)) {
+		if (!promotoria && participantes().contains(por)) {
 			throw new AutoaprobacionException("No puedes confirmar un lote que tú creaste, enviaste o al que le "
 					+ "agregaste líneas: debe confirmarlo otra persona de Promotoría o Dirección.");
 		}
+		boolean directaAhora = promotoria && participantes().contains(por);
 		if (totalInforme == null || Dinero.normalizar(totalInforme).compareTo(totalDeclarado) != 0) {
 			throw new TotalNoCoincideException("El total que escribiste no coincide con el que declaró quien armó el "
 					+ "lote. Revisa el informe del contador: no se confirmó nada.");
 		}
 		totalConfirmado = Dinero.normalizar(totalInforme);
+		directa = directaAhora ? Boolean.TRUE : null;
 		estado = EstadoLote.CONFIRMADO;
 		confirmadoPor = por;
 		confirmadoEn = Objects.requireNonNull(ahora, "ahora");

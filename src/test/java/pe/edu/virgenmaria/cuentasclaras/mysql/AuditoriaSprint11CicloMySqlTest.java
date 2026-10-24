@@ -202,8 +202,10 @@ class AuditoriaSprint11CicloMySqlTest {
 
 		// Dirección, con la facultad y el código (trg_uso_facultad_titular_nace y trg_usuario_rol_alta).
 		ingresar(titular);
-		FacultadTitular.CodigoPedido pedido = facultad.pedirCodigo();
-		String codigo = derivador.codigoFacultad(colegio, pedido.clave());
+		pe.edu.virgenmaria.cuentasclaras.seguridad.service.CodigoPromotoria.Pedido pedido = facultad.pedirCodigo(
+				Rol.DIRECTOR, "dir." + sufijo);
+		String codigo = pe.edu.virgenmaria.cuentasclaras.comun.prueba.CodigosDePrueba.codigo(jdbc, derivador, colegio,
+				pedido.mensajeId());
 		ingresar(titular);
 		facultad.crearCuentaDirectiva(new CrearUsuarioRequest("Diana Dirección", "dir." + sufijo, null, "987661002",
 				EnumSet.of(Rol.DIRECTOR)), codigo, pedido);
@@ -244,10 +246,9 @@ class AuditoriaSprint11CicloMySqlTest {
 		ingresar(admin);
 		planes.enviar(planSecundaria);
 
-		// El titular no aprueba (preparó la cuenta de Administración); Dirección sí.
+		// Tanda 1c (decisión 215): el titular aprueba el plan de la Administración que creó (A5 ya no lo bloquea);
+		// Dirección aprueba el de Secundaria.
 		ingresar(titular);
-		assertThatThrownBy(() -> planes.aprobar(plan, planes.obtener(plan).version())).hasMessageContaining("participaste");
-		ingresar(direccion);
 		planes.aprobar(plan, planes.obtener(plan).version());
 		ingresar(direccion);
 		planes.aprobar(planSecundaria, planes.obtener(planSecundaria).version());
@@ -270,14 +271,11 @@ class AuditoriaSprint11CicloMySqlTest {
 		Long cierreId = jdbc.queryForObject("SELECT id FROM cierre_caja WHERE colegio_id = ?", Long.class, colegio);
 		Long solicitud = ContextoColegio.en(colegio, () -> EscenarioAprobaciones.pendiente(jdbc, "cierre_caja", cierreId));
 
-		// El titular no aprueba el cierre de la cajera que creó; Dirección sí.
+		// Tanda 1c: el titular aprueba el cierre de la cajera que creó (la Promotoría no cobra).
 		ingresar(titular);
-		assertThatThrownBy(() -> bandeja.aprobar(solicitud, "Conversé con la cajera: repuso el faltante"))
-				.hasMessageContaining("cuenta que creaste");
-		ingresar(direccion);
 		bandeja.aprobar(solicitud, "Conversé con la cajera: repuso el faltante");
 		assertThat(jdbc.queryForObject("SELECT revisado_por FROM cierre_caja WHERE id = ?", String.class, cierreId))
-				.isEqualTo("dir." + sufijo);
+				.isEqualTo(titular.getNombreUsuario());
 	}
 
 	/**
@@ -291,26 +289,33 @@ class AuditoriaSprint11CicloMySqlTest {
 				10_000_000)), "987662001");
 		long colegio = n.colegio();
 		Usuario titular = n.titular();
-		FacultadTitular.CodigoPedido pedido = facultad.pedirCodigo();
+		pe.edu.virgenmaria.cuentasclaras.seguridad.service.CodigoPromotoria.Pedido pedido = facultad.pedirCodigo(
+				Rol.DIRECTOR, "dir2." + sufijo);
+		String escrito = pe.edu.virgenmaria.cuentasclaras.comun.cripto.Sha256.hex(
+				pe.edu.virgenmaria.cuentasclaras.comun.prueba.CodigosDePrueba.codigo(jdbc, derivador, colegio,
+						pedido.mensajeId()));
 		ingresar(titular);
 		servicioUsuarios.crear(new CrearUsuarioRequest("Pedro Docente", "doc." + sufijo, null, "987662002",
 				Set.of(Rol.DOCENTE)));
 		Long docente = jdbc.queryForObject("SELECT id FROM usuario WHERE nombre_usuario = ?", Long.class, "doc." + sufijo);
 		String insertar = "INSERT INTO uso_facultad_titular (colegio_id, numero, titular_id, titular, usuario_id, rol, accion, "
-				+ "cuenta_nueva, mensaje_id, creado_en, creado_por, actualizado_en) VALUES (?, ?, ?, ?, ?, 'DIRECTOR', 'DAR', "
-				+ "FALSE, ?, NOW(6), ?, NOW(6))";
+				+ "cuenta_nueva, mensaje_id, codigo_escrito_sha256, creado_en, creado_por, actualizado_en) VALUES (?, ?, ?, "
+				+ "?, ?, 'DIRECTOR', 'DAR', ?, ?, ?, NOW(6), ?, NOW(6))";
 		// F13: a nombre de otra cuenta (no es la del titular).
-		assertThat(codigoAl(() -> sistema().update(insertar, colegio, 1, docente, "doc." + sufijo, titular.getId(),
-				pedido.mensajeId(), "doc." + sufijo))).isEqualTo(1644);
-		// Sin la firma del titular (y con el número saltado).
-		assertThat(codigoAl(() -> sistema().update(insertar, colegio, 2, titular.getId(), titular.getNombreUsuario(),
-				docente, pedido.mensajeId(), titular.getNombreUsuario()))).isEqualTo(1644);
+		assertThat(codigoAl(() -> sistema().update(insertar, colegio, 1, docente, "doc." + sufijo, titular.getId(), true,
+				pedido.mensajeId(), escrito, "doc." + sufijo))).isEqualTo(1644);
+		// Tanda 1c (ajuste de 3.12): la facultad ya no da roles a una cuenta que existe (solo crea cuentas directivas).
+		assertThat(codigoAl(() -> sistema().update(insertar, colegio, 1, titular.getId(), titular.getNombreUsuario(),
+				docente, false, pedido.mensajeId(), escrito, titular.getNombreUsuario()))).isEqualTo(1644);
+		// A1c-5: el código es de la cuenta dir2 (no de doc), aunque se diga que es nueva; y sin la firma del titular.
+		assertThat(codigoAl(() -> sistema().update(insertar, colegio, 1, titular.getId(), titular.getNombreUsuario(),
+				docente, true, pedido.mensajeId(), escrito, titular.getNombreUsuario()))).isEqualTo(1644);
 		// F14: sobre sí mismo (el trigger o el CHECK).
 		assertThat(codigoAl(() -> sistema().update(insertar, colegio, 1, titular.getId(), titular.getNombreUsuario(),
-				titular.getId(), pedido.mensajeId(), titular.getNombreUsuario()))).isIn(1644, 3819);
+				titular.getId(), true, pedido.mensajeId(), escrito, titular.getNombreUsuario()))).isIn(1644, 3819);
 		// cc_app no lo escribe, no lo edita ni lo borra.
 		assertThat(codigoAl(() -> jdbc.update(insertar, colegio, 1, titular.getId(), titular.getNombreUsuario(), docente,
-				pedido.mensajeId(), titular.getNombreUsuario()))).isEqualTo(1142);
+				true, pedido.mensajeId(), escrito, titular.getNombreUsuario()))).isEqualTo(1142);
 		assertThat(codigoAl(() -> jdbc.update("UPDATE uso_facultad_titular SET rol = rol WHERE 1 = 0"))).isEqualTo(1142);
 		assertThat(codigoAl(() -> jdbc.update("DELETE FROM uso_facultad_titular WHERE 1 = 0"))).isEqualTo(1142);
 		// Un DIRECTOR sin su uso de la facultad ni su CAMBIO_ROLES.
@@ -322,17 +327,20 @@ class AuditoriaSprint11CicloMySqlTest {
 		assertThat(codigoAl(() -> sistema().update("UPDATE usuario SET activo = FALSE WHERE id = ?", titular.getId())))
 				.isEqualTo(1644);
 
-		// Con la aplicación: el uso legítimo pasa y su código no se reusa (UNIQUE de mensaje_id).
+		// Con la aplicación: el uso legítimo pasa (crea la cuenta) y su código no se reusa (UNIQUE de mensaje_id).
 		ingresar(titular);
-		facultad.dar(docente, Rol.DIRECTOR, derivador.codigoFacultad(colegio, pedido.clave()), pedido);
-		assertThat(jdbc.queryForList("SELECT rol FROM usuario_rol WHERE usuario_id = ?", String.class, docente))
-				.contains("DIRECTOR", "DOCENTE");
-		ingresar(titular);
+		facultad.crearCuentaDirectiva(new CrearUsuarioRequest("Dora Dirección", "dir2." + sufijo, null, "987662003",
+				EnumSet.of(Rol.DIRECTOR)), pe.edu.virgenmaria.cuentasclaras.comun.prueba.CodigosDePrueba.codigo(jdbc,
+						derivador, colegio, pedido.mensajeId()), pedido);
+		assertThat(jdbc.queryForList("SELECT r.rol FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id "
+				+ "WHERE u.nombre_usuario = ?", String.class, "dir2." + sufijo)).containsExactly("DIRECTOR");
 		Long uso = jdbc.queryForObject("SELECT id FROM uso_facultad_titular WHERE colegio_id = ?", Long.class, colegio);
+		ingresar(titular);
 		assertThat(codigoAl(() -> sistema().update("INSERT INTO uso_facultad_titular (colegio_id, numero, titular_id, "
-				+ "titular, usuario_id, rol, accion, cuenta_nueva, mensaje_id, creado_en, creado_por, actualizado_en) SELECT "
-				+ "colegio_id, numero + 1, titular_id, titular, usuario_id, 'PROMOTOR', accion, cuenta_nueva, mensaje_id, "
-				+ "NOW(6), creado_por, NOW(6) FROM uso_facultad_titular WHERE id = ?", uso))).isIn(1062, 1644);
+				+ "titular, usuario_id, rol, accion, cuenta_nueva, mensaje_id, codigo_escrito_sha256, creado_en, creado_por, "
+				+ "actualizado_en) SELECT colegio_id, numero + 1, titular_id, titular, usuario_id, 'PROMOTOR', accion, "
+				+ "cuenta_nueva, mensaje_id, codigo_escrito_sha256, NOW(6), creado_por, NOW(6) FROM uso_facultad_titular "
+				+ "WHERE id = ?", uso))).isIn(1062, 1644);
 	}
 
 	/**
@@ -381,7 +389,7 @@ class AuditoriaSprint11CicloMySqlTest {
 		assertThat(jdbc.queryForObject("SELECT facultad_bloqueada FROM colegio WHERE id = ?", Boolean.class, n.colegio()))
 				.isTrue();
 		ingresar(n.titular());
-		assertThatThrownBy(() -> facultad.pedirCodigo()).isInstanceOf(RuntimeException.class);
+		assertThatThrownBy(() -> facultad.pedirCodigo(Rol.DIRECTOR, "otra." + sufijo)).isInstanceOf(RuntimeException.class);
 
 		// cc_app no escribe cambios de estado (1142) y nadie cambia el tipo ni el motivo (1143).
 		assertThat(codigoAl(() -> jdbc.update("INSERT INTO cambio_estado_colegio (colegio_id, plataforma_id, tipo, ambito, "

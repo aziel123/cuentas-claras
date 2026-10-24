@@ -34,7 +34,7 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.MovimientoBancar
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.PartidaConciliacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ReglasEmparejamiento.ObjetoAbierto;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LoteRecaudacionRepository;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
@@ -88,7 +88,7 @@ public class ServicioPartidas {
 
 	private final ResponsablesPartida responsables;
 
-	private final ControlParticipantes participantes;
+	private final SegundaFirma segundaFirma;
 
 	private final RegistroSolicitudes solicitudes;
 
@@ -108,7 +108,7 @@ public class ServicioPartidas {
 			ReembolsoRepository reembolsos, LoteRecaudacionRepository lotes,
 			pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LineaRecaudacionRepository lineasRecaudacion,
 			ResponsablesPartida responsables,
-			ControlParticipantes participantes,
+			SegundaFirma segundaFirma,
 			RegistroSolicitudes solicitudes, PropiedadesConciliacion propiedades, AuditoriaService auditoria,
 			ApplicationEventPublisher eventos, Clock reloj, FirmaSesion firmaSesion) {
 		this.firmaSesion = firmaSesion;
@@ -121,7 +121,7 @@ public class ServicioPartidas {
 		this.lotes = lotes;
 		this.lineasRecaudacion = lineasRecaudacion;
 		this.responsables = responsables;
-		this.participantes = participantes;
+		this.segundaFirma = segundaFirma;
 		this.solicitudes = solicitudes;
 		this.propiedades = propiedades;
 		this.auditoria = auditoria;
@@ -261,7 +261,7 @@ public class ServicioPartidas {
 		String motivo = Motivo.exigir(nota);
 		String usuario = usuario();
 		if (movimiento.getTipo() == TipoMovimiento.CARGO
-				&& participantes.ampliar(Set.of(movimiento.getExtracto().getCreadoPor())).contains(usuario)) {
+				&& segundaFirma.excluidosPara(Set.of(movimiento.getExtracto().getCreadoPor())).contains(usuario)) {
 			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "movimiento_bancario", movimientoId.toString(),
 					null, "Cargo del " + Calendario.formatear(movimiento.getFecha()) + " por "
 							+ Dinero.formatear(movimiento.getMonto()),

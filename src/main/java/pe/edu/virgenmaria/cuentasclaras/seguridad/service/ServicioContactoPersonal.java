@@ -54,12 +54,68 @@ public class ServicioContactoPersonal {
 
 	private final AuditoriaService auditoria;
 
+	private final CodigoPromotoria codigos;
+
+	private final CorreoControlRegistrado correoControl;
+
+	private final pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion firma;
+
 	public ServicioContactoPersonal(UsuarioRepository usuarios, RegistroSolicitudes solicitudes, ContactoPropio propio,
-			AuditoriaService auditoria) {
+			AuditoriaService auditoria, CodigoPromotoria codigos, CorreoControlRegistrado correoControl,
+			pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion firma) {
 		this.usuarios = usuarios;
 		this.solicitudes = solicitudes;
 		this.propio = propio;
 		this.auditoria = auditoria;
+		this.codigos = codigos;
+		this.correoControl = correoControl;
+		this.firma = firma;
+	}
+
+	/**
+	 * Sprint 11, tanda 1c (A1c-1): la dueña de una cuenta de Promotoría o Dirección pide el código a su contacto ANTERIOR
+	 * (el que hoy tiene registrado) para confirmar el cambio pedido. Sin esa confirmación (o la de dos operadores, si lo
+	 * perdió), el contacto de una cuenta directiva no cambia: ni directo ni con la aprobación de otra persona.
+	 */
+	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
+	public CodigoPromotoria.Pedido pedirCodigoDelContactoAnterior(Long solicitudId) {
+		SolicitudCambio solicitud = suyaPorConfirmar(solicitudId);
+		return codigos.pedirAlContactoAnterior(new CodigoPromotoria.Accion(solicitud.huellaAccion(),
+				"cambiar tu contacto (" + solicitud.getResumen() + ")"));
+	}
+
+	/** Sprint 11, tanda 1c (A1c-1): confirma el cambio de su contacto con el código que le llegó al anterior. */
+	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
+	@Transactional
+	public void confirmarDesdeContactoAnterior(Long solicitudId, CodigoPromotoria.Escrito escrito) {
+		SolicitudCambio solicitud = suyaPorConfirmar(solicitudId);
+		CodigoPromotoria.Valido valido = codigos.exigirDelContactoAnterior(escrito, solicitud.huellaAccion());
+		firma.firmar(pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma.solicitudConfirmada(solicitudId));
+		solicitudes.confirmarDesdeContactoAnterior(solicitud, valido.mensajeId(), valido.sha256());
+		auditoria.registrar(AccionAuditoria.CONTACTO_CONFIRMADO, "solicitud_cambio", solicitudId.toString(), null,
+				"confirmado desde el contacto anterior", "La dueña de la cuenta confirmó el cambio de su contacto con el "
+						+ "código que le llegó a su contacto anterior. Ahora lo aprueba otra persona de Promotoría o Dirección.");
+	}
+
+	/** Si quien está en sesión puede confirmar este cambio de su propio contacto (A1c-1; para la pantalla). */
+	@Transactional(readOnly = true)
+	public boolean puedeConfirmar(Long solicitudId) {
+		UsuarioAutenticado actor = actor();
+		return solicitudes.pendienteDeContacto(solicitudId, actor.usuarioId())
+				.filter(s -> !s.confirmadaDesdeContactoAnterior())
+				.flatMap(s -> usuarios.findById(actor.usuarioId()))
+				.map(u -> u.getRoles().contains(Rol.PROMOTOR) || u.getRoles().contains(Rol.DIRECTOR)).orElse(false);
+	}
+
+	/** Solo en dev y en la demo: el código del pedido, para mostrarlo en la pantalla. */
+	public java.util.Optional<String> codigoDeDemostracion(CodigoPromotoria.Pedido pedido) {
+		return pedido == null ? java.util.Optional.empty() : codigos.codigoDeDemostracion(pedido.mensajeId());
+	}
+
+	private SolicitudCambio suyaPorConfirmar(Long solicitudId) {
+		UsuarioAutenticado actor = actor();
+		return solicitudes.pendienteDeContacto(solicitudId, actor.usuarioId())
+				.orElseThrow(() -> new RecursoNoEncontradoException("Solicitud no encontrada"));
 	}
 
 	/** El contacto actual (enmascarado) de una persona del personal, para el formulario. */
@@ -94,6 +150,11 @@ public class ServicioContactoPersonal {
 		}
 		propio.exigir(usuario, nuevoTelefono, "celular");
 		propio.exigir(usuario, nuevoCorreo, "correo");
+		// Sprint 11, tanda 1c (A1c-8): una Promotoría no pone en su cuenta el correo externo de control.
+		if (nuevoCorreo != null && usuario.getRoles().contains(Rol.PROMOTOR) && correoControl.esElCorreoDeControl(nuevoCorreo)) {
+			throw new ReglaNegocioException("Ese es el correo externo de control del colegio: no puede ser el de una persona "
+					+ "de Promotoría (es el testigo independiente).");
+		}
 		Map<String, String> pedido = new LinkedHashMap<>();
 		pedido.put("telefonoAnterior", vacioSiNulo(usuario.getTelefonoWhatsapp()));
 		pedido.put("correoAnterior", vacioSiNulo(usuario.getCorreo()));

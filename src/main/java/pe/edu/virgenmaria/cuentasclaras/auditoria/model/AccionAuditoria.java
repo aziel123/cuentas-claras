@@ -507,6 +507,27 @@ public enum AccionAuditoria {
 	FACULTAD_TITULAR_USADA("El titular usó su facultad para dar o quitar Promotoría o Dirección", true),
 	/** AP-2: el titular pidió el código de un uso de su facultad (le llegó por WhatsApp o correo). */
 	CODIGO_FACULTAD_PEDIDO("El titular pidió el código para usar su facultad", false),
+	// Sprint 11, tanda 1c (secciones 3.16 y 3.16b): la Promotoría aplica directo
+	/** Una Promotoría pidió y aplicó ella misma un cambio (con su firma y, si es sensible, su código). Se resalta. */
+	ACCION_DIRECTA_PROMOTORIA("Una Promotoría aplicó un cambio directo, sin segunda aprobación", true),
+	/** Una Promotoría pidió el código de una acción sensible (le llegó por WhatsApp). */
+	CODIGO_PROMOTORIA_ENVIADO("Una Promotoría pidió el código de una acción sensible", false),
+	/** A1c-1: la persona dueña de una cuenta directiva pidió el código a su contacto anterior. */
+	CODIGO_CONTACTO_ENVIADO("Se envió el código al contacto anterior para confirmar un cambio de contacto", false),
+	/** A1c-1: la persona confirmó el cambio de su contacto desde su contacto anterior. */
+	CONTACTO_CONFIRMADO("La persona confirmó desde su contacto anterior el cambio de su contacto", false),
+	/** Un cambio aplicado directo espera 24 horas (dar o quitar Promotoría, desactivar una Promotoría). */
+	DIRECTA_EN_ESPERA("Un cambio directo de Promotoría espera 24 horas antes de aplicarse", true),
+	/** Se frenó un cambio que esperaba. */
+	DIRECTA_FRENADA("Se frenó un cambio que esperaba (no se aplica)", true),
+	/** sistema.roles aplicó un cambio cuya espera venció. */
+	DIRECTA_APLICADA_AL_VENCER("Se aplicó un cambio al terminar su espera", true),
+	/** La cuenta bancaria, la pasarela o la recaudación que aprobó directo una Promotoría espera 24 horas. */
+	CONECTOR_EN_ESPERA("Un conector que mueve dinero espera 24 horas antes de entrar en vigencia", true),
+	/** Se frenó un conector que esperaba. */
+	CONECTOR_FRENADO("Se frenó un conector que esperaba (no entra en vigencia)", true),
+	/** A1c-4: quien cambió la cuenta intentó confirmar la conciliación dentro de los 30 días. */
+	CONCILIACION_TRAS_CAMBIO_RECHAZADA("Quien cambió la cuenta intentó confirmar la conciliación (se rechazó)", true),
 
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */

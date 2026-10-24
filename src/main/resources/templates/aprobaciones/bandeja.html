@@ -37,7 +37,11 @@
 				</ul>
 				<p class="secundario" th:text="|Motivo: ${s.motivo}|">Motivo</p>
 				<p class="secundario" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM/yyyy HH:mm')}|">Pedida por administracion</p>
-				<div class="fila" th:if="${s.puedeResolver}">
+				<!--/* Sprint 11, tanda 1c: lo sensible que pidió la Promotoría se aplica en su detalle, con su código. */-->
+				<p class="fila" th:if="${s.puedeResolver and s.pideCodigo}">
+					<a class="btn btn-primario" th:href="@{/aprobaciones/{id}(id=${s.id})}" data-aplicar-directo>Aplicar con tu código</a>
+				</p>
+				<div class="fila" th:if="${s.puedeResolver and !s.pideCodigo}">
 					<form method="post" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}" th:unless="${s.apruebaConVentana()}">
 						<button th:replace="~{fragments/componentes :: boton('Aprobar', 'primario')}"></button>
 					</form>

@@ -106,7 +106,12 @@ final class CatalogoRutasConId {
 
 		// Aprobaciones, avisos y usuarios.
 		r("GET /aprobaciones/{id:\\d+}", "id", Recurso.SOLICITUD);
-		r("POST /aprobaciones/{id:\\d+}/aprobar", "id", Recurso.SOLICITUD);
+		// Sprint 11, tanda 1c: la directa sensible con el código de la Promotoría (su mensaje).
+		r("POST /aprobaciones/{id:\\d+}/aprobar", "id", Recurso.SOLICITUD, "codigoMensajeId", Recurso.MENSAJE);
+		r("POST /aprobaciones/{id:\\d+}/codigo", "id", Recurso.SOLICITUD);
+		r("POST /aprobaciones/{id:\\d+}/frenar", "id", Recurso.SOLICITUD);
+		r("POST /aprobaciones/{id:\\d+}/confirmar-contacto/codigo", "id", Recurso.SOLICITUD);
+		r("POST /aprobaciones/{id:\\d+}/confirmar-contacto", "id", Recurso.SOLICITUD, "codigoMensajeId", Recurso.MENSAJE);
 		r("POST /aprobaciones/{id:\\d+}/rechazar", "id", Recurso.SOLICITUD);
 		r("GET /aprobaciones/cajas/{id:\\d+}", "id", Recurso.CAJA);
 		r("POST /avisos-familias/{id:\\d+}/atender", "id", Recurso.AVISO);
@@ -253,9 +258,19 @@ final class CatalogoRutasConId {
 					Recurso.CAMBIO_ESTADO);
 		}
 		r("POST /colegio/estado/{id:\\d+}/objecion", "id", Recurso.CAMBIO_ESTADO);
+		// Sprint 11, tanda 1c: el operador frena lo que espera y propone el contacto de una cuenta directiva.
+		r("POST /plataforma/colegios/{id:\\d+}/esperas/conectores/{conector:\\d+}/frenar", "id", Recurso.COLEGIO, "conector",
+				Recurso.CONECTOR);
+		r("POST /plataforma/colegios/{id:\\d+}/esperas/solicitudes/{solicitud:\\d+}/frenar", "id", Recurso.COLEGIO,
+				"solicitud", Recurso.SOLICITUD);
+		r("POST /plataforma/colegios/{id:\\d+}/contacto-directivo", "id", Recurso.COLEGIO);
 		// Sprint 8, tanda 2: los conectores del colegio (proponer un tipo y probar uno propuesto).
 		r("POST /conectores/{tipo:[a-z-]{3,20}}", "tipo", Recurso.TIPO_CONECTOR);
 		r("POST /conectores/{id:\\d{1,12}}/probar", "id", Recurso.CONECTOR);
+		// Sprint 11, tanda 1c (decisión 218): el socio y el freno de un conector en espera.
+		r("POST /conectores/{id:\\d{1,12}}/codigo-socio", "id", Recurso.CONECTOR);
+		r("POST /conectores/{id:\\d{1,12}}/aprobar-ahora", "id", Recurso.CONECTOR, "codigoMensajeId", Recurso.MENSAJE);
+		r("POST /conectores/{id:\\d{1,12}}/frenar", "id", Recurso.CONECTOR);
 		// Sprint 9, tanda 1: la lista de una sección (Dirección o un docente con asignación vigente) y Docentes y secciones.
 		r("GET /academico/secciones/{id:\\d+}", "id", Recurso.SECCION);
 		r("GET /academico/asignaciones", "anio", Recurso.ANIO);

@@ -58,6 +58,16 @@ public class Mensaje extends BaseEntity {
 	@Column(nullable = false, updatable = false, length = 150)
 	private String destino;
 
+	/**
+	 * Sprint 11, tanda 1c (A1c-5): la SHA-256 del código que lleva (solo CODIGO_PROMOTORIA y CODIGO_CONTACTO; el código
+	 * no se guarda: lo deriva el envío) y la huella de la acción que autoriza. No cambian (CHECK ck_mensaje_codigo).
+	 */
+	@Column(name = "codigo_sha256", updatable = false, length = 64)
+	private String codigoSha256;
+
+	@Column(name = "huella_accion", updatable = false, length = 64)
+	private String huellaAccion;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, updatable = false, length = 60)
 	private PlantillaMensaje plantilla;
@@ -139,6 +149,27 @@ public class Mensaje extends BaseEntity {
 		m.respaldoDeId = respaldoDeId;
 		m.proximoIntentoEn = proximoIntento;
 		return m;
+	}
+
+	/** Sprint 11, tanda 1c (A1c-5): el código (su SHA-256) y la acción que autoriza, antes de guardarlo. */
+	public Mensaje conCodigo(String sha256, String huella) {
+		if (getId() != null) {
+			throw new IllegalStateException("El código va al crear el mensaje");
+		}
+		if (tipo != TipoMensaje.CODIGO_PROMOTORIA && tipo != TipoMensaje.CODIGO_CONTACTO) {
+			throw new IllegalArgumentException("Solo un código de Promotoría o de contacto lleva código");
+		}
+		this.codigoSha256 = Objects.requireNonNull(sha256, "sha256");
+		this.huellaAccion = Objects.requireNonNull(huella, "huella");
+		return this;
+	}
+
+	public String getCodigoSha256() {
+		return codigoSha256;
+	}
+
+	public String getHuellaAccion() {
+		return huellaAccion;
 	}
 
 	/** El proveedor lo aceptó con su id. */

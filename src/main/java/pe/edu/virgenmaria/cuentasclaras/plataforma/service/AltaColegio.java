@@ -279,12 +279,33 @@ public class AltaColegio {
 	}
 
 	/**
+	 * Sprint 11, tanda 1c (A1c-1): un operador PROPONE cambiar el contacto de una cuenta de Promotoría o Dirección que lo
+	 * perdió (con la firma de su sesión), en un colegio que opera. Lo aplica OTRO operador ({@link #aplicarContactoTitular}).
+	 */
+	public Long proponerContactoDirectivo(long colegioId, String cuenta, ContactoTitularRequest contacto) {
+		OperadorFirmante operador = operador();
+		Colegio colegio = colegioQueOpera(colegioId);
+		AltaTitular.IntentoCambio intento = titulares.siguienteIntentoDeCambio(colegioId, cuenta, contacto.telefonoWhatsapp(),
+				contacto.correo(), contacto.motivo(), operador);
+		transaccion.executeWithoutResult(t -> firma.firmar(ClaveFirma.cambioContactoTitularPropuesto(colegioId,
+				intento.titularId(), intento.numero())));
+		Long id = titulares.proponerContacto(colegioId, cuenta, contacto.telefonoWhatsapp(), contacto.correo(),
+				contacto.motivo(), operador);
+		plataforma.ejecutar(() -> auditoria.registrar(AccionAuditoria.TITULAR_CONTACTO_PROPUESTO, "colegio",
+				Long.toString(colegioId), null, "cambio " + id, "El operador " + operador.nombreUsuario() + " propuso cambiar "
+						+ "el contacto de la cuenta directiva " + cuenta + " del colegio " + colegio.getNombre()
+						+ ". Lo aplica otro operador."));
+		return id;
+	}
+
+	/**
 	 * S8-A1: OTRO operador aplica el cambio del contacto del titular (con la firma de su sesión), con aviso al contacto
 	 * anterior, al correo institucional y al correo externo de control. Exige el correo institucional del colegio.
 	 */
 	public ColegioCreado aplicarContactoTitular(long colegioId, long cambioId) {
 		OperadorFirmante operador = operador();
-		Colegio colegio = colegioEnPreparacion(colegioId);
+		// Sprint 11, tanda 1c (A1c-1): también una cuenta directiva de un colegio en producción.
+		Colegio colegio = colegioQueOpera(colegioId);
 		if (colegio.getCorreoInstitucional() == null || !colegio.getCorreoInstitucional().contains("@")) {
 			throw new ReglaNegocioException("Primero completa el correo institucional del colegio en la ficha: el cambio del "
 					+ "contacto del titular se le avisa.");
@@ -402,6 +423,15 @@ public class AltaColegio {
 		if (operador.correo() != null && valor.equalsIgnoreCase(operador.correo())) {
 			throw new ReglaNegocioException("Ese correo es tuyo: el correo de control es del contador o de un tercero de "
 					+ "confianza del colegio, nunca del operador.");
+		}
+		// Sprint 11, tanda 1c (A1c-8): el correo de control nunca es el de una Promotoría activa del colegio (el testigo
+		// independiente sería la misma persona). La base también lo rechaza.
+		if (Boolean.TRUE.equals(ContextoColegio.en(colegioId, () -> transaccion.execute(t -> usuarios
+				.activosConRol(pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.PROMOTOR).stream()
+				.anyMatch(u -> u.getCorreo() != null && pe.edu.virgenmaria.cuentasclaras.comun.texto.ContactoNormal
+						.iguales(u.getCorreo(), valor)))))) {
+			throw new ReglaNegocioException("Ese es el correo de una persona de Promotoría del colegio: el correo de control es "
+					+ "del contador o de un tercero de confianza, nunca de la Promotoría.");
 		}
 		if (colegio.getEstado() == EstadoColegio.PRODUCCION) {
 			proponerCorreoControl(colegio, valor, motivo, operador);
@@ -533,6 +563,15 @@ public class AltaColegio {
 	private Colegio colegioDeLaPlataforma(long colegioId) {
 		return transaccion.execute(t -> colegios.findById(colegioId).filter(c -> !c.esPlataforma())
 				.orElseThrow(() -> new RecursoNoEncontradoException("Colegio no encontrado")));
+	}
+
+	/** Sprint 11, tanda 1c: el colegio en preparación o en producción. */
+	private Colegio colegioQueOpera(long colegioId) {
+		Colegio colegio = colegioDeLaPlataforma(colegioId);
+		if (!colegio.getEstado().opera()) {
+			throw new ReglaNegocioException("El colegio no está operando.");
+		}
+		return colegio;
 	}
 
 	private Colegio colegioEnPreparacion(long colegioId) {

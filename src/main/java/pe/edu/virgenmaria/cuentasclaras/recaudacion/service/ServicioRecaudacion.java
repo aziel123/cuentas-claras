@@ -46,7 +46,7 @@ import pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LineaRecaudacionR
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LoteRecaudacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.service.ReglasRecaudacion.Deuda;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.service.ReglasRecaudacion.Resolucion;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
@@ -107,7 +107,11 @@ public class ServicioRecaudacion {
 
 	private final List<ExportadorBaseDeudas> exportadores;
 
-	private final ControlParticipantes participantes;
+	private final SegundaFirma segundaFirma;
+
+	/** Sprint 11, tanda 1c (A1c-4). */
+	@org.springframework.beans.factory.annotation.Autowired
+	private pe.edu.virgenmaria.cuentasclaras.conectores.service.CambiosRecientesConectores cambiosRecientes;
 
 	private final AuditoriaService auditoria;
 
@@ -128,7 +132,7 @@ public class ServicioRecaudacion {
 
 	public ServicioRecaudacion(LectoresRecaudacion lectores, RegistroArchivos archivos, LoteRecaudacionRepository lotes,
 			LineaRecaudacionRepository lineas, AlumnoRepository alumnos, CuotaRepository cuotas, PagoRepository pagos,
-			List<ExportadorBaseDeudas> exportadores, ControlParticipantes participantes, AuditoriaService auditoria,
+			List<ExportadorBaseDeudas> exportadores, SegundaFirma segundaFirma, AuditoriaService auditoria,
 			ApplicationEventPublisher eventos, PropiedadesRecaudacion propiedades, Clock reloj, FirmaSesion firmaSesion,
 			RecaudacionDelColegio delColegio, pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios) {
 		this.delColegio = delColegio;
@@ -142,7 +146,7 @@ public class ServicioRecaudacion {
 		this.cuotas = cuotas;
 		this.pagos = pagos;
 		this.exportadores = List.copyOf(exportadores);
-		this.participantes = participantes;
+		this.segundaFirma = segundaFirma;
 		this.auditoria = auditoria;
 		this.eventos = eventos;
 		this.propiedades = propiedades;
@@ -266,7 +270,7 @@ public class ServicioRecaudacion {
 	public ConfirmacionRecaudacionVista paraConfirmar(Long loteId) {
 		LoteRecaudacion lote = lotes.findById(loteId)
 				.orElseThrow(() -> new RecursoNoEncontradoException("Lote no encontrado"));
-		boolean participo = participantes.ampliar(Set.of(lote.getCreadoPor())).contains(usuario());
+		boolean participo = segundaFirma.excluidosPara(Set.of(lote.getCreadoPor())).contains(usuario());
 		Set<Integer> elegidas = Set.copyOf(lote.numerosMuestra());
 		List<LineaMuestra> muestra = lineas.findByLoteIdOrderByNumeroAsc(loteId).stream()
 				.filter(l -> elegidas.contains(l.getNumero()))
@@ -297,13 +301,20 @@ public class ServicioRecaudacion {
 		if (version == null || !version.equals(lote.getVersion())) {
 			throw new ReglaNegocioException("El lote cambió desde que lo abriste; ábrelo de nuevo.");
 		}
-		if (participantes.ampliar(Set.of(lote.getCreadoPor())).contains(usuario)) {
+		if (segundaFirma.excluidosPara(Set.of(lote.getCreadoPor())).contains(usuario)) {
 			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "lote_recaudacion", loteId.toString(), null,
 					"Recaudación del " + Calendario.formatear(lote.getDesde()) + " al "
 							+ Calendario.formatear(lote.getHasta()),
 					"Intentó confirmar un archivo de recaudación que subió (o subió una cuenta que preparó). Se rechazó.");
 			throw new AutoaprobacionException("No puedes confirmar un archivo que tú subiste: debe confirmarlo otra persona "
 					+ "de Promotoría o Dirección, mirando el portal del banco.");
+		}
+		// Sprint 11, tanda 1c (A1c-4): quien cambió la recaudación hace menos de 30 días no confirma el archivo.
+		if (cambiosRecientes.rechazarSiCambioReciente(pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector
+				.RECAUDACION, usuario, "lote_recaudacion", loteId, "la recaudación del "
+						+ Calendario.formatear(lote.getDesde()) + " al " + Calendario.formatear(lote.getHasta()))) {
+			throw new AutoaprobacionException("Cambiaste la recaudación del colegio hace menos de 30 días: el archivo lo "
+					+ "confirma otra persona de Promotoría o Dirección. Se avisó a todas las Promotorías y al correo de control.");
 		}
 		if (totalVisto == null) {
 			throw new ReglaNegocioException("Escribe el total recaudado que ves en el portal del banco.");

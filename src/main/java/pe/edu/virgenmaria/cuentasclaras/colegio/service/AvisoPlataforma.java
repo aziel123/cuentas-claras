@@ -53,7 +53,15 @@ public record AvisoPlataforma(Long colegioId, Tipo tipo, List<String> parametros
 		/** Sprint 11, tanda 1 (AP-10): un operador respondió la objeción. */
 		OBJECION_RESPONDIDA,
 		/** Sprint 11, tanda 1 (sección 3.12): el titular usó su facultad. */
-		FACULTAD_TITULAR_USADA;
+		FACULTAD_TITULAR_USADA,
+		/** Sprint 11, tanda 1c (3.16, A1c-8): una Promotoría aplicó un cambio directo (a todas las Promotorías y al control). */
+		ACCION_DIRECTA,
+		/** Tanda 1c (A1c-2, A1c-3, decisión 218): un cambio directo espera 24 horas y se puede frenar. */
+		DIRECTA_EN_ESPERA,
+		/** Tanda 1c: se frenó un cambio que esperaba. */
+		DIRECTA_FRENADA,
+		/** Tanda 1c (A1c-4): quien cambió la cuenta intentó confirmar la conciliación (alerta CRÍTICA). */
+		CONCILIACION_BLOQUEADA;
 
 		/**
 		 * Lo que distingue la clave idempotente de cada tipo. Los del sprint 8 conservan sus cuatro letras (las claves ya

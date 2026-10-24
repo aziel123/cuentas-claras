@@ -368,6 +368,11 @@ GRANT UPDATE (directa, codigo_mensaje_id, codigo_escrito_sha256, frenado_por, mo
 GRANT UPDATE (directa, frenado_por, motivo_freno, codigo_mensaje_id, codigo_escrito_sha256)
     ON cuentasclaras.conector_colegio TO 'cc_negocio';
 -- configuracion_bd sigue SIN GRANT: espera_directa_horas (24) la escribe solo el DBA; el verificador de prod exige 24.
+-- La directa del plan, del lote de saldo inicial y del descuento (anulacion_pago es solo inserción: ya tiene INSERT). Que
+-- la marque una Promotoría activa (y, en el descuento, con su solicitud directa) lo exigen sus triggers.
+GRANT UPDATE (directa) ON cuentasclaras.plan_pension TO 'cc_negocio';
+GRANT UPDATE (directa) ON cuentasclaras.lote_saldo_inicial TO 'cc_negocio';
+GRANT UPDATE (directa) ON cuentasclaras.descuento TO 'cc_negocio';
 
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).

@@ -58,6 +58,9 @@ class AprobacionesMovilTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comun.cripto.DerivadorSecreto derivador;
+
 	private Usuario promotora;
 
 	private Usuario directora;
@@ -67,12 +70,16 @@ class AprobacionesMovilTest {
 	@BeforeEach
 	void preparar() {
 		LimpiezaBaseDatos.limpiar(jdbc);
-		Usuario lucia = guardar("lucia.caja", Rol.CAJA);
 		promotora = guardar("promotora", Rol.PROMOTOR);
 		directora = guardar("directora", Rol.DIRECTOR);
-		// Promotoría pide el cambio de contacto de la cajera: lo resuelve otra persona (Dirección).
-		UsuariosDePrueba.iniciarSesion(promotora);
-		solicitud = contacto.solicitar(lucia.getId(), "987 111 222", null, "Cambió de número de celular");
+		// Sprint 11, tanda 1c: antes la Promotoría pedía el cambio de contacto de la cajera, pero ahora lo aplica ella misma
+		// (sección 3.16). Aquí Dirección pide el cambio de SU contacto y lo confirma desde el anterior (A1c-1): lo resuelve
+		// otra persona (Promotoría).
+		UsuariosDePrueba.iniciarSesion(directora);
+		solicitud = contacto.solicitar(directora.getId(), "987 111 222", null, "Cambió de número de celular");
+		var pedido = contacto.pedirCodigoDelContactoAnterior(solicitud);
+		contacto.confirmarDesdeContactoAnterior(solicitud, pe.edu.virgenmaria.cuentasclaras.comun.prueba.CodigosDePrueba
+				.escrito(jdbc, derivador, 1L, pedido));
 		SecurityContextHolder.clearContext();
 	}
 
@@ -88,16 +95,16 @@ class AprobacionesMovilTest {
 
 	@Test
 	void laVistaDelCelularListaYElDetalleResuelveConLosMismosPost() throws Exception {
-		mvc.perform(get("/aprobaciones").param("vista", "movil").with(UsuariosDePrueba.como(directora)))
+		mvc.perform(get("/aprobaciones").param("vista", "movil").with(UsuariosDePrueba.como(promotora)))
 				.andExpect(status().isOk())
 				.andExpect(content().string(containsString("data-pantalla=\"aprobaciones-movil\"")))
 				.andExpect(content().string(containsString("href=\"/aprobaciones/" + solicitud + "\"")))
 				.andExpect(content().string(containsString("Cambio de celular o correo del personal")));
-		mvc.perform(get("/aprobaciones/" + solicitud).with(UsuariosDePrueba.como(directora))).andExpect(status().isOk())
+		mvc.perform(get("/aprobaciones/" + solicitud).with(UsuariosDePrueba.como(promotora))).andExpect(status().isOk())
 				.andExpect(content().string(containsString("action=\"/aprobaciones/" + solicitud + "/aprobar\"")))
 				.andExpect(content().string(containsString("name=\"volver\" value=\"movil\"")))
 				.andExpect(content().string(containsString("No se puede deshacer")));
-		mvc.perform(post("/aprobaciones/" + solicitud + "/aprobar").with(csrf()).with(UsuariosDePrueba.como(directora))
+		mvc.perform(post("/aprobaciones/" + solicitud + "/aprobar").with(csrf()).with(UsuariosDePrueba.como(promotora))
 				.param("volver", "movil")).andExpect(redirectedUrl("/aprobaciones?vista=movil"))
 				.andExpect(flash().attributeExists("exito"));
 		assertThat(jdbc.queryForObject("SELECT estado FROM solicitud_cambio WHERE id = ?", String.class, solicitud))
@@ -110,9 +117,9 @@ class AprobacionesMovilTest {
 	 */
 	@Test
 	void elContadorDelMenuNoCuentaLoQueUnoMismoPidio() throws Exception {
-		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(directora)))
-				.andExpect(content().string(containsString("aria-label=\"1 por aprobar\"")));
 		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(promotora)))
+				.andExpect(content().string(containsString("aria-label=\"1 por aprobar\"")));
+		mvc.perform(get("/inicio").with(UsuariosDePrueba.como(directora)))
 				.andExpect(content().string(not(containsString("por aprobar\""))))
 				.andExpect(content().string(not(containsString("class=\"contador\""))));
 	}
@@ -129,10 +136,10 @@ class AprobacionesMovilTest {
 	/** P8: quien la pidió ve el detalle sin botones y, si fuerza el POST, se rechaza y queda en la bitácora. */
 	@Test
 	void quienLaPidioNoLaApruebaDesdeElCelular() throws Exception {
-		mvc.perform(get("/aprobaciones/" + solicitud).with(UsuariosDePrueba.como(promotora))).andExpect(status().isOk())
+		mvc.perform(get("/aprobaciones/" + solicitud).with(UsuariosDePrueba.como(directora))).andExpect(status().isOk())
 				.andExpect(content().string(not(containsString("/aprobar\""))))
 				.andExpect(content().string(containsString("la resuelve otra persona")));
-		mvc.perform(post("/aprobaciones/" + solicitud + "/aprobar").with(csrf()).with(UsuariosDePrueba.como(promotora))
+		mvc.perform(post("/aprobaciones/" + solicitud + "/aprobar").with(csrf()).with(UsuariosDePrueba.como(directora))
 				.param("volver", "movil")).andExpect(redirectedUrl("/aprobaciones?vista=movil"))
 				.andExpect(flash().attributeExists("error"));
 		assertThat(jdbc.queryForObject("SELECT estado FROM solicitud_cambio WHERE id = ?", String.class, solicitud))
@@ -146,12 +153,12 @@ class AprobacionesMovilTest {
 	void ningunEnlaceApruebaYSinSesionVaAlLogin() throws Exception {
 		mvc.perform(get("/aprobaciones/" + solicitud)).andExpect(status().is3xxRedirection())
 				.andExpect(header().string("Location", endsWith("/login")));
-		mvc.perform(get("/aprobaciones/" + solicitud + "/aprobar").with(UsuariosDePrueba.como(directora)))
+		mvc.perform(get("/aprobaciones/" + solicitud + "/aprobar").with(UsuariosDePrueba.como(promotora)))
 				.andExpect(status().isMethodNotAllowed());
-		mvc.perform(post("/aprobaciones/" + solicitud + "/aprobar").with(UsuariosDePrueba.como(directora)))
+		mvc.perform(post("/aprobaciones/" + solicitud + "/aprobar").with(UsuariosDePrueba.como(promotora)))
 				.andExpect(status().isForbidden());
 		// Un «volver» inventado no redirige afuera.
-		mvc.perform(post("/aprobaciones/" + solicitud + "/rechazar").with(csrf()).with(UsuariosDePrueba.como(directora))
+		mvc.perform(post("/aprobaciones/" + solicitud + "/rechazar").with(csrf()).with(UsuariosDePrueba.como(promotora))
 				.param("motivo", "No lo confirmó en persona").param("volver", "https://otro.sitio"))
 				.andExpect(redirectedUrl("/aprobaciones"));
 		assertThat(jdbc.queryForObject("SELECT estado FROM solicitud_cambio WHERE id = ?", String.class, solicitud))

@@ -199,6 +199,19 @@ public class Usuario extends BaseEntity {
 	 * Sprint 8, tanda 1 (sección 3.3): el operador corrige el celular o el correo del titular de la primera Promotoría
 	 * SOLO antes de la activación (la clave sigue por cambiar). En MySQL, trg_usuario_contacto exige la firma del operador.
 	 */
+	/**
+	 * Sprint 11, tanda 1c (A1c-1): el contacto de una cuenta de Promotoría o Dirección que lo perdió, aplicado por dos
+	 * operadores de la plataforma (cambio_contacto_titular; trg_usuario_contacto lo exige). Activada o no.
+	 */
+	public void corregirContactoPorDosOperadores(String telefono, String correo) {
+		String nuevoCorreo = correo == null || correo.isBlank() ? null : correo.strip();
+		if (telefono == null && nuevoCorreo == null) {
+			throw new ReglaNegocioException("La cuenta debe quedar con un celular o un correo.");
+		}
+		asignarTelefonoWhatsapp(telefono);
+		this.correo = nuevoCorreo;
+	}
+
 	public void corregirContactoDelTitular(String telefono, String correo) {
 		if (!debeCambiarClave) {
 			throw new ReglaNegocioException("La cuenta ya está activada: su contacto cambia con la aprobación de otra persona.");

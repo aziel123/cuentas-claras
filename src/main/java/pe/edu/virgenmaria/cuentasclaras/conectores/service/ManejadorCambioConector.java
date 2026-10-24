@@ -121,6 +121,21 @@ public class ManejadorCambioConector implements ManejadorSolicitud {
 		adaptadores.stream().filter(a -> a.tipo() == tipo && a.admite(conector.getProveedor()))
 				.forEach(a -> a.validarAntesDeVigencia(candidato));
 		LocalDateTime ahora = LocalDateTime.now(reloj).truncatedTo(ChronoUnit.MICROS);
+		if (solicitud.isDirecta() && tipo.mueveDinero()) {
+			// Sprint 11, tanda 1c (decisión 218): la Promotoría que lo propuso lo aprobó directo con su código; lo que mueve
+			// dinero espera 24 horas (la fecha la pone la base). El vigente sigue hasta entonces.
+			conector.aprobarDirecto(aprobador, ahora);
+			conectores.saveAndFlush(conector);
+			vigentes.olvidar(conector.getId());
+			auditoria.registrar(AccionAuditoria.CONECTOR_EN_ESPERA, PropuestaConector.ENTIDAD, conector.getId().toString(),
+					EstadoConector.PROPUESTO.name(), EstadoConector.EN_ESPERA.name(), "Cambiar " + tipo.descripcion() + " a "
+							+ conector.getProveedor().etiqueta() + ": " + ConfiguracionConector.deJson(tipo,
+									conector.getConfiguracion()).resumen() + ". Lo propuso y lo aprobó directo " + aprobador
+							+ " con su código: espera 24 horas. Lo pueden frenar otra Promotoría con 30 días en el rol o un "
+							+ "operador; el socio lo puede aprobar al instante. Se avisó a todas las Promotorías, al correo "
+							+ "de control y a los operadores.");
+			return;
+		}
 		Optional<ConectorColegio> anterior = conectores.bloquearVigente(tipo);
 		anterior.ifPresent(a -> {
 			a.reemplazar();
@@ -128,9 +143,26 @@ public class ManejadorCambioConector implements ManejadorSolicitud {
 			conectores.saveAndFlush(a);
 			vigentes.olvidar(a.getId());
 		});
-		conector.entrarEnVigencia(aprobador, ahora);
+		if (solicitud.isDirecta()) {
+			// Tanda 1c (decisión 217): el OSE de la Promotoría, directo con su código y sin espera.
+			conector.aprobarDirecto(aprobador, ahora);
+		}
+		else {
+			conector.entrarEnVigencia(aprobador, ahora);
+		}
 		conectores.saveAndFlush(conector);
 		vigentes.olvidar(conector.getId());
+		avisarVigencia(conector, anterior.orElse(null), solicitud.getId(), aprobador, ahora);
+	}
+
+	/**
+	 * La bitácora resaltada {@code CONECTOR_VIGENTE} y {@link ConectorEnVigencia} (la mensajería avisa a TODA la Promotoría
+	 * y al correo externo de control en esta misma transacción). También al entrar en vigencia desde la espera.
+	 */
+	void avisarVigencia(ConectorColegio conector, ConectorColegio anteriorVigente, Long solicitudId, String aprobador,
+			LocalDateTime ahora) {
+		TipoConector tipo = conector.getTipo();
+		Optional<ConectorColegio> anterior = Optional.ofNullable(anteriorVigente);
 		ConfiguracionConector configuracion = ConfiguracionConector.deJson(tipo, conector.getConfiguracion());
 		String antes = anterior.map(PropuestaConector::descripcion).orElse("sin conector");
 		auditoria.registrar(AccionAuditoria.CONECTOR_VIGENTE, PropuestaConector.ENTIDAD, conector.getId().toString(),
@@ -139,10 +171,16 @@ public class ManejadorCambioConector implements ManejadorSolicitud {
 						+ configuracion.resumen() + (conector.getSecretoPista() == null ? ""
 								: " (secreto que termina en " + conector.getSecretoPista() + ")")
 						+ ". Propuso " + conector.getPropuestoPor() + " y aprobó " + aprobador + " (solicitud "
-						+ solicitud.getId() + "). Se avisó a toda la Promotoría y al correo externo de control.");
+						+ solicitudId + "). Se avisó a toda la Promotoría y al correo externo de control.");
 		eventos.publishEvent(new ConectorEnVigencia(conector.getColegioId(), conector.getId(), tipo,
 				conector.getProveedor().etiqueta(), detalleAviso(tipo, configuracion, conector, anterior.orElse(null)),
 				conector.getPropuestoPor(), aprobador, ahora));
+	}
+
+	/** Tanda 1c (decisión 218): la cuenta bancaria, la pasarela o la recaudación que entran en espera avisan a los operadores. */
+	@Override
+	public boolean avisaOperadoresAlAplicarDirecta(SolicitudCambio solicitud) {
+		return conectores.findById(solicitud.getEntidadId()).map(c -> c.getTipo().mueveDinero()).orElse(false);
 	}
 
 	@Override

@@ -117,6 +117,19 @@ class ReglasArquitecturaTest {
 			.orShould().dependOnClassesThat().haveFullyQualifiedName("java.net.HttpURLConnection")
 			.because("una petición saliente a una URL que no es de la lista cerrada permitiría SSRF");
 
+	/**
+	 * Sprint 11, tanda 1c (sección 3.16b): A5 (quien preparó la cuenta no aprueba lo de ella) se consulta SIEMPRE por
+	 * {@code SegundaFirma}, que sabe que la Promotoría aplica directo. Un servicio que llamara directo a
+	 * {@code ControlParticipantes} volvería a bloquear (o a dejar pasar) a quien no corresponde.
+	 */
+	@ArchTest
+	static final ArchRule soloSegundaFirmaConsultaLosParticipantes = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".seguridad.service.SegundaFirma")
+			.and().doNotHaveFullyQualifiedName(BASE + ".seguridad.service.ControlParticipantes")
+			.and().resideInAPackage(BASE + "..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".seguridad.service.ControlParticipantes")
+			.because("la regla de quién aprueba lo de quién (A5 y la directa de Promotoría) vive en SegundaFirma");
+
 	@ArchTest
 	static final ArchRule soloVerificadorPermisosUsaJdbcTemplate = noClasses()
 			.that().doNotHaveFullyQualifiedName(VERIFICADOR_PERMISOS)
@@ -142,7 +155,9 @@ class ReglasArquitecturaTest {
 					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.CurriculoVersion.class,
 					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.AreaCurricular.class,
 					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.Competencia.class,
-					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.EscalaLogro.class)
+					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.EscalaLogro.class,
+					// Sprint 11, tanda 1c (A1c-2): la antigüedad de un rol se lee de usuario_rol (sin colegio: por la cuenta).
+					pe.edu.virgenmaria.cuentasclaras.seguridad.model.AntiguedadRol.class)
 			.should().beAssignableTo(BaseEntity.class)
 			.because("BaseEntity aporta colegioId (@TenantId), autoría y versión");
 
@@ -247,6 +262,9 @@ class ReglasArquitecturaTest {
 
 	private static final String SOLO_ADMINISTRACION = "hasRole('ADMINISTRACION')";
 
+	/** Sprint 11, tanda 1c (sección 3.16): la Promotoría también arma (y aplica directo) el plan y el saldo inicial. */
+	private static final String ADMINISTRACION_O_PROMOTORIA = "hasAnyRole('ADMINISTRACION','PROMOTOR')";
+
 	private static final String APROBACION = "hasAnyRole('PROMOTOR','DIRECTOR')";
 
 	/** Sprint 6, tanda 2: las alertas las calculan Promotoría y sistema.panel (resumen diario y avisos al celular). */
@@ -286,24 +304,24 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".alumnos.importacion.ServicioImportacionAlumnos", ESCRITURA_ESCOLAR),
 			// Sprint 2, tanda 3: Administración propone y arma; Promotoría o Dirección aprueban y confirman.
 			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension", LECTURA_ESCOLAR),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#propuestaPorDefecto", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#datosParaEditar", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#crearBorrador", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#editarBorrador", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#nuevaVersion", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#descartar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#propuestaPorDefecto", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#datosParaEditar", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#crearBorrador", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#editarBorrador", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#nuevaVersion", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#descartar", ADMINISTRACION_O_PROMOTORIA),
 			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#aprobar", APROBACION),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#enviar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#enviar", ADMINISTRACION_O_PROMOTORIA),
 			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#devolver", APROBACION),
 			Map.entry(BASE + ".cobranza.service.AlertasCobranza", ALERTAS),
 			Map.entry(BASE + ".cobranza.service.ServicioCronograma", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".cobranza.service.GeneradorCronograma#generarPendientes", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial", LECTURA_ESCOLAR),
-			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#crearLote", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#agregarLinea", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#quitarLinea", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#enviar", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#descartar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#crearLote", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#agregarLinea", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#quitarLinea", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#enviar", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#descartar", ADMINISTRACION_O_PROMOTORIA),
 			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#confirmar", APROBACION),
 			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#devolver", APROBACION),
 			Map.entry(BASE + ".cobranza.service.ServicioAnulacionCuotas", LECTURA_ESCOLAR),

@@ -151,11 +151,16 @@ class AltaACobroTest {
 				.contains("anio_escolar:2027:CREADO");
 
 		ingresar(titular);
-		FacultadTitular.CodigoPedido pedido = facultad.pedirCodigo();
+		// Sprint 11, tanda 1c (A1c-5): el código queda atado a la cuenta que se crea.
+		pe.edu.virgenmaria.cuentasclaras.seguridad.service.CodigoPromotoria.Pedido pedido = facultad.pedirCodigo(
+				Rol.DIRECTOR, "testdireccion");
 		assertThat(jdbc.queryForObject("SELECT tipo FROM mensaje WHERE id = ?", String.class, pedido.mensajeId()))
-				.isEqualTo("CODIGO_FACULTAD");
-		// El mensaje no guarda el código.
-		String codigo = derivador.codigoFacultad(colegio, pedido.clave());
+				.isEqualTo("CODIGO_PROMOTORIA");
+		// El mensaje no guarda el código (solo su SHA-256) y dice qué autoriza.
+		String codigo = pe.edu.virgenmaria.cuentasclaras.comun.prueba.CodigosDePrueba.codigo(jdbc, derivador, colegio,
+				pedido.mensajeId());
+		assertThat(jdbc.queryForObject("SELECT parametros FROM mensaje WHERE id = ?", String.class, pedido.mensajeId()))
+				.contains("Crear la cuenta testdireccion con Dirección");
 		assertThat(jdbc.queryForObject("SELECT parametros FROM mensaje WHERE id = ?", String.class, pedido.mensajeId()))
 				.doesNotContain(codigo);
 		// Con un código equivocado, no.
@@ -170,15 +175,18 @@ class AltaACobroTest {
 				+ "WHERE colegio_id = ?", colegio)).containsEntry("rol", "DIRECTOR").containsEntry("accion", "DAR")
 				.containsEntry("titular", "titular.kepler");
 		assertThat(jdbc.queryForList("SELECT accion FROM evento_auditoria WHERE colegio_id = ?", String.class, colegio))
-				.contains("FACULTAD_TITULAR_USADA", "CODIGO_FACULTAD_PEDIDO");
+				.contains("FACULTAD_TITULAR_USADA", "CODIGO_PROMOTORIA_ENVIADO");
 		// El aviso al correo de control y a la cuenta que recibió el rol, en la misma transacción.
 		assertThat(jdbc.queryForList("SELECT destino FROM mensaje WHERE colegio_id = ? AND plantilla = "
 				+ "'FACULTAD_TITULAR_USADA'", String.class, colegio)).contains("contador.kepler@estudio.pe");
-		// El código no se usa dos veces.
+		// El código no sirve para otra cuenta (A1c-5) ni se usa dos veces.
 		ingresar(titular);
 		assertThatThrownBy(() -> facultad.crearCuentaDirectiva(new CrearUsuarioRequest("Otra Dirección", "otradireccion",
 				null, "987650099", Set.of(Rol.DIRECTOR)), codigo, pedido)).isInstanceOf(ReglaNegocioException.class)
-				.hasMessageContaining("ya se usó");
+				.hasMessageContaining("otra acción");
+		ingresar(titular);
+		assertThatThrownBy(() -> facultad.crearCuentaDirectiva(direccion(), codigo, pedido))
+				.isInstanceOf(ReglaNegocioException.class);
 
 		// Después, Administración y Caja (sin facultad: no son roles directivos).
 		ingresar(titular);
@@ -207,13 +215,11 @@ class AltaACobroTest {
 		ingresar(admin);
 		planes.enviar(planSecundaria);
 
-		// 4. El titular no lo aprueba (preparó la cuenta de Administración: A5).
+		// 4. Sprint 11, tanda 1c (decisión 215): A5 ya no bloquea a la Promotoría: el titular aprueba el plan de la cuenta de
+		// Administración que creó (con su firma). Antes de la 1c, aquí se rechazaba.
 		ingresar(titular);
-		assertThatThrownBy(() -> planes.aprobar(plan, planes.obtener(plan).version()))
-				.hasMessageContaining("participaste");
-		// 5. Dirección sí (la regla no es transitiva): el cronograma se genera.
-		ingresar(direccion);
 		planes.aprobar(plan, planes.obtener(plan).version());
+		// 5. Dirección aprueba el de Secundaria: el cronograma se genera.
 		ingresar(direccion);
 		planes.aprobar(planSecundaria, planes.obtener(planSecundaria).version());
 		assertThat(jdbc.queryForObject("SELECT estado FROM plan_pension WHERE id = ?", String.class, plan))
@@ -252,14 +258,12 @@ class AltaACobroTest {
 		Long cierreId = jdbc.queryForObject("SELECT id FROM cierre_caja WHERE colegio_id = ?", Long.class, colegio);
 		Long solicitud = ContextoColegio.en(colegio, () -> EscenarioAprobaciones.pendiente(jdbc, "cierre_caja", cierreId));
 
-		// 10. El titular no aprueba el cierre de la cajera que creó; Dirección sí.
+		// 10. Tanda 1c (decisión 215): el titular aprueba el cierre de la cajera que creó (A5 ya no lo bloquea); la
+		// Promotoría no cobra, así que «quien cobra no aprueba» sigue intacto.
 		ingresar(titular);
-		assertThatThrownBy(() -> bandeja.aprobar(solicitud, "Conversé con la cajera: repuso el faltante"))
-				.hasMessageContaining("cuenta que creaste");
-		ingresar(direccion);
 		bandeja.aprobar(solicitud, "Conversé con la cajera: repuso el faltante");
 		assertThat(jdbc.queryForObject("SELECT revisado_por FROM cierre_caja WHERE id = ?", String.class, cierreId))
-				.isEqualTo("testdireccion");
+				.isEqualTo("titular.kepler");
 	}
 
 	/** La persona elige su clave (como con su enlace de activación): desde aquí su sesión tiene sus roles. */

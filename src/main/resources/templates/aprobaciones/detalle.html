@@ -28,9 +28,67 @@
 		<p class="secundario" th:if="${s.resueltoPor != null}"
 			th:text="|Resuelta por ${s.resueltoPor} · ${#temporals.format(s.resueltoEn, 'dd/MM/yyyy HH:mm')}|">Resuelta por director</p>
 
-		<th:block th:if="${s.puedeResolver}">
+		<!--/* Sprint 11, tanda 1c (A1c-2, A1c-3): lo que espera 24 horas y quién lo frenó. */-->
+		<th:block th:if="${s.enEspera}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', |Se aplica el ${#temporals.format(s.venceEspera, 'dd/MM/yyyy HH:mm')} si nadie lo frena. Lo pueden frenar otra Promotoría con 30 días en el rol, la persona afectada o un operador.|)}"></div>
+			<form method="post" class="formulario" th:if="${s.puedeFrenar}" th:action="@{/aprobaciones/{id}/frenar(id=${s.id})}" data-frenar>
+				<div class="campo">
+					<label th:for="|frenar-${s.id}-motivo|">Por qué lo frenas (obligatorio)</label>
+					<textarea class="input" th:id="|frenar-${s.id}-motivo|" name="motivo" required minlength="20" maxlength="500"></textarea>
+				</div>
+				<button type="submit" class="btn btn-peligro">Frenar</button>
+			</form>
+		</th:block>
+		<p class="secundario" th:if="${s.frenadoPor != null}" th:text="|Frenada por ${s.frenadoPor}: ${s.motivoFreno}. No se aplica.|">Frenada</p>
+
+		<!--/* Sprint 11, tanda 1c (A1c-1): la dueña de una cuenta directiva confirma el cambio desde su contacto anterior. */-->
+		<th:block th:if="${confirmarContacto == true}">
+			<div th:replace="~{fragments/componentes :: alerta('info', 'Es el cambio de tu propio contacto: confírmalo con el código que llega a tu celular ANTERIOR (el que hoy tienes registrado). Después lo aprueba otra persona.')}"></div>
+			<form method="post" th:action="@{/aprobaciones/{id}/confirmar-contacto/codigo(id=${s.id})}" th:if="${pedidoContacto == null}">
+				<button type="submit" class="btn btn-secundario">Enviar código a mi celular anterior</button>
+			</form>
+			<form method="post" class="formulario" th:if="${pedidoContacto != null}" th:action="@{/aprobaciones/{id}/confirmar-contacto(id=${s.id})}">
+				<input type="hidden" name="codigoMensajeId" th:value="${pedidoContacto.mensajeId}">
+				<p th:text="|Te enviamos el código a tu ${pedidoContacto.destino}. Vale 10 minutos.|">Te enviamos el código.</p>
+				<p class="secundario" th:if="${codigoDemostracion != null}" th:text="|Demo: el código es ${codigoDemostracion}|">Demo</p>
+				<div class="campo">
+					<label for="codigo-contacto">Código de 6 dígitos</label>
+					<input class="input" id="codigo-contacto" name="codigo" required inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+				</div>
+				<button type="submit" class="btn btn-primario">Confirmar el cambio</button>
+			</form>
+		</th:block>
+
+		<!--/* Sprint 11, tanda 1c (sección 3.16): la Promotoría aplica directo lo que pidió; lo sensible, con su código. */-->
+		<th:block th:if="${s.puedeAplicarDirecto and s.pideCodigo}">
+			<p class="secundario">La pediste tú: como Promotoría la aplicas directo. Es una acción sensible: pide tu código (llega a tu WhatsApp y dice qué autoriza).</p>
+			<form method="post" th:action="@{/aprobaciones/{id}/codigo(id=${s.id})}" th:if="${pedido == null}">
+				<button type="submit" class="btn btn-secundario btn-bloque" data-enviar-codigo>Enviar código por WhatsApp</button>
+			</form>
+			<form method="post" class="formulario" th:if="${pedido != null}" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}" data-aplicar-directo>
+				<input type="hidden" name="volver" value="movil">
+				<input type="hidden" name="codigoMensajeId" th:value="${pedido.mensajeId}">
+				<p th:text="|Te enviamos el código a tu ${pedido.destino}. Vale 10 minutos y solo para esta acción.|">Te enviamos el código.</p>
+				<p class="secundario" th:if="${codigoDemostracion != null}" th:text="|Demo: el código es ${codigoDemostracion}|">Demo</p>
+				<div class="campo">
+					<label for="codigo-directa">Código de 6 dígitos</label>
+					<input class="input" id="codigo-directa" name="codigo" required inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+				</div>
+				<th:block th:unless="${#lists.isEmpty(s.llamadas)}">
+					<div class="campo" th:each="familia, i : ${s.llamadas}">
+						<label th:for="|directa-${s.id}-tel-${i.index}|" th:text="|Número al que llamaste (${familia})|">Número al que llamaste</label>
+						<input class="input" type="tel" th:id="|directa-${s.id}-tel-${i.index}|" name="telefonos" required inputmode="tel" maxlength="20">
+					</div>
+					<label class="opcion"><input type="checkbox" name="hablo" value="true" required>
+						<span th:text="${#lists.size(s.llamadas) == 1} ? 'Hablé con el apoderado' : 'Hablé con ambas familias'">Hablé con el apoderado</span></label>
+				</th:block>
+				<button type="submit" class="btn btn-primario btn-bloque" title="Se aplica directo. Se avisa a las demás Promotorías y al correo de control.">Aprobar y aplicar</button>
+			</form>
+		</th:block>
+
+		<th:block th:if="${s.puedeResolver and !(s.puedeAplicarDirecto and s.pideCodigo)}">
 			<button type="button" class="btn btn-bloque" th:classappend="${s.pideComentario} ? 'btn-cuidado' : 'btn-primario'"
-				th:popovertarget="|aprobar-${s.id}|" th:text="${s.pideComentario} ? 'Aprobar con nota' : 'Aprobar'">Aprobar</button>
+				th:popovertarget="|aprobar-${s.id}|" th:text="${s.puedeAplicarDirecto} ? 'Aprobar y aplicar' : (${s.pideComentario} ? 'Aprobar con nota' : 'Aprobar')">Aprobar</button>
 			<div class="modal" th:id="|aprobar-${s.id}|" popover role="dialog" aria-modal="true" th:aria-labelledby="|aprobar-${s.id}-titulo|">
 				<form method="post" th:action="@{/aprobaciones/{id}/aprobar(id=${s.id})}" class="modal-cuerpo">
 					<input type="hidden" name="volver" value="movil">
@@ -62,7 +120,7 @@
 			</div>
 
 			<button type="button" class="btn btn-secundario btn-bloque" th:popovertarget="|rechazar-${s.id}|"
-				th:text="${s.accionRechazo}">Rechazar</button>
+				th:unless="${s.puedeAplicarDirecto}" th:text="${s.accionRechazo}">Rechazar</button>
 			<div class="modal" th:id="|rechazar-${s.id}|" popover role="dialog" aria-modal="true" th:aria-labelledby="|rechazar-${s.id}-titulo|">
 				<form method="post" th:action="@{/aprobaciones/{id}/rechazar(id=${s.id})}" class="modal-cuerpo">
 					<input type="hidden" name="volver" value="movil">

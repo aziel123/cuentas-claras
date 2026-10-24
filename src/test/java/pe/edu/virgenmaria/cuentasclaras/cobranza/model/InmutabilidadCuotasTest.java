@@ -148,9 +148,13 @@ class InmutabilidadCuotasTest {
 	static Set<String> concedidas(String script, String tabla) {
 		Matcher grant = Pattern.compile("GRANT (?:INSERT, )?UPDATE \\(([^)]*)\\)\\s+ON cuentasclaras\\." + tabla + " ")
 				.matcher(script);
-		assertThat(grant.find()).as("GRANT UPDATE por columna sobre " + tabla).isTrue();
-		return Arrays.stream(grant.group(1).split(",")).map(String::strip)
-				.collect(Collectors.toCollection(TreeSet::new));
+		// Sprint 11, tanda 1c: una tabla puede tener varios GRANT por columna (uno por tanda); se unen todos.
+		Set<String> columnas = new TreeSet<>();
+		while (grant.find()) {
+			Arrays.stream(grant.group(1).split(",")).map(String::strip).forEach(columnas::add);
+		}
+		assertThat(columnas).as("GRANT UPDATE por columna sobre " + tabla).isNotEmpty();
+		return columnas;
 	}
 
 	@Test

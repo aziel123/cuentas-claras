@@ -37,7 +37,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Normalizador;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
@@ -85,7 +85,11 @@ public class ServicioSaldoInicial {
 
 	private final PlanPensionRepository planes;
 
-	private final ControlParticipantes participantes;
+	private final SegundaFirma segundaFirma;
+
+	/** Sprint 11, tanda 1c: los avisos de lo que la Promotoría aplica directo. */
+	@org.springframework.beans.factory.annotation.Autowired
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.AvisosAccionDirecta avisosDirecta;
 
 	private final PropiedadesSaldoInicial propiedades;
 
@@ -97,11 +101,11 @@ public class ServicioSaldoInicial {
 	public ServicioSaldoInicial(LoteSaldoInicialRepository lotes, LineaSaldoInicialRepository lineas,
 			CuotaRepository cuotas, AnioEscolarRepository anios,
 			AlumnoRepository alumnos, MatriculaRepository matriculas, AuditoriaService auditoria,
-			PlanPensionRepository planes, ControlParticipantes participantes, PropiedadesSaldoInicial propiedades,
+			PlanPensionRepository planes, SegundaFirma segundaFirma, PropiedadesSaldoInicial propiedades,
 			Clock reloj, FirmaSesion firmaSesion) {
 		this.firmaSesion = firmaSesion;
 		this.planes = planes;
-		this.participantes = participantes;
+		this.segundaFirma = segundaFirma;
 		this.propiedades = propiedades;
 		this.lotes = lotes;
 		this.lineas = lineas;
@@ -124,7 +128,7 @@ public class ServicioSaldoInicial {
 
 	/** Solo Administración arma lotes: decide si se muestra el formulario. */
 	public boolean puedeArmarLotes() {
-		return SesionActual.tieneAlgunRol("ADMINISTRACION");
+		return SesionActual.tieneAlgunRol("ADMINISTRACION", "PROMOTOR");
 	}
 
 	/** Años para el formulario del lote (los no cerrados). */
@@ -136,9 +140,9 @@ public class ServicioSaldoInicial {
 	public LoteDetalle obtener(Long id) {
 		LoteSaldoInicial lote = buscar(id);
 		String usuario = SesionActual.usuario();
-		boolean administracion = SesionActual.tieneAlgunRol("ADMINISTRACION");
+		boolean administracion = SesionActual.tieneAlgunRol("ADMINISTRACION", "PROMOTOR");
 		boolean confirmador = SesionActual.tieneAlgunRol("PROMOTOR", "DIRECTOR");
-		boolean participo = participantes.ampliar(lote.participantes()).contains(usuario);
+		boolean participo = segundaFirma.participantesPara(lote.participantes()).contains(usuario);
 		boolean borrador = lote.getEstado() == EstadoLote.BORRADOR;
 		boolean enviado = lote.getEstado() == EstadoLote.ENVIADO;
 		Map<Long, Long> cuotaPorLinea = lote.getLineas().isEmpty() ? Map.of()
@@ -228,7 +232,7 @@ public class ServicioSaldoInicial {
 	}
 
 	@Transactional
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public Long crearLote(LoteRequest solicitud) {
 		AnioEscolar anio = anios.findById(solicitud.anioId())
 				.orElseThrow(() -> new RecursoNoEncontradoException("Año escolar no encontrado"));
@@ -243,7 +247,7 @@ public class ServicioSaldoInicial {
 	}
 
 	@Transactional
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public Long agregarLinea(Long loteId, LineaSaldoRequest solicitud) {
 		LoteSaldoInicial lote = bloquear(loteId);
 		Alumno alumno = alumnoPorDocumento(solicitud.documentoAlumno());
@@ -280,7 +284,7 @@ public class ServicioSaldoInicial {
 	}
 
 	@Transactional
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public void quitarLinea(Long loteId, Long lineaId, String motivo) {
 		String texto = Motivo.exigir(motivo);
 		LoteSaldoInicial lote = bloquear(loteId);
@@ -290,7 +294,7 @@ public class ServicioSaldoInicial {
 	}
 
 	@Transactional
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public void enviar(Long loteId) {
 		LoteSaldoInicial lote = bloquear(loteId);
 		lote.enviar(SesionActual.usuario(), ahora());
@@ -316,7 +320,7 @@ public class ServicioSaldoInicial {
 					+ lote.getEstado().etiqueta().toLowerCase() + ").");
 		}
 		exigirVersion(lote, version);
-		if (participantes.ampliar(lote.participantes()).contains(usuario)) {
+		if (segundaFirma.participantesPara(lote.participantes()).contains(usuario)) {
 			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "lote_saldo_inicial", loteId.toString(), null,
 					cabecera(lote), "Intentó confirmar el lote " + loteId + ", en el que participó (lo creó, lo envió, "
 							+ "le agregó líneas o preparó la cuenta de quien lo hizo). Se rechazó.");
@@ -334,7 +338,7 @@ public class ServicioSaldoInicial {
 					.compareTo(lote.getTotalDeclarado()) == 0) {
 				firmaSesion.firmar(ClaveFirma.loteSaldoInicialConfirmado(lote.getId()));
 			}
-			lote.confirmar(usuario, totalInforme, ahora());
+			lote.confirmar(usuario, totalInforme, ahora(), segundaFirma.aplicaDirecto(usuario));
 		}
 		catch (TotalNoCoincideException e) {
 			auditoria.registrar(AccionAuditoria.SALDO_INICIAL_TOTAL_NO_COINCIDE, "lote_saldo_inicial", loteId.toString(),
@@ -352,6 +356,11 @@ public class ServicioSaldoInicial {
 				EstadoLote.ENVIADO.name(), cabecera(lote) + " · " + vigentes.size() + " cuotas creadas por "
 						+ Dinero.formatear(lote.totalLineas()) + " · total del informe confirmado a ciegas",
 				"Lote creado por " + lote.getCreadoPor() + " y enviado por " + lote.getEnviadoPor() + ".");
+		// Sprint 11, tanda 1c (sección 3.16): si lo armó la misma Promotoría que lo confirma, es una directa (con avisos).
+		if (segundaFirma.aplicaDirecto(usuario) && lote.participantes().contains(usuario)) {
+			avisosDirecta.registrar("lote_saldo_inicial", lote.getId(), "Saldo inicial confirmado (" + vigentes.size()
+					+ " cuotas por " + Dinero.formatear(lote.totalLineas()) + ")", false);
+		}
 		return vigentes.size();
 	}
 
@@ -381,7 +390,7 @@ public class ServicioSaldoInicial {
 	}
 
 	@Transactional
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public void descartar(Long loteId, String motivo) {
 		LoteSaldoInicial lote = bloquear(loteId);
 		lote.descartar(SesionActual.usuario(), motivo, ahora());

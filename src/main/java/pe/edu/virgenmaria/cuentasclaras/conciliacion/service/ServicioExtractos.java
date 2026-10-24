@@ -44,7 +44,7 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.MovimientoBancar
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.PartidaConciliacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ReglasEmparejamiento.MovimientoAbierto;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.service.ReglasEmparejamiento.Propuesta;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
@@ -103,7 +103,11 @@ public class ServicioExtractos {
 
 	private final Emparejador emparejador;
 
-	private final ControlParticipantes participantes;
+	private final SegundaFirma segundaFirma;
+
+	/** Sprint 11, tanda 1c (A1c-4). */
+	@org.springframework.beans.factory.annotation.Autowired
+	private pe.edu.virgenmaria.cuentasclaras.conectores.service.CambiosRecientesConectores cambiosRecientes;
 
 	private final AuditoriaService auditoria;
 
@@ -119,7 +123,7 @@ public class ServicioExtractos {
 	public ServicioExtractos(LectoresExtracto lectores, RegistroArchivos archivos, CuentaBancariaRepository cuentas,
 			ExtractoBancarioRepository extractos, MovimientoBancarioRepository movimientos,
 			PartidaConciliacionRepository partidas, ObjetosConciliables objetos, Emparejador emparejador,
-			ControlParticipantes participantes, AuditoriaService auditoria, ApplicationEventPublisher eventos,
+			SegundaFirma segundaFirma, AuditoriaService auditoria, ApplicationEventPublisher eventos,
 			PropiedadesConciliacion propiedades, Clock reloj, FirmaSesion firmaSesion) {
 		this.firmaSesion = firmaSesion;
 		this.lectores = lectores;
@@ -130,7 +134,7 @@ public class ServicioExtractos {
 		this.partidas = partidas;
 		this.objetos = objetos;
 		this.emparejador = emparejador;
-		this.participantes = participantes;
+		this.segundaFirma = segundaFirma;
 		this.auditoria = auditoria;
 		this.eventos = eventos;
 		this.propiedades = propiedades;
@@ -274,7 +278,7 @@ public class ServicioExtractos {
 					false, List.of());
 		}
 		ExtractoBancario toca = pendientes.getFirst();
-		boolean participo = participantes.ampliar(Set.of(toca.getCreadoPor())).contains(usuario());
+		boolean participo = segundaFirma.excluidosPara(Set.of(toca.getCreadoPor())).contains(usuario());
 		Set<Integer> elegidos = Set.copyOf(toca.numerosMuestra());
 		List<ConfirmacionExtractoVista.Muestra> muestra = movimientos.findByExtractoIdOrderByNumeroAsc(toca.getId()).stream()
 				.filter(m -> elegidos.contains(m.getNumero()))
@@ -312,13 +316,20 @@ public class ServicioExtractos {
 					+ "otro, se confirmó uno o alguien escribió un saldo). Ábrela de nuevo.");
 		}
 		String usuario = usuario();
-		if (participantes.ampliar(Set.of(extracto.getCreadoPor())).contains(usuario)) {
+		if (segundaFirma.excluidosPara(Set.of(extracto.getCreadoPor())).contains(usuario)) {
 			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "extracto_bancario", extracto.getId().toString(),
 					null, "Extracto del " + Calendario.formatear(extracto.getDesde()) + " al "
 							+ Calendario.formatear(extracto.getHasta()),
 					"Intentó confirmar un extracto que subió (o subió una cuenta que preparó). Se rechazó.");
 			throw new AutoaprobacionException("No puedes confirmar un extracto que tú subiste: debe confirmarlo otra persona "
 					+ "de Promotoría o Dirección, mirando su app del banco.");
+		}
+		// Sprint 11, tanda 1c (A1c-4): quien cambió la cuenta bancaria hace menos de 30 días no confirma el extracto.
+		if (cambiosRecientes.rechazarSiCambioReciente(pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector
+				.CUENTA_BANCARIA, usuario, "extracto_bancario", extracto.getId(), "el extracto del "
+						+ Calendario.formatear(extracto.getDesde()) + " al " + Calendario.formatear(extracto.getHasta()))) {
+			throw new AutoaprobacionException("Cambiaste la cuenta bancaria del colegio hace menos de 30 días: el extracto lo "
+					+ "confirma otra persona de Promotoría o Dirección. Se avisó a todas las Promotorías y al correo de control.");
 		}
 		if (saldoVisto == null) {
 			throw new ReglaNegocioException("Escribe el saldo que ves en tu app del banco.");

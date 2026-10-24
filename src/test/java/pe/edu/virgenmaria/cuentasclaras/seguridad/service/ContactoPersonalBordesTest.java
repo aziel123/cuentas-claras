@@ -72,6 +72,9 @@ class ContactoPersonalBordesTest {
 	private RelojAjustable reloj;
 
 	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comun.cripto.DerivadorSecreto derivador;
+
+	@Autowired
 	private JdbcTemplate jdbc;
 
 	private Usuario promotora;
@@ -149,6 +152,12 @@ class ContactoPersonalBordesTest {
 		String anterior = celularDe(promotora);
 		UsuariosDePrueba.iniciarSesion(promotora);
 		Long solicitud = servicio.solicitar(promotora.getId(), "987 444 999", null, MOTIVO);
+		// Sprint 11, tanda 1c (A1c-1): la dueña de la cuenta directiva lo confirma desde su contacto anterior.
+		UsuariosDePrueba.iniciarSesion(promotora);
+		var pedidoContacto = servicio.pedirCodigoDelContactoAnterior(solicitud);
+		servicio.confirmarDesdeContactoAnterior(solicitud, pe.edu.virgenmaria.cuentasclaras.comun.prueba.CodigosDePrueba
+				.escrito(jdbc, derivador, 1L, pedidoContacto));
+		SecurityContextHolder.clearContext();
 		UsuariosDePrueba.iniciarSesion(directora);
 		bandeja.aprobar(solicitud, null);
 		SecurityContextHolder.clearContext();

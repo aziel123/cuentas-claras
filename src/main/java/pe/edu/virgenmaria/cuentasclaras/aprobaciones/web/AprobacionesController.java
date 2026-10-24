@@ -1,5 +1,8 @@
 package pe.edu.virgenmaria.cuentasclaras.aprobaciones.web;
 
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.CodigoPromotoria;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioContactoPersonal;
+
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -30,8 +33,11 @@ public class AprobacionesController {
 
 	private final BandejaAprobaciones bandeja;
 
-	public AprobacionesController(BandejaAprobaciones bandeja) {
+	private final ServicioContactoPersonal contactos;
+
+	public AprobacionesController(BandejaAprobaciones bandeja, ServicioContactoPersonal contactos) {
 		this.bandeja = bandeja;
+		this.contactos = contactos;
 	}
 
 	@GetMapping
@@ -44,6 +50,8 @@ public class AprobacionesController {
 	@RegistraAcceso(TipoAcceso.APROBACION_CONTACTO)
 	public String detalle(@PathVariable Long id, Model model) {
 		model.addAttribute("s", bandeja.detalle(id));
+		// Sprint 11, tanda 1c (A1c-1): la dueña de una cuenta directiva confirma el cambio de su contacto.
+		model.addAttribute("confirmarContacto", contactos.puedeConfirmar(id));
 		// Ley 29733: si es el cambio de contacto de un apoderado, queda registrado quién lo abrió (lo decide privacidad).
 		AccesoMostrado.solicitud(id);
 		return "aprobaciones/detalle";
@@ -52,9 +60,63 @@ public class AprobacionesController {
 	@PostMapping("/{id:\\d+}/aprobar")
 	public String aprobar(@PathVariable Long id, @RequestParam(required = false) String comentario,
 			@RequestParam(defaultValue = "false") boolean hablo, @RequestParam(required = false) List<String> telefonos,
+			@RequestParam(required = false) Long codigoMensajeId, @RequestParam(required = false) String codigo,
 			@RequestParam(required = false) String volver, RedirectAttributes avisos) {
-		return resolver(avisos, () -> bandeja.aprobar(id, comentario, hablo, telefonos),
-				"Listo: aprobaste la solicitud y el cambio se aplicó.", volver);
+		return resolver(avisos, () -> bandeja.aprobar(id, comentario, hablo, telefonos,
+				CodigoPromotoria.Escrito.de(codigoMensajeId, codigo)),
+				codigoMensajeId == null ? "Listo: aprobaste la solicitud y el cambio se aplicó."
+						: "Listo: se aprobó y se aplicó (o quedó en su espera de 24 horas). Se avisó a quien corresponde.",
+				volver);
+	}
+
+	/** Sprint 11, tanda 1c: el código de una acción sensible que pidió la Promotoría (le llega a su WhatsApp). */
+	@PostMapping("/{id:\\d+}/codigo")
+	public String codigo(@PathVariable Long id, RedirectAttributes avisos) {
+		try {
+			CodigoPromotoria.Pedido pedido = bandeja.pedirCodigo(id);
+			avisos.addFlashAttribute("pedido", pedido);
+			avisos.addFlashAttribute("codigoDemostracion", bandeja.codigoDeDemostracion(pedido).orElse(null));
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/aprobaciones/" + id;
+	}
+
+	/** Sprint 11, tanda 1c (A1c-2, A1c-3): frena una directa que espera. */
+	@PostMapping("/{id:\\d+}/frenar")
+	public String frenar(@PathVariable Long id, @RequestParam(required = false) String motivo, RedirectAttributes avisos) {
+		return resolver(avisos, () -> bandeja.frenar(id, motivo), "Listo: lo frenaste. No se aplica; se avisó a todos.",
+				MOVIL);
+	}
+
+	/** Sprint 11, tanda 1c (A1c-1): el código al contacto anterior para confirmar el cambio del propio contacto. */
+	@PostMapping("/{id:\\d+}/confirmar-contacto/codigo")
+	public String codigoContacto(@PathVariable Long id, RedirectAttributes avisos) {
+		try {
+			CodigoPromotoria.Pedido pedido = contactos.pedirCodigoDelContactoAnterior(id);
+			avisos.addFlashAttribute("pedidoContacto", pedido);
+			avisos.addFlashAttribute("codigoDemostracion", contactos.codigoDeDemostracion(pedido).orElse(null));
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/aprobaciones/" + id;
+	}
+
+	/** Sprint 11, tanda 1c (A1c-1): confirma el cambio del propio contacto con el código del anterior. */
+	@PostMapping("/{id:\\d+}/confirmar-contacto")
+	public String confirmarContacto(@PathVariable Long id, @RequestParam(required = false) Long codigoMensajeId,
+			@RequestParam(required = false) String codigo, RedirectAttributes avisos) {
+		try {
+			contactos.confirmarDesdeContactoAnterior(id, CodigoPromotoria.Escrito.de(codigoMensajeId, codigo));
+			avisos.addFlashAttribute("exito", "Listo: confirmaste el cambio desde tu contacto anterior. Ahora lo aprueba otra "
+					+ "persona de Promotoría o Dirección.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/aprobaciones/" + id;
 	}
 
 	@PostMapping("/{id:\\d+}/rechazar")

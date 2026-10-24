@@ -232,10 +232,8 @@ class ServicioPlanesPensionTest {
 	}
 
 	@Test
-	void promotorRecibe403AlCrearBorrador() {
-		como(PROMOTORIA);
-		assertThatThrownBy(() -> planes.crearBorrador(escuela.anio2027(), Nivel.PRIMARIA, plan(2027, "450", "350", null)))
-				.isInstanceOf(AuthorizationDeniedException.class);
+	void administracionNoApruebaNiLoAjeno() {
+		// Sprint 11, tanda 1c (sección 3.16): la Promotoría ya crea el borrador (antes 403); lo que sigue no cambia.
 		como(ADMINISTRACION);
 		Long id = planes.crearBorrador(escuela.anio2027(), Nivel.PRIMARIA, plan(2027, "450", "350", null));
 		// Administración no aprueba (ni siquiera lo ajeno).

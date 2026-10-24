@@ -9,7 +9,15 @@ public enum EstadoConector {
 	PROPUESTO("Por aprobar", "alerta"),
 	VIGENTE("Vigente", "exito"),
 	RECHAZADO("Rechazado", "peligro"),
-	REEMPLAZADO("Reemplazado", "neutro");
+	REEMPLAZADO("Reemplazado", "neutro"),
+	/**
+	 * Sprint 11, tanda 1c (decisión 218): la cuenta bancaria, la pasarela o la recaudación que aprobó directo una
+	 * Promotoría esperan 24 horas antes de entrar en vigencia (las frena otra Promotoría o un operador; el socio las
+	 * aprueba al instante).
+	 */
+	EN_ESPERA("En espera (24 horas)", "alerta"),
+	/** Sprint 11, tanda 1c: frenado durante la espera (no entra en vigencia; se vuelve a proponer). */
+	FRENADO("Frenado", "peligro");
 
 	private final String etiqueta;
 

@@ -47,7 +47,31 @@
 			<form th:if="${p.puedeProbar}" method="post" th:action="@{/conectores/{id}/probar(id=${p.id})}">
 				<button th:replace="~{fragments/componentes :: boton('Probar conexión', 'secundario')}">Probar conexión</button>
 			</form>
-			<p class="secundario">Lo aprueba otra persona de Promotoría o Dirección en <a th:href="@{/aprobaciones}">Aprobaciones</a>.</p>
+			<p class="secundario" th:unless="${p.enEspera}">Lo aprueba otra persona de Promotoría o Dirección en <a th:href="@{/aprobaciones}">Aprobaciones</a>. Si lo propusiste tú y eres Promotoría, aplícalo con tu código desde <a th:href="@{/aprobaciones/{id}(id=${p.solicitudId})}" th:if="${p.solicitudId != null}">su solicitud</a>.</p>
+			<!--/* Sprint 11, tanda 1c (decisión 218): la espera de 24 horas, el socio y el freno. */-->
+			<th:block th:if="${p.enEspera}">
+				<div th:replace="~{fragments/componentes :: alerta('advertencia', |Entra en vigencia el ${#temporals.format(p.venceEspera, 'dd/MM/yyyy HH:mm')} si nadie lo frena. Si no lo reconoces, frénalo hoy y avisa al proveedor.|)}"></div>
+				<form method="post" th:if="${p.puedeAprobarAhora and (pedidoConector == null or pedidoConector != p.id)}" th:action="@{/conectores/{id}/codigo-socio(id=${p.id})}">
+					<button type="submit" class="btn btn-secundario">Aprobar ahora (enviar código)</button>
+				</form>
+				<form method="post" class="formulario formulario-angosto" th:if="${p.puedeAprobarAhora and pedidoConector != null and pedidoConector == p.id}" th:action="@{/conectores/{id}/aprobar-ahora(id=${p.id})}">
+					<input type="hidden" name="codigoMensajeId" th:value="${pedido.mensajeId}">
+					<p th:text="|Te enviamos el código a tu ${pedido.destino}. Vale 10 minutos.|">Te enviamos el código.</p>
+					<p class="secundario" th:if="${codigoDemostracion != null}" th:text="|Demo: el código es ${codigoDemostracion}|">Demo</p>
+					<div class="campo">
+						<label th:for="|codigo-socio-${p.id}|">Código de 6 dígitos</label>
+						<input class="input" th:id="|codigo-socio-${p.id}|" name="codigo" required inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+					</div>
+					<button type="submit" class="btn btn-primario">Aprobar ahora</button>
+				</form>
+				<form method="post" class="formulario formulario-angosto" th:if="${p.puedeFrenar}" th:action="@{/conectores/{id}/frenar(id=${p.id})}">
+					<div class="campo">
+						<label th:for="|frenar-${p.id}|">Por qué lo frenas (obligatorio)</label>
+						<textarea class="input" th:id="|frenar-${p.id}|" name="motivo" required minlength="20" maxlength="500"></textarea>
+					</div>
+					<button type="submit" class="btn btn-peligro">Frenar</button>
+				</form>
+			</th:block>
 		</div>
 
 		<details th:if="${vista.puedeProponer and #lists.isEmpty(s.propuestos)}" class="conector-formulario">

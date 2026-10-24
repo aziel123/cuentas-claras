@@ -177,14 +177,13 @@ class CambioConectorTest {
 	}
 
 	@Test
-	void quienProponeNoAprueba() {
-		Long id = proponer(promotora, TipoConector.CUENTA_BANCARIA, cuenta(ProveedorConector.BCP, "1912345678901"));
-		probar(promotora, id);
-
-		assertThatThrownBy(() -> aprobar(promotora, id)).isInstanceOf(AutoaprobacionSolicitudException.class);
-		assertThat(estado(id)).isEqualTo("PROPUESTO");
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'AUTOAPROBACION_RECHAZADA'",
-				Long.class)).isEqualTo(1L);
+	void promotoriaSinCodigoNoAprueba() {
+		// Sprint 11, tanda 1c: la Promotoría sí aprueba lo suyo, pero solo con su código (sin él no pasa nada).
+		Long propio = proponer(promotora, TipoConector.CUENTA_BANCARIA, cuenta(ProveedorConector.BCP, "1912345678901"));
+		probar(promotora, propio);
+		assertThatThrownBy(() -> aprobar(promotora, propio)).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("pide tu código");
+		assertThat(estado(propio)).isEqualTo("PROPUESTO");
 	}
 
 	@Test

@@ -8,4 +8,7 @@ package pe.edu.virgenmaria.cuentasclaras.seguridad.service;
 public interface CorreoControlRegistrado {
 
 	boolean registrado();
+
+	/** Sprint 11, tanda 1c (A1c-8): si ese correo es el correo externo de control del colegio en contexto. */
+	boolean esElCorreoDeControl(String correo);
 }

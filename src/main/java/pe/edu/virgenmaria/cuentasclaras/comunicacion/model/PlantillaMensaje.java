@@ -157,7 +157,20 @@ public enum PlantillaMensaje {
 					+ "lo reconoce, escriba hoy al proveedor y a la Promotoría."),
 	CODIGO_FACULTAD("cc_codigo_facultad_v2", "Su código para dar o quitar Promotoría o Dirección", 3, false,
 			"{{1}}: su código para dar o quitar Promotoría o Dirección es {{2}}. Vence a las {{3}}. Si usted no lo pidió, "
-					+ "escriba hoy al proveedor.");
+					+ "escriba hoy al proveedor."),
+	// Sprint 11, tanda 1c (secciones 3.16 y 3.16b): la Promotoría aplica directo.
+	CODIGO_PROMOTORIA("cc_codigo_promotoria_v2", "Su código para una acción en el colegio", 4, false,
+			"{{1}}: código {{2}} para: {{3}}. Vence a las {{4}}. Si usted no lo pidió, no lo comparta y escriba hoy al proveedor."),
+	CODIGO_CONTACTO("cc_codigo_contacto_v2", "Confirme el cambio de su celular o correo", 4, false,
+			"{{1}}: código {{2}} para confirmar: {{3}}. Vence a las {{4}}. Si usted no lo pidió, no lo comparta y avise hoy al colegio."),
+	ACCION_DIRECTA("cc_accion_directa_v2", "Una Promotoría aplicó un cambio directo", 3, false,
+			"{{1}}: {{2}} aplicó directo: {{3}}. Si no lo reconoce, cambie su clave y avise hoy al colegio y al proveedor."),
+	DIRECTA_EN_ESPERA("cc_directa_en_espera_v2", "Un cambio espera 24 horas", 4, false,
+			"{{1}}: {{2}} pidió {{3}}. Se aplica el {{4}} si nadie lo frena. Si no lo reconoce, frénelo desde el sistema o escriba hoy al proveedor."),
+	DIRECTA_FRENADA("cc_directa_frenada_v2", "Se frenó un cambio en espera", 4, false,
+			"{{1}}: {{2}} frenó {{3}}. Motivo: {{4}}. No se aplica: se puede volver a pedir."),
+	CONCILIACION_BLOQUEADA("cc_conciliacion_bloqueada_v2", "Alerta: confirmación rechazada", 3, false,
+			"{{1}}: {{2}} intentó confirmar {{3}} después de cambiar la cuenta del colegio. Se rechazó: la confirma otra persona. Revíselo hoy.");
 
 	/** Sprint 10, tanda 3: las plantillas de libretas (botón a {@code /familia/libretas}). */
 	public boolean deLibretas() {

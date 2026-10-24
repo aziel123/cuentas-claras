@@ -119,6 +119,9 @@ public final class LimpiezaBaseDatos {
 				+ "WHERE cambio_estado_id IS NOT NULL OR facultad_cambio_id IS NOT NULL");
 		jdbc.update("DELETE FROM cambio_estado_colegio");
 		jdbc.update("UPDATE enlace_activacion SET mensaje_id = NULL WHERE mensaje_id IS NOT NULL");
+		// Sprint 11, tanda 1c (V40): la solicitud y el conector apuntan al mensaje de su código.
+		jdbc.update("UPDATE solicitud_cambio SET codigo_mensaje_id = NULL, codigo_escrito_sha256 = NULL WHERE codigo_mensaje_id IS NOT NULL");
+		jdbc.update("UPDATE conector_colegio SET codigo_mensaje_id = NULL, codigo_escrito_sha256 = NULL WHERE codigo_mensaje_id IS NOT NULL");
 		jdbc.update("DELETE FROM mensaje WHERE respaldo_de_id IS NOT NULL");
 		jdbc.update("DELETE FROM mensaje");
 		jdbc.update("DELETE FROM huella_bitacora");

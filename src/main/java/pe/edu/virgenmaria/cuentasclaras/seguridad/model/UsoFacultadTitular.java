@@ -56,12 +56,16 @@ public class UsoFacultadTitular extends BaseEntity {
 	@Column(name = "mensaje_id", nullable = false, updatable = false)
 	private Long mensajeId;
 
+	/** Sprint 11, tanda 1c (A1c-5): la SHA-256 de lo que escribió el titular (la base la compara con la del mensaje). */
+	@Column(name = "codigo_escrito_sha256", updatable = false, length = 64)
+	private String codigoEscritoSha256;
+
 	protected UsoFacultadTitular() {
 		// requerido por JPA
 	}
 
 	public static UsoFacultadTitular de(int numero, Usuario titular, Long usuarioId, Rol rol, Accion accion,
-			boolean cuentaNueva, Long mensajeId) {
+			boolean cuentaNueva, Long mensajeId, String codigoEscritoSha256) {
 		Objects.requireNonNull(titular, "titular");
 		if (rol != Rol.PROMOTOR && rol != Rol.DIRECTOR) {
 			throw new ReglaNegocioException("La facultad del titular es solo para Promotoría y Dirección.");
@@ -81,6 +85,7 @@ public class UsoFacultadTitular extends BaseEntity {
 		u.accion = Objects.requireNonNull(accion, "accion");
 		u.cuentaNueva = cuentaNueva;
 		u.mensajeId = Objects.requireNonNull(mensajeId, "mensajeId");
+		u.codigoEscritoSha256 = Objects.requireNonNull(codigoEscritoSha256, "codigoEscritoSha256");
 		return u;
 	}
 

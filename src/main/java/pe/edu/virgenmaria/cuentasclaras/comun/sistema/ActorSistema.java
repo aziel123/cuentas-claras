@@ -57,7 +57,21 @@ public enum ActorSistema {
 	 * una corrección aprobada o una reemisión) y crea sus avisos a las familias. Con {@code cc_sistema}: es la única conexión
 	 * con INSERT en {@code libreta_emitida} y trg_libreta_emitida_nace y trg_mensaje_nace lo exigen.
 	 */
-	LIBRETAS("sistema.libretas");
+	LIBRETAS("sistema.libretas"),
+
+	/**
+	 * Sprint 11, tanda 1c (decisión 218): pone en vigencia la cuenta bancaria, la pasarela o la recaudación que aprobó
+	 * directo una Promotoría cuando vencen sus 24 horas de espera sin freno. Con {@code cc_sistema}: trg_conector_colegio_estado
+	 * lo exige.
+	 */
+	CONECTORES("sistema.conectores"),
+
+	/**
+	 * Sprint 11, tanda 1c (A1c-2 y A1c-3): aplica el cambio de roles o de estado de una cuenta que aprobó directo una
+	 * Promotoría cuando vencen sus 24 horas de espera sin freno (dar Promotoría en producción, quitarla y desactivar a una
+	 * Promotoría). Con {@code cc_sistema}: trg_usuario_rol_* y trg_usuario_identidad lo exigen.
+	 */
+	ROLES("sistema.roles");
 
 	/** Prefijo reservado: ninguna persona puede tener un nombre de usuario que empiece así. */
 	public static final String PREFIJO_RESERVADO = "sistema";

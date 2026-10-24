@@ -33,9 +33,59 @@ public class ConectoresController {
 
 	private final PropuestaConector propuesta;
 
-	public ConectoresController(ConsultaConectores consulta, PropuestaConector propuesta) {
+	private final pe.edu.virgenmaria.cuentasclaras.conectores.service.EsperaConectores espera;
+
+	public ConectoresController(ConsultaConectores consulta, PropuestaConector propuesta,
+			pe.edu.virgenmaria.cuentasclaras.conectores.service.EsperaConectores espera) {
 		this.consulta = consulta;
 		this.propuesta = propuesta;
+		this.espera = espera;
+	}
+
+	/** Sprint 11, tanda 1c (decisión 218): el código del socio para aprobar al instante un conector en espera. */
+	@PostMapping("/conectores/{id:\\d{1,12}}/codigo-socio")
+	public String codigoSocio(@PathVariable Long id, RedirectAttributes avisos) {
+		try {
+			pe.edu.virgenmaria.cuentasclaras.seguridad.service.CodigoPromotoria.Pedido pedido = espera.pedirCodigoDelSocio(id);
+			avisos.addFlashAttribute("pedido", pedido);
+			avisos.addFlashAttribute("pedidoConector", id);
+			avisos.addFlashAttribute("codigoDemostracion", espera.codigoDeDemostracion(pedido).orElse(null));
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/conectores";
+	}
+
+	/** Sprint 11, tanda 1c (decisión 218, A1c-2): el socio lo aprueba al instante con su código. */
+	@PostMapping("/conectores/{id:\\d{1,12}}/aprobar-ahora")
+	public String aprobarAhora(@PathVariable Long id,
+			@org.springframework.web.bind.annotation.RequestParam(required = false) Long codigoMensajeId,
+			@org.springframework.web.bind.annotation.RequestParam(required = false) String codigo, RedirectAttributes avisos) {
+		try {
+			espera.aprobarAhora(id, pe.edu.virgenmaria.cuentasclaras.seguridad.service.CodigoPromotoria.Escrito.de(
+					codigoMensajeId, codigo));
+			avisos.addFlashAttribute("exito", "Listo: lo aprobaste al instante y entró en vigencia. Se avisó a todas las "
+					+ "Promotorías y al correo de control.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/conectores";
+	}
+
+	/** Sprint 11, tanda 1c (decisión 218, A1c-2): otra Promotoría con 30 días en el rol lo frena durante la espera. */
+	@PostMapping("/conectores/{id:\\d{1,12}}/frenar")
+	public String frenar(@PathVariable Long id,
+			@org.springframework.web.bind.annotation.RequestParam(required = false) String motivo, RedirectAttributes avisos) {
+		try {
+			espera.frenar(id, motivo);
+			avisos.addFlashAttribute("exito", "Listo: lo frenaste. No entra en vigencia; se avisó a todos.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/conectores";
 	}
 
 	@GetMapping("/conectores")

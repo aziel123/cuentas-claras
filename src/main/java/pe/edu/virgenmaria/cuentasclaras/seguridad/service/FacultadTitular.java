@@ -101,11 +101,18 @@ public class FacultadTitular {
 	}
 
 	/**
-	 * El código pedido (vive en la sesión HTTP del titular hasta que lo usa): el mensaje que lo llevó y a dónde salió. No
-	 * guarda el código.
+	 * Sprint 11, tanda 1c (A1c-5): el código de un uso queda atado a la cuenta que se crea (la base calcula la misma huella
+	 * en trg_uso_facultad_titular_nace).
 	 */
-	public record CodigoPedido(Long colegioId, Long titularId, Long mensajeId, String clave, LocalDateTime creadoEn,
-			String destino) implements java.io.Serializable {
+	public static String huellaCuenta(Rol rol, String nombreUsuario) {
+		return pe.edu.virgenmaria.cuentasclaras.comun.cripto.Sha256.hex("FACULTAD|" + Accion.DAR.name() + "|" + rol.name()
+				+ "|" + Usuario.normalizarNombreUsuario(nombreUsuario));
+	}
+
+	/** Lo que autoriza el código de un uso (para «Enviar código»). */
+	public static CodigoPromotoria.Accion accionCrear(Rol rol, String nombreUsuario) {
+		return new CodigoPromotoria.Accion(huellaCuenta(rol, nombreUsuario), "Crear la cuenta "
+				+ Usuario.normalizarNombreUsuario(nombreUsuario) + " con " + rol.etiqueta());
 	}
 
 	private final UsuarioRepository usuarios;
@@ -132,6 +139,8 @@ public class FacultadTitular {
 
 	private final DerivadorSecreto derivador;
 
+	private final CodigoPromotoria codigos;
+
 	private final PasswordEncoder codificador;
 
 	private final GeneradorClaveTemporal generador;
@@ -156,7 +165,8 @@ public class FacultadTitular {
 			FirmaSesion firma, AuditoriaService auditoria, ApplicationEventPublisher eventos, DerivadorSecreto derivador,
 			PasswordEncoder codificador, GeneradorClaveTemporal generador, ServicioDetallesUsuario detalles,
 			SesionesFirmadas sesionesFirmadas, SesionesUsuario sesionesHttp, PropiedadesSeguridad propiedades,
-			PlatformTransactionManager transacciones, Clock reloj, Environment entorno) {
+			PlatformTransactionManager transacciones, Clock reloj, Environment entorno, CodigoPromotoria codigos) {
+		this.codigos = codigos;
 		this.usuarios = usuarios;
 		this.primeras = primeras;
 		this.sesionesGuardadas = sesionesGuardadas;
@@ -206,40 +216,26 @@ public class FacultadTitular {
 	}
 
 	/**
-	 * El titular pide el código de un uso: le llega al contacto registrado de su cuenta y vale 10 minutos. Devuelve el
-	 * pedido (sin el código), que la pantalla guarda en la sesión.
+	 * El titular pide el código de un uso: le llega a su WhatsApp registrado, vale 10 minutos y dice qué cuenta autoriza
+	 * crear (A1c-5). Devuelve el pedido (sin el código), que la pantalla guarda en la sesión.
 	 */
-	public CodigoPedido pedirCodigo() {
+	public CodigoPromotoria.Pedido pedirCodigo(Rol rol, String nombreUsuario) {
 		UsuarioAutenticado actor = actor();
-		return identidad.como(() -> {
-			Usuario titular = exigirTitularDisponible(actor);
-			LocalDateTime ahora = LocalDateTime.now(reloj);
-			CodigoFacultadPedido pedido = CodigoFacultadPedido.de(titular.getId(), "CODIGO_FACULTAD:"
-					+ UUID.randomUUID().toString().replace("-", "").substring(0, 16), ahora.plus(VIGENCIA_CODIGO).format(HORA));
-			eventos.publishEvent(pedido);
-			CodigoFacultadPedido.Resultado r = pedido.resultado();
-			if (r.mensajeId() == null) {
-				throw new IllegalStateException("La mensajería no creó el mensaje del código");
-			}
-			auditoria.registrar(AccionAuditoria.CODIGO_FACULTAD_PEDIDO, "usuario", titular.getId().toString(), null,
-					r.destino(), "El titular pidió el código para usar su facultad: salió a " + r.destino()
-							+ ". Vale 10 minutos y una sola vez.");
-			return new CodigoPedido(ContextoColegio.actual(), titular.getId(), r.mensajeId(), r.clave(), r.creadoEn(),
-					r.destino());
-		});
+		lectura.executeWithoutResult(t -> exigirTitularDisponible(actor));
+		exigirRolDelUso(rol);
+		return codigos.pedir(accionCrear(rol, nombreUsuario));
 	}
 
 	/** Solo en dev y en la demo (sin WhatsApp real): el código del pedido, para mostrarlo en la pantalla. */
-	public Optional<String> codigoDeDemostracion(CodigoPedido pedido) {
-		return demostracion && pedido != null ? Optional.of(derivador.codigoFacultad(pedido.colegioId(), pedido.clave()))
-				: Optional.empty();
+	public Optional<String> codigoDeDemostracion(CodigoPromotoria.Pedido pedido) {
+		return pedido == null ? Optional.empty() : codigos.codigoDeDemostracion(pedido.mensajeId());
 	}
 
 	/**
 	 * Crea una cuenta del personal que nace con UN rol directivo (PROMOTOR o DIRECTOR) más sus otros roles permitidos,
 	 * con el código del titular. La cuenta se activa con su enlace de un solo uso, que va a SU contacto.
 	 */
-	public UsuarioCreado crearCuentaDirectiva(CrearUsuarioRequest solicitud, String codigo, CodigoPedido pedido) {
+	public UsuarioCreado crearCuentaDirectiva(CrearUsuarioRequest solicitud, String codigo, CodigoPromotoria.Pedido pedido) {
 		UsuarioAutenticado actor = actor();
 		Set<Rol> roles = solicitud.roles() == null ? EnumSet.noneOf(Rol.class) : EnumSet.copyOf(solicitud.roles());
 		Set<Rol> directivos = EnumSet.copyOf(roles);
@@ -252,6 +248,7 @@ public class FacultadTitular {
 			throw new ReglaNegocioException("Esa cuenta no se crea desde aquí.");
 		}
 		Rol directivo = directivos.iterator().next();
+		exigirRolDelUso(directivo);
 		String nombreUsuario = Usuario.normalizarNombreUsuario(solicitud.nombreUsuario());
 		if (!Usuario.esNombreUsuarioValido(nombreUsuario)) {
 			throw new ReglaNegocioException("El usuario debe tener de 3 a 60 caracteres: letras minúsculas sin tildes, "
@@ -268,11 +265,14 @@ public class FacultadTitular {
 		}
 		Usuario creado;
 		try {
+			CodigoPromotoria.Valido valido = codigos.exigir(CodigoPromotoria.Escrito.de(pedido == null ? null
+					: pedido.mensajeId(), codigo), huellaCuenta(directivo, nombreUsuario));
 			creado = identidad.como(() -> {
 				Usuario titular = exigirTitularDisponible(actor);
-				exigirCodigo(titular, pedido, codigo);
+				if (usos.existsByMensajeId(valido.mensajeId())) {
+					throw new ReglaNegocioException("Ese código ya se usó: pide uno nuevo para cada cuenta.");
+				}
 				exigirOtroContacto(titular, telefono, correo);
-				exigirSinOtraDirectivaEnProduccion(titular.getId(), null);
 				LocalDateTime ahora = LocalDateTime.now(reloj);
 				// La firma antes que la cuenta: firmar vacía la sesión de Hibernate, y los roles de la cuenta nueva no deben
 				// llegar a la base antes que su uso de la facultad (trg_usuario_rol_alta lo exige).
@@ -284,7 +284,7 @@ public class FacultadTitular {
 				// La cuenta primero (su id lo necesita el uso); el uso antes que sus filas de usuario_rol (con IDENTITY,
 				// Hibernate inserta la cuenta y el uso al guardarlos, y los roles recién al vaciar la sesión).
 				usuarios.save(nuevo);
-				UsoFacultadTitular uso = guardarUso(numero, titular, nuevo.getId(), directivo, Accion.DAR, true, pedido);
+				UsoFacultadTitular uso = guardarUso(numero, titular, nuevo.getId(), directivo, Accion.DAR, true, valido);
 				usuarios.saveAndFlush(nuevo);
 				auditoria.registrar(AccionAuditoria.USUARIO_CREADO, "usuario", nuevo.getId().toString(), null,
 						"roles=" + rolesNombres(roles) + "; activo; enlace de activación al titular", "Usuario "
@@ -308,75 +308,19 @@ public class FacultadTitular {
 				LocalDateTime.now(reloj).plus(propiedades.vigenciaClaveTemporal()));
 	}
 
-	/** Da PROMOTOR o DIRECTOR a una cuenta del personal que ya existe, con el código del titular. */
-	public void dar(Long usuarioId, Rol rol, String codigo, CodigoPedido pedido) {
-		cambiar(usuarioId, rol, Accion.DAR, codigo, pedido);
-	}
-
-	/** Quita PROMOTOR o DIRECTOR a otra cuenta (solo en preparación: en producción, por CAMBIO_ROLES). */
-	public void quitar(Long usuarioId, Rol rol, String codigo, CodigoPedido pedido) {
-		cambiar(usuarioId, rol, Accion.QUITAR, codigo, pedido);
-	}
-
-	private void cambiar(Long usuarioId, Rol rol, Accion accion, String codigo, CodigoPedido pedido) {
-		UsuarioAutenticado actor = actor();
+	/**
+	 * Sprint 11, tanda 1c (ajuste de 3.12, decisión 220): dar o quitar Promotoría o Dirección a una cuenta que ya existe
+	 * ya no es la facultad del titular: es una acción directa y sensible de cualquier Promotoría («Cambiar roles», con su
+	 * código). En producción, una cuenta no nace con PROMOTOR (se le da después, con la espera de 24 horas: A1c-2).
+	 */
+	private void exigirRolDelUso(Rol rol) {
 		if (rol != Rol.PROMOTOR && rol != Rol.DIRECTOR) {
-			throw new ReglaNegocioException("La facultad del titular es solo para Promotoría y Dirección.");
+			throw new ReglaNegocioException("La facultad del titular crea cuentas de Promotoría o Dirección.");
 		}
-		String nombre = identidad.como(() -> {
-			Usuario titular = exigirTitularDisponible(actor);
-			Usuario cuenta = usuarios.findById(usuarioId)
-					.orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado"));
-			if (cuenta.getId().equals(titular.getId())) {
-				throw new ReglaNegocioException("Tu facultad no se usa sobre tu propia cuenta: ni para darte Dirección ni para "
-						+ "quitarte Promotoría.");
-			}
-			if (cuenta.getApoderadoId() != null) {
-				throw new ReglaNegocioException("Esa es la cuenta de un apoderado: no recibe roles del personal.");
-			}
-			Set<Rol> nuevos = cuenta.getRoles().isEmpty() ? EnumSet.noneOf(Rol.class) : EnumSet.copyOf(cuenta.getRoles());
-			if (accion == Accion.DAR) {
-				if (nuevos.contains(rol)) {
-					throw new ReglaNegocioException("Esa cuenta ya tiene " + rol.etiqueta() + ".");
-				}
-				nuevos.add(rol);
-			}
-			else {
-				if (!nuevos.contains(rol)) {
-					throw new ReglaNegocioException("Esa cuenta no tiene " + rol.etiqueta() + ".");
-				}
-				if (colegio().getEstado() == EstadoColegio.PRODUCCION) {
-					throw new ReglaNegocioException("En producción, quitar Promotoría o Dirección se pide con «Cambiar roles» y "
-							+ "lo aprueba otra persona: nunca se quita solo al contrapeso.");
-				}
-				nuevos.remove(rol);
-				if (nuevos.isEmpty()) {
-					throw new ReglaNegocioException("La cuenta se quedaría sin roles: dale otro rol primero o desactívala.");
-				}
-			}
-			// Quien cobra no aprueba (rige también para el titular): antes de firmar.
-			pe.edu.virgenmaria.cuentasclaras.seguridad.model.ReglasSegregacion.validarCuenta(nuevos, null);
-			exigirCodigo(titular, pedido, codigo);
-			if (accion == Accion.DAR) {
-				exigirSinOtraDirectivaEnProduccion(titular.getId(), cuenta.getId());
-				if (!cuentaActivada(cuenta.getId())) {
-					exigirOtroContacto(titular, cuenta.getTelefonoWhatsapp(), cuenta.getCorreo());
-				}
-			}
-			String anteriores = rolesNombres(cuenta.getRoles());
-			UsoFacultadTitular uso = guardarUso(firmarUso(), titular, cuenta.getId(), rol, accion, false, pedido);
-			cuenta.cambiarRoles(nuevos);
-			usuarios.saveAndFlush(cuenta);
-			auditoria.registrar(AccionAuditoria.ROLES_CAMBIADOS, "usuario", cuenta.getId().toString(), anteriores,
-					rolesNombres(nuevos), "Usuario " + cuenta.getNombreUsuario() + ": el titular "
-							+ (accion == Accion.DAR ? "le dio " : "le quitó ") + rol.etiqueta() + " con su facultad (uso "
-							+ uso.getNumero() + "), sin segunda aprobación.");
-			sesionesFirmadas.cerrarDe(cuenta.getId(), MotivoCierreSesion.CUENTA_CAMBIADA);
-			avisar(titular, cuenta, rol, accion, uso);
-			return cuenta.getNombreUsuario();
-		});
-		sesionesHttp.expirar(usuarioId);
-		avisarOperadores(actor, nombre, rol, accion);
+		if (rol == Rol.PROMOTOR && lectura.execute(t -> colegio().getEstado() == EstadoColegio.PRODUCCION)) {
+			throw new ReglaNegocioException("En producción una cuenta no nace con Promotoría: créala sin ese rol y dáselo con "
+					+ "«Cambiar roles» (espera 24 horas y lo pueden frenar las demás Promotorías y los operadores).");
+		}
 	}
 
 	/** La firma de la sesión del titular para el uso siguiente (numerado sin huecos); devuelve su número. */
@@ -388,9 +332,9 @@ public class FacultadTitular {
 
 	/** La fila del uso, ya firmado. */
 	private UsoFacultadTitular guardarUso(int numero, Usuario titular, Long usuarioId, Rol rol, Accion accion,
-			boolean cuentaNueva, CodigoPedido pedido) {
+			boolean cuentaNueva, CodigoPromotoria.Valido valido) {
 		return usos.saveAndFlush(UsoFacultadTitular.de(numero, titular, usuarioId, rol, accion, cuentaNueva,
-				pedido.mensajeId()));
+				valido.mensajeId(), valido.sha256()));
 	}
 
 	/**
@@ -475,25 +419,6 @@ public class FacultadTitular {
 		return null;
 	}
 
-	/** El código: del mensaje que le llegó al titular en este colegio, de hace 10 minutos o menos y sin usar. */
-	private void exigirCodigo(Usuario titular, CodigoPedido pedido, String codigo) {
-		if (pedido == null || !Objects.equals(pedido.colegioId(), ContextoColegio.actual())
-				|| !Objects.equals(pedido.titularId(), titular.getId())) {
-			throw new ReglaNegocioException("Primero pide tu código: te llega por WhatsApp o correo y vale 10 minutos.");
-		}
-		if (pedido.creadoEn() == null || pedido.creadoEn().plus(VIGENCIA_CODIGO).isBefore(LocalDateTime.now(reloj))) {
-			throw new ReglaNegocioException("Tu código venció (vale 10 minutos): pide uno nuevo.");
-		}
-		if (usos.existsByMensajeId(pedido.mensajeId())) {
-			throw new ReglaNegocioException("Ese código ya se usó: pide uno nuevo para cada cambio.");
-		}
-		String esperado = derivador.codigoFacultad(pedido.colegioId(), pedido.clave());
-		String escrito = codigo == null ? "" : codigo.replaceAll("\\s", "");
-		if (!MessageDigest.isEqual(esperado.getBytes(StandardCharsets.UTF_8), escrito.getBytes(StandardCharsets.UTF_8))) {
-			throw new ReglaNegocioException("El código no coincide con el que te llegó. Revísalo o pide uno nuevo.");
-		}
-	}
-
 	/** AP-2: una cuenta que todavía no se activó no va al contacto del titular (no se crea «otra persona»). */
 	private static void exigirOtroContacto(Usuario titular, String telefono, String correo) {
 		for (String suyo : new String[] { titular.getTelefonoWhatsapp(), titular.getCorreo() }) {
@@ -505,19 +430,6 @@ public class FacultadTitular {
 				throw new ReglaNegocioException("Ese celular o correo es tuyo: la cuenta de otra persona se activa con SU "
 						+ "contacto, nunca con el del titular.");
 			}
-		}
-	}
-
-	/** Decisión 201: en producción, la facultad da roles solo sin otra persona directiva (además del titular y del destino). */
-	private void exigirSinOtraDirectivaEnProduccion(Long titularId, Long destinoId) {
-		if (colegio().getEstado() != EstadoColegio.PRODUCCION) {
-			return;
-		}
-		boolean otra = DIRECTIVOS.stream().flatMap(r -> usuarios.activosConRol(r).stream())
-				.anyMatch(u -> u.getApoderadoId() == null && !u.getId().equals(titularId) && !u.getId().equals(destinoId));
-		if (otra) {
-			throw new ReglaNegocioException("El colegio está en producción y ya tiene otra persona de Promotoría o Dirección: "
-					+ "pide el rol con «Cambiar roles»; lo aprueba esa otra persona.");
 		}
 	}
 

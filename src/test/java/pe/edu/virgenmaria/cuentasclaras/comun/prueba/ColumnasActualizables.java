@@ -42,7 +42,13 @@ public final class ColumnasActualizables {
 		if (!grant.find()) {
 			throw new AssertionError("Falta el GRANT UPDATE por columna sobre " + tabla);
 		}
-		return Arrays.stream(grant.group(1).split(",")).map(String::strip).collect(Collectors.toCollection(TreeSet::new));
+		// Sprint 11, tanda 1c: las columnas de todos los GRANT UPDATE por columna de la tabla (las tandas suman los suyos).
+		Set<String> columnas = new TreeSet<>();
+		do {
+			Arrays.stream(grant.group(1).split(",")).map(String::strip).forEach(columnas::add);
+		}
+		while (grant.find());
+		return columnas;
 	}
 
 	private static boolean actualizable(Field campo) {

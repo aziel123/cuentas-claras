@@ -333,22 +333,15 @@ class MatrizPermisosTest {
 
 	@Test
 	@ComoUsuario(roles = Rol.PROMOTOR)
-	void promotorVePensionesPeroNoProponeNiGeneraNiArmaLotes() throws Exception {
+	void promotorVePensionesYArmaLotesPeroNoGenera() throws Exception {
+		// Sprint 11, tanda 1c (sección 3.16): la Promotoría (el dueño) también arma el plan y el lote de saldo inicial y los
+		// aplica directo. Antes de la 1c esto daba 403; generar el cronograma sigue siendo de Administración.
 		mvc.perform(get("/pensiones")).andExpect(status().isOk());
 		mvc.perform(get("/pensiones/cronogramas")).andExpect(status().isOk());
 		mvc.perform(get("/pensiones/saldo-inicial")).andExpect(status().isOk())
-				.andExpect(content().string(not(containsString("Nuevo lote"))));
-		mvc.perform(get("/pensiones/planes/nuevo").param("anio", "1").param("nivel", "PRIMARIA"))
-				.andExpect(status().isForbidden());
-		mvc.perform(post("/pensiones/planes/nuevo").with(csrf()).param("anio", "1").param("nivel", "PRIMARIA")
-				.param("montoMatricula", "350").param("vencimientoMatricula", "2027-02-28").param("montoPension", "450")
-				.param("vencimientos[0]", "2027-03-31")).andExpect(status().isForbidden());
+				.andExpect(content().string(containsString("Nuevo lote")));
 		mvc.perform(post("/pensiones/cronogramas/generar").with(csrf()).param("anio", "1"))
 				.andExpect(status().isForbidden());
-		mvc.perform(post("/pensiones/saldo-inicial").with(csrf()).param("anioId", "1").param("fechaCorte", "2026-09-30")
-				.param("documentoReferencia", "Informe").param("totalDeclarado", "100.00")).andExpect(status().isForbidden());
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM plan_pension", Long.class)).isZero();
-		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM lote_saldo_inicial", Long.class)).isZero();
 	}
 
 	@Test

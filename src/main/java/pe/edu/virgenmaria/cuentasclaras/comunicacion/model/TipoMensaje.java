@@ -48,7 +48,14 @@ public enum TipoMensaje {
 	LIBRETA_CORREGIDA("Libreta corregida", false),
 	// Sprint 11, tanda 1 (AP-2): el código de cada uso de la facultad del titular. Va solo al titular, a su contacto
 	// vigente (trg_mensaje_nace); ni el mensaje ni sus parámetros guardan el código: lo deriva el envío.
-	CODIGO_FACULTAD("Código de la facultad del titular", false);
+	CODIGO_FACULTAD("Código de la facultad del titular", false),
+	/**
+	 * Sprint 11, tanda 1c (decisión 216, A1c-5): el código de 6 dígitos de una acción sensible de Promotoría (también la
+	 * facultad del titular), atado a esa acción. Guarda solo su SHA-256 (CHECK ck_mensaje_codigo).
+	 */
+	CODIGO_PROMOTORIA("Código de una acción de Promotoría", false),
+	/** Sprint 11, tanda 1c (A1c-1): el código al contacto ANTERIOR de una cuenta directiva que cambia su contacto. */
+	CODIGO_CONTACTO("Código para confirmar el cambio de contacto", false);
 
 	private final String etiqueta;
 

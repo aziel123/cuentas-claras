@@ -387,6 +387,14 @@ BEGIN
             CONCAT('plan_pension:', NEW.id, ':APROBADO'), NEW.aprobado_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
     END IF;
+    -- Sprint 11, tanda 1c (V40): la directa (quien armó el plan lo aprueba) solo al aprobar, y por una Promotoría activa de
+    -- un colegio que opera. Después no cambia.
+    IF NOT (NEW.directa <=> OLD.directa) AND (OLD.directa IS NOT NULL OR NOT (NEW.estado <=> 'APROBADO')
+            OR OLD.estado <=> 'APROBADO' OR NOT cc_rol_activo(NEW.colegio_id, NEW.aprobado_por, 'PROMOTOR')
+            OR NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id AND c.tipo = 'COLEGIO'
+                AND c.estado IN ('PREPARACION', 'PRODUCCION'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el plan lo aprueba directo solo la Promotoria activa que lo armo';
+    END IF;
     IF OLD.estado <> 'BORRADOR' AND (NEW.monto_matricula <> OLD.monto_matricula
             OR NEW.monto_pension <> OLD.monto_pension
             OR NEW.vencimiento_matricula <> OLD.vencimiento_matricula
@@ -420,6 +428,14 @@ BEGIN
     IF NEW.estado = 'CONFIRMADO' AND NOT (OLD.estado <=> 'CONFIRMADO') AND NOT cc_firma_valida(NEW.colegio_id,
             CONCAT('lote_saldo_inicial:', NEW.id, ':CONFIRMADO'), NEW.confirmado_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
+    END IF;
+    -- Sprint 11, tanda 1c (V40): la directa (quien armó el lote lo confirma) solo al confirmar, y por una Promotoría
+    -- activa de un colegio que opera. Después no cambia.
+    IF NOT (NEW.directa <=> OLD.directa) AND (OLD.directa IS NOT NULL OR NOT (NEW.estado <=> 'CONFIRMADO')
+            OR OLD.estado <=> 'CONFIRMADO' OR NOT cc_rol_activo(NEW.colegio_id, NEW.confirmado_por, 'PROMOTOR')
+            OR NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id AND c.tipo = 'COLEGIO'
+                AND c.estado IN ('PREPARACION', 'PRODUCCION'))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el lote lo confirma directo solo la Promotoria activa que lo armo';
     END IF;
     IF NOT (NEW.devuelto_en <=> OLD.devuelto_en) AND NOT cc_firma_valida(NEW.colegio_id,
             CONCAT('lote_saldo_inicial:', NEW.id, ':DEVUELTO:', DATE_FORMAT(NEW.devuelto_en, '%Y%m%d%H%i%s%f')),
@@ -723,9 +739,11 @@ BEGIN
     -- pago, APROBADA por quien figura como aprobador y pedida por quien figura como solicitante, del mismo tipo y motivo,
     -- firmada con la sesión del aprobador hace 5 minutos o menos (se registra en la transacción de la bandeja), y quien
     -- aprueba es Promotoría o Dirección activa de ese colegio.
+    -- Sprint 11, tanda 1c (V40): directa solo si su solicitud fue directa (la de la Promotoría que la pidió, con código).
     IF NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = NEW.solicitud_id AND s.colegio_id = NEW.colegio_id
             AND s.tipo = 'ANULACION_PAGO' AND s.entidad = 'pago' AND s.entidad_id = NEW.pago_id AND s.estado = 'APROBADA'
             AND s.solicitado_por = NEW.solicitado_por AND s.resuelto_por = NEW.aprobado_por AND s.motivo = NEW.motivo
+            AND NEW.directa <=> s.directa
             AND JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.tipo')) = NEW.tipo
             AND cc_firma_valida(NEW.colegio_id, CONCAT('solicitud_cambio:', s.id, ':APROBADA'), s.resuelto_por))
             OR NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
@@ -768,8 +786,15 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la resolucion no tiene la firma de quien resuelve';
     END IF;
     IF OLD.estado <> 'SOLICITADO' AND (NOT (NEW.estado <=> OLD.estado) OR NOT (NEW.resuelto_por <=> OLD.resuelto_por)
-            OR NOT (NEW.resuelto_en <=> OLD.resuelto_en)) THEN
+            OR NOT (NEW.resuelto_en <=> OLD.resuelto_en) OR NOT (NEW.directa <=> OLD.directa)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un descuento resuelto no cambia';
+    END IF;
+    -- Sprint 11, tanda 1c (V40): la directa solo con su solicitud DESCUENTO directa (la Promotoría que la pidió, con su
+    -- código) ya APROBADA por quien lo resuelve.
+    IF OLD.estado = 'SOLICITADO' AND NEW.directa IS NOT NULL AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s
+            WHERE s.colegio_id = NEW.colegio_id AND s.tipo = 'DESCUENTO' AND s.entidad = 'descuento'
+              AND s.entidad_id = NEW.id AND s.estado = 'APROBADA' AND s.directa AND s.resuelto_por <=> NEW.resuelto_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el descuento lo aprueba directo solo la Promotoria que lo pidio, con su solicitud directa';
     END IF;
 END$$
 

@@ -65,6 +65,35 @@ public class SolicitudCambio extends BaseEntity {
 	@Column(length = 500)
 	private String comentario;
 
+	/**
+	 * Sprint 11, tanda 1c (sección 3.16): TRUE si la pidió y la resolvió la misma Promotoría (aplicación directa); si no,
+	 * NULL. En MySQL lo valida trg_solicitud_cambio_resuelta (rol, firma, código si es sensible, correo de control).
+	 */
+	@Column
+	private Boolean directa;
+
+	/** Tanda 1c (A1c-5): el CODIGO_PROMOTORIA de una directa sensible, o el CODIGO_CONTACTO de una cuenta directiva. */
+	@Column(name = "codigo_mensaje_id")
+	private Long codigoMensajeId;
+
+	/** Tanda 1c (A1c-5): la SHA-256 de lo que escribió la persona (la base la compara con la del mensaje). */
+	@Column(name = "codigo_escrito_sha256", length = 64)
+	private String codigoEscritoSha256;
+
+	/** Tanda 1c (A1c-6): fin de la espera de 24 horas. La pone SOLO la base (en H2 queda vacía). */
+	@Column(name = "aplica_desde", insertable = false, updatable = false)
+	private LocalDateTime aplicaDesde;
+
+	@Column(name = "frenado_por", length = 60)
+	private String frenadoPor;
+
+	/** La hora del freno: la pone la base (en H2, nadie). */
+	@Column(name = "frenado_en", insertable = false, updatable = false)
+	private LocalDateTime frenadoEn;
+
+	@Column(name = "motivo_freno", length = 500)
+	private String motivoFreno;
+
 	protected SolicitudCambio() {
 		// requerido por JPA
 	}
@@ -90,6 +119,73 @@ public class SolicitudCambio extends BaseEntity {
 	public void aprobar(String por, String comentarioAprobacion, LocalDateTime ahora) {
 		resolver(EstadoSolicitud.APROBADA, por, comentarioAprobacion == null || comentarioAprobacion.isBlank() ? null
 				: Motivo.exigir(comentarioAprobacion), ahora);
+	}
+
+	/**
+	 * Sprint 11, tanda 1c (sección 3.16): la Promotoría que la pidió la aprueba ella misma (aplicación directa), con el
+	 * código de esta acción si es sensible ({@code codigoMensajeId} y la SHA-256 de lo escrito; si no, {@code null}).
+	 */
+	public void aprobarDirecta(String por, Long codigoMensajeId, String codigoEscritoSha256, LocalDateTime ahora) {
+		if (estado != EstadoSolicitud.PENDIENTE) {
+			throw new ReglaNegocioException("La solicitud ya fue " + estado.etiqueta().toLowerCase() + ".");
+		}
+		if (!Objects.equals(por, solicitadoPor)) {
+			throw new IllegalStateException("La directa la resuelve quien la pidió");
+		}
+		if ((codigoMensajeId == null) != (codigoEscritoSha256 == null)) {
+			throw new IllegalArgumentException("El código va con su mensaje y lo escrito");
+		}
+		estado = EstadoSolicitud.APROBADA;
+		pendiente = null;
+		resueltoPor = por;
+		resueltoEn = Objects.requireNonNull(ahora, "ahora");
+		comentario = null;
+		directa = Boolean.TRUE;
+		this.codigoMensajeId = codigoMensajeId;
+		this.codigoEscritoSha256 = codigoEscritoSha256;
+	}
+
+	/**
+	 * Sprint 11, tanda 1c (A1c-1): la persona dueña de una cuenta directiva confirma el cambio de su contacto con el código
+	 * que le llegó a su contacto ANTERIOR (una vez, mientras está pendiente).
+	 */
+	public void confirmarDesdeContactoAnterior(Long codigoMensajeId, String codigoEscritoSha256) {
+		if (estado != EstadoSolicitud.PENDIENTE) {
+			throw new ReglaNegocioException("La solicitud ya fue " + estado.etiqueta().toLowerCase() + ".");
+		}
+		if (this.codigoMensajeId != null) {
+			throw new ReglaNegocioException("Este cambio ya está confirmado desde el contacto anterior.");
+		}
+		this.codigoMensajeId = Objects.requireNonNull(codigoMensajeId, "codigoMensajeId");
+		this.codigoEscritoSha256 = Objects.requireNonNull(codigoEscritoSha256, "codigoEscritoSha256");
+	}
+
+	/** Si la persona afectada ya confirmó el cambio de su contacto desde el contacto anterior (A1c-1). */
+	public boolean confirmadaDesdeContactoAnterior() {
+		return codigoMensajeId != null && !isDirecta();
+	}
+
+	/**
+	 * Sprint 11, tanda 1c (A1c-2, A1c-3): frena una directa que espera (una vez, con motivo de 20 caracteres o más).
+	 * {@code venceEspera}: cuándo termina la espera (la de la base o la que calcula la aplicación en H2).
+	 */
+	public void frenar(String por, String motivo, LocalDateTime ahora, LocalDateTime venceEspera) {
+		if (estado != EstadoSolicitud.APROBADA || !Boolean.TRUE.equals(directa) || venceEspera == null) {
+			throw new ReglaNegocioException("Esta solicitud no está en espera: no se frena.");
+		}
+		if (frenadoPor != null) {
+			throw new ReglaNegocioException("Esta solicitud ya está frenada por " + frenadoPor + ".");
+		}
+		if (!ahora.isBefore(venceEspera)) {
+			throw new ReglaNegocioException("La espera ya terminó: el cambio se aplica (o ya se aplicó).");
+		}
+		String texto = motivo == null ? "" : motivo.strip();
+		if (texto.length() < 20 || texto.length() > 500) {
+			throw new ReglaNegocioException("Escribe por qué la frenas (de 20 a 500 caracteres): lo leen todas las "
+					+ "Promotorías y el correo de control.");
+		}
+		frenadoPor = Objects.requireNonNull(por, "por");
+		motivoFreno = texto;
 	}
 
 	public void rechazar(String por, String motivoRechazo, LocalDateTime ahora) {
@@ -165,5 +261,52 @@ public class SolicitudCambio extends BaseEntity {
 
 	public String getComentario() {
 		return comentario;
+	}
+
+	public boolean isDirecta() {
+		return Boolean.TRUE.equals(directa);
+	}
+
+	public Long getCodigoMensajeId() {
+		return codigoMensajeId;
+	}
+
+	public String getCodigoEscritoSha256() {
+		return codigoEscritoSha256;
+	}
+
+	/** El fin de la espera que puso la base (MySQL), o {@code null} (H2 o una solicitud sin espera). */
+	public LocalDateTime getAplicaDesde() {
+		return aplicaDesde;
+	}
+
+	public String getFrenadoPor() {
+		return frenadoPor;
+	}
+
+	public LocalDateTime getFrenadoEn() {
+		return frenadoEn;
+	}
+
+	public String getMotivoFreno() {
+		return motivoFreno;
+	}
+
+	public boolean estaFrenada() {
+		return frenadoPor != null;
+	}
+
+	/**
+	 * Tanda 1c (A1c-5): la huella de la acción que autoriza el código, igual que la calcula la base
+	 * ({@code SHA2(CONCAT_WS('|', tipo, entidad, entidad_id, datos), 256)}).
+	 */
+	public String huellaAccion() {
+		return huella(tipo, entidad, entidadId, datos);
+	}
+
+	/** La misma huella, antes de que la solicitud exista. */
+	public static String huella(TipoSolicitud tipo, String entidad, Long entidadId, String datos) {
+		return pe.edu.virgenmaria.cuentasclaras.comun.cripto.Sha256.hex(tipo.name() + "|" + entidad + "|" + entidadId + "|"
+				+ datos);
 	}
 }

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import jakarta.servlet.http.HttpSession;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.CodigoPromotoria;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.FacultadTitular;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
@@ -78,7 +79,8 @@ public class UsuarioController {
 		if (validacion.hasErrors()) {
 			return "usuarios/formulario";
 		}
-		boolean directiva = solicitud.roles().contains(Rol.PROMOTOR) || solicitud.roles().contains(Rol.DIRECTOR);
+		boolean directiva = solicitud.roles() != null
+				&& (solicitud.roles().contains(Rol.PROMOTOR) || solicitud.roles().contains(Rol.DIRECTOR));
 		if (directiva && facultad.esTitular()) {
 			Rol rol = solicitud.roles().contains(Rol.DIRECTOR) ? Rol.DIRECTOR : Rol.PROMOTOR;
 			java.util.EnumSet<Rol> roles = java.util.EnumSet.copyOf(solicitud.roles());
@@ -107,24 +109,15 @@ public class UsuarioController {
 		return "usuarios/detalle";
 	}
 
-	/** Sprint 11, tanda 1 (sección 3.12): el titular da o quita Promotoría o Dirección con su facultad (pide el código). */
+	/**
+	 * Sprint 11, tanda 1c (ajuste de 3.12): dar o quitar Promotoría o Dirección a una cuenta que ya existe ya no es la
+	 * facultad del titular: es «Cambiar roles», directo con el código de la Promotoría.
+	 */
 	@PostMapping("/{id}/facultad")
-	public String usarFacultad(@PathVariable Long id, @RequestParam Rol rol, @RequestParam String accion, Model model,
-			HttpSession sesion, RedirectAttributes avisos) {
-		boolean dar = !"QUITAR".equals(accion);
-		String nombre;
-		try {
-			nombre = servicio.obtener(id).nombreUsuario();
-		}
-		catch (ReglaNegocioException e) {
-			avisos.addFlashAttribute("error", e.getMessage());
-			return redirigirADetalle(id);
-		}
-		model.addAttribute("usuario", servicio.obtener(id));
-		model.addAttribute("rolesAsignables", servicio.rolesAsignables());
-		model.addAttribute("facultad", estadoFacultad());
-		return pedirCodigo(new Pendiente(false, id, rol, dar, null, null, null, null, null, (dar ? "Dar " : "Quitar ")
-				+ rol.etiqueta() + (dar ? " a " : " a la cuenta ") + nombre), sesion, model, "usuarios/detalle");
+	public String usarFacultad(@PathVariable Long id, RedirectAttributes avisos) {
+		avisos.addFlashAttribute("error", "Para dar o quitar Promotoría o Dirección usa «Cambiar roles»: como Promotoría lo "
+				+ "aplicas directo con tu código por WhatsApp (dar Promotoría en producción o quitarla espera 24 horas).");
+		return redirigirADetalle(id);
 	}
 
 	/** Sprint 11, tanda 1: otro código para lo mismo (el anterior venció o no llegó). */
@@ -142,40 +135,28 @@ public class UsuarioController {
 	public String confirmarFacultad(@RequestParam(required = false) String codigo, HttpSession sesion, Model model,
 			RedirectAttributes avisos) {
 		if (!(sesion.getAttribute(PENDIENTE) instanceof Pendiente pendiente)
-				|| !(sesion.getAttribute(PEDIDO) instanceof FacultadTitular.CodigoPedido pedido)) {
+				|| !(sesion.getAttribute(PEDIDO) instanceof CodigoPromotoria.Pedido pedido)) {
 			avisos.addFlashAttribute("error", "No hay nada pendiente: vuelve a empezar desde «Usuarios».");
 			return "redirect:/usuarios";
 		}
 		try {
-			if (pendiente.crear()) {
-				model.addAttribute("creado", facultad.crearCuentaDirectiva(pendiente.solicitud(), codigo, pedido));
-				model.addAttribute("restablecida", false);
-				model.addAttribute("conFacultad", true);
-				limpiar(sesion);
-				return "usuarios/creado";
-			}
-			if (pendiente.dar()) {
-				facultad.dar(pendiente.usuarioId(), pendiente.rol(), codigo, pedido);
-			}
-			else {
-				facultad.quitar(pendiente.usuarioId(), pendiente.rol(), codigo, pedido);
-			}
+			model.addAttribute("creado", facultad.crearCuentaDirectiva(pendiente.solicitud(), codigo, pedido));
+			model.addAttribute("restablecida", false);
+			model.addAttribute("conFacultad", true);
+			limpiar(sesion);
+			return "usuarios/creado";
 		}
 		catch (ReglaNegocioException e) {
 			model.addAttribute("error", e.getMessage());
 			prepararCodigo(model, pendiente, pedido);
 			return "usuarios/codigo-facultad";
 		}
-		limpiar(sesion);
-		avisos.addFlashAttribute("exito", "Listo: " + primeraMinuscula(pendiente.resumen()) + ", con tu facultad. Se avisó "
-				+ "al correo de control, a toda la Promotoría y a la plataforma; sus sesiones abiertas se cerraron.");
-		return redirigirADetalle(pendiente.usuarioId());
 	}
 
 	private String pedirCodigo(Pendiente pendiente, HttpSession sesion, Model model, String vistaSiFalla) {
-		FacultadTitular.CodigoPedido pedido;
+		CodigoPromotoria.Pedido pedido;
 		try {
-			pedido = facultad.pedirCodigo();
+			pedido = facultad.pedirCodigo(pendiente.rol(), pendiente.nombreUsuario());
 		}
 		catch (ReglaNegocioException e) {
 			model.addAttribute("error", e.getMessage());
@@ -187,7 +168,7 @@ public class UsuarioController {
 		return "usuarios/codigo-facultad";
 	}
 
-	private void prepararCodigo(Model model, Pendiente pendiente, FacultadTitular.CodigoPedido pedido) {
+	private void prepararCodigo(Model model, Pendiente pendiente, CodigoPromotoria.Pedido pedido) {
 		model.addAttribute("pendiente", pendiente);
 		model.addAttribute("pedido", pedido);
 		model.addAttribute("codigoDemostracion", facultad.codigoDeDemostracion(pedido).orElse(null));
@@ -219,8 +200,9 @@ public class UsuarioController {
 		String[] exito = { "Listo: se cambiaron los roles. Sus sesiones abiertas se cerraron." };
 		return ejecutar(id, validacion, avisos, () -> {
 			if (servicio.cambiarRoles(id, solicitud)) {
-				exito[0] = "Listo: se pidió el cambio de roles. Lo aprueba otra persona de Promotoría o Dirección en la "
-						+ "bandeja de aprobaciones; hasta entonces los roles no cambian.";
+				exito[0] = "Listo: se pidió el cambio de roles. Si eres Promotoría, confírmalo con tu código en Aprobaciones "
+						+ "(«Aprobar y aplicar»; dar Promotoría en producción o quitarla espera 24 horas); si no, lo aprueba "
+						+ "una persona de Promotoría. Hasta entonces los roles no cambian.";
 			}
 		}, exito);
 	}

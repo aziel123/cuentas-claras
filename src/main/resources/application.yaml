@@ -101,6 +101,12 @@ cuentasclaras:
     operadores: ${CC_OPERADORES:}
     max-colegios: 25                 # decisión 138: tope de una instalación compartida
     max-alumnos: 8000
+  directa:
+    # Sprint 11, tanda 1c (decisiones 218 y 223): cada 15 minutos, sistema.roles aplica el cambio de roles o de estado de
+    # cuenta y sistema.conectores la cuenta bancaria, la pasarela o la recaudación que una Promotoría aplicó directo y
+    # esperaron 24 horas sin freno. La espera la fija la base (configuracion_bd, espera_directa_horas: 24 en prod).
+    aplicacion-cron: "0 */15 * * * *"
+    conectores-cron: "0 */15 * * * *"
   ciclo:
     # Sprint 11, tanda 1 (secciones 3.3 a 3.6): los cambios de estado del colegio. sistema.plataforma aplica los aprobados
     # cada 15 minutos y revisa cada día que todo estado tenga su cambio (F7). La suspensión queda apagada hasta que exista

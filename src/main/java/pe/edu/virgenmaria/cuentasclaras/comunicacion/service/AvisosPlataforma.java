@@ -140,6 +140,10 @@ public class AvisosPlataforma {
 			case OBJECION_TITULAR -> PlantillaMensaje.OBJECION_TITULAR;
 			case OBJECION_RESPONDIDA -> PlantillaMensaje.OBJECION_RESPONDIDA;
 			case FACULTAD_TITULAR_USADA -> PlantillaMensaje.FACULTAD_TITULAR_USADA;
+			case ACCION_DIRECTA -> PlantillaMensaje.ACCION_DIRECTA;
+			case DIRECTA_EN_ESPERA -> PlantillaMensaje.DIRECTA_EN_ESPERA;
+			case DIRECTA_FRENADA -> PlantillaMensaje.DIRECTA_FRENADA;
+			case CONCILIACION_BLOQUEADA -> PlantillaMensaje.CONCILIACION_BLOQUEADA;
 		};
 	}
 
