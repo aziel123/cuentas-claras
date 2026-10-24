@@ -6,7 +6,7 @@
 > está en verde.** Skills: `sistema-diseno` (marca, componentes y accesibilidad) y `evaluacion-ux` (microcopy).
 
 ## 1. Decisiones (pendientes del usuario: se implementan los valores por defecto)
-1. **Sin cambios en la base:** sin migración, triggers, funciones ni huellas. Conteos sin cambio: **117 triggers, 19 funciones y
+1. **Sin cambios en la base** (tampoco en F-D1 ni F-D2): sin migración, triggers, funciones ni huellas. Conteos sin cambio: **117 triggers, 19 funciones y
    136 huellas** (los de la tanda 1). Si algo pareciera pedir una columna, se calcula en Java desde lo que ya existe.
 2. **Avance (206):** «Tu colegio está en preparación: faltan N de 15 pasos», con N = obligatorios pendientes; «(y 2 opcionales)»
    si faltan; la barra sobre los 13 obligatorios.
@@ -38,11 +38,12 @@
   recaudación («Confirmar lote») y renovación.
 - **Puesta en marcha** (`puesta-en-marcha/lista.html`): número, título, estado con texto e ícono, responsable, conteo, «Ir» o
   «Lo hace …», «Siguiente» marcado con texto, «Pasar a producción» deshabilitado con el motivo.
-- **Una falla de interfaz de la demo (sección 2b):** la tarjeta de Secundaria desalineada en Pensiones.
+- **Dos correcciones de Pensiones (sección 2b):** la tarjeta de Secundaria desalineada (F-D1) y los vencimientos propuestos
+  según el inicio de clases (F-D2).
 - **Fuera de alcance:** cambios de lógica de los pasos (son de la tanda 1); avisos por WhatsApp o correo de los pasos
   pendientes (después, si el usuario lo pide); la guía para el operador (ya ve la lista como sí o no).
 
-## 2b. Falla de la demo que se corrige en esta tanda
+## 2b. Correcciones de Pensiones que van en esta tanda
 **F-D1. Tarjeta de Secundaria desalineada en Pensiones.** «Sin plan aprobado» baja a una segunda línea junto a «Secundaria» y su
 botón queda más abajo que los de Inicial y Primaria.
 - **Corrección (CSS con los tokens de `sistema-diseno`, sin colores nuevos):** `.lista-tarjetas` en grilla con filas de la
@@ -54,6 +55,26 @@ botón queda más abajo que los de Inicial y Primaria.
 - **Pruebas:** `PensionesTarjetasTest` (renderiza el resumen con los tres niveles: cada tarjeta tiene la misma estructura,
   `.tarjeta-titulo`, `.tarjeta-etiqueta` y `.tarjeta-acciones`, en ese orden, sin importar el estado del plan) y revisión visual
   con `disenador-ui` en 360, 768 y 1280 px con «Secundaria» y la etiqueta más larga («Sin plan aprobado»).
+
+**F-D2. Vencimientos de las pensiones propuestos según el inicio de clases.** Hoy `ConfiguracionPlan.porDefecto(int anio, …)`
+propone siempre el último día de **marzo a diciembre** (`Calendario.vencimientosPorDefecto(anio, 3, 10)`), sin mirar el año
+escolar. Un colegio que empieza en abril recibe una pensión de marzo que `validarVencimientos` rechaza («vence antes del inicio
+de clases»), y uno que termina en noviembre recibe una de diciembre.
+- **Regla nueva:** `ConfiguracionPlan.porDefecto(AnioEscolar anio, BigDecimal matricula, BigDecimal pension)` propone el último
+  día de **cada mes desde el mes del inicio de clases hasta el mes del fin de clases**, uno por mes, **como máximo 12**
+  (`MAX_PENSIONES`). Si las clases empiezan a mitad de mes (por ejemplo, el 16/03), la primera pensión es la de ese mismo mes
+  (31/03), que `validarVencimientos` acepta porque compara por mes. El vencimiento de la matrícula y «Cobrar desde» no cambian.
+- **Se reemplaza la firma con `int`:** `ServicioPlanesPension.propuestaPorDefecto`, `PensionesDemo` y `DatosDemoPensionesDev`
+  usan la nueva. Las pruebas que hoy llaman a `porDefecto(int, …)` (`ConfiguracionPlanTest`, `CalculadoraCronogramaTest`,
+  `CuotasDePrueba`) pasan un `AnioEscolar` de marzo a diciembre y sus resultados esperados no cambian. `EscenarioCobranza` y
+  `GeneradorCronogramaTest`, que arman sus vencimientos con `Calendario.vencimientosPorDefecto` directamente, quedan igual.
+- **Prueba obligatoria** `PropuestaVencimientosSegunInicioTest`: la propuesta por defecto **pasa `validar(anio)`** y trae estos
+  vencimientos:
+  - clases del 01/03 al 18/12: 10 pensiones, de marzo a diciembre;
+  - clases del 01/04 al 30/11: 8 pensiones, de abril a noviembre (ninguna en marzo ni en diciembre);
+  - clases del 16/03 al 18/12 (a mitad de mes): 10 pensiones, la primera el 31/03;
+  - un año de enero a diciembre: 12 pensiones (el tope);
+  - y lo mismo por el servicio (`propuestaPorDefecto(anioId, nivel)` con su año escolar), para el año en curso y el siguiente.
 
 ## 3. Textos (microcopy; revisar con `investigador-ux` antes de cerrar)
 - Banner, le toca: «Tu colegio está en preparación: faltan 6 de 15 pasos.» · «Siguiente: Crear las secciones del año 2026 — lo
@@ -98,7 +119,8 @@ botón queda más abajo que los de Inicial y Primaria.
   `pensiones/…`, `alumnos/…`, `conectores/…`, `usuarios/…`, el saldo inicial); `caja/hoy` y `caja/familia` («Cobrar»
   deshabilitado), `comunicados/…`, `recaudacion/lote` y la campaña de renovación; `familia/…` (texto del portal en preparación).
 - **CSS:** `static/css/` (banner, barra, estado de paso).
-- **F-D1:** `templates/pensiones/resumen.html` y su CSS.
+- **F-D1:** `templates/pensiones/resumen.html` y su CSS. **F-D2:** `cobranza.model.ConfiguracionPlan` (`porDefecto(AnioEscolar,
+  …)`), `ServicioPlanesPension.propuestaPorDefecto`, `PensionesDemo`, `DatosDemoPensionesDev` y las pruebas que usan la firma vieja.
 - **Documentos:** `docs/manuales/promotoria.md`, `direccion.md`, `administracion.md`, `caja.md` y `docente.md` («Qué ves mientras tu colegio
   está en preparación»); sección «Tanda 1b · Implementación» del diseño.
 
@@ -109,7 +131,7 @@ botón queda más abajo que los de Inicial y Primaria.
 4. La Puesta en marcha con responsable, estado e «Ir».
 5. `ColegioEnPreparacionException`, `PreparacionAdvice`, traducción de los 1644 y botones deshabilitados.
 6. Los 7 estados vacíos.
-7. F-D1 (tarjetas de Pensiones).
+7. F-D1 (tarjetas de Pensiones) y F-D2 (vencimientos según el inicio de clases, con su prueba).
 8. Accesibilidad, microcopy con `investigador-ux`, revisión en celular con `disenador-ui`, manuales y CI en verde.
 
 ## 7. Pruebas obligatorias
@@ -159,5 +181,5 @@ Mientras el colegio está en preparación, cada persona del personal ve en su in
 y quién lo hace, con un botón que la lleva a la pantalla correcta solo si puede usarla; las 7 pantallas vacías dicen qué falta y
 cómo seguir; cobrar o enviar algo bloqueado explica por qué y enlaza a la Puesta en marcha; la Puesta en marcha muestra estado,
 responsable e «Ir» de los 15 pasos; las familias no ven nada de esto; las tres tarjetas de Pensiones quedan
-alineadas; la revisión de accesibilidad pasa; y el CI del PR en
+alineadas y la propuesta de vencimientos pasa la validación con clases desde marzo, desde abril o desde mitad de mes; la revisión de accesibilidad pasa; y el CI del PR en
 borrador está en verde, con los conteos de la tanda 1 sin cambios (117 triggers, 19 funciones, 136 huellas).
