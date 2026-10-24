@@ -434,6 +434,8 @@ class VerificadorPermisosBaseDatosTest {
 	static void conPlataformaSana(JdbcTemplate mysql) {
 		// Sprint 11, tanda 1 (H9): SET timestamp no mueve SYSDATE().
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_RELOJ_REAL, Boolean.class)).thenReturn(true);
+		// Sprint 11, tanda 1c (A1c-6): la espera de las directas, 24 horas.
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_ESPERA_DIRECTA, String.class)).thenReturn("24");
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_PLATAFORMAS, Integer.class)).thenReturn(1);
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_ROLES_EN_PLATAFORMA, Integer.class)).thenReturn(0);
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_OPERADORES_FUERA, Integer.class)).thenReturn(0);

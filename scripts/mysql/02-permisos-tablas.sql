@@ -358,6 +358,17 @@ GRANT INSERT ON cuentasclaras.delegacion_siagie TO 'cc_negocio';
 -- deciden trg_anio_escolar_nace y trg_anio_escolar_cambio.
 GRANT UPDATE (estado_desde, suspendido_en) ON cuentasclaras.colegio TO 'cc_negocio';
 
+-- ===================== Sprint 11 · tanda 1c (V40): la Promotoría aplica directo =====================
+-- solicitud_cambio: la directa, su código (y la confirmación del contacto anterior, A1c-1) y el freno de la espera.
+-- conector_colegio: la directa, el freno y el código del socio que aprueba al instante. Las columnas se suman a las de
+-- arriba (cc_sistema las hereda del rol). A1c-6: NINGÚN GRANT sobre aplica_desde ni frenado_en en ninguna de las dos (las
+-- pone el trigger, cuyo definidor es cc_migrador: comprobado en el paso 1; con cc_app o cc_sistema, 1143).
+GRANT UPDATE (directa, codigo_mensaje_id, codigo_escrito_sha256, frenado_por, motivo_freno)
+    ON cuentasclaras.solicitud_cambio TO 'cc_negocio';
+GRANT UPDATE (directa, frenado_por, motivo_freno, codigo_mensaje_id, codigo_escrito_sha256)
+    ON cuentasclaras.conector_colegio TO 'cc_negocio';
+-- configuracion_bd sigue SIN GRANT: espera_directa_horas (24) la escribe solo el DBA; el verificador de prod exige 24.
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se

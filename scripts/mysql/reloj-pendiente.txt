@@ -2,4 +2,5 @@
 # CURDATE, CURRENT_TIMESTAMP y CURRENT_DATE) quedan en scripts/mysql/03-triggers.sql, fuera de los comentarios «--». Los
 # triggers nuevos y las versiones nuevas usan cc_ahora_lima_real(). El paso «reloj-real» del CI (scripts/ci/reloj-real.sh)
 # falla si 03 tiene MÁS que este número: el conteo solo puede bajar. En la tanda 2 del sprint 11 llega a 0.
-31
+# Tanda 1c: 31 → 27 (trg_feriado_anulacion y trg_comunicado_estado pasan al reloj real).
+27

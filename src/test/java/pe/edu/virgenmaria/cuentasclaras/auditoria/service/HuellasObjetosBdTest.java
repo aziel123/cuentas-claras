@@ -44,9 +44,10 @@ class HuellasObjetosBdTest {
 		// del SIAGIE; versión nueva de trg_mensaje_nace) y las mismas 16 funciones: 128.
 		// Sprint 11, tanda 1 (V39): 117 triggers (el cambio de estado del colegio, el año escolar y la facultad del titular)
 		// y 19 funciones (cc_ahora_lima_real, cc_colegio_en_preparacion y cc_es_titular): 136.
+		// Sprint 11, tanda 1c (V40): los mismos 117 triggers y 21 funciones (cc_codigo_promotoria y cc_promotoria_antigua): 138.
 		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(117)
 				.isEqualTo(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
-		assertThat(esperadas).hasSize(136).containsKeys("trg_cambio_estado_colegio_nace", "trg_cambio_estado_colegio_estado",
+		assertThat(esperadas).hasSize(138).containsKeys("cc_codigo_promotoria", "cc_promotoria_antigua", "trg_cambio_estado_colegio_nace", "trg_cambio_estado_colegio_estado",
 				"trg_anio_escolar_nace", "trg_anio_escolar_cambio", "trg_uso_facultad_titular_nace", "cc_ahora_lima_real",
 				"cc_colegio_en_preparacion", "cc_es_titular", "trg_libreta_emitida_nace", "trg_entrega_libreta_nace",
 				"trg_exportacion_calificaciones_nace", "trg_delegacion_siagie_nace", "cc_docente_de_area", "trg_lote_calificacion_nace",

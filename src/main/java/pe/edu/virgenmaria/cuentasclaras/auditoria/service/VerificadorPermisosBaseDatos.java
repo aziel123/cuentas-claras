@@ -66,6 +66,9 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 	/** SIGNAL SQLSTATE '45000' de un trigger (scripts/mysql/03-triggers.sql). */
 	static final int MYSQL_SIGNAL = 1644;
 
+	/** Sprint 11, tanda 1c: un CHECK que no se cumple. */
+	static final int MYSQL_CHECK = 3819;
+
 	/** Sentencia que la base DEBE rechazar, con los códigos de error aceptados y lo que significaría si no. */
 	record SentenciaProhibida(String sql, Set<Integer> codigosAceptados, String riesgo) {
 	}
@@ -491,7 +494,43 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					"La aplicación podría dar Promotoría o Dirección como si fuera el titular."),
 			soloInsercion("uso_facultad_titular"), sinBorrado("uso_facultad_titular"), sinBorrado("cambio_estado_colegio"),
 			columna("UPDATE colegio SET cambio_estado_id = cambio_estado_id WHERE 1 = 0", "colegio"),
-			columna("UPDATE colegio SET facultad_bloqueada = facultad_bloqueada WHERE 1 = 0", "colegio"));
+			columna("UPDATE colegio SET facultad_bloqueada = facultad_bloqueada WHERE 1 = 0", "colegio"),
+			// Sprint 11, tanda 1c (V40, secciones 3.16 y 3.16b): una solicitud no nace APROBADA ni directa sin firma, un
+			// conector no nace EN_ESPERA (1644); la espera y la hora del freno las pone solo la base (A1c-6: 1143); una
+			// directa resuelta por otra persona viola su CHECK (3819).
+			trigger(VerificadorPermisosBaseDatos.SOLICITUD_DIRECTA_IMPOSIBLE, "trg_solicitud_cambio_nace"),
+			trigger(VerificadorPermisosBaseDatos.CONECTOR_EN_ESPERA_IMPOSIBLE, "trg_conector_colegio_nace"),
+			columna("UPDATE solicitud_cambio SET aplica_desde = aplica_desde WHERE 1 = 0", "solicitud_cambio"),
+			columna("UPDATE solicitud_cambio SET frenado_en = frenado_en WHERE 1 = 0", "solicitud_cambio"),
+			columna("UPDATE conector_colegio SET aplica_desde = aplica_desde WHERE 1 = 0", "conector_colegio"),
+			columna("UPDATE conector_colegio SET frenado_en = frenado_en WHERE 1 = 0", "conector_colegio"),
+			new SentenciaProhibida(VerificadorPermisosBaseDatos.DIRECTA_DE_OTRA_PERSONA_IMPOSIBLE,
+					Set.of(MYSQL_CHECK, MYSQL_SIGNAL, MYSQL_COMANDO_DENEGADO),
+					"falta ck_solicitud_cambio_directa (V40): una solicitud resuelta por otra persona se marcaría directa."));
+
+	/**
+	 * Sprint 11, tanda 1c (V40): una solicitud del colegio 0 que nace APROBADA y directa, sin firma ni código (la rechaza
+	 * trg_solicitud_cambio_nace antes que las FK y los CHECK: 1644).
+	 */
+	static final String SOLICITUD_DIRECTA_IMPOSIBLE = "INSERT INTO solicitud_cambio (colegio_id, tipo, entidad, entidad_id, "
+			+ "resumen, datos, motivo, estado, pendiente, solicitado_por, resuelto_por, resuelto_en, directa, creado_en, "
+			+ "creado_por, actualizado_en) VALUES (0, 'CAMBIO_ROLES', 'usuario', 0, 'verificador', '{}', 'verificador', "
+			+ "'APROBADA', NULL, 'verificador', 'verificador', NOW(6), TRUE, NOW(6), 'verificador', NOW(6))";
+
+	/** Sprint 11, tanda 1c (V40): un conector del colegio 0 que nace EN_ESPERA (trg_conector_colegio_nace: 1644). */
+	static final String CONECTOR_EN_ESPERA_IMPOSIBLE = "INSERT INTO conector_colegio (colegio_id, tipo, proveedor, modo, "
+			+ "configuracion, clave_publica, estado, propuesto_por, resuelto_por, resuelto_en, directa, creado_en, creado_por, "
+			+ "actualizado_en) VALUES (0, 'CUENTA_BANCARIA', 'BCP', 'REAL', '{}', '00000000-0000-0000-0000-000000000000', "
+			+ "'EN_ESPERA', 'verificador', 'verificador', NOW(6), TRUE, NOW(6), 'verificador', NOW(6))";
+
+	/**
+	 * Sprint 11, tanda 1c (V40): una solicitud PENDIENTE marcada directa (el trigger de nacimiento solo mira el estado y la
+	 * resolución): la rechaza ck_solicitud_cambio_directa antes que las FK (3819).
+	 */
+	static final String DIRECTA_DE_OTRA_PERSONA_IMPOSIBLE = "INSERT INTO solicitud_cambio (colegio_id, tipo, entidad, "
+			+ "entidad_id, resumen, datos, motivo, estado, pendiente, solicitado_por, directa, creado_en, creado_por, "
+			+ "actualizado_en) VALUES (0, 'CAMBIO_ROLES', 'usuario', 0, 'verificador', '{}', 'verificador', 'PENDIENTE', TRUE, "
+			+ "'verificador', TRUE, NOW(6), 'verificador', NOW(6))";
 
 	/**
 	 * Sprint 11, tanda 1 (sección 6.4): un cambio de estado del colegio 0 que nace APROBADO, sin firma (con cc_app, 1142;
@@ -1011,6 +1050,7 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		verificarPrivilegios();
 		verificarTls();
 		verificarRelojReal();
+		verificarEsperaDirecta();
 		verificarPlataforma();
 		avisarConfiguracionVieja();
 		avisarDocentesConCobranza();
@@ -1023,6 +1063,30 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 	 * con la opción {@code --sysdate-is-now} (que no es una variable: no se lee con {@code @@global}), {@code SYSDATE()}
 	 * obedecería a la sesión y {@code cc_ahora_lima_real()} dejaría de ser el reloj real.
 	 */
+	/** Sprint 11, tanda 1c (A1c-6): la espera de las directas que solo escribe el DBA. */
+	static final String SQL_ESPERA_DIRECTA = "SELECT valor FROM configuracion_bd WHERE clave = 'espera_directa_horas'";
+
+	/**
+	 * Sprint 11, tanda 1c (A1c-6): en prod la espera de una cuenta bancaria, una pasarela o una recaudación nuevas, de dar
+	 * Promotoría en producción, quitarla y desactivar a una Promotoría es de 24 horas. Las pruebas de MySQL la bajan como
+	 * DBA; si alguien la bajó en prod, la aplicación no arranca.
+	 */
+	public void verificarEsperaDirecta() {
+		String valor;
+		try {
+			valor = jdbc.queryForObject(SQL_ESPERA_DIRECTA, String.class);
+		}
+		catch (DataAccessException e) {
+			throw new IllegalStateException("No se pudo leer la espera de las acciones directas (configuracion_bd, "
+					+ "'espera_directa_horas', código " + codigoMySql(e) + "): aplica la migración V40.");
+		}
+		if (!"24".equals(valor == null ? null : valor.strip())) {
+			throw new IllegalStateException("La espera de las acciones directas de Promotoría (configuracion_bd, "
+					+ "'espera_directa_horas') es " + valor + " y debe ser 24 horas: el DBA debe dejarla en 24 "
+					+ "(docs/operacion/mysql-usuarios.md).");
+		}
+	}
+
 	static final String SQL_RELOJ_REAL = "SELECT /*+ SET_VAR(timestamp=946684800) */ SYSDATE(6) > NOW(6) + INTERVAL 1 DAY";
 
 	/** Sprint 11, tanda 1 (AP-3): el reloj que la conexión no mueve existe y responde en hora de Lima. */
