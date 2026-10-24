@@ -13,10 +13,10 @@
 3. **Bandeja de Aprobaciones (209):** lista también lo que hoy se aprueba en otra pantalla, con «Revisar» que lleva a esa
    pantalla; el contador del menú lo suma con la regla de `puedeResolver`.
 4. **Inicio en preparación (210):** domina la guía; las cifras y los gráficos aparecen cuando hay datos.
-6. **Aceptos en su flujo (213, F-D8):** el acepto del OSE simulado y el «sin deudas anteriores» se firman donde se usan y desde
-   la Puesta en marcha, con la misma firma de hoy.
 5. **Menos texto (212, F-D7):** lo no crucial se quita; lo crucial, a un tooltip accesible; lo que se verifica y los controles
    antifraude no se borran. Se implementa después de que el usuario revise `docs/ux/inventario-textos-sprint-11.md`.
+6. **Aceptos en su flujo (213, F-D8):** el acepto del OSE simulado y el «sin deudas anteriores» se firman donde se usan y desde
+   la Puesta en marcha, con la misma firma de hoy.
 
 ## 2. Pensiones (F-D1 a F-D4)
 **F-D1. Tarjeta de Secundaria desalineada en Pensiones.** «Sin plan aprobado» baja a una segunda línea junto a «Secundaria» y su

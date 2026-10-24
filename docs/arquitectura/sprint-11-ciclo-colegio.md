@@ -16,7 +16,7 @@
 >   `trg_usuario_nace`, `trg_configuracion_colegio_*`, `trg_cambio_contacto_titular_*`, `trg_orden_pago_nace`), `Colegio`,
 >   `EstadoColegio`, `AltaColegio`, `AltaColegioRequest`, `ServicioEstructura`, `EstadoPuestaEnMarcha`, `RecorridoColegios`,
 >   `ProveedorAutenticacion`, `ConfiguracionSeguridad` (CSP), `deploy/Caddyfile` y `AvisoPlataforma`.
-> - **NO probado:** V39, V40, los GRANT, los triggers nuevos, sus versiones nuevas y la función nueva **no se ejecutaron**
+> - **NO probado:** V39, V41, los GRANT, los triggers nuevos, sus versiones nuevas y la función nueva **no se ejecutaron**
 >   en H2 ni en MySQL 8.4. El primer paso de cada tanda es aplicarlos sobre V1–V38 reales en las dos bases.
 > - **Normativa:** los plazos de la sección 2 salen del texto del DS 016-2024-JUS (traducción publicada por NIAID) y de
 >   fuentes secundarias para el Código Tributario y SUNAT. **Los revisa el abogado antes del primer contrato que termine**
@@ -53,10 +53,14 @@
 - **URL por colegio (parte B):** se recomienda `virgenmaria.cuotaria.pe` **ya** para la instalación dedicada (un registro DNS,
   sin código), y **dejar los subdominios de la compartida para cuando 3 colegios lo pidan** (1 tanda; sección 10).
   **Es una decisión abierta: no entra en las tandas hasta que el usuario la confirme.**
+- **Tanda 1c (decisión del usuario): la Promotoría no pide aprobación a personas de menor jerarquía.** Sus acciones se aplican
+  directo, con firma, bitácora y avisos; las sensibles, con un código por WhatsApp; los conectores de dinero, con 24 horas de
+  espera que otra Promotoría o un operador pueden frenar (o el socio aprobar al instante). Lo que piden los demás roles sigue con
+  dos personas. Orden: 1 → 1c → 1b → 2 (sección 3.16; V40, y la tanda 2 pasa a V41).
 - **Tanda corta de interfaz 1b** (pedido del usuario): guía de puesta en marcha para todo el personal (banner con el
   siguiente paso y quién lo hace, estados vacíos que guían, mensajes de bloqueo con enlace), sin cambios en la base (3.14).
 - **Dos tandas de base:** (1) estados, baja, suspensión, reactivación, modo consulta, año escolar del colegio y facultad del titular (V39; 117 triggers,
-  19 funciones, 136 huellas); (2) exportación, cierre y supresión con acta (V40; 124 triggers, 20 funciones, 144 huellas).
+  19 funciones, 136 huellas); (2) exportación, cierre y supresión con acta (V41; 124 triggers, 21 funciones, 145 huellas).
   **La auditoría del diseño en papel (sección 3.13, 14 hallazgos) prevalece sobre lo que sigue.**
 
 ## 2. Plazos legales (investigación del 24-oct-2026)
@@ -394,7 +398,7 @@ Dirección (`primera_direccion`, V27), una vez y con una sola Promotoría. Un co
 ### 3.13 Auditoría del diseño en papel (sobre 8dd46fb): 14 hallazgos incorporados (esta sección prevalece)
 Revisión de `auditor-seguridad-antifraude`: 1 crítico, 6 altos, 5 medios y 2 bajos. Donde esta sección contradice a las
 anteriores, vale esta. Los conteos nuevos: **tanda 1, 117 triggers, 19 funciones y 136 huellas** (`trg_anio_escolar_cambio`
-se suma); **tanda 2, 124, 20 y 144**.
+se suma); **tanda 2, 124, 21 y 145**.
 
 **AP-1 (crítico). Quitar al único contrapeso en producción.** Con el conteo que excluía al destino, el titular podía quitarle
 Dirección a la única otra persona directiva sin que nadie lo aprobara. **Corrección:** en DAR, el conteo de la decisión 201
@@ -459,17 +463,17 @@ libretas) se rechaza. Pruebas: `a5ActivacionDeApoderadoEnSuspendidoPasa`, `a5Rec
 **AP-6 (alto). La baja de un colegio con datos.** «Datos» = alguna fila de `alumno`, `apoderado` o `matricula` del colegio.
 - **Sin datos y sin ninguna cuenta activada** (tampoco la del titular): baja inmediata.
 - **Sin datos pero con alguna cuenta activada:** a los 7 días.
-- **Con datos:** exige una `exportacion_colegio` del colegio `ENTREGADA` o `VENCIDA`. Como esa tabla llega en V40, **en la tanda 1
+- **Con datos:** exige una `exportacion_colegio` del colegio `ENTREGADA` o `VENCIDA`. Como esa tabla llega en V41, **en la tanda 1
   la base rechaza la baja de un colegio con datos** y la tanda 2 trae la versión que la permite con la exportación.
 
-**AP-7 (alto). `conservar_hasta` exacto.** V40: `CHECK (conservar_hasta IS NULL OR conservar_hasta =
+**AP-7 (alto). `conservar_hasta` exacto.** V41: `CHECK (conservar_hasta IS NULL OR conservar_hasta =
 DATE(suspendido_en) + INTERVAL 12 MONTH OR conservar_hasta = DATE(cerrado_en) + INTERVAL 30 DAY)` y el trigger lo calcula (no
 lo recibe de la aplicación). Ver AP-11 para la fecha de partida y la variante sin autorización.
 
-**AP-8 (medio). No hay suspensión sin exportación.** Mientras no exista V40, **la base rechaza proponer una SUSPENSION** (la
+**AP-8 (medio). No hay suspensión sin exportación.** Mientras no exista V41, **la base rechaza proponer una SUSPENSION** (la
 suspensión debe entregar los datos el día que se aplica). `trg_cambio_estado_colegio_nace`: `IF NEW.tipo = 'SUSPENSION' AND NOT
 EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'exportacion_colegio') THEN
-SIGNAL`. Se habilita sola cuando llega V40, sin versión nueva del trigger. En la tanda 1 se construye y se prueba todo el flujo
+SIGNAL`. Se habilita sola cuando llega V41, sin versión nueva del trigger. En la tanda 1 se construye y se prueba todo el flujo
 (las pruebas de MySQL crean la suspensión como DBA, que conserva su camino); en producción no se puede usar hasta la tanda 2.
 `CambiosEstadoColegio` lo repite en la aplicación (`suspensionDisponible()`), y la pantalla dice «Disponible cuando esté la
 exportación de datos (tanda 2)».
@@ -494,7 +498,7 @@ Pruebas: `a10ObjecionSinResolverImpideAplicar`, `a10ObjecionLaResuelveOtroOperad
   suspensión, la consulta de las familias dura **unos 11 meses** después del cierre. `colegio.suspendido_en` (V39) guarda
   cuándo se aplicó la suspensión (vuelve a NULL al reactivar). AP-7 queda así: `conservar_hasta = DATE(suspendido_en) +
   12 meses`, exacto.
-- **La autorización expresa de L4 queda en la base:** `colegio.conservacion_autorizada_por` y `conservacion_autorizada_en` (V40),
+- **La autorización expresa de L4 queda en la base:** `colegio.conservacion_autorizada_por` y `conservacion_autorizada_en` (V41),
   que pone el titular con su firma (`colegio:{id}:CONSERVACION`) al aceptar el contrato de encargo en la Puesta en marcha (paso
   nuevo, no bloqueante) o después. **Sin ella, el plazo es de 30 días desde el cierre** (`conservar_hasta = DATE(cerrado_en) +
   30 días`) y no hay modo consulta de 12 meses: las familias reciben su información por la exportación del colegio.
@@ -621,6 +625,8 @@ responsable e «Ir» de los 15); accesibilidad (`<progress>` con etiqueta, un so
 «Ir», ningún estado solo por color); y una revisión en celular (360 px) con `disenador-ui` antes del merge.
 
 ### 3.15 Segundo bloqueo del alta: «preparaste la cuenta de quien lo hizo» (tanda 1)
+> **Nota:** con la tanda 1c (3.16), A5 deja de bloquear a la Promotoría y estas trabas desaparecen para el titular. Lo de esta
+> sección sigue valiendo para Dirección y los demás roles, y para el escenario de prueba.
 **Lo que vio el usuario (Kepler):** el titular creó `testadmin` (Administración); `testadmin` propuso el plan de pensiones; el
 titular no pudo aprobarlo: «Tú creaste, editaste o enviaste este plan (o preparaste la cuenta de quien lo hizo): debe aprobarlo
 otra persona de Promotoría o Dirección». **La regla es correcta** (impide crear cuentas títere y aprobarles todo). En un colegio
@@ -681,6 +687,199 @@ desde que se creó la cuenta (después, `ampliar` ya no suma al creador). No se 
   dobles de prueba que ya usa `PermisosMySqlTest`; si alguno no se puede en MySQL, lo cubre H2 y MySQL cubre lo de la base
   (año con firma, facultad, aprobación del plan, pago, cierre y su aprobación).
 
+### 3.16 Decisión del usuario: la Promotoría no pide aprobación a personas de menor jerarquía (tanda 1c)
+**Confirmada por el usuario el 24-oct-2026.** La Promotoría es el dueño, es decir, quien sufrió el fraude de los S/ 70,000. Su
+segunda firma no la protege de nadie: la frena a ella. El fraude original (una auxiliar que cobraba, registraba y custodiaba
+sola) no se reabre, porque **la Promotoría no cobra** (no se combina con CAJA) y **lo que pide cualquier otro rol sigue con dos
+personas**. **El riesgo principal pasa a ser el robo de la cuenta de Promotoría**: se refuerza con un código por WhatsApp en las
+acciones sensibles, avisos inmediatos y una espera de 24 horas en lo que cambia adónde entra el dinero. La autonomía no se toca.
+
+**Orden de las tandas (decisión 214):** 1 → **1c** → 1b → 2. La 1c cambia reglas de fondo que la guía de la 1b explica (con la 1c,
+el titular ya no queda trabado por «preparaste la cuenta»). Migraciones: tanda 1 = V39, **tanda 1c = V40**, tanda 1b sin
+migración, **tanda 2 = V41** (renumerada). Brief: `docs/arquitectura/sprint-11/tanda-1c.md`.
+
+**Las reglas:**
+1. **Acciones normales de Promotoría: se aplican directo**, sin segunda aprobación. Son proponer y aprobar planes de pensiones,
+   descuentos y becas, feriados, saldo inicial, anulaciones y correcciones, roles del equipo, aviso de privacidad, confirmar lotes
+   y extractos, asignaciones y reemisión de libretas. Cada una:
+   - lleva la firma de la sesión y queda en la bitácora con el evento de siempre, más la marca «aplicada directo por
+     Promotoría»;
+   - avisa **al momento** a las demás Promotorías activas y al correo externo de control, en la misma transacción (si no se puede
+     avisar, no se guarda), y entra en el resumen diario del correo de control.
+2. **Acciones sensibles** (decisión 216): llevan además un **código por WhatsApp** al celular de quien actúa, de 6 dígitos, que
+   vale 10 minutos y una sola vez. Son:
+   - dar o quitar PROMOTOR o DIRECTOR, y activar o desactivar una cuenta directiva;
+   - anular un pago, anular una cuota y devolver un ingreso;
+   - descuentos y becas;
+   - partidas manuales de la conciliación;
+   - cambiar el contacto o el responsable de pago de un apoderado (es adónde van los avisos de pago);
+   - todo conector.
+3. **Conectores que mueven dinero** (cuenta bancaria, pasarela y recaudación) propuestos por una Promotoría:
+   - **no necesitan a Dirección**; sí el código por WhatsApp;
+   - pasan a **EN_ESPERA** por **24 horas** (desde la aprobación, con el reloj real de AP-3), con aviso inmediato al correo de
+     control, a las demás Promotorías y a los operadores, y alerta CRÍTICA en el panel;
+   - **durante la espera los frena** otra Promotoría activa o un operador, con su firma y un motivo (estado FRENADO; se puede
+     volver a proponer);
+   - **si hay otra Promotoría activa, ese socio lo aprueba de inmediato** (con su firma y su código) y se salta la espera;
+   - al vencer la espera sin freno, `sistema.conectores` lo pone VIGENTE y el anterior pasa a REEMPLAZADO, como hoy;
+   - **la conciliación del sprint 4 sigue siendo la red final:** un abono que no llega a la cuenta del colegio sale en rojo al día
+     siguiente.
+4. **El OSE (decisión 217): acción normal, pero sensible.** Se aplica directo, sin espera, con el código por WhatsApp y los
+   avisos. No mueve dinero: el pago entra igual a la cuenta del colegio. Un OSE cambiado de mala fe afecta los comprobantes, y eso
+   lo ven la familia y el contador. Como siempre, en PRODUCCION no se vuelve a SIMULADO.
+5. **Lo que no cambia:**
+   - la Promotoría **no cobra** (no se combina con CAJA);
+   - **nada se borra ni se edita**: se anula con motivo;
+   - **lo que pide otro rol** (Administración, Caja, Dirección o Docente) **sigue necesitando la aprobación de otra persona**, y la
+     Promotoría puede ser quien lo apruebe;
+   - quien **ejecuta** algo que sale del colegio (la devolución de dinero ya aprobada, el reembolso de la pasarela) sigue siendo
+     una persona distinta de quien lo aprobó: la base ya lo exige (`trg_orden_pago_estado`, `trg_linea_recaudacion_estado`,
+     `trg_reembolso_pasarela_registro`). La Promotoría lo aprueba directo y lo ejecuta Administración.
+6. **«Preparaste la cuenta» (A5) deja de bloquear a la Promotoría** (es el dueño). **Se mantiene para Dirección** (decisión
+   215): Dirección no es el dueño, y una Dirección que crea cuentas podría aprobarles todo. Con eso desaparecen las trabas T1 a T5
+   de 3.15 para el titular: aprueba lo de las cuentas que él creó.
+7. **Excepciones de seguridad, que la Promotoría no aplica directo** (auditoría en papel, P1): el **contacto de su propia cuenta**
+   (`CAMBIO_CONTACTO_PERSONAL` sobre sí misma) es adonde llega el código. Lo aprueba **otra Promotoría**; el del titular, **dos
+   operadores** (V31, como hoy). Si no, una cuenta robada cambiaría el celular y después recibiría todos los códigos.
+
+**Lo que se ajusta de lo ya diseñado:**
+- **Facultad del titular (3.12) y decisión 201:** la facultad sigue siendo la forma de **crear** una cuenta que nace con PROMOTOR o
+  DIRECTOR. **Dar y quitar roles directivos pasa a ser una acción normal y sensible de cualquier Promotoría activa**:
+  `CAMBIO_ROLES` directa, con código y avisos. Se quita la condición «en PRODUCCION, sin otra persona directiva».
+- **AP-1 (crítico del sprint 11, QUITAR en producción por `CAMBIO_ROLES`):** se reemplaza. Quitar Dirección en PRODUCCION lo
+  hace la Promotoría directo, con código, aviso a la persona que pierde el rol, a las demás Promotorías, al correo de control y a
+  los operadores. **Es un riesgo aceptado por el usuario** (el dueño puede apartar a su director); la huella diaria y los avisos lo
+  hacen visible.
+- **A8 del sprint 9:** el aviso pasa a ser «Tu colegio tiene una sola Promotoría: sus acciones no tienen segunda firma; las ven
+  el correo de control y la bitácora» (no se exige otra persona). El de «menos de 2 directivos» sigue para lo que pide Dirección.
+- **3.15 y decisión 211:** para la Promotoría quedan superadas. La guía de la 1b ya no dice «crea primero a Dirección porque tú no
+  puedes aprobar…»; recomienda crear Dirección y Caja para separar funciones, sin presentarlo como un bloqueo.
+- **AP-2 (código de la facultad):** el mismo mecanismo se generaliza (`cc_codigo_promotoria`) y el `TipoMensaje` pasa a ser
+  `CODIGO_PROMOTORIA` (`CODIGO_FACULTAD` queda como alias aceptado).
+
+**La base (V40 y `03`).** La idea central: **una «solicitud directa»** es una `solicitud_cambio` que pide una Promotoría activa y
+resuelve ella misma, en la misma transacción, con su firma (`directa = TRUE`). Todos los triggers que hoy ejecutan algo
+«aprobado» lo comprueban con `cc_solicitud_firmada`. Basta con cambiar esa función y el trigger que resuelve para que los
+flujos acepten la aplicación directa, sin tocarlos uno por uno.
+```sql
+-- V40 (tanda 1c)
+ALTER TABLE solicitud_cambio ADD COLUMN directa BOOLEAN;                 -- TRUE solo si la resolvió quien la pidió (Promotoría)
+ALTER TABLE solicitud_cambio ADD COLUMN codigo_mensaje_id BIGINT;        -- el CODIGO_PROMOTORIA de una acción sensible
+ALTER TABLE solicitud_cambio ADD CONSTRAINT uk_solicitud_cambio_codigo UNIQUE (codigo_mensaje_id);
+ALTER TABLE solicitud_cambio ADD CONSTRAINT ck_solicitud_cambio_directa CHECK (directa IS NULL
+    OR (directa AND estado = 'APROBADA' AND resuelto_por = solicitado_por));
+ALTER TABLE conector_colegio ADD COLUMN directa BOOLEAN;                 -- lo aprobó directo una Promotoría (espera si mueve dinero)
+ALTER TABLE conector_colegio ADD COLUMN aplica_desde DATETIME(6);        -- fin de la espera de 24 h (la pone la base)
+ALTER TABLE conector_colegio ADD COLUMN frenado_por VARCHAR(60);
+ALTER TABLE conector_colegio ADD COLUMN frenado_en DATETIME(6);
+ALTER TABLE conector_colegio ADD COLUMN motivo_freno VARCHAR(500);
+-- ck_conector_colegio_estado: + EN_ESPERA y FRENADO; ck_conector_colegio_resolucion: EN_ESPERA con aplica_desde y
+-- resuelto_por; FRENADO con frenado_por, frenado_en y motivo de 20 caracteres o más; ck_conector_colegio_actor: resuelto_por
+-- puede ser propuesto_por solo si directa (se copian las listas de V29 y se agregan los estados).
+```
+- **Función nueva `cc_codigo_promotoria(p_mensaje, p_colegio, p_nombre)`:** TRUE si el mensaje es un `CODIGO_PROMOTORIA` (o
+  `CODIGO_FACULTAD`) de ese colegio, a la cuenta de esa persona, a su contacto vigente, de hace 10 minutos o menos según
+  `cc_ahora_lima_real()`. La usan `trg_solicitud_cambio_resuelta`, `trg_conector_colegio_estado` y `trg_uso_facultad_titular_nace`.
+- **Versión nueva de `cc_solicitud_firmada`:** acepta `s.resuelto_por <> s.solicitado_por` (como hoy) **o** `s.directa`; en los
+  dos casos, con la firma de quien resolvió. La condición de rol no se repite: la comprobó la base al resolver.
+- **Versión nueva de `trg_solicitud_cambio_resuelta`.** `directa` solo puede quedar en TRUE si se cumple todo esto:
+  - `resuelto_por = solicitado_por`;
+  - `cc_rol_activo(colegio, resuelto_por, 'PROMOTOR')` y el colegio en PREPARACION o PRODUCCION;
+  - con la firma `solicitud_cambio:{id}:APROBADA`;
+  - si el tipo es sensible (la lista de la regla 2, que se fija en el trigger), con un `codigo_mensaje_id` válido según
+    `cc_codigo_promotoria`;
+  - en PRODUCCION, con el correo de control registrado;
+  - **nunca** si es un `CAMBIO_CONTACTO_PERSONAL` sobre la cuenta de quien lo pide (P1).
+  Sin `directa`, una solicitud resuelta por quien la pidió sigue sin valer (`cc_solicitud_firmada` la rechaza, como hoy).
+- **Versiones nuevas de los triggers que comparan personas directamente** (no pasan por la función):
+  - `trg_feriado_anulacion`: un feriado lo aprueba quien lo creó solo si es PROMOTOR activo con su firma;
+  - `trg_partida_conciliacion_estado`: `s.solicitado_por <> NEW.resuelto_por`, o la solicitud es directa;
+  - `trg_comunicado_estado`: `s.resuelto_por <> OLD.creado_por`, o la solicitud es directa (un comunicado de la Promotoría con un
+    PDF que pide revisión);
+  - `trg_conector_colegio_estado`:
+    - PROPUESTO → VIGENTE directo para el OSE, con su `CAMBIO_CONECTOR` directa y su código;
+    - PROPUESTO → EN_ESPERA para los que mueven dinero, con `aplica_desde = cc_ahora_lima_real() + 24 h`;
+    - EN_ESPERA → VIGENTE por `sistema.conectores` con `aplica_desde` vencido, o por **otra** Promotoría activa con su firma y su
+      código (el socio);
+    - EN_ESPERA → FRENADO por otra Promotoría activa o un operador activo (cc_sistema), con su firma y su motivo;
+    - nada más;
+  - `trg_uso_facultad_titular_nace`: se quitan la condición de PRODUCCION (decisión 201) y la de AP-1, y el código se comprueba
+    con `cc_codigo_promotoria`;
+  - `trg_mensaje_nace`: `CODIGO_PROMOTORIA` solo a la cuenta de una Promotoría activa, a su contacto vigente, sin cobranza.
+- **Los triggers que no cambian, y por qué (inventario completo de los 21 usos):**
+  - `trg_cuota_libro`, `trg_pago_registro`, `trg_apoderado_facturacion`, `trg_usuario_contacto`, `trg_asignacion_docente_estado`,
+    `trg_registro_asistencia_nace`, `trg_marca_asistencia_nace`, `trg_lote_calificacion_nace`, `trg_calificacion_nace` y
+    `trg_libreta_emitida_nace`: usan `cc_solicitud_firmada`, que ya acepta la directa;
+  - `trg_orden_pago_estado`, `trg_linea_recaudacion_estado` y `trg_reembolso_pasarela_registro`: quien ejecuta sigue siendo otra
+    persona (regla 5);
+  - `trg_caja_diaria_estado` (reapertura), `trg_verificacion_bancaria_registro` y `trg_reembolso_registro`: quien cobró no
+    verifica ni reabre, y la Promotoría no cobra;
+  - `trg_usuario_identidad` (`ESTADO_CUENTA`: quien aprueba no es la cuenta misma) y `trg_usuario_rol_alta` y `_baja` (exigen
+    `CAMBIO_ROLES` APROBADA y firmada, y aceptan la directa sin cambio);
+  - `trg_cambio_contacto_titular_estado`, `trg_cambio_correo_control_estado` y `trg_cambio_estado_colegio_estado`: son del
+    operador y no cambian.
+- **Conteos (tanda 1c):** triggers **117** (ninguno nuevo; 7 versiones nuevas); funciones de `03` 16 → **17**, con huella 19 →
+  **20** (`cc_codigo_promotoria`; versión nueva de `cc_solicitud_firmada`); huellas 136 → **137**. **Tanda 2 (V41): 124, 21 y
+  145.**
+
+**En Java** (una política, no reglas repartidas):
+- `seguridad.service.SegundaFirma` (nueva):
+  - `aplicaDirecto(usuario)`: PROMOTOR activo en un colegio que opera;
+  - `puedeResolver(usuario, autores)`: si es Promotoría, siempre (salvo P1); si no, la regla A5 de hoy (`ControlParticipantes`);
+  - `esSensible(tipo, datos)`.
+- **La usan los 11 servicios que hoy llaman a `ControlParticipantes`,** más `RegistroSolicitudes`: si quien pide es Promotoría,
+  crea y resuelve en la misma transacción y pide el código si es sensible. `AutoaprobacionSolicitudException` deja de lanzarse
+  para la Promotoría.
+- `ServicioPlanesPension`, `ServicioSaldoInicial`, `ServicioRecaudacion`, `ServicioExtractos`, `ServicioPartidas`,
+  `ServicioCierreMensual`, `ServicioFeriados` y la de descuentos: la Promotoría crea y aprueba, o confirma, en un paso.
+- `CodigoPromotoria` (pedir, enviar y comprobar el código) reemplaza al código de `FacultadTitular`.
+- `AvisosAccionDirecta` avisa a las demás Promotorías y al correo de control.
+- `ConectoresColegio`: la espera, el freno, el socio y `AplicacionConectoresEnEspera` (cada 15 minutos, `sistema.conectores`).
+
+**Auditoría en papel de la 1c (revisión del arquitecto; la revisión formal de `auditor-seguridad-antifraude` va antes de codear,
+como en todo sprint).** Hallazgos, todos incorporados arriba:
+
+| # | Nivel | Hallazgo | Corrección |
+|---|---|---|---|
+| P1 | Crítico | Con aplicación directa, una Promotoría robada cambia el celular de su cuenta y desde ahí recibe todos los códigos | El contacto propio nunca es directo: lo aprueba otra Promotoría; el del titular, dos operadores (regla 7, en `trg_solicitud_cambio_resuelta`) |
+| P2 | Alto | `cc_solicitud_firmada` aceptaría cualquier solicitud resuelta por quien la pidió | Solo con `directa`, que la base pone después de comprobar el rol PROMOTOR activo en ese momento, la firma y el código; CHECK `ck_solicitud_cambio_directa` |
+| P3 | Alto | La espera de 24 horas se saltaría con `SET timestamp` | `aplica_desde` y su vencimiento, con `cc_ahora_lima_real()` (AP-3) |
+| P4 | Alto | Una Promotoría que perdió el rol podría reusar una firma vieja | `cc_rol_activo` al resolver y la firma de 5 minutos; el código, de 10 minutos y una vez (UNIQUE) |
+| P5 | Medio | Anulaciones directas de pagos en efectivo con una Caja cómplice | La familia recibe el aviso de la anulación (sprint 5) y las demás Promotorías y el correo de control también; la anulación lleva el código. Riesgo residual aceptado (el dueño frente a sí mismo no es una amenaza; el socio está avisado) |
+| P6 | Medio | Un operador que frena por abuso | Solo en EN_ESPERA, con firma, motivo y aviso a todas las Promotorías y al correo de control; la Promotoría lo vuelve a proponer |
+| P7 | Medio | Sin correo de control, nadie externo ve las acciones directas | En PRODUCCION, la aplicación directa exige el correo de control registrado (ya lo pide el paso a producción) |
+| P8 | Bajo | El socio que salta la espera podría ser la misma persona con dos cuentas | Las cuentas de Promotoría nuevas las crea la facultad o una directa sensible con código y avisos; el contacto debe ser distinto (AP-2), así que el código del socio llega a otro celular |
+
+**Escenarios de prueba (resumen; el detalle va en el brief):**
+- **H2:**
+  - el titular sin Dirección aprueba el plan de `testadmin` (A5 ya no lo bloquea);
+  - el titular propone y aprueba su propio plan, descuento y feriado en un paso, con los avisos;
+  - una anulación directa sin código, rechazada; con código, aplicada y avisada a la familia, a la otra Promotoría y al correo de
+    control;
+  - la cuenta bancaria en espera 24 horas, aplicada sola; frenada por el socio o por el operador; aprobada por el socio de
+    inmediato;
+  - el OSE directo con código;
+  - el contacto propio no es directo;
+  - Dirección sigue con A5 y con dos personas;
+  - lo que pide Administración sigue esperando aprobación.
+- **MySQL:**
+  - la directa sin rol, sin firma, sin código, con un código usado, vencido o de otro, y por quien no la pidió, rechazada;
+  - `cc_solicitud_firmada` acepta la directa y rechaza una resuelta por quien la pidió sin `directa`;
+  - el conector: EN_ESPERA → VIGENTE antes de 24 horas, rechazado (también con `SET timestamp`); el freno; el socio;
+  - el feriado, la partida y el comunicado directos;
+  - lo que ejecuta otra persona (la devolución) sigue exigiéndola.
+
+**Riesgos de la 1c:**
+- **Cuenta de Promotoría robada:** es el riesgo principal. Lo mitigan el código en lo sensible, el contacto protegido, los avisos
+  a todos, la espera en el dinero y el freno.
+- **Un colegio con una sola Promotoría** no tiene segunda firma en nada de lo suyo. Lo ven el correo de control y la huella
+  diaria (A8 ajustado).
+- **Cambio grande de reglas:** se tocan una función central (`cc_solicitud_firmada`), 7 triggers y 11 servicios. Las pruebas de
+  los sprints 2 a 10 que asertan «la Promotoría no aprueba lo suyo» cambian de sentido; cada una se reemplaza por la que prueba lo
+  mismo para los demás roles, sin perder cobertura.
+- **El WhatsApp caído** traba las acciones sensibles de la Promotoría. Respaldo: el código por correo, al correo de su cuenta. Lo
+  normal sigue sin código.
+
 ## 4. Modelo
 ```mermaid
 erDiagram
@@ -727,7 +926,7 @@ erDiagram
 - **`orden_pago`** (versión nueva): no nace si el colegio tiene una SUSPENSION APROBADA con `efectiva_desde` en menos de
   2 horas (MySQL).
 - **`configuracion_colegio`** (versión nueva, H1): el operador solo en PREPARACION (MySQL).
-- **`exportacion_colegio`, `descarga_exportacion` y `acta_supresion`** (tanda 2): sección 5, V40.
+- **`exportacion_colegio`, `descarga_exportacion` y `acta_supresion`** (tanda 2): sección 5, V41.
 
 ## 5. Migraciones Flyway (NO probadas: aplicar sobre V1–V38 en H2 2.4.240 MODE=MySQL y en MySQL 8.4 antes de seguir)
 **Última migración en `main`: V38** (`V38__correcciones_sprint_10.sql`, confirmado en `cb06efd`). Sin `||` para concatenar (en
@@ -767,7 +966,7 @@ CREATE TABLE cambio_estado_colegio (
     id                BIGINT        NOT NULL AUTO_INCREMENT PRIMARY KEY,
     colegio_id        BIGINT        NOT NULL,
     plataforma_id     BIGINT        NOT NULL,
-    tipo              VARCHAR(20)   NOT NULL,   -- BAJA, SUSPENSION, REACTIVACION, BLOQUEO_FACULTAD, DESBLOQUEO_FACULTAD (CIERRE en V40)
+    tipo              VARCHAR(20)   NOT NULL,   -- BAJA, SUSPENSION, REACTIVACION, BLOQUEO_FACULTAD, DESBLOQUEO_FACULTAD (CIERRE en V41)
     ambito            VARCHAR(8)    NOT NULL,   -- ESTADO o FACULTAD (AP-2: un bloqueo no espera a una suspensión)
     motivo_tipo       VARCHAR(16)   NOT NULL,
     motivo            VARCHAR(500)  NOT NULL,
@@ -887,7 +1086,7 @@ ALTER TABLE sesion_usuario ADD CONSTRAINT ck_sesion_usuario_cierre CHECK ((cerra
   base); `EstadoColegio` con `BAJA`, `SUSPENDIDO`, `CERRADO` y `SUPRIMIDO` y sus etiquetas; `MotivoCierreSesion` con
   `COLEGIO_SUSPENDIDO`.
 
-### `V40__exportacion_cierre_y_supresion.sql` (tanda 2, esquema; el SQL completo se escribe con el brief de la tanda 2)
+### `V41__exportacion_cierre_y_supresion.sql` (tanda 2, esquema; el SQL completo se escribe con el brief de la tanda 2)
 - `colegio`: `conservar_hasta DATE` (nulo salvo en CERRADO y BAJA; CHECK `conservar_hasta <= DATE(estado_desde) + INTERVAL 12 MONTH`).
 - `cambio_estado_colegio`: `ck_cambio_estado_colegio_tipo` con `CIERRE` (SUSPENDIDO → CERRADO, motivos `FIN_CONTRATO`,
   `FALTA_PAGO`, `PEDIDO_COLEGIO`, `OTRO`) y `exportacion_id`.
@@ -987,16 +1186,16 @@ BEGIN
             OR EXISTS (SELECT 1 FROM orden_pago o WHERE o.colegio_id = NEW.colegio_id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un colegio con comprobantes u ordenes de pago no se da de baja';
     END IF;
-    -- AP-6 (tanda 1): con datos, la baja exige la exportación entregada o vencida, que llega en V40: hasta entonces, no.
+    -- AP-6 (tanda 1): con datos, la baja exige la exportación entregada o vencida, que llega en V41: hasta entonces, no.
     IF NEW.tipo <=> 'BAJA' AND (EXISTS (SELECT 1 FROM alumno a WHERE a.colegio_id = NEW.colegio_id)
             OR EXISTS (SELECT 1 FROM apoderado d WHERE d.colegio_id = NEW.colegio_id)
             OR EXISTS (SELECT 1 FROM matricula x WHERE x.colegio_id = NEW.colegio_id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un colegio con datos se da de baja con su exportacion entregada';
     END IF;
-    -- AP-8: sin la exportación (V40) no hay suspensión.
+    -- AP-8: sin la exportación (V41) no hay suspensión.
     IF NEW.tipo <=> 'SUSPENSION' AND NOT EXISTS (SELECT 1 FROM information_schema.tables t
             WHERE t.table_schema = DATABASE() AND t.table_name = 'exportacion_colegio') THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la suspension llega con la exportacion de datos (V40)';
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la suspension llega con la exportacion de datos (V41)';
     END IF;
 END$$
 
@@ -1259,9 +1458,9 @@ END$$
 (`cc_colegio_en_preparacion`, `cc_es_titular`, `cc_ahora_lima_real`), con huella 16 → **19** (16 + 3 de `02`); huellas 128 → **135**. Prod:
 «Huellas de los 117 triggers y las 19 funciones verificadas».
 
-**Tanda 2 (V40), adelanto del conteo:** 7 triggers nuevos (`trg_exportacion_colegio_nace`, `trg_exportacion_colegio_cambio`,
+**Tanda 2 (V41), adelanto del conteo:** 7 triggers nuevos (`trg_exportacion_colegio_nace`, `trg_exportacion_colegio_cambio`,
 `trg_descarga_exportacion_nace`, `trg_acta_supresion_nace`, `trg_acta_supresion_estado`, `trg_evento_auditoria_tachado`,
-`trg_evento_auditoria_sin_borrado`) y la función `cc_supresion_en_curso`: **124 triggers, 20 funciones, 144 huellas**. Versiones
+`trg_evento_auditoria_sin_borrado`) y la función `cc_supresion_en_curso`: **124 triggers, 21 funciones, 145 huellas**. Versiones
 nuevas: `trg_cambio_estado_colegio_*` y `trg_colegio_cambio` (CIERRE, `conservar_hasta`), `trg_sesion_usuario_nace` (CERRADO
 hasta `conservar_hasta`) y los triggers de UPDATE y DELETE de las tablas del inventario (3.11).
 
@@ -1448,6 +1647,14 @@ Brief: `docs/arquitectura/sprint-11/tanda-1.md`. Pasos pequeños y verificables:
 6. Modo consulta de las familias (3.8) y `RecorridoColegios` (H2).
 7. Pruebas H2 y MySQL del brief; CI en verde.
 
+### Tanda 1c · La Promotoría aplica directo (V40; 117 triggers, 20 funciones, 137 huellas)
+Brief: `docs/arquitectura/sprint-11/tanda-1c.md`. Sección 3.16. Va después de la tanda 1 y antes de la 1b.
+1. V40 y `cc_codigo_promotoria`; versiones de `cc_solicitud_firmada` y de los 7 triggers; MySQL local de lo tocado.
+2. `SegundaFirma` y `CodigoPromotoria`; `RegistroSolicitudes` con la solicitud directa; avisos.
+3. Los 11 servicios que usan A5, pasados a `SegundaFirma`.
+4. Conectores: espera de 24 horas, freno, socio y `AplicacionConectoresEnEspera`.
+5. Pruebas invertidas (de «la Promotoría no aprueba lo suyo» a «los demás roles no aprueban lo suyo») y CI en verde.
+
 ### Tanda 1b · Guía de puesta en marcha (solo interfaz; sin migración; 117, 19 y 136 sin cambios)
 Briefs: `docs/arquitectura/sprint-11/tanda-1b.md` (la guía, sección 3.14) y `tanda-1b-interfaz.md` (correcciones de
 interfaz F-D1 a F-D6: tarjetas, vencimientos, fechas y textos de Pensiones; bandeja de Aprobaciones con lo que hoy se aprueba en
@@ -1459,9 +1666,9 @@ otras pantallas; ancho de 1760 px y tableros).
 5. Puesta en marcha con estado, responsable e «Ir»; revisión en celular con `disenador-ui`; CI en verde.
 6. Correcciones de `tanda-1b-interfaz.md` (F-D1 a F-D6), con revisión visual en 390, 1280, 1600 y 1920 px.
 
-### Tanda 2 · Exportación, cierre y supresión (V40; 124 triggers; 20 funciones; 144 huellas)
+### Tanda 2 · Exportación, cierre y supresión (V41; 124 triggers; 21 funciones; 145 huellas)
 1. Inventario `scripts/fin-de-colegio/inventario.txt` (tablas con `colegio_id`, datos personales, triggers que las protegen).
-2. V40, triggers y `cc_supresion_en_curso`; versiones que habilitan la BAJA con datos (AP-6) y el CIERRE; `conservar_hasta`
+2. V41, triggers y `cc_supresion_en_curso`; versiones que habilitan la BAJA con datos (AP-6) y el CIERRE; `conservar_hasta`
    exacto (AP-7, AP-11) y la autorización expresa del titular; `reloj-pendiente.txt` en 0 (AP-3).
 3. Exportación (3.9; AP-12: `colegio_id` explícito o join al dueño, prueba con dos colegios fila por fila, evento al descifrar
    la clave): generador en flujo, CSV, libretas comparadas con su huella, ZIP AES-256, manifiesto, constancia, entrega
@@ -1504,7 +1711,7 @@ al cobro, entregados primero como bloque propio) y los del ciclo de vida (cambio
 4. La Puesta en marcha tiene **16 entradas** en `PASOS` (los 15 pasos del brief más «Secciones» separado de «Año escolar y
    fechas de clases», con `PRIMERO_EL_ANIO`).
 5. La suspensión: `cuentasclaras.ciclo.suspension-disponible` es `false` en producción (AP-8; la pantalla lo dice) y `true`
-   en las pruebas de H2, que prueban el flujo completo; en MySQL la base la rechaza igual sin la exportación (V40).
+   en las pruebas de H2, que prueban el flujo completo; en MySQL la base la rechaza igual sin la exportación (V41).
 6. En las pruebas de MySQL, cuando una prueba no creó el año, `CuentasDePrueba.pasarAProduccion` deja uno de paso (2099) como
    DBA y lo cierra después (F18: la base exige el año para producción).
 7. La objeción del titular está en `/colegio/estado` (módulo «Colegio»; la ve también Dirección; objeta solo el titular con
@@ -1525,9 +1732,9 @@ suspensión a los 30 días con objeción, cierre de sesiones del personal, filtr
 año; `RutasIdorTest` con las rutas nuevas. MySQL: `AuditoriaSprint11CicloMySqlTest` (alta al cobro, facultad fuera de su
 camino, baja y bloqueo de dos operadores, F2, F6, 1142, 1143, cambio que nace aprobado, reloj real) y `PermisosMySqlTest`.
 
-**Quedan para las correcciones o la tanda 2 (no se pueden probar sin V40 o piden un colegio suspendido en MySQL):** las
+**Quedan para las correcciones o la tanda 2 (no se pueden probar sin V41 o piden un colegio suspendido en MySQL):** las
 pruebas de MySQL de la suspensión aplicada (`a4…`, `h3…`, `f10…`, `a5…` en SUSPENDIDO), que en esta tanda cubre H2 con la
-misma lógica; en MySQL la suspensión no se puede proponer hasta V40.
+misma lógica; en MySQL la suspensión no se puede proponer hasta V41.
 
 ## 13. Decisiones abiertas para el usuario
 Valor por defecto entre corchetes; se implementa el valor por defecto mientras el usuario no diga otra cosa (salvo la 202,
@@ -1544,18 +1751,25 @@ que no entra en las tandas sin su confirmación). Sigue la numeración del sprin
 | 198 | Formato de la exportación | **[Un ZIP con AES-256: un CSV por tabla (UTF-8 con BOM, sin fórmulas), libretas y comunicados en PDF, `MANIFIESTO.csv` con SHA-256 y `LEEME.pdf`; los comprobantes como CSV, con el XML y el CDR en su OSE y SUNAT; 30 días para descargarla]** |
 | 199 | Cifrado del ZIP | **[`zip4j` (Apache 2.0): ZIP AES-256 que abre 7-Zip y el Explorador de Windows 11]**. Alternativas: `age` (lo usan los respaldos, pero el colegio no sabe abrirlo) o 7z por línea de comandos (otra herramienta en la imagen) |
 | 200 | Fin definitivo | **[Dedicada: se elimina la instalación completa con acta. Compartida: el DBA borra las filas del colegio y tacha sus eventos de la bitácora con un acta de dos operadores; la fila del colegio queda con la ficha mínima]** |
-| 201 | Facultad del titular (**ajustada por AP-1 y AP-2**) | **[En PREPARACION da y quita. En PRODUCCION solo da, y solo mientras no haya otra persona activa con Promotoría o Dirección además del titular y del destino; quitar en PRODUCCION va siempre por `CAMBIO_ROLES`. Cada uso pide un código por WhatsApp al contacto del titular; la cuenta nueva lleva un contacto distinto; sin correo de control no hay facultad; dos operadores la bloquean de inmediato]** |
+| 201 | Facultad del titular (**ajustada por AP-1 y AP-2**) (**superada en parte por la tanda 1c, 3.16**) | **[En PREPARACION da y quita. En PRODUCCION solo da, y solo mientras no haya otra persona activa con Promotoría o Dirección además del titular y del destino; quitar en PRODUCCION va siempre por `CAMBIO_ROLES`. Cada uso pide un código por WhatsApp al contacto del titular; la cuenta nueva lleva un contacto distinto; sin correo de control no hay facultad; dos operadores la bloquean de inmediato]** |
 | 202 | Una dirección por colegio (**abierta, fuera de las tandas**) | **[Virgen María en `virgenmaria.cuotaria.pe` ya, sin código; subdominios de la compartida cuando 3 colegios lo pidan (una tanda, comodín por DNS-01); demo fuera del dominio de la marca; correo desde `notifica.cuotaria.pe` con SPF, DKIM y DMARC y `Reply-To` al colegio]** |
 | 203 | Reactivación | **[Dos operadores, inmediata, sin pedir nada al colegio; las cuentas vuelven como estaban; los pagos del periodo se registran por la conciliación]** |
-| 204 | Suspensión antes de la tanda 2 (AP-8) | **[No: la base la rechaza hasta que exista V40 (la exportación)]** |
+| 204 | Suspensión antes de la tanda 2 (AP-8) | **[No: la base la rechaza hasta que exista V41 (la exportación)]** |
 | 205 | Objeción del titular (AP-10) | **[El titular objeta con su firma; la resuelve otro operador con respuesta escrita; sin resolver, no se aplica]** |
 | 206 | Texto del avance de la guía | **[«Faltan N de 15 pasos», con N = obligatorios pendientes, y «(y 2 opcionales)» si faltan; barra sobre los 13 obligatorios]** |
 | 207 | Dónde va la guía | **[Banner en el inicio del personal (no en el portal de las familias), estados vacíos en 7 pantallas y mensaje con enlace al intentar algo bloqueado; tanda corta 1b, sin cambios en la base]** |
 | 208 | Ancho del armazón | **[Fluido hasta 1760 px, margen lateral de 24 a 32 px, encabezado alineado; texto corrido a unos 70 caracteres]** |
 | 209 | Bandeja de Aprobaciones | **[Lista y cuenta también lo que se aprueba en otra pantalla (8 tipos), con «Revisar» a esa pantalla y la regla de `puedeResolver`; la aprobación sigue en su pantalla]** |
 | 210 | Inicio en preparación | **[Domina la guía; sin cifras ni gráficos hasta producción; en producción, estados vacíos por gráfico sin datos]** |
-| 211 | «Preparaste la cuenta» (A5) en un colegio nuevo | **[La regla no cambia; crear primero a Dirección, que aprueba lo de las cuentas que creó el titular; la cuenta bancaria la propone el titular y la aprueba Dirección; las trabas T1 a T5 de 3.15 duran 30 días y la guía las explica]** |
+| 211 | «Preparaste la cuenta» (A5) en un colegio nuevo (**superada en parte por la tanda 1c, 3.16**) | **[La regla no cambia; crear primero a Dirección, que aprueba lo de las cuentas que creó el titular; la cuenta bancaria la propone el titular y la aprueba Dirección; las trabas T1 a T5 de 3.15 duran 30 días y la guía las explica]** |
 | 212 | Menos texto (F-D7) | **[Lo no crucial se quita; lo crucial pasa a un tooltip accesible (`popover` y `aria-describedby`, sin JS); lo que se verifica y los controles antifraude quedan; inventario en `docs/ux/inventario-textos-sprint-11.md` para revisión del usuario antes de implementar]** |
+| 213 | Aceptos de Promotoría en su flujo (F-D8) | **[El acepto del OSE simulado se firma al proponerlo o aprobarlo si es Promotoría; la Puesta en marcha ofrece «Firmar acepto» y, para el saldo inicial de un colegio nuevo, primero «sin deudas anteriores»]** |
+| 214 | Orden de las tandas | **[1 → 1c → 1b → 2; V39, V40 (1c) y V41 (tanda 2)]** |
+| 215 | «Preparaste la cuenta» (A5) | **[Deja de bloquear a la Promotoría; se mantiene para Dirección y los demás roles]** |
+| 216 | Acciones sensibles de Promotoría | **[Código por WhatsApp (10 minutos, una vez) en: roles y estado de cuentas directivas, anulaciones de pago y de cuota, devoluciones, descuentos y becas, partidas manuales, contacto y responsable de pago de apoderados, y todo conector]** |
+| 217 | El OSE | **[Acción normal pero sensible: directa con código y avisos, sin espera]**. Alternativa: con la espera de 24 horas como el dinero |
+| 218 | Conectores de dinero propuestos por Promotoría | **[Código; 24 horas de espera con avisos; los frena otra Promotoría o un operador; el socio Promotoría lo aprueba de inmediato]** |
+| 219 | Contacto propio de una Promotoría | **[Nunca directo: lo aprueba otra Promotoría; el del titular, dos operadores (V31)]** |
 
 ## Fuentes
 - Código Tributario, art. 87 num. 7 (texto del DL 1315) y art. 43: resumen en [Noticiero Contable](https://noticierocontable.com/guardar-los-libros-contables/),

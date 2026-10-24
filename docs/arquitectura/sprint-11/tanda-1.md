@@ -8,7 +8,7 @@
 1. **Dos operadores** para dar de baja, suspender, reactivar y bloquear la facultad (192): propone uno, aprueba otro, con firma.
 2. **Suspensión:** a los 30 días de aprobada (194), con la caja revisada, los comprobantes aceptados y las libretas emitidas
    (AP-4, AP-13); sin pagos en línea desde 2 horas antes ni efectivo desde 24 horas antes. **La base la rechaza hasta que
-   exista V40** (AP-8, 204): en esta tanda se construye y se prueba, pero no se usa. El titular puede **objetar** (AP-10, 205).
+   exista V41** (AP-8, 204): en esta tanda se construye y se prueba, pero no se usa. El titular puede **objetar** (AP-10, 205).
 3. **Baja** (193, AP-6): sin comprobantes ni órdenes; **sin datos** (alumnos, apoderados, matrículas); inmediata si nadie activó
    su cuenta, si no a los 7 días. Con datos, rechazada hasta la tanda 2 (exportación).
 4. **En SUSPENDIDO** nadie del personal ingresa, tampoco la Promotoría; las familias en **modo consulta** (195); a ellas solo
@@ -23,7 +23,9 @@
 8. **«Preparaste la cuenta» (A5, decisión 211; diseño 3.15):** la regla no cambia. El titular crea primero a Dirección, y
    Dirección aprueba lo de las cuentas que creó el titular (la regla no es transitiva: `ControlParticipantes.ampliar`). **Paso 1:
    comprobar que `usuario.creado_por` de esas cuentas es el titular, no `sistema.identidad`.**
-9. **La 202 (subdominios) NO entra.** CIERRE, exportación, `conservar_hasta` y supresión son de la tanda 2.
+9. **La tanda 1c (3.16) ajusta después** la facultad del titular, la 201, AP-1 y A5 para la Promotoría. Esta tanda se
+   implementa tal como está; la 1c cambia esas reglas en su propia migración (V40).
+10. **La 202 (subdominios) NO entra.** CIERRE, exportación, `conservar_hasta` y supresión son de la tanda 2.
 
 ## 2. Alcance
 - **V39** (diseño, sección 5): estados y CHECK de `colegio` (`estado_desde`, `cambio_estado_id`, `suspendido_en`,
@@ -89,7 +91,7 @@
     no se quita) y `trg_usuario_identidad` (la cuenta del titular no se desactiva).
   - Encabezado: «Versión anterior (V38, correcciones del sprint 10): 112 triggers y 13 funciones (16 con huella; 128 huellas)».
 - **Conteo esperado:** 112 → **117 triggers**; funciones de `03` 13 → **16**, con huella 16 → **19**; huellas 128 → **136**.
-  Prod: «Huellas de los 117 triggers y las 19 funciones verificadas». Tanda 2: **124, 20 y 144**.
+  Prod: «Huellas de los 117 triggers y las 19 funciones verificadas». Tanda 2: **124, 21 y 145**.
 - **CI `reloj-real`** (AP-3): cuenta `UTC_TIMESTAMP`, `NOW(`, `CURDATE`, `CURRENT_TIMESTAMP` y `CURRENT_DATE` fuera de
   comentarios en `03` y falla si supera `reloj-pendiente.txt` (el conteo que queda después de esta tanda; en la tanda 2, 0).
 - `VerificadorPermisosBaseDatos`: `TRIGGERS_ESPERADOS` con los 5; exige `@@global.sysdate_is_now = 0`; 1142 (`INSERT INTO
@@ -159,7 +161,7 @@
 
 **MySQL real (`mysql/AuditoriaSprint11CicloMySqlTest`, job `mysql`; correr local lo tocado antes del push). 1644 salvo aviso.
 Las fechas se simulan como DBA (`UPDATE … SET efectiva_desde` con root), nunca con `SET timestamp`:**
-- `f1SuspensionAntesDe30DiasFalla`, `efectivaDesdeLaPoneLaBase`, `a8SuspensionSinV40Falla`, **`h9SetTimestampNoMueveElReloj`**
+- `f1SuspensionAntesDe30DiasFalla`, `efectivaDesdeLaPoneLaBase`, `a8SuspensionSinV41Falla`, **`h9SetTimestampNoMueveElReloj`**
   (con `SET timestamp` a +31 días: no aplica la suspensión, no alarga una firma ni una sesión), `relojNuloLanzaSignal`,
   `verificadorExigeSysdateIsNowApagado`.
 - `f2MismoOperadorNoApruebaFalla`, `rechazoPorElMismoOperadorFalla`, `aprobacionSinFirmaFalla`, `cambioQueNaceAprobadoFalla`,
@@ -198,5 +200,5 @@ Las fechas se simulan como DBA (`UPDATE … SET efectiva_desde` con root), nunca
 Un colegio nace sin año y su titular lo crea con firma; el titular arma su equipo directivo con un código en su teléfono y
 avisos a todos, y en producción no puede quitar solo al único contrapeso; sin año no hay producción; dos operadores dan de baja
 un colegio sin datos y bloquean la facultad; la suspensión está construida, espera caja, comprobantes y libretas, no se mueve
-con `SET timestamp` y la base la rechaza hasta V40; y el CI del PR en borrador está en verde (117 triggers, 19 funciones, 136
+con `SET timestamp` y la base la rechaza hasta V41; y el CI del PR en borrador está en verde (117 triggers, 19 funciones, 136
 huellas).

@@ -222,6 +222,9 @@ Diseño: `docs/arquitectura/sprint-11-ciclo-colegio.md`.
   - en suspensión el personal no ingresa ni cobra y las familias consultan (también su libreta);
   - el alta del operador ya no pide el año escolar: lo crea **Promotoría o Dirección** con su firma, y sin él no se pasa a producción;
   - el **titular del contrato** crea las cuentas de Promotoría y Dirección sin esperar a una segunda persona, con avisos.
+- **Tanda 1c · La Promotoría aplica directo:** el dueño no pide aprobación a personas de menor jerarquía; sus acciones quedan
+  en la bitácora y avisan al correo de control y a las demás Promotorías; lo sensible pide un código por WhatsApp; una cuenta
+  bancaria nueva espera 24 horas (o la aprueba un socio). Lo que piden los demás roles sigue con dos personas.
 - **Tanda 1b · Guía de puesta en marcha (solo interfaz):** mientras el colegio está en preparación, cada persona del personal
   ve en su inicio cuántos pasos faltan, el siguiente y quién lo hace, con un botón directo; las pantallas vacías dicen qué falta;
   lo bloqueado explica por qué y enlaza a la Puesta en marcha, que muestra el responsable de cada paso.
