@@ -31,6 +31,24 @@ public record PuntoLista(String clave, String paso, Estado estado, String conteo
 		return estado != Estado.OPCIONAL;
 	}
 
+	/** Quién del colegio (o de la plataforma) completa el paso, para que cada rol sepa qué le toca. */
+	public String responsable() {
+		return switch (clave) {
+			case "datos" -> "Promotoría";
+			case "equipo" -> "Titular (Promotoría)";
+			case "anio" -> "Promotoría o Dirección";
+			case "secciones" -> "Administración o Dirección";
+			case "pensiones" -> "Propone Administración; aprueba Dirección";
+			case "alumnos" -> "Administración";
+			case "saldo-inicial" -> "Administración; confirma Promotoría o Dirección";
+			case "ose", "cuenta-bancaria", "pasarela", "recaudacion" -> "Propone Promotoría; aprueba Dirección";
+			case "privacidad" -> "Dirección";
+			case "areas-docentes" -> "Dirección o Administración; aprueba otra persona";
+			case "mensajeria", "correo-control", "respaldo" -> "Plataforma (operador)";
+			default -> "";
+		};
+	}
+
 	/** Lo mismo, sin el enlace: para la ficha del operador. */
 	public PuntoLista paraOperador() {
 		return new PuntoLista(clave, paso, estado, conteo, null);
