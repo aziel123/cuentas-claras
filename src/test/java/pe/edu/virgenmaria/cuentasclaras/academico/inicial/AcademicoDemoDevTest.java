@@ -15,6 +15,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PersonasDemoDePrueba;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.PruebaIntegracion;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable;
 import pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba;
+import pe.edu.virgenmaria.cuentasclaras.comunicados.inicial.ComunicadosDemoDev;
 import pe.edu.virgenmaria.cuentasclaras.comunicados.inicial.EjemploComunicados;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.inicial.DatosDemoDev;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
@@ -77,6 +78,8 @@ class AcademicoDemoDevTest {
 	void dejaLoAcademicoListoPorLosServiciosDelColegio() {
 		assertThat(colegioDemo.crear()).isTrue();
 		assertThat(demo("jdbc:h2:mem:demo").crearSiCorresponde()).isTrue();
+		assertThat(new ComunicadosDemoDev(fabrica.createBean(EjemploComunicados.class), personaDemo, "jdbc:h2:mem:demo",
+				true).crearSiCorresponde()).isTrue();
 
 		// La evaluación por bimestres: el I cerrado y el II abierto.
 		assertThat(jdbc.queryForList("SELECT estado FROM periodo_evaluacion WHERE colegio_id = ? ORDER BY numero",
@@ -96,10 +99,10 @@ class AcademicoDemoDevTest {
 				+ "c.periodo_id WHERE p.numero = 2", Long.class)).isZero();
 		// Libretas de los hijos de la cuenta «apoderado»; la de Mateo, en versión 2 por la corrección que aprobó Promotoría.
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM libreta_emitida l JOIN alumno a ON a.id = l.alumno_id WHERE "
-				+ "a.documento_numero IN (?, ?) AND l.numero_version = 1 AND l.creado_por = 'sistema.libretas'", Long.class,
+				+ "a.numero_documento IN (?, ?) AND l.numero_version = 1 AND l.creado_por = 'sistema.libretas'", Long.class,
 				MATEO, VALERIA)).isEqualTo(2L);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM libreta_emitida l JOIN alumno a ON a.id = l.alumno_id WHERE "
-				+ "a.documento_numero = ? AND l.numero_version = 2 AND l.motivo = 'CORRECCION'", Long.class, MATEO))
+				+ "a.numero_documento = ? AND l.numero_version = 2 AND l.motivo = 'CORRECCION'", Long.class, MATEO))
 				.isEqualTo(1L);
 		assertThat(jdbc.queryForObject("SELECT resuelto_por FROM solicitud_cambio WHERE tipo = 'CORRECCION_CALIFICACION'",
 				String.class)).isEqualTo("promotor");
@@ -137,7 +140,6 @@ class AcademicoDemoDevTest {
 					false, Rol.DOCENTE);
 		}
 		// Los beans compartidos con la demo son de los perfiles dev y demo: aquí se arman con los servicios del contexto.
-		return new AcademicoDemoDev(fabrica.createBean(EjemploAcademico.class), fabrica.createBean(EjemploComunicados.class),
-				personaDemo, reloj, url, true);
+		return new AcademicoDemoDev(fabrica.createBean(EjemploAcademico.class), personaDemo, reloj, url, true);
 	}
 }

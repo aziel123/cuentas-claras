@@ -374,9 +374,9 @@ public class EjemploAcademico {
 	static List<MarcaPedida> marcas(List<AlumnoEnHoja> filas, int dia) {
 		List<MarcaPedida> marcas = new ArrayList<>();
 		for (AlumnoEnHoja fila : filas) {
-			int turno = (fila.numero() + dia) % 5;
+			int turno = (fila.numero() + dia) % 7;
 			EstadoAsistencia estado = turno == 0 ? EstadoAsistencia.TARDE
-					: turno == 3 && fila.numero() % 2 == 0 ? EstadoAsistencia.FALTA : EstadoAsistencia.PRESENTE;
+					: turno == 3 ? EstadoAsistencia.FALTA : EstadoAsistencia.PRESENTE;
 			marcas.add(new MarcaPedida(fila.alumnoId(), estado, estado == EstadoAsistencia.TARDE ? LocalTime.of(8, 12)
 					: null));
 		}

@@ -10,8 +10,6 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.TipoAsignacion;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado;
-import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
-import pe.edu.virgenmaria.cuentasclaras.comunicados.inicial.EjemploComunicados;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.inicial.DatosDemoDev;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.PersonaDemo;
 
@@ -21,14 +19,14 @@ import java.util.List;
 
 /**
  * Lo académico del arranque de desarrollo, listo para una demostración en vivo (lo mismo que la demo pública, con
- * {@link EjemploAcademico} y {@link EjemploComunicados}): la cuenta «docente» es tutora de 3.° Primaria A (Comunicación,
+ * {@link EjemploAcademico}): la cuenta «docente» es tutora de 3.° Primaria A (Comunicación,
  * Matemática, Personal Social, Ciencia y Tecnología, Arte y Cultura) y enseña Matemática en 4.° y 5.° Primaria A, con las
  * áreas del catálogo, propuestas por «administracion» y aprobadas por «director». La evaluación 2026 va por bimestres; el I
  * bimestre queda cerrado con las notas de todas sus hojas y las libretas emitidas (también las de los hijos de la cuenta
  * «apoderado», y la versión 2 de la de Mateo por una corrección que aprueba «promotor»); el II, abierto. Hay asistencia de
- * los últimos días hábiles (registro tardío aprobado por «director») y, si hoy hay clases, la de hoy de 3.° Primaria A;
- * un comunicado enviado (la «Salida al museo» de la tutora) y uno con PDF por aprobar (el «Día del Logro» de Dirección,
- * en la bandeja de Promotoría). Solo con H2 en memoria. Corre al final del arranque, antes de que se acepte el ingreso
+ * los últimos días hábiles (registro tardío aprobado por «director») y, si hoy hay clases, la de hoy de 3.° Primaria A.
+ * Los comunicados van después, en {@code ComunicadosDemoDev} (lo académico no depende de comunicados). Solo con H2 en
+ * memoria. Corre al final del arranque, antes de que se acepte el ingreso
  * ({@code EsperaDatosDemoDev}).
  */
 @Component
@@ -57,8 +55,6 @@ public class AcademicoDemoDev implements ApplicationRunner {
 
 	private final EjemploAcademico academico;
 
-	private final EjemploComunicados comunicados;
-
 	private final PersonaDemo personas;
 
 	private final Clock reloj;
@@ -67,11 +63,10 @@ public class AcademicoDemoDev implements ApplicationRunner {
 
 	private final boolean habilitado;
 
-	public AcademicoDemoDev(EjemploAcademico academico, EjemploComunicados comunicados, PersonaDemo personas, Clock reloj,
+	public AcademicoDemoDev(EjemploAcademico academico, PersonaDemo personas, Clock reloj,
 			@Value("${spring.datasource.url:}") String urlBaseDatos,
 			@Value("${cuentasclaras.demo.datos-colegio:true}") boolean habilitado) {
 		this.academico = academico;
-		this.comunicados = comunicados;
 		this.personas = personas;
 		this.reloj = reloj;
 		this.urlBaseDatos = urlBaseDatos;
@@ -96,27 +91,12 @@ public class AcademicoDemoDev implements ApplicationRunner {
 				DNI_CORRECCION);
 		int dias = academico.asistencia(colegio, PERSONAS, ANIO, hoy, CALIFICABLES, DIAS_DE_ASISTENCIA,
 				CALIFICABLES.getFirst());
-		boolean conComunicados = cargarComunicados(colegio);
 		LOG.info("Académico de demostración: «docente» con {} áreas del catálogo en 3.°, 4.° y 5.° Primaria A (aprobadas por "
-				+ "«director»); {}; asistencia en {} día(s) de sección; {} ({} ms).", CALIFICABLES.stream()
+				+ "«director»); {}; asistencia en {} día(s) de sección ({} ms).", CALIFICABLES.stream()
 				.mapToInt(c -> c.areas().size()).sum(), calificado == null ? "sin bimestres (hoy no deja un I bimestre "
 						+ "terminado)" : "I bimestre cerrado con " + calificado.notas() + " notas y libretas emitidas"
 						+ (calificado.conVersion2() ? " (una versión 2 por corrección)" : "") + ", II bimestre abierto",
-				dias, conComunicados ? "un comunicado enviado y uno con PDF por aprobar (Promotoría)" : "sin comunicados",
-				(System.nanoTime() - inicio) / 1_000_000);
+				dias, (System.nanoTime() - inicio) / 1_000_000);
 		return true;
-	}
-
-	private boolean cargarComunicados(long colegio) {
-		try {
-			comunicados.codigosModulares(colegio, PERSONAS.direccion());
-			comunicados.salidaAlMuseo(colegio, PERSONAS.docente());
-			comunicados.diaDelLogro(colegio, PERSONAS.direccion());
-			return true;
-		}
-		catch (ReglaNegocioException | IllegalStateException e) {
-			LOG.warn("No se cargaron los comunicados de demostración: {}", e.getMessage());
-			return false;
-		}
 	}
 }
