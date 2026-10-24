@@ -263,7 +263,9 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".auditoria.service.VerificadorIntegridadAuditoria#verificar", "hasRole('PROMOTOR')"),
 			// Sprint 2: Promotoría consulta; Dirección y Administración registran y corrigen.
 			Map.entry(BASE + ".colegio.service.ServicioEstructura", LECTURA_ESCOLAR),
-			Map.entry(BASE + ".colegio.service.ServicioEstructura#crearAnio", ESCRITURA_ESCOLAR),
+			// Sprint 11, tanda 1 (sección 3.7): el año escolar lo crean y lo cambian Promotoría o Dirección con su firma.
+			Map.entry(BASE + ".colegio.service.ServicioEstructura#crearAnio", APROBACION),
+			Map.entry(BASE + ".colegio.service.ServicioEstructura#cambiarFechas", APROBACION),
 			Map.entry(BASE + ".colegio.service.ServicioEstructura#crearSeccion", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".colegio.service.ServicioEstructura#desactivarSeccion", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".alumnos.service.ServicioAlumnos", LECTURA_ESCOLAR),

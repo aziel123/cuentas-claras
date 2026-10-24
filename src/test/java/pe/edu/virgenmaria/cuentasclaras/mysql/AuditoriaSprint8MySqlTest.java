@@ -130,8 +130,9 @@ class AuditoriaSprint8MySqlTest {
 				+ "WHERE u.colegio_id = ?", String.class, creado.colegioId())).isEqualTo("PROMOTOR");
 		assertThat(jdbc.queryForObject("SELECT creado_por FROM primera_promotoria WHERE colegio_id = ?", String.class,
 				creado.colegioId())).isEqualTo("operador.s8");
+		// Sprint 11, tanda 1 (sección 3.7): el colegio nace sin año escolar (lo crea el colegio, nunca el operador).
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM anio_escolar WHERE colegio_id = ?", Long.class,
-				creado.colegioId())).isEqualTo(1L);
+				creado.colegioId())).isZero();
 		assertThat(jdbc.queryForList("SELECT accion FROM evento_auditoria WHERE colegio_id = ?", String.class,
 				creado.colegioId())).contains("PRIMERA_PROMOTORIA_CREADA", "COLEGIO_CREADO");
 

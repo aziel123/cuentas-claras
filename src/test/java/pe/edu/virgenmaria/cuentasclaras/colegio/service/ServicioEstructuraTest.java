@@ -57,15 +57,15 @@ class ServicioEstructuraTest {
 
 	@Test
 	void soloPuedeHaberUnAnioEnCurso() {
-		Long anio2026 = servicio.crearAnio(anio(2026, true));
+		Long anio2026 = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(servicio, anio(2026, true));
 
 		// En el servicio: mensaje claro.
-		assertThatThrownBy(() -> servicio.crearAnio(anio(2027, true)))
+		assertThatThrownBy(() -> pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(servicio, anio(2027, true)))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("Ya hay un año en curso (2026)");
 		assertThat(servicio.anioEnCurso()).hasValueSatisfying(a -> assertThat(a.id()).isEqualTo(anio2026));
 
 		// En la base: aunque el código fallara, no entra un segundo año EN_CURSO.
-		Long anio2027 = servicio.crearAnio(anio(2027, false));
+		Long anio2027 = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(servicio, anio(2027, false));
 		assertThatThrownBy(() -> jdbc.update("UPDATE anio_escolar SET estado = 'EN_CURSO', vigente = TRUE WHERE id = ?",
 				anio2027)).isInstanceOf(DataIntegrityViolationException.class);
 		// Y el CHECK ata "vigente" al estado: EN_CURSO sin vigente no pasa.
@@ -77,12 +77,12 @@ class ServicioEstructuraTest {
 
 	@Test
 	void anioDuplicadoMuestraMensajeClaro() {
-		servicio.crearAnio(anio(2026, true));
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(servicio, anio(2026, true));
 
-		assertThatThrownBy(() -> servicio.crearAnio(anio(2026, false)))
+		assertThatThrownBy(() -> pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(servicio, anio(2026, false)))
 				.isInstanceOf(ReglaNegocioException.class).hasMessage(
 						"El año 2026 ya existe. Ábrelo en la lista para agregarle secciones.");
-		assertThatThrownBy(() -> servicio.crearAnio(new CrearAnioEscolarRequest(2027, LocalDate.of(2027, 12, 1),
+		assertThatThrownBy(() -> pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(servicio, new CrearAnioEscolarRequest(2027, LocalDate.of(2027, 12, 1),
 				LocalDate.of(2027, 3, 1), false)))
 				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("antes del fin de clases");
 		assertThat(servicio.listarAnios()).hasSize(1);
@@ -90,7 +90,7 @@ class ServicioEstructuraTest {
 
 	@Test
 	void seccionDuplicadaEnElMismoAnioEsRechazada() {
-		Long anio = servicio.crearAnio(anio(2026, true));
+		Long anio = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(servicio, anio(2026, true));
 		servicio.crearSeccion(anio, new CrearSeccionRequest(Grado.PRIMARIA_5, "A"));
 
 		// «a» y « A » son la misma sección (MySQL tampoco distingue mayúsculas).
@@ -106,8 +106,8 @@ class ServicioEstructuraTest {
 
 	@Test
 	void mismaSeccionEnOtroAnioEsPermitida() {
-		Long anio2026 = servicio.crearAnio(anio(2026, true));
-		Long anio2027 = servicio.crearAnio(anio(2027, false));
+		Long anio2026 = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(servicio, anio(2026, true));
+		Long anio2027 = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(servicio, anio(2027, false));
 
 		Long en2026 = servicio.crearSeccion(anio2026, new CrearSeccionRequest(Grado.PRIMARIA_5, "A"));
 		Long en2027 = servicio.crearSeccion(anio2027, new CrearSeccionRequest(Grado.PRIMARIA_5, "A"));
@@ -119,7 +119,7 @@ class ServicioEstructuraTest {
 
 	@Test
 	void seccionSeDesactivaSinBorrarse() {
-		Long anio = servicio.crearAnio(anio(2026, true));
+		Long anio = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(servicio, anio(2026, true));
 		Long seccion = servicio.crearSeccion(anio, new CrearSeccionRequest(Grado.PRIMARIA_5, "B"));
 
 		assertThatThrownBy(() -> servicio.desactivarSeccion(seccion, "corto"))
@@ -140,6 +140,7 @@ class ServicioEstructuraTest {
 
 	@Test
 	void crearAnioYSeccionQuedanAuditados() {
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.DIRECTOR));
 		Long anio = servicio.crearAnio(anio(2026, true));
 		Long seccion = servicio.crearSeccion(anio, new CrearSeccionRequest(Grado.INICIAL_3, "Celeste"));
 
@@ -154,16 +155,21 @@ class ServicioEstructuraTest {
 
 	@Test
 	void promotoriaConsultaPeroNoCreaNiDesactiva() {
-		Long anio = servicio.crearAnio(anio(2026, true));
+		Long anio = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(servicio, anio(2026, true));
 		Long seccion = servicio.crearSeccion(anio, new CrearSeccionRequest(Grado.PRIMARIA_1, "A"));
 		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.PROMOTOR));
 
 		assertThat(servicio.listarAnios()).hasSize(1);
 		assertThat(servicio.obtenerAnio(anio).anio().secciones()).isEqualTo(1);
-		assertThatThrownBy(() -> servicio.crearAnio(anio(2027, false))).isInstanceOf(AccessDeniedException.class);
+		// Sprint 11, tanda 1 (sección 3.7): la Promotoría sí crea el año escolar (con su firma); las secciones, no.
+		assertThat(servicio.crearAnio(anio(2027, false))).isNotNull();
 		assertThatThrownBy(() -> servicio.crearSeccion(anio, new CrearSeccionRequest(Grado.PRIMARIA_1, "B")))
 				.isInstanceOf(AccessDeniedException.class);
 		assertThatThrownBy(() -> servicio.desactivarSeccion(seccion, MOTIVO)).isInstanceOf(AccessDeniedException.class);
+
+		// Administración ya no crea años.
+		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.ADMINISTRACION));
+		assertThatThrownBy(() -> servicio.crearAnio(anio(2028, false))).isInstanceOf(AccessDeniedException.class);
 
 		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(Rol.CAJA));
 		assertThatThrownBy(() -> servicio.listarAnios()).isInstanceOf(AccessDeniedException.class);

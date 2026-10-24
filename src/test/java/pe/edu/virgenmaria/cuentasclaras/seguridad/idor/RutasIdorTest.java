@@ -179,6 +179,10 @@ class RutasIdorTest {
 				pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioPlataforma.RUC_B, "titular.idor.b", "45678950",
 				"987650050"), null, null).colegioId();
 		SecurityContextHolder.clearContext();
+		// Sprint 11, tanda 1 (sección 3.7): el alta ya no crea el año escolar; lo crea el colegio (aquí, en H2, directo).
+		jdbc.update("INSERT INTO anio_escolar (colegio_id, anio, estado, vigente, inicio_clases, fin_clases, creado_en, "
+				+ "creado_por, actualizado_en) VALUES (?, 2027, 'EN_CURSO', TRUE, '2027-03-01', '2027-12-17', CURRENT_TIMESTAMP, "
+				+ "'director.colegio.b', CURRENT_TIMESTAMP)", colegioB);
 		Map<Rol, RequestPostProcessor> personasB = new EnumMap<>(Rol.class);
 		for (Rol rol : List.of(Rol.PROMOTOR, Rol.DIRECTOR, Rol.ADMINISTRACION, Rol.CAJA, Rol.DOCENTE)) {
 			personasB.put(rol, UsuariosDePrueba.como(UsuariosDePrueba.guardar(usuarios, codificador, colegioB,

@@ -64,3 +64,4 @@ entrega_libreta
 exportacion_calificaciones
 delegacion_siagie
 matricula_historial
+uso_facultad_titular

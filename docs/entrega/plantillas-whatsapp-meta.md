@@ -496,6 +496,152 @@
 | `{{2}}` | I bimestre |
 | `{{3}}` | Lucas |
 
+## 33. `cc_cambio_estado_propuesto_v2` · Cambio propuesto en el acceso del colegio
+
+> Sprint 11, tanda 1. Un operador propone dar de baja, suspender o reactivar el colegio, o bloquear la facultad del titular. Va al titular, a la Promotoría, al correo institucional, al de control y a los operadores.
+
+```text
+{{1}}: el operador {{2}} de la plataforma propone {{3}}. Motivo: {{4}}. Todavía no cambia nada: lo debe aprobar otro operador. Si cree que es un error, escriba hoy al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | operador.pruebas |
+| `{{3}}` | suspender el acceso del personal desde el 01/12/2026 |
+| `{{4}}` | Falta de pago: contrato CT-001 vencido desde agosto |
+
+## 34. `cc_cambio_estado_aprobado_v2` · Cambio aprobado en el acceso del colegio
+
+> Sprint 11, tanda 1. Otro operador aprueba el cambio; la base fija la fecha en que rige.
+
+```text
+{{1}}: los operadores {{4}} de la plataforma aprobaron {{2}}, que rige desde el {{3}}. Hasta esa fecha todo funciona. Si cree que es un error, escriba hoy al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | suspender el acceso del personal |
+| `{{3}}` | 01/12/2026 |
+| `{{4}}` | operador.uno y operador.dos |
+
+## 35. `cc_cambio_estado_resuelto_v2` · Se dejó sin efecto un cambio en el colegio
+
+> Sprint 11, tanda 1. Un operador rechaza o anula el cambio propuesto.
+
+```text
+{{1}}: el operador {{4}} de la plataforma {{3}} el cambio propuesto ({{2}}). No cambia nada.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | suspender el acceso del personal |
+| `{{3}}` | anuló |
+| `{{4}}` | operador.dos |
+
+## 36. `cc_cambio_estado_aplicado_v2` · Cambió el acceso del colegio
+
+> Sprint 11, tanda 1. El proceso aplica el cambio en su fecha.
+
+```text
+{{1}}: desde el {{3}}, {{2}}. Para cualquier consulta, escriba al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | el acceso del personal quedó en pausa |
+| `{{3}}` | 01/12/2026 |
+
+## 37. `cc_cambio_estado_en_espera_v2` · Un cambio del colegio espera
+
+> Sprint 11, tanda 1. El cambio espera que el colegio ponga en orden su caja, sus comprobantes o sus libretas (alerta diaria).
+
+```text
+{{1}}: {{2}} espera que el colegio resuelva lo siguiente: {{3}}. Mientras tanto no se aplica.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | la pausa del acceso del personal |
+| `{{3}}` | 2 cierres por revisar, 1 comprobante rechazado |
+
+## 38. `cc_cambio_estado_proximo_v2` · Recordatorio de un cambio en el colegio
+
+> Sprint 11, tanda 1. Recordatorio a 7 días y a 1 día de la fecha en que rige.
+
+```text
+{{1}}: recuerde que {{2}} rige desde el {{3}}. Si cree que es un error, escriba hoy al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | la pausa del acceso del personal |
+| `{{3}}` | 01/12/2026 |
+
+## 39. `cc_objecion_titular_v2` · El titular objetó un cambio del colegio
+
+> Sprint 11, tanda 1. El titular objeta una baja o una suspensión.
+
+```text
+{{1}}: el titular {{2}} objetó {{3}}. No se aplica hasta que otro operador responda la objeción.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | María Torres |
+| `{{3}}` | la pausa del acceso del personal |
+
+## 40. `cc_objecion_respondida_v2` · Se respondió la objeción del titular
+
+> Sprint 11, tanda 1. Un operador que no propuso responde la objeción del titular.
+
+```text
+{{1}}: el operador {{2}} de la plataforma respondió la objeción sobre {{3}}: {{4}}
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | operador.dos |
+| `{{3}}` | la pausa del acceso del personal |
+| `{{4}}` | Revisamos el pago y el contrato sigue vencido. |
+
+## 41. `cc_facultad_titular_usada_v2` · El titular cambió Promotoría o Dirección
+
+> Sprint 11, tanda 1. El titular da o quita Promotoría o Dirección sin segunda aprobación (facultad del titular). Va al correo de control, a toda la Promotoría, a la cuenta que recibe o pierde el rol y a los operadores.
+
+```text
+{{1}}: el titular {{2}} {{3}} {{4}} a la cuenta {{5}} sin segunda aprobación (facultad del titular). Si no lo reconoce, escriba hoy al proveedor y a la Promotoría.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | María Torres |
+| `{{3}}` | dio |
+| `{{4}}` | Dirección |
+| `{{5}}` | diana.rojas |
+
+## 42. `cc_codigo_facultad_v2` · Su código para dar o quitar Promotoría o Dirección
+
+> Sprint 11, tanda 1. El código de 6 dígitos de cada uso de la facultad del titular. Va solo al titular, a su contacto registrado; ni el mensaje ni la base lo guardan (lo calcula el envío).
+
+```text
+{{1}}: su código para dar o quitar Promotoría o Dirección es {{2}}. Vence a las {{3}}. Si usted no lo pidió, escriba hoy al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | 482915 |
+| `{{3}}` | 10:42 |
+
 ## Después de la aprobación
 1. Anotar en `docs/estado-del-proyecto.md` la fecha de aprobación de cada plantilla.
 2. Con el número de WhatsApp Business de la plataforma verificado, cargar su id y su token en Secret Manager (`whatsapp-token`, `whatsapp-secreto-app`, `whatsapp-token-verificacion`) y `WHATSAPP_NUMERO_ID` en `/etc/cc/instalacion.env` (docs/operacion/despliegue-gcp.md).

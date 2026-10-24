@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Código de tu facultad', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="usuario-codigo-facultad">
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-codigo">
+		<div>
+			<p class="etiqueta">Usuarios y roles · facultad del titular</p>
+			<h1 id="titulo-codigo">Escribe tu código</h1>
+			<p class="secundario" th:text="${pendiente.resumen}">Crear la cuenta de Dirección</p>
+		</div>
+
+		<th:block th:if="${error != null}">
+			<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+		</th:block>
+
+		<p th:text="|Te enviamos un código de 6 dígitos a tu ${pedido.destino}. Vale 10 minutos y una sola vez.|">Te enviamos un código.</p>
+		<p class="secundario">Como titular del contrato puedes hacerlo sin aprobación. Se avisará al correo de control, a toda
+			la Promotoría y a la plataforma.</p>
+		<th:block th:if="${codigoDemostracion != null}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', |Demostración (sin WhatsApp real): tu código es ${codigoDemostracion}. En el colegio real llega solo a tu celular.|)}"></div>
+		</th:block>
+
+		<form class="formulario" th:action="@{/usuarios/facultad/confirmar}" method="post">
+			<div class="campo">
+				<label for="codigo">Código</label>
+				<input class="input num" type="text" id="codigo" name="codigo" required inputmode="numeric" pattern="[0-9]{6}"
+					maxlength="6" autocomplete="one-time-code">
+			</div>
+			<div class="acciones">
+				<a class="btn btn-secundario" th:href="@{/usuarios}">Cancelar</a>
+				<button th:replace="~{fragments/componentes :: boton('Confirmar con mi firma', 'primario')}"></button>
+			</div>
+		</form>
+		<form th:action="@{/usuarios/facultad/nuevo-codigo}" method="post">
+			<button type="submit" class="btn btn-texto">No me llegó: enviar otro código</button>
+		</form>
+	</section>
+</main>
+</body>
+</html>

@@ -180,7 +180,7 @@ class AuditoriaSprint9AsistenciaMySqlTest {
 					usuarios, codificador, colegios, estructura, jdbc);
 			LocalDate hoy = hoyEnLaBase();
 			// El año del alta (2027) pasa a cubrir hoy (cc_app tiene UPDATE de anio_escolar; sin trigger).
-			jdbc.update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(40),
+			pe.edu.virgenmaria.cuentasclaras.comun.prueba.DbaMySql.exigir().update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(40),
 					hoy.plusDays(40), compartida.anioId());
 		}
 		EscuelaConDocentesMySql.Escuela e = compartida;

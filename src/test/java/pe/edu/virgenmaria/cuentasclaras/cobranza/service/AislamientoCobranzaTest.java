@@ -101,7 +101,7 @@ class AislamientoCobranzaTest {
 		administracionB = UsuariosDePrueba.autenticado(colegioB, 91L, "administracion.b", "Administración B", false,
 				EnumSet.of(Rol.ADMINISTRACION));
 		como(administracionB);
-		anioB = estructura.crearAnio(new CrearAnioEscolarRequest(2027, LocalDate.of(2027, 3, 1), LocalDate.of(2027, 12, 17),
+		anioB = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(estructura, new CrearAnioEscolarRequest(2027, LocalDate.of(2027, 3, 1), LocalDate.of(2027, 12, 17),
 				false));
 	}
 

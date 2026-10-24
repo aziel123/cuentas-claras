@@ -179,9 +179,9 @@ class AuditoriaSprint10CurriculoMySqlTest {
 		EscuelaConDocentesMySql.Escuela e = EscuelaConDocentesMySql.crear(sufijo + "cur", "20600000056", "987654711", alta,
 				servicioUsuarios, usuarios, codificador, colegios, estructura, jdbc);
 		int y = hoy().getYear();
-		long pasado = como(e.equipo().administracion(), () -> anio(e.colegioId(), y - 1));
-		long actual = como(e.equipo().administracion(), () -> anio(e.colegioId(), y));
-		long futuro = como(e.equipo().administracion(), () -> anio(e.colegioId(), y + 1));
+		long pasado = como(e.equipo().directora(), () -> anio(e.colegioId(), y - 1));
+		long actual = como(e.equipo().directora(), () -> anio(e.colegioId(), y));
+		long futuro = como(e.equipo().directora(), () -> anio(e.colegioId(), y + 1));
 		long primaria = como(e.equipo().administracion(), () -> estructura.crearSeccion(futuro,
 				new CrearSeccionRequest(Grado.PRIMARIA_5, "Curriculo")));
 		long secundaria = como(e.equipo().administracion(), () -> estructura.crearSeccion(futuro,

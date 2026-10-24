@@ -364,14 +364,13 @@ class MatrizPermisosTest {
 	@ComoUsuario(roles = Rol.PROMOTOR)
 	void promotorVeAlumnosPeroRecibe403AlRegistrar() throws Exception {
 		mvc.perform(get("/alumnos")).andExpect(status().isOk());
+		// Sprint 11, tanda 1 (sección 3.7): la Promotoría crea el año escolar (con su firma); las secciones, no.
 		mvc.perform(get("/colegio")).andExpect(status().isOk())
-				.andExpect(content().string(not(containsString("Nuevo año escolar"))));
+				.andExpect(content().string(containsString("Nuevo año escolar")));
 		mvc.perform(get("/alumnos/nuevo")).andExpect(status().isForbidden());
 		mvc.perform(post("/alumnos/nuevo").with(csrf()).param("tipoDocumento", "DNI").param("numeroDocumento", "78451236")
 				.param("apellidoPaterno", "Quispe").param("nombres", "Mateo").param("fechaNacimiento", "2015-06-14")
 				.param("documentoApoderadoExistente", "45678912")).andExpect(status().isForbidden());
-		mvc.perform(post("/colegio/anios").with(csrf()).param("anio", "2026").param("inicioClases", "2026-03-02")
-				.param("finClases", "2026-12-18")).andExpect(status().isForbidden());
 		mvc.perform(post("/colegio/anios/1/secciones").with(csrf()).param("grado", "PRIMARIA_1").param("nombre", "A"))
 				.andExpect(status().isForbidden());
 		mvc.perform(post("/alumnos/1/retirar").with(csrf()).param("fecha", "2026-10-01")

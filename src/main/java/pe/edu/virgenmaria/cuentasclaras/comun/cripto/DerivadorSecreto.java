@@ -41,6 +41,18 @@ public class DerivadorSecreto {
 		return ByteBuffer.wrap(huella, 0, Long.BYTES).getLong();
 	}
 
+	/**
+	 * Sprint 11, tanda 1 (AP-2): el código de 6 dígitos de un uso de la facultad del titular, derivado de la clave del
+	 * mensaje que lo lleva ({@code HMAC(clave, "codigo_facultad|" + colegio + "|" + claveDelMensaje)}). Ni el mensaje ni la
+	 * base lo guardan: lo calcula el envío y lo vuelve a calcular la aplicación al comparar lo que escribió el titular.
+	 */
+	public String codigoFacultad(long colegioId, String claveMensaje) {
+		Objects.requireNonNull(claveMensaje, "claveMensaje");
+		byte[] huella = hmac("codigo_facultad|" + colegioId + "|" + claveMensaje);
+		long valor = ByteBuffer.wrap(huella, 0, Long.BYTES).getLong() & Long.MAX_VALUE;
+		return String.format("%06d", valor % 1_000_000L);
+	}
+
 	private byte[] hmac(String mensaje) {
 		try {
 			Mac mac = Mac.getInstance(ALGORITMO);

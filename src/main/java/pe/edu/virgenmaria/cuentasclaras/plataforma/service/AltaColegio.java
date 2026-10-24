@@ -13,7 +13,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
-import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Colegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoColegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
@@ -68,7 +67,8 @@ import java.util.Set;
  *   <li>{@code cc_sistema}, colegio nuevo ({@link AltaTitular}): la cuenta del titular, su marca de primera Promotoría,
  *       el rol PROMOTOR, el mensaje de activación (el enlace se genera al enviarlo) y {@code PRIMERA_PROMOTORIA_CREADA}
  *       en la bitácora del colegio nuevo, con el nombre del operador.</li>
- *   <li>{@code cc_sistema}, colegio nuevo: el año escolar inicial, el logo y {@code COLEGIO_CREADO} en su bitácora.</li>
+ *   <li>{@code cc_sistema}, colegio nuevo: el logo y {@code COLEGIO_CREADO} en su bitácora (sprint 11, tanda 1: sin año
+ *       escolar; lo configura el colegio, sección 3.7).</li>
  * </ol>
  * Si fallan la 2, la 3 o la 4, el colegio queda creado y la ficha dice qué falta: el operador reintenta con «Completar
  * alta». Después de la 3, el operador ya no puede crear cuentas en ese colegio (trg_usuario_nace).
@@ -157,7 +157,6 @@ public class AltaColegio {
 		String ruc = ValidadorRuc.validar(datos.ruc());
 		DatosTitular titular = titulares.validar(new DatosTitular(datos.titularUsuario(), datos.titularNombre(),
 				datos.titularTelefono(), datos.titularCorreo()), operador);
-		AnioEscolar anioInicial = AnioEscolar.nuevo(datos.anio(), true, datos.inicioClases(), datos.finClases());
 		String documento = datos.titularDocumento().strip().toUpperCase(Locale.ROOT);
 		boolean conLogo = logo != null && logo.length > 0;
 		// QA-S8-1: el logo se valida antes de crear nada (si no sirve, no hay colegio a medias ni año escolar perdido).
@@ -201,7 +200,7 @@ public class AltaColegio {
 							+ " (" + Enmascarar.documento("DNI", documento) + ").");
 			return colegio.getId();
 		});
-		// 2 y 3. La firma y el titular. 4. El año escolar y el logo.
+		// 2 y 3. La firma y el titular. 4. El logo (sprint 11, tanda 1: el año escolar lo crea el colegio).
 		String pendiente = null;
 		TitularCreado creado = null;
 		try {
@@ -213,12 +212,12 @@ public class AltaColegio {
 		}
 		if (pendiente == null) {
 			try {
-				completarDatosIniciales(colegioId, anioInicial, conLogo ? logo : null, nombreLogo, operador);
+				completarDatosIniciales(colegioId, conLogo ? logo : null, nombreLogo, operador);
 			}
 			catch (RuntimeException e) {
-				LOG.warn("El alta del colegio {} quedó sin año escolar o logo: {}", colegioId, e.getClass().getSimpleName());
-				pendiente = "El titular ya tiene su enlace, pero no se pudo crear el año escolar o guardar el logo ("
-						+ mensaje(e) + "). La Promotoría los completa desde su colegio.";
+				LOG.warn("El alta del colegio {} quedó sin logo: {}", colegioId, e.getClass().getSimpleName());
+				pendiente = "El titular ya tiene su enlace, pero no se pudo guardar el logo (" + mensaje(e) + "). La "
+						+ "Promotoría lo sube desde su colegio.";
 			}
 		}
 		Colegio colegio = colegios.findById(colegioId).orElseThrow();
@@ -514,20 +513,20 @@ public class AltaColegio {
 		return titulares.crearPrimeraPromotoria(colegioId, titular, operador);
 	}
 
-	private void completarDatosIniciales(long colegioId, AnioEscolar anioInicial, byte[] logo, String nombreLogo,
-			OperadorFirmante operador) {
+	/**
+	 * Sprint 11, tanda 1 (sección 3.7): la transacción 4 solo guarda el logo y deja {@code COLEGIO_CREADO} en la bitácora del
+	 * colegio. El año escolar NO lo crea el operador (la base lo rechaza con cualquier nombre de operador): lo configura el
+	 * colegio, con la firma de su Promotoría o su Dirección.
+	 */
+	private void completarDatosIniciales(long colegioId, byte[] logo, String nombreLogo, OperadorFirmante operador) {
 		ContextoColegio.en(colegioId, () -> plataforma.ejecutar(() -> {
-			if (!anios.existsByAnio(anioInicial.getAnio())) {
-				anios.saveAndFlush(AnioEscolar.nuevo(anioInicial.getAnio(), true, anioInicial.getInicioClases(),
-						anioInicial.getFinClases()));
-			}
 			if (logo != null && logo.length > 0) {
 				logos.guardar(logo, nombreLogo);
 			}
 			auditoria.registrar(AccionAuditoria.COLEGIO_CREADO, "colegio", Long.toString(colegioId), null,
-					"año escolar " + anioInicial.getAnio() + (logo != null && logo.length > 0 ? "; con logo" : "; sin logo"),
-					"Tu colegio y tu cuenta los creó el operador " + operador.nombreUsuario() + " de la plataforma. El año "
-							+ "escolar " + anioInicial.getAnio() + " quedó en curso.");
+					"sin año escolar: lo configura el colegio" + (logo != null && logo.length > 0 ? "; con logo" : "; sin logo"),
+					"Tu colegio y tu cuenta los creó el operador " + operador.nombreUsuario() + " de la plataforma. Tu primer "
+							+ "paso es configurar el año escolar y las fechas de clases.");
 		}));
 	}
 

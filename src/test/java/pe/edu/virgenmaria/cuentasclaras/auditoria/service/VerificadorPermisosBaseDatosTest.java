@@ -432,6 +432,8 @@ class VerificadorPermisosBaseDatosTest {
 
 	/** Sprint 8, tanda 1 (sección 6.4): exactamente una PLATAFORMA, sin roles de colegio y sin operadores fuera. */
 	static void conPlataformaSana(JdbcTemplate mysql) {
+		// Sprint 11, tanda 1 (H9): SET timestamp no mueve SYSDATE().
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_RELOJ_REAL, Boolean.class)).thenReturn(true);
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_PLATAFORMAS, Integer.class)).thenReturn(1);
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_ROLES_EN_PLATAFORMA, Integer.class)).thenReturn(0);
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_OPERADORES_FUERA, Integer.class)).thenReturn(0);

@@ -78,6 +78,28 @@
 			</div>
 			</th:block>
 
+			<!--/* Sprint 11, tanda 1 (sección 3.12): el titular da o quita Promotoría o Dirección con su facultad. */-->
+			<th:block th:if="${facultad != null and facultad.titular() and facultad.disponible() and !usuario.esUnoMismo and usuario.activo}">
+				<form method="post" th:action="@{/usuarios/{id}/facultad(id=${usuario.id})}" th:unless="${usuario.roles.contains(T(pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol).DIRECTOR)}">
+					<input type="hidden" name="rol" value="DIRECTOR"><input type="hidden" name="accion" value="DAR">
+					<button type="submit" class="btn btn-secundario">Dar Dirección (facultad del titular)</button>
+				</form>
+				<form method="post" th:action="@{/usuarios/{id}/facultad(id=${usuario.id})}" th:unless="${usuario.roles.contains(T(pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol).PROMOTOR)}">
+					<input type="hidden" name="rol" value="PROMOTOR"><input type="hidden" name="accion" value="DAR">
+					<button type="submit" class="btn btn-secundario">Dar Promotoría (facultad del titular)</button>
+				</form>
+				<th:block th:unless="${facultad.enProduccion()}">
+				<form method="post" th:action="@{/usuarios/{id}/facultad(id=${usuario.id})}" th:if="${usuario.roles.contains(T(pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol).DIRECTOR)}">
+					<input type="hidden" name="rol" value="DIRECTOR"><input type="hidden" name="accion" value="QUITAR">
+					<button type="submit" class="btn btn-secundario">Quitar Dirección (facultad del titular)</button>
+				</form>
+				<form method="post" th:action="@{/usuarios/{id}/facultad(id=${usuario.id})}" th:if="${usuario.roles.contains(T(pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol).PROMOTOR)}">
+					<input type="hidden" name="rol" value="PROMOTOR"><input type="hidden" name="accion" value="QUITAR">
+					<button type="submit" class="btn btn-secundario">Quitar Promotoría (facultad del titular)</button>
+				</form>
+				</th:block>
+			</th:block>
+
 			<th:block th:if="${usuario.bloqueado}">
 				<th:block th:replace="~{fragments/componentes :: modalConfirmacion('modal-desbloquear', '¿Desbloquear la cuenta?',
 					'Podrá volver a intentar ingresar de inmediato.', @{/usuarios/{id}/desbloquear(id=${usuario.id})},

@@ -93,7 +93,7 @@ class MonitoreoBordesTest {
 		HuellasDiarias huellas = mock(HuellasDiarias.class);
 		when(huellas.registrarHora(any(LocalDateTime.class))).thenThrow(new IllegalStateException("1142: sin permiso"));
 		RecorridoColegios colegios = mock(RecorridoColegios.class);
-		when(colegios.activos()).thenReturn(List.of(1L, 2L));
+		when(colegios.conBitacora()).thenReturn(List.of(1L, 2L));
 		HuellaDiaria tarea = new HuellaDiaria(huellas, mock(VerificadorIntegridadAuditoria.class), colegios, reloj, 400);
 
 		ejecutarComoTareaProgramada(tarea, HuellaDiaria.class.getMethod("cadaHora"));
@@ -108,7 +108,7 @@ class MonitoreoBordesTest {
 		HuellasDiarias huellas = mock(HuellasDiarias.class);
 		when(huellas.registrarHora(any(LocalDateTime.class))).thenReturn(java.util.Optional.empty());
 		RecorridoColegios colegios = mock(RecorridoColegios.class);
-		when(colegios.activos()).thenReturn(List.of(1L, 2L));
+		when(colegios.conBitacora()).thenReturn(List.of(1L, 2L));
 		HuellaDiaria tarea = new HuellaDiaria(huellas, mock(VerificadorIntegridadAuditoria.class), colegios, reloj, 400);
 
 		ejecutarComoTareaProgramada(tarea, HuellaDiaria.class.getMethod("cadaHora"));

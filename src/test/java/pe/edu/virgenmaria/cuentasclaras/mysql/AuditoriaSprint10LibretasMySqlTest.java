@@ -270,7 +270,7 @@ class AuditoriaSprint10LibretasMySqlTest {
 				servicioUsuarios, usuarios, codificador, colegios, estructura, jdbc);
 		LocalDate hoy = hoy();
 		long anio = e.anioId();
-		jdbc.update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(100),
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.DbaMySql.exigir().update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(100),
 				hoy.plusDays(100), anio);
 		// Cobranza de Primaria con la matrícula VENCIDA hace 20 días (las pensiones vencen en el año del plan). La propone
 		// Administración, la envía otra persona de Administración y la aprueba Dirección.
@@ -341,9 +341,9 @@ class AuditoriaSprint10LibretasMySqlTest {
 		});
 		// C1: el año siguiente PLANIFICADO, con la matrícula RESERVADA (impaga) de Sofía, su evaluación, su I bimestre
 		// abierto con la nota de Ana y después CERRADO.
-		long siguiente = como(e.equipo().administracion(), () -> estructura.crearAnio(new CrearAnioEscolarRequest(2028,
+		long siguiente = como(e.equipo().directora(), () -> estructura.crearAnio(new CrearAnioEscolarRequest(2028,
 				LocalDate.of(2028, 1, 2), LocalDate.of(2028, 12, 30), false)));
-		jdbc.update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(100),
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.DbaMySql.exigir().update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(100),
 				hoy.plusDays(100), siguiente);
 		long seccionSiguiente = como(e.equipo().administracion(), () -> estructura.crearSeccion(siguiente,
 				new CrearSeccionRequest(Grado.PRIMARIA_5, "R" + sufijo.substring(sufijo.length() - 4))));

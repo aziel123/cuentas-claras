@@ -217,7 +217,8 @@ class PasoAProduccionTest {
 		assertThat(lista.enPreparacion()).isTrue();
 		// Tanda 2: los 14 pasos de la sección 3.5, en su orden; los dos últimos, opcionales.
 		assertThat(lista.puntos()).extracting(p -> p.clave()).containsExactlyElementsOf(EstadoPuestaEnMarcha.PASOS);
-		assertThat(lista.puntos()).hasSize(15);
+		// Sprint 11, tanda 1: 15 pasos (año escolar y secciones por separado) más el de las áreas de cada docente.
+		assertThat(lista.puntos()).hasSize(16);
 		assertThat(lista.puntos().stream().filter(p -> !p.obligatorio()).map(p -> p.clave()).toList())
 				.containsExactly(EstadoPuestaEnMarcha.PASARELA, EstadoPuestaEnMarcha.RECAUDACION);
 		assertThat(lista.puntos()).allMatch(p -> p.enlace() == null);

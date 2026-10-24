@@ -1047,7 +1047,11 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			LOG.warn("La función cc_ahora_lima_real() no responde todavía (código {}): fase 1, antes de 03.", codigoMySql(e));
 			return;
 		}
-		if (!Boolean.TRUE.equals(ahora)) {
+		if (ahora == null) {
+			LOG.warn("La función cc_ahora_lima_real() no respondió: fase 1, antes de 03.");
+			return;
+		}
+		if (!ahora) {
 			throw new IllegalStateException("cc_ahora_lima_real() obedece a SET timestamp: no es la de 03-triggers.sql de esta "
 					+ "versión. Aplica 03 con cc_migrador; si nadie la cambió a propósito, es un incidente.");
 		}

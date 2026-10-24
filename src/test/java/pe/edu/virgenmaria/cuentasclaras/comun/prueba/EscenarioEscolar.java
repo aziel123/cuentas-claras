@@ -59,9 +59,9 @@ public final class EscenarioEscolar {
 	}
 
 	private static Estructura crearEstructura(ServicioEstructura estructura, boolean enCurso2026) {
-		Long a2026 = estructura.crearAnio(new CrearAnioEscolarRequest(2026, LocalDate.of(2026, 3, 2),
+		Long a2026 = crearAnio(estructura, new CrearAnioEscolarRequest(2026, LocalDate.of(2026, 3, 2),
 				LocalDate.of(2026, 12, 18), enCurso2026));
-		Long a2027 = estructura.crearAnio(new CrearAnioEscolarRequest(2027, LocalDate.of(2027, 3, 1),
+		Long a2027 = crearAnio(estructura, new CrearAnioEscolarRequest(2027, LocalDate.of(2027, 3, 1),
 				LocalDate.of(2027, 12, 17), false));
 		return new Estructura(a2026, a2027,
 				estructura.crearSeccion(a2026, new CrearSeccionRequest(Grado.PRIMARIA_5, "A")),
@@ -69,6 +69,30 @@ public final class EscenarioEscolar {
 				estructura.crearSeccion(a2026, new CrearSeccionRequest(Grado.PRIMARIA_2, "B")),
 				estructura.crearSeccion(a2026, new CrearSeccionRequest(Grado.SECUNDARIA_1, "A")),
 				estructura.crearSeccion(a2027, new CrearSeccionRequest(Grado.PRIMARIA_6, "A")));
+	}
+
+	/**
+	 * Sprint 11, tanda 1 (sección 3.7): el año escolar lo crean Promotoría o Dirección con su firma (Administración ya no).
+	 * Si quien está en sesión no es de Promotoría ni de Dirección, lo crea una Dirección del mismo colegio (en H2, una
+	 * persona inventada: la firma de prueba le abre su sesión) y la sesión vuelve a quien estaba.
+	 */
+	public static Long crearAnio(ServicioEstructura estructura, CrearAnioEscolarRequest solicitud) {
+		org.springframework.security.core.Authentication antes = org.springframework.security.core.context
+				.SecurityContextHolder.getContext().getAuthentication();
+		if (antes != null && antes.getPrincipal() instanceof pe.edu.virgenmaria.cuentasclaras.seguridad.service
+				.UsuarioAutenticado actual && !actual.roles().contains(pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.PROMOTOR)
+				&& !actual.roles().contains(pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.DIRECTOR)) {
+			UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(actual.colegioId(), 900_000L + actual.colegioId(),
+					"direccion.anio." + actual.colegioId(), "Dirección del año", false,
+					java.util.EnumSet.of(pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.DIRECTOR)));
+			try {
+				return estructura.crearAnio(solicitud);
+			}
+			finally {
+				org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(antes);
+			}
+		}
+		return estructura.crearAnio(solicitud);
 	}
 
 	/** Mateo Quispe Huamán con su madre Rosa como apoderada nueva (con celular y correo). */

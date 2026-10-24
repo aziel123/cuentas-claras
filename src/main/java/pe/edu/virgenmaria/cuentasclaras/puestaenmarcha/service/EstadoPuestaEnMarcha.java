@@ -53,8 +53,9 @@ import java.util.stream.Collectors;
 
 /**
  * Sprint 8, tanda 2 (sección 3.5): calcula la lista de verificación de la puesta en marcha de un colegio DESDE LOS DATOS
- * (nada se marca a mano, salvo los dos «aceptos» firmados por la Promotoría). Son los 14 pasos del diseño: 12
- * obligatorios para pasar a producción y 2 opcionales (pago en línea y recaudación bancaria). En PRODUCCION se sigue
+ * (nada se marca a mano, salvo los dos «aceptos» firmados por la Promotoría). Son los 15 pasos (sprint 11, tanda 1: el
+ * año escolar y las secciones van por separado): 13 obligatorios para pasar a producción y 2 opcionales (pago en línea y
+ * recaudación bancaria), más el aviso de las áreas de cada docente (sprint 10, no bloquea). En PRODUCCION se sigue
  * mostrando como «Salud de la configuración» (un punto puede volver a pendiente, por ejemplo si se desactiva la única
  * Caja).
  * <p>
@@ -70,6 +71,9 @@ public class EstadoPuestaEnMarcha {
 	public static final String EQUIPO = "equipo";
 
 	public static final String ANIO = "anio";
+
+	/** Sprint 11, tanda 1 (sección 3.7): las secciones del año, separadas del año escolar. */
+	public static final String SECCIONES = "secciones";
 
 	public static final String PENSIONES = "pensiones";
 
@@ -96,9 +100,15 @@ public class EstadoPuestaEnMarcha {
 	/** Sprint 10, tanda 2: las asignaciones del sprint 9 sin áreas del catálogo (esos docentes no califican). */
 	public static final String AREAS_DOCENTES = "areas-docentes";
 
-	/** Los 14 pasos en el orden de la sección 3.5, y el 15 del sprint 10 (las áreas de cada docente; no bloquea). */
-	public static final List<String> PASOS = List.of(DATOS, EQUIPO, ANIO, PENSIONES, ALUMNOS, SALDO_INICIAL, OSE,
+	/**
+	 * Los 15 pasos (sprint 11, tanda 1: el 3 de antes, «Año escolar y secciones», se separa en «Año escolar y fechas de
+	 * clases» y «Secciones»), y el del sprint 10 (las áreas de cada docente; no bloquea).
+	 */
+	public static final List<String> PASOS = List.of(DATOS, EQUIPO, ANIO, SECCIONES, PENSIONES, ALUMNOS, SALDO_INICIAL, OSE,
 			CUENTA_BANCARIA, MENSAJERIA, CORREO_CONTROL, PRIVACIDAD, RESPALDO, PASARELA, RECAUDACION, AREAS_DOCENTES);
+
+	/** Lo que dicen los pasos que dependen del año mientras el año no está configurado (sin enlace). */
+	static final String PRIMERO_EL_ANIO = "Primero configure el año escolar";
 
 	private static final Set<EstadoMensaje> SALIDOS = EnumSet.of(EstadoMensaje.ENVIADO, EstadoMensaje.ENTREGADO,
 			EstadoMensaje.LEIDO);
@@ -218,36 +228,44 @@ public class EstadoPuestaEnMarcha {
 				+ (gobierno >= 2 ? "" : "; hay menos de 2 personas de Promotoría o Dirección: nadie distinto aprueba lo "
 						+ "que la otra pide"), "/usuarios"));
 
-		// 3. Año escolar y secciones: el año vigente con al menos una sección por nivel ofrecido.
+		// 3. Año escolar y fechas de clases (sprint 11, tanda 1, sección 3.7; obligatorio y bloqueante): un año EN_CURSO o
+		// PLANIFICADO con su inicio y fin de clases. Lo crea Promotoría o Dirección con su firma; el operador nunca.
 		Optional<AnioEscolar> vigente = anios.findByEstado(EstadoAnioEscolar.EN_CURSO)
-				.or(() -> anios.findAllByOrderByAnioDesc().stream().findFirst());
+				.or(() -> anios.findAllByOrderByAnioDesc().stream().filter(a -> !a.cerrado()).findFirst());
+		boolean conAnio = vigente.isPresent();
+		puntos.add(new PuntoLista(ANIO, "Año escolar y fechas de clases", estado(conAnio), vigente.map(a -> "Año "
+				+ a.getAnio() + " (" + a.getEstado().etiqueta().toLowerCase(Locale.ROOT) + "): clases del " + a.rangoClases())
+				.orElse("Sin año escolar: lo crea Promotoría o Dirección, con su firma"), "/colegio"));
+
+		// 4. Secciones: el año del paso 3 con al menos una sección por nivel ofrecido.
 		Set<Nivel> conSeccion = vigente.map(a -> secciones.findByAnioEscolarIdOrderByGradoAscNombreAsc(a.getId()).stream()
 				.filter(Seccion::isActiva).map(Seccion::nivel).collect(Collectors.toSet())).orElse(Set.of());
-		boolean anio = vigente.isPresent() && conSeccion.containsAll(niveles);
-		puntos.add(new PuntoLista(ANIO, "Año escolar y secciones", estado(anio), vigente.map(a -> "Año " + a.getAnio()
-				+ ": secciones en " + conSeccion.size() + " de " + niveles.size() + " nivel(es)").orElse("Sin año escolar"),
-				"/colegio"));
+		boolean conSecciones = conAnio && conSeccion.containsAll(niveles);
+		puntos.add(new PuntoLista(SECCIONES, "Secciones", estado(conSecciones), vigente.map(a -> "Año " + a.getAnio()
+				+ ": secciones en " + conSeccion.size() + " de " + niveles.size() + " nivel(es)").orElse(PRIMERO_EL_ANIO),
+				conAnio ? "/colegio/anios/" + vigente.get().getId() : null));
 
-		// 4. Pensiones: un plan APROBADO (vigente) para cada nivel ofrecido.
+		// 5. Pensiones: un plan APROBADO (vigente) para cada nivel ofrecido.
 		Set<Nivel> conPlan = vigente.map(a -> planes.findByAnioEscolarIdAndVigenteTrue(a.getId()).stream()
 				.map(PlanPension::getNivel).collect(Collectors.toSet())).orElse(Set.of());
-		boolean pensiones = vigente.isPresent() && conPlan.containsAll(niveles);
-		puntos.add(new PuntoLista(PENSIONES, "Pensiones", estado(pensiones), "Planes aprobados: " + conPlan.size() + " de "
-				+ niveles.size() + " nivel(es)", "/pensiones"));
+		boolean pensiones = conAnio && conPlan.containsAll(niveles);
+		puntos.add(new PuntoLista(PENSIONES, "Pensiones", estado(pensiones), conAnio ? "Planes aprobados: " + conPlan.size()
+				+ " de " + niveles.size() + " nivel(es)" : PRIMERO_EL_ANIO, conAnio ? "/pensiones" : null));
 
-		// 5. Alumnos matriculados en el año vigente.
+		// 6. Alumnos matriculados en el año vigente.
 		long matriculados = vigente.map(a -> matriculas.countByAnioEscolarIdAndEstado(a.getId(), EstadoMatricula.ACTIVA))
 				.orElse(0L);
-		puntos.add(new PuntoLista(ALUMNOS, "Alumnos", estado(matriculados > 0), "Alumnos matriculados: " + matriculados,
-				"/alumnos"));
+		puntos.add(new PuntoLista(ALUMNOS, "Alumnos", estado(matriculados > 0), conAnio ? "Alumnos matriculados: "
+				+ matriculados : PRIMERO_EL_ANIO, conAnio ? "/alumnos" : null));
 
-		// 6. Saldo inicial: un lote CONFIRMADO o «el colegio empieza sin deudas anteriores» firmado por Promotoría.
+		// 7. Saldo inicial: un lote CONFIRMADO o «el colegio empieza sin deudas anteriores» firmado por Promotoría.
 		boolean loteConfirmado = lotes.findAllByOrderByCreadoEnDescIdDesc().stream()
 				.anyMatch(l -> l.getEstado() == EstadoLote.CONFIRMADO);
 		boolean sinSaldo = firmas.existsByClave(ClaveFirma.colegioSinSaldoInicial(colegioId));
 		puntos.add(new PuntoLista(SALDO_INICIAL, "Saldo inicial", estado(loteConfirmado || sinSaldo), loteConfirmado
 				? "Lote de saldo inicial confirmado" : sinSaldo ? "Promotoría firmó que el colegio empieza sin deudas anteriores"
-						: "Sin lote confirmado (o la Promotoría firma que no hay deudas anteriores)", "/pensiones/saldo-inicial"));
+						: conAnio ? "Sin lote confirmado (o la Promotoría firma que no hay deudas anteriores)" : PRIMERO_EL_ANIO,
+				conAnio || loteConfirmado || sinSaldo ? "/pensiones/saldo-inicial" : null));
 
 		// 7. Comprobantes: un OSE real vigente y probado, o el simulado aceptado con la firma de Promotoría.
 		Optional<ConectorColegio> ose = vigenteDe(TipoConector.OSE);

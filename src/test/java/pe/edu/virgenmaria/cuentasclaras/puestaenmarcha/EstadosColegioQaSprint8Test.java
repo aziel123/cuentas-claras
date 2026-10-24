@@ -151,9 +151,10 @@ class EstadosColegioQaSprint8Test {
 		List<PuntoLista> puntos = estado.paraOperador(1L).puntos();
 
 		assertThat(puntos).extracting(PuntoLista::clave).containsExactlyElementsOf(EstadoPuestaEnMarcha.PASOS);
-		assertThat(puntos).hasSize(15);
-		// Sprint 10, tanda 2: el punto 15 (áreas de cada docente) sale HECHO sin asignaciones por completar (no bloquea).
-		assertThat(puntos.stream().filter(PuntoLista::obligatorio).count()).isEqualTo(13L);
+		// Sprint 11, tanda 1 (sección 3.7): el año escolar y las secciones van por separado: 15 pasos más el de las áreas.
+		assertThat(puntos).hasSize(16);
+		// Sprint 10, tanda 2: el punto de las áreas de cada docente sale HECHO sin asignaciones por completar (no bloquea).
+		assertThat(puntos.stream().filter(PuntoLista::obligatorio).count()).isEqualTo(14L);
 		assertThat(puntos).filteredOn(p -> !p.obligatorio()).extracting(PuntoLista::clave)
 				.containsExactly(EstadoPuestaEnMarcha.PASARELA, EstadoPuestaEnMarcha.RECAUDACION);
 		assertThat(puntos).allSatisfy(p -> assertThat(p.enlace()).as("el operador no recibe enlaces").isNull());

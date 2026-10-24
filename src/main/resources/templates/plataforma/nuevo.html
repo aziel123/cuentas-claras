@@ -44,23 +44,8 @@
 			</div>
 			<div th:replace="~{fragments/componentes :: campo('contratoCodigo', 'Código del contrato', 'Enlaza la ficha con el contrato firmado.', 'off')}"></div>
 
-			<h2>Año escolar inicial</h2>
-			<div class="campo">
-				<label for="anio">Año</label>
-				<input type="number" class="input" th:field="*{anio}" min="2000" max="2100" inputmode="numeric"
-					th:classappend="${#fields.hasErrors('anio')} ? 'input-con-error'">
-				<p class="error" th:if="${#fields.hasErrors('anio')}" th:errors="*{anio}">Error</p>
-			</div>
-			<div class="campo">
-				<label for="inicioClases">Inicio de clases</label>
-				<input type="date" class="input" th:field="*{inicioClases}" th:classappend="${#fields.hasErrors('inicioClases')} ? 'input-con-error'">
-				<p class="error" th:if="${#fields.hasErrors('inicioClases')}" th:errors="*{inicioClases}">Error</p>
-			</div>
-			<div class="campo">
-				<label for="finClases">Fin de clases</label>
-				<input type="date" class="input" th:field="*{finClases}" th:classappend="${#fields.hasErrors('finClases')} ? 'input-con-error'">
-				<p class="error" th:if="${#fields.hasErrors('finClases')}" th:errors="*{finClases}">Error</p>
-			</div>
+			<p class="ayuda">El año escolar y las fechas de clases los configura el colegio (Promotoría o Dirección, con su
+				firma): es el primer paso de su puesta en marcha.</p>
 
 			<h2>Titular del contrato (primera Promotoría)</h2>
 			<div th:replace="~{fragments/componentes :: campo('titularNombre', 'Nombre completo', null, 'off')}"></div>

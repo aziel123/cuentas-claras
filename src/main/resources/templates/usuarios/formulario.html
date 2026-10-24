@@ -41,6 +41,12 @@
 				</label>
 				<p class="ayuda" id="roles-ayuda">Caja no se combina con Promotoría, Dirección ni Administración: quien cobra no aprueba.
 					Apoderado no se combina con roles del personal.</p>
+				<p class="ayuda" th:if="${facultad != null and facultad.titular() and facultad.disponible()}">Como titular del
+					contrato puedes crear una cuenta con Promotoría o Dirección sin aprobación: te pediremos un código que llega a
+					tu celular. Se avisará al correo de control, a toda la Promotoría y a la plataforma. Crea primero la cuenta de
+					Dirección: es quien aprueba lo de las cuentas que tú creas.</p>
+				<p class="ayuda" th:if="${facultad != null and facultad.titular() and !facultad.disponible()}"
+					th:text="${facultad.motivo()}">Motivo</p>
 				<p class="error" th:if="${#fields.hasErrors('roles')}" th:errors="*{roles}">Error</p>
 			</fieldset>
 

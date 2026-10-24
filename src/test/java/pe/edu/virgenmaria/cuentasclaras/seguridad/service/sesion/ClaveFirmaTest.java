@@ -75,7 +75,10 @@ class ClaveFirmaTest {
 				// Sprint 10, tanda 2 (V36): el lote de notas y la exoneración.
 				ClaveFirma.loteCalificacion(1L, 2L, 3L, 1), ClaveFirma.exoneracionArea(1L, 2L),
 				// Sprint 10, tanda 3 (V37, M12): la delegación de la exportación para el SIAGIE.
-				ClaveFirma.delegacionSiagie(1L, LocalDate.of(2026, 10, 5)))
+				ClaveFirma.delegacionSiagie(1L, LocalDate.of(2026, 10, 5)),
+				// Sprint 11, tanda 1 (V39): el cambio de estado del colegio, el año escolar y la facultad del titular.
+				ClaveFirma.cambioEstadoPropuesto(1L, 1), ClaveFirma.cambioEstado(1L, "APROBADO"),
+				ClaveFirma.anioEscolarCreado(2027), ClaveFirma.anioEscolarCambiado(1L, 0), ClaveFirma.facultadTitular(1L, 1))
 				.forEach(clave -> {
 					// El CHECK de V25 (firma_operacion.clave) y el largo de la columna.
 					assertThat(clave).matches("^[a-z_]+:[A-Za-z0-9:_-]+$").hasSizeLessThanOrEqualTo(120);

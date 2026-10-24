@@ -54,6 +54,26 @@
 		</div>
 	</section>
 
+	<section class="tarjeta formulario-angosto" th:if="${puedeCrearAnio and !anio.cerrado()}" aria-labelledby="titulo-fechas">
+		<h2 id="titulo-fechas">Fechas de clases</h2>
+		<p class="secundario">Las cuotas ya generadas no cambian: salen del plan de pensiones. El cambio va con tu firma y queda en la bitácora.</p>
+		<form class="formulario" th:action="@{/colegio/anios/{id}/fechas(id=${anio.id})}" method="post">
+			<div class="formulario-doble">
+				<div class="campo">
+					<label for="inicioClases">Inicio de clases</label>
+					<input class="input" type="date" id="inicioClases" name="inicioClases" required th:value="${anio.inicioClases}">
+				</div>
+				<div class="campo">
+					<label for="finClases">Fin de clases</label>
+					<input class="input" type="date" id="finClases" name="finClases" required th:value="${anio.finClases}">
+				</div>
+			</div>
+			<div class="acciones">
+				<button th:replace="~{fragments/componentes :: boton('Cambiar fechas', 'secundario')}"></button>
+			</div>
+		</form>
+	</section>
+
 	<section class="tarjeta formulario-angosto" th:if="${puedeEditar and !anio.cerrado()}" aria-labelledby="titulo-nueva">
 		<h2 id="titulo-nueva">Agregar sección</h2>
 		<form class="formulario" th:action="@{/colegio/anios/{id}/secciones(id=${anio.id})}" th:object="${nuevaSeccion}" method="post">

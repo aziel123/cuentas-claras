@@ -244,7 +244,7 @@ class PermisosMySqlTest {
 				jdbc.queryForList("SELECT anio FROM anio_escolar WHERE colegio_id = 1", Integer.class));
 		int anio = java.util.stream.IntStream.iterate(2025, a -> a >= 2000, a -> a - 1).filter(a -> !usados.contains(a))
 				.findFirst().orElseThrow();
-		Long anioId = estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
+		Long anioId = crearAnioComoDireccion(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
 				java.time.LocalDate.of(anio, 3, 2), java.time.LocalDate.of(anio, 12, 18), false));
 		Long seccionA = estructura.crearSeccion(anioId, new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest(
 				pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "A"));
@@ -324,7 +324,7 @@ class PermisosMySqlTest {
 				jdbc.queryForList("SELECT anio FROM anio_escolar WHERE colegio_id = 1", Integer.class));
 		int anio = java.util.stream.IntStream.iterate(2025, a -> a >= 2000, a -> a - 1).filter(a -> !usados.contains(a))
 				.findFirst().orElseThrow();
-		Long anioId = estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
+		Long anioId = crearAnioComoDireccion(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
 				java.time.LocalDate.of(anio, 3, 2), java.time.LocalDate.of(anio, 12, 18), false));
 		estructura.crearSeccion(anioId, new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest(
 				pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "A"));
@@ -391,7 +391,7 @@ class PermisosMySqlTest {
 		int anio = java.util.stream.IntStream.iterate(2025, a -> a >= 2000, a -> a - 1).filter(a -> !usados.contains(a))
 				.findFirst().orElseThrow();
 		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
-		Long anioId = estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
+		Long anioId = crearAnioComoDireccion(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
 				java.time.LocalDate.of(anio, 3, 2), java.time.LocalDate.of(anio, 12, 18), false));
 		Long seccion = estructura.crearSeccion(anioId, new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest(
 				pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "A"));
@@ -472,7 +472,7 @@ class PermisosMySqlTest {
 	void triggersImpidenCambiarPlanesAprobadosYLotesEnviados() {
 		int anio = anioLibre();
 		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
-		Long anioId = estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
+		Long anioId = crearAnioComoDireccion(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
 				java.time.LocalDate.of(anio, 3, 2), java.time.LocalDate.of(anio, 12, 18), false));
 		estructura.crearSeccion(anioId, new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest(
 				pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "A"));
@@ -531,7 +531,7 @@ class PermisosMySqlTest {
 	private FamiliasCaja crearFamiliasDeCaja() {
 		int anio = anioLibre();
 		EscenarioCobranza.como(EscenarioCobranza.ADMINISTRACION);
-		Long anioId = estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
+		Long anioId = crearAnioComoDireccion(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(anio,
 				java.time.LocalDate.of(anio, 3, 2), java.time.LocalDate.of(anio, 12, 18), false));
 		Long seccion = estructura.crearSeccion(anioId, new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest(
 				pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado.PRIMARIA_5, "A"));
@@ -2510,7 +2510,7 @@ class PermisosMySqlTest {
 	private Long anioDe(long colegio, int anio, boolean enCurso) {
 		java.util.List<Long> existente = jdbc.queryForList("SELECT id FROM anio_escolar WHERE colegio_id = ? AND anio = ?",
 				Long.class, colegio, anio);
-		return existente.isEmpty() ? estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto
+		return existente.isEmpty() ? crearAnioComoDireccion(new pe.edu.virgenmaria.cuentasclaras.colegio.dto
 				.CrearAnioEscolarRequest(anio, java.time.LocalDate.of(anio, 3, 2), java.time.LocalDate.of(anio, 12, 18),
 						enCurso)) : existente.getFirst();
 	}
@@ -2728,6 +2728,23 @@ class PermisosMySqlTest {
 				.findFirst().orElseThrow();
 	}
 
+	/**
+	 * Sprint 11, tanda 1 (sección 3.7): el año escolar lo crean Promotoría o Dirección con su firma (en MySQL,
+	 * trg_anio_escolar_nace). Lo crea la Dirección base del colegio de quien está en sesión y la sesión vuelve a esa persona.
+	 */
+	private Long crearAnioComoDireccion(pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest solicitud) {
+		org.springframework.security.core.Authentication antes = SecurityContextHolder.getContext().getAuthentication();
+		long colegio = antes != null && antes.getPrincipal() instanceof pe.edu.virgenmaria.cuentasclaras.seguridad.service
+				.UsuarioAutenticado u ? u.colegioId() : 1L;
+		UsuariosDePrueba.iniciarSesion(cuentasDePrueba.direccionBase(colegio));
+		try {
+			return estructura.crearAnio(solicitud);
+		}
+		finally {
+			SecurityContextHolder.getContext().setAuthentication(antes);
+		}
+	}
+
 	private Usuario guardar(String nombre, Rol rol) {
 		return UsuariosDePrueba.guardar(usuarios, codificador, 1L, nombre, UsuariosDePrueba.CLAVE, false, rol);
 	}
@@ -2740,6 +2757,9 @@ class PermisosMySqlTest {
 
 	@Autowired
 	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.SesionesFirmadas sesionesFirmadas;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comun.prueba.CuentasDePrueba cuentasDePrueba;
 
 	/**
 	 * Sprint 7, tanda 2: la firma de esa persona del colegio 1 para la clave, como la deja la aplicación al aprobar (con
@@ -4150,7 +4170,7 @@ class PermisosMySqlTest {
 		EscuelaConDocentesMySql.Escuela escuela = EscuelaConDocentesMySql.crear(sufijo + "s", "20600000048", "987653181",
 				alta, servicioUsuarios, usuarios, codificador, colegiosDeLaBase, estructura, jdbc);
 		java.time.LocalDate hoy = jdbc.queryForObject("SELECT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR)", java.time.LocalDate.class);
-		jdbc.update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(40),
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.DbaMySql.exigir().update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(40),
 				hoy.plusDays(40), escuela.anioId());
 		// Dirección: las horas (el cierre de las correcciones a las 18:00, el máximo, para que el flujo corra casi todo el día).
 		UsuariosDePrueba.iniciarSesion(escuela.equipo().directora());

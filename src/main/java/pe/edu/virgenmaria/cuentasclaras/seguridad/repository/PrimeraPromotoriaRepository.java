@@ -13,6 +13,9 @@ public interface PrimeraPromotoriaRepository extends Repository<PrimeraPromotori
 	/** Si el colegio en contexto ya tiene su primera Promotoría. */
 	boolean existsByIdNotNull();
 
+	/** Sprint 11, tanda 1 (sección 3.12): si esa cuenta es la del titular (su Promotoría no se quita ni se desactiva). */
+	boolean existsByUsuarioId(Long usuarioId);
+
 	Optional<PrimeraPromotoria> findFirstByIdNotNull();
 
 	/** Si esa cuenta (del colegio en contexto) es el titular de la primera Promotoría. */

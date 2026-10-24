@@ -20,6 +20,9 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Seccion;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository;
+import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.SeccionRepository;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
@@ -36,7 +39,10 @@ import java.util.Optional;
 /**
  * Estructura académica: años escolares y secciones (los niveles y grados son el catálogo nacional, {@link Grado}).
  * <ul>
- *   <li>Lectura: Promotoría, Dirección y Administración. Escritura: Dirección y Administración.</li>
+ *   <li>Lectura: Promotoría, Dirección y Administración. Secciones: Dirección y Administración.</li>
+ *   <li>Sprint 11, tanda 1 (sección 3.7, AP-9): el año escolar lo crean y lo cambian Promotoría o Dirección con la firma
+ *       de su sesión ({@code anio_escolar:{anio}:CREADO} y {@code anio_escolar:{id}:{version}}); Administración ya no.
+ *       En MySQL lo exigen trg_anio_escolar_nace y trg_anio_escolar_cambio (nunca el operador ni un proceso).</li>
  *   <li>Solo un año EN_CURSO por colegio (lo comprueba el servicio y lo garantiza la base).</li>
  *   <li>Nada se borra: una sección se desactiva con motivo. Todo cambio queda en la bitácora.</li>
  * </ul>
@@ -54,12 +60,18 @@ public class ServicioEstructura {
 
 	private final AuditoriaService auditoria;
 
+	private final FirmaSesion firma;
+
+	private final ColegioRepository colegios;
+
 	public ServicioEstructura(AnioEscolarRepository anios, SeccionRepository secciones, ConteoMatriculas conteo,
-			AuditoriaService auditoria) {
+			AuditoriaService auditoria, FirmaSesion firma, ColegioRepository colegios) {
 		this.anios = anios;
 		this.secciones = secciones;
 		this.conteo = conteo;
 		this.auditoria = auditoria;
+		this.firma = firma;
+		this.colegios = colegios;
 	}
 
 	@Transactional(readOnly = true)
@@ -121,12 +133,13 @@ public class ServicioEstructura {
 				.toList();
 	}
 
-	@PreAuthorize("hasAnyRole('DIRECTOR','ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
 	@Transactional
 	public Long crearAnio(CrearAnioEscolarRequest solicitud) {
 		if (solicitud.anio() == null) {
 			throw new ReglaNegocioException("Escribe el año.");
 		}
+		exigirColegioQueOpera();
 		int numero = solicitud.anio();
 		if (anios.existsByAnio(numero)) {
 			throw anioRepetido(numero);
@@ -138,6 +151,8 @@ public class ServicioEstructura {
 		}
 		AnioEscolar anio = AnioEscolar.nuevo(numero, solicitud.esEnCurso(), solicitud.inicioClases(),
 				solicitud.finClases());
+		// Sprint 11, tanda 1: con la firma de la sesión de quien lo crea (en MySQL, trg_anio_escolar_nace la exige).
+		firma.firmar(ClaveFirma.anioEscolarCreado(numero));
 		try {
 			anios.saveAndFlush(anio);
 		}
@@ -148,8 +163,37 @@ public class ServicioEstructura {
 		}
 		auditoria.registrar(AccionAuditoria.ANIO_ESCOLAR_CREADO, "anio_escolar", anio.getId().toString(), null,
 				"año " + numero + "; " + anio.getEstado().etiqueta().toLowerCase(java.util.Locale.ROOT) + "; clases del "
-						+ anio.rangoClases(), null);
+						+ anio.rangoClases(), "Con la firma de su sesión.");
 		return anio.getId();
+	}
+
+	/**
+	 * Sprint 11, tanda 1 (AP-9): cambia las fechas de clases de un año (no cerrado), con la firma de quien lo cambia sobre
+	 * la versión que tenía ({@code anio_escolar:{id}:{version}}). Las cuotas ya generadas no cambian: salen del plan de
+	 * pensiones, que aprueba otra persona.
+	 */
+	@PreAuthorize("hasAnyRole('PROMOTOR','DIRECTOR')")
+	@Transactional
+	public void cambiarFechas(Long id, java.time.LocalDate inicio, java.time.LocalDate fin, String por) {
+		exigirColegioQueOpera();
+		AnioEscolar anio = anios.bloquear(id).orElseThrow(() -> new RecursoNoEncontradoException("Año escolar no encontrado"));
+		String antes = anio.rangoClases();
+		long version = anio.getVersion();
+		anio.cambiarFechas(inicio, fin, por);
+		firma.firmar(ClaveFirma.anioEscolarCambiado(anio.getId(), version));
+		anios.saveAndFlush(anio);
+		auditoria.registrar(AccionAuditoria.ANIO_ESCOLAR_CAMBIADO, "anio_escolar", anio.getId().toString(),
+				"clases del " + antes, "clases del " + anio.rangoClases(), "Año " + anio.getAnio()
+						+ ", con la firma de su sesión.");
+	}
+
+	/** Sprint 11, tanda 1: un colegio suspendido o dado de baja no crea ni cambia años (lo exige también la base). */
+	private void exigirColegioQueOpera() {
+		Long colegioId = pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio.actual();
+		boolean opera = colegioId != null && colegios.findById(colegioId).map(c -> c.opera()).orElse(true);
+		if (!opera) {
+			throw new ReglaNegocioException("El colegio no está operando: no se crean ni cambian años escolares.");
+		}
 	}
 
 	@PreAuthorize("hasAnyRole('DIRECTOR','ADMINISTRACION')")

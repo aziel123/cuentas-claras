@@ -114,6 +114,8 @@ final class CatalogoRutasConId {
 		r("POST /usuarios/{id}/reactivar", "id", Recurso.USUARIO);
 		r("POST /usuarios/{id}/restablecer-clave", "id", Recurso.USUARIO);
 		r("POST /usuarios/{id}/roles", "id", Recurso.USUARIO);
+		// Sprint 11, tanda 1 (sección 3.12): el titular da o quita Promotoría o Dirección con su facultad.
+		r("POST /usuarios/{id}/facultad", "id", Recurso.USUARIO);
 		r("POST /usuarios/{id:\\d+}/contacto", "id", Recurso.USUARIO);
 		r("GET /auditoria/accesos", "usuarioId", Recurso.USUARIO);
 
@@ -166,6 +168,8 @@ final class CatalogoRutasConId {
 		// Colegio, feriados, mensajes y matrícula 2027.
 		r("GET /colegio/anios/{id:\\d+}", "id", Recurso.ANIO);
 		r("POST /colegio/anios/{id:\\d+}/secciones", "id", Recurso.ANIO);
+		// Sprint 11, tanda 1 (AP-9): las fechas de clases, con la firma de Promotoría o Dirección.
+		r("POST /colegio/anios/{id:\\d+}/fechas", "id", Recurso.ANIO);
 		r("POST /colegio/secciones/{id:\\d+}/desactivar", "id", Recurso.SECCION, "anioId", Recurso.ANIO);
 		r("POST /feriados/{id:\\d+}/anular", "id", Recurso.FERIADO);
 		r("POST /feriados/{id:\\d+}/aprobar", "id", Recurso.FERIADO);

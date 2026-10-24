@@ -113,7 +113,9 @@ public class DespachoMensajes {
 			ApoderadoRepository apoderados, CreadorMensajes creador, AuditoriaService auditoria,
 			PropiedadesMensajeria propiedades, RecorridoColegios colegios, PlatformTransactionManager transacciones,
 			Clock reloj, CalendarioHabil calendario, VerificacionesContacto verificaciones, CuotaRepository cuotas,
-			ColegioService nombresColegios, Marca marca) {
+			ColegioService nombresColegios, Marca marca,
+			pe.edu.virgenmaria.cuentasclaras.comun.cripto.DerivadorSecreto derivador) {
+		this.derivador = derivador;
 		this.calendario = calendario;
 		this.verificaciones = verificaciones;
 		this.cuotas = cuotas;
@@ -133,6 +135,8 @@ public class DespachoMensajes {
 		this.transaccion.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 		this.reloj = reloj;
 	}
+
+	private final pe.edu.virgenmaria.cuentasclaras.comun.cripto.DerivadorSecreto derivador;
 
 	@Scheduled(fixedDelayString = "${cuentasclaras.mensajeria.envio-cada:30s}", initialDelayString = "20s")
 	public void despachar() {
@@ -287,6 +291,14 @@ public class DespachoMensajes {
 			String cuerpo = PlantillaMensaje.VERIFICACION.componer(parametros) + "\n\n" + propiedades.urlPublica() + ruta
 					+ pieDelCorreo(colegio);
 			return new Envio(parametros, ruta, cuerpo);
+		}
+		if (mensaje.getTipo() == TipoMensaje.CODIGO_FACULTAD) {
+			// Sprint 11, tanda 1 (AP-2): el código se deriva AQUÍ de la clave del mensaje (no está guardado en ninguna parte).
+			List<String> guardados = mensaje.parametrosLista();
+			String vence = guardados.size() > 2 ? guardados.get(2) : "";
+			List<String> parametros = List.of(colegio, derivador.codigoFacultad(ContextoColegio.actual(), mensaje.getClave()),
+					vence);
+			return new Envio(parametros, null, PlantillaMensaje.CODIGO_FACULTAD.componer(parametros) + pieDelCorreo(colegio));
 		}
 		if (mensaje.getTipo() != TipoMensaje.ACTIVACION_CUENTA) {
 			List<String> parametros = mensaje.parametrosLista();

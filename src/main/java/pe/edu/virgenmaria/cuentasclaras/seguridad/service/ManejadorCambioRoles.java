@@ -48,8 +48,11 @@ public class ManejadorCambioRoles implements ManejadorSolicitud {
 
 	private final SesionesFirmadas sesiones;
 
+	private final pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraPromotoriaRepository primeras;
+
 	public ManejadorCambioRoles(UsuarioRepository usuarios, AuditoriaService auditoria, SesionesUsuario sesionesHttp,
-			SesionesFirmadas sesiones) {
+			SesionesFirmadas sesiones, pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraPromotoriaRepository primeras) {
+		this.primeras = primeras;
 		this.usuarios = usuarios;
 		this.auditoria = auditoria;
 		this.sesionesHttp = sesionesHttp;
@@ -94,6 +97,12 @@ public class ManejadorCambioRoles implements ManejadorSolicitud {
 					+ "rechaza esta solicitud y que se pida de nuevo.");
 		}
 		ReglasSegregacion.validarCuenta(nuevos, null);
+		// Sprint 11, tanda 1 (sección 3.12): la Promotoría del titular del contrato no se quita con la aplicación (decisión
+		// 115: cambiar de titular va con carta del representante legal y acta del DBA). La base también lo exige.
+		if (anteriores.contains(Rol.PROMOTOR) && !nuevos.contains(Rol.PROMOTOR) && primeras.existsByUsuarioId(usuario.getId())) {
+			throw new ReglaNegocioException("Es la cuenta del titular del contrato: su Promotoría no se quita. Cambiar de "
+					+ "titular se hace con el proveedor, con una carta del representante legal.");
+		}
 		if (anteriores.contains(Rol.PROMOTOR) && !nuevos.contains(Rol.PROMOTOR)
 				&& usuarios.bloquearActivosConRol(Rol.PROMOTOR).size() <= 1) {
 			throw new ReglaNegocioException("No se le puede quitar Promotoría al último usuario de Promotoría activo.");

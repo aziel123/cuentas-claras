@@ -64,7 +64,7 @@ public class PlataformaController {
 
 	@GetMapping("/colegios/nuevo")
 	public String nuevo(Model model) {
-		model.addAttribute("solicitud", AltaColegioRequest.vacio(LocalDate.now(reloj).getYear()));
+		model.addAttribute("solicitud", AltaColegioRequest.vacio());
 		model.addAttribute("niveles", Nivel.values());
 		return "plataforma/nuevo";
 	}

@@ -75,7 +75,7 @@ class AltaColegioTest {
 	}
 
 	@Test
-	void elAltaCreaElColegioEnPreparacionConSuTitularSuEnlaceYSuAnio() {
+	void elAltaCreaElColegioEnPreparacionConSuTitularYSuEnlaceSinAnio() {
 		ColegioCreado creado = alta.crear(EscenarioPlataforma.alta("Colegio San Martín", EscenarioPlataforma.RUC_A,
 				"titular.sanmartin", "45678912", "987650001"), null, null);
 
@@ -107,9 +107,9 @@ class AltaColegioTest {
 		assertThat(mensaje).containsEntry("tipo", "ACTIVACION_CUENTA").containsEntry("estado", "PENDIENTE")
 				.containsEntry("destino", "+51987650001");
 		assertThat((String) mensaje.get("parametros")).startsWith("Colegio San Martín");
-		// El año escolar inicial, en curso.
-		assertThat(jdbc.queryForObject("SELECT estado FROM anio_escolar WHERE colegio_id = ? AND anio = 2027", String.class,
-				creado.colegioId())).isEqualTo("EN_CURSO");
+		// Sprint 11, tanda 1 (sección 3.7): el colegio nace SIN año escolar (lo crea su Promotoría o su Dirección).
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM anio_escolar WHERE colegio_id = ?", Long.class,
+				creado.colegioId())).isZero();
 		// Auditoría: en la bitácora de la plataforma (el alta) y en la del colegio (quién creó el colegio y la cuenta).
 		assertThat(jdbc.queryForList("SELECT accion FROM evento_auditoria WHERE colegio_id = ?", String.class,
 				EscenarioPlataforma.plataformaId(colegios))).contains("COLEGIO_CREADO");

@@ -53,7 +53,7 @@ public class HuellaDiaria {
 	@Scheduled(cron = "${cuentasclaras.huella.cron:0 0 6 * * *}", zone = ConfiguracionTiempo.ZONA)
 	public void ejecutar() {
 		LocalDate hoy = LocalDate.now(reloj);
-		PasadaPorColegios.recorrer(LOG, "La huella diaria", colegios.activos(), colegio -> enColegio(colegio, hoy));
+		PasadaPorColegios.recorrer(LOG, "La huella diaria", colegios.conBitacora(), colegio -> enColegio(colegio, hoy));
 	}
 
 	/**
@@ -63,7 +63,7 @@ public class HuellaDiaria {
 	@Scheduled(cron = "${cuentasclaras.huella.cron-hora:0 0 8-19 * * MON-SAT}", zone = ConfiguracionTiempo.ZONA)
 	public void cadaHora() {
 		LocalDateTime ahora = LocalDateTime.now(reloj);
-		PasadaPorColegios.recorrer(LOG, "La huella de la hora", colegios.activos(), colegio -> horaEnColegio(colegio, ahora));
+		PasadaPorColegios.recorrer(LOG, "La huella de la hora", colegios.conBitacora(), colegio -> horaEnColegio(colegio, ahora));
 	}
 
 	/** La huella de la hora de un colegio (lo llama la tarea programada; las pruebas, directamente). */
