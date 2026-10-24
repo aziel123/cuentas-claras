@@ -1472,6 +1472,63 @@ otras pantallas; ancho de 1760 px y tableros).
    y acta), `suscripcion.md` («la plataforma no tiene un botón de suspensión» deja de ser cierto).
 7. CI en verde.
 
+## Tanda 1 · Implementación
+Rama `claude/sprint-11-ciclo-colegio`, PR #22 en borrador. Commits de la tanda: `89e710b` (V39, `03`, `02`, verificador y
+modelo), `162d53e` y `76a2dd6` (facultad del titular, año escolar del colegio, «preparaste la cuenta» y la prueba del alta
+al cobro, entregados primero como bloque propio) y los del ciclo de vida (cambios de estado, objeción, franja y modo consulta).
+
+**Paso 1 (comprobado antes de seguir):**
+- **MySQL 8.4.11:** `cc_app` y `cc_sistema` **sí** pueden hacer `SET timestamp = …` (no hace falta privilegio). `NOW()`,
+  `UTC_TIMESTAMP()`, `CURDATE()` y `CURRENT_TIMESTAMP` lo obedecen; `SYSDATE()` no. Por eso existe `cc_ahora_lima_real()`
+  (`CONVERT_TZ(SYSDATE(6), @@session.time_zone, '-05:00')`, probado con `time_zone` en `SYSTEM`, `+00:00`, `-05:00` y
+  `America/Lima`; SIGNAL si da NULL).
+- **`@@global.sysdate_is_now` no es una variable de sistema** en 8.4 (solo una opción de arranque): el verificador lo
+  comprueba por comportamiento: `SELECT /*+ SET_VAR(timestamp=946684800) */ SYSDATE(6) > NOW(6) + INTERVAL 1 DAY` debe ser
+  verdadero (si el servidor arrancó con `--sysdate-is-now`, el arranque de producción falla).
+- El CHECK se evalúa **después** del BEFORE trigger (comprobado); `MODIFY … NOT NULL DEFAULT` funciona en H2 2.4.240
+  MODE=MySQL (como en V28); la FK circular `colegio` ↔ `cambio_estado_colegio` se crea en las dos bases; los `DROP`/`ADD
+  CONSTRAINT` de `colegio` pasan con filas existentes.
+- Nadie llama hoy a `AnioEscolar.iniciar()` ni `cerrar()` sobre años guardados (AP-9: solo la creación y `cambiarFechas`).
+- A5 (decisión 211): la regla no es transitiva; `AltaACobroTest` (H2) y `AuditoriaSprint11CicloMySqlTest` (MySQL) prueban
+  que Dirección, creada por el titular, aprueba el plan de la Administración que también creó el titular, y que el titular
+  no puede.
+
+**Desviaciones respecto del diseño (todas anotadas en el código):**
+1. El código de la facultad **no se guarda**: se deriva con HMAC (`DerivadorSecreto.codigoFacultad`, clave del colegio y
+   clave del pedido) al despachar el mensaje `CODIGO_FACULTAD` y al verificarlo; el mensaje guarda solo su clave.
+2. `uso_facultad_titular` lleva `actualizado_en` y `version` (extiende `BaseEntity`); sigue `@Immutable` y sin `UPDATE` ni
+   `DELETE` para nadie (1142).
+3. `CambioEstadoColegio`, sus enums y su repositorio viven en `colegio.model` y `colegio.repository` (los lee la franja del
+   personal, que no puede depender de `plataforma`); solo `plataforma` los escribe (regla ArchUnit
+   `soloLaPlataformaEscribeCambiosDeEstado`). Los usos de la facultad los escribe solo `FacultadTitular` (otra regla).
+4. La Puesta en marcha tiene **16 entradas** en `PASOS` (los 15 pasos del brief más «Secciones» separado de «Año escolar y
+   fechas de clases», con `PRIMERO_EL_ANIO`).
+5. La suspensión: `cuentasclaras.ciclo.suspension-disponible` es `false` en producción (AP-8; la pantalla lo dice) y `true`
+   en las pruebas de H2, que prueban el flujo completo; en MySQL la base la rechaza igual sin la exportación (V40).
+6. En las pruebas de MySQL, cuando una prueba no creó el año, `CuentasDePrueba.pasarAProduccion` deja uno de paso (2099) como
+   DBA y lo cierra después (F18: la base exige el año para producción).
+7. La objeción del titular está en `/colegio/estado` (módulo «Colegio»; la ve también Dirección; objeta solo el titular con
+   su facultad sin bloquear, como `cc_es_titular`) y la responde un operador en la bandeja `/plataforma/cambios-estado`.
+
+**Construido:** V39; `03` con 117 triggers, 16 funciones (19 con huella, 136 huellas) y `reloj-pendiente.txt` (31) con el
+paso `reloj-real` del CI; `02`; `VerificadorPermisosBaseDatos` (5 triggers, inserciones imposibles y reloj real); año
+escolar del colegio con firma; facultad del titular con código por WhatsApp, avisos y bloqueo; `CambiosEstadoColegio`,
+`AplicadorCambioEstado`, `AplicacionCambiosEstado` (cada 15 min), `RevisionEstadosColegio` (F7, diaria), `ObjecionesTitular`;
+bandeja de operadores con «Aprobar» oculto para quien propuso, «Bloqueada por» y la objeción; filtro «Dados de baja»;
+`FiltroColegioQueOpera` e ingreso rechazado del personal (`INGRESO_RECHAZADO_COLEGIO_SUSPENDIDO`); franja ámbar
+(`EstadoDelColegio`); modo consulta de las familias (`ModoConsultaFamilias`: todo POST 403 salvo la clave y `/salir`);
+`RecorridoColegios` (H2).
+
+**Pruebas:** H2: `CambioEstadoColegioTest` (F2, AP-6, un pendiente por ámbito, bandeja, bloqueo de la facultad, F7,
+suspensión a los 30 días con objeción, cierre de sesiones del personal, filtro y modo consulta, aislamiento de la objeción),
+`AplicacionCambiosEstadoTest` (AP-4, AP-13, AP-10, F10), `RecorridoColegiosTest`, `AltaACobroTest` y las de la facultad y el
+año; `RutasIdorTest` con las rutas nuevas. MySQL: `AuditoriaSprint11CicloMySqlTest` (alta al cobro, facultad fuera de su
+camino, baja y bloqueo de dos operadores, F2, F6, 1142, 1143, cambio que nace aprobado, reloj real) y `PermisosMySqlTest`.
+
+**Quedan para las correcciones o la tanda 2 (no se pueden probar sin V40 o piden un colegio suspendido en MySQL):** las
+pruebas de MySQL de la suspensión aplicada (`a4…`, `h3…`, `f10…`, `a5…` en SUSPENDIDO), que en esta tanda cubre H2 con la
+misma lógica; en MySQL la suspensión no se puede proponer hasta V40.
+
 ## 13. Decisiones abiertas para el usuario
 Valor por defecto entre corchetes; se implementa el valor por defecto mientras el usuario no diga otra cosa (salvo la 202,
 que no entra en las tandas sin su confirmación). Sigue la numeración del sprint 10 (la última es la 191).

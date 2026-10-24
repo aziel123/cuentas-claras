@@ -401,6 +401,29 @@ class AuditoriaSprint11CicloMySqlTest {
 				+ "'operador.s11', NOW(6) FROM cambio_estado_colegio WHERE id = ?", n.colegio(), idBloqueo))).isIn(1644, 3819);
 	}
 
+	/**
+	 * AP-3 y H9: {@code SET timestamp} mueve {@code NOW()} de la conexión, pero no el reloj real de los triggers
+	 * ({@code cc_ahora_lima_real()}, con {@code SYSDATE()}): una conexión que adelanta su hora 31 días no adelanta una
+	 * suspensión, una firma ni una sesión.
+	 */
+	@Test
+	void h9SetTimestampNoMueveElReloj() {
+		Boolean real = pe.edu.virgenmaria.cuentasclaras.comun.prueba.DbaMySql.exigir().execute(
+				(org.springframework.jdbc.core.ConnectionCallback<Boolean>) conexion -> {
+					try (java.sql.Statement st = conexion.createStatement()) {
+						st.execute("SET timestamp = UNIX_TIMESTAMP() + 31 * 86400");
+						try (java.sql.ResultSet r = st.executeQuery("SELECT cuentasclaras.cc_ahora_lima_real() < NOW(6) - "
+								+ "INTERVAL 30 DAY")) {
+							r.next();
+							boolean b = r.getBoolean(1);
+							st.execute("SET timestamp = DEFAULT");
+							return b;
+						}
+					}
+				});
+		assertThat(real).isTrue();
+	}
+
 	private static int codigoAl(Runnable sentencia) {
 		try {
 			sentencia.run();
