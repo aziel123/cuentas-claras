@@ -6,7 +6,7 @@
 > está en verde.** Skills: `sistema-diseno` (marca, componentes y accesibilidad) y `evaluacion-ux` (microcopy).
 
 ## 1. Decisiones (pendientes del usuario: se implementan los valores por defecto)
-1. **Sin cambios en la base** (tampoco en F-D1 ni F-D2): sin migración, triggers, funciones ni huellas. Conteos sin cambio: **117 triggers, 19 funciones y
+1. **Sin cambios en la base** (tampoco en F-D1, F-D2 ni F-D3): sin migración, triggers, funciones ni huellas. Conteos sin cambio: **117 triggers, 19 funciones y
    136 huellas** (los de la tanda 1). Si algo pareciera pedir una columna, se calcula en Java desde lo que ya existe.
 2. **Avance (206):** «Tu colegio está en preparación: faltan N de 15 pasos», con N = obligatorios pendientes; «(y 2 opcionales)»
    si faltan; la barra sobre los 13 obligatorios.
@@ -38,8 +38,8 @@
   recaudación («Confirmar lote») y renovación.
 - **Puesta en marcha** (`puesta-en-marcha/lista.html`): número, título, estado con texto e ícono, responsable, conteo, «Ir» o
   «Lo hace …», «Siguiente» marcado con texto, «Pasar a producción» deshabilitado con el motivo.
-- **Dos correcciones de Pensiones (sección 2b):** la tarjeta de Secundaria desalineada (F-D1) y los vencimientos propuestos
-  según el inicio de clases (F-D2).
+- **Tres correcciones de Pensiones (sección 2b):** la tarjeta de Secundaria desalineada (F-D1), los vencimientos propuestos
+  según el inicio de clases (F-D2) y las fechas del formulario con `min` y `max` iguales a la validación (F-D3).
 - **Fuera de alcance:** cambios de lógica de los pasos (son de la tanda 1); avisos por WhatsApp o correo de los pasos
   pendientes (después, si el usuario lo pide); la guía para el operador (ya ve la lista como sí o no).
 
@@ -75,6 +75,31 @@ de clases»), y uno que termina en noviembre recibe una de diciembre.
   - clases del 16/03 al 18/12 (a mitad de mes): 10 pensiones, la primera el 31/03;
   - un año de enero a diciembre: 12 pensiones (el tope);
   - y lo mismo por el servicio (`propuestaPorDefecto(anioId, nivel)` con su año escolar), para el año en curso y el siguiente.
+
+**F-D3. Las fechas del formulario del plan con `min` y `max` iguales a la validación.** Hoy los `<input type="date">` de
+`pensiones/plan-formulario.html` no tienen límites: el calendario deja elegir fechas que el servidor rechaza después. **La
+validación del servidor no cambia.**
+- **Una sola fuente para los rangos:** `ConfiguracionPlan` expone `rangoMatricula(AnioEscolar)`, `rangoPensiones(AnioEscolar)` y
+  `rangoCobroDesde(AnioEscolar)` (un `record RangoFechas(LocalDate desde, LocalDate hasta)`), y **`validar` usa esos mismos
+  métodos** en lugar de calcular las fechas aparte. Así el HTML y el servidor no pueden separarse.
+  | Campo | `min` | `max` |
+  |---|---|---|
+  | Vencimiento de la matrícula | 01/01 del año anterior | fin de clases |
+  | Cada pensión (`vencimientos[i]`) | día 1 del mes de inicio de clases | 31/12 del año del plan |
+  | «Cobrar desde» | 01/01 del año del plan | 31/12 del año del plan |
+- **Plantilla:** fragmento nuevo `componentes.html :: campoFecha(nombre, etiqueta, ayuda, requerido, min, max)` (el `campoDe` de
+  hoy no cambia, para no tocar a sus otros usos), con `min` y `max` en formato ISO (`aaaa-mm-dd`); las 12 casillas de pensión
+  reciben los mismos `th:min` y `th:max`. El controlador agrega `rangos` al modelo en «nuevo», «editar» y al volver a mostrar
+  el formulario después de un error. La ayuda de cada campo dice el rango en palabras («Entre el 01/01/2025 y el 18/12/2026»),
+  porque `min` y `max` no se anuncian igual en todos los lectores de pantalla y en algunos navegadores no impiden escribir.
+  «Cobrar desde» mantiene su ayuda «el día 1 de un mes» (eso lo sigue validando solo el servidor).
+- **Prueba obligatoria** `PlanFormularioRangosTest` (con MockMvc, sobre el HTML):
+  - en «Proponer plan» de un año con clases del 01/04 al 30/11: la matrícula trae `min` = 01/01 del año anterior y `max` = fin
+    de clases; **cada una de las 12 casillas** de pensión trae `min` = día 1 de abril y `max` = 31/12; «Cobrar desde» trae
+    `min` = 01/01 y `max` = 31/12;
+  - lo mismo en «Editar plan» y al volver a mostrar el formulario después de un error de validación;
+  - **coherencia con el servidor:** `validar` acepta una fecha en el `min` y otra en el `max` de cada campo, y rechaza un día
+    antes del `min` y un día después del `max` (la matrícula, la primera pensión y «Cobrar desde» del día 1 del año siguiente).
 
 ## 3. Textos (microcopy; revisar con `investigador-ux` antes de cerrar)
 - Banner, le toca: «Tu colegio está en preparación: faltan 6 de 15 pasos.» · «Siguiente: Crear las secciones del año 2026 — lo
@@ -121,6 +146,8 @@ de clases»), y uno que termina en noviembre recibe una de diciembre.
 - **CSS:** `static/css/` (banner, barra, estado de paso).
 - **F-D1:** `templates/pensiones/resumen.html` y su CSS. **F-D2:** `cobranza.model.ConfiguracionPlan` (`porDefecto(AnioEscolar,
   …)`), `ServicioPlanesPension.propuestaPorDefecto`, `PensionesDemo`, `DatosDemoPensionesDev` y las pruebas que usan la firma vieja.
+  **F-D3:** `ConfiguracionPlan` (rangos y `validar`), `PlanPensionController` (`rangos`), `fragments/componentes.html`
+  (`campoFecha`) y `pensiones/plan-formulario.html`.
 - **Documentos:** `docs/manuales/promotoria.md`, `direccion.md`, `administracion.md`, `caja.md` y `docente.md` («Qué ves mientras tu colegio
   está en preparación»); sección «Tanda 1b · Implementación» del diseño.
 
@@ -131,7 +158,7 @@ de clases»), y uno que termina en noviembre recibe una de diciembre.
 4. La Puesta en marcha con responsable, estado e «Ir».
 5. `ColegioEnPreparacionException`, `PreparacionAdvice`, traducción de los 1644 y botones deshabilitados.
 6. Los 7 estados vacíos.
-7. F-D1 (tarjetas de Pensiones) y F-D2 (vencimientos según el inicio de clases, con su prueba).
+7. F-D1 (tarjetas de Pensiones), F-D2 (vencimientos según el inicio de clases) y F-D3 (`min` y `max`), cada una con su prueba.
 8. Accesibilidad, microcopy con `investigador-ux`, revisión en celular con `disenador-ui`, manuales y CI en verde.
 
 ## 7. Pruebas obligatorias
@@ -181,5 +208,6 @@ Mientras el colegio está en preparación, cada persona del personal ve en su in
 y quién lo hace, con un botón que la lleva a la pantalla correcta solo si puede usarla; las 7 pantallas vacías dicen qué falta y
 cómo seguir; cobrar o enviar algo bloqueado explica por qué y enlaza a la Puesta en marcha; la Puesta en marcha muestra estado,
 responsable e «Ir» de los 15 pasos; las familias no ven nada de esto; las tres tarjetas de Pensiones quedan
-alineadas y la propuesta de vencimientos pasa la validación con clases desde marzo, desde abril o desde mitad de mes; la revisión de accesibilidad pasa; y el CI del PR en
+alineadas y la propuesta de vencimientos pasa la validación con clases desde marzo, desde abril o desde mitad de mes; el
+calendario del plan no deja elegir fechas que el servidor rechazaría; la revisión de accesibilidad pasa; y el CI del PR en
 borrador está en verde, con los conteos de la tanda 1 sin cambios (117 triggers, 19 funciones, 136 huellas).
