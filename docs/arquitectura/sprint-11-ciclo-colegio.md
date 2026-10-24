@@ -60,7 +60,7 @@
 - **Tanda corta de interfaz 1b** (pedido del usuario): guía de puesta en marcha para todo el personal (banner con el
   siguiente paso y quién lo hace, estados vacíos que guían, mensajes de bloqueo con enlace), sin cambios en la base (3.14).
 - **Dos tandas de base:** (1) estados, baja, suspensión, reactivación, modo consulta, año escolar del colegio y facultad del titular (V39; 117 triggers,
-  19 funciones, 136 huellas); (2) exportación, cierre y supresión con acta (V41; 124 triggers, 21 funciones, 145 huellas).
+  19 funciones, 136 huellas); (2) exportación, cierre y supresión con acta (V41; 124 triggers, 22 funciones, 146 huellas).
   **La auditoría del diseño en papel (sección 3.13, 14 hallazgos) prevalece sobre lo que sigue.**
 
 ## 2. Plazos legales (investigación del 24-oct-2026)
@@ -398,7 +398,7 @@ Dirección (`primera_direccion`, V27), una vez y con una sola Promotoría. Un co
 ### 3.13 Auditoría del diseño en papel (sobre 8dd46fb): 14 hallazgos incorporados (esta sección prevalece)
 Revisión de `auditor-seguridad-antifraude`: 1 crítico, 6 altos, 5 medios y 2 bajos. Donde esta sección contradice a las
 anteriores, vale esta. Los conteos nuevos: **tanda 1, 117 triggers, 19 funciones y 136 huellas** (`trg_anio_escolar_cambio`
-se suma); **tanda 2, 124, 21 y 145**.
+se suma); **tanda 2, 124, 22 y 146**.
 
 **AP-1 (crítico). Quitar al único contrapeso en producción.** *(Reemplazado por la tanda 1c, decisión 220 confirmada por el
 usuario: en producción, quitar Dirección es una acción directa de Promotoría con código; el riesgo queda aceptado. Lo que sigue
@@ -820,9 +820,7 @@ ALTER TABLE conector_colegio ADD COLUMN motivo_freno VARCHAR(500);
     `CAMBIO_ROLES` APROBADA y firmada, y aceptan la directa sin cambio);
   - `trg_cambio_contacto_titular_estado`, `trg_cambio_correo_control_estado` y `trg_cambio_estado_colegio_estado`: son del
     operador y no cambian.
-- **Conteos (tanda 1c):** triggers **117** (ninguno nuevo; 7 versiones nuevas); funciones de `03` 16 → **17**, con huella 19 →
-  **20** (`cc_codigo_promotoria`; versión nueva de `cc_solicitud_firmada`); huellas 136 → **137**. **Tanda 2 (V41): 124, 21 y
-  145.**
+- **Conteos (tanda 1c):** ver 3.16b, que prevalece: **117 triggers, 21 funciones y 138 huellas**; tanda 2 (V41): **124, 22 y 146**.
 
 **En Java** (una política, no reglas repartidas):
 - `seguridad.service.SegundaFirma` (nueva):
@@ -881,6 +879,149 @@ como en todo sprint).** Hallazgos, todos incorporados arriba:
   mismo para los demás roles, sin perder cobertura.
 - **El WhatsApp caído** traba las acciones sensibles de la Promotoría. Respaldo: el código por correo, al correo de su cuenta. Lo
   normal sigue sin código.
+
+### 3.16b Auditoría del diseño en papel de la 1c (sobre 93e68ec): 9 hallazgos incorporados (esta sección prevalece sobre 3.16)
+Revisión de `auditor-seguridad-antifraude`: 2 críticos, 4 altos, 2 medios y 1 bajo. **Se respeta la decisión del usuario: la
+Promotoría aplica directo.** Lo que se agrega son esperas, frenos y avisos que hacen visible y reversible el robo de una cuenta,
+sin pedirle permiso a nadie de menor jerarquía. **Conteos nuevos: tanda 1c, 117 triggers, 21 funciones y 138 huellas
+(`cc_promotoria_antigua` se suma); tanda 2 (V41), 124, 22 y 146.**
+
+**A1c-1 (crítico). El contacto de cualquier cuenta directiva nunca cambia directo** (amplía P1). Vale para el celular o el correo
+de una cuenta con PROMOTOR o DIRECTOR, sea la propia o la de otra persona. `CAMBIO_CONTACTO_PERSONAL` sobre una cuenta directiva
+exige uno de dos caminos:
+- **la confirmación de la persona afectada desde su contacto anterior:** un `CODIGO_CONTACTO` al contacto anterior, atado a este
+  cambio (A1c-5), que escribe ella;
+- **o la de dos operadores** cuando perdió ese contacto: la tabla `cambio_contacto_titular` (V31) se generaliza a cualquier cuenta
+  directiva con versiones nuevas de `trg_cambio_contacto_titular_nace` y `_estado`, sin la condición «nunca activada». Para el
+  titular es el camino de siempre.
+Siempre se avisa al **contacto anterior**, antes de que el cambio surta efecto. La regla vive en `trg_solicitud_cambio_resuelta`, y
+`trg_usuario_contacto` (versión nueva) acepta el cambio de una cuenta directiva solo con uno de los dos.
+
+**A1c-2 (crítico). Frenar y aprobar al instante, solo con antigüedad. Dar PROMOTOR en producción también espera.**
+- **`usuario_rol.desde`** (V40, nueva): la pone la base al dar el rol (`trg_usuario_rol_alta`). Las filas existentes se llenan con
+  `usuario.creado_en`.
+- **Función nueva `cc_promotoria_antigua(colegio, nombre)`:** PROMOTOR activo con `desde` de 30 días o más (reloj real).
+- **«Aprobar ahora» (el socio) y «Frenar» (otra Promotoría)** en `trg_conector_colegio_estado` exigen `cc_promotoria_antigua`. El
+  freno del operador no pide antigüedad. Así una cuenta robada no crea un «socio» el lunes para aprobarse la cuenta bancaria el
+  martes.
+- **Dar PROMOTOR en PRODUCCION** (por `CAMBIO_ROLES` directa) **pasa por 24 horas de espera**, con freno de otra Promotoría antigua
+  o de un operador. En PRODUCCION, la facultad del titular ya no crea cuentas que nazcan con PROMOTOR: se crean sin el rol y se
+  les da por la directa con espera.
+
+**A1c-3 (alto). El riesgo aceptado de AP-1 (decisión 220) cubre solo a DIRECTOR.** Quitar PROMOTOR a otra persona o desactivar
+la cuenta de otra Promotoría pasa por **24 horas de espera**. La pueden frenar **la persona afectada** y los operadores, y se avisa a
+su contacto vigente (WhatsApp y correo). Así una Promotoría no se queda con el colegio de un día para otro apartando a su socio.
+
+**La espera de las solicitudes (mecanismo de A1c-2 y A1c-3):** `solicitud_cambio` gana `aplica_desde`, `frenado_por`,
+`frenado_en` y `motivo_freno`. `trg_solicitud_cambio_resuelta` pone `aplica_desde = cc_ahora_lima_real() + espera` cuando la
+directa es de un tipo con espera:
+- `CAMBIO_ROLES` que da PROMOTOR en PRODUCCION, o que quita PROMOTOR;
+- `ESTADO_CUENTA` que desactiva a una Promotoría.
+Durante la espera solo cambian los campos del freno, y solo por quien puede frenar. La **versión nueva de
+`cc_solicitud_firmada`** exige además `frenado_por IS NULL` y `aplica_desde` vencido. La aplica `sistema.roles` (cc_sistema, cada
+15 minutos). **Versiones nuevas de `trg_usuario_rol_alta`, `_baja` y `trg_usuario_identidad`:** con una directa con espera vencida,
+la firma de 5 minutos de quien aprobó se reemplaza por `cc_solicitud_firmada` y por el actor `sistema.roles`.
+
+**A1c-4 (alto). Confirmar extractos y lotes es sensible, y después de cambiar un conector lo confirma otra persona.**
+- Confirmar un `extracto_bancario` o un `lote_recaudacion`, y el cierre mensual de la conciliación, pasan a la lista de acciones
+  sensibles (con código) cuando los aplica directo una Promotoría.
+- **Durante los 30 días siguientes a que un conector `CUENTA_BANCARIA` o `RECAUDACION` entró en vigencia, quien lo propuso o lo
+  aprobó no confirma la conciliación** de ese colegio. La confirma otra persona de Promotoría o Dirección. Lo exigen las versiones
+  nuevas de `trg_extracto_bancario_estado` y `trg_lote_recaudacion_estado` (y la regla en `ServicioCierreMensual`). Así quien desvió
+  la cuenta no puede «confirmar» que el dinero llegó.
+- Si esa persona lo intenta, se rechaza y se manda una **alerta CRÍTICA** al correo de control, a las demás Promotorías y a los
+  operadores.
+- **Residual:** en un colegio sin otra persona directiva, la conciliación queda pendiente esos 30 días, con alerta diaria. La guía
+  de la 1b recomienda tener Dirección.
+
+**A1c-5 (alto). El código queda atado a la acción.**
+- `mensaje` gana `codigo_sha256` (la SHA-256 del código) y `huella_accion`: la SHA-256 de `tipo|entidad|entidad_id|datos`
+  (en el conector, `tipo|proveedor|clave_publica|configuración`).
+- `solicitud_cambio` y `conector_colegio` guardan `codigo_escrito_sha256`: la SHA-256 de lo que escribió la persona.
+- `cc_codigo_promotoria(mensaje, colegio, nombre, huella)` comprueba que el mensaje sea de esa persona, a su contacto vigente,
+  reciente y sin usar, que `mensaje.codigo_sha256 = codigo_escrito_sha256` y que `mensaje.huella_accion = huella`. La huella la
+  calcula el trigger con `SHA2(CONCAT_WS('|', …), 256)`, no la aplicación.
+- **El WhatsApp dice qué autoriza:** «Código 482913 para: Dar Promotoría a j.perez. Si no fuiste tú, avisa al colegio.» (y
+  «Cuenta bancaria → BCP ···2022», «Anular el pago B001-00000123 de S/ 450.00»).
+
+**A1c-6 (alto). `aplica_desde` no lo escribe nadie más que la base.**
+- **Ningún rol tiene GRANT** sobre `conector_colegio.aplica_desde` ni sobre `solicitud_cambio.aplica_desde`. Se corrige 6.2 de
+  3.16, que se los daba a `cc_negocio` y a `cc_sistema`.
+- El trigger (definidor `cc_migrador`) la fija al pasar a EN_ESPERA, o al resolver una directa con espera, y **rechaza cualquier
+  cambio después**, también del DBA. Las entidades la mapean con `insertable = false, updatable = false`.
+- **La duración de la espera** sale de `configuracion_bd` (`espera_directa_horas`, 24 por defecto), que solo escribe el DBA.
+  `VerificadorPermisosBaseDatos` exige 24 en prod. Las pruebas de MySQL la bajan como DBA para probar el vencimiento (las fechas
+  ya no se simulan cambiando `aplica_desde`).
+- **Comprobar en el paso 1:** que el trigger puede fijar la columna sin que el usuario de la conexión tenga GRANT sobre ella.
+- **Prueba `aplicaDesdeManipuladoFalla`:** un `UPDATE … SET aplica_desde` como cc_app y como cc_sistema da 1143, y como DBA da
+  1644 (también para el conector y la solicitud).
+
+**A1c-7 (medio). Sin respaldo por correo en lo más sensible.**
+- Para conectores y roles directivos (dar o quitar PROMOTOR o DIRECTOR, y estado de cuentas directivas) **no hay código por
+  correo**: solo WhatsApp.
+- Para lo demás, el respaldo por correo se ofrece solo si el proveedor confirmó que el WhatsApp falló (el mensaje está `FALLIDO`
+  con su respuesta). Usarlo avisa al celular («Se usó un código por correo para: …»).
+- `trg_mensaje_nace` (versión) y `cc_codigo_promotoria` lo exigen por tipo de acción.
+
+**A1c-8 (medio). Quien actúa también se entera, y el correo de control no es de una Promotoría.**
+- **Cada acción directa avisa también al WhatsApp de quien la hizo** («Hiciste: …. Si no fuiste tú, cambia tu clave y avisa»): si
+  le robaron la sesión, se entera al momento.
+- **La base rechaza un correo de control igual al de una Promotoría activa** (`cc_contacto_normal`), en
+  `trg_configuracion_colegio_registro` y `_cambio` y en `trg_cambio_correo_control_nace` (versiones). También se rechaza que una
+  Promotoría ponga en su cuenta el correo de control (`trg_usuario_contacto`). Si no, el testigo independiente sería la misma
+  persona.
+
+**A1c-9 (bajo). Con una sola Promotoría, las anulaciones y devoluciones directas avisan también a los operadores** (`AvisoPlataforma`
+con `operadores`), porque no hay un socio que las vea.
+
+**Lo que cambia en la base respecto de 3.16 (resumen para el brief):**
+- **V40 suma:**
+  - `usuario_rol.desde`;
+  - en `solicitud_cambio`: `aplica_desde`, `frenado_por`, `frenado_en`, `motivo_freno` y `codigo_escrito_sha256`;
+  - en `conector_colegio`: `codigo_escrito_sha256`;
+  - en `mensaje`: `codigo_sha256` y `huella_accion`;
+  - en `configuracion_bd`: `espera_directa_horas = 24`.
+- **Funciones:** nuevas `cc_codigo_promotoria` (con la huella) y `cc_promotoria_antigua`; versión nueva de `cc_solicitud_firmada`
+  (directa, sin freno y con la espera vencida).
+- **Triggers con versión nueva: 18**, sin ninguno nuevo:
+  - los 7 de 3.16;
+  - `trg_cambio_contacto_titular_nace` y `_estado`, y `trg_usuario_contacto` (A1c-1, A1c-8);
+  - `trg_usuario_rol_alta`, `_baja` y `trg_usuario_identidad` (A1c-2, A1c-3);
+  - `trg_extracto_bancario_estado` y `trg_lote_recaudacion_estado` (A1c-4);
+  - `trg_configuracion_colegio_registro` y `_cambio`, y `trg_cambio_correo_control_nace` (A1c-8).
+- **Conteo:** **117 triggers; funciones de `03` 16 → 18, con huella 19 → 21; huellas 136 → 138.** Tanda 2 (V41): **124, 22 y 146.**
+
+**Pruebas nuevas por los hallazgos:**
+- **H2:**
+  - `ContactoDirectivoTest` (A1c-1): el contacto de una Dirección o de otra Promotoría no cambia directo; cambia con el código del
+    contacto anterior o con dos operadores, y se avisa al contacto anterior;
+  - `PromotoriaAntiguaTest` (A1c-2): una Promotoría de menos de 30 días no frena ni aprueba al instante;
+  - `DarPromotorEsperaTest`: dar PROMOTOR en producción espera 24 horas y se puede frenar;
+  - `QuitarPromotorEsperaTest` (A1c-3): quitar PROMOTOR y desactivar a otra Promotoría esperan; los frena la persona afectada o un
+    operador; se avisa a su contacto;
+  - `ConciliacionTrasCambioDeConectorTest` (A1c-4): quien cambió la cuenta no confirma el extracto en 30 días, y queda la alerta;
+  - `CodigoAtadoTest` (A1c-5): el código de «quitar DIRECTOR a A» no sirve para «quitar DIRECTOR a B» ni para otra acción; el
+    WhatsApp dice qué autoriza;
+  - `CodigoSinCorreoTest` (A1c-7);
+  - `AvisoAQuienActuaTest` y `CorreoDeControlNoEsDePromotoriaTest` (A1c-8);
+  - `UnaPromotoriaAvisaOperadoresTest` (A1c-9).
+- **MySQL:**
+  - `a1c1ContactoDirectivoDirectoFalla`, `a1c1ContactoConCodigoDelAnteriorPasa`, `a1c1DosOperadoresPasa`;
+  - `a1c2SocioNuevoApruebaAhoraFalla`, `a1c2FrenoDePromotoriaNuevaFalla`, `a1c2DarPromotorAntesDeLaEsperaFalla`;
+  - `a1c3QuitarPromotorAntesDeLaEsperaFalla`, `a1c3FrenoDeLaAfectadaPasa`, `solicitudFrenadaNoSeEjecuta`;
+  - `a1c4ConfirmaQuienCambioLaCuentaFalla`;
+  - `a1c5CodigoDeOtraAccionFalla`, `a1c5CodigoEscritoDistintoFalla`;
+  - **`aplicaDesdeManipuladoFalla`** (1143 con cc_app y cc_sistema; 1644 como DBA) y `esperaSaleDeConfiguracionBd`;
+  - `a1c8CorreoDeControlDePromotoriaFalla`.
+  - Las esperas se prueban bajando `espera_directa_horas` como DBA. `huellas_objetos()` = 138 y arranque prod con 117 y 21.
+
+| # | Decisión | Por defecto |
+|---|---|---|
+| 221 | Contacto de cuentas directivas (A1c-1) | **[Nunca directo: con el código del contacto anterior o con dos operadores; aviso al contacto anterior]** |
+| 222 | Antigüedad para frenar y aprobar al instante (A1c-2) | **[30 días en el rol PROMOTOR; el operador frena sin antigüedad]** |
+| 223 | Esperas de 24 h en roles (A1c-2, A1c-3) | **[Dar PROMOTOR en producción, quitar PROMOTOR y desactivar a una Promotoría: 24 horas, con freno de otra Promotoría antigua, de la persona afectada y de los operadores]** |
+| 224 | Conciliación después de cambiar un conector (A1c-4) | **[30 días en que quien lo cambió no confirma extractos, lotes ni el cierre mensual; alerta si lo intenta]** |
+| 225 | Código por correo (A1c-7) | **[Nunca en conectores ni en roles directivos; en lo demás, solo con el WhatsApp fallido confirmado por el proveedor y aviso al celular]** |
 
 ## 4. Modelo
 ```mermaid
@@ -1462,7 +1603,7 @@ END$$
 
 **Tanda 2 (V41), adelanto del conteo:** 7 triggers nuevos (`trg_exportacion_colegio_nace`, `trg_exportacion_colegio_cambio`,
 `trg_descarga_exportacion_nace`, `trg_acta_supresion_nace`, `trg_acta_supresion_estado`, `trg_evento_auditoria_tachado`,
-`trg_evento_auditoria_sin_borrado`) y la función `cc_supresion_en_curso`: **124 triggers, 21 funciones, 145 huellas**. Versiones
+`trg_evento_auditoria_sin_borrado`) y la función `cc_supresion_en_curso`: **124 triggers, 22 funciones, 146 huellas**. Versiones
 nuevas: `trg_cambio_estado_colegio_*` y `trg_colegio_cambio` (CIERRE, `conservar_hasta`), `trg_sesion_usuario_nace` (CERRADO
 hasta `conservar_hasta`) y los triggers de UPDATE y DELETE de las tablas del inventario (3.11).
 
@@ -1649,9 +1790,10 @@ Brief: `docs/arquitectura/sprint-11/tanda-1.md`. Pasos pequeños y verificables:
 6. Modo consulta de las familias (3.8) y `RecorridoColegios` (H2).
 7. Pruebas H2 y MySQL del brief; CI en verde.
 
-### Tanda 1c · La Promotoría aplica directo (V40; 117 triggers, 20 funciones, 137 huellas)
+### Tanda 1c · La Promotoría aplica directo (V40; 117 triggers, 21 funciones, 138 huellas)
 Brief: `docs/arquitectura/sprint-11/tanda-1c.md`. Sección 3.16. Va después de la tanda 1 y antes de la 1b.
-1. V40 y `cc_codigo_promotoria`; versiones de `cc_solicitud_firmada` y de los 7 triggers; MySQL local de lo tocado.
+1. V40, `cc_codigo_promotoria` y `cc_promotoria_antigua`; versión de `cc_solicitud_firmada` y de los 18 triggers (3.16b); MySQL
+   local de lo tocado.
 2. `SegundaFirma` y `CodigoPromotoria`; `RegistroSolicitudes` con la solicitud directa; avisos.
 3. Los 11 servicios que usan A5, pasados a `SegundaFirma`.
 4. Conectores: espera de 24 horas, freno, socio y `AplicacionConectoresEnEspera`.
@@ -1668,7 +1810,7 @@ otras pantallas; ancho de 1760 px y tableros).
 5. Puesta en marcha con estado, responsable e «Ir»; revisión en celular con `disenador-ui`; CI en verde.
 6. Correcciones de `tanda-1b-interfaz.md` (F-D1 a F-D6), con revisión visual en 390, 1280, 1600 y 1920 px.
 
-### Tanda 2 · Exportación, cierre y supresión (V41; 124 triggers; 21 funciones; 145 huellas)
+### Tanda 2 · Exportación, cierre y supresión (V41; 124 triggers; 22 funciones; 146 huellas)
 1. Inventario `scripts/fin-de-colegio/inventario.txt` (tablas con `colegio_id`, datos personales, triggers que las protegen).
 2. V41, triggers y `cc_supresion_en_curso`; versiones que habilitan la BAJA con datos (AP-6) y el CIERRE; `conservar_hasta`
    exacto (AP-7, AP-11) y la autorización expresa del titular; `reloj-pendiente.txt` en 0 (AP-3).
@@ -1773,6 +1915,11 @@ que no entra en las tandas sin su confirmación). Sigue la numeración del sprin
 | 218 | Conectores de dinero propuestos por Promotoría | **[Código; 24 horas de espera con avisos; los frena otra Promotoría o un operador; el socio Promotoría lo aprueba de inmediato]** |
 | 219 | Contacto propio de una Promotoría | **[Nunca directo: lo aprueba otra Promotoría; el del titular, dos operadores (V31)]** |
 | 220 | Quitar Dirección en PRODUCCION (reemplaza AP-1) (**confirmada por el usuario el 24-oct-2026**) | **[Acción directa de Promotoría, sensible (con código por WhatsApp), con aviso a quien pierde el rol, a las demás Promotorías, al correo de control y a los operadores; riesgo aceptado]** |
+| 221 | Contacto de cuentas directivas (A1c-1) | **[Nunca directo: con el código del contacto anterior o con dos operadores; aviso al contacto anterior]** |
+| 222 | Antigüedad para frenar y aprobar al instante (A1c-2) | **[30 días en el rol PROMOTOR; el operador frena sin antigüedad]** |
+| 223 | Esperas de 24 h en roles (A1c-2, A1c-3) | **[Dar PROMOTOR en producción, quitar PROMOTOR y desactivar a una Promotoría: 24 horas, con freno de otra Promotoría antigua, de la persona afectada y de los operadores]** |
+| 224 | Conciliación después de cambiar un conector (A1c-4) | **[30 días en que quien lo cambió no confirma extractos, lotes ni el cierre mensual; alerta si lo intenta]** |
+| 225 | Código por correo (A1c-7) | **[Nunca en conectores ni en roles directivos; en lo demás, solo con el WhatsApp fallido confirmado por el proveedor y aviso al celular]** |
 
 ## Fuentes
 - Código Tributario, art. 87 num. 7 (texto del DL 1315) y art. 43: resumen en [Noticiero Contable](https://noticierocontable.com/guardar-los-libros-contables/),

@@ -91,7 +91,7 @@
     no se quita) y `trg_usuario_identidad` (la cuenta del titular no se desactiva).
   - Encabezado: «Versión anterior (V38, correcciones del sprint 10): 112 triggers y 13 funciones (16 con huella; 128 huellas)».
 - **Conteo esperado:** 112 → **117 triggers**; funciones de `03` 13 → **16**, con huella 16 → **19**; huellas 128 → **136**.
-  Prod: «Huellas de los 117 triggers y las 19 funciones verificadas». Tanda 2: **124, 21 y 145**.
+  Prod: «Huellas de los 117 triggers y las 19 funciones verificadas». Tanda 2: **124, 22 y 146**.
 - **CI `reloj-real`** (AP-3): cuenta `UTC_TIMESTAMP`, `NOW(`, `CURDATE`, `CURRENT_TIMESTAMP` y `CURRENT_DATE` fuera de
   comentarios en `03` y falla si supera `reloj-pendiente.txt` (el conteo que queda después de esta tanda; en la tanda 2, 0).
 - `VerificadorPermisosBaseDatos`: `TRIGGERS_ESPERADOS` con los 5; exige `@@global.sysdate_is_now = 0`; 1142 (`INSERT INTO

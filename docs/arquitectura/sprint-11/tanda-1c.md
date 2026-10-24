@@ -1,7 +1,7 @@
 # Sprint 11 · Tanda 1c · La Promotoría aplica directo (brief)
 
-> Léase primero. Diseño: `docs/arquitectura/sprint-11-ciclo-colegio.md`, **sección 3.16** (incluye su auditoría en papel P1 a
-> P8) y decisiones 214 a 219. Va **después de la tanda 1 y antes de la 1b** (decisión 214). Rama `claude/sprint-11-ciclo-colegio`,
+> Léase primero. Diseño: `docs/arquitectura/sprint-11-ciclo-colegio.md`, **sección 3.16** y **3.16b (auditoría en papel sobre
+> 93e68ec, A1c-1 a A1c-9, que prevalece)**; decisiones 214 a 225. Va **después de la tanda 1 y antes de la 1b** (decisión 214). Rama `claude/sprint-11-ciclo-colegio`,
 > PR en borrador: **la tanda está terminada cuando el CI del PR está en verde.** Antes de codear, `auditor-seguridad-antifraude`
 > revisa el diseño en papel (esta tanda cambia una regla de fondo: sus hallazgos críticos y altos se corrigen aquí primero).
 
@@ -18,7 +18,19 @@
    (la Promotoría puede aprobarlo); quien ejecuta una devolución sigue siendo otra persona.
 6. **A5 (215):** deja de bloquear a la Promotoría y se mantiene para Dirección.
 7. **Contacto propio (219, P1):** nunca directo. Lo aprueba otra Promotoría; el del titular, dos operadores.
-8. **Ajustes:** la facultad del titular solo crea cuentas directivas, y dar o quitar esos roles es una directa sensible; se quitan
+8. **Auditoría en papel (3.16b), sin quitar la autonomía:**
+   - el contacto de toda cuenta directiva nunca cambia directo: se confirma desde el contacto anterior o con dos operadores
+     (A1c-1);
+   - «Frenar» y «Aprobar ahora» solo para una Promotoría con 30 días en el rol (A1c-2);
+   - dar PROMOTOR en producción, quitar PROMOTOR y desactivar a otra Promotoría esperan 24 horas con freno (A1c-2, A1c-3);
+   - confirmar extractos y lotes es sensible, y en los 30 días después de un cambio de conector no lo confirma quien lo cambió
+     (A1c-4);
+   - el código queda atado a la acción (A1c-5);
+   - `aplica_desde` solo lo escribe la base (A1c-6);
+   - sin código por correo en lo más sensible (A1c-7);
+   - aviso también a quien actúa, y el correo de control nunca es de una Promotoría (A1c-8);
+   - con una sola Promotoría, las anulaciones y devoluciones avisan a los operadores (A1c-9).
+9. **Ajustes:** la facultad del titular solo crea cuentas directivas, y dar o quitar esos roles es una directa sensible; se quitan
    la condición de PRODUCCION de la 201 y AP-1 (**decisión 220, confirmada por el usuario**: quitar Dirección en producción es
    directa con código y el riesgo queda aceptado); A8 pasa a ser un aviso; 3.15 y la 211 quedan
    superadas para la Promotoría.
@@ -51,7 +63,10 @@
   ingresar (decisión futura, si el usuario lo pide).
 
 ## 3. Migración `V40__promotoria_directa.sql`
-- SQL en la sección 3.16 del diseño: `solicitud_cambio.directa` y `codigo_mensaje_id` (UNIQUE), y `ck_solicitud_cambio_directa`;
+- SQL en las secciones 3.16 y 3.16b del diseño. 3.16b suma `usuario_rol.desde` (las filas existentes con `usuario.creado_en`);
+  en `solicitud_cambio`, `aplica_desde`, el freno y `codigo_escrito_sha256`; en `mensaje`, `codigo_sha256` y `huella_accion`; y
+  en `configuracion_bd`, `espera_directa_horas`.
+- Lo de 3.16: `solicitud_cambio.directa` y `codigo_mensaje_id` (UNIQUE), y `ck_solicitud_cambio_directa`;
   `conector_colegio.directa`, `aplica_desde`, `frenado_por`, `frenado_en` y `motivo_freno`.
 - **Se reemplazan tres CHECK de V29, copiando sus listas:** `ck_conector_colegio_estado` (+ `EN_ESPERA` y `FRENADO`),
   `ck_conector_colegio_resolucion` (EN_ESPERA con `aplica_desde` y `resuelto_por`; FRENADO con `frenado_por`, `frenado_en` y
@@ -65,12 +80,17 @@
 ## 4. MySQL: funciones, triggers y huellas
 - `01-usuarios.sql` sin cambios. `02-permisos-tablas.sql`:
   - `UPDATE (directa, codigo_mensaje_id)` de `solicitud_cambio` para `cc_negocio`;
-  - `UPDATE (directa, aplica_desde, frenado_por, frenado_en, motivo_freno)` de `conector_colegio` para `cc_negocio` y para
-    `cc_sistema` (la aplicación por `sistema.conectores` y el freno del operador).
+  - `UPDATE (directa, frenado_por, frenado_en, motivo_freno, codigo_escrito_sha256)` de `conector_colegio` para `cc_negocio` y
+    `cc_sistema`, y lo mismo, más `codigo_escrito_sha256`, en `solicitud_cambio`;
+  - **ningún GRANT sobre `aplica_desde`** en las dos tablas (A1c-6): la fija el trigger, cuyo definidor es `cc_migrador`.
+    **Comprobar en el paso 1** que funciona sin GRANT del usuario de la conexión.
 - `03-triggers.sql` (SQL en 3.16; todo con `cc_ahora_lima_real()` y `<=>`):
-  - **función nueva** `cc_codigo_promotoria(mensaje, colegio, nombre)`;
-  - **versión nueva** de `cc_solicitud_firmada` (acepta `directa`);
-  - **7 triggers con versión nueva:**
+  - **funciones nuevas** `cc_codigo_promotoria(mensaje, colegio, nombre, huella)` (A1c-5) y `cc_promotoria_antigua(colegio,
+    nombre)` (A1c-2);
+  - **versión nueva** de `cc_solicitud_firmada` (acepta `directa`, sin freno y con la espera vencida);
+  - **18 triggers con versión nueva:** los 7 de abajo, más los 11 de 3.16b (`trg_cambio_contacto_titular_nace` y `_estado`,
+    `trg_usuario_contacto`, `trg_usuario_rol_alta` y `_baja`, `trg_usuario_identidad`, `trg_extracto_bancario_estado`,
+    `trg_lote_recaudacion_estado`, `trg_configuracion_colegio_registro` y `_cambio`, y `trg_cambio_correo_control_nace`):
     - `trg_solicitud_cambio_resuelta`: reglas de `directa`: rol PROMOTOR activo, colegio que opera, firma, código si es
       sensible, correo de control en PRODUCCION y nunca el contacto propio;
     - `trg_conector_colegio_estado`: OSE directo; espera de 24 horas; aplicación por `sistema.conectores`; socio; freno;
@@ -81,12 +101,12 @@
     es otro», los 3 de «quien cobró no verifica», `trg_usuario_identidad` y `trg_usuario_rol_*`, y los de los operadores
     (inventario completo en 3.16);
   - encabezado: «Versión anterior (V39, sprint 11, tanda 1): 117 triggers y 16 funciones (19 con huella; 136 huellas)».
-- **Conteo esperado:** **117 triggers** (ninguno nuevo); funciones de `03` 16 → **17**, con huella 19 → **20**; huellas 136 →
-  **137**. Prod: «Huellas de los 117 triggers y las 20 funciones verificadas». Tanda 2 (V41): 124, 21 y 145.
+- **Conteo esperado:** **117 triggers** (ninguno nuevo); funciones de `03` 16 → **18**, con huella 19 → **21**; huellas 136 →
+  **138**. Prod: «Huellas de los 117 triggers y las 21 funciones verificadas». Tanda 2 (V41): 124, 22 y 146.
 - `VerificadorPermisosBaseDatos`:
   - 1644 nuevos: una solicitud APROBADA con `directa` y sin firma; un conector que nace EN_ESPERA;
   - 3819 nuevo: `directa` con `resuelto_por` distinto de `solicitado_por`;
-  - `HuellasObjetosBd` = 137;
+  - `HuellasObjetosBd` = 138; exige `espera_directa_horas = 24` en `configuracion_bd` (prod);
   - el paso `reloj-real` del CI sigue bajando.
 
 ## 5. Segregación de funciones (lo que queda)
@@ -124,11 +144,11 @@
 - **Transversales:** `AccionAuditoria` (+`ACCION_DIRECTA_PROMOTORIA`, `CONECTOR_EN_ESPERA`, `CONECTOR_FRENADO` y
   `CODIGO_PROMOTORIA_ENVIADO`), `ClaveFirma`, `VerificadorPermisosBaseDatos`, `HuellasObjetosBd` y `PermisosEsperados`.
 - **Documentos:** `docs/manuales/promotoria.md` («Lo que haces directo y lo que te pide un código»), `operador.md` (frenar un
-  conector), `docs/entrega/terminos-de-servicio.md` (la espera y el freno, para el abogado), `ci.yml` (V1–V40, 137 y 117/20).
+  conector), `docs/entrega/terminos-de-servicio.md` (la espera y el freno, para el abogado), `ci.yml` (V1–V40, 138 y 117/21).
 
 ## 7. Pruebas obligatorias
 **H2 (`./mvnw -B verify`, también con la zona de Los Ángeles):**
-- `PromotoriaDirectaTest`:
+- `PromotoriaDirectaTest` (todo lo de abajo, con las reglas de 3.16b):
   - el titular, **sin Dirección**, aprueba el plan que propuso `testadmin` (A5 ya no lo bloquea);
   - el titular crea y aprueba su propio plan, feriado y lote de saldo inicial en un paso;
   - cada directa deja su evento con la marca «aplicada directo» y avisa a las demás Promotorías y al correo de control;
@@ -153,9 +173,13 @@
   `ServicioSaldoInicialTest`, `BandejaAprobacionesTest`, `FeriadosTest`, `CambioConectorTest`, `AltaACobroTest` (paso 4) y las
   de la facultad): cada una se reemplaza por la misma comprobación con Administración o Dirección como autor. La lista de las
   reemplazadas va en «Tanda 1c · Implementación».
+- **Por la auditoría (3.16b):** `ContactoDirectivoTest`, `PromotoriaAntiguaTest`, `DarPromotorEsperaTest`,
+  `QuitarPromotorEsperaTest`, `ConciliacionTrasCambioDeConectorTest`, `CodigoAtadoTest`, `CodigoSinCorreoTest`,
+  `AvisoAQuienActuaTest`, `CorreoDeControlNoEsDePromotoriaTest` y `UnaPromotoriaAvisaOperadoresTest`.
 - `ReglasArquitecturaTest`: ningún servicio llama a `ControlParticipantes` sin pasar por `SegundaFirma`.
 
-**MySQL real (`mysql/AuditoriaSprint11PromotoriaMySqlTest`). Todas 1644 salvo aviso; las fechas se simulan como DBA:**
+**MySQL real (`mysql/AuditoriaSprint11PromotoriaMySqlTest`). Todas 1644 salvo aviso. Las esperas se prueban bajando
+`espera_directa_horas` como DBA, nunca cambiando `aplica_desde`. Más las de 3.16b (A1c-1 a A1c-8, con `aplicaDesdeManipuladoFalla`):**
 - `directaSinRolPromotorFalla`, `directaDeQuienNoLaPidioFalla` (3819), `directaSinFirmaFalla`, `directaSensibleSinCodigoFalla`,
   `codigoUsadoFalla` (UNIQUE), `codigoVencidoFalla`, `codigoDeOtraPersonaFalla`, `codigoAOtroContactoFalla`,
   `directaEnColegioSuspendidoFalla`, `directaEnProduccionSinCorreoDeControlFalla`, `p1ContactoPropioDirectoFalla`.
@@ -167,7 +191,7 @@
 - **Lo que no cambia:** `devolucionEjecutadaPorQuienAproboFalla`, `promotoriaComoCajaFalla`, `direccionApruebaLoSuyoFalla`
   (con la clave de cc_app y sin `directa`), `administracionDirectaFalla`.
 - `PermisosMySqlTest`: el flujo del titular con permisos mínimos (plan directo, cuenta bancaria en espera y aplicada por
-  `sistema.conectores`, anulación con código). `huellas_objetos()` = 137; arranque prod con 117 y 20.
+  `sistema.conectores`, anulación con código). `huellas_objetos()` = 138; arranque prod con 117 y 21.
 
 ## 8. Riesgos
 - **Cuenta de Promotoría robada** (el principal): la mitigan el código en lo sensible, el contacto protegido (P1), los avisos
@@ -175,12 +199,14 @@
 - **Una sola Promotoría:** nada de lo suyo tiene segunda firma; lo ven el correo de control y la huella diaria.
 - **Se cambia una función central y 7 triggers:** las pruebas de los sprints 2 a 10 deben seguir verdes, salvo las que cambian
   de sentido, que se reemplazan sin perder cobertura.
-- **WhatsApp caído:** traba lo sensible; respaldo por correo.
+- **WhatsApp caído:** traba lo sensible; respaldo por correo solo fuera de conectores y roles directivos, con el fallo confirmado
+  por el proveedor (A1c-7).
 - **Revisión legal:** la espera y el freno del operador van en los términos de servicio (el operador interviene en el dinero del
   colegio solo para frenar, nunca para aplicar).
 
 ## 9. Terminado cuando
 La Promotoría aprueba y aplica lo suyo en un paso, con firma y avisos, y aprueba lo de las cuentas que creó. Lo sensible le pide
 un código que llega a su celular. Una cuenta bancaria nueva espera 24 horas, salvo que un socio la apruebe, y se puede frenar. Su
-propio celular no lo cambia sola. Lo que piden los demás roles sigue con dos personas. El CI del PR en borrador está en verde (117
-triggers, 20 funciones, 137 huellas).
+propio celular no lo cambia sola, ni el de otra cuenta directiva. Apartar a otra Promotoría espera 24 horas y la afectada lo puede
+frenar. Quien cambió la cuenta bancaria no confirma la conciliación en 30 días. Cada código dice qué autoriza. Lo que piden los
+demás roles sigue con dos personas. El CI del PR en borrador está en verde (117 triggers, 21 funciones, 138 huellas).
