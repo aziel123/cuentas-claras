@@ -400,7 +400,9 @@ Revisión de `auditor-seguridad-antifraude`: 1 crítico, 6 altos, 5 medios y 2 b
 anteriores, vale esta. Los conteos nuevos: **tanda 1, 117 triggers, 19 funciones y 136 huellas** (`trg_anio_escolar_cambio`
 se suma); **tanda 2, 124, 21 y 145**.
 
-**AP-1 (crítico). Quitar al único contrapeso en producción.** Con el conteo que excluía al destino, el titular podía quitarle
+**AP-1 (crítico). Quitar al único contrapeso en producción.** *(Reemplazado por la tanda 1c, decisión 220 confirmada por el
+usuario: en producción, quitar Dirección es una acción directa de Promotoría con código; el riesgo queda aceptado. Lo que sigue
+vale para la tanda 1, antes de la 1c.)* Con el conteo que excluía al destino, el titular podía quitarle
 Dirección a la única otra persona directiva sin que nadie lo aprobara. **Corrección:** en DAR, el conteo de la decisión 201
 excluye al destino (como estaba); **en PRODUCCION, QUITAR va siempre por `CAMBIO_ROLES`** con la aprobación de otra persona. En
 PREPARACION el titular sigue quitando con la facultad. `trg_uso_facultad_titular_nace`: `IF NEW.accion = 'QUITAR' AND
@@ -748,8 +750,8 @@ migración, **tanda 2 = V41** (renumerada). Brief: `docs/arquitectura/sprint-11/
   `CAMBIO_ROLES` directa, con código y avisos. Se quita la condición «en PRODUCCION, sin otra persona directiva».
 - **AP-1 (crítico del sprint 11, QUITAR en producción por `CAMBIO_ROLES`):** se reemplaza. Quitar Dirección en PRODUCCION lo
   hace la Promotoría directo, con código, aviso a la persona que pierde el rol, a las demás Promotorías, al correo de control y a
-  los operadores. **Es un riesgo aceptado por el usuario** (el dueño puede apartar a su director); la huella diaria y los avisos lo
-  hacen visible.
+  los operadores. **Decisión 220, confirmada por el usuario el 24-oct-2026:** es una acción directa de Promotoría, con código, y el riesgo queda
+  aceptado (el dueño puede apartar a su director). La huella diaria y los avisos lo hacen visible.
 - **A8 del sprint 9:** el aviso pasa a ser «Tu colegio tiene una sola Promotoría: sus acciones no tienen segunda firma; las ven
   el correo de control y la bitácora» (no se exige otra persona). El de «menos de 2 directivos» sigue para lo que pide Dirección.
 - **3.15 y decisión 211:** para la Promotoría quedan superadas. La guía de la 1b ya no dice «crea primero a Dirección porque tú no
@@ -1770,6 +1772,7 @@ que no entra en las tandas sin su confirmación). Sigue la numeración del sprin
 | 217 | El OSE | **[Acción normal pero sensible: directa con código y avisos, sin espera]**. Alternativa: con la espera de 24 horas como el dinero |
 | 218 | Conectores de dinero propuestos por Promotoría | **[Código; 24 horas de espera con avisos; los frena otra Promotoría o un operador; el socio Promotoría lo aprueba de inmediato]** |
 | 219 | Contacto propio de una Promotoría | **[Nunca directo: lo aprueba otra Promotoría; el del titular, dos operadores (V31)]** |
+| 220 | Quitar Dirección en PRODUCCION (reemplaza AP-1) (**confirmada por el usuario el 24-oct-2026**) | **[Acción directa de Promotoría, sensible (con código por WhatsApp), con aviso a quien pierde el rol, a las demás Promotorías, al correo de control y a los operadores; riesgo aceptado]** |
 
 ## Fuentes
 - Código Tributario, art. 87 num. 7 (texto del DL 1315) y art. 43: resumen en [Noticiero Contable](https://noticierocontable.com/guardar-los-libros-contables/),

@@ -19,7 +19,8 @@
 6. **A5 (215):** deja de bloquear a la Promotoría y se mantiene para Dirección.
 7. **Contacto propio (219, P1):** nunca directo. Lo aprueba otra Promotoría; el del titular, dos operadores.
 8. **Ajustes:** la facultad del titular solo crea cuentas directivas, y dar o quitar esos roles es una directa sensible; se quitan
-   la condición de PRODUCCION de la 201 y AP-1 (riesgo aceptado por el usuario); A8 pasa a ser un aviso; 3.15 y la 211 quedan
+   la condición de PRODUCCION de la 201 y AP-1 (**decisión 220, confirmada por el usuario**: quitar Dirección en producción es
+   directa con código y el riesgo queda aceptado); A8 pasa a ser un aviso; 3.15 y la 211 quedan
    superadas para la Promotoría.
 
 ## 2. Alcance
