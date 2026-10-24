@@ -42,9 +42,13 @@ class HuellasObjetosBdTest {
 		// Sprint 10, tanda 2 (V36): 108 triggers (lotes, notas, exoneraciones y borradores) y cc_docente_de_area: 124.
 		// Sprint 10, tanda 3 (V37): 112 triggers (la libreta, su entrega, la exportación de calificaciones y la delegación
 		// del SIAGIE; versión nueva de trg_mensaje_nace) y las mismas 16 funciones: 128.
-		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(112)
+		// Sprint 11, tanda 1 (V39): 117 triggers (el cambio de estado del colegio, el año escolar y la facultad del titular)
+		// y 19 funciones (cc_ahora_lima_real, cc_colegio_en_preparacion y cc_es_titular): 136.
+		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(117)
 				.isEqualTo(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
-		assertThat(esperadas).hasSize(128).containsKeys("trg_libreta_emitida_nace", "trg_entrega_libreta_nace",
+		assertThat(esperadas).hasSize(136).containsKeys("trg_cambio_estado_colegio_nace", "trg_cambio_estado_colegio_estado",
+				"trg_anio_escolar_nace", "trg_anio_escolar_cambio", "trg_uso_facultad_titular_nace", "cc_ahora_lima_real",
+				"cc_colegio_en_preparacion", "cc_es_titular", "trg_libreta_emitida_nace", "trg_entrega_libreta_nace",
 				"trg_exportacion_calificaciones_nace", "trg_delegacion_siagie_nace", "cc_docente_de_area", "trg_lote_calificacion_nace",
 				"trg_calificacion_nace", "trg_exoneracion_area_nace", "trg_borrador_conclusion_nace", "cc_rol_activo", "trg_configuracion_evaluacion_nace",
 				"trg_configuracion_evaluacion_cambio", "trg_periodo_evaluacion_nace", "trg_periodo_evaluacion_cambio",

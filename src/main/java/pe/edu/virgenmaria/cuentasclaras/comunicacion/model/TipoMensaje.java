@@ -45,7 +45,10 @@ public enum TipoMensaje {
 	// Sprint 10, tanda 3 (sección 3.7): la libreta está en el portal (o se corrigió). Los crea solo sistema.libretas
 	// (trg_mensaje_nace); nunca llevan notas, conclusiones ni montos.
 	LIBRETA_DISPONIBLE("Libreta disponible", false),
-	LIBRETA_CORREGIDA("Libreta corregida", false);
+	LIBRETA_CORREGIDA("Libreta corregida", false),
+	// Sprint 11, tanda 1 (AP-2): el código de cada uso de la facultad del titular. Va solo al titular, a su contacto
+	// vigente (trg_mensaje_nace); ni el mensaje ni sus parámetros guardan el código: lo deriva el envío.
+	CODIGO_FACULTAD("Código de la facultad del titular", false);
 
 	private final String etiqueta;
 

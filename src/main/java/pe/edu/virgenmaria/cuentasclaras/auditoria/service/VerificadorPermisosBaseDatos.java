@@ -482,7 +482,42 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "estado_anterior, estado_nuevo, cambiado_bd, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, "
 					+ "'ACTIVA', 'RETIRADA', NOW(6), NOW(6), 'verificador', NOW(6))", "matricula_historial"),
 			soloBase("UPDATE matricula_historial SET estado_nuevo = estado_nuevo WHERE 1 = 0", "matricula_historial"),
-			sinBorrado("matricula_historial"));
+			sinBorrado("matricula_historial"),
+			// Sprint 11, tanda 1 (V39, sección 6.4): el cambio de estado del colegio y el uso de la facultad del titular los
+			// escribe solo cc_sistema (1142); cc_app no pone el cambio de estado del colegio (1143).
+			soloSistema(VerificadorPermisosBaseDatos.CAMBIO_ESTADO_APROBADO_IMPOSIBLE,
+					"La aplicación podría escribir el estado de un colegio."),
+			soloSistema(VerificadorPermisosBaseDatos.USO_FACULTAD_IMPOSIBLE,
+					"La aplicación podría dar Promotoría o Dirección como si fuera el titular."),
+			soloInsercion("uso_facultad_titular"), sinBorrado("uso_facultad_titular"), sinBorrado("cambio_estado_colegio"),
+			columna("UPDATE colegio SET cambio_estado_id = cambio_estado_id WHERE 1 = 0", "colegio"),
+			columna("UPDATE colegio SET facultad_bloqueada = facultad_bloqueada WHERE 1 = 0", "colegio"));
+
+	/**
+	 * Sprint 11, tanda 1 (sección 6.4): un cambio de estado del colegio 0 que nace APROBADO, sin firma (con cc_app, 1142;
+	 * con cc_sistema, lo rechaza trg_cambio_estado_colegio_nace antes que las FK: 1644).
+	 */
+	static final String CAMBIO_ESTADO_APROBADO_IMPOSIBLE = "INSERT INTO cambio_estado_colegio (colegio_id, plataforma_id, "
+			+ "tipo, ambito, motivo_tipo, motivo, estado_origen, estado_destino, estado, pendiente, propuesto_por, "
+			+ "operador_id, aprobado_por, aprobador_id, aprobado_en, efectiva_desde, creado_en, creado_por, actualizado_en) "
+			+ "VALUES (0, 0, 'BAJA', 'ESTADO', 'PRUEBA', 'verificador de permisos de la base', 'PREPARACION', 'BAJA', "
+			+ "'APROBADO', TRUE, 'verificador', 0, 'otro.verificador', 0, NOW(6), NOW(6), NOW(6), 'verificador', NOW(6))";
+
+	/**
+	 * Sprint 11, tanda 1 (sección 6.4): un uso de la facultad del titular del colegio 0 (con cc_app, 1142; con cc_sistema,
+	 * lo rechaza trg_uso_facultad_titular_nace antes que las FK: 1644).
+	 */
+	static final String USO_FACULTAD_IMPOSIBLE = "INSERT INTO uso_facultad_titular (colegio_id, numero, titular_id, titular, "
+			+ "usuario_id, rol, accion, cuenta_nueva, mensaje_id, creado_en, creado_por, actualizado_en) VALUES (0, 1, 0, "
+			+ "'verificador', 1, 'DIRECTOR', 'DAR', FALSE, 0, NOW(6), 'verificador', NOW(6))";
+
+	/**
+	 * Sprint 11, tanda 1 (sección 6.4): un año escolar del colegio 0 escrito por cc_sistema (ni el operador ni un proceso
+	 * crean años: trg_anio_escolar_nace, 1644).
+	 */
+	static final String ANIO_SISTEMA_IMPOSIBLE = "INSERT INTO anio_escolar (colegio_id, anio, estado, inicio_clases, "
+			+ "fin_clases, creado_en, creado_por, actualizado_en) VALUES (0, 2000, 'PLANIFICADO', '2000-03-01', '2000-12-15', "
+			+ "NOW(6), 'verificador', NOW(6))";
 
 	/**
 	 * Sprint 10, tanda 3 (E14 y sección 6.4): una libreta del colegio 0 en la versión 2 sin una corrección aprobada. Con
@@ -753,7 +788,16 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 					+ "estado_anterior, estado_nuevo, cambiado_bd, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, "
 					+ "'ACTIVA', 'RETIRADA', NOW(6), NOW(6), 'verificador', NOW(6))", "matricula_historial"),
 			soloBase("UPDATE matricula_historial SET estado_nuevo = estado_nuevo WHERE 1 = 0", "matricula_historial"),
-			sinBorrado("matricula_historial"));
+			sinBorrado("matricula_historial"),
+			// Sprint 11, tanda 1 (V39, sección 6.4): con cc_sistema, un cambio de estado no nace APROBADO, la facultad del
+			// titular no se usa en el colegio 0 y ningún proceso crea un año escolar (1644 de sus triggers); el tipo y el
+			// motivo de un cambio no cambian (1143) y nada se borra ni se edita del uso de la facultad (1142).
+			trigger(VerificadorPermisosBaseDatos.CAMBIO_ESTADO_APROBADO_IMPOSIBLE, "trg_cambio_estado_colegio_nace"),
+			trigger(VerificadorPermisosBaseDatos.USO_FACULTAD_IMPOSIBLE, "trg_uso_facultad_titular_nace"),
+			trigger(VerificadorPermisosBaseDatos.ANIO_SISTEMA_IMPOSIBLE, "trg_anio_escolar_nace"),
+			columna("UPDATE cambio_estado_colegio SET tipo = tipo WHERE 1 = 0", "cambio_estado_colegio"),
+			columna("UPDATE cambio_estado_colegio SET motivo = motivo WHERE 1 = 0", "cambio_estado_colegio"),
+			sinBorrado("cambio_estado_colegio"), soloInsercion("uso_facultad_titular"), sinBorrado("uso_facultad_titular"));
 
 	/** 1142 (o 1143): solo cc_sistema la escribe. */
 	private static SentenciaProhibida soloSistema(String sql, String riesgo) {
@@ -864,7 +908,10 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_borrador_conclusion_nace",
 			// Sprint 10, tanda 3 (V37).
 			"trg_libreta_emitida_nace", "trg_entrega_libreta_nace", "trg_exportacion_calificaciones_nace",
-			"trg_delegacion_siagie_nace");
+			"trg_delegacion_siagie_nace",
+			// Sprint 11, tanda 1 (V39).
+			"trg_cambio_estado_colegio_nace", "trg_cambio_estado_colegio_estado", "trg_anio_escolar_nace",
+			"trg_anio_escolar_cambio", "trg_uso_facultad_titular_nace");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 
@@ -963,10 +1010,48 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 		}
 		verificarPrivilegios();
 		verificarTls();
+		verificarRelojReal();
 		verificarPlataforma();
 		avisarConfiguracionVieja();
 		avisarDocentesConCobranza();
 		avisarColegiosSinGobierno();
+	}
+
+	/**
+	 * Sprint 11, tanda 1 (H9 y AP-3): con la hora de la sesión puesta en el año 2000 ({@code SET_VAR(timestamp)}, sin
+	 * privilegios, como podría hacerlo cualquier conexión), {@code SYSDATE()} sigue en la hora real. Si el servidor arrancó
+	 * con la opción {@code --sysdate-is-now} (que no es una variable: no se lee con {@code @@global}), {@code SYSDATE()}
+	 * obedecería a la sesión y {@code cc_ahora_lima_real()} dejaría de ser el reloj real.
+	 */
+	static final String SQL_RELOJ_REAL = "SELECT /*+ SET_VAR(timestamp=946684800) */ SYSDATE(6) > NOW(6) + INTERVAL 1 DAY";
+
+	/** Sprint 11, tanda 1 (AP-3): el reloj que la conexión no mueve existe y responde en hora de Lima. */
+	static final String SQL_AHORA_LIMA_REAL = "SELECT /*+ SET_VAR(timestamp=946684800) */ "
+			+ "cc_ahora_lima_real() > NOW(6) + INTERVAL 1 DAY";
+
+	/**
+	 * Sprint 11, tanda 1 (H9): SET timestamp no mueve el reloj de las reglas de la base. En la fase 1 (sin 03) la función
+	 * todavía no existe: solo se exige SYSDATE().
+	 */
+	public void verificarRelojReal() {
+		if (!Boolean.TRUE.equals(jdbc.queryForObject(SQL_RELOJ_REAL, Boolean.class))) {
+			throw new IllegalStateException("SYSDATE() obedece a SET timestamp de la sesión: el servidor MySQL arrancó con "
+					+ "--sysdate-is-now. Sin esa opción, una conexión no puede adelantar la hora de las firmas, las sesiones "
+					+ "ni las suspensiones. Quítala de la configuración del servidor (docs/operacion/mysql-usuarios.md).");
+		}
+		Boolean ahora;
+		try {
+			ahora = jdbc.queryForObject(SQL_AHORA_LIMA_REAL, Boolean.class);
+		}
+		catch (DataAccessException e) {
+			LOG.warn("La función cc_ahora_lima_real() no responde todavía (código {}): fase 1, antes de 03.", codigoMySql(e));
+			return;
+		}
+		if (!Boolean.TRUE.equals(ahora)) {
+			throw new IllegalStateException("cc_ahora_lima_real() obedece a SET timestamp: no es la de 03-triggers.sql de esta "
+					+ "versión. Aplica 03 con cc_migrador; si nadie la cambió a propósito, es un incidente.");
+		}
+		LOG.info("Reloj de la base verificado: SET timestamp no mueve la hora de las reglas (SYSDATE).");
 	}
 
 	static final String SQL_PLATAFORMAS = "SELECT COUNT(*) FROM colegio WHERE tipo = 'PLATAFORMA'";

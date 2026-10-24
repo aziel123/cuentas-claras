@@ -289,6 +289,37 @@ public final class ClaveFirma {
 		return "delegacion_siagie:" + id(usuarioId) + ":" + Objects.requireNonNull(desde, "desde") + ":DELEGADA";
 	}
 
+	/**
+	 * Sprint 11, tanda 1 (sección 3.3): un operador propone el cambio número {@code numero} del colegio (los anteriores más
+	 * uno), en el colegio de plataforma (trg_cambio_estado_colegio_nace: {@code cambio_estado_colegio:{colegio}:{n}}).
+	 */
+	public static String cambioEstadoPropuesto(Long colegioId, long numero) {
+		return "cambio_estado_colegio:" + id(colegioId) + ":" + numero;
+	}
+
+	/**
+	 * Sprint 11, tanda 1: la resolución de un cambio de estado ({@code APROBADO}, {@code RECHAZADO}, {@code ANULADO} y
+	 * {@code OBJECION_RESUELTA}, del operador en el colegio de plataforma; {@code OBJETADO}, del titular en su colegio).
+	 */
+	public static String cambioEstado(Long cambioId, String resolucion) {
+		return "cambio_estado_colegio:" + id(cambioId) + ":" + Objects.requireNonNull(resolucion, "resolucion");
+	}
+
+	/** Sprint 11, tanda 1 (sección 3.7): Promotoría o Dirección crea el año (trg_anio_escolar_nace). */
+	public static String anioEscolarCreado(int anio) {
+		return "anio_escolar:" + anio + ":CREADO";
+	}
+
+	/** Sprint 11, tanda 1 (AP-9): Promotoría o Dirección cambia el año sobre su versión (trg_anio_escolar_cambio). */
+	public static String anioEscolarCambiado(Long anioId, long version) {
+		return "anio_escolar:" + id(anioId) + ":" + version;
+	}
+
+	/** Sprint 11, tanda 1 (sección 3.12): el uso número {@code numero} de la facultad del titular. */
+	public static String facultadTitular(Long colegioId, long numero) {
+		return "facultad_titular:" + id(colegioId) + ":" + numero;
+	}
+
 	private static Long id(Long id) {
 		return Objects.requireNonNull(id, "id");
 	}

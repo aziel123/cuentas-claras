@@ -16,5 +16,8 @@ public enum MotivoCierreSesion {
 	CUENTA_CAMBIADA,
 
 	/** La aplicación arrancó: las sesiones HTTP anteriores ya no existen. */
-	REINICIO
+	REINICIO,
+
+	/** Sprint 11, tanda 1 (H8, F10): se aplicó la suspensión del colegio: el personal sale y no vuelve a entrar. */
+	COLEGIO_SUSPENDIDO
 }

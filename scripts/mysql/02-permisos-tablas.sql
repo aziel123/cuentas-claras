@@ -349,6 +349,15 @@ GRANT INSERT ON cuentasclaras.delegacion_siagie TO 'cc_negocio';
 -- Correcciones del sprint 10 (V38): matricula_historial NO tiene GRANT de escritura para nadie: la escribe SOLO
 -- trg_matricula_estado (con los permisos de su DEFINER). cc_app y cc_sistema solo la leen (SELECT de arriba): 1142.
 
+-- ===================== Sprint 11 · tanda 1 (V39): ciclo de vida del colegio y facultad del titular =====================
+-- cambio_estado_colegio y uso_facultad_titular: cc_app solo los lee (el SELECT de cuentasclaras.* del rol, para la franja
+-- del personal, el aviso del portal y la Puesta en marcha); los escribe solo cc_sistema (bloque 2): 1142 con cc_app.
+-- colegio: la Promotoría (cc_app) pasa a producción y la hora del estado viaja con él (la pone la base:
+-- trg_colegio_cambio); el cambio de estado aplicado y la facultad del titular, NO (1143).
+-- anio_escolar: sin cambios (INSERT y UPDATE de la tabla, también actualizado_por); quién lo crea y quién lo cambia lo
+-- deciden trg_anio_escolar_nace y trg_anio_escolar_cambio.
+GRANT UPDATE (estado_desde, suspendido_en) ON cuentasclaras.colegio TO 'cc_negocio';
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se
@@ -378,6 +387,18 @@ GRANT INSERT, UPDATE (estado, pendiente, resuelto_por, resuelto_en, actualizado_
     ON cuentasclaras.cambio_contacto_titular TO 'cc_sistema'@'%';
 GRANT INSERT, UPDATE (estado, pendiente, resuelto_por, resuelto_en, actualizado_en, version)
     ON cuentasclaras.cambio_correo_control TO 'cc_sistema'@'%';
+--    Sprint 11, tanda 1 (V39). Los cambios de estado del colegio (y el bloqueo de la facultad del titular) los escriben
+--    solo los operadores (EjecucionPlataforma) y sistema.plataforma (AplicacionCambiosEstado), con cc_sistema; la objeción
+--    del titular va por la ruta de identidad. Tipo, colegio, motivo, origen, destino y quién propuso no cambian (1143).
+--    Qué transición vale lo decide trg_cambio_estado_colegio_estado.
+GRANT INSERT, UPDATE (estado, pendiente, aprobado_por, aprobador_id, aprobado_en, efectiva_desde, aplicado_en, resuelto_por,
+    resuelto_en, objecion, objetado_por, objetado_en, objecion_respuesta, objecion_resuelta_por, objecion_resuelta_en,
+    actualizado_en, version) ON cuentasclaras.cambio_estado_colegio TO 'cc_sistema'@'%';
+--    H6: sistema.plataforma aplica el estado y la facultad (las columnas se suman a las del bloque del sprint 8).
+GRANT UPDATE (estado, estado_desde, cambio_estado_id, suspendido_en, facultad_bloqueada, facultad_cambio_id)
+    ON cuentasclaras.colegio TO 'cc_sistema'@'%';
+--    La facultad del titular: solo inserción y solo por la ruta de identidad (como primera_promotoria).
+GRANT INSERT ON cuentasclaras.uso_facultad_titular TO 'cc_sistema'@'%';
 --    Escrituras que solo hace un proceso: con cc_app, 1142.
 GRANT INSERT ON cuentasclaras.semilla_muestreo TO 'cc_sistema'@'%';               -- sistema.muestreo, solo inserción
 GRANT INSERT ON cuentasclaras.muestra_llamada TO 'cc_sistema'@'%';                -- sistema.panel, solo inserción

@@ -269,7 +269,7 @@ class VerificadorPermisosBaseDatosTest {
 					+ "aviso_asistencia_corte|comunicado_adjunto|confirmacion_lectura|exportacion_nomina|asignacion_area|"
 					+ "competencia|escala_logro|curriculo_version|area_curricular|calificacion|lote_calificacion|exoneracion_area|"
 					+ "borrador_conclusion|libreta_emitida|entrega_libreta|exportacion_calificaciones|delegacion_siagie|"
-					+ "matricula_historial) ");
+					+ "matricula_historial|uso_facultad_titular) ");
 
 	/** Sprint 10, tanda 1 (E12): el catálogo nacional no tiene GRANT de escritura: cc_app no inserta (1142). */
 	private static final java.util.regex.Pattern CATALOGO = java.util.regex.Pattern
@@ -391,7 +391,8 @@ class VerificadorPermisosBaseDatosTest {
 	/** Sprint 7, tanda 2: lo que solo escribe cc_sistema (a cc_app le falta el GRANT: 1142). */
 	private static final java.util.regex.Pattern SOLO_SISTEMA = java.util.regex.Pattern.compile(
 			"^INSERT INTO (usuario|usuario_rol|sesion_usuario|semilla_muestreo|muestra_llamada|resumen_diario|primera_direccion|"
-			+ "colegio|primera_promotoria|cambio_contacto_titular|cambio_correo_control|aviso_asistencia_corte|libreta_emitida) ");
+			+ "colegio|primera_promotoria|cambio_contacto_titular|cambio_correo_control|aviso_asistencia_corte|libreta_emitida|"
+			+ "cambio_estado_colegio|uso_facultad_titular) ");
 
 	private static JdbcTemplate mysqlQueDeniega() {
 		JdbcTemplate mysql = mock(JdbcTemplate.class);
@@ -414,6 +415,9 @@ class VerificadorPermisosBaseDatosTest {
 				.thenReturn(String.join(",", VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS));
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_PASARELA_SIMULADA, Integer.class)).thenReturn(0);
 		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_MENSAJERIA_SIMULADA, Integer.class)).thenReturn(0);
+		// Sprint 11, tanda 1 (H9): SET timestamp no mueve SYSDATE() ni cc_ahora_lima_real().
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_RELOJ_REAL, Boolean.class)).thenReturn(true);
+		when(mysql.queryForObject(VerificadorPermisosBaseDatos.SQL_AHORA_LIMA_REAL, Boolean.class)).thenReturn(true);
 		// Sprint 8, tanda 1: un solo colegio de plataforma, solo con operadores.
 		conPlataformaSana(mysql);
 		// Sprint 7, tanda 2: el usuario, las huellas del jar y solo los privilegios de 02.
@@ -471,7 +475,8 @@ class VerificadorPermisosBaseDatosTest {
 				throw denegado(1644);
 			}
 			if (sql.startsWith("UPDATE") && (sql.contains("cuota SET monto") || sql.contains("sesion_usuario SET hash")
-					|| sql.contains("colegio SET tipo") || sql.contains("configuracion_colegio SET clave"))) {
+					|| sql.contains("colegio SET tipo") || sql.contains("configuracion_colegio SET clave")
+					|| sql.contains("cambio_estado_colegio SET tipo") || sql.contains("cambio_estado_colegio SET motivo"))) {
 				throw denegado(1143);
 			}
 			throw denegado(1142);
@@ -751,7 +756,9 @@ class VerificadorPermisosBaseDatosTest {
 		// Sprint 10, tanda 1 (V35): 104 (la evaluación del año, los periodos y las áreas de cada asignación).
 		// Sprint 10, tanda 2 (V36): 108 (los lotes, las notas, las exoneraciones y los borradores de conclusión).
 		// Sprint 10, tanda 3 (V37): 112 (la libreta, su entrega, la exportación de calificaciones y la delegación del SIAGIE).
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(112);
+		// Sprint 11, tanda 1 (V39): 117 (el cambio de estado del colegio nace y cambia, el año escolar nace y cambia y el uso
+		// de la facultad del titular).
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(117);
 	}
 
 	/**

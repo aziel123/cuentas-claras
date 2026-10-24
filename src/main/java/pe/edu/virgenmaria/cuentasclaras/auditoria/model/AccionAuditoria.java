@@ -36,6 +36,8 @@ public enum AccionAuditoria {
 
 	// Estructura del colegio (sprint 2)
 	ANIO_ESCOLAR_CREADO("Creó un año escolar", false),
+	/** Sprint 11, tanda 1 (AP-9): Promotoría o Dirección cambió las fechas de clases de un año, con su firma. */
+	ANIO_ESCOLAR_CAMBIADO("Cambió las fechas de clases de un año escolar", false),
 	SECCION_CREADA("Creó una sección", false),
 	SECCION_DESACTIVADA("Desactivó una sección", false),
 
@@ -469,6 +471,42 @@ public enum AccionAuditoria {
 	CALIFICACIONES_SIAGIE_EXPORTADAS("Descargó las calificaciones de una sección para el SIAGIE", false),
 	/** Se resalta (M12): Dirección delegó con su firma la exportación para el SIAGIE a una persona de Administración. */
 	DELEGACION_SIAGIE_OTORGADA("Delegó la exportación de calificaciones para el SIAGIE", true),
+
+	// Sprint 11, tanda 1: ciclo de vida del colegio (dos operadores) y facultad del titular. Todos se resaltan.
+	/** Un operador propuso dar de baja, suspender o reactivar el colegio (o bloquear la facultad del titular). */
+	CAMBIO_ESTADO_COLEGIO_PROPUESTO("Propuso un cambio de estado del colegio", true),
+	/** Otro operador aprobó el cambio de estado (la base fijó su fecha efectiva). */
+	CAMBIO_ESTADO_COLEGIO_APROBADO("Aprobó un cambio de estado del colegio", true),
+	/** Otro operador rechazó el cambio de estado propuesto. */
+	CAMBIO_ESTADO_COLEGIO_RECHAZADO("Rechazó un cambio de estado del colegio", true),
+	/** Un operador anuló el cambio de estado antes de que se aplicara. */
+	CAMBIO_ESTADO_COLEGIO_ANULADO("Anuló un cambio de estado del colegio", true),
+	/** AP-10: el titular objetó una baja o una suspensión. */
+	CAMBIO_ESTADO_OBJETADO("El titular objetó un cambio de estado del colegio", true),
+	/** AP-10: un operador que no propuso resolvió la objeción del titular, con su respuesta. */
+	OBJECION_RESUELTA("Resolvió la objeción del titular", true),
+	/** sistema.plataforma aplicó la baja del colegio. */
+	COLEGIO_DADO_DE_BAJA("El colegio fue dado de baja", true),
+	/** sistema.plataforma aplicó la suspensión: el personal no ingresa; las familias, en modo consulta. */
+	COLEGIO_SUSPENDIDO("El colegio fue suspendido", true),
+	/** sistema.plataforma aplicó la reactivación del colegio. */
+	COLEGIO_REACTIVADO("El colegio fue reactivado", true),
+	/** AP-2: dos operadores bloquearon la facultad del titular. */
+	FACULTAD_BLOQUEADA("Se bloqueó la facultad del titular", true),
+	/** AP-2: dos operadores desbloquearon la facultad del titular. */
+	FACULTAD_DESBLOQUEADA("Se desbloqueó la facultad del titular", true),
+	/** Recordatorio de la suspensión próxima (7 días y 1 día antes). */
+	SUSPENSION_PROXIMA("Recordó la suspensión próxima del colegio", false),
+	/** AP-4 y AP-13: la suspensión espera cierres, comprobantes, órdenes o libretas (alerta diaria). */
+	SUSPENSION_EN_ESPERA("La suspensión espera que el colegio ponga en orden su caja", true),
+	/** F10: alguien del personal intentó ingresar a un colegio que no opera (mensaje genérico en pantalla). */
+	INGRESO_RECHAZADO_COLEGIO_SUSPENDIDO("Intentó ingresar a un colegio suspendido o dado de baja", false),
+	/** F7: un colegio está en un estado sin su cambio aplicado (o una suspensión con menos de 30 días): alerta CRÍTICA. */
+	ESTADO_COLEGIO_SIN_CAMBIO("Estado del colegio sin su cambio aprobado (revisión diaria)", true),
+	/** Sección 3.12: el titular dio o quitó Promotoría o Dirección sin segunda aprobación, con su firma y su código. */
+	FACULTAD_TITULAR_USADA("El titular usó su facultad para dar o quitar Promotoría o Dirección", true),
+	/** AP-2: el titular pidió el código de un uso de su facultad (le llegó por WhatsApp o correo). */
+	CODIGO_FACULTAD_PEDIDO("El titular pidió el código para usar su facultad", false),
 
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */

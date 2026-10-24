@@ -9,7 +9,19 @@
 -- completa de este archivo (una prueba exige que las dos coincidan) y además prueba varios con un INSERT imposible
 -- que el trigger rechaza con el error 1644.
 -- El GRANT por columna (02-permisos-tablas.sql) no distingue estados: estos triggers sí.
--- Versión de la migración V38 (correcciones del sprint 10): 112 triggers y 13 funciones (16 con huella; 128 huellas).
+-- Versión de la migración V39 (sprint 11, tanda 1): 117 triggers y 16 funciones (19 con huella; 136 huellas). Nuevos:
+-- trg_cambio_estado_colegio_nace y _estado (el estado del colegio y el bloqueo de la facultad del titular los propone un
+-- operador y los aprueba OTRO, con firma; la base pone las fechas: la suspensión a los 30 días; la baja sin dinero ni
+-- datos; sin suspensión hasta la exportación de V40; el titular objeta y otro operador resuelve), trg_anio_escolar_nace y
+-- _cambio (el año escolar lo crea y lo cambia Promotoría o Dirección con su firma; nunca el operador) y
+-- trg_uso_facultad_titular_nace (el titular da o quita Promotoría y Dirección con su firma y su código por WhatsApp; en
+-- producción no quita y da solo sin otra persona directiva); las funciones cc_ahora_lima_real (la hora de Lima que SET
+-- timestamp no mueve, AP-3), cc_colegio_en_preparacion (H1) y cc_es_titular. Versiones nuevas: cc_hoy_lima, cc_firma_valida
+-- y cc_sesion_abierta (reloj real), trg_colegio_cambio, trg_sesion_usuario_nace, trg_firma_operacion_nace,
+-- trg_orden_pago_nace, trg_pago_registro, trg_mensaje_nace, trg_configuracion_colegio_registro y _cambio,
+-- trg_usuario_rol_alta y _baja y trg_usuario_identidad. Los usos del reloj que la conexión mueve que quedan los cuenta
+-- reloj-pendiente.txt (paso reloj-real del CI): solo pueden bajar.
+-- Versión anterior (V38, correcciones del sprint 10): 112 triggers y 13 funciones (16 con huella; 128 huellas).
 -- Sin triggers nuevos; versiones nuevas de trg_lote_calificacion_nace (guarda CONNECTION_ID(); la nota tardía la aprobó
 -- Dirección o Promotoría con rol activo), trg_calificacion_nace (las notas de un lote solo desde su conexión y hasta sus
 -- filas; la corrección de un trasladado en la sección de la nota que reemplaza), trg_libreta_emitida_nace (la sección y el
@@ -140,8 +152,26 @@ DROP FUNCTION IF EXISTS cc_es_sistema$$
 CREATE FUNCTION cc_es_sistema() RETURNS BOOLEAN NOT DETERMINISTIC NO SQL
     RETURN SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_sistema'$$
 
+-- Sprint 11, tanda 1 (H9 y AP-3): la hora de Lima que la conexión NO puede mover. UTC_TIMESTAMP(), NOW(), CURDATE() y
+-- CURRENT_TIMESTAMP obedecen a SET timestamp de la sesión, que no pide privilegios (comprobado en MySQL 8.4.11 con cc_app y
+-- cc_sistema); SYSDATE() no lo obedece (salvo que el servidor arranque con la opción --sysdate-is-now, que no es una
+-- variable: el verificador de prod lo prueba con un SET timestamp). SYSDATE() sale en la zona de la sesión y CONVERT_TZ
+-- la lleva a Lima (UTC-5, sin horario de verano), sea cual sea esa zona; si CONVERT_TZ no la conoce (una zona con nombre
+-- sin las tablas de zonas cargadas), devuelve NULL y aquí se rechaza: nunca se compara contra NULL. Va primero: la usan las
+-- funciones siguientes.
+DROP FUNCTION IF EXISTS cc_ahora_lima_real$$
+CREATE FUNCTION cc_ahora_lima_real() RETURNS DATETIME(6) NOT DETERMINISTIC NO SQL
+BEGIN
+    DECLARE v DATETIME(6) DEFAULT CONVERT_TZ(SYSDATE(6), @@session.time_zone, '-05:00');
+    IF v IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: no se pudo leer la hora real de la base';
+    END IF;
+    RETURN v;
+END$$
+
 -- Sprint 7, tanda 2 (sección 3.4): quien resuelve es sistema.* (y escribe cc_sistema) o una persona con SU firma de hace
 -- 5 minutos o menos (firma_operacion, que trg_firma_operacion_nace validó contra una sesión abierta de esa persona).
+-- Sprint 11, tanda 1 (AP-3): la ventana con el reloj real (la conexión no la alarga con SET timestamp).
 DROP FUNCTION IF EXISTS cc_firma_valida$$
 CREATE FUNCTION cc_firma_valida(p_colegio BIGINT, p_clave VARCHAR(120), p_quien VARCHAR(60)) RETURNS BOOLEAN
     NOT DETERMINISTIC READS SQL DATA
@@ -149,7 +179,7 @@ CREATE FUNCTION cc_firma_valida(p_colegio BIGINT, p_clave VARCHAR(120), p_quien 
         ELSE EXISTS (SELECT 1 FROM firma_operacion f JOIN usuario u ON u.id = f.usuario_id
             WHERE f.colegio_id = p_colegio AND f.clave = p_clave AND u.colegio_id = p_colegio
               AND u.nombre_usuario = p_quien
-              AND f.firmada_bd >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE) END$$
+              AND f.firmada_bd >= cc_ahora_lima_real() - INTERVAL 5 MINUTE) END$$
 
 -- Correcciones del sprint 7 (S7-A1): ¿la solicitud está APROBADA y quien figura como aprobador la firmó con su sesión? Sin
 -- límite de tiempo: la usan las operaciones que se ejecutan DESPUÉS de aprobar (una devolución que hace otra persona días
@@ -175,6 +205,13 @@ DROP FUNCTION IF EXISTS cc_colegio_en_produccion$$
 CREATE FUNCTION cc_colegio_en_produccion(p_colegio BIGINT) RETURNS BOOLEAN NOT DETERMINISTIC READS SQL DATA
     RETURN EXISTS (SELECT 1 FROM colegio c WHERE c.id = p_colegio AND c.tipo = 'COLEGIO' AND c.estado = 'PRODUCCION')$$
 
+-- Sprint 11, tanda 1 (H1): ¿el colegio está en preparación? «No en producción» ya no lo significa: hay SUSPENDIDO y BAJA
+-- (y en la tanda 2, CERRADO y SUPRIMIDO). La usan las versiones nuevas de trg_configuracion_colegio_* (el operador solo
+-- escribe el correo de control de un colegio en preparación).
+DROP FUNCTION IF EXISTS cc_colegio_en_preparacion$$
+CREATE FUNCTION cc_colegio_en_preparacion(p_colegio BIGINT) RETURNS BOOLEAN NOT DETERMINISTIC READS SQL DATA
+    RETURN EXISTS (SELECT 1 FROM colegio c WHERE c.id = p_colegio AND c.tipo = 'COLEGIO' AND c.estado = 'PREPARACION')$$
+
 -- Correcciones del sprint 8 (QA-S8-3): ¿la cuenta se activó alguna vez? Usó un enlace de activación o abrió una sesión.
 -- No se decide por debe_cambiar_clave: un restablecimiento vuelve a pedir el cambio de clave, pero la cuenta ya era de su
 -- titular (el operador ya no la toca).
@@ -182,6 +219,20 @@ DROP FUNCTION IF EXISTS cc_cuenta_activada$$
 CREATE FUNCTION cc_cuenta_activada(p_usuario BIGINT) RETURNS BOOLEAN NOT DETERMINISTIC READS SQL DATA
     RETURN EXISTS (SELECT 1 FROM enlace_activacion e WHERE e.usuario_id = p_usuario AND e.usado_en IS NOT NULL)
         OR EXISTS (SELECT 1 FROM sesion_usuario s WHERE s.usuario_id = p_usuario)$$
+
+-- Sprint 11, tanda 1 (sección 3.12 y AP-2): ¿es el titular del contrato? La cuenta de la primera Promotoría del colegio,
+-- activada, activa, del personal y con PROMOTOR, en un colegio en preparación o en producción y con la facultad sin
+-- bloquear (la bloquean dos operadores: BLOQUEO_FACULTAD). No es un rol: es una condición que la base reconoce. Va después
+-- de cc_cuenta_activada, que usa.
+DROP FUNCTION IF EXISTS cc_es_titular$$
+CREATE FUNCTION cc_es_titular(p_colegio BIGINT, p_nombre VARCHAR(60)) RETURNS BOOLEAN NOT DETERMINISTIC READS SQL DATA
+    RETURN EXISTS (SELECT 1 FROM primera_promotoria p
+        JOIN usuario u ON u.id = p.usuario_id AND u.colegio_id = p.colegio_id
+        JOIN usuario_rol r ON r.usuario_id = u.id
+        JOIN colegio c ON c.id = p.colegio_id
+        WHERE p.colegio_id = p_colegio AND u.nombre_usuario = p_nombre AND u.activo AND u.apoderado_id IS NULL
+          AND r.rol = 'PROMOTOR' AND c.tipo = 'COLEGIO' AND c.estado IN ('PREPARACION', 'PRODUCCION')
+          AND NOT c.facultad_bloqueada AND cc_cuenta_activada(u.id))$$
 
 -- Correcciones del sprint 9 (decisión del usuario sobre los dos niveles del filtro): el texto de un comunicado como lo lee
 -- el filtro de la aplicación (FiltroContenido.normalizar): sin marcas combinantes, con las letras de ancho completo y las
@@ -214,19 +265,21 @@ END$$
 
 -- Sprint 9, tanda 2 (sección 7.3): el día de hoy en Lima según el reloj de la BASE (Perú no tiene horario de verano). Mismo
 -- criterio que cc_firma_valida (UTC menos 5 horas). El servidor de la aplicación no decide qué día es (E9).
+-- Sprint 11, tanda 1 (AP-3): con el reloj real (la conexión no cambia el día con SET timestamp).
 DROP FUNCTION IF EXISTS cc_hoy_lima$$
 CREATE FUNCTION cc_hoy_lima() RETURNS DATE NOT DETERMINISTIC NO SQL
-    RETURN DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR)$$
+    RETURN DATE(cc_ahora_lima_real())$$
 
 -- Sprint 9, tanda 2: ¿es una sesión abierta y vigente de esta persona en este colegio? Lo que escribe un docente o una
 -- familia lleva su sesión: con la clave de cc_app no se escribe «como» alguien que no está conectado. vence_en está en
 -- hora de Lima (A12: lo prueba a12ZonaDeVenceEnEsLima).
+-- Sprint 11, tanda 1 (AP-3): vigente según el reloj real (la conexión no alarga una sesión con SET timestamp).
 DROP FUNCTION IF EXISTS cc_sesion_abierta$$
 CREATE FUNCTION cc_sesion_abierta(p_sesion BIGINT, p_nombre VARCHAR(60), p_colegio BIGINT) RETURNS BOOLEAN
     NOT DETERMINISTIC READS SQL DATA
     RETURN EXISTS (SELECT 1 FROM sesion_usuario s JOIN usuario u ON u.id = s.usuario_id AND u.colegio_id = s.colegio_id
         WHERE s.id = p_sesion AND s.colegio_id = p_colegio AND u.nombre_usuario = p_nombre AND u.activo
-          AND s.cerrada_en IS NULL AND s.vence_en > UTC_TIMESTAMP(6) - INTERVAL 5 HOUR)$$
+          AND s.cerrada_en IS NULL AND s.vence_en > cc_ahora_lima_real())$$
 
 -- Sprint 9, tanda 1 (sección 7.3): ¿esta persona tiene una asignación VIGENTE en esta sección, con su cuenta activa y el rol
 -- DOCENTE? p_con_auxiliar: la asistencia la marca también el auxiliar; los comunicados, no. La usan los triggers de las
@@ -521,6 +574,13 @@ BEGIN
     END IF;
     IF NOT (NEW.estado <=> 'VIGENTE') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un pago nace VIGENTE';
+    END IF;
+    -- Sprint 11, tanda 1 (AP-4): el último día antes de la suspensión no se cobra efectivo (nadie deja un faltante de caja
+    -- que ya no se revisará). Con el reloj real (AP-3).
+    IF NEW.medio <=> 'EFECTIVO' AND EXISTS (SELECT 1 FROM cambio_estado_colegio x WHERE x.colegio_id = NEW.colegio_id
+            AND x.tipo = 'SUSPENSION' AND x.estado = 'APROBADO'
+            AND x.efectiva_desde <= cc_ahora_lima_real() + INTERVAL 24 HOUR) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio se suspende en menos de 24 horas: sin cobros en efectivo';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM comprobante c WHERE c.id = NEW.comprobante_id AND c.tipo IN ('BOLETA', 'FACTURA')
             AND c.total = NEW.total) THEN
@@ -903,6 +963,12 @@ BEGIN
             WHERE c.clave = 'pasarela_simulada' AND c.valor = 'PERMITIDA') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: esta base no admite la pasarela simulada';
     END IF;
+    -- Sprint 11, tanda 1 (H3): desde 2 horas antes de la suspensión no nacen órdenes (la orden vive 30 minutos): ninguna
+    -- queda en vuelo cuando se aplica. Con el reloj real (AP-3).
+    IF EXISTS (SELECT 1 FROM cambio_estado_colegio x WHERE x.colegio_id = NEW.colegio_id AND x.tipo = 'SUSPENSION'
+            AND x.estado = 'APROBADO' AND x.efectiva_desde <= cc_ahora_lima_real() + INTERVAL 2 HOUR) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio se suspende en menos de 2 horas: sin pagos en linea';
+    END IF;
     -- Correcciones del sprint 8 (S8-M2): en un colegio en preparación no hay pago en línea (la pasarela no llega a cobrar).
     IF NOT cc_colegio_en_produccion(NEW.colegio_id) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio todavia no esta en produccion: sin pagos en linea';
@@ -1280,8 +1346,21 @@ BEGIN
     END IF;
     -- Sprint 8, tanda 1 (sección 3.4, E30): un colegio en preparación no manda recordatorios ni renovaciones.
     -- Correcciones del sprint 8 (QA-S8-4 y S8-M2): ningún mensaje a las familias (ni avisos, ni enlaces, ni verificaciones).
-    IF NEW.destinatario_tipo = 'APODERADO' AND NOT cc_colegio_en_produccion(NEW.colegio_id) THEN
+    -- Sprint 11, tanda 1 (AP-5): en SUSPENDIDO (y en CERRADO, tanda 2) la familia entra en modo consulta: solo le llega el
+    -- enlace de acceso (ACTIVACION_CUENTA: activar el portal o restablecer la clave). Nada de pagos, recordatorios,
+    -- comunicados, asistencia ni libretas.
+    IF NEW.destinatario_tipo = 'APODERADO' AND NOT cc_colegio_en_produccion(NEW.colegio_id)
+            AND NOT (NEW.tipo <=> 'ACTIVACION_CUENTA' AND EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id
+                AND c.tipo = 'COLEGIO' AND c.estado IN ('SUSPENDIDO', 'CERRADO'))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio todavia no esta en produccion: sin recordatorios de cobro ni mensajes a las familias';
+    END IF;
+    -- Sprint 11, tanda 1 (AP-2): el código de la facultad del titular va solo al titular (cc_es_titular), por cc_sistema y
+    -- creado a su nombre, a un contacto suyo (la regla de abajo exige el registrado). Ni la plantilla ni los parámetros
+    -- llevan el código: lo deriva el envío.
+    IF NEW.tipo <=> 'CODIGO_FACULTAD' AND (NOT cc_es_sistema() OR NOT (NEW.destinatario_tipo <=> 'USUARIO')
+            OR NOT EXISTS (SELECT 1 FROM usuario u WHERE u.id = NEW.usuario_id AND u.colegio_id = NEW.colegio_id
+                AND u.nombre_usuario = NEW.creado_por AND cc_es_titular(NEW.colegio_id, u.nombre_usuario))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el codigo de la facultad va solo al titular, a su contacto';
     END IF;
     -- Sprint 9, tandas 2 y 3 (secciones 3.6, 3.10 y 3.13): los avisos académicos (asistencia y comunicados) los crea solo
     -- su proceso (sistema.asistencia o sistema.comunicados, con cc_sistema por la regla de arriba), a un apoderado, con su
@@ -2215,17 +2294,20 @@ DELIMITER $$
 
 -- La firma: el secreto es el de una sesión ABIERTA y vigente de ESA persona (activa) en ESE colegio. El secreto nunca
 -- queda guardado (el trigger lo deja en NULL) y la hora es la de la base.
+-- Sprint 11, tanda 1 (AP-3): la hora de la firma y la vigencia de la sesión con el reloj real. Si no, una firma fechada en
+-- el futuro con SET timestamp seguiría valiendo días.
 DROP TRIGGER IF EXISTS trg_firma_operacion_nace$$
 CREATE TRIGGER trg_firma_operacion_nace BEFORE INSERT ON firma_operacion FOR EACH ROW
 BEGIN
+    DECLARE v_ahora DATETIME(6) DEFAULT cc_ahora_lima_real();
     IF NEW.token IS NULL OR NOT EXISTS (SELECT 1 FROM sesion_usuario s JOIN usuario u ON u.id = s.usuario_id
             WHERE s.id = NEW.sesion_id AND s.colegio_id = NEW.colegio_id AND s.usuario_id = NEW.usuario_id
               AND u.colegio_id = NEW.colegio_id AND s.hash_token = SHA2(NEW.token, 256) AND s.cerrada_en IS NULL
-              AND s.vence_en > UTC_TIMESTAMP(6) - INTERVAL 5 HOUR AND u.activo) THEN
+              AND s.vence_en > v_ahora AND u.activo) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la firma no es de una sesion abierta de esa persona';
     END IF;
     SET NEW.token = NULL;
-    SET NEW.firmada_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    SET NEW.firmada_bd = v_ahora;
 END$$
 
 -- La sesión la abre solo cc_sistema (al ingresar): nace abierta, ahora (5 minutos de margen con la hora de la base), con
@@ -2236,12 +2318,20 @@ BEGIN
     IF NOT cc_es_sistema() THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las sesiones las abre solo cc_sistema';
     END IF;
+    -- Sprint 11, tanda 1 (AP-3): «ahora» es el reloj real.
     IF NEW.cerrada_en IS NOT NULL OR NEW.motivo_cierre IS NOT NULL OR NEW.abierta_en IS NULL
             OR NEW.vence_en > NEW.abierta_en + INTERVAL 12 HOUR
-            OR ABS(TIMESTAMPDIFF(SECOND, NEW.abierta_en, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR)) > 300
+            OR ABS(TIMESTAMPDIFF(SECOND, NEW.abierta_en, cc_ahora_lima_real())) > 300
             OR NOT EXISTS (SELECT 1 FROM usuario u WHERE u.id = NEW.usuario_id AND u.colegio_id = NEW.colegio_id
                 AND u.activo) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la sesion nace abierta, ahora y de una cuenta activa';
+    END IF;
+    -- Sprint 11, tanda 1 (F10): en un colegio que no opera no nace la sesión del personal; la de una familia, solo en
+    -- SUSPENDIDO y CERRADO (modo consulta). En BAJA y SUPRIMIDO, nadie.
+    IF EXISTS (SELECT 1 FROM colegio c JOIN usuario u ON u.id = NEW.usuario_id
+            WHERE c.id = NEW.colegio_id AND c.tipo = 'COLEGIO'
+              AND (c.estado IN ('BAJA', 'SUPRIMIDO') OR (c.estado IN ('SUSPENDIDO', 'CERRADO') AND u.apoderado_id IS NULL))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio no esta operando: el personal no ingresa';
     END IF;
 END$$
 
@@ -2314,6 +2404,12 @@ BEGIN
     END IF;
     IF NOT cc_es_sistema() THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las cuentas las cambia solo cc_sistema';
+    END IF;
+    -- Sprint 11, tanda 1 (sección 3.12): la cuenta del titular (la de su primera Promotoría) no se desactiva con la
+    -- aplicación: cambiar de titular va fuera del sistema, con carta del representante legal y acta del DBA (decisión
+    -- 115). El bloqueo por intentos fallidos no toca activo.
+    IF OLD.activo AND NOT (NEW.activo <=> TRUE) AND EXISTS (SELECT 1 FROM primera_promotoria p WHERE p.usuario_id = OLD.id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la cuenta del titular no se desactiva con la aplicacion';
     END IF;
     IF OLD.activo AND NOT (NEW.activo <=> TRUE)
             AND EXISTS (SELECT 1 FROM usuario_rol r WHERE r.usuario_id = OLD.id AND r.rol = 'PROMOTOR')
@@ -2396,10 +2492,16 @@ BEGIN
             OR (r.rol = 'DOCENTE' AND NEW.rol IN ('CAJA', 'ADMINISTRACION')))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el docente no ve deudas: DOCENTE no se combina con CAJA ni ADMINISTRACION';
     END IF;
+    -- Sprint 11, tanda 1 (sección 3.12): también con SU uso de la facultad del titular (DAR ese rol a esa cuenta) de hace
+    -- 5 minutos o menos, que trg_uso_facultad_titular_nace validó (el titular con su firma y su código). Las ventanas, con
+    -- el reloj real (AP-3). Las combinaciones prohibidas de arriba rigen también para el titular.
     IF NEW.rol IN ('PROMOTOR', 'DIRECTOR')
             AND NOT (NEW.rol = 'PROMOTOR' AND EXISTS (SELECT 1 FROM primera_promotoria p WHERE p.colegio_id = v_colegio
                 AND p.usuario_id = NEW.usuario_id
-                AND p.creado_en >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE))
+                AND p.creado_en >= cc_ahora_lima_real() - INTERVAL 5 MINUTE))
+            AND NOT EXISTS (SELECT 1 FROM uso_facultad_titular f WHERE f.colegio_id = v_colegio
+                AND f.usuario_id = NEW.usuario_id AND f.rol = NEW.rol AND f.accion = 'DAR'
+                AND f.creado_en >= cc_ahora_lima_real() - INTERVAL 5 MINUTE)
             AND NOT (NEW.rol = 'DIRECTOR' AND NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r
                 ON r.usuario_id = u.id WHERE u.colegio_id = v_colegio AND u.activo AND r.rol = 'DIRECTOR')
                 AND (SELECT COUNT(*) FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
@@ -2408,7 +2510,7 @@ BEGIN
                 -- historia, marcada en primera_direccion (UNIQUE por colegio) para esta cuenta en esta operación.
                 AND EXISTS (SELECT 1 FROM primera_direccion p WHERE p.colegio_id = v_colegio
                     AND p.usuario_id = NEW.usuario_id
-                    AND p.creado_en >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE))
+                    AND p.creado_en >= cc_ahora_lima_real() - INTERVAL 5 MINUTE))
             AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s WHERE s.id = v_solicitud AND s.colegio_id = v_colegio
                 AND s.tipo = 'CAMBIO_ROLES' AND s.entidad = 'usuario' AND s.entidad_id = NEW.usuario_id
                 AND s.estado = 'APROBADA'
@@ -2429,11 +2531,20 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los roles los cambia solo cc_sistema';
     END IF;
     SELECT u.colegio_id, u.roles_solicitud_id INTO v_colegio, v_solicitud FROM usuario u WHERE u.id = OLD.usuario_id;
+    -- Sprint 11, tanda 1 (sección 3.12): la Promotoría del titular no se quita con la aplicación (ni con CAMBIO_ROLES).
+    IF OLD.rol = 'PROMOTOR' AND EXISTS (SELECT 1 FROM primera_promotoria p WHERE p.usuario_id = OLD.usuario_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la Promotoria del titular no se quita con la aplicacion';
+    END IF;
+    -- Sprint 11, tanda 1: quitar PROMOTOR o DIRECTOR vale también con SU uso QUITAR de la facultad del titular de hace 5
+    -- minutos o menos (solo en preparación: en producción trg_uso_facultad_titular_nace lo rechaza, AP-1).
     IF OLD.rol IN ('PROMOTOR', 'DIRECTOR') AND NOT EXISTS (SELECT 1 FROM solicitud_cambio s
             WHERE s.id = v_solicitud AND s.colegio_id = v_colegio AND s.tipo = 'CAMBIO_ROLES' AND s.entidad = 'usuario'
               AND s.entidad_id = OLD.usuario_id AND s.estado = 'APROBADA'
               AND FIND_IN_SET(OLD.rol, JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.roles'))) = 0
-              AND cc_firma_valida(v_colegio, CONCAT('solicitud_cambio:', s.id, ':APROBADA'), s.resuelto_por)) THEN
+              AND cc_firma_valida(v_colegio, CONCAT('solicitud_cambio:', s.id, ':APROBADA'), s.resuelto_por))
+            AND NOT EXISTS (SELECT 1 FROM uso_facultad_titular f WHERE f.colegio_id = v_colegio
+                AND f.usuario_id = OLD.usuario_id AND f.rol = OLD.rol AND f.accion = 'QUITAR'
+                AND f.creado_en >= cc_ahora_lima_real() - INTERVAL 5 MINUTE) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: Promotoria y Direccion se quitan con una solicitud aprobada';
     END IF;
     IF OLD.rol = 'PROMOTOR' AND NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
@@ -2471,6 +2582,11 @@ END$$
 -- versión anterior: colegio:{id}:FICHA:{version}). El operador (cc_sistema, firma en el colegio de plataforma) solo
 -- mientras el titular no activó su cuenta; después, la Promotoría activa del colegio (cc_app, firma en su colegio).
 -- S8-A1: el DNI del titular no cambia una vez creada su primera Promotoría (es lo que confirma al activar).
+-- Sprint 11, tanda 1 (secciones 3.2, 3.6, 3.7 y 3.13): estados nuevos. cc_app (la Promotoría) solo PREPARACION ->
+-- PRODUCCION, ahora también con un año escolar; cc_sistema (sistema.plataforma) cambia el estado solo con SU cambio de
+-- estado aprobado por dos operadores y vencido (F5, F6); la suspensión espera la caja revisada y los comprobantes
+-- aceptados (AP-4); la facultad del titular la bloquean dos operadores (AP-2); la ficha de un colegio que no opera no
+-- cambia; la base pone estado_desde y suspendido_en. El DBA conserva su camino (lo delata RevisionEstadosColegio, F7).
 DROP TRIGGER IF EXISTS trg_colegio_cambio$$
 CREATE TRIGGER trg_colegio_cambio BEFORE UPDATE ON colegio FOR EACH ROW
 BEGIN
@@ -2502,12 +2618,58 @@ BEGIN
                 OR NOT (NEW.plataforma_unica <=> OLD.plataforma_unica) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el tipo y el creador del colegio no cambian';
         END IF;
-        IF OLD.estado = 'PRODUCCION' AND (NOT (NEW.estado <=> 'PRODUCCION') OR NOT (NEW.ruc <=> OLD.ruc)) THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un colegio en produccion no vuelve atras ni cambia su RUC';
+        -- Sprint 11, tanda 1 (a): un colegio que ya opero no cambia su RUC; la ficha de uno que no opera no cambia.
+        IF OLD.estado <> 'PREPARACION' AND NOT (NEW.ruc <=> OLD.ruc) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un colegio que ya opero no cambia su RUC';
         END IF;
-        IF v_quien = 'cc_sistema' AND (OLD.estado = 'PRODUCCION' OR NOT (NEW.estado <=> OLD.estado)) THEN
+        IF v_ficha AND OLD.estado NOT IN ('PREPARACION', 'PRODUCCION') THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la ficha de un colegio suspendido o dado de baja no cambia';
+        END IF;
+        -- (b) El operador solo cambia la ficha de un colegio en preparacion.
+        IF v_quien = 'cc_sistema' AND v_ficha AND OLD.estado <> 'PREPARACION' THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el operador solo cambia la ficha de un colegio en preparacion';
         END IF;
+        -- (c) Quien cambia el estado: cc_app (la Promotoria) solo PREPARACION a PRODUCCION; cc_sistema
+        -- (sistema.plataforma) solo con SU cambio de estado aprobado por dos operadores, del mismo colegio, con este origen y
+        -- este destino, y en su fecha segun el reloj real (F5 y F6).
+        IF v_quien = 'cc_app' AND NOT (NEW.estado <=> OLD.estado)
+                AND NOT (OLD.estado = 'PREPARACION' AND NEW.estado <=> 'PRODUCCION') THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio solo pasa a produccion; lo demas lo deciden dos operadores';
+        END IF;
+        IF v_quien = 'cc_sistema' AND NOT (NEW.estado <=> OLD.estado) AND NOT EXISTS (SELECT 1 FROM cambio_estado_colegio x
+                WHERE x.id = NEW.cambio_estado_id AND x.colegio_id = NEW.id AND x.estado = 'APROBADO'
+                  AND x.ambito = 'ESTADO' AND x.estado_origen <=> OLD.estado AND x.estado_destino <=> NEW.estado
+                  AND x.efectiva_desde <= cc_ahora_lima_real()) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el estado cambia solo con su cambio aprobado por dos operadores y en su fecha';
+        END IF;
+        -- AP-4: la suspension se aplica con la caja revisada y los comprobantes aceptados.
+        IF NEW.estado <=> 'SUSPENDIDO' AND NOT (OLD.estado <=> 'SUSPENDIDO') AND (
+                EXISTS (SELECT 1 FROM cierre_caja k WHERE k.colegio_id = NEW.id AND k.estado IN ('POR_REVISAR', 'OBSERVADO'))
+                OR EXISTS (SELECT 1 FROM comprobante k WHERE k.colegio_id = NEW.id
+                    AND k.estado_envio IN ('PENDIENTE', 'ENVIADO', 'RECHAZADO'))) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la suspension espera los cierres de caja aprobados y los comprobantes aceptados';
+        END IF;
+        -- AP-2: la facultad del titular se bloquea o desbloquea solo con SU cambio de ambito FACULTAD aprobado por dos
+        -- operadores (con cc_sistema); facultad_cambio_id solo cambia con ella.
+        IF NOT (NEW.facultad_bloqueada <=> OLD.facultad_bloqueada) AND NOT (v_quien = 'cc_sistema' AND EXISTS (
+                SELECT 1 FROM cambio_estado_colegio x WHERE x.id = NEW.facultad_cambio_id AND x.colegio_id = NEW.id
+                  AND x.estado = 'APROBADO' AND x.ambito = 'FACULTAD'
+                  AND x.tipo = IF(NEW.facultad_bloqueada, 'BLOQUEO_FACULTAD', 'DESBLOQUEO_FACULTAD'))) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la facultad del titular la bloquean dos operadores';
+        END IF;
+        IF NOT (NEW.facultad_cambio_id <=> OLD.facultad_cambio_id) AND NEW.facultad_bloqueada <=> OLD.facultad_bloqueada THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cambio de la facultad solo cambia con la facultad';
+        END IF;
+        IF NOT (NEW.cambio_estado_id <=> OLD.cambio_estado_id) AND NEW.estado <=> OLD.estado THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cambio de estado solo cambia con el estado';
+        END IF;
+        -- F12: un colegio que ya cobro no se da de baja.
+        IF NEW.estado <=> 'BAJA' AND NOT (OLD.estado <=> 'BAJA') AND (
+                EXISTS (SELECT 1 FROM comprobante k WHERE k.colegio_id = NEW.id)
+                OR EXISTS (SELECT 1 FROM orden_pago o WHERE o.colegio_id = NEW.id)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un colegio con comprobantes u ordenes de pago no se da de baja';
+        END IF;
+        -- (d) Sprint 11, tanda 1 (seccion 3.7, F18): a produccion, tambien con un anio escolar del colegio.
         IF OLD.estado = 'PREPARACION' AND NEW.estado = 'PRODUCCION' AND NOT (
                 EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id WHERE u.colegio_id = NEW.id
                     AND u.activo AND r.rol = 'PROMOTOR' AND u.nombre_usuario = NEW.produccion_por)
@@ -2515,9 +2677,26 @@ BEGIN
                 AND EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id WHERE u.colegio_id = NEW.id
                     AND u.activo AND r.rol = 'DIRECTOR')
                 AND EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id WHERE u.colegio_id = NEW.id
-                    AND u.activo AND r.rol = 'CAJA')) THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: a produccion lo pasa la Promotoria con su firma, con Direccion y Caja activas';
+                    AND u.activo AND r.rol = 'CAJA')
+                AND EXISTS (SELECT 1 FROM anio_escolar a WHERE a.colegio_id = NEW.id
+                    AND a.estado IN ('EN_CURSO', 'PLANIFICADO'))) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: a produccion lo pasa la Promotoria con su firma, con anio escolar, Direccion y Caja activas';
         END IF;
+    END IF;
+    -- AP-11: suspendido_en lo pone la base (tambien para el DBA) y vuelve a NULL al reactivar; con la aplicacion no se
+    -- escribe a mano.
+    IF NEW.estado <=> 'SUSPENDIDO' AND NOT (OLD.estado <=> 'SUSPENDIDO') THEN
+        SET NEW.suspendido_en = cc_ahora_lima_real();
+    ELSEIF NEW.estado <=> 'PRODUCCION' AND OLD.estado <=> 'SUSPENDIDO' THEN
+        SET NEW.suspendido_en = NULL;
+    ELSEIF NOT (NEW.suspendido_en <=> OLD.suspendido_en) AND v_quien IN ('cc_app', 'cc_sistema') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la fecha de suspension la pone la base';
+    END IF;
+    -- (e) La hora del estado la pone la base, con el reloj real (AP-3).
+    IF NOT (NEW.estado <=> OLD.estado) THEN
+        SET NEW.estado_desde = cc_ahora_lima_real();
+    ELSEIF NOT (NEW.estado_desde <=> OLD.estado_desde) AND v_quien IN ('cc_app', 'cc_sistema') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la hora del estado la pone la base';
     END IF;
 END$$
 
@@ -2548,11 +2727,13 @@ END$$
 -- Correcciones del sprint 8 (S8-A2): el operador, solo en un colegio EN PREPARACIÓN. En producción, la escribe la
 -- Promotoría que aprobó (con su firma de hace 5 minutos o menos) el cambio_correo_control que propuso el operador, con ESE
 -- correo.
+-- Sprint 11, tanda 1 (H1, F4): «en preparación» con cc_colegio_en_preparacion (antes, «no en producción», que con
+-- SUSPENDIDO y BAJA dejaba al operador cambiar solo el testigo independiente). En SUSPENDIDO o BAJA, nadie.
 DROP TRIGGER IF EXISTS trg_configuracion_colegio_registro$$
 CREATE TRIGGER trg_configuracion_colegio_registro BEFORE INSERT ON configuracion_colegio FOR EACH ROW
 BEGIN
     IF SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_app' OR (cc_es_sistema() AND NOT (
-            (NOT cc_colegio_en_produccion(NEW.colegio_id) AND cc_operador_activo(NEW.creado_por)
+            (cc_colegio_en_preparacion(NEW.colegio_id) AND cc_operador_activo(NEW.creado_por)
                 AND cc_firma_valida((SELECT c.id FROM colegio c WHERE c.tipo = 'PLATAFORMA'),
                     CONCAT('configuracion_colegio:', NEW.colegio_id, ':', NEW.clave, ':0'), NEW.creado_por))
             OR (cc_colegio_en_produccion(NEW.colegio_id) AND EXISTS (SELECT 1 FROM cambio_correo_control x
@@ -2572,7 +2753,7 @@ BEGIN
     IF NOT (NEW.colegio_id <=> OLD.colegio_id) OR NOT (NEW.clave <=> OLD.clave)
             OR SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_app'
             OR (cc_es_sistema() AND NOT (
-                (NOT cc_colegio_en_produccion(NEW.colegio_id) AND cc_operador_activo(NEW.actualizado_por)
+                (cc_colegio_en_preparacion(NEW.colegio_id) AND cc_operador_activo(NEW.actualizado_por)
                     AND cc_firma_valida((SELECT c.id FROM colegio c WHERE c.tipo = 'PLATAFORMA'),
                         CONCAT('configuracion_colegio:', NEW.colegio_id, ':', NEW.clave, ':', NEW.version),
                         NEW.actualizado_por))
@@ -3854,4 +4035,247 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la delegacion es para una persona de Administracion sin Caja ni Docente';
     END IF;
 END$$
+DELIMITER ;
+
+-- ===================== Sprint 11 · tanda 1 (V39): ciclo de vida del colegio y facultad del titular =====================
+-- (Las funciones cc_ahora_lima_real, cc_colegio_en_preparacion y cc_es_titular, y las versiones nuevas de cc_hoy_lima,
+-- cc_firma_valida y cc_sesion_abierta, están al principio de este archivo. Las versiones nuevas de trg_colegio_cambio,
+-- trg_sesion_usuario_nace, trg_firma_operacion_nace, trg_orden_pago_nace, trg_pago_registro, trg_mensaje_nace,
+-- trg_configuracion_colegio_registro y _cambio, trg_usuario_rol_alta y _baja y trg_usuario_identidad quedaron en su lugar,
+-- marcadas con «Sprint 11, tanda 1».) Toda hora con cc_ahora_lima_real() (AP-3) y toda comparación con <=> o NOT EXISTS.
+DELIMITER $$
+
+-- Un cambio de estado (o el bloqueo de la facultad del titular) lo PROPONE un operador activo con su firma
+-- (cambio_estado_colegio:{colegio}:{n}, en el colegio de plataforma), desde el estado actual del colegio, y nace sin
+-- aprobación, objeción ni fechas. La BAJA, sin comprobantes, órdenes de pago ni datos (AP-6: con datos, hasta que llegue la
+-- exportación de V40); la SUSPENSION, solo cuando exista la exportación (AP-8); el bloqueo, de una facultad sin bloquear, y
+-- el desbloqueo, de una bloqueada.
+DROP TRIGGER IF EXISTS trg_cambio_estado_colegio_nace$$
+CREATE TRIGGER trg_cambio_estado_colegio_nace BEFORE INSERT ON cambio_estado_colegio FOR EACH ROW
+BEGIN
+    IF NOT cc_es_sistema() OR NOT (NEW.estado <=> 'PROPUESTO') OR NOT (NEW.pendiente <=> TRUE)
+            OR NEW.aprobado_por IS NOT NULL OR NEW.aprobador_id IS NOT NULL OR NEW.aprobado_en IS NOT NULL
+            OR NEW.efectiva_desde IS NOT NULL OR NEW.aplicado_en IS NOT NULL OR NEW.resuelto_por IS NOT NULL
+            OR NEW.resuelto_en IS NOT NULL OR NEW.objecion IS NOT NULL OR NEW.objetado_por IS NOT NULL
+            OR NEW.objecion_resuelta_por IS NOT NULL
+            OR NOT cc_operador_activo(NEW.propuesto_por)
+            OR NOT EXISTS (SELECT 1 FROM usuario o JOIN colegio p ON p.id = o.colegio_id WHERE o.id = NEW.operador_id
+                AND o.colegio_id = NEW.plataforma_id AND p.tipo = 'PLATAFORMA' AND o.nombre_usuario = NEW.propuesto_por)
+            OR NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id AND c.tipo = 'COLEGIO'
+                AND c.estado <=> NEW.estado_origen)
+            OR NOT cc_firma_valida(NEW.plataforma_id, CONCAT('cambio_estado_colegio:', NEW.colegio_id, ':',
+                (SELECT COUNT(*) FROM cambio_estado_colegio x WHERE x.colegio_id = NEW.colegio_id) + 1), NEW.propuesto_por) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cambio de estado del colegio lo propone un operador con su firma';
+    END IF;
+    IF NEW.tipo <=> 'BAJA' AND (EXISTS (SELECT 1 FROM comprobante k WHERE k.colegio_id = NEW.colegio_id)
+            OR EXISTS (SELECT 1 FROM orden_pago o WHERE o.colegio_id = NEW.colegio_id)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un colegio con comprobantes u ordenes de pago no se da de baja';
+    END IF;
+    -- AP-6 (tanda 1): con datos, la baja exige la exportación entregada o vencida, que llega en V40: hasta entonces, no.
+    IF NEW.tipo <=> 'BAJA' AND (EXISTS (SELECT 1 FROM alumno a WHERE a.colegio_id = NEW.colegio_id)
+            OR EXISTS (SELECT 1 FROM apoderado d WHERE d.colegio_id = NEW.colegio_id)
+            OR EXISTS (SELECT 1 FROM matricula m WHERE m.colegio_id = NEW.colegio_id)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un colegio con datos se da de baja con su exportacion entregada';
+    END IF;
+    -- AP-8: sin la exportación (V40) no hay suspensión. Se habilita sola cuando llega la tabla.
+    IF NEW.tipo <=> 'SUSPENSION' AND NOT EXISTS (SELECT 1 FROM information_schema.tables t
+            WHERE t.table_schema = DATABASE() AND t.table_name = 'exportacion_colegio') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la suspension llega con la exportacion de datos (V40)';
+    END IF;
+    IF (NEW.tipo <=> 'BLOQUEO_FACULTAD' AND EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id
+                AND c.facultad_bloqueada))
+            OR (NEW.tipo <=> 'DESBLOQUEO_FACULTAD' AND NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id
+                AND c.facultad_bloqueada)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la facultad del titular ya esta en ese estado';
+    END IF;
+END$$
+
+-- Se APRUEBA por OTRO operador activo con su firma (la base pone aprobado_en y efectiva_desde: las 00:00 de Lima del día
+-- siguiente a los 30 días en la suspensión, 7 días en la baja de un colegio con alguna cuenta activada, inmediato en lo
+-- demás); se APLICA solo con efectiva_desde vencido, sin objeción abierta y con el colegio ya en el estado destino con este
+-- cambio (o con su facultad puesta por este cambio); se RECHAZA por otro operador; se ANULA antes de aplicar. El titular
+-- OBJETA una BAJA o una SUSPENSION en PROPUESTO o APROBADO con su firma (en su colegio) y la objeción la resuelve un
+-- operador que no propuso, con respuesta y firma (AP-10). Lo escribe solo cc_sistema; el DBA conserva su camino documentado
+-- (las pruebas de MySQL lo usan para simular la fecha) y lo delata RevisionEstadosColegio (F7).
+DROP TRIGGER IF EXISTS trg_cambio_estado_colegio_estado$$
+CREATE TRIGGER trg_cambio_estado_colegio_estado BEFORE UPDATE ON cambio_estado_colegio FOR EACH ROW
+BEGIN
+    DECLARE v_ahora DATETIME(6) DEFAULT cc_ahora_lima_real();
+    IF SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_app' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cambio de estado lo escribe solo cc_sistema';
+    END IF;
+    IF cc_es_sistema() THEN
+        IF OLD.estado IN ('APLICADO', 'RECHAZADO', 'ANULADO') THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un cambio de estado resuelto no cambia';
+        END IF;
+        IF OLD.estado <> 'PROPUESTO' AND (NOT (NEW.aprobado_por <=> OLD.aprobado_por)
+                OR NOT (NEW.aprobador_id <=> OLD.aprobador_id) OR NOT (NEW.aprobado_en <=> OLD.aprobado_en)
+                OR NOT (NEW.efectiva_desde <=> OLD.efectiva_desde)) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la aprobacion y la fecha efectiva no cambian';
+        END IF;
+        -- AP-10: la objeción y su resolución se escriben una vez, cada una en su propio cambio (sin mover el estado).
+        IF (OLD.objecion IS NOT NULL AND (NOT (NEW.objecion <=> OLD.objecion) OR NOT (NEW.objetado_por <=> OLD.objetado_por)
+                    OR NOT (NEW.objetado_en <=> OLD.objetado_en)))
+                OR (OLD.objecion_resuelta_por IS NOT NULL AND (NOT (NEW.objecion_resuelta_por <=> OLD.objecion_resuelta_por)
+                    OR NOT (NEW.objecion_respuesta <=> OLD.objecion_respuesta)
+                    OR NOT (NEW.objecion_resuelta_en <=> OLD.objecion_resuelta_en))) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la objecion y su respuesta no cambian';
+        END IF;
+        IF OLD.objecion IS NULL AND NEW.objecion IS NOT NULL THEN
+            IF NOT (NEW.estado <=> OLD.estado) OR NEW.objecion_resuelta_por IS NOT NULL
+                    OR NOT cc_es_titular(OLD.colegio_id, NEW.objetado_por)
+                    OR NOT cc_firma_valida(OLD.colegio_id, CONCAT('cambio_estado_colegio:', OLD.id, ':OBJETADO'),
+                        NEW.objetado_por) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la objecion la escribe el titular con su firma';
+            END IF;
+            SET NEW.objetado_en = v_ahora;
+        ELSEIF OLD.objecion_resuelta_por IS NULL AND NEW.objecion_resuelta_por IS NOT NULL THEN
+            IF NOT (NEW.estado <=> OLD.estado) OR OLD.objecion IS NULL
+                    OR NEW.objecion_resuelta_por <=> OLD.propuesto_por OR NOT cc_operador_activo(NEW.objecion_resuelta_por)
+                    OR NOT cc_firma_valida(OLD.plataforma_id, CONCAT('cambio_estado_colegio:', OLD.id, ':OBJECION_RESUELTA'),
+                        NEW.objecion_resuelta_por) THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la objecion la resuelve OTRO operador con su firma';
+            END IF;
+            SET NEW.objecion_resuelta_en = v_ahora;
+        ELSEIF NOT (NEW.estado <=> OLD.estado) THEN
+            IF OLD.estado = 'PROPUESTO' AND NEW.estado <=> 'APROBADO' THEN
+                IF NEW.aprobado_por <=> OLD.propuesto_por OR NOT cc_operador_activo(NEW.aprobado_por)
+                        OR NOT EXISTS (SELECT 1 FROM usuario o WHERE o.id = NEW.aprobador_id
+                            AND o.colegio_id = OLD.plataforma_id AND o.nombre_usuario = NEW.aprobado_por)
+                        OR NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = OLD.colegio_id
+                            AND c.estado <=> OLD.estado_origen)
+                        OR NOT cc_firma_valida(OLD.plataforma_id, CONCAT('cambio_estado_colegio:', OLD.id, ':APROBADO'),
+                            NEW.aprobado_por) THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cambio de estado lo aprueba OTRO operador con su firma';
+                END IF;
+                SET NEW.aprobado_en = v_ahora;
+                SET NEW.efectiva_desde = CASE OLD.tipo
+                    WHEN 'SUSPENSION' THEN TIMESTAMP(DATE(v_ahora) + INTERVAL 31 DAY)
+                    WHEN 'BAJA' THEN IF(EXISTS (SELECT 1 FROM usuario u WHERE u.colegio_id = OLD.colegio_id
+                        AND cc_cuenta_activada(u.id)), v_ahora + INTERVAL 7 DAY, v_ahora)
+                    ELSE v_ahora END;
+            ELSEIF OLD.estado = 'APROBADO' AND NEW.estado <=> 'APLICADO' THEN
+                IF OLD.efectiva_desde > v_ahora OR (OLD.objecion IS NOT NULL AND OLD.objecion_resuelta_en IS NULL)
+                        OR NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = OLD.colegio_id
+                            AND ((OLD.ambito = 'ESTADO' AND c.estado <=> OLD.estado_destino AND c.cambio_estado_id <=> OLD.id)
+                                OR (OLD.ambito = 'FACULTAD' AND c.facultad_cambio_id <=> OLD.id
+                                    AND c.facultad_bloqueada <=> (OLD.tipo = 'BLOQUEO_FACULTAD')))) THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cambio se aplica en su fecha, sin objecion abierta y con el colegio en el estado destino';
+                END IF;
+                SET NEW.aplicado_en = v_ahora;
+                SET NEW.pendiente = NULL;
+            ELSEIF OLD.estado = 'PROPUESTO' AND NEW.estado <=> 'RECHAZADO' THEN
+                IF NEW.resuelto_por <=> OLD.propuesto_por OR NOT cc_operador_activo(NEW.resuelto_por)
+                        OR NOT cc_firma_valida(OLD.plataforma_id, CONCAT('cambio_estado_colegio:', OLD.id, ':RECHAZADO'),
+                            NEW.resuelto_por) THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cambio de estado lo rechaza OTRO operador con su firma';
+                END IF;
+                SET NEW.resuelto_en = v_ahora;
+                SET NEW.pendiente = NULL;
+            ELSEIF OLD.estado IN ('PROPUESTO', 'APROBADO') AND NEW.estado <=> 'ANULADO' THEN
+                IF NOT cc_operador_activo(NEW.resuelto_por)
+                        OR NOT cc_firma_valida(OLD.plataforma_id, CONCAT('cambio_estado_colegio:', OLD.id, ':ANULADO'),
+                            NEW.resuelto_por) THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la anulacion del cambio de estado lleva la firma del operador';
+                END IF;
+                SET NEW.resuelto_en = v_ahora;
+                SET NEW.pendiente = NULL;
+            ELSE
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: transicion del cambio de estado no permitida';
+            END IF;
+        END IF;
+    END IF;
+END$$
+
+-- Pedido del usuario (sección 3.7): el año escolar lo crea Promotoría o Dirección del colegio con su firma
+-- (anio_escolar:{anio}:CREADO). Nunca cc_sistema: ni el operador ni un proceso. Solo en un colegio que opera (también para
+-- el DBA).
+DROP TRIGGER IF EXISTS trg_anio_escolar_nace$$
+CREATE TRIGGER trg_anio_escolar_nace BEFORE INSERT ON anio_escolar FOR EACH ROW
+BEGIN
+    IF cc_es_sistema() OR (SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_app' AND NOT (
+            (cc_rol_activo(NEW.colegio_id, NEW.creado_por, 'PROMOTOR') OR cc_rol_activo(NEW.colegio_id, NEW.creado_por, 'DIRECTOR'))
+            AND cc_firma_valida(NEW.colegio_id, CONCAT('anio_escolar:', NEW.anio, ':CREADO'), NEW.creado_por))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el anio escolar lo crea Promotoria o Direccion del colegio con su firma';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = NEW.colegio_id AND c.tipo = 'COLEGIO'
+            AND c.estado IN ('PREPARACION', 'PRODUCCION')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio no esta operando: no se crean anios escolares';
+    END IF;
+END$$
+
+-- AP-9: el año escolar no cambia sin firma. El colegio y el año, fijos para todos; con cc_app, Promotoría o Dirección
+-- activa con su firma sobre la versión anterior (anio_escolar:{id}:{version}); con cc_sistema, solo el estado (y vigente),
+-- por un proceso sistema.*. Hoy ningún proceso cambia un año (comprobado en el paso 1: nadie llama a iniciar() ni a
+-- cerrar() sobre un año guardado); la regla queda para cuando lo haga.
+DROP TRIGGER IF EXISTS trg_anio_escolar_cambio$$
+CREATE TRIGGER trg_anio_escolar_cambio BEFORE UPDATE ON anio_escolar FOR EACH ROW
+BEGIN
+    IF NOT (NEW.colegio_id <=> OLD.colegio_id) OR NOT (NEW.anio <=> OLD.anio) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio y el anio de un anio escolar no cambian';
+    END IF;
+    IF SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_app' AND NOT (
+            (cc_rol_activo(NEW.colegio_id, NEW.actualizado_por, 'PROMOTOR')
+                OR cc_rol_activo(NEW.colegio_id, NEW.actualizado_por, 'DIRECTOR'))
+            AND cc_firma_valida(NEW.colegio_id, CONCAT('anio_escolar:', OLD.id, ':', OLD.version), NEW.actualizado_por)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el anio escolar lo cambia Promotoria o Direccion con su firma';
+    END IF;
+    IF cc_es_sistema() AND (NOT (NEW.actualizado_por <=> OLD.actualizado_por OR NEW.actualizado_por LIKE 'sistema.%')
+            OR NOT (NEW.inicio_clases <=> OLD.inicio_clases) OR NOT (NEW.fin_clases <=> OLD.fin_clases)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el sistema solo cambia el estado del anio escolar';
+    END IF;
+END$$
+
+-- Pedido del usuario (sección 3.12, AP-1 y AP-2): la facultad del titular. La escribe cc_sistema (ruta de identidad) por
+-- el titular con su firma (facultad_titular:{colegio}:{numero}), numerada sin huecos, sobre otra cuenta del personal del
+-- mismo colegio, con el código que le llegó por WhatsApp (su mensaje CODIGO_FACULTAD de hace 10 minutos o menos, a su
+-- contacto vigente, usado una vez: UNIQUE), con el correo de control registrado y, si la cuenta aún no se activó, con
+-- otro contacto que el del titular. En PRODUCCION, QUITAR siempre va por CAMBIO_ROLES (AP-1) y DAR solo si no hay otra
+-- persona activa de Promotoría o Dirección además del titular y de la cuenta destino (decisión 201). La hora la pone la
+-- base: así la ventana de 5 minutos de trg_usuario_rol_alta y _baja no se adelanta.
+DROP TRIGGER IF EXISTS trg_uso_facultad_titular_nace$$
+CREATE TRIGGER trg_uso_facultad_titular_nace BEFORE INSERT ON uso_facultad_titular FOR EACH ROW
+BEGIN
+    IF NOT cc_es_sistema() OR NOT (NEW.creado_por <=> NEW.titular) OR NOT cc_es_titular(NEW.colegio_id, NEW.titular)
+            OR NOT EXISTS (SELECT 1 FROM usuario t JOIN primera_promotoria p ON p.usuario_id = t.id
+                AND p.colegio_id = t.colegio_id WHERE t.id = NEW.titular_id AND t.colegio_id = NEW.colegio_id
+                AND t.nombre_usuario = NEW.titular)
+            OR NOT EXISTS (SELECT 1 FROM usuario u WHERE u.id = NEW.usuario_id AND u.colegio_id = NEW.colegio_id
+                AND u.apoderado_id IS NULL)
+            OR NEW.usuario_id <=> NEW.titular_id
+            OR NOT (NEW.numero <=> (SELECT COUNT(*) FROM uso_facultad_titular x WHERE x.colegio_id = NEW.colegio_id) + 1)
+            OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('facultad_titular:', NEW.colegio_id, ':', NEW.numero), NEW.titular) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la facultad del titular la usa el titular con su firma, sobre otra cuenta del personal';
+    END IF;
+    -- AP-1: en producción, quitar Promotoría o Dirección se aprueba con CAMBIO_ROLES (nunca se quita solo al contrapeso).
+    IF NEW.accion <=> 'QUITAR' AND cc_colegio_en_produccion(NEW.colegio_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: en produccion, quitar Promotoria o Direccion se aprueba con CAMBIO_ROLES';
+    END IF;
+    -- AP-2: el código al contacto vigente del titular (de hace 10 minutos), el correo de control registrado y, para una
+    -- cuenta que todavía no se activó (o creada en esta operación), un contacto distinto de los del titular.
+    IF NOT EXISTS (SELECT 1 FROM mensaje m JOIN usuario t ON t.id = NEW.titular_id WHERE m.id = NEW.mensaje_id
+            AND m.colegio_id = NEW.colegio_id AND m.tipo = 'CODIGO_FACULTAD' AND m.usuario_id <=> NEW.titular_id
+            AND m.creado_por <=> NEW.titular
+            AND ((m.canal = 'WHATSAPP' AND m.destino <=> t.telefono_whatsapp) OR (m.canal = 'CORREO' AND m.destino <=> t.correo))
+            AND m.creado_en >= cc_ahora_lima_real() - INTERVAL 10 MINUTE)
+            OR NOT EXISTS (SELECT 1 FROM configuracion_colegio k WHERE k.colegio_id = NEW.colegio_id
+                AND k.clave = 'huella_correo_externo' AND k.valor IS NOT NULL AND k.valor LIKE '%_@_%')
+            OR ((NEW.cuenta_nueva OR NOT cc_cuenta_activada(NEW.usuario_id)) AND EXISTS (SELECT 1 FROM usuario u
+                JOIN usuario t ON t.id = NEW.titular_id
+                WHERE u.id = NEW.usuario_id AND (
+                    (u.telefono_whatsapp IS NOT NULL AND cc_contacto_normal(u.telefono_whatsapp) IN
+                        (cc_contacto_normal(t.telefono_whatsapp), cc_contacto_normal(t.correo)))
+                    OR (u.correo IS NOT NULL AND cc_contacto_normal(u.correo) IN
+                        (cc_contacto_normal(t.telefono_whatsapp), cc_contacto_normal(t.correo)))))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la facultad pide el codigo del titular, correo de control y una cuenta con otro contacto';
+    END IF;
+    IF NEW.accion <=> 'DAR' AND cc_colegio_en_produccion(NEW.colegio_id) AND EXISTS (SELECT 1 FROM usuario u
+            JOIN usuario_rol r ON r.usuario_id = u.id
+            WHERE u.colegio_id = NEW.colegio_id AND u.activo AND u.apoderado_id IS NULL AND u.id <> NEW.titular_id
+              AND u.id <> NEW.usuario_id AND r.rol IN ('PROMOTOR', 'DIRECTOR')) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: en produccion, con otra Promotoria o Direccion activa, el rol se aprueba con CAMBIO_ROLES';
+    END IF;
+    SET NEW.creado_en = cc_ahora_lima_real();
+END$$
+
 DELIMITER ;

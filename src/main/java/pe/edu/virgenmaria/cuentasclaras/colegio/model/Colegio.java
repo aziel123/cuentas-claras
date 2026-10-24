@@ -110,6 +110,29 @@ public class Colegio {
 	@Column(name = "produccion_por", length = 60)
 	private String produccionPor;
 
+	/**
+	 * Sprint 11, tanda 1 (V39): desde cuándo está en su estado. En MySQL la pone la base al cambiar el estado
+	 * (trg_colegio_cambio, con el reloj real); en H2 la pone la aplicación con el mismo criterio.
+	 */
+	@Column(name = "estado_desde", nullable = false)
+	private LocalDateTime estadoDesde;
+
+	/** Sprint 11, tanda 1: el último cambio de estado aplicado ({@code cambio_estado_colegio}, dos operadores). */
+	@Column(name = "cambio_estado_id")
+	private Long cambioEstadoId;
+
+	/** Sprint 11, tanda 1 (AP-11): cuándo se aplicó la suspensión (la pone la base; vuelve a {@code null} al reactivar). */
+	@Column(name = "suspendido_en")
+	private LocalDateTime suspendidoEn;
+
+	/** Sprint 11, tanda 1 (AP-2): la facultad del titular, bloqueada por dos operadores. */
+	@Column(name = "facultad_bloqueada", nullable = false)
+	private boolean facultadBloqueada;
+
+	/** Sprint 11, tanda 1 (AP-2): el BLOQUEO_FACULTAD o DESBLOQUEO_FACULTAD que la dejó como está. */
+	@Column(name = "facultad_cambio_id")
+	private Long facultadCambioId;
+
 	@CreatedBy
 	@Column(name = "creado_por", nullable = false, updatable = false, length = 60)
 	private String creadoPor;
@@ -209,6 +232,41 @@ public class Colegio {
 		this.estado = EstadoColegio.PRODUCCION;
 		this.produccionPor = Objects.requireNonNull(por, "por");
 		this.produccionDesde = Objects.requireNonNull(ahora, "ahora");
+		this.estadoDesde = ahora;
+	}
+
+	/**
+	 * Sprint 11, tanda 1 (sección 3.3): aplica el cambio de estado APROBADO por dos operadores ({@code cambioId}). Solo
+	 * cambia el estado, el enlace y las horas (que en MySQL pone la base: trg_colegio_cambio exige ese cambio aprobado, del
+	 * mismo origen y destino, y vencido). Lo llama solo {@code sistema.plataforma}.
+	 */
+	public void aplicarCambioDeEstado(Long cambioId, EstadoColegio origen, EstadoColegio destino, LocalDateTime ahora) {
+		if (tipo != TipoColegio.COLEGIO) {
+			throw new ReglaNegocioException("La plataforma no cambia de estado.");
+		}
+		if (estado != origen) {
+			throw new ReglaNegocioException("El colegio está " + estado.etiqueta().toLowerCase(java.util.Locale.ROOT)
+					+ " y el cambio era desde «" + origen.etiqueta() + "».");
+		}
+		this.estado = Objects.requireNonNull(destino, "destino");
+		this.cambioEstadoId = Objects.requireNonNull(cambioId, "cambioId");
+		this.estadoDesde = Objects.requireNonNull(ahora, "ahora");
+		if (destino == EstadoColegio.SUSPENDIDO) {
+			this.suspendidoEn = ahora;
+		}
+		else if (origen == EstadoColegio.SUSPENDIDO && destino == EstadoColegio.PRODUCCION) {
+			this.suspendidoEn = null;
+		}
+	}
+
+	/** Sprint 11, tanda 1 (AP-2): bloquea o desbloquea la facultad del titular con su cambio aprobado por dos operadores. */
+	public void cambiarFacultad(boolean bloqueada, Long cambioId) {
+		if (this.facultadBloqueada == bloqueada) {
+			throw new ReglaNegocioException(bloqueada ? "La facultad del titular ya está bloqueada."
+					: "La facultad del titular no está bloqueada.");
+		}
+		this.facultadBloqueada = bloqueada;
+		this.facultadCambioId = Objects.requireNonNull(cambioId, "cambioId");
 	}
 
 	/** Dirección aprobó la versión vigente del aviso de privacidad del colegio (sección 3.5, paso 11). */
@@ -224,6 +282,9 @@ public class Colegio {
 		if (estado == EstadoColegio.PRODUCCION && produccionDesde == null) {
 			produccionDesde = actualizadoEn;
 			produccionPor = creadoPor == null ? "sistema" : creadoPor;
+		}
+		if (estadoDesde == null) {
+			estadoDesde = produccionDesde != null ? produccionDesde : actualizadoEn;
 		}
 	}
 
@@ -281,6 +342,31 @@ public class Colegio {
 
 	public boolean enProduccion() {
 		return estado == EstadoColegio.PRODUCCION;
+	}
+
+	/** Sprint 11, tanda 1: el colegio opera (preparación o producción): su personal ingresa. */
+	public boolean opera() {
+		return estado.opera();
+	}
+
+	public LocalDateTime getEstadoDesde() {
+		return estadoDesde;
+	}
+
+	public Long getCambioEstadoId() {
+		return cambioEstadoId;
+	}
+
+	public LocalDateTime getSuspendidoEn() {
+		return suspendidoEn;
+	}
+
+	public boolean isFacultadBloqueada() {
+		return facultadBloqueada;
+	}
+
+	public Long getFacultadCambioId() {
+		return facultadCambioId;
 	}
 
 	public String getRazonSocial() {
