@@ -22,3 +22,6 @@ Thumbs.db
 .env
 *.env
 application-local.yaml
+
+### Demo local persistente (perfil dev,persistente) ###
+.demo-db/

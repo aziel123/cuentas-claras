@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.alumnos.inicial;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.BaseH2Local;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -155,7 +156,7 @@ public class FamiliasAmpliadasDev implements ApplicationRunner {
 
 	@Override
 	public void run(ApplicationArguments argumentos) {
-		if (!habilitado || urlBaseDatos == null || !urlBaseDatos.startsWith("jdbc:h2:mem:")) {
+		if (!habilitado || !BaseH2Local.es(urlBaseDatos)) {
 			return;
 		}
 		try {

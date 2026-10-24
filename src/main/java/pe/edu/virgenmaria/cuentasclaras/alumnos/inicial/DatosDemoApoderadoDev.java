@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.alumnos.inicial;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.BaseH2Local;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -81,7 +82,7 @@ public class DatosDemoApoderadoDev implements ApplicationRunner {
 
 	/** @return {@code true} si creó el usuario */
 	boolean crearSiCorresponde() {
-		if (urlBaseDatos == null || !urlBaseDatos.startsWith("jdbc:h2:mem:")) {
+		if (!BaseH2Local.es(urlBaseDatos)) {
 			return false;
 		}
 		long colegio = DatosDemoDev.COLEGIO_PRINCIPAL;

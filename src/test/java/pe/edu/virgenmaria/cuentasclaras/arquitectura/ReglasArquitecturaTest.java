@@ -799,6 +799,39 @@ class ReglasArquitecturaTest {
 			})
 			.because("la demo crea colegios y cuentas sin una persona detrás: nunca debe existir fuera de la demo");
 
+	/**
+	 * Demo local: el respaldo SIMULADO que deja «Hecho» el paso «Respaldo» de la Puesta en marcha existe solo con el perfil
+	 * dev (nunca en prod, piloto, demo ni test). En prod, además, el destino simulado no cuenta y cc_app no tiene INSERT.
+	 */
+	@ArchTest
+	static final ArchRule elRespaldoSimuladoSoloEnDev = classes()
+			.that().haveFullyQualifiedName(BASE + ".operacion.inicial.RespaldoSimuladoDev")
+			.should(new ArchCondition<>("estar anotada con @Profile(\"dev\")") {
+				@Override
+				public void check(JavaClass clase, ConditionEvents eventos) {
+					boolean ok = clase.tryGetAnnotationOfType(org.springframework.context.annotation.Profile.class)
+							.map(p -> Set.of(p.value()).equals(Set.of("dev"))).orElse(false);
+					if (!ok) {
+						eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " no está limitada al perfil dev"));
+					}
+				}
+			})
+			.because("un respaldo simulado haría creer que la instalación tiene respaldo: solo en la demo local");
+
+	/** Solo RespaldoSimuladoDev crea un respaldo simulado (la aplicación nunca registra respaldos reales). */
+	@ArchTest
+	static final ArchRule soloLaDemoDeDevCreaRespaldosSimulados = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".operacion.inicial.RespaldoSimuladoDev")
+			.and().doNotHaveFullyQualifiedName(BASE + ".operacion.model.Respaldo")
+			.should().callMethodWhere(new DescribedPredicate<>("llamar a Respaldo.simulado") {
+				@Override
+				public boolean test(JavaMethodCall llamada) {
+					return llamada.getTarget().getOwner().getFullName().equals(BASE + ".operacion.model.Respaldo")
+							&& llamada.getTarget().getName().equals("simulado");
+				}
+			})
+			.because("los respaldos los registra cc_respaldo desde respaldar.sh; el simulado es solo de la demo local");
+
 	/** RegistroAlumnos no tiene @PreAuthorize: solo lo usan los servicios protegidos de alumnos y la demo de dev. */
 	@ArchTest
 	static final ArchRule registroAlumnosSoloDesdeServiciosDeAlumnos = noClasses()
