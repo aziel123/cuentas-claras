@@ -475,7 +475,14 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			soloInsercion("libreta_emitida"), sinBorrado("libreta_emitida"),
 			soloInsercion("entrega_libreta"), sinBorrado("entrega_libreta"),
 			soloInsercion("exportacion_calificaciones"), sinBorrado("exportacion_calificaciones"),
-			soloInsercion("delegacion_siagie"), sinBorrado("delegacion_siagie"));
+			soloInsercion("delegacion_siagie"), sinBorrado("delegacion_siagie"),
+			// Correcciones del sprint 10 (V38): la historia de la matrícula la escribe SOLO la base (trg_matricula_estado):
+			// cc_app no la inserta, no la cambia ni la borra (1142).
+			soloBase("INSERT INTO matricula_historial (colegio_id, matricula_id, seccion_anterior_id, seccion_nueva_id, "
+					+ "estado_anterior, estado_nuevo, cambiado_bd, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, "
+					+ "'ACTIVA', 'RETIRADA', NOW(6), NOW(6), 'verificador', NOW(6))", "matricula_historial"),
+			soloBase("UPDATE matricula_historial SET estado_nuevo = estado_nuevo WHERE 1 = 0", "matricula_historial"),
+			sinBorrado("matricula_historial"));
 
 	/**
 	 * Sprint 10, tanda 3 (E14 y sección 6.4): una libreta del colegio 0 en la versión 2 sin una corrección aprobada. Con
@@ -507,6 +514,13 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			+ "'verificador', NOW(6), 'verificador', NOW(6), 'verificador', NOW(6), 'verificador', NOW(6))";
 
 	/** Sprint 10, tanda 1 (E12, B15): el catálogo nacional no tiene GRANT de escritura para cc_negocio (1142). */
+	/** Correcciones del sprint 10 (V38): 1142, la tabla la escribe SOLO un trigger (la historia de la matrícula). */
+	private static SentenciaProhibida soloBase(String sql, String tabla) {
+		return new SentenciaProhibida(sql, Set.of(MYSQL_COMANDO_DENEGADO), "la aplicación podría fabricar la historia de "
+				+ "las matrículas (" + tabla + ") y mover una libreta de sección: solo la escribe trg_matricula_estado "
+				+ "(revisa 02-permisos-tablas.sql).");
+	}
+
 	private static SentenciaProhibida sinPermiso(String sql, String tabla) {
 		return new SentenciaProhibida(sql, Set.of(MYSQL_COMANDO_DENEGADO), "la aplicación podría escribir el catálogo "
 				+ "nacional (" + tabla + "): solo lo inserta la migración con cc_migrador (revisa 02-permisos-tablas.sql).");
@@ -733,7 +747,13 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			// Sprint 10, tanda 3 (sección 6.4): con cc_sistema, una libreta del colegio 0 en la versión 2 sin corrección la
 			// rechaza trg_libreta_emitida_nace (1644); ni sistema.libretas la edita ni la borra (1142).
 			trigger(VerificadorPermisosBaseDatos.LIBRETA_SIN_CORRECCION_IMPOSIBLE, "trg_libreta_emitida_nace"),
-			soloInsercion("libreta_emitida"), sinBorrado("libreta_emitida"));
+			soloInsercion("libreta_emitida"), sinBorrado("libreta_emitida"),
+			// Correcciones del sprint 10 (V38): tampoco cc_sistema escribe la historia de la matrícula (1142).
+			soloBase("INSERT INTO matricula_historial (colegio_id, matricula_id, seccion_anterior_id, seccion_nueva_id, "
+					+ "estado_anterior, estado_nuevo, cambiado_bd, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, "
+					+ "'ACTIVA', 'RETIRADA', NOW(6), NOW(6), 'verificador', NOW(6))", "matricula_historial"),
+			soloBase("UPDATE matricula_historial SET estado_nuevo = estado_nuevo WHERE 1 = 0", "matricula_historial"),
+			sinBorrado("matricula_historial"));
 
 	/** 1142 (o 1143): solo cc_sistema la escribe. */
 	private static SentenciaProhibida soloSistema(String sql, String riesgo) {

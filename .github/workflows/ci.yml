@@ -327,7 +327,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V37): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V38): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -878,6 +878,13 @@ jobs:
           done
           comprobar_sistema 1142 "UPDATE libreta_emitida SET version = version WHERE 1 = 0"
           comprobar_sistema 1142 "DELETE FROM libreta_emitida WHERE 1 = 0"
+          # Correcciones del sprint 10 (V38): la historia de la matrícula la escribe solo trg_matricula_estado: ni cc_app ni
+          # cc_sistema la insertan, la cambian ni la borran (1142).
+          historial="INSERT INTO matricula_historial (colegio_id, matricula_id, seccion_anterior_id, seccion_nueva_id, estado_anterior, estado_nuevo, cambiado_bd, creado_en, creado_por, actualizado_en) VALUES (0, 0, 0, 0, 'ACTIVA', 'RETIRADA', NOW(6), NOW(6), 'ci', NOW(6))"
+          comprobar 1142 "$historial"
+          comprobar_sistema 1142 "$historial"
+          comprobar 1142 "UPDATE matricula_historial SET estado_nuevo = estado_nuevo WHERE 1 = 0"
+          comprobar 1142 "DELETE FROM matricula_historial WHERE 1 = 0"
           # Huellas (H7): cc_app ve las de los 112 triggers y las 16 funciones con huellas_objetos() (sprint 10, tanda 3).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
           [ "$objetos" = "$((esperados + 16))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
@@ -1272,7 +1279,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V37, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V38, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \

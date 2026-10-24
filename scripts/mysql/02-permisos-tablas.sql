@@ -346,6 +346,9 @@ GRANT INSERT ON cuentasclaras.entrega_libreta TO 'cc_negocio';
 GRANT INSERT ON cuentasclaras.exportacion_calificaciones TO 'cc_negocio';
 GRANT INSERT ON cuentasclaras.delegacion_siagie TO 'cc_negocio';
 
+-- Correcciones del sprint 10 (V38): matricula_historial NO tiene GRANT de escritura para nadie: la escribe SOLO
+-- trg_matricula_estado (con los permisos de su DEFINER). cc_app y cc_sistema solo la leen (SELECT de arriba): 1142.
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se

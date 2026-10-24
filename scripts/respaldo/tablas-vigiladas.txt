@@ -63,3 +63,4 @@ libreta_emitida
 entrega_libreta
 exportacion_calificaciones
 delegacion_siagie
+matricula_historial

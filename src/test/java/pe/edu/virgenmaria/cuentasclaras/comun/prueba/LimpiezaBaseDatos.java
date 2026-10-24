@@ -41,6 +41,8 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM aviso_asistencia_corte");
 		// Sprint 10, tanda 3 (V37): las entregas apuntan a su libreta; las libretas, de la última versión a la primera, al
 		// periodo, la matrícula y la solicitud; la exportación y la delegación, a la sesión y la cuenta.
+		// Correcciones del sprint 10 (V38): la historia de la matrícula (en H2 la insertan las pruebas).
+		jdbc.update("DELETE FROM matricula_historial");
 		jdbc.update("DELETE FROM entrega_libreta");
 		while (jdbc.update("DELETE FROM libreta_emitida WHERE id NOT IN (SELECT reemplaza_id FROM libreta_emitida "
 				+ "WHERE reemplaza_id IS NOT NULL)") > 0) {
