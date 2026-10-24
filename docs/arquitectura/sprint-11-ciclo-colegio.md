@@ -533,7 +533,7 @@ hecho; el enum solo agrega lo que la interfaz necesita.
 | # | Paso | Acción del botón | Lo hace (roles) | Depende de |
 |---|---|---|---|---|
 | 1 | Datos y logo del colegio | «Completar los datos del colegio» | Promotoría | — |
-| 2 | Equipo del colegio (en pantalla; «con segregación» en el código) | «Crear las cuentas de Dirección y Caja» | Promotoría (el titular, con su facultad) | — |
+| 2 | Equipo del colegio (en pantalla; «con segregación» en el código) | «Crear la cuenta de Dirección» primero (3.15); después, «Crear las cuentas de Administración y Caja» | Promotoría (el titular, con su facultad) | — |
 | 3 | Año escolar y fechas de clases | «Configurar el año escolar» | Promotoría o Dirección | — |
 | 4 | Secciones | «Crear las secciones del año {año}» | Administración o Dirección | 3 |
 | 5 | Pensiones | «Proponer las pensiones del año {año}» | Administración propone; aprueba Promotoría o Dirección | 3 |
@@ -619,6 +619,67 @@ pantallas, con y sin permiso, y «Primero: …» con la dependencia pendiente); 
 comunicado y recaudación en PREPARACION: 409, texto y enlace; la familia, sin enlace); `PuestaEnMarchaVistaTest` (estado,
 responsable e «Ir» de los 15); accesibilidad (`<progress>` con etiqueta, un solo botón primario por pantalla, `aria-label` en
 «Ir», ningún estado solo por color); y una revisión en celular (360 px) con `disenador-ui` antes del merge.
+
+### 3.15 Segundo bloqueo del alta: «preparaste la cuenta de quien lo hizo» (tanda 1)
+**Lo que vio el usuario (Kepler):** el titular creó `testadmin` (Administración); `testadmin` propuso el plan de pensiones; el
+titular no pudo aprobarlo: «Tú creaste, editaste o enviaste este plan (o preparaste la cuenta de quien lo hizo): debe aprobarlo
+otra persona de Promotoría o Dirección». **La regla es correcta** (impide crear cuentas títere y aprobarles todo). En un colegio
+nuevo el titular crea todas las cuentas, así que la salida es que **apruebe Dirección**.
+
+**Dónde vive la regla (leído):** `seguridad.service.ControlParticipantes.ampliar(autores)` (auditoría antifraude A5). Suma a
+los autores **solo** a quien creó la cuenta de cada autor (`usuario.creado_por`) o le restableció la clave
+(`clave_restablecida_por`), si fue en los últimos **30 días** (`VENTANA`). **No es transitiva:** no suma a quien creó la cuenta
+del que aprueba, ni a los «hermanos» creados por la misma persona. La usan `BandejaAprobaciones` (todas las `solicitud_cambio`:
+anulaciones, descuentos, cierre y reapertura de caja, conectores, roles, asignaciones, correcciones, reemisión de libreta…),
+`ServicioPlanesPension` (crear el borrador, enviar y aprobar), `ServicioSaldoInicial`, `ServicioRecaudacion`,
+`ServicioExtractos`, `ServicioPartidas`, `ResponsablesPartida`, `ServicioCierreMensual`, `ServicioAvisosFamilia` y
+`MensajesPromotoria` (quién no recibe un aviso).
+
+**Por qué la facultad del titular destraba el flujo (sin cambiar la regla):**
+- El titular crea `testdireccion` con DIRECTOR (facultad, 3.12) y `testadmin` con ADMINISTRACION.
+- `testadmin` propone el plan. Participantes = {`testadmin`, el titular (creó su cuenta hace menos de 30 días)}.
+- `testdireccion` **no** está en ese conjunto: no creó la cuenta de `testadmin` ni el plan. **Aprueba.**
+- Lo mismo con el cierre de caja de la cajera que creó el titular: lo aprueba Dirección.
+- **Comprobar en el paso 1:** que `usuario.creado_por` de una cuenta creada por el titular (por la facultad y por «Usuarios»)
+  sea **el nombre del titular**, no `sistema.identidad`. Si fuera el del sistema, la regla A5 no bloquearía a nadie y estaría
+  rota: sería un hallazgo crítico.
+
+**Otras trabas del mismo tipo en un colegio de 2 directivos (el titular y una Dirección que él creó).** Todas duran **30 días**
+desde que se creó la cuenta (después, `ampliar` ya no suma al creador). No se cambia la regla; se documentan y la guía (tanda
+1b) enseña el camino:
+
+| # | Qué | Por qué se traba | Camino |
+|---|---|---|---|
+| T1 | Lo que **propone la propia Dirección** y solo puede aprobar Promotoría: reemisión de una libreta (A3 del sprint 10), `CAMBIO_ROLES` y `ESTADO_CUENTA` de otra cuenta directiva | El titular creó la cuenta de Dirección: es participante | Que lo proponga otra persona (Administración, si el tipo lo permite) o el titular, y que lo apruebe Dirección; o esperar 30 días. Con la facultad, el titular da los roles directivos sin solicitud |
+| T2 | **Cuenta bancaria, pasarela y recaudación** (`CAMBIO_CONECTOR`, «una Promotoría participa»): si la propone Administración, la Promotoría que aprueba sería el titular, que creó a Administración | El titular es participante y es la única Promotoría | **La propone el titular y la aprueba Dirección** (participa una Promotoría y aprueba otra persona que no preparó la cuenta del autor) |
+| T3 | Lo que propone una Dirección y aprueba **otra** Dirección o Promotoría (asignaciones docentes, feriados) | Si solo hay una Dirección, solo queda el titular, que creó su cuenta | Que lo proponga Administración y lo apruebe Dirección; o el titular propone y Dirección aprueba |
+| T4 | El saldo inicial y el OSE | Los carga o propone Administración; aprueba Promotoría **o** Dirección | Dirección (sin traba) |
+| T5 | Un colegio con **solo el titular y Administración**, sin Dirección | Nadie puede aprobar nada de Administración durante 30 días | **Por eso crear Dirección es el primer paso del equipo** (guía, tanda 1b) |
+
+- **Decisión 211:** **[No se cambia la regla A5. La guía y la Puesta en marcha piden crear primero a Dirección; cada paso
+  que aprueba otra persona dice «Lo aprueba Dirección: el titular no aprueba lo de las cuentas que creó en los últimos 30
+  días». La cuenta bancaria la propone el titular y la aprueba Dirección]**. Alternativa evaluada y descartada: eximir al
+  titular de la regla en PREPARACION (reabre la cuenta títere justo cuando se cargan las pensiones y el saldo inicial).
+
+**Escenario de punta a punta «del alta al cobro»** (pruebas obligatorias de la tanda 1):
+1. El operador da de alta el colegio (sin año escolar).
+2. El titular activa su cuenta con su DNI, crea el año escolar con su firma y, con la facultad, crea `testdireccion`
+   (DIRECTOR). Después crea `testadmin` (ADMINISTRACION) y `testcaja` (CAJA).
+3. `testadmin` crea las secciones y propone el plan de pensiones del nivel.
+4. **El titular intenta aprobarlo y recibe el mensaje de A5** (la regla sigue).
+5. **`testdireccion` lo aprueba.** El cronograma se genera.
+6. El titular propone la cuenta bancaria y `testdireccion` la aprueba (T2). Dirección aprueba el aviso de privacidad. El titular
+   firma «sin deudas anteriores» y «comprobante simulado». El operador registra el correo de control. El titular pasa el colegio a
+   producción.
+7. `testadmin` registra un alumno y su matrícula. Sus cuotas salen del plan aprobado.
+8. `testcaja` cobra en efectivo: se emiten el comprobante y el aviso al apoderado.
+9. `testcaja` cierra su caja a ciegas.
+10. **`testdireccion` aprueba el cierre**, y el titular no puede (A5).
+- **H2:** `AltaACobroTest` con todos los pasos y las aserciones de 4, 5 y 10.
+- **MySQL real:** `AltaACobroMySqlTest`, con los permisos mínimos de `PermisosMySqlTest` (cc_app, cc_sistema y los triggers).
+  Los pasos de la lista que dependen de procesos externos (WhatsApp activo y respaldo de menos de 26 horas) se cumplen con los
+  dobles de prueba que ya usa `PermisosMySqlTest`; si alguno no se puede en MySQL, lo cubre H2 y MySQL cubre lo de la base
+  (año con firma, facultad, aprobación del plan, pago, cierre y su aprobación).
 
 ## 4. Modelo
 ```mermaid
@@ -1436,6 +1497,7 @@ que no entra en las tandas sin su confirmación). Sigue la numeración del sprin
 | 208 | Ancho del armazón | **[Fluido hasta 1760 px, margen lateral de 24 a 32 px, encabezado alineado; texto corrido a unos 70 caracteres]** |
 | 209 | Bandeja de Aprobaciones | **[Lista y cuenta también lo que se aprueba en otra pantalla (8 tipos), con «Revisar» a esa pantalla y la regla de `puedeResolver`; la aprobación sigue en su pantalla]** |
 | 210 | Inicio en preparación | **[Domina la guía; sin cifras ni gráficos hasta producción; en producción, estados vacíos por gráfico sin datos]** |
+| 211 | «Preparaste la cuenta» (A5) en un colegio nuevo | **[La regla no cambia; crear primero a Dirección, que aprueba lo de las cuentas que creó el titular; la cuenta bancaria la propone el titular y la aprueba Dirección; las trabas T1 a T5 de 3.15 duran 30 días y la guía las explica]** |
 
 ## Fuentes
 - Código Tributario, art. 87 num. 7 (texto del DL 1315) y art. 43: resumen en [Noticiero Contable](https://noticierocontable.com/guardar-los-libros-contables/),

@@ -20,7 +20,10 @@
    WhatsApp al contacto del titular; la cuenta nueva con otro contacto; sin correo de control, no hay facultad.
 7. **Reloj real (AP-3):** `cc_ahora_lima_real()` (con `SYSDATE()`, SIGNAL si es NULL) en `cc_hoy_lima`, `cc_firma_valida`,
    `cc_sesion_abierta`, los triggers nuevos y las versiones nuevas. El resto, en la tanda 2.
-8. **La 202 (subdominios) NO entra.** CIERRE, exportación, `conservar_hasta` y supresión son de la tanda 2.
+8. **«Preparaste la cuenta» (A5, decisión 211; diseño 3.15):** la regla no cambia. El titular crea primero a Dirección, y
+   Dirección aprueba lo de las cuentas que creó el titular (la regla no es transitiva: `ControlParticipantes.ampliar`). **Paso 1:
+   comprobar que `usuario.creado_por` de esas cuentas es el titular, no `sistema.identidad`.**
+9. **La 202 (subdominios) NO entra.** CIERRE, exportación, `conservar_hasta` y supresión son de la tanda 2.
 
 ## 2. Alcance
 - **V39** (diseño, sección 5): estados y CHECK de `colegio` (`estado_desde`, `cambio_estado_id`, `suspendido_en`,
@@ -146,6 +149,11 @@
   **`f16bQuitarAlUnicoDirectivoEnProduccionFalla`** (AP-1); sin código, con el código de otro mensaje o vencido, rechazada;
   cuenta nueva con el contacto del titular, rechazada; sin correo de control, rechazada; bloqueada por dos operadores,
   rechazada) y `FacultadTitularAvisosTest` (F17).
+- **`AltaACobroTest`** (diseño 3.15, 10 pasos): alta sin año → el titular activa, crea el año y, con la facultad, Dirección,
+  Administración y Caja → Administración propone el plan → **el titular no puede aprobarlo (A5)** → **Dirección lo aprueba** →
+  cuenta bancaria (la propone el titular y la aprueba Dirección) y producción → Administración registra un alumno → Caja cobra
+  (comprobante y aviso) → Caja cierra a ciegas → **Dirección aprueba el cierre y el titular no puede**.
+  `ParticipantesNoTransitivosTest`: una Dirección creada por el titular aprueba lo de una Administración también creada por él.
 - `ReglasArquitecturaTest`, `RutasIdorTest`, `CatalogoRutasConId`, `MatrizPermisosTest`, `MarcaUnicaTest` y las que cuentan:
   **39 migraciones, 117 triggers, 136 huellas**.
 
@@ -171,6 +179,8 @@ Las fechas se simulan como DBA (`UPDATE … SET efectiva_desde` con root), nunca
   **`f16bQuitarAlUnicoDirectivoEnProduccionFalla`**, `a2CuentaNuevaConContactoDelTitularFalla`, `a2FacultadSinCorreoDeControlFalla`,
   `a2FacultadBloqueadaFalla`, `a2BloqueoDeUnSoloOperadorFalla`, `rolDirectivoConUsoViejoFalla`, `usoFacultadSinUpdate` (1142).
 - `checksConNull`; `reactivacionEnUnaTransaccion` y `bajaInmediataEnUnaTransaccion` (pasan).
+- **`AltaACobroMySqlTest`:** el mismo escenario con permisos mínimos; lo que dependa de procesos externos, con los dobles de
+  `PermisosMySqlTest` (si un paso no se puede en MySQL, lo cubre H2, y MySQL cubre año, facultad, plan, pago y cierre).
 - `PermisosMySqlTest`: alta sin año; el titular activa, crea el año con firma, pide el código y crea su Dirección; pasa a
   producción; dos operadores proponen una suspensión (rechazada: AP-8) y bloquean la facultad.
 - Paso `comprobar`; `huellas_objetos()` = 136; arranque prod por TLS con 117 y 19; paso `reloj-real`. Job `respaldo`: un

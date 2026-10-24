@@ -204,6 +204,28 @@ en preparación aparecen tarjetas en S/ 0.00 y gráficos vacíos.
   - la bandeja de Aprobaciones.
   Las capturas quedan en la sección «Tanda 1b · Implementación» del diseño.
 
+## 4b. Cómo verificar
+Al implementar la 1b se usan cuatro skills juntas: `sistema-diseno` (tokens, componentes y AA), `impeccable` (crítica de
+interfaz), y las dos nuevas de `~/.claude/skills`:
+- **`emil-design-eng`:** revisa el pulido de la guía (banner y Puesta en marcha), la bandeja de Aprobaciones y los tableros:
+  alineación, ritmo de espaciado, jerarquía, estados de foco, hover y vacío, y transiciones.
+- **`break-ui`:** prueba con datos del peor caso:
+  - la bandeja de Aprobaciones con cero ítems y con 50, y títulos y nombres largos («Plan de pensiones de Secundaria 2026 ·
+    Enviado por administración.contabilidad.sede.norte»);
+  - las tarjetas de Pensiones con «Secundaria», con «Sin plan aprobado» y con montos extremos (S/ 0.00 y S/ 99,999.99);
+  - los tableros con cifras de 7 dígitos, cero pagos y morosidad del 100 %;
+  - nombres con Ñ y tildes («Peñaloza Ñahui, María José»).
+  Cada caso, en 390, 1280, 1600 y 1920 px, sin desborde ni texto cortado sin `title`.
+
+**Dos límites:**
+- **El stack es Thymeleaf con CSP estricta** (`script-src 'self'`, sin `unsafe-inline`): **no hay React ni librerías JS
+  externas**. De esas skills solo se toman los principios y el CSS (en `static/css/`, con los tokens).
+- **Las animaciones, solo con CSS** (`transition` y `@keyframes`) y siempre dentro de `@media (prefers-reduced-motion:
+  no-preference)`. Con `reduce`, nada se mueve. `PlantillasSinScriptExternoTest` y `CssMovimientoReducidoTest` (toda
+  `transition` o `animation` está dentro de ese `@media`) lo comprueban.
+
+Los hallazgos de las cuatro skills se anotan en «Tanda 1b · Implementación» del diseño, con su captura y su corrección.
+
 ## 5. Archivos que toca
 - **Pensiones (F-D1 a F-D4):**
   - `templates/pensiones/resumen.html`, `plan-formulario.html` y `plan.html`, y su CSS;

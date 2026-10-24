@@ -48,6 +48,12 @@
   hace Administración o Dirección.» · botón «Crear las secciones».
 - Banner, no le toca: «Este paso lo hace Administración o Dirección.» · «Lo que puedes hacer tú: Aprobar el aviso de
   privacidad.» Si no hay nada para su rol: «Por ahora no tienes pasos pendientes. Te avisaremos aquí cuando haya uno.»
+- **Paso 2, el equipo (decisión 211):** el botón dice primero «Crear la cuenta de Dirección». Debajo: «Crea primero a
+  Dirección: tú no puedes aprobar lo que hagan las cuentas que creaste en los últimos 30 días; lo aprueba Dirección.» Después
+  ofrece «Crear las cuentas de Administración y Caja».
+- **Pasos que aprueba otra persona** (pensiones, saldo inicial, OSE, cuenta bancaria, cierres): «Lo aprueba Dirección.» Si quien
+  mira es el titular: «Tú no puedes aprobarlo porque creaste la cuenta de quien lo propuso; lo aprueba Dirección.» La cuenta
+  bancaria: «La propones tú y la aprueba Dirección.»
 - Banner, esperando a la plataforma: «Estamos activando WhatsApp y el correo de tu colegio. Si lleva más de 2 días, escribe a
   {soporte}.»
 - Estado vacío con dependencia: «Este año todavía no tiene secciones. Primero: Configurar el año escolar (lo hace Promotoría o
@@ -104,7 +110,8 @@ toca la base; el job `mysql` del CI debe seguir en verde igual.**
 - `PasoPuestaEnMarchaTest`: 15 pasos, mismas claves y orden que `EstadoPuestaEnMarcha.PASOS`; toda `ruta` existe en
   `CatalogoRutasConId` o en `ModuloApp`; las dependencias no forman ciclos.
 - `GuiaPuestaEnMarchaTest`:
-  - colegio recién creado: siguiente = paso 1 o 3 según lo hecho; con el año hecho y sin secciones, el siguiente es el paso 4
+  - colegio recién creado: si falta Dirección, el siguiente es el paso 2 con «Crear la cuenta de Dirección», antes que el 3;
+    después, paso 1 o 3 según lo hecho; con el año hecho y sin secciones, el siguiente es el paso 4
     con «del año {año}»;
   - un paso con su dependencia pendiente nunca es el `siguiente` ni el `tuyo`;
   - por rol: a Caja no le toca nada en preparación (texto «Por ahora no tienes pasos pendientes»); a Dirección, `tuyo` = aviso
