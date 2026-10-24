@@ -53,7 +53,9 @@
 - **URL por colegio (parte B):** se recomienda `virgenmaria.cuotaria.pe` **ya** para la instalación dedicada (un registro DNS,
   sin código), y **dejar los subdominios de la compartida para cuando 3 colegios lo pidan** (1 tanda; sección 10).
   **Es una decisión abierta: no entra en las tandas hasta que el usuario la confirme.**
-- **Dos tandas:** (1) estados, baja, suspensión, reactivación, modo consulta, año escolar del colegio y facultad del titular (V39; 117 triggers,
+- **Tanda corta de interfaz 1b** (pedido del usuario): guía de puesta en marcha para todo el personal (banner con el
+  siguiente paso y quién lo hace, estados vacíos que guían, mensajes de bloqueo con enlace), sin cambios en la base (3.14).
+- **Dos tandas de base:** (1) estados, baja, suspensión, reactivación, modo consulta, año escolar del colegio y facultad del titular (V39; 117 triggers,
   19 funciones, 136 huellas); (2) exportación, cierre y supresión con acta (V40; 124 triggers, 20 funciones, 144 huellas).
   **La auditoría del diseño en papel (sección 3.13, 14 hallazgos) prevalece sobre lo que sigue.**
 
@@ -517,6 +519,106 @@ en vuelo). Así la familia en modo consulta encuentra la libreta del último per
 `produccion_por`, `actualizado_por`, `conservacion_autorizada_por` y los tres `aviso_privacidad_*`. Se borran su logo, su
 `configuracion_colegio` (el correo de control) y todas sus cuentas. `suprimir.sql` lo hace en este orden y `SupresionFichaMinimaTest`
 lo comprueba columna por columna.
+
+### 3.14 Pedido del usuario: la guía de puesta en marcha (tanda 1b, solo interfaz)
+**Objetivo:** mientras el colegio está en PREPARACION, nadie del personal se pregunta «¿y ahora qué hago?». Todo sale del
+cálculo de los 15 pasos que ya existe (`EstadoPuestaEnMarcha`, sección 3.7). **Sin tablas ni columnas nuevas**, sin triggers ni
+huellas: los conteos siguen en **117, 19 y 136**. Va en una **tanda corta de interfaz (1b)**, después de la tanda 1 (que trae los
+15 pasos) y antes de la tanda 2. Brief: `docs/arquitectura/sprint-11/tanda-1b.md`. Aplica la skill `sistema-diseno`.
+
+**El catálogo de pasos (`puestaenmarcha.model.PasoPuestaEnMarcha`, enum nuevo, sin datos en la base).** Cada paso dice su
+título, el verbo de la acción, quién lo hace, la ruta y de qué pasos depende. `EstadoPuestaEnMarcha` sigue calculando si está
+hecho; el enum solo agrega lo que la interfaz necesita.
+
+| # | Paso | Acción del botón | Lo hace (roles) | Depende de |
+|---|---|---|---|---|
+| 1 | Datos y logo del colegio | «Completar los datos del colegio» | Promotoría | — |
+| 2 | Equipo del colegio (en pantalla; «con segregación» en el código) | «Crear las cuentas de Dirección y Caja» | Promotoría (el titular, con su facultad) | — |
+| 3 | Año escolar y fechas de clases | «Configurar el año escolar» | Promotoría o Dirección | — |
+| 4 | Secciones | «Crear las secciones del año {año}» | Administración o Dirección | 3 |
+| 5 | Pensiones | «Proponer las pensiones del año {año}» | Administración propone; aprueba Promotoría o Dirección | 3 |
+| 6 | Alumnos | «Importar los alumnos del año {año}» | Administración | 4 |
+| 7 | Saldo inicial | «Cargar el saldo inicial» o «Firmar que no hay deudas anteriores» | Administración carga; Promotoría confirma | 6 |
+| 8 | Comprobantes (OSE) | «Configurar los comprobantes» | Administración propone; aprueba otra persona | 1 |
+| 9 | Cuenta bancaria | «Registrar la cuenta del banco» | Promotoría propone; aprueba otra persona | 1 |
+| 10 | WhatsApp y correo | (sin botón) | La plataforma, automático | — |
+| 11 | Correo externo de control | (sin botón) | El operador de la plataforma | — |
+| 12 | Aviso de privacidad | «Aprobar el aviso de privacidad» | Dirección | 1 |
+| 13 | Respaldo | (sin botón) | La plataforma, automático | — |
+| 14 | Pago en línea (opcional) | «Configurar el pago en línea» | Promotoría propone; aprueba otra persona | 9 |
+| 15 | Recaudación bancaria (opcional) | «Configurar la recaudación del banco» | Promotoría propone; aprueba otra persona | 9 |
+
+**El siguiente paso (`puestaenmarcha.service.GuiaPuestaEnMarcha`, nuevo).** `guiaPara(colegioId, rolesDelUsuario)` devuelve
+`GuiaVista(pendientes, total, obligatoriosHechos, siguiente, tuyo, esperandoPlataforma)`:
+- `siguiente`: el primer paso **obligatorio y pendiente**, en el orden de la tabla, **cuyas dependencias están hechas** y que hace
+  el colegio (no la plataforma);
+- `tuyo`: si al rol actual no le toca el `siguiente`, el primer paso desbloqueado que sí le toca (puede no haber);
+- `esperandoPlataforma`: los pasos 10, 11 y 13 pendientes («Lo hace la plataforma. Si lleva más de 2 días, escribe a soporte»).
+- **El texto del avance (decisión 206):** «Tu colegio está en preparación: faltan N de 15 pasos», donde N son los pasos
+  **obligatorios** pendientes; si faltan opcionales, se agrega «(y 2 opcionales)». La barra es obligatorios hechos sobre 13.
+- **El botón solo aparece si el rol puede entrar a la ruta** según `ModuloApp` (si no hay un método público, se agrega
+  `ModuloApp.puedeEntrar(Set<Rol> roles, String ruta)`): nunca un botón que termina en 403.
+- **Nunca muestra datos de familias ni montos:** solo títulos, estados, roles y los conteos que ya muestra la lista («Alumnos:
+  312»). El docente ve el banner, pero sin conteos (decisión 141: el docente no ve cifras de cobranza).
+
+**1. Banner fijo en el inicio de cada rol.** Fragmento `fragments/guia.html :: bannerPreparacion(guia)` en las plantillas de
+`inicio/` **salvo `apoderado.html`** (las familias no ven la preparación). Va arriba del contenido; no flota ni se puede cerrar
+mientras el colegio esté en PREPARACION, y desaparece en PRODUCCION. Contenido:
+- el título «Tu colegio está en preparación» y el texto del avance;
+- la barra: `<progress max="13" value="{hechos}">` con su `<label>` visible («9 de 13 pasos obligatorios hechos»), que no
+  depende del color;
+- **el siguiente paso:** «Siguiente: Crear las secciones del año 2026 — lo hace Administración o Dirección», con el botón que
+  lleva directo a la pantalla;
+- si no le toca: «Este paso lo hace Administración o Dirección.» y, si hay `tuyo`, un botón secundario «Lo que puedes hacer tú:
+  Aprobar el aviso de privacidad»;
+- el enlace de texto «Ver los 15 pasos» a `/puesta-en-marcha`.
+
+Marca y accesibilidad: superficie blanca con borde superior celeste (decorativo) y título en azul profundo; el botón en azul
+primario (uno por pantalla: si el inicio ya tiene uno, el del banner pasa a secundario); `<section aria-labelledby>`, no
+`role="alert"` (es persistente y no debe anunciarse en cada carga); objetivos de 44 px; foco visible; en celular, el texto y el
+botón uno debajo del otro.
+
+**2. Estados vacíos que guían.** Fragmento nuevo `componentes.html :: estadoVacioPaso(titulo, texto, punto)`: usa el
+`estadoVacio` de hoy y agrega «Lo hace: {roles}» y el botón (si el rol puede) o el texto «Pídeselo a {roles}».
+
+| Pantalla | Cuándo | Texto | Acción |
+|---|---|---|---|
+| Año escolar (`/estructura`) | Sin año | «Tu colegio todavía no tiene año escolar» | «Configurar el año escolar» (Promotoría o Dirección) |
+| Secciones del año | Año sin secciones | «Este año todavía no tiene secciones» | «Agregar sección» (Administración o Dirección) |
+| Pensiones | Sin plan del año | «Todavía no hay pensiones para {año}» | «Proponer pensiones» (Administración) |
+| Alumnos | Sin alumnos en el año | «Todavía no hay alumnos matriculados en {año}» | «Importar alumnos del Excel» (Administración) |
+| Conectores, cuenta del banco | Sin `CUENTA_BANCARIA` vigente | «Todavía no registraste la cuenta donde entra el dinero» | «Registrar la cuenta del banco» (Promotoría) |
+| Usuarios | Sin Dirección o sin Caja | «Falta la cuenta de Dirección» o «de Caja» | «Crear la cuenta» (el titular o Promotoría) |
+| Saldo inicial | Sin lote ni firma | «Falta el saldo inicial» | «Cargar el saldo» o «Firmar que no hay deudas anteriores» |
+
+Si el paso depende de otro pendiente, el estado vacío dice «Primero: Configurar el año escolar» con su enlace (no un botón que
+falla). En PRODUCCION estos estados vacíos siguen (por ejemplo, un año nuevo sin secciones), sin mencionar la puesta en marcha.
+
+**3. Pantallas bloqueadas por la preparación.** `ColegioService.exigirEnProduccion` lanza `ColegioEnPreparacionException`
+(nueva, subclase de `ReglaNegocioException`, con lo que se intentó: `COBRAR`, `PAGO_EN_LINEA`, `RECAUDACION`, `COMUNICADO`,
+`RECORDATORIO`, `RENOVACION`). También se lanza cuando la base responde con el mensaje de preparación de `trg_pago_registro`,
+`trg_orden_pago_nace` o `trg_mensaje_nace` (se reconoce el texto, como hoy con los otros 1644). `PreparacionAdvice`
+(`@ControllerAdvice`) responde 409 con la misma pantalla y una alerta de advertencia (ícono y texto; `role="alert"`, porque es
+el error de una acción): «Tu colegio está en preparación: todavía no se registran pagos. Cuando la Promotoría lo pase a
+producción, podrás cobrar. Faltan N pasos.» y el enlace «Ver la Puesta en marcha». A las familias (portal en preparación) solo
+se les dice «El colegio todavía no recibe pagos por aquí», sin enlace ni pasos. Donde se sabe antes (el botón «Cobrar» de caja,
+«Enviar comunicado»), la pantalla ya muestra el botón deshabilitado con el motivo al lado (`aria-describedby`), no solo el
+error al enviar.
+
+**4. La pantalla de Puesta en marcha** (`/puesta-en-marcha`, hoy `puesta-en-marcha/lista.html`): cada paso en una fila (tarjeta
+en celular) con número, título, **estado con texto e ícono** («Hecho», «Pendiente», «Opcional», «Bloqueado: primero el paso 3»,
+«Lo hace la plataforma»), **el responsable (roles)**, el conteo (si lo hay) y el botón **«Ir»** (si el rol puede entrar) o «Lo
+hace {roles}». Arriba, el mismo avance del banner. El paso siguiente lleva el texto «Siguiente», no solo un borde celeste. Al
+final, «Pasar a producción» (solo Promotoría), deshabilitado con «Faltan N pasos obligatorios» hasta que la lista esté
+completa. El `aria-label` de cada «Ir» incluye el paso («Ir: Crear las secciones del año 2026»).
+
+**Pruebas (tanda 1b):** `GuiaPuestaEnMarchaTest` (el siguiente con dependencias, `tuyo` por rol, la plataforma aparte, N y la
+barra, sin conteos para el docente); `BannerPreparacionTest` (en los inicios del personal, no en el del apoderado ni en
+PRODUCCION; **nunca un botón a una ruta que daría 403**: recorre los 15 pasos con cada rol); `EstadosVaciosPasoTest` (las 7
+pantallas, con y sin permiso, y «Primero: …» con la dependencia pendiente); `PreparacionAdviceTest` (cobrar, pago en línea,
+comunicado y recaudación en PREPARACION: 409, texto y enlace; la familia, sin enlace); `PuestaEnMarchaVistaTest` (estado,
+responsable e «Ir» de los 15); accesibilidad (`<progress>` con etiqueta, un solo botón primario por pantalla, `aria-label` en
+«Ir», ningún estado solo por color); y una revisión en celular (360 px) con `disenador-ui` antes del merge.
 
 ## 4. Modelo
 ```mermaid
@@ -1285,6 +1387,14 @@ Brief: `docs/arquitectura/sprint-11/tanda-1.md`. Pasos pequeños y verificables:
 6. Modo consulta de las familias (3.8) y `RecorridoColegios` (H2).
 7. Pruebas H2 y MySQL del brief; CI en verde.
 
+### Tanda 1b · Guía de puesta en marcha (solo interfaz; sin migración; 117, 19 y 136 sin cambios)
+Brief: `docs/arquitectura/sprint-11/tanda-1b.md`. Sección 3.14.
+1. `PasoPuestaEnMarcha` y `GuiaPuestaEnMarcha` sobre `EstadoPuestaEnMarcha`, con sus pruebas.
+2. Banner en los inicios del personal.
+3. Estados vacíos de las 7 pantallas.
+4. `ColegioEnPreparacionException` y `PreparacionAdvice`; botones deshabilitados con su motivo.
+5. Puesta en marcha con estado, responsable e «Ir»; revisión en celular con `disenador-ui`; CI en verde.
+
 ### Tanda 2 · Exportación, cierre y supresión (V40; 124 triggers; 20 funciones; 144 huellas)
 1. Inventario `scripts/fin-de-colegio/inventario.txt` (tablas con `colegio_id`, datos personales, triggers que las protegen).
 2. V40, triggers y `cc_supresion_en_curso`; versiones que habilitan la BAJA con datos (AP-6) y el CIERRE; `conservar_hasta`
@@ -1318,6 +1428,8 @@ que no entra en las tandas sin su confirmación). Sigue la numeración del sprin
 | 203 | Reactivación | **[Dos operadores, inmediata, sin pedir nada al colegio; las cuentas vuelven como estaban; los pagos del periodo se registran por la conciliación]** |
 | 204 | Suspensión antes de la tanda 2 (AP-8) | **[No: la base la rechaza hasta que exista V40 (la exportación)]** |
 | 205 | Objeción del titular (AP-10) | **[El titular objeta con su firma; la resuelve otro operador con respuesta escrita; sin resolver, no se aplica]** |
+| 206 | Texto del avance de la guía | **[«Faltan N de 15 pasos», con N = obligatorios pendientes, y «(y 2 opcionales)» si faltan; barra sobre los 13 obligatorios]** |
+| 207 | Dónde va la guía | **[Banner en el inicio del personal (no en el portal de las familias), estados vacíos en 7 pantallas y mensaje con enlace al intentar algo bloqueado; tanda corta 1b, sin cambios en la base]** |
 
 ## Fuentes
 - Código Tributario, art. 87 num. 7 (texto del DL 1315) y art. 43: resumen en [Noticiero Contable](https://noticierocontable.com/guardar-los-libros-contables/),

@@ -222,6 +222,9 @@ Diseño: `docs/arquitectura/sprint-11-ciclo-colegio.md`.
   - en suspensión el personal no ingresa ni cobra y las familias consultan (también su libreta);
   - el alta del operador ya no pide el año escolar: lo crea **Promotoría o Dirección** con su firma, y sin él no se pasa a producción;
   - el **titular del contrato** crea las cuentas de Promotoría y Dirección sin esperar a una segunda persona, con avisos.
+- **Tanda 1b · Guía de puesta en marcha (solo interfaz):** mientras el colegio está en preparación, cada persona del personal
+  ve en su inicio cuántos pasos faltan, el siguiente y quién lo hace, con un botón directo; las pantallas vacías dicen qué falta;
+  lo bloqueado explica por qué y enlaza a la Puesta en marcha, que muestra el responsable de cada paso.
 - **Tanda 2 · Exportación, cierre y supresión:** ZIP cifrado con CSV y PDF y su huella; cierre del contrato; 12 meses de
   consulta para las familias; supresión con acta de dos operadores.
 - **Terminado cuando:** un colegio nuevo arranca solo con su titular; ningún operador suspende a un colegio de un día para otro;
