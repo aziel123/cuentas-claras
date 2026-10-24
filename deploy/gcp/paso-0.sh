@@ -1,5 +1,5 @@
 #!/bin/sh
-# Cuentas Claras · «PASO 0» (sección 6.6 del diseño): ¿acepta Cloud SQL para MySQL 8.4 los 99 triggers, las 14 funciones,
+# Cuentas Claras · «PASO 0» (sección 6.6 del diseño): ¿acepta Cloud SQL para MySQL 8.4 los 112 triggers, las 16 funciones,
 # el rol cc_negocio, permisos_objetos() (lee mysql.*), el TLS sin proxy y el arranque de prod? Corre el job «mysql» del CI
 # COMPLETO contra una instancia de PRUEBA, más las comprobaciones a mano de la sección 6.6 y un respaldo con su
 # restauración. Si algo falla, se cambia de proveedor ANTES de desplegar (AWS RDS en sa-east-1).
@@ -89,7 +89,7 @@ probar)
 		a() { $MYSQL_ADMIN -N cuentasclaras -e "$1"; }
 		echo "-- Privilegios del administrador del servicio:"; $MYSQL_ADMIN -N -e "SHOW GRANTS" | tr "," "\n" \
 			| grep -E "ROLE_ADMIN|CREATE ROLE|DROP ROLE|CREATE USER|SUPER" || true
-		echo "-- huellas_objetos(): $(a "SELECT JSON_LENGTH(huellas_objetos())") objetos (esperados: 96)"
+		echo "-- huellas_objetos(): $(a "SELECT JSON_LENGTH(huellas_objetos())") objetos (esperados: 128)"
 		echo "-- permisos_objetos(): $(a "SELECT JSON_LENGTH(permisos_objetos())") líneas (sin error)"
 		echo "-- Usuarios cc_* con un rol que no es cc_negocio: $(a "SELECT COUNT(*) FROM mysql.role_edges WHERE TO_USER LIKE \"cc%\" AND FROM_USER <> \"cc_negocio\"")"
 		echo "-- log_bin_trust_function_creators: $(a "SELECT @@GLOBAL.log_bin_trust_function_creators")"
@@ -132,7 +132,7 @@ probar)
 				java -jar target/cuentas-claras-*.jar --server.port=18099 > /resultados/prod-tls.log 2>&1 &
 			for i in $(seq 1 90); do curl -sf http://127.0.0.1:18099/actuator/health | grep -q UP && break; sleep 2; done
 			kill %1 || true
-			for linea in "Huellas de los 99 triggers y las 14 funciones verificadas" "Conexiones a MySQL cifradas (TLS) verificadas" \
+			for linea in "Huellas de los 112 triggers y las 16 funciones verificadas" "Conexiones a MySQL cifradas (TLS) verificadas" \
 					"Privilegios verificados"; do
 				grep -q "$linea" /resultados/prod-tls.log || { echo "ERROR: falta «$linea» (ver prod-tls.log)"; exit 1; }
 				echo "OK: $linea"

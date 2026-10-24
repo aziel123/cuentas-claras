@@ -39,6 +39,31 @@ public final class LimpiezaBaseDatos {
 		jdbc.update("DELETE FROM consentimiento_aviso");
 		jdbc.update("DELETE FROM configuracion_academica");
 		jdbc.update("DELETE FROM aviso_asistencia_corte");
+		// Sprint 10, tanda 3 (V37): las entregas apuntan a su libreta; las libretas, de la última versión a la primera, al
+		// periodo, la matrícula y la solicitud; la exportación y la delegación, a la sesión y la cuenta.
+		// Correcciones del sprint 10 (V38): la historia de la matrícula (en H2 la insertan las pruebas).
+		jdbc.update("DELETE FROM matricula_historial");
+		jdbc.update("DELETE FROM entrega_libreta");
+		while (jdbc.update("DELETE FROM libreta_emitida WHERE id NOT IN (SELECT reemplaza_id FROM libreta_emitida "
+				+ "WHERE reemplaza_id IS NOT NULL)") > 0) {
+			// sigue con la versión anterior de cada cadena
+		}
+		jdbc.update("DELETE FROM exportacion_calificaciones");
+		jdbc.update("DELETE FROM delegacion_siagie");
+		// Sprint 10, tanda 2 (V36): los borradores apuntan a su nota; las notas, de la última a la primera de cada cadena,
+		// a su lote y a su solicitud; las exoneraciones, al periodo desde el que rigen.
+		jdbc.update("DELETE FROM borrador_conclusion");
+		while (jdbc.update("DELETE FROM calificacion WHERE id NOT IN (SELECT reemplaza_id FROM calificacion "
+				+ "WHERE reemplaza_id IS NOT NULL)") > 0) {
+			// sigue con la nota anterior de cada cadena
+		}
+		jdbc.update("DELETE FROM lote_calificacion");
+		jdbc.update("DELETE FROM exoneracion_area");
+		// Sprint 10, tanda 1 (V35): las áreas de cada asignación, antes que la asignación; los periodos y la configuración de
+		// evaluación apuntan al año. El catálogo (sin colegio) es de la migración: no se borra.
+		jdbc.update("DELETE FROM asignacion_area");
+		jdbc.update("DELETE FROM periodo_evaluacion");
+		jdbc.update("DELETE FROM configuracion_evaluacion");
 		// Sprint 9, tanda 1 (V32): la asignación docente apunta a su solicitud, a la sección, al año y a la cuenta.
 		jdbc.update("DELETE FROM asignacion_docente");
 		// Correcciones del sprint 7 (V27): la resolución de una alerta apunta al respaldo y a la cuenta; la primera Dirección,

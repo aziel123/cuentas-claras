@@ -137,6 +137,45 @@ public class AuditoriaService {
 				desde).map(EventoAuditoria::getSecuencia);
 	}
 
+	/**
+	 * Sprint 10, tanda 3 (A3, decisión 188): las entidades con eventos de esa acción en el colegio actual desde un momento,
+	 * con la hora del PRIMER evento de cada una (solo lectura; hasta 500). Así la integridad de las libretas sabe desde
+	 * cuándo una no coincide con su huella sin otra tabla.
+	 */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public java.util.Map<String, LocalDateTime> primerasDesde(AccionAuditoria accion, LocalDateTime desde) {
+		Long colegio = ContextoColegio.actual();
+		java.util.Map<String, LocalDateTime> primeras = new java.util.LinkedHashMap<>();
+		if (colegio == null || colegio <= 0) {
+			return primeras;
+		}
+		for (EventoAuditoria e : eventos.findByColegioIdAndAccionInAndOcurridoEnGreaterThanEqualOrderBySecuenciaDesc(
+				colegio, java.util.List.of(accion), desde, org.springframework.data.domain.Limit.of(500))) {
+			if (e.getEntidadId() != null) {
+				primeras.put(e.getEntidadId(), e.getOcurridoEn());
+			}
+		}
+		return primeras;
+	}
+
+	/**
+	 * Correcciones del sprint 10 (hallazgo 1): el valor nuevo del PRIMER evento de esas acciones sobre cada registro del
+	 * colegio actual (solo lectura). Así la integridad de las notas compara cada lote con la huella que dejó al guardarse.
+	 */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public java.util.Map<String, String> valoresNuevos(java.util.Collection<AccionAuditoria> acciones, String entidad,
+			java.util.Collection<String> entidadIds) {
+		Long colegio = ContextoColegio.actual();
+		java.util.Map<String, String> valores = new java.util.HashMap<>();
+		if (colegio == null || colegio <= 0 || entidadIds.isEmpty()) {
+			return valores;
+		}
+		eventos.findByColegioIdAndAccionInAndEntidadAndEntidadIdIn(colegio, acciones, entidad, entidadIds).stream()
+				.sorted(java.util.Comparator.comparingLong(EventoAuditoria::getSecuencia))
+				.forEach(e -> valores.putIfAbsent(e.getEntidadId(), e.getValorNuevo()));
+		return valores;
+	}
+
 	/** Sprint 6: cuántos eventos de esa acción hizo cada persona en el colegio actual desde un momento (solo lectura). */
 	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
 	public java.util.Map<String, Long> contarPorUsuarioDesde(AccionAuditoria accion, LocalDateTime desde) {

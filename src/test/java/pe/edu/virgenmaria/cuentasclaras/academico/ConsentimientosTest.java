@@ -42,7 +42,9 @@ class ConsentimientosTest extends PruebaAsistencia {
 			// Sprint 9, tanda 3: cada finalidad (asistencia y comunicados) con sus dos canales.
 			assertThat(a.consentimientos()).extracting(c -> c.finalidad() + ":" + c.canal() + ":" + c.otorgado() + ":"
 					+ c.porDefecto()).containsExactly("ASISTENCIA:WHATSAPP:false:true", "ASISTENCIA:CORREO:true:true",
-							"COMUNICADOS:WHATSAPP:false:true", "COMUNICADOS:CORREO:true:true");
+							"COMUNICADOS:WHATSAPP:false:true", "COMUNICADOS:CORREO:true:true",
+							// Sprint 10, tanda 3 (decisión 180): la finalidad nueva de los avisos de libretas.
+							"LIBRETAS:WHATSAPP:false:true", "LIBRETAS:CORREO:true:true");
 		});
 	}
 

@@ -4,7 +4,9 @@ package pe.edu.virgenmaria.cuentasclaras.academico.model;
 public enum Finalidad {
 
 	ASISTENCIA("Avisos de asistencia"),
-	COMUNICADOS("Comunicados del colegio");
+	COMUNICADOS("Comunicados del colegio"),
+	/** Sprint 10, tanda 3 (decisión 180): el aviso de que la libreta está en el portal (nunca las notas). */
+	LIBRETAS("Avisos de libretas");
 
 	private final String etiqueta;
 

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 2: el avance del registro de notas del periodo, SIN alumnos (Dirección y Promotoría): por sección y
+     área, cuántas notas faltan y quién califica; y las asignaciones que todavía no pueden calificar. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Avance de notas', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="avance-notas">
+	<div class="cabecera">
+		<div>
+			<h1>Avance de notas</h1>
+			<p class="secundario">Cuántas notas faltan por sección y área. No muestra alumnos.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<form class="filtros" method="get" th:action="@{/academico/notas/avance}" th:unless="${#lists.isEmpty(vista.periodos)}">
+		<div class="campo">
+			<label for="periodo">Periodo</label>
+			<select class="input" id="periodo" name="periodo">
+				<option th:each="p : ${vista.periodos}" th:value="${p.id}" th:text="|${p.nombre} (${p.estado})|"
+					th:selected="${p.id == vista.periodoId}">I bimestre</option>
+			</select>
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Ver el periodo', 'secundario')}"></button>
+	</form>
+
+	<th:block th:if="${vista.periodoId == null}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay un periodo abierto', 'Dirección programa los periodos del año.')}"></div>
+	</th:block>
+
+	<th:block th:replace="~{academico/notas/cierre :: resumen(${vista})}"></th:block>
+
+	<p th:if="${vista.periodoId != null and vista.verCorrecciones}">
+		<a th:href="@{/academico/notas/avance/correcciones(periodo=${vista.periodoId})}">Correcciones de notas del periodo</a>
+	</p>
+</main>
+</body>
+</html>

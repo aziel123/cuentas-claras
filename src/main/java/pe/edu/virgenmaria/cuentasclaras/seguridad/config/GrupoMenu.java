@@ -20,6 +20,10 @@ public enum GrupoMenu {
 	// para el SIAGIE (tanda 3).
 	ASISTENCIA_Y_CONSENTIMIENTOS("Asistencia", ASISTENCIA, ASISTENCIA_DIRECCION, REPORTE_ASISTENCIA, CONSENTIMIENTOS_FICHA,
 			SIAGIE),
+	// Sprint 10, tanda 3: las libretas, su verificación y las calificaciones para el SIAGIE van con la evaluación.
+	// Sprint 10, tanda 1: la evaluación del año, sus periodos y el currículo nacional (las notas y libretas, tandas 2 y 3).
+	EVALUACION_Y_NOTAS("Evaluación", NOTAS, NOTAS_SECCION, NOTAS_AVANCE, EXONERACIONES, LIBRETAS, LIBRETAS_VERIFICAR,
+			SIAGIE_CALIFICACIONES, EVALUACION, PERIODOS, CURRICULO),
 	COBRANZA("Cobranza", PENSIONES, DESCUENTOS, COMPROBANTES, REPORTES),
 	CONTROL_Y_AUDITORIA("Control y auditoría", AUDITORIA, ACCESOS_DATOS),
 	CONFIGURACION("Configuración", PLATAFORMA, COLEGIO, ASIGNACIONES, CONFIGURACION_ACADEMICA, USUARIOS, MARCA_COLEGIO,

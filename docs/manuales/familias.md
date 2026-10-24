@@ -14,7 +14,11 @@
    piden confirmar la lectura, toca **Confirmar que lo leí**. Te avisamos de los urgentes al momento y de los demás en un
    resumen al final del día (en *Mis avisos* eliges el canal y quién de la familia recibe). Un comunicado nunca te pide
    pagos ni datos de tu cuenta.
-6. **Mis datos:** ves los datos tuyos y de tus hijos que guarda el colegio, si tus contactos están verificados, para qué se usa cada dato, a quién se envía y cuánto tiempo se guarda. Lo puedes imprimir.
+6. **Libretas:** en *Libretas* descargas en PDF la libreta de cada hijo cuando el colegio cierra el bimestre (te avisamos
+   por WhatsApp o correo si autorizaste ese aviso). Todas las familias la reciben igual, deban o no: la libreta nunca
+   depende de los pagos. Si una nota se corrige, recibes la versión nueva con lo que cambió. El código del pie (LIB-…)
+   sirve para que el colegio confirme que es auténtica.
+7. **Mis datos:** ves los datos tuyos y de tus hijos que guarda el colegio, si tus contactos están verificados, para qué se usa cada dato, a quién se envía y cuánto tiempo se guarda. Lo puedes imprimir.
 
 ## Lo que el sistema no te deja hacer, y por qué
 - **Apagar los avisos de tus pagos:** son tu constancia y te permiten comprobar que todo cuadra. Los **recordatorios** de vencimiento sí los puedes apagar (botón **Apagar recordatorios**).

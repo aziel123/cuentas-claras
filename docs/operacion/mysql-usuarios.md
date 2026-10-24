@@ -220,6 +220,51 @@ calza una palabra ambigua (cancelar, «al día con», abono, saldo, regularizar,
 clara de `trg_mensaje_nace` ya no tiene las ambiguas: el aviso de un comunicado aprobado con «cancelar la reunión» sale.
 Prod: «Huellas de los 99 triggers y las 14 funciones verificadas». Una base existente: solo `03`.
 
+**Sprint 10, tanda 1 (V35): 104 triggers y 15 funciones con huella (119).** El catálogo nacional del currículo
+(`curriculo_version`, `area_curricular`, `competencia` y `escala_logro`, sin `colegio_id`) **no tiene ningún GRANT de
+escritura**: solo `cc_migrador` lo inserta con su migración; `cc_app` y `cc_sistema` lo leen con el SELECT de siempre (1142
+al escribir). Su huella la verifica la aplicación al arrancar y a diario contra `curriculo/{codigo}.sha256` del jar, en las
+dos direcciones: en prod, si un DBA cambia una competencia o mete una versión sin su archivo, no arranca («El catálogo
+CNEB-2016.1 no coincide con el del jar»). `configuracion_evaluacion` y `periodo_evaluacion`: INSERT y UPDATE por columna
+(sin el colegio, el año, el número ni quién los creó: 1143), sin DELETE; `asignacion_area`: solo INSERT (está en
+`tablas-vigiladas.txt`). Nuevos: la función `cc_rol_activo`, `trg_configuracion_evaluacion_nace` y `_cambio`,
+`trg_periodo_evaluacion_nace` y `_cambio` (el cierre lo decide la hora de Lima de la base) y `trg_asignacion_area_nace`;
+versión nueva de `trg_asignacion_docente_estado` (al aprobar, las áreas son las de la solicitud). Prod: «Huellas de los 104
+triggers y las 15 funciones verificadas» y «Catálogo del currículo verificado». Una base existente: `migrar`, `02` y `03`,
+en ese orden y con la aplicación detenida; no hay usuarios nuevos.
+
+**Sprint 10, tanda 2 (V36): 108 triggers y 16 funciones con huella (124).** Las notas son un libro de **solo inserción**:
+`lote_calificacion`, `calificacion`, `exoneracion_area` y `borrador_conclusion` tienen solo INSERT para `cc_negocio`
+(ningún UPDATE ni DELETE: 1142) y están en `tablas-vigiladas.txt`. Nuevos: la función `cc_docente_de_area` (la misma regla
+que la aplicación: el área asignada, o la transversal si es el tutor), `trg_lote_calificacion_nace` (el docente del área con
+su sesión y su firma; con el periodo cerrado, solo con su nota tardía aprobada hace 48 horas o menos según la base),
+`trg_calificacion_nace` (matrícula ACTIVA o RESERVADA, sin exoneración vigente, la conclusión que exige la norma con su
+SHA-256 de la base, la cadena lineal y, después del cierre, solo la corrección aprobada y firmada por otra persona, con el
+texto de su borrador), `trg_exoneracion_area_nace` (Dirección con su firma, desde un periodo abierto) y
+`trg_borrador_conclusion_nace`. Prod: «Huellas de los 108 triggers y las 16 funciones verificadas». Una base existente:
+`migrar`, `02` y `03`, en ese orden y con la aplicación detenida; no hay usuarios nuevos.
+
+**Sprint 10, tanda 3 (V37): 112 triggers y 16 funciones con huella (128).** Las libretas son de **solo inserción**:
+`libreta_emitida` la crea SOLO `cc_sistema` (proceso `sistema.libretas`; `cc_app` no tiene GRANT: 1142), y
+`entrega_libreta`, `exportacion_calificaciones` y `delegacion_siagie` tienen solo INSERT para `cc_negocio`; las cuatro están
+en `tablas-vigiladas.txt`. Nuevos: `trg_libreta_emitida_nace` (periodo CERRADO, matrícula ACTIVA o RESERVADA, la versión 1
+con lo registrado hasta el cierre y la siguiente solo con una corrección aprobada o la reemisión aprobada por Promotoría),
+`trg_entrega_libreta_nace` (la familia con su sesión, Dirección o el tutor vigente de la sección; la entrevista solo en
+Inicial), `trg_exportacion_calificaciones_nace` (periodo cerrado, Dirección o la persona de Administración con delegación
+vigente) y `trg_delegacion_siagie_nace` (Dirección con su firma, solo a Administración sin Caja, hasta 15 días); versión
+nueva de `trg_mensaje_nace` (los avisos de libretas sin cobranza y con el consentimiento LIBRETAS). Prod: «Huellas de los
+112 triggers y las 16 funciones verificadas». Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación
+detenida; no hay usuarios nuevos.
+
+**Correcciones del sprint 10 (V38): siguen 112 triggers y 16 funciones con huella (128).** Sin triggers nuevos: cambian
+`trg_lote_calificacion_nace` (guarda `CONNECTION_ID()` en `lote_calificacion.conexion_id`; la nota tardía la aprobó Dirección
+o Promotoría con rol activo), `trg_calificacion_nace` (las notas de un lote solo desde la conexión que lo guardó y hasta
+sus filas; la corrección de un trasladado, en la sección de la nota que reemplaza), `trg_libreta_emitida_nace` (sección y
+estado de la matrícula al cierre, la matrícula existía al cierre, la corrección de un periodo anterior, los niveles guardados
+en `libreta_emitida.niveles` y la reemisión con los mismos) y `trg_matricula_estado` (escribe `matricula_historial`, que
+NADIE más escribe: ni `cc_app` ni `cc_sistema` tienen GRANT, 1142; está en `tablas-vigiladas.txt`). Una base existente:
+`migrar`, `02` y `03`, en ese orden y con la aplicación detenida.
+
 **Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
 van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
 custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra

@@ -46,6 +46,10 @@ public interface EventoAuditoriaRepository extends Repository<EventoAuditoria, L
 			@Param("siempreRevisar") Collection<AccionAuditoria> siempreRevisar,
 			@Param("conRoles") Collection<AccionAuditoria> conRoles, Pageable pagina);
 
+	/** Correcciones del sprint 10 (hallazgo 1): los eventos de esas acciones sobre esos registros (la huella de cada lote). */
+	List<EventoAuditoria> findByColegioIdAndAccionInAndEntidadAndEntidadIdIn(Long colegioId,
+			Collection<AccionAuditoria> acciones, String entidad, Collection<String> entidadIds);
+
 	/** Eventos recientes de ciertas acciones en un colegio (tarjeta "Para revisar"). */
 	List<EventoAuditoria> findByColegioIdAndAccionInAndOcurridoEnGreaterThanEqualOrderBySecuenciaDesc(Long colegioId,
 			Collection<AccionAuditoria> acciones, LocalDateTime desde, Limit limite);

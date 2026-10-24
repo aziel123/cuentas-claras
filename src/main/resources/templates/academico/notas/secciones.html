@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 2 (sección 3.5): las secciones cuyas notas puede ver quien entra: Dirección, todas las del año en
+     curso; el docente, donde es tutor. Solo lectura. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Notas de la sección', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="notas-secciones">
+	<div class="cabecera">
+		<div>
+			<h1>Notas de la sección</h1>
+			<p class="secundario">Las notas de todas las áreas de una sección, de solo lectura. Cada consulta queda registrada.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${#lists.isEmpty(secciones)}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('No hay secciones que ver', 'Ves las secciones de las que eres tutor(a).')}"></div>
+	</th:block>
+	<ul class="lista-simple tarjeta" th:unless="${#lists.isEmpty(secciones)}">
+		<li th:each="s : ${secciones}" th:data-seccion="${s.id}">
+			<a th:href="@{/academico/notas/secciones/{id}(id=${s.id})}" th:text="${s.nombre}">3.° Primaria A</a>
+		</li>
+	</ul>
+</main>
+</body>
+</html>

@@ -15,7 +15,7 @@ import pe.edu.virgenmaria.cuentasclaras.academico.repository.ConsentimientoAviso
  * ({@code sistema.asistencia} al crear el aviso y {@code sistema.mensajeria} al crear su respaldo por correo).
  */
 @Service
-@PreAuthorize("hasAnyRole('SISTEMA_ASISTENCIA','SISTEMA_COMUNICADOS','SISTEMA_MENSAJERIA','APODERADO','DIRECTOR','ADMINISTRACION')")
+@PreAuthorize("hasAnyRole('SISTEMA_ASISTENCIA','SISTEMA_COMUNICADOS','SISTEMA_LIBRETAS','SISTEMA_MENSAJERIA','APODERADO','DIRECTOR','ADMINISTRACION')")
 public class ConsentimientosVigentes implements Consentimientos {
 
 	private final ConsentimientoAvisoRepository consentimientos;
@@ -37,6 +37,14 @@ public class ConsentimientosVigentes implements Consentimientos {
 	public boolean recibeComunicados(long apoderadoId, boolean porWhatsapp) {
 		Canal canal = porWhatsapp ? Canal.WHATSAPP : Canal.CORREO;
 		return consentimientos.findFirstByApoderadoIdAndFinalidadAndCanalOrderByIdDesc(apoderadoId, Finalidad.COMUNICADOS,
+				canal).map(ConsentimientoAviso::isOtorgado).orElse(canal.salvoOposicion());
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public boolean recibeLibretas(long apoderadoId, boolean porWhatsapp) {
+		Canal canal = porWhatsapp ? Canal.WHATSAPP : Canal.CORREO;
+		return consentimientos.findFirstByApoderadoIdAndFinalidadAndCanalOrderByIdDesc(apoderadoId, Finalidad.LIBRETAS,
 				canal).map(ConsentimientoAviso::isOtorgado).orElse(canal.salvoOposicion());
 	}
 

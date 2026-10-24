@@ -38,7 +38,18 @@ final class CatalogoRutasConId {
 		/** Sprint 9, tanda 2: una marca de asistencia (corregir, pedir corrección, justificar, revertir). */
 		MARCA,
 		/** Sprint 9, tanda 3: un comunicado (detalle, fe de erratas, retiro, PDF y el portal de la familia). */
-		COMUNICADO
+		COMUNICADO,
+		/** Sprint 10, tanda 1: un periodo de evaluación (mover fechas, abrir y cerrar). */
+		PERIODO,
+		/**
+		 * Sprint 10, tanda 1: un id del catálogo nacional del currículo (una versión o un área). No es de un colegio: es el
+		 * mismo para todos (no hay nada de otro colegio que ver), pero la ruta igual se pide con el resto de ids del A.
+		 */
+		CATALOGO,
+		/** Sprint 10, tanda 2: una nota (la corrección después del cierre). */
+		CALIFICACION,
+		/** Sprint 10, tanda 3: una libreta emitida (la descarga de la familia, la impresión y la reemisión). */
+		LIBRETA
 	}
 
 	static final Map<String, Map<String, Recurso>> CATALOGO = new LinkedHashMap<>();
@@ -234,7 +245,8 @@ final class CatalogoRutasConId {
 		// Sprint 9, tanda 1: la lista de una sección (Dirección o un docente con asignación vigente) y Docentes y secciones.
 		r("GET /academico/secciones/{id:\\d+}", "id", Recurso.SECCION);
 		r("GET /academico/asignaciones", "anio", Recurso.ANIO);
-		r("POST /academico/asignaciones", "anio", Recurso.ANIO, "seccionId", Recurso.SECCION, "docenteId", Recurso.USUARIO);
+		r("POST /academico/asignaciones", "anio", Recurso.ANIO, "seccionId", Recurso.SECCION, "docenteId", Recurso.USUARIO,
+				"areaIds", Recurso.CATALOGO);
 		r("POST /academico/asignaciones/copiar-anio-anterior", "anioId", Recurso.ANIO);
 		r("POST /academico/asignaciones/{id:\\d+}/terminar", "id", Recurso.ASIGNACION, "anio", Recurso.ANIO);
 		// Sprint 9, tanda 2: la asistencia (hoja, correcciones, registro tardío, reversión y reporte con ?seccion=, A11),
@@ -264,6 +276,44 @@ final class CatalogoRutasConId {
 		r("GET /familia/comunicados/{id:\\d+}/adjunto", "id", Recurso.COMUNICADO);
 		r("GET /academico/siagie/nomina", "seccion", Recurso.SECCION);
 		r("POST /alumnos/{id:\\d+}/datos-siagie", "id", Recurso.ALUMNO);
+		// Sprint 10, tanda 1: la evaluación del año y los periodos (?anio=, el formulario y cada periodo por su id).
+		r("GET /academico/curriculo/{codigo:[A-Z0-9.-]{4,40}}", "codigo", Recurso.CATALOGO);
+		r("GET /academico/evaluacion/configuracion", "anio", Recurso.ANIO);
+		r("POST /academico/evaluacion/configuracion", "anioId", Recurso.ANIO, "curriculoVersionId", Recurso.CATALOGO);
+		r("GET /academico/periodos", "anio", Recurso.ANIO);
+		r("POST /academico/periodos", "anioId", Recurso.ANIO);
+		r("POST /academico/periodos/{id:\\d+}/fechas", "id", Recurso.PERIODO, "anio", Recurso.ANIO);
+		r("POST /academico/periodos/{id:\\d+}/abrir", "id", Recurso.PERIODO, "anio", Recurso.ANIO);
+		r("POST /academico/periodos/{id:\\d+}/cerrar", "id", Recurso.PERIODO, "anio", Recurso.ANIO);
+		// Sprint 10, tanda 2: la hoja de notas (sección, área del catálogo, ?periodo= y ?solicitud= de la nota tardía), la
+		// vista de la sección, la corrección de una nota, el avance y el cierre de un periodo, las exoneraciones y
+		// «Completar áreas» (una asignación o una sección).
+		r("GET /academico/notas/{seccionId:\\d+}/{areaId:\\d+}", "seccionId", Recurso.SECCION, "areaId", Recurso.CATALOGO,
+				"periodo", Recurso.PERIODO, "solicitud", Recurso.SOLICITUD);
+		r("POST /academico/notas/{seccionId:\\d+}/{areaId:\\d+}", "seccionId", Recurso.SECCION, "areaId", Recurso.CATALOGO,
+				"periodo", Recurso.PERIODO, "solicitud", Recurso.SOLICITUD);
+		r("POST /academico/notas/{seccionId:\\d+}/{areaId:\\d+}/tardia", "seccionId", Recurso.SECCION, "areaId",
+				Recurso.CATALOGO, "periodo", Recurso.PERIODO);
+		r("GET /academico/notas/secciones/{seccionId:\\d+}", "seccionId", Recurso.SECCION, "periodo", Recurso.PERIODO);
+		r("GET /academico/notas/correcciones/{calificacionId:\\d+}", "calificacionId", Recurso.CALIFICACION);
+		r("POST /academico/notas/correcciones/{calificacionId:\\d+}", "calificacionId", Recurso.CALIFICACION);
+		r("GET /academico/notas/avance", "periodo", Recurso.PERIODO);
+		r("GET /academico/notas/avance/correcciones", "periodo", Recurso.PERIODO);
+		r("GET /academico/periodos/{id:\\d+}/cierre", "id", Recurso.PERIODO);
+		r("POST /academico/periodos/{id:\\d+}/cierre", "id", Recurso.PERIODO);
+		r("GET /academico/notas/exoneraciones", "seccion", Recurso.SECCION);
+		r("POST /academico/notas/exoneraciones", "seccion", Recurso.SECCION, "matriculaId", Recurso.MATRICULA, "areaId",
+				Recurso.CATALOGO);
+		r("GET /academico/asignaciones/completar", "asignacion", Recurso.ASIGNACION, "seccion", Recurso.SECCION);
+		// Sprint 10, tanda 3: las libretas (la familia, Dirección y el tutor), su reemisión, la exportación para el SIAGIE y
+		// su delegación.
+		r("GET /familia/libretas/{id:\\d+}.pdf", "id", Recurso.LIBRETA);
+		r("GET /academico/libretas", "seccion", Recurso.SECCION, "periodo", Recurso.PERIODO);
+		r("GET /academico/libretas/seccion.pdf", "seccion", Recurso.SECCION, "periodo", Recurso.PERIODO);
+		r("GET /academico/libretas/{id:\\d+}.pdf", "id", Recurso.LIBRETA);
+		r("POST /academico/libretas/{id:\\d+}/reemision", "id", Recurso.LIBRETA);
+		r("GET /academico/siagie/calificaciones", "seccion", Recurso.SECCION, "periodo", Recurso.PERIODO);
+		r("POST /academico/siagie/delegaciones", "usuario", Recurso.USUARIO);
 	}
 
 	private CatalogoRutasConId() {

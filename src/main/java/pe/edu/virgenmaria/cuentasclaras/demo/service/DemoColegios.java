@@ -90,6 +90,16 @@ public class DemoColegios {
 	private org.springframework.beans.factory.ObjectProvider<pe.edu.virgenmaria.cuentasclaras.comunicados.inicial.ComunicadosDemo>
 			comunicados;
 
+	private org.springframework.beans.factory.ObjectProvider<pe.edu.virgenmaria.cuentasclaras.academico.inicial.LibretasDemo>
+			libretas;
+
+	/** Sprint 10, tanda 3: las notas y libretas de la demo (opcionales: la demo sale igual sin ellas). */
+	@org.springframework.beans.factory.annotation.Autowired
+	void setLibretas(org.springframework.beans.factory.ObjectProvider<
+			pe.edu.virgenmaria.cuentasclaras.academico.inicial.LibretasDemo> libretas) {
+		this.libretas = libretas;
+	}
+
 	/** Sprint 9, tanda 3: los comunicados de la demo (opcionales: la demo sale igual sin ellos). */
 	@org.springframework.beans.factory.annotation.Autowired
 	void setComunicados(org.springframework.beans.factory.ObjectProvider<
@@ -179,6 +189,12 @@ public class DemoColegios {
 		// tutora) y los códigos modulares ficticios.
 		if (comunicados != null) {
 			comunicados.ifAvailable(c -> c.cargar(colegioId, prefijo + ".promotoria", prefijo + ".direccion", prefijo + ".docente"));
+		}
+		// Sprint 10, tanda 3 (decisión 187): el I bimestre cerrado con las notas de Matemática de 4.° Primaria A, las
+		// libretas (una versión 2 por una corrección aprobada) y el II bimestre abierto.
+		if (libretas != null) {
+			libretas.ifAvailable(l -> l.cargar(colegioId, prefijo + ".promotoria", prefijo + ".direccion",
+					prefijo + ".administracion", prefijo + ".docente", creadas.anio(), hoy));
 		}
 		// QA-S8-9: el primer cobro es de la familia de la cuenta «apoderado»: quien entra como padre ve su pago, su boleta
 		// «DEMO · SIN VALOR» y el aviso que le llegó.

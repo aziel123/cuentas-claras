@@ -51,7 +51,13 @@ public enum ActorSistema {
 	 * Sprint 9, tanda 3 (sección 3.10): crea el resumen diario de comunicados, los urgentes y el recordatorio de las 48
 	 * horas a las familias, y anota qué mensaje avisó cada comunicado. Con {@code cc_sistema}: trg_mensaje_nace lo exige.
 	 */
-	COMUNICADOS("sistema.comunicados");
+	COMUNICADOS("sistema.comunicados"),
+	/**
+	 * Sprint 10, tanda 3 (sección 3.7): emite las libretas de los periodos CERRADOS (la versión 1 al cierre, la siguiente por
+	 * una corrección aprobada o una reemisión) y crea sus avisos a las familias. Con {@code cc_sistema}: es la única conexión
+	 * con INSERT en {@code libreta_emitida} y trg_libreta_emitida_nace y trg_mensaje_nace lo exigen.
+	 */
+	LIBRETAS("sistema.libretas");
 
 	/** Prefijo reservado: ninguna persona puede tener un nombre de usuario que empiece así. */
 	public static final String PREFIJO_RESERVADO = "sistema";

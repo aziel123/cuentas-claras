@@ -24,4 +24,10 @@ public interface Consentimientos {
 	 * como principal; si hay varios, el más reciente (cada apoderado lo elige con su cuenta; uno solo recibe el resumen).
 	 */
 	java.util.Optional<Long> contactoPrincipal(long familiaId);
+
+	/**
+	 * Sprint 10, tanda 3 (decisión 180): ¿se le avisa que la libreta está en el portal por WhatsApp ({@code true}, con su
+	 * «sí» a la finalidad LIBRETAS) o por correo (salvo oposición)?
+	 */
+	boolean recibeLibretas(long apoderadoId, boolean porWhatsapp);
 }

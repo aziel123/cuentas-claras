@@ -41,7 +41,11 @@ public enum TipoMensaje {
 	// Sprint 9, tanda 3 (sección 3.10): el resumen diario de comunicados y el urgente. Los crea solo sistema.comunicados
 	// (trg_mensaje_nace); nunca llevan el texto del comunicado (el título, solo el urgente).
 	COMUNICADOS_RESUMEN("Resumen de comunicados", false),
-	COMUNICADO_URGENTE("Comunicado urgente", false);
+	COMUNICADO_URGENTE("Comunicado urgente", false),
+	// Sprint 10, tanda 3 (sección 3.7): la libreta está en el portal (o se corrigió). Los crea solo sistema.libretas
+	// (trg_mensaje_nace); nunca llevan notas, conclusiones ni montos.
+	LIBRETA_DISPONIBLE("Libreta disponible", false),
+	LIBRETA_CORREGIDA("Libreta corregida", false);
 
 	private final String etiqueta;
 

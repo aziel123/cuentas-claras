@@ -93,9 +93,12 @@ public class EstadoPuestaEnMarcha {
 
 	public static final String RECAUDACION = "recaudacion";
 
-	/** Los 14 pasos en el orden de la sección 3.5. */
+	/** Sprint 10, tanda 2: las asignaciones del sprint 9 sin áreas del catálogo (esos docentes no califican). */
+	public static final String AREAS_DOCENTES = "areas-docentes";
+
+	/** Los 14 pasos en el orden de la sección 3.5, y el 15 del sprint 10 (las áreas de cada docente; no bloquea). */
 	public static final List<String> PASOS = List.of(DATOS, EQUIPO, ANIO, PENSIONES, ALUMNOS, SALDO_INICIAL, OSE,
-			CUENTA_BANCARIA, MENSAJERIA, CORREO_CONTROL, PRIVACIDAD, RESPALDO, PASARELA, RECAUDACION);
+			CUENTA_BANCARIA, MENSAJERIA, CORREO_CONTROL, PRIVACIDAD, RESPALDO, PASARELA, RECAUDACION, AREAS_DOCENTES);
 
 	private static final Set<EstadoMensaje> SALIDOS = EnumSet.of(EstadoMensaje.ENVIADO, EstadoMensaje.ENTREGADO,
 			EstadoMensaje.LEIDO);
@@ -137,7 +140,9 @@ public class EstadoPuestaEnMarcha {
 			PlanPensionRepository planes, LoteSaldoInicialRepository lotes, ConectorColegioRepository conectores,
 			MensajeRepository mensajes, FirmaOperacionRepository firmas, LogoColegioRepository logos,
 			ConfiguracionColegioRepository configuracion, EstadoTecnico estadoTecnico, Environment entorno,
-			PlatformTransactionManager transacciones) {
+			PlatformTransactionManager transacciones,
+			pe.edu.virgenmaria.cuentasclaras.academico.api.AsignacionesPorCompletar porCompletar) {
+		this.porCompletar = porCompletar;
 		this.colegios = colegios;
 		this.usuarios = usuarios;
 		this.primeras = primeras;
@@ -156,6 +161,8 @@ public class EstadoPuestaEnMarcha {
 		this.lectura = new TransactionTemplate(transacciones);
 		this.lectura.setReadOnly(true);
 	}
+
+	private final pe.edu.virgenmaria.cuentasclaras.academico.api.AsignacionesPorCompletar porCompletar;
 
 	/** La lista del colegio en contexto (la sesión de una persona del colegio). */
 	public ListaVerificacion actual() {
@@ -293,6 +300,12 @@ public class EstadoPuestaEnMarcha {
 		boolean recaudacion = vigenteDe(TipoConector.RECAUDACION).isPresent();
 		puntos.add(new PuntoLista(RECAUDACION, "Recaudación bancaria", recaudacion ? Estado.HECHO : Estado.OPCIONAL,
 				recaudacion ? "Recaudación vigente" : "Opcional: sin recaudación por código de alumno", "/conectores"));
+
+		// 15 (sprint 10, tanda 2; no bloquea): las asignaciones del sprint 9 sin áreas del catálogo no pueden poner notas.
+		int sinAreas = porCompletar.sinAreasDelAnioEnCurso();
+		puntos.add(new PuntoLista(AREAS_DOCENTES, "Áreas de cada docente", sinAreas == 0 ? Estado.HECHO : Estado.OPCIONAL,
+				sinAreas == 0 ? "Todas las asignaciones tienen sus áreas del catálogo" : sinAreas
+						+ " asignaciones sin áreas del catálogo: esos docentes no pueden poner notas", "/academico/asignaciones"));
 
 		return new ListaVerificacion(colegio.getId(), colegio.getNombre(), colegio.getEstado(), List.copyOf(puntos));
 	}

@@ -4022,6 +4022,12 @@ class PermisosMySqlTest {
 	@Autowired
 	private pe.edu.virgenmaria.cuentasclaras.academico.proceso.FinAsignaciones finAsignaciones;
 
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.academico.curriculo.service.ConfiguracionesEvaluacion configuracionesEvaluacion;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.academico.curriculo.service.Periodos periodosEvaluacion;
+
 	/**
 	 * Sprint 9, tanda 1 (sección 7.5): las asignaciones docentes con los permisos mínimos, en un colegio aparte.
 	 * Administración propone (trg_asignacion_docente_nace) y Dirección aprueba con su firma en la bandeja: la solicitud
@@ -4064,6 +4070,36 @@ class PermisosMySqlTest {
 		asignaciones.terminar(id, "Cambió de colegio a mitad de año");
 		SecurityContextHolder.clearContext();
 		assertThat(estadoAsignacion(id)).isEqualTo("TERMINADA");
+
+		// Sprint 10, tanda 1 (A2, con los permisos mínimos): Dirección guarda la evaluación del año con su firma y programa su
+		// I bimestre; Administración propone al docente con dos áreas del catálogo (en la misma transacción, antes de la
+		// solicitud) y Dirección la aprueba con su firma: la base compara las áreas con las de la solicitud. Las áreas quedan
+		// para el job de respaldo (asignacion_area es de solo inserción y está en tablas-vigiladas.txt).
+		long anio = jdbc.queryForObject("SELECT anio_escolar_id FROM seccion WHERE id = ?", Long.class, escuela.seccionB());
+		Long version = jdbc.queryForObject("SELECT id FROM curriculo_version WHERE codigo = 'CNEB-2016.1'", Long.class);
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().directora());
+		assertThat(configuracionesEvaluacion.guardar(anio, new pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model
+				.ConfiguracionEvaluacion.Valores(version, pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model
+						.TipoPeriodo.BIMESTRE, 500, false, 7, "Castellano", null, null))).isTrue();
+		java.time.LocalDate inicioClases = jdbc.queryForObject("SELECT inicio_clases FROM anio_escolar WHERE id = ?",
+				java.time.LocalDate.class, anio);
+		Long bimestre = periodosEvaluacion.programar(anio, inicioClases, inicioClases.plusDays(60));
+		SecurityContextHolder.clearContext();
+		java.util.List<Long> areas = jdbc.queryForList("SELECT a.id FROM area_curricular a JOIN curriculo_version v ON v.id = "
+				+ "a.version_id WHERE v.codigo = 'CNEB-2016.1' AND a.nivel = 'PRIMARIA' AND a.codigo IN ('MAT', 'CYT') "
+				+ "ORDER BY a.id", Long.class);
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().administracion());
+		Long conAreas = asignaciones.proponer(pe.edu.virgenmaria.cuentasclaras.academico.dto.ProponerAsignacionRequest
+				.conAreas(escuela.seccionB(), escuela.docente().getId(),
+						pe.edu.virgenmaria.cuentasclaras.academico.model.TipoAsignacion.DOCENTE, motivo, areas));
+		UsuariosDePrueba.iniciarSesion(escuela.equipo().directora());
+		bandeja.aprobar(solicitudDeAsignacion(conAreas), null);
+		SecurityContextHolder.clearContext();
+		assertThat(estadoAsignacion(conAreas)).isEqualTo("VIGENTE");
+		assertThat(jdbc.queryForList("SELECT area_id FROM asignacion_area WHERE asignacion_id = ? ORDER BY area_id",
+				Long.class, conAreas)).isEqualTo(areas);
+		assertThat(jdbc.queryForObject("SELECT estado FROM periodo_evaluacion WHERE id = ?", String.class, bimestre))
+				.isEqualTo("PROGRAMADO");
 
 		// Otro tutor: sistema.academico termina su asignación al desactivarse su cuenta (con cc_sistema).
 		UsuariosDePrueba.iniciarSesion(escuela.equipo().administracion());

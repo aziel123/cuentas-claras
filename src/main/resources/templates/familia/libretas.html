@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 3 (secciones 3.7 y 3.8): las libretas de los hijos. TODAS las versiones, con su fecha y qué cambió:
+     nada desaparece. Lo mismo para la familia que debe que para la que está al día (INDECOPI: la libreta nunca se retiene
+     por deuda). Sin montos ni nada de cobranza en esta pantalla. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Libretas', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="familia-libretas">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/familia}">Mi familia</a></p>
+			<h1>Libretas</h1>
+			<p class="secundario">El informe de progreso de tus hijos al cierre de cada periodo. Si el colegio corrige una nota,
+				verás la versión nueva con lo que cambió; las anteriores siguen aquí.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${#lists.isEmpty(vista.hijos())}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay libretas', 'Cuando el colegio cierre el periodo, la libreta de cada hijo aparecerá aquí y te avisaremos.')}"></div>
+	</th:block>
+
+	<section class="tarjeta" th:each="h : ${vista.hijos()}" th:attr="aria-label=${h.nombre()}">
+		<h2 th:text="${h.nombre()}">Mateo</h2>
+		<p class="secundario" th:if="${#lists.isEmpty(h.periodos())}">Todavía no tiene libretas: aparecerán al cierre del periodo.</p>
+		<div th:each="p : ${h.periodos()}" class="bloque-libreta">
+			<h3 th:text="|${p.nombre()} ${p.anio()}|">I bimestre 2026</h3>
+			<ul class="lista-simple">
+				<li class="fila entre" th:each="v : ${p.versiones()}">
+					<span>
+						<span th:text="|Versión ${v.numero()} · emitida el ${v.emitida()}|">Versión 1 · emitida el 08/05/2026</span>
+						<span th:replace="~{fragments/componentes :: badge(${v.vigente()} ? 'Vigente' : 'Reemplazada', ${v.vigente()} ? 'exito' : 'neutro')}"></span>
+						<span class="secundario" th:text="${v.motivo()}">Al cierre del periodo</span>
+						<span class="secundario" th:if="${v.cambios() != null}" th:text="|Qué cambió: ${v.cambios()}|">Qué cambió</span>
+					</span>
+					<a class="btn btn-secundario btn-chico" th:href="@{/familia/libretas/{id}.pdf(id=${v.id()})}"
+						th:attr="aria-label=|Descargar la versión ${v.numero()} de la libreta de ${h.nombre()}|">Descargar PDF</a>
+				</li>
+			</ul>
+		</div>
+	</section>
+	<p class="ayuda">Cada libreta tiene un código de verificación. Si tienes una duda sobre una nota, comunícate con el tutor
+		o con Dirección.</p>
+</main>
+</body>
+</html>

@@ -422,6 +422,54 @@ public enum AccionAuditoria {
 	/** Sección, perfil, filas, faltantes, código y SHA-256 del archivo (sin su contenido). */
 	NOMINA_SIAGIE_EXPORTADA("Descargó la nómina de una sección para el SIAGIE", false),
 
+	// Sprint 10, tanda 1: currículo, periodos y escalas (sección 8.4). Sin nombres de alumnos: años, periodos y valores.
+	/** Se resalta: Dirección guardó (con su firma) cómo se evalúa el año, con el antes y el después. */
+	CONFIGURACION_EVALUACION_GUARDADA("Guardó la configuración de evaluación del año", true),
+	/** Dirección programó un periodo de evaluación (con su firma). */
+	PERIODO_PROGRAMADO("Programó un periodo de evaluación", false),
+	/** Se resalta: Dirección movió las fechas de un periodo (con su firma), con el antes y el después. */
+	PERIODO_FECHAS_CAMBIADAS("Cambió las fechas de un periodo de evaluación", true),
+	/** sistema.academico abrió un periodo en su fecha, o Dirección antes de tiempo con su firma. */
+	PERIODO_ABIERTO("Abrió un periodo de evaluación", false),
+	/** Dirección cerró un periodo con su firma (no se reabre). */
+	PERIODO_CERRADO("Cerró un periodo de evaluación", true),
+	/** Se resalta (M10): la revisión diaria encontró que el catálogo de la base no coincide con el del jar. */
+	CATALOGO_NO_COINCIDE("El catálogo del currículo no coincide con el del sistema", true),
+
+	// Sprint 10, tanda 2: notas (sección 8.4). Sin conclusiones (pueden tener datos sensibles): solo su SHA-256.
+	/** Un lote del docente: cuántas filas y su huella. */
+	NOTAS_GUARDADAS("Guardó notas de un área", false),
+	/** Se pidió corregir una nota después del cierre (la aprueba otra persona). */
+	CORRECCION_NOTA_PEDIDA("Pidió corregir una nota después del cierre", false),
+	/** Se resalta: nivel anterior y nuevo, quién pidió, quién aprobó y las huellas de las dos conclusiones. */
+	CALIFICACION_CORREGIDA("Corrigió una nota después del cierre", true),
+	/** Se pidió registrar una nota tardía (competencia sin nota de un periodo cerrado). */
+	CALIFICACION_TARDIA_PEDIDA("Pidió registrar una nota tardía", false),
+	/** Se resalta: notas de un periodo cerrado registradas con su solicitud aprobada. */
+	CALIFICACION_TARDIA_REGISTRADA("Registró notas tardías de un periodo cerrado", true),
+	/** Se resalta: Dirección exoneró a un alumno de Religión o Educación Física desde un periodo. */
+	AREA_EXONERADA("Exoneró a un alumno de un área", true),
+
+	// Sprint 10, tanda 3: libretas y SIAGIE (sección 8.4). Sin notas ni conclusiones: cantidades, versiones y huellas.
+	/** sistema.libretas emitió las libretas de una sección al cierre: UN evento por periodo y sección (decisión 191). */
+	LIBRETAS_EMITIDAS("Emitió las libretas de una sección", false),
+	/** sistema.libretas emitió la versión siguiente de una libreta por una corrección o nota tardía aprobada. */
+	LIBRETA_CORREGIDA_EMITIDA("Emitió una libreta corregida", false),
+	/** Se resalta: sistema.libretas reemitió una libreta con la reemisión aprobada por Promotoría (A3). */
+	LIBRETA_REEMITIDA("Reemitió una libreta tras una revisión de integridad", true),
+	/** Se resalta (E40): al regenerar una libreta su huella no coincide: alguien tocó la base. No se entregó ese PDF. */
+	LIBRETA_HUELLA_NO_COINCIDE("Una libreta no coincide con su huella", true),
+	/** Dirección consultó un código de verificación (A4). */
+	LIBRETA_VERIFICADA("Verificó el código de una libreta", false),
+	/** Dirección o el tutor imprimió libretas (cada una deja su constancia de entrega). */
+	LIBRETAS_IMPRESAS("Imprimió libretas", false),
+	/** sistema.libretas creó los avisos de libretas a las familias. */
+	AVISOS_LIBRETAS_ENVIADOS("Avisó a las familias que su libreta está en el portal", false),
+	/** Se descargó la exportación de calificaciones de una sección para el SIAGIE (con el código y el SHA-256). */
+	CALIFICACIONES_SIAGIE_EXPORTADAS("Descargó las calificaciones de una sección para el SIAGIE", false),
+	/** Se resalta (M12): Dirección delegó con su firma la exportación para el SIAGIE a una persona de Administración. */
+	DELEGACION_SIAGIE_OTORGADA("Delegó la exportación de calificaciones para el SIAGIE", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

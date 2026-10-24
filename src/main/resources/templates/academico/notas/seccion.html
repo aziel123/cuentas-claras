@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 2 (sección 3.5): las notas de toda una sección en un periodo, de solo lectura (tutor y Dirección).
+     Solo nombres de los alumnos. Dirección pide desde aquí la corrección de una nota de un periodo cerrado. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Notas de la sección', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="notas-seccion">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/academico/notas/secciones}">Notas de la sección</a></p>
+			<h1 th:text="|${vista.seccion} · ${vista.periodo}|">3.° Primaria A · I bimestre</h1>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<form class="filtros" method="get" th:action="@{/academico/notas/secciones/{id}(id=${vista.seccionId})}">
+		<div class="campo">
+			<label for="periodo">Periodo</label>
+			<select class="input" id="periodo" name="periodo">
+				<option th:each="p : ${vista.periodos}" th:value="${p.id}" th:text="|${p.nombre} (${p.estado})|"
+					th:selected="${p.id == vista.periodoId}">I bimestre</option>
+			</select>
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Ver el periodo', 'secundario')}"></button>
+	</form>
+
+	<section class="tarjeta" th:each="a : ${vista.areas}" th:attr="aria-labelledby=${'titulo-area-' + a.areaId}">
+		<h2 th:id="${'titulo-area-' + a.areaId}" th:text="${a.area}">Matemática</h2>
+		<table class="tabla">
+			<caption class="solo-lectores" th:text="|Notas de ${a.area}|">Notas</caption>
+			<thead>
+				<tr><th scope="col">Alumno</th><th scope="col" th:each="k : ${a.competencias}" th:text="${k.codigo}" th:title="${k.nombre}">PRI-MAT-1</th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="f : ${a.filas}">
+					<td data-etiqueta="Alumno" th:text="|${f.apellidos}, ${f.nombres}|">Quispe Huamán, Mateo</td>
+					<td th:each="c, i : ${f.celdas}" th:attr="data-etiqueta=${a.competencias[i.index].codigo}">
+						<span th:if="${f.exonerado}" class="secundario">Exonerado</span>
+						<th:block th:unless="${f.exonerado}">
+							<span th:text="${c.nivel != null} ? ${c.nivel} : '—'">A</span>
+							<a class="secundario" th:if="${c.calificacionId != null and vista.puedeCorregir}"
+								th:href="@{/academico/notas/correcciones/{id}(id=${c.calificacionId})}">Corregir</a>
+						</th:block>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

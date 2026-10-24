@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 2 (sección 3.5): la hoja de notas de un área en el celular. Un alumno por bloque y una competencia
+     por grupo: un toque elige AD, A, B o C («Sin nota» la quita con el periodo abierto) y la conclusión va debajo. UN
+     botón «Guardar»: un POST, un lote, una firma. Solo nombres: nunca documentos, contactos ni nada de cobranza. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Hoja de notas', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="hoja-notas">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/academico/notas}">Notas</a></p>
+			<h1 th:text="${hoja.area != null} ? |${hoja.seccion} · ${hoja.area}| : ${hoja.seccion}">3.° Primaria A · Matemática</h1>
+			<p class="secundario" th:if="${hoja.periodo != null}" th:text="|${hoja.periodo} (${hoja.estadoPeriodo})|">I bimestre (Abierto)</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${hoja.aviso != null}">
+		<div th:replace="~{fragments/componentes :: alerta('info', ${hoja.aviso})}"></div>
+	</th:block>
+
+	<form class="filtros" method="get" th:if="${hoja.areaId != null and hoja.periodoId != null and hoja.solicitudId == null}"
+		th:action="@{/academico/notas/{s}/{a}(s=${hoja.seccionId}, a=${hoja.areaId})}">
+		<div class="campo">
+			<label for="periodo">Periodo</label>
+			<select class="input" id="periodo" name="periodo">
+				<option th:each="p : ${hoja.periodos}" th:value="${p.id}" th:text="|${p.nombre} (${p.estado})|"
+					th:selected="${p.id == hoja.periodoId}">I bimestre</option>
+			</select>
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Ver el periodo', 'secundario')}"></button>
+	</form>
+
+	<th:block th:if="${hoja.periodoId != null}">
+		<p class="ayuda" th:if="${hoja.conclusionSiempre}"
+			th:text="|El colegio pide la conclusión descriptiva con todo nivel (hasta ${hoja.conclusionMax} caracteres).|">Conclusión</p>
+		<p class="ayuda" th:if="${!hoja.conclusionSiempre and !#lists.isEmpty(hoja.exigenConclusion)}"
+			th:text="|La norma exige la conclusión descriptiva con ${#strings.listJoin(hoja.exigenConclusion, ', ')}: escribe qué logró y qué le recomiendas (hasta ${hoja.conclusionMax} caracteres).|">Conclusión</p>
+
+		<form method="post" class="tarjeta" th:if="${hoja.editable}"
+			th:action="@{/academico/notas/{s}/{a}(s=${hoja.seccionId}, a=${hoja.areaId}, periodo=${hoja.periodoId}, solicitud=${hoja.solicitudId})}">
+			<th:block th:if="${#lists.isEmpty(hoja.filas)}">
+				<div th:replace="~{fragments/componentes :: estadoVacio('La sección no tiene alumnos matriculados', 'Administración los matricula.')}"></div>
+			</th:block>
+			<div class="hoja-fila" th:each="f : ${hoja.filas}" th:data-matricula="${f.matriculaId}">
+				<h2 class="titulo-chico" th:text="|${f.numero}. ${f.apellidos}, ${f.nombres}|">1. Quispe Huamán, Mateo</h2>
+				<p class="secundario" th:if="${f.exonerado}">Exonerado de esta área: no se califica.</p>
+				<th:block th:unless="${f.exonerado}">
+					<fieldset class="grupo-opciones" th:each="c, i : ${f.celdas}">
+						<legend th:text="|${hoja.competencias[i.index].codigo} · ${hoja.competencias[i.index].nombre}|">Resuelve problemas de cantidad</legend>
+						<div class="hoja-estados">
+							<label class="opcion" th:each="v : ${niveles}">
+								<input type="radio" th:name="|nivel-${c.clave(f.matriculaId)}|" th:value="${v}" th:checked="${c.nivel == v}"
+									th:disabled="${hoja.tardia and c.conNota}">
+								<span th:text="${v}">A</span>
+							</label>
+							<label class="opcion" th:if="${!hoja.tardia and c.calificacionId != null}">
+								<input type="radio" th:name="|nivel-${c.clave(f.matriculaId)}|" value="SIN" th:checked="${c.nivel == null}">
+								<span>Sin nota</span>
+							</label>
+						</div>
+						<label class="campo" th:unless="${hoja.tardia and c.conNota}">
+							<span class="solo-lectores" th:text="|Conclusión de ${f.nombres} en ${hoja.competencias[i.index].codigo}|">Conclusión</span>
+							<textarea class="input" th:name="|conclusion-${c.clave(f.matriculaId)}|" rows="2"
+								th:maxlength="${hoja.conclusionMax}" placeholder="Conclusión descriptiva (si la norma la exige)"
+								th:text="${c.conclusion}"></textarea>
+						</label>
+					</fieldset>
+				</th:block>
+			</div>
+			<div class="acciones" th:unless="${#lists.isEmpty(hoja.filas)}">
+				<button type="submit" class="btn btn-primario" th:text="|Guardar notas de ${hoja.area}|">Guardar notas</button>
+			</div>
+			<p class="ayuda">Se guarda solo lo que cambió, en un solo guardado con tu firma. Con el periodo abierto puedes
+				cambiar una nota las veces que haga falta; después del cierre, va por solicitud.</p>
+		</form>
+
+		<!--/* Periodo cerrado (o por abrir): de solo lectura; cada nota se corrige por solicitud. */-->
+		<section class="tarjeta" aria-labelledby="titulo-lectura" th:unless="${hoja.editable}">
+			<h2 id="titulo-lectura">Notas registradas</h2>
+			<table class="tabla">
+				<caption class="solo-lectores">Nota vigente de cada alumno por competencia</caption>
+				<thead>
+					<tr><th scope="col">Alumno</th><th scope="col" th:each="k : ${hoja.competencias}" th:text="${k.codigo}" th:title="${k.nombre}">PRI-MAT-1</th></tr>
+				</thead>
+				<tbody>
+					<tr th:each="f : ${hoja.filas}">
+						<td data-etiqueta="Alumno" th:text="|${f.apellidos}, ${f.nombres}|">Quispe Huamán, Mateo</td>
+						<td th:each="c, i : ${f.celdas}" th:attr="data-etiqueta=${hoja.competencias[i.index].codigo}">
+							<span th:if="${f.exonerado}" class="secundario">Exonerado</span>
+							<th:block th:unless="${f.exonerado}">
+								<span th:text="${c.nivel != null} ? ${c.nivel} : '—'">A</span>
+								<a class="secundario" th:if="${c.calificacionId != null and hoja.estadoPeriodo == 'Cerrado'}"
+									th:href="@{/academico/notas/correcciones/{id}(id=${c.calificacionId})}">Pedir corrección</a>
+							</th:block>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</section>
+
+		<section class="tarjeta formulario-angosto" aria-labelledby="titulo-tardia"
+			th:if="${!hoja.editable and hoja.estadoPeriodo == 'Cerrado' and hoja.sinNota > 0}">
+			<h2 id="titulo-tardia">¿Quedaron competencias sin nota?</h2>
+			<p class="secundario" th:text="|Faltan ${hoja.sinNota} notas. Si se trabajaron y no se registraron a tiempo, pide registrarlas (lo aprueba otra persona; luego tienes 48 horas).|">Faltan notas</p>
+			<form method="post" class="formulario" th:action="@{/academico/notas/{s}/{a}/tardia(s=${hoja.seccionId}, a=${hoja.areaId}, periodo=${hoja.periodoId})}">
+				<div class="campo">
+					<label for="motivo-tardia">Por qué quedaron sin registrar</label>
+					<textarea class="input" id="motivo-tardia" name="motivo" required minlength="20" maxlength="500"></textarea>
+				</div>
+				<div class="acciones"><button type="submit" class="btn btn-secundario">Pedir registrar las notas pendientes</button></div>
+			</form>
+		</section>
+	</th:block>
+</main>
+</body>
+</html>

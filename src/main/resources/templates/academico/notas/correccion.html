@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 2 (sección 3.6, M8): pedir la corrección de una nota de un periodo CERRADO. La aprueba OTRA persona
+     de Dirección o Promotoría que no la pidió ni registró la nota. La conclusión nueva va en su borrador (nunca en la
+     bitácora). */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Pedir corrección de nota', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="correccion-nota">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/academico/notas}">Notas</a></p>
+			<h1>Pedir corrección de nota</h1>
+			<p class="secundario" th:text="|${f.seccion} · ${f.area} · ${f.periodo}|">3.° Primaria A · Matemática · I bimestre</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-correccion">
+		<h2 id="titulo-correccion" th:text="${f.alumno}">Mateo Quispe</h2>
+		<p th:text="${f.competencia}">PRI-MAT-1 · Resuelve problemas de cantidad</p>
+		<p class="secundario" th:text="|Hoy figura: ${f.nivelActual != null ? f.nivelActual : 'sin nota'}|">Hoy figura: B</p>
+		<p class="secundario" th:if="${f.conclusionActual != null}" th:text="|Conclusión de hoy: ${f.conclusionActual}|">Conclusión</p>
+		<form method="post" class="formulario" th:action="@{/academico/notas/correcciones/{id}(id=${f.calificacionId})}">
+			<fieldset class="grupo-opciones">
+				<legend>Nivel correcto</legend>
+				<div class="hoja-estados">
+					<label class="opcion" th:each="v : ${ {'AD','A','B','C'} }">
+						<input type="radio" name="nivel" th:value="${v}" required>
+						<span th:text="${v}">A</span>
+					</label>
+					<label class="opcion">
+						<input type="radio" name="nivel" value="SIN">
+						<span>Sin nota</span>
+					</label>
+				</div>
+			</fieldset>
+			<div class="campo">
+				<label for="conclusion">Conclusión descriptiva</label>
+				<textarea class="input" id="conclusion" name="conclusion" rows="3" th:maxlength="${f.conclusionMax}"></textarea>
+				<p class="ayuda" th:text="${f.conclusionSiempre} ? 'El colegio la pide con todo nivel.' : |La norma la exige con ${#strings.listJoin(f.exigenConclusion, ', ')}.|">Ayuda</p>
+			</div>
+			<div class="campo">
+				<label for="motivo">Motivo de la corrección</label>
+				<textarea class="input" id="motivo" name="motivo" required minlength="20" maxlength="500"></textarea>
+				<p class="ayuda">Qué pasó y cómo lo verificaste (al menos 20 caracteres). Lo lee quien aprueba.</p>
+			</div>
+			<div class="acciones"><button type="submit" class="btn btn-primario">Pedir la corrección</button></div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

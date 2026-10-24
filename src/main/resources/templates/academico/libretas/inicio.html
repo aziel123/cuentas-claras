@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 3 (secciones 3.7 y 3.13, M9): las libretas de una sección para imprimir. Dirección ve todas las
+     secciones; el tutor, solo las suyas. Cada libreta impresa deja su constancia de entrega (en Inicial, la de la entrevista
+     con la familia). Sin documentos ni nada de cobranza. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Libretas', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="libretas">
+	<div class="cabecera">
+		<div>
+			<h1>Libretas</h1>
+			<p class="secundario">Las libretas se emiten solas al cerrar cada periodo, para todos los alumnos matriculados.
+				Imprime una o la sección completa: cada impresión queda registrada a tu nombre.</p>
+		</div>
+		<a class="btn btn-secundario" th:if="${vista.direccion()}" th:href="@{/academico/libretas/verificar}">Verificar un código</a>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${#lists.isEmpty(vista.secciones())}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('No tienes secciones con libretas', 'Dirección ve todas las secciones; el tutor, la suya.')}"></div>
+	</th:block>
+
+	<form class="filtros" method="get" th:action="@{/academico/libretas}" th:unless="${#lists.isEmpty(vista.secciones())}">
+		<div class="campo">
+			<label for="seccion">Sección</label>
+			<select class="input" id="seccion" name="seccion" required>
+				<option th:each="s : ${vista.secciones()}" th:value="${s.id()}" th:text="${s.etiqueta()}"
+					th:selected="${s.id() == vista.seccionId()}">3.° Primaria B</option>
+			</select>
+		</div>
+		<div class="campo">
+			<label for="periodo">Periodo cerrado</label>
+			<select class="input" id="periodo" name="periodo" required>
+				<option th:each="p : ${vista.periodos()}" th:value="${p.id()}" th:text="${p.etiqueta()}"
+					th:selected="${p.id() == vista.periodoId()}">I bimestre</option>
+			</select>
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Ver libretas', 'secundario')}"></button>
+	</form>
+
+	<section class="tarjeta" th:if="${vista.seccion() != null}" aria-labelledby="titulo-libretas">
+		<div class="fila entre">
+			<h2 id="titulo-libretas" th:text="|${vista.seccion()} · ${vista.periodo()}|">3.° Primaria B · I bimestre</h2>
+			<a class="btn btn-primario" th:if="${!#lists.isEmpty(vista.libretas()) and #lists.size(vista.libretas()) <= vista.maxPorArchivo()}"
+				th:href="@{/academico/libretas/seccion.pdf(seccion=${vista.seccionId()},periodo=${vista.periodoId()})}"
+				th:text="${vista.inicial()} ? 'Imprimir para la entrevista' : 'Imprimir la sección'">Imprimir la sección</a>
+		</div>
+		<p class="secundario" th:if="${vista.inicial()}">En Inicial la libreta se entrega en la entrevista con la familia: la
+			impresión queda como entrega en la entrevista.</p>
+		<th:block th:if="${vista.faltan() > 0}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', |${vista.faltan()} alumno(s) todavía no tienen su libreta: se emiten en unos minutos.|)}"></div>
+		</th:block>
+		<th:block th:if="${#lists.isEmpty(vista.libretas())}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay libretas', 'Se emiten solas unos minutos después del cierre del periodo.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(vista.libretas())}">
+			<caption class="solo-lectores">Libretas vigentes de la sección</caption>
+			<thead><tr><th scope="col">Alumno</th><th scope="col">Versión</th><th scope="col">Emitida</th>
+				<th scope="col">Entregas</th><th scope="col"><span class="solo-lectores">Acción</span></th></tr></thead>
+			<tbody>
+				<tr th:each="l : ${vista.libretas()}">
+					<td data-etiqueta="Alumno" th:text="${l.alumno()}">Quispe Rojas, Mateo</td>
+					<td data-etiqueta="Versión"><span th:text="${l.version()}">1</span> <span class="secundario" th:text="${l.motivo()}">Al cierre del periodo</span></td>
+					<td data-etiqueta="Emitida" th:text="${l.emitida()}">08/05/2026</td>
+					<td data-etiqueta="Entregas" th:text="${l.entregas()}">0</td>
+					<td><a class="btn btn-secundario btn-chico" th:href="@{/academico/libretas/{id}.pdf(id=${l.id()})}"
+						th:attr="aria-label=|Imprimir la libreta de ${l.alumno()}|">Imprimir</a></td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

@@ -61,8 +61,27 @@
 					</select>
 					<p class="error" th:if="${#fields.hasErrors('tipo')}" th:errors="*{tipo}">Error</p>
 				</div>
-				<div th:replace="~{fragments/componentes :: campoDe('areas', 'Áreas (opcional)', 'Por ejemplo: Matemática, Ciencia y Tecnología. El auxiliar no lleva áreas.', 'text', false)}"></div>
 			</div>
+			<!--/* Sprint 10, tanda 1 (sección 3.4): las áreas del catálogo que calificará; se aprueban con la asignación. */-->
+			<fieldset class="campo" th:if="${vista.evaluacionConfigurada}" aria-describedby="areas-ayuda">
+				<legend>Áreas que calificará (del nivel de la sección)</legend>
+				<p class="ayuda" id="areas-ayuda">Se aprueban junto con la asignación y nadie las agrega después. El auxiliar y
+					una cobertura no llevan áreas; las competencias transversales las califica el tutor(a).</p>
+				<div th:each="g : ${vista.areasDelAnio}" class="bloque" th:data-nivel="${g.nivel()}">
+					<strong th:text="${g.etiqueta()}">Primaria</strong>
+					<label class="opcion" th:each="a : ${g.areas()}">
+						<input type="checkbox" name="areaIds" th:value="${a.id}" th:checked="${#lists.contains(nueva.areaIds, a.id)}">
+						<span th:text="${a.nombre}">Matemática</span>
+					</label>
+				</div>
+				<label class="opcion">
+					<input type="checkbox" name="todasLasAreas" value="true" th:checked="${nueva.todasLasAreas}">
+					<span>Todas las áreas del grado (tutor(a) de Inicial o Primaria)</span>
+				</label>
+			</fieldset>
+			<th:block th:unless="${vista.evaluacionConfigurada}">
+				<div th:replace="~{fragments/componentes :: alerta('info', 'Para dar áreas del currículo, Dirección guarda primero la evaluación del año. Sin áreas, el docente marca asistencia pero no califica.')}"></div>
+			</th:block>
 			<div class="campo">
 				<label for="motivo">Motivo (obligatorio)</label>
 				<textarea class="input" th:field="*{motivo}" required minlength="10" maxlength="500" aria-describedby="motivo-ayuda"
@@ -91,6 +110,30 @@
 				<button th:replace="~{fragments/componentes :: boton('Proponer las del año anterior', 'secundario')}"></button>
 			</div>
 		</form>
+	</section>
+
+	<!--/* Sprint 10, tanda 1: las vigentes del sprint 9 sin áreas del catálogo no califican hasta volver a proponerlas. */-->
+	<section class="tarjeta" aria-labelledby="titulo-sin-areas" th:unless="${#lists.isEmpty(vista.sinAreas)}">
+		<h2 id="titulo-sin-areas">Asignaciones sin áreas del catálogo</h2>
+		<p class="secundario">Estas personas marcan asistencia, pero no pueden poner notas hasta que se proponga de nuevo su
+			asignación con las áreas del currículo (al aprobarla, la anterior termina sola).</p>
+		<table class="tabla">
+			<thead><tr><th>Docente</th><th>Qué hace</th><th>Sección</th><th>Áreas (texto anterior)</th><th>Completar</th></tr></thead>
+			<tbody>
+				<tr th:each="a : ${vista.sinAreas}" th:data-asignacion="${a.id()}">
+					<td th:text="${a.docente()}">Ana Torres</td>
+					<td th:text="${a.tipo()}">Docente de área</td>
+					<td th:text="${a.seccion()}">3.° Primaria A</td>
+					<td th:text="${a.areasTexto() == null} ? '—' : ${a.areasTexto()}">Matemática</td>
+					<td>
+						<th:block th:if="${vista.puedeProponer}">
+							<a class="btn btn-secundario btn-chico" th:href="@{/academico/asignaciones/completar(asignacion=${a.id()})}">Completar áreas</a>
+							<a class="secundario" th:href="@{/academico/asignaciones/completar(seccion=${a.seccionId()})}">Completar todas las de esta sección</a>
+						</th:block>
+					</td>
+				</tr>
+			</tbody>
+		</table>
 	</section>
 
 	<section class="tarjeta" th:each="s : ${vista.secciones}" th:attr="aria-labelledby=${'titulo-seccion-' + s.seccionId}"
