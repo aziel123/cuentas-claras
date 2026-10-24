@@ -30,17 +30,26 @@ class ColaDeLibretasTest extends PruebaLibretas {
 		CountDownLatch soltar = new CountDownLatch(1);
 		CountDownLatch ocupados = new CountDownLatch(2);
 		try {
-			for (int i = 0; i < 10; i++) {
-				generador.ocupar(() -> {
-					ocupados.countDown();
-					try {
-						soltar.await(60, TimeUnit.SECONDS);
-					}
-					catch (InterruptedException e) {
-						Thread.currentThread().interrupt();
-					}
-				});
+			// Llena los 2 hilos y la cola de 8 hasta que el generador rechace (en la suite completa puede quedar una tarea
+			// de otra prueba en curso: se llena hasta el rechazo, no un número fijo).
+			boolean llena = false;
+			for (int i = 0; i < 20 && !llena; i++) {
+				try {
+					generador.ocupar(() -> {
+						ocupados.countDown();
+						try {
+							soltar.await(60, TimeUnit.SECONDS);
+						}
+						catch (InterruptedException e) {
+							Thread.currentThread().interrupt();
+						}
+					});
+				}
+				catch (GeneradorLibretaPdf.ColaLlenaException e) {
+					llena = true;
+				}
 			}
+			assertThat(llena).as("la cola se llenó con 2 hilos y 8 en espera").isTrue();
 			assertThat(ocupados.await(10, TimeUnit.SECONDS)).isTrue();
 			MockHttpServletResponse r = mvc.perform(get("/familia/libretas/" + id + ".pdf").with(UsuariosDePrueba.como(
 					rosaEnLinea()))).andReturn().getResponse();
