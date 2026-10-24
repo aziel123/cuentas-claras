@@ -217,7 +217,7 @@ class PasoAProduccionTest {
 		assertThat(lista.enPreparacion()).isTrue();
 		// Tanda 2: los 14 pasos de la sección 3.5, en su orden; los dos últimos, opcionales.
 		assertThat(lista.puntos()).extracting(p -> p.clave()).containsExactlyElementsOf(EstadoPuestaEnMarcha.PASOS);
-		assertThat(lista.puntos()).hasSize(14);
+		assertThat(lista.puntos()).hasSize(15);
 		assertThat(lista.puntos().stream().filter(p -> !p.obligatorio()).map(p -> p.clave()).toList())
 				.containsExactly(EstadoPuestaEnMarcha.PASARELA, EstadoPuestaEnMarcha.RECAUDACION);
 		assertThat(lista.puntos()).allMatch(p -> p.enlace() == null);

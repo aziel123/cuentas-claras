@@ -55,6 +55,16 @@ public interface MarcaAsistenciaRepository extends Repository<MarcaAsistencia, L
 	/** QA-S9-8: todas las marcas de una fecha (vigentes y reemplazadas), en el orden en que se escribieron. */
 	List<MarcaAsistencia> findByFechaAndIdLessThanEqualOrderByIdAsc(LocalDate fecha, Long hastaId);
 
+	/** Sprint 10, tanda 3: toda la historia de unas matrículas entre dos fechas (la foto de la libreta la filtra por id). */
+	List<MarcaAsistencia> findByMatriculaIdInAndFechaBetweenOrderByIdAsc(Collection<Long> matriculas, LocalDate desde,
+			LocalDate hasta);
+
+	/** Sprint 10, tanda 3: [matrícula, id más alto] de las marcas escritas hasta una hora (la marca de agua de la libreta). */
+	@Query("select m.matriculaId, max(m.id) from MarcaAsistencia m where m.matriculaId in :matriculas and m.creadoEn <= :hasta "
+			+ "group by m.matriculaId")
+	List<Object[]> ultimasHasta(@Param("matriculas") Collection<Long> matriculas,
+			@Param("hasta") java.time.LocalDateTime hasta);
+
 	/** El id más alto del colegio (0 si no hay marcas). */
 	@Query("select coalesce(max(m.id), 0) from MarcaAsistencia m")
 	Long ultimoId();

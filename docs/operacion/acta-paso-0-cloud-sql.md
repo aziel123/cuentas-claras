@@ -50,7 +50,7 @@ Copia aquí el «Resumen del job mysql» (cada paso con OK o FALLÓ).
 |---|---|
 | `gcloud sql instances patch --ssl-mode ENCRYPTED_ONLY` | |
 | Sin TLS no conecta | |
-| Prod arranca con `sslMode=VERIFY_CA`: «Huellas de los 99 triggers y las 14 funciones verificadas» | |
+| Prod arranca con `sslMode=VERIFY_CA`: «Huellas de los 112 triggers y las 16 funciones verificadas» | |
 | «Conexiones a MySQL cifradas (TLS) verificadas» y «Privilegios verificados» | |
 
 ## 5. Lo que este paso no prueba

@@ -61,7 +61,7 @@ class GraficosDireccionTest {
 				seccion(2L, "5.° Primaria B", true, asignacion("carlos.quispe", true), asignacion("ana.rojas", true)),
 				seccion(3L, "1.° Secundaria A", true, asignacion("luis.vega", false)),
 				seccion(4L, "2.° Secundaria A", true),
-				seccion(5L, "3.° Secundaria A", false)), List.of(), true, true, false));
+				seccion(5L, "3.° Secundaria A", false)), List.of(), true, true, false, List.of(), List.of(), false));
 		when(asistencia.resumenDelDia()).thenReturn(new AsistenciaDelDia(HOY, 40, 5, 4, 1, 2));
 		when(cobranza.anio(null)).thenReturn(Optional.of(new AnioOpcion(7L, 2026, "En curso")));
 		when(cobranza.morosidadPorGrado(any(), any())).thenReturn(List.of(

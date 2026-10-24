@@ -43,6 +43,10 @@ public interface AsignacionDocenteRepository extends Repository<AsignacionDocent
 	Optional<AsignacionDocente> findFirstBySeccionIdAndTipoAndEstado(Long seccionId, TipoAsignacion tipo,
 			EstadoAsignacion estado);
 
+	/** Sprint 10, tanda 1: la de ese docente, sección y tipo en ese estado (la VIGENTE que reemplaza una propuesta nueva). */
+	Optional<AsignacionDocente> findFirstByUsuarioIdAndSeccionIdAndTipoAndEstado(Long usuarioId, Long seccionId,
+			TipoAsignacion tipo, EstadoAsignacion estado);
+
 	/** Todas las de un año (la pantalla de asignaciones), en orden de sección y de llegada. */
 	List<AsignacionDocente> findByAnioEscolarIdOrderBySeccionIdAscIdAsc(Long anioEscolarId);
 

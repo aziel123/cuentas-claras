@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 2 (E21, A3): exonerar a un alumno de Religión o Educación Física. Solo Dirección, con su firma y el
+     código del escrito del padre. Rige desde el periodo abierto: las notas anteriores quedan. Solo nombres. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Exoneraciones', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="exoneraciones">
+	<div class="cabecera">
+		<div>
+			<h1>Exoneraciones</h1>
+			<p class="secundario">Religión o Educación Física, con el escrito del padre. Desde el periodo abierto el área no se
+				califica para ese alumno y la libreta dirá «Exonerado».</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:if="${vista.seccionId == null}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('No hay secciones en el año en curso', 'Créalas en Colegio.')}"></div>
+	</th:block>
+
+	<th:block th:if="${vista.seccionId != null}">
+		<form class="filtros" method="get" th:action="@{/academico/notas/exoneraciones}">
+			<div class="campo">
+				<label for="seccion">Sección</label>
+				<select class="input" id="seccion" name="seccion">
+					<option th:each="s : ${vista.secciones}" th:value="${s.id}" th:text="${s.nombre}" th:selected="${s.id == vista.seccionId}">3.° Primaria A</option>
+				</select>
+			</div>
+			<button th:replace="~{fragments/componentes :: boton('Ver la sección', 'secundario')}"></button>
+		</form>
+
+		<th:block th:if="${vista.periodoAbierto == null}">
+			<div th:replace="~{fragments/componentes :: alerta('info', 'No hay un periodo abierto: la exoneración rige desde un periodo abierto.')}"></div>
+		</th:block>
+
+		<section class="tarjeta formulario-angosto" aria-labelledby="titulo-exonerar"
+			th:if="${vista.periodoAbierto != null and !#lists.isEmpty(vista.areas)}">
+			<h2 id="titulo-exonerar" th:text="|Exonerar en ${vista.seccion} desde el ${vista.periodoAbierto}|">Exonerar</h2>
+			<form method="post" class="formulario" th:action="@{/academico/notas/exoneraciones(seccion=${vista.seccionId})}" th:object="${pedido}">
+				<div class="campo">
+					<label for="matriculaId">Alumno</label>
+					<select class="input" id="matriculaId" th:field="*{matriculaId}" required>
+						<option value="">Elige al alumno</option>
+						<option th:each="a : ${vista.alumnos}" th:value="${a.id}" th:text="${a.nombre}">Quispe Huamán, Mateo</option>
+					</select>
+					<p class="error" th:if="${#fields.hasErrors('matriculaId')}" th:errors="*{matriculaId}">Error</p>
+				</div>
+				<div class="campo">
+					<label for="areaId">Área</label>
+					<select class="input" id="areaId" th:field="*{areaId}" required>
+						<option value="">Elige el área</option>
+						<option th:each="x : ${vista.areas}" th:value="${x.id}" th:text="${x.nombre}">Educación Religiosa</option>
+					</select>
+					<p class="error" th:if="${#fields.hasErrors('areaId')}" th:errors="*{areaId}">Error</p>
+				</div>
+				<div class="campo">
+					<label for="documento">Código del escrito del padre</label>
+					<input class="input" id="documento" th:field="*{documento}" required minlength="3" maxlength="40">
+					<p class="error" th:if="${#fields.hasErrors('documento')}" th:errors="*{documento}">Error</p>
+				</div>
+				<div class="campo">
+					<label for="motivo">Motivo</label>
+					<textarea class="input" id="motivo" th:field="*{motivo}" required minlength="10" maxlength="300"></textarea>
+					<p class="error" th:if="${#fields.hasErrors('motivo')}" th:errors="*{motivo}">Error</p>
+				</div>
+				<div class="acciones"><button type="submit" class="btn btn-primario">Exonerar con mi firma</button></div>
+			</form>
+		</section>
+
+		<section class="tarjeta" aria-labelledby="titulo-registradas">
+			<h2 id="titulo-registradas">Exoneraciones registradas</h2>
+			<p class="secundario" th:if="${#lists.isEmpty(vista.registradas)}">Ninguna en esta sección.</p>
+			<table class="tabla" th:unless="${#lists.isEmpty(vista.registradas)}">
+				<thead><tr><th scope="col">Alumno</th><th scope="col">Área</th><th scope="col">Desde</th><th scope="col">Escrito</th><th scope="col">Autorizó</th></tr></thead>
+				<tbody>
+					<tr th:each="r : ${vista.registradas}">
+						<td data-etiqueta="Alumno" th:text="${r.alumno}">Mateo Quispe</td>
+						<td data-etiqueta="Área" th:text="${r.area}">Educación Religiosa</td>
+						<td data-etiqueta="Desde" th:text="${r.desde}">II bimestre</td>
+						<td data-etiqueta="Escrito" th:text="${r.documento}">EXP-123</td>
+						<td data-etiqueta="Autorizó" th:text="${r.autorizadoPor}">director</td>
+					</tr>
+				</tbody>
+			</table>
+		</section>
+	</th:block>
+</main>
+</body>
+</html>

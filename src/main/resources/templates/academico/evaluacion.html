@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 1 (sección 3.3): cómo se evalúa el año. La guarda SOLO Dirección, con su firma; Administración y
+     Promotoría la leen. Desde que abre un periodo, la versión, el tipo de periodo y los días de cierre no cambian (M7). */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Evaluación del año', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="evaluacion-anio">
+	<div class="cabecera">
+		<div>
+			<h1>Evaluación del año</h1>
+			<p class="secundario">Con qué currículo se califica, cómo se divide el año y cuándo se puede cerrar cada periodo.
+				Las notas nunca dependen de los pagos de la familia.</p>
+			<p class="secundario" th:if="${vista.actualizadoPor != null}"
+				th:text="|Último cambio: ${vista.actualizadoPor}, ${#temporals.format(vista.actualizadoEn, 'dd/MM/yyyy HH:mm')}|">Último cambio</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<form class="filtros" method="get" th:action="@{/academico/evaluacion/configuracion}" th:unless="${#lists.isEmpty(vista.anios)}">
+		<div class="campo">
+			<label for="anio">Año escolar</label>
+			<select class="input" id="anio" name="anio">
+				<option th:each="a : ${vista.anios}" th:value="${a.id}" th:text="${a.etiqueta}" th:selected="${vista.anioId == a.id}">2027</option>
+			</select>
+		</div>
+		<button th:replace="~{fragments/componentes :: boton('Ver el año', 'secundario')}"></button>
+	</form>
+
+	<th:block th:if="${vista.anioId == null}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay años escolares', 'Créalos en Colegio con sus secciones.')}"></div>
+	</th:block>
+
+	<th:block th:if="${vista.anioId != null}">
+		<th:block th:if="${!vista.guardada}">
+			<div th:replace="~{fragments/componentes :: alerta('info', 'Todavía no se guardó la evaluación de este año: estos son los valores por defecto. Sin guardarla no se programan periodos ni se dan áreas.')}"></div>
+		</th:block>
+		<th:block th:if="${vista.fijos}">
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', 'El año ya tiene un periodo abierto: la versión del currículo, el tipo de periodo y los días de cierre anticipado ya no cambian.')}"></div>
+		</th:block>
+
+		<section class="tarjeta formulario-angosto" aria-label="Configuración de la evaluación">
+			<form class="formulario" method="post" th:action="@{/academico/evaluacion/configuracion}" th:object="${configuracion}">
+				<input type="hidden" th:field="*{anioId}">
+				<fieldset th:disabled="${!vista.puedeGuardar}">
+					<legend class="solo-lectores">Configuración</legend>
+					<div class="formulario-doble">
+						<div class="campo">
+							<label for="curriculoVersionId">Versión del currículo</label>
+							<select class="input" th:field="*{curriculoVersionId}" required th:disabled="${vista.fijos}">
+								<option th:each="v : ${vista.versiones}" th:value="${v.id}" th:text="|${v.codigo} · ${v.nombre}|">CNEB-2016.1</option>
+							</select>
+							<input type="hidden" th:if="${vista.fijos}" name="curriculoVersionId" th:value="*{curriculoVersionId}">
+							<p class="error" th:if="${#fields.hasErrors('curriculoVersionId')}" th:errors="*{curriculoVersionId}">Error</p>
+						</div>
+						<div class="campo">
+							<label for="tipoPeriodo">Cómo se divide el año</label>
+							<select class="input" th:field="*{tipoPeriodo}" required th:disabled="${vista.fijos}">
+								<option th:each="t : ${tipos}" th:value="${t}" th:text="|${t.periodos()} ${t.etiqueta().toLowerCase()}s|">4 bimestres</option>
+							</select>
+							<input type="hidden" th:if="${vista.fijos}" name="tipoPeriodo" th:value="*{tipoPeriodo}">
+							<p class="error" th:if="${#fields.hasErrors('tipoPeriodo')}" th:errors="*{tipoPeriodo}">Error</p>
+						</div>
+						<div th:replace="~{fragments/componentes :: campoDe('diasCierreAnticipado', 'Días de cierre anticipado', 'Dirección puede cerrar el periodo desde estos días antes de su fin (0 a 15).', 'number', true)}"></div>
+						<div th:replace="~{fragments/componentes :: campoDe('conclusionMax', 'Largo máximo de la conclusión descriptiva', 'De 100 a 1000 caracteres.', 'number', true)}"></div>
+						<div th:replace="~{fragments/componentes :: campoDe('lenguaMaterna', 'Lengua materna de los estudiantes', 'Va en la libreta (por ejemplo, Castellano).', 'text', true)}"></div>
+						<div th:replace="~{fragments/componentes :: campoDe('dre', 'DRE (opcional)', 'Por ejemplo: DRE Lima Metropolitana.', 'text', false)}"></div>
+						<div th:replace="~{fragments/componentes :: campoDe('ugel', 'UGEL (opcional)', 'Por ejemplo: UGEL 03.', 'text', false)}"></div>
+					</div>
+					<label class="opcion">
+						<input type="checkbox" th:field="*{conclusionSiempre}">
+						<span>Exigir siempre la conclusión descriptiva (también donde la norma no la exige; nunca menos)</span>
+					</label>
+					<div class="acciones" th:if="${vista.puedeGuardar}">
+						<button th:replace="~{fragments/componentes :: boton('Guardar con mi firma', 'primario')}"></button>
+					</div>
+				</fieldset>
+			</form>
+			<p class="ayuda" th:unless="${vista.puedeGuardar}">Solo Dirección guarda la evaluación del año, con su firma.</p>
+		</section>
+		<p class="secundario">
+			<a th:href="@{/academico/curriculo}">Ver el currículo nacional</a> ·
+			<a th:href="@{/academico/periodos(anio=${vista.anioId})}">Periodos del año</a>
+		</p>
+	</th:block>
+</main>
+</body>
+</html>

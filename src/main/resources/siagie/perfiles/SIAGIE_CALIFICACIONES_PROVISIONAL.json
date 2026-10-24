@@ -1,0 +1,10 @@
+{
+  "nombre": "SIAGIE_CALIFICACIONES_PROVISIONAL",
+  "columnas": [
+    { "encabezado": "N°", "campo": "ORDEN" },
+    { "encabezado": "Código de estudiante o DNI", "campo": "CODIGO" },
+    { "encabezado": "Tipo", "campo": "TIPO_CODIGO", "valores": { "CODIGO_ESTUDIANTE": "Código", "DNI": "DNI", "CE": "CE", "PASAPORTE": "Pasaporte" } },
+    { "encabezado": "Apellidos y nombres", "campo": "APELLIDOS_Y_NOMBRES" }
+  ],
+  "conclusion": true
+}

@@ -19,6 +19,41 @@
 8. **Nómina para el SIAGIE** (*Académico → SIAGIE*): registra el código modular de cada nivel, completa el sexo y el
    código del estudiante en la ficha de quien falte y descarga la nómina **provisional** de cada sección para copiarla en
    la plantilla oficial del SIAGIE. Cada descarga queda en la bitácora con su código.
+9. **Evaluación del año** (sprint 10, *Evaluación → Evaluación del año*): antes del primer bimestre elige la versión del
+   Currículo Nacional (CNEB-2016.1), cómo se divide el año (bimestres por defecto; trimestres o semestres), desde cuántos días
+   antes del fin puedes cerrar cada periodo (7 por defecto), el largo de la conclusión descriptiva, la lengua materna y, si
+   quieres, la DRE y la UGEL de la libreta. Se guarda con tu firma. **Desde que abre el primer periodo**, la versión, el
+   tipo de periodo y los días de cierre ya no cambian. Nada de esto depende de los pagos de la familia.
+10. **Periodos** (*Evaluación → Periodos de evaluación*): programa los bimestres en orden, dentro de las clases del año y sin
+    que se solapen. Cada uno **abre solo** en su fecha de inicio (a las 6:00); si hace falta, ábrelo antes con tu firma. Lo
+    **cierras tú**, con tu firma, desde 7 días antes de su fin y después de cerrar el anterior. **Un periodo cerrado no se
+    reabre.** Con el periodo abierto puedes **extender** su fin, nunca adelantarlo.
+11. **Áreas de cada docente** (*Configuración → Docentes y secciones*): al proponer una asignación de tutor o de área, marca
+    las áreas del currículo que calificará (al tutor de Inicial o Primaria, «Todas las áreas del grado»). Las áreas se
+    aprueban con la asignación y nadie las agrega después; para cambiarlas, propón otra igual con las nuevas: al aprobarla,
+    la anterior termina sola. Las asignaciones del sprint 9 sin áreas salen en «Asignaciones sin áreas del catálogo»:
+    esas personas marcan asistencia, pero no califican hasta que las vuelvas a proponer. Usa **«Completar áreas»** (o
+    «Completar todas las de esta sección»): la propuesta sale llenada con las áreas que coinciden con lo que se escribió
+    antes; revísala y otra persona la aprueba. Te llega el aviso «Hay docentes que todavía no pueden poner notas» al abrir
+    cada periodo y en su última semana.
+12. **Notas** (sprint 10, *Evaluación*): tú **no pones notas** (las pone el docente del área; el tutor, las transversales).
+    En **Avance de notas** ves por sección y área cuántas faltan (sin alumnos) y, 3 días antes del fin, te llega el aviso.
+    En **Notas de la sección** ves todas las notas de una sección (cada consulta queda registrada).
+13. **Cerrar el periodo** (*Periodos → Revisar y cerrar*): antes de cerrar ves lo que falta (competencias sin nota y
+    asignaciones sin áreas). Puedes cerrar igual: queda en la bitácora y cada docente pide su nota tardía. Después del
+    cierre, toda corrección va por la bandeja y la aprueba **otra** persona de Dirección o Promotoría que no la pidió ni
+    registró la nota; si sube el nivel o deja sin nota, Promotoría recibe la alerta. En **Correcciones de notas del
+    periodo** ves quién pidió, quién aprobó y de qué a qué.
+14. **Exoneraciones** (*Evaluación → Exoneraciones*): Religión o Educación Física, con el código del escrito del padre y tu
+    firma. Rige desde el periodo **abierto**: las notas de los periodos anteriores quedan.
+15. **Libretas** (*Evaluación → Libretas*, sprint 10): al cerrar el periodo el sistema emite la libreta de cada alumno
+    (también de quien debe: la ley prohíbe retenerla) y avisa a las familias sin mencionar pagos. Puedes imprimir una o
+    la sección. En **Verificar una libreta** escribes el código LIB-… del pie y ves si es la versión vigente y coincide
+    con lo registrado. Si no coincide, pide la **reemisión** con el motivo: la aprueba Promotoría.
+16. **Calificaciones para el SIAGIE** (*Académico → SIAGIE · Calificaciones*): con el periodo cerrado, descargas el Excel
+    de cada sección con las notas de las libretas vigentes y su hoja de control. Puedes **delegar** la descarga, con tu
+    firma y por hasta 15 días, a una persona de Administración (nunca a Caja ni a un docente). Cada descarga queda en la
+    bitácora con su código.
 
 ## Lo que el sistema no te deja hacer, y por qué
 - **Aprobar algo que pediste o en lo que participaste:** el botón no aparece («La resuelve otra persona»), ni en la computadora ni en el celular.

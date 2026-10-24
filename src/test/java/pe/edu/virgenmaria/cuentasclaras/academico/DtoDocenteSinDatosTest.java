@@ -41,6 +41,32 @@ class DtoDocenteSinDatosTest {
 		assertThat(encontrados).as("campos prohibidos en los DTO académicos").isEmpty();
 	}
 
+	/**
+	 * Sprint 10, tanda 2: la hoja de notas, la vista de la sección y el avance tampoco llevan documentos, contactos ni dinero
+	 * (solo nombres de los alumnos, decisión 142). {@code documento} de la exoneración es el código del escrito del padre y
+	 * lo ve solo Dirección: no es un DTO del docente.
+	 */
+	@Test
+	void losDtoDeLasNotasDelDocenteTampoco() {
+		List<String> encontrados = new ArrayList<>();
+		for (Class<?> dto : new Class<?>[] { pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.HojaNotas.class,
+				pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.HojaNotas.FilaAlumno.class,
+				pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.HojaNotas.Celda.class,
+				pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.NotasSeccionVista.class,
+				pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.AvanceVista.class,
+				pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.AvanceVista.FilaAvance.class,
+				pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.MisNotasVista.class,
+				pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.CorreccionFormulario.class,
+				pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.NotaPedida.class }) {
+			for (RecordComponent c : dto.getRecordComponents()) {
+				String nombre = c.getName().toLowerCase(Locale.ROOT);
+				PROHIBIDOS.stream().filter(nombre::contains).forEach(p -> encontrados.add(dto.getSimpleName() + "."
+						+ c.getName() + " (" + p + ")"));
+			}
+		}
+		assertThat(encontrados).as("campos prohibidos en los DTO de las notas").isEmpty();
+	}
+
 	@Test
 	void elDetectorReconoceUnCampoProhibido() {
 		record Inventado(String nombres, String numeroDocumento, java.math.BigDecimal deudaVencida) {

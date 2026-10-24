@@ -77,7 +77,7 @@ Plataforma completa: compartida + demo ≈ **US$ 85-100 al mes**. Con el Colegio
    privado, crea un token de GitHub de **solo lectura** (`read:packages`) y guárdalo en el secreto `<prefijo>-ghcr-lectura`
    como `usuario:token`.
 
-## 4. Paso 0: ¿Cloud SQL acepta los 99 triggers? (antes de todo, medio día)
+## 4. Paso 0: ¿Cloud SQL acepta los 112 triggers? (antes de todo, medio día)
 
 Es el riesgo técnico más grande (sección 6.6): si Cloud SQL no acepta los triggers, las funciones `DEFINER`, el rol
 `cc_negocio`, la lectura de `mysql.*` de `permisos_objetos()` o el TLS sin proxy, se cambia de proveedor **antes** de
@@ -101,7 +101,7 @@ de punta a punta con Cloud SQL):
    de más, la marca de las funciones, `general_log` apagado y `Ssl_cipher` con `VERIFY_CA`.
 3. Un respaldo con `respaldar.sh` como `cc_respaldo` y su restauración real en un MySQL desechable.
 4. Pasa la instancia a TLS obligatorio (`ENCRYPTED_ONLY`): sin TLS no conecta y prod arranca con `sslMode=VERIFY_CA`
-   («Huellas de los 99 triggers y las 14 funciones verificadas» y «Conexiones a MySQL cifradas (TLS) verificadas»).
+   («Huellas de los 112 triggers y las 16 funciones verificadas» y «Conexiones a MySQL cifradas (TLS) verificadas»).
 
 Los registros quedan en `~/cc-paso0` (fuera del repositorio). Copia el resultado a
 `docs/operacion/acta-paso-0-cloud-sql.md`. Lo que el paso 0 **no** prueba (lo prueba el primer despliegue, que lee las mismas
@@ -165,7 +165,7 @@ sh deploy/desplegar.sh compartida ghcr.io/<org>/cuentas-claras@sha256:<digest>
 3. `java -jar … migrar` con `cc_migrador` (la imagen nueva).
 4. `02-permisos-tablas.sql` como root y `03-triggers.sql` como `cc_migrador`.
 5. Arranca con el digest nuevo.
-6. Espera `/actuator/health/readiness` y busca en el log del verificador «Huellas de los 99 triggers y las 14 funciones
+6. Espera `/actuator/health/readiness` y busca en el log del verificador «Huellas de los 112 triggers y las 16 funciones
    verificadas», «Privilegios verificados», «Conexiones a MySQL cifradas (TLS) verificadas», «Plataforma verificada» y
    «Triggers verificados». Si falta una, **detiene la aplicación**: prod no queda arriba con la base a medias.
 7. Anota el digest en `/etc/cc/desplegado.txt` de la VM.

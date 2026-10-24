@@ -151,6 +151,13 @@ public enum ModuloApp {
 			EnumSet.of(PROMOTOR, DIRECTOR, ADMINISTRACION)),
 	// Sprint 9, tanda 3 (sección 3.11, E34, B14): la nómina para el SIAGIE (DNI y fechas de nacimiento de menores) la saca
 	// SOLO Dirección, con su sesión; los datos que faltan y los códigos modulares, también. Va ANTES que ACADEMICO.
+	// Sprint 10, tanda 3 (A6, M12, decisión 189): las calificaciones para el SIAGIE las exporta Dirección o la persona de
+	// Administración a quien Dirección delegó con su firma (lo exige el servicio: sin delegación, la pantalla lo dice y la
+	// descarga es 403). Va ANTES que SIAGIE (que es solo de Dirección).
+	SIAGIE_CALIFICACIONES("Calificaciones para el SIAGIE", "Las calificaciones de cada sección y periodo cerrado, desde las "
+			+ "libretas vigentes, para copiar en la plantilla del SIAGIE, con su hoja de control.", "Sprint 10", true,
+			"/academico/siagie/calificaciones", new String[] { "/academico/siagie/calificaciones" },
+			EnumSet.of(DIRECTOR, ADMINISTRACION)),
 	SIAGIE("Nómina para el SIAGIE", "Los datos que faltan para la matrícula en el SIAGIE, los códigos modulares y la nómina "
 			+ "provisional de cada sección para copiar en la plantilla del SIAGIE.", "Sprint 9", true, "/academico/siagie",
 			new String[] { "/academico/siagie", "/academico/siagie/**" }, EnumSet.of(DIRECTOR)),
@@ -174,6 +181,53 @@ public enum ModuloApp {
 	ASISTENCIA("Asistencia de hoy", "Marca la asistencia de tu sección en un minuto: todos en «Presente» y un toque por "
 			+ "alumno.", "Sprint 9", true, "/academico/asistencia",
 			new String[] { "/academico/asistencia", "/academico/asistencia/**" }, EnumSet.of(DOCENTE)),
+	// Sprint 10, tanda 1 (sección 8.3): cómo se evalúa el año. La leen Dirección, Administración y Promotoría; la guarda SOLO
+	// Dirección con su firma (lo exige el servicio: 403 para los demás). Va ANTES que ACADEMICO.
+	EVALUACION("Evaluación del año", "Con qué currículo se califica, cómo se divide el año y desde cuándo se cierra cada "
+			+ "periodo. Solo Dirección la guarda, con su firma.", "Sprint 10", true, "/academico/evaluacion/configuracion",
+			new String[] { "/academico/evaluacion", "/academico/evaluacion/**" }, EnumSet.of(PROMOTOR, DIRECTOR,
+					ADMINISTRACION)),
+	// Sprint 10, tanda 1: los periodos de evaluación (programar, mover fechas, abrir antes y cerrar), SOLO Dirección con su
+	// firma; abren solos en su fecha (sistema.academico). Va ANTES que ACADEMICO.
+	PERIODOS("Periodos de evaluación", "Programa los bimestres del año, ábrelos antes de tiempo si hace falta y ciérralos "
+			+ "con tu firma. Un periodo cerrado no se reabre.", "Sprint 10", true, "/academico/periodos",
+			new String[] { "/academico/periodos", "/academico/periodos/**" }, EnumSet.of(DIRECTOR)),
+	// Sprint 10, tanda 1: el catálogo nacional del currículo, de solo lectura, para el personal académico y de gobierno (sin
+	// datos personales). Caja no: solo entra a caja (mínimo acceso). Va ANTES que ACADEMICO.
+	CURRICULO("Currículo nacional", "Las áreas, competencias y la escala de calificación del Currículo Nacional, de solo "
+			+ "lectura.", "Sprint 10", true, "/academico/curriculo",
+			new String[] { "/academico/curriculo", "/academico/curriculo/**" }, EnumSet.of(PROMOTOR, DIRECTOR,
+					ADMINISTRACION, DOCENTE)),
+	// Sprint 10, tanda 3 (A4): verificar el código de una libreta y pedir su reemisión, SOLO Dirección. Va ANTES que LIBRETAS.
+	LIBRETAS_VERIFICAR("Verificar una libreta", "Comprueba con el código impreso si una libreta es auténtica y vigente, y "
+			+ "compara sus niveles con el papel.", "Sprint 10", true, "/academico/libretas/verificar",
+			new String[] { "/academico/libretas/verificar", "/academico/libretas/*/reemision" }, EnumSet.of(DIRECTOR)),
+	// Sprint 10, tanda 3 (M9): las libretas emitidas para imprimir; Dirección, todas; el tutor, las de su sección (lo exige el
+	// servicio: otra, 404). Va ANTES que ACADEMICO.
+	LIBRETAS("Libretas", "Las libretas de cada sección al cierre del periodo: imprímelas para entregarlas; queda la "
+			+ "constancia de entrega.", "Sprint 10", true, "/academico/libretas",
+			new String[] { "/academico/libretas", "/academico/libretas/**" }, EnumSet.of(DIRECTOR, DOCENTE)),
+	// Sprint 10, tanda 2 (sección 8.3): el avance del registro de notas, SIN alumnos, para Dirección y Promotoría (las
+	// correcciones del periodo, solo Dirección: lo exige el servicio). Va ANTES que NOTAS (que es solo del docente).
+	NOTAS_AVANCE("Avance de notas", "Por sección y área, cuántas notas faltan en el periodo, y las asignaciones que todavía "
+			+ "no pueden calificar.", "Sprint 10", true, "/academico/notas/avance",
+			new String[] { "/academico/notas/avance", "/academico/notas/avance/**" }, EnumSet.of(PROMOTOR, DIRECTOR)),
+	// Sprint 10, tanda 2 (E21): las exoneraciones de Religión o Educación Física, SOLO Dirección con su firma.
+	EXONERACIONES("Exoneraciones", "Exonera a un alumno de Religión o Educación Física con el escrito del padre; rige desde "
+			+ "el periodo abierto.", "Sprint 10", true, "/academico/notas/exoneraciones",
+			new String[] { "/academico/notas/exoneraciones" }, EnumSet.of(DIRECTOR)),
+	// Sprint 10, tanda 2 (secciones 3.5 y 3.6): las notas de toda la sección, de solo lectura, para su tutor y Dirección (lo
+	// exige el servicio: 404 a otro docente), y la solicitud de corrección de una nota de un periodo cerrado (el docente del
+	// área o Dirección). Va ANTES que NOTAS.
+	NOTAS_SECCION("Notas de la sección", "Las notas de toda la sección, de solo lectura (tutor y Dirección), y la corrección "
+			+ "de una nota después del cierre (la aprueba otra persona).", "Sprint 10", true, "/academico/notas/secciones",
+			new String[] { "/academico/notas/secciones", "/academico/notas/secciones/*", "/academico/notas/correcciones/*" },
+			EnumSet.of(DIRECTOR, DOCENTE)),
+	// Sprint 10, tanda 2 (decisión 173 y sección 6 del brief): la hoja de notas es SOLO del docente del área (el tutor, en las
+	// transversales). Dirección y Promotoría no ponen notas (403). Va ANTES que ACADEMICO.
+	NOTAS("Notas", "Registra las notas de tu área por competencias, desde el celular: un toque por nivel y un solo guardado "
+			+ "con tu firma.", "Sprint 10", true, "/academico/notas",
+			new String[] { "/academico/notas", "/academico/notas/**" }, EnumSet.of(DOCENTE)),
 	// Sprint 9, tanda 1: el docente ve sus secciones y los nombres de sus alumnos (nunca deudas, pagos, documentos ni
 	// contactos); Dirección, todas las secciones. Promotoría no ve las listas por alumno (decisión 143).
 	ACADEMICO("Académico", "Tus secciones y la lista de tus alumnos. Nunca muestra deudas, pagos, documentos ni contactos.",

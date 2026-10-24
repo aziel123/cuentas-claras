@@ -30,8 +30,13 @@ class PlantillasMensajeTest {
 	void ningunaPlantillaMencionaLoAcademicoNiAmenaza() {
 		for (PlantillaMensaje plantilla : PlantillaMensaje.values()) {
 			String texto = sinTildes(plantilla.texto() + " " + plantilla.asunto());
-			assertThat(PROHIBIDAS).as(plantilla.name()).noneMatch(texto::contains);
-			assertThat(plantilla.nombreMeta()).as(plantilla.name()).matches("cc_[a-z_]+_v2");
+			// Sprint 10, tanda 3: el aviso de la libreta dice «libreta» (es su tema); todo lo demás sigue prohibido, y
+			// ninguna otra plantilla la menciona. Sus nombres de Meta nacen en la v1 (ya con el colegio en {{1}}).
+			List<String> prohibidas = plantilla.deLibretas() ? PROHIBIDAS.stream().filter(p -> !p.equals("libreta"))
+					.toList() : PROHIBIDAS;
+			assertThat(prohibidas).as(plantilla.name()).noneMatch(texto::contains);
+			assertThat(plantilla.nombreMeta()).as(plantilla.name())
+					.matches(plantilla.deLibretas() ? "cc_libreta[a-z_]*_v1" : "cc_[a-z_]+_v2");
 		}
 	}
 

@@ -136,7 +136,13 @@ class ReglasArquitecturaTest {
 					// Sprint 9, tanda 2: la clave de estas dos ES el colegio (una fila por colegio); se leen siempre con el
 					// colegio del contexto.
 					pe.edu.virgenmaria.cuentasclaras.academico.model.ConfiguracionAcademica.class,
-					pe.edu.virgenmaria.cuentasclaras.academico.model.AvisoAsistenciaCorte.class)
+					pe.edu.virgenmaria.cuentasclaras.academico.model.AvisoAsistenciaCorte.class,
+					// Sprint 10, tanda 1 (decisión 184): el catálogo nacional del currículo no es de un colegio (como el enum
+					// Grado): solo lo inserta la migración y la aplicación lo lee.
+					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.CurriculoVersion.class,
+					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.AreaCurricular.class,
+					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.Competencia.class,
+					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.EscalaLogro.class)
 			.should().beAssignableTo(BaseEntity.class)
 			.because("BaseEntity aporta colegioId (@TenantId), autoría y versión");
 
@@ -504,7 +510,48 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".comunicados.service.AlertasComunicados", ALERTAS),
 			Map.entry(BASE + ".comunicacion.service.AvisosComunicadosFamilias", "hasRole('SISTEMA_COMUNICADOS')"),
 			Map.entry(BASE + ".comunicacion.service.ConsumoMensajes", "hasRole('PROMOTOR')"),
-			Map.entry(BASE + ".academico.siagie.NominaSiagie", "hasRole('DIRECTOR')"));
+			Map.entry(BASE + ".academico.siagie.NominaSiagie", "hasRole('DIRECTOR')"),
+			// Sprint 10, tanda 1 (sección 8.3): la evaluación del año la leen Promotoría, Dirección y Administración y la
+			// guarda SOLO Dirección; los periodos, SOLO Dirección; la apertura en su fecha y la revisión del catálogo, solo
+			// sistema.academico; el catálogo lo lee el personal.
+			Map.entry(BASE + ".academico.curriculo.service.ConfiguracionesEvaluacion", LECTURA_ESCOLAR),
+			Map.entry(BASE + ".academico.curriculo.service.ConfiguracionesEvaluacion#guardar", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.curriculo.service.Periodos", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.curriculo.service.AperturaDeSistema", "hasRole('SISTEMA_ACADEMICO')"),
+			Map.entry(BASE + ".academico.curriculo.service.IntegridadCatalogo", "hasRole('SISTEMA_ACADEMICO')"),
+			Map.entry(BASE + ".academico.curriculo.service.AlertasCatalogo", ALERTAS),
+			Map.entry(BASE + ".academico.curriculo.service.Catalogo",
+					"hasAnyRole('PROMOTOR','DIRECTOR','ADMINISTRACION','DOCENTE','SISTEMA_ACADEMICO')"),
+			// Sprint 10, tanda 2 (sección 6 del brief): pone y cambia notas SOLO el docente (Dirección no califica); pide una
+			// corrección el docente o Dirección, y una nota tardía solo el docente; exonera SOLO Dirección; el avance lo ven
+			// Dirección y Promotoría (sin alumnos) y el cierre es de Dirección; las notas de la sección, Dirección y el tutor
+			// (lo exige el servicio).
+			Map.entry(BASE + ".academico.notas.service.RegistroNotas", "hasRole('DOCENTE')"),
+			Map.entry(BASE + ".academico.notas.service.CorreccionesNota", "hasAnyRole('DIRECTOR','DOCENTE')"),
+			Map.entry(BASE + ".academico.notas.service.CorreccionesNota#pedirTardia", "hasRole('DOCENTE')"),
+			Map.entry(BASE + ".academico.notas.service.Exoneraciones", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.notas.service.AvanceRegistro", "hasAnyRole('DIRECTOR','PROMOTOR')"),
+			Map.entry(BASE + ".academico.notas.service.AvanceRegistro#resumenCierre", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.notas.service.AvanceRegistro#cerrar", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.notas.service.AvanceRegistro#correccionesDelPeriodo", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.notas.service.NotasDeSeccion", "hasAnyRole('DIRECTOR','DOCENTE')"),
+			Map.entry(BASE + ".academico.notas.service.AlertasNotas", ALERTAS),
+			Map.entry(BASE + ".academico.service.CompletarAreas", "hasAnyRole('DIRECTOR','ADMINISTRACION')"),
+			// Sprint 10, tanda 3 (secciones 3.7 a 3.10, M9, M12): emite y avisa SOLO sistema.libretas; la familia ve y
+			// descarga las suyas; Dirección y el tutor imprimen (lo exige el servicio); verifica, pide la reemisión y delega
+			// el SIAGIE SOLO Dirección; exporta Dirección o la persona de Administración delegada (lo exige el servicio); la
+			// integridad y la alerta del SIAGIE, Promotoría y sistema.panel.
+			Map.entry(BASE + ".academico.libreta.service.EmisorLibretas", "hasRole('SISTEMA_LIBRETAS')"),
+			Map.entry(BASE + ".academico.libreta.service.LibretasPorAvisarDeLaBase", "hasRole('SISTEMA_LIBRETAS')"),
+			Map.entry(BASE + ".comunicacion.service.AvisosLibretasFamilias", "hasRole('SISTEMA_LIBRETAS')"),
+			Map.entry(BASE + ".academico.libreta.service.LibretasFamilia", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".academico.libreta.service.LibretasColegio", "hasAnyRole('DIRECTOR','DOCENTE')"),
+			Map.entry(BASE + ".academico.libreta.service.VerificacionLibreta", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.libreta.service.ReemisionLibretas", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.libreta.service.IntegridadLibretas", ALERTAS),
+			Map.entry(BASE + ".academico.siagie.CalificacionesSiagie", "hasAnyRole('DIRECTOR','ADMINISTRACION')"),
+			Map.entry(BASE + ".academico.siagie.DelegacionesSiagie", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.siagie.AlertasSiagie", ALERTAS));
 
 	/**
 	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para
@@ -679,6 +726,10 @@ class ReglasArquitecturaTest {
 					BASE + ".conectores.service..",
 					// Sprint 9, tanda 1: la propuesta de una asignación (DIRECTOR o ADMINISTRACION) crea su ASIGNACION_DOCENTE.
 					BASE + ".academico.service..",
+					// Sprint 10, tanda 2: la corrección de una nota y la nota tardía crean su solicitud.
+					BASE + ".academico.notas.service..",
+					// Sprint 10, tanda 3 (A3): la reemisión de una libreta la pide Dirección (REEMISION_LIBRETA).
+					BASE + ".academico.libreta.service..",
 					// Sprint 9, tanda 3: el comunicado con PDF (de un docente o que requiere revisión) crea su
 					// PUBLICAR_COMUNICADO.
 					BASE + ".comunicados.service..")
@@ -843,17 +894,37 @@ class ReglasArquitecturaTest {
 			.because("la cobranza no se mezcla con la asistencia ni con los comunicados (sección 3.13)");
 
 	/**
-	 * Sprint 9, tanda 3 (sección 3.9, B5): la librería de PDF solo la usa el analizador, que corre en un PROCESO HIJO con su
-	 * memoria, su tiempo y sin red. La aplicación nunca abre un PDF.
+	 * Sprint 9, tanda 3 (sección 3.9, B5) y sprint 10, tanda 3 (M11, E39): la librería de PDF la usan SOLO el analizador de
+	 * comunicados (que lee, en un PROCESO HIJO) y el generador de la libreta (que solo escribe, con su lista blanca). Ninguna
+	 * otra clase de la aplicación toca PDFBox.
 	 */
 	@ArchTest
-	static final ArchRule pdfboxSoloEnElAnalizador = noClasses()
+	static final ArchRule pdfboxSoloEnElAnalizadorYLaLibreta = noClasses()
 			.that().resideOutsideOfPackage(BASE + ".comunicados.analizador..")
+			.and().resideOutsideOfPackage(BASE + ".academico.libreta.pdf..")
 			.and().resideOutsideOfPackage("org.apache.pdfbox..").and().resideOutsideOfPackage("org.apache.fontbox..")
 			.should().dependOnClassesThat().resideInAnyPackage("org.apache.pdfbox..", "org.apache.fontbox..")
 			.because("un PDF puede traer JavaScript, acciones, bombas o archivos embebidos: lo abre solo el proceso hijo");
 
-	/** B5: el analizador no depende de nada de la aplicación (corre sin Spring, sin base y sin credenciales). */
+	/**
+	 * Sprint 10, tanda 3 (E39, sección 3.9): fuera del analizador nadie ABRE un PDF: ni {@code Loader}, ni el parser, ni
+	 * {@code PDFTextStripper}.
+	 */
+	@ArchTest
+	static final ArchRule pdfboxParseaSoloElAnalizador = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".comunicados.analizador..")
+			.and().resideOutsideOfPackage("org.apache.pdfbox..").and().resideOutsideOfPackage("org.apache.fontbox..")
+			.should().dependOnClassesThat().haveFullyQualifiedName("org.apache.pdfbox.Loader")
+			.orShould().dependOnClassesThat().resideInAnyPackage("org.apache.pdfbox.pdfparser..", "org.apache.pdfbox.text..")
+			.because("abrir un PDF ajeno es la superficie de ataque: solo el proceso hijo del analizador lo hace");
+
+	/** Sprint 10, tanda 3 (M11): la LISTA BLANCA de lo que el generador de la libreta usa de PDFBox (solo escribir). */
+	@ArchTest
+	static void pdfboxEscribeSoloLaLibreta(JavaClasses clases) {
+		ListaBlancaPdfbox.regla(BASE + ".academico.libreta.pdf..").check(clases);
+	}
+
+		/** B5: el analizador no depende de nada de la aplicación (corre sin Spring, sin base y sin credenciales). */
 	@ArchTest
 	static final ArchRule elAnalizadorNoDependeDeLaAplicacion = noClasses()
 			.that().resideInAPackage(BASE + ".comunicados.analizador..")
@@ -923,6 +994,100 @@ class ReglasArquitecturaTest {
 			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
 			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
 			.because("una asignación solo cambia por sus métodos (y en MySQL el UPDATE está limitado por columna)");
+
+	/**
+	 * Sprint 10, tanda 1 (E12, regla {@code nadieEscribeElCatalogo}): los repositorios del catálogo nacional y de la evaluación
+	 * no heredan {@code save} ni {@code delete*} (no extienden CrudRepository); los del catálogo, además, no declaran
+	 * {@code save}: la aplicación nunca lo escribe (y en MySQL no tiene GRANT: 1142).
+	 */
+	@ArchTest
+	static final ArchRule nadieEscribeElCatalogo = classes()
+			.that().resideInAPackage(BASE + ".academico.curriculo.repository..")
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("el catálogo y la evaluación cambian solo por la migración o por sus métodos con firma");
+
+	@ArchTest
+	static final ArchRule repositoriosDelCatalogoSinSave = noMethods()
+			.that().areDeclaredInClassesThat().haveSimpleNameEndingWith("Repository")
+			.and().areDeclaredInClassesThat().resideInAPackage(BASE + ".academico.curriculo.repository..")
+			.and().areDeclaredInClassesThat(DescribedPredicate.describe("son del catálogo nacional",
+					(JavaClass c) -> Set.of("CurriculoVersionRepository", "AreaCurricularRepository", "CompetenciaRepository",
+							"EscalaLogroRepository").contains(c.getSimpleName())))
+			.should().haveNameMatching("(?i)(save|delete|remove|update|insert).*")
+			.orShould().beAnnotatedWith(Modifying.class)
+			.because("el catálogo nacional lo inserta solo la migración (cc_migrador): una corrección es una versión nueva");
+
+	@ArchTest
+	static final ArchRule repositoriosDelCurriculoSinModifyingNiBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAPackage(BASE + ".academico.curriculo.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("la evaluación y los periodos cambian solo por sus métodos con la firma de Dirección");
+
+	/**
+	 * Sprint 10, tanda 2 (E7): las notas, sus lotes, las exoneraciones y los borradores son de SOLO INSERCIÓN: sus
+	 * repositorios no heredan {@code delete*} ni declaran borrados, cambios ni {@code @Modifying} (en MySQL, 1142).
+	 */
+	@ArchTest
+	static final ArchRule repositoriosDeNotasSoloInsercion = classes()
+			.that().resideInAPackage(BASE + ".academico.notas.repository..")
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("una nota no se edita ni se borra: se agrega la fila que reemplaza a la vigente");
+
+	@ArchTest
+	static final ArchRule repositoriosDeNotasSinBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAPackage(BASE + ".academico.notas.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("las notas son un libro de solo inserción (sección 3.5)");
+
+	/**
+	 * Sprint 10, tanda 2 (sección 3 del brief): lo que pide el docente para una nota NO trae el origen, el autor, el lote ni
+	 * la huella de la conclusión: los decide el servicio (y la base los vuelve a exigir).
+	 */
+	@ArchTest
+	static void notaPedidaSinOrigen(JavaClasses clases) {
+		assertThat(java.util.Arrays.stream(pe.edu.virgenmaria.cuentasclaras.academico.notas.dto.NotaPedida.class
+				.getRecordComponents()).map(java.lang.reflect.RecordComponent::getName).toList())
+				.containsExactly("matriculaId", "competenciaId", "nivel", "conclusion");
+	}
+
+	/**
+	 * Sprint 10, tanda 3 (E14): las libretas, sus entregas, la exportación de calificaciones y la delegación del SIAGIE son de
+	 * SOLO INSERCIÓN: sus repositorios no heredan {@code delete*} ni declaran borrados, cambios ni {@code @Modifying}.
+	 */
+	@ArchTest
+	static final ArchRule repositoriosDeLibretasYSiagieSoloInsercion = classes()
+			.that().resideInAnyPackage(BASE + ".academico.libreta.repository..", BASE + ".academico.siagie.repository..")
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("una libreta no se edita ni se borra: se emite la versión siguiente");
+
+	@ArchTest
+	static final ArchRule repositoriosDeLibretasYSiagieSinBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".academico.libreta.repository..",
+					BASE + ".academico.siagie.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("las libretas y sus constancias son un libro de solo inserción (sección 3.7)");
+
+	/**
+	 * Sprint 10, tanda 3 (sección 3.7): los avisos de libretas (el proceso y su servicio) leen las libretas SOLO por
+	 * {@code academico.api}: sin notas ni conclusiones.
+	 */
+	@ArchTest
+	static final ArchRule avisosDeLibretasSoloLeenLaApiAcademica = noClasses()
+			.that().haveFullyQualifiedName(BASE + ".comunicacion.proceso.AvisosLibretas")
+			.or().haveFullyQualifiedName(BASE + ".comunicacion.service.AvisosLibretasFamilias")
+			.should().dependOnClassesThat(DescribedPredicate.describe("de academico fuera de academico.api",
+					(JavaClass c) -> c.getPackageName().startsWith(BASE + ".academico")
+							&& !c.getPackageName().startsWith(BASE + ".academico.api")))
+			.because("el aviso a la familia no debe poder leer las notas de la libreta");
 
 	@ArchTest
 	static final ArchRule repositoriosDeAcademicoNoHeredanBorrados = classes()

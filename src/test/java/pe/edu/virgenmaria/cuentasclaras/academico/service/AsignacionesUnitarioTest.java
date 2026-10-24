@@ -68,7 +68,10 @@ class AsignacionesUnitarioTest {
 
 	private final Asignaciones servicio = new Asignaciones(repositorio, secciones, anios, usuarios, solicitudes,
 			mock(FirmaSesion.class), auditoria, Clock.fixed(Instant.parse("2027-03-01T13:00:00Z"), ZoneId.of("UTC")),
-			mock(pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil.class));
+			mock(pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil.class),
+			mock(pe.edu.virgenmaria.cuentasclaras.academico.repository.AsignacionAreaRepository.class),
+			mock(pe.edu.virgenmaria.cuentasclaras.academico.curriculo.repository.ConfiguracionEvaluacionRepository.class),
+			mock(pe.edu.virgenmaria.cuentasclaras.academico.curriculo.service.Catalogo.class));
 
 	private Seccion seccion;
 

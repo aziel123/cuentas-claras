@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<!--/* Sprint 10, tanda 2 (sección 2 del brief): el cierre del periodo con su resumen. Dirección ve lo que falta (competencias
+     sin nota y asignaciones sin áreas del catálogo) y confirma con su firma. No bloquea: lo que falte va por nota tardía.
+     El fragmento «resumen» lo usa también el avance. M7: aquí no se adelanta el fin ni cambian los días de cierre. */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cerrar periodo', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="cierre-periodo">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta"><a th:href="@{/academico/periodos}">Periodos de evaluación</a></p>
+			<h1 th:text="|Cerrar el ${vista.periodo}|">Cerrar el I bimestre</h1>
+			<p class="secundario">Revisa lo que falta antes de cerrar. Un periodo cerrado no se reabre: lo que no se registró va
+				por nota tardía y un cambio, por corrección; las dos las aprueba otra persona.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<th:block th:fragment="resumen(vista)">
+		<section class="tarjeta" aria-labelledby="titulo-resumen" th:if="${vista.periodoId != null}">
+			<div class="fila entre">
+				<h2 id="titulo-resumen" th:text="|${vista.periodo} (${vista.estadoPeriodo})|">I bimestre</h2>
+				<span class="secundario num" th:text="|${vista.conNota} de ${vista.esperadas} notas registradas; faltan ${vista.faltan()}|">Avance</span>
+			</div>
+			<p class="secundario" th:if="${#lists.isEmpty(vista.pendientes())}">No falta ninguna nota.</p>
+			<table class="tabla" th:unless="${#lists.isEmpty(vista.pendientes())}">
+				<caption class="solo-lectores">Secciones y áreas con notas pendientes</caption>
+				<thead><tr><th scope="col">Sección</th><th scope="col">Área</th><th scope="col">Quién califica</th><th scope="col">Faltan</th></tr></thead>
+				<tbody>
+					<tr th:each="f : ${vista.pendientes()}" th:data-seccion="${f.seccionId}">
+						<td data-etiqueta="Sección" th:text="${f.seccion}">3.° Primaria A</td>
+						<td data-etiqueta="Área" th:text="${f.area}">Matemática</td>
+						<td data-etiqueta="Quién califica" th:text="${f.docentes}">Ana Torres</td>
+						<td data-etiqueta="Faltan" class="num" th:text="|${f.faltan()} de ${f.esperadas}|">4 de 120</td>
+					</tr>
+				</tbody>
+			</table>
+		</section>
+		<section class="tarjeta" aria-labelledby="titulo-sin-areas-avance" th:unless="${#lists.isEmpty(vista.sinAreas)}">
+			<h2 id="titulo-sin-areas-avance">Asignaciones sin áreas del catálogo</h2>
+			<p class="secundario">Estas personas no pueden poner notas hasta que se complete su asignación (en Docentes y
+				secciones, «Completar áreas»; la aprueba otra persona).</p>
+			<ul class="lista-simple">
+				<li th:each="s : ${vista.sinAreas}" th:text="|${s.seccion}: ${s.docente} (${s.tipo})|">3.° Primaria A: Ana Torres</li>
+			</ul>
+		</section>
+	</th:block>
+
+	<section class="tarjeta formulario-angosto" aria-labelledby="titulo-confirmar">
+		<h2 id="titulo-confirmar">Confirmar el cierre</h2>
+		<p th:if="${vista.faltan() > 0 or !#lists.isEmpty(vista.sinAreas)}">Faltan notas. Puedes cerrar igual: quedará en la
+			bitácora lo que faltaba y cada docente podrá pedir su nota tardía.</p>
+		<form method="post" class="formulario" th:action="@{/academico/periodos/{id}/cierre(id=${vista.periodoId})}">
+			<div class="acciones">
+				<button type="submit" class="btn btn-primario" th:text="|Cerrar el ${vista.periodo} con mi firma|">Cerrar con mi firma</button>
+				<a class="btn btn-secundario" th:href="@{/academico/periodos}">Volver sin cerrar</a>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

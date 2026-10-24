@@ -494,6 +494,35 @@ class RutasIdorTest {
 		ids.put(Recurso.MARCA, texto("SELECT MIN(id) FROM marca_asistencia WHERE colegio_id = 1"));
 		// Sprint 9, tanda 3: un comunicado del docente usuario.a a la sección de Mateo (destinataria: la familia Quispe).
 		ids.put(Recurso.COMUNICADO, comunicado(seccionMateo, usuarioA, sesionA, f.quispe(), "a").toString());
+		// Sprint 10, tanda 1: la evaluación de 2027 del colegio A con su I bimestre ABIERTO (H2: sin triggers). El colegio B
+		// no lo ve, no le mueve las fechas, no lo abre ni lo cierra (404).
+		Long version = id("SELECT id FROM curriculo_version WHERE codigo = 'CNEB-2016.1'");
+		jdbc.update("INSERT INTO configuracion_evaluacion (colegio_id, anio_escolar_id, curriculo_version_id, actualizado_por, "
+				+ "creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, 'director', CURRENT_TIMESTAMP, 'director', "
+				+ "CURRENT_TIMESTAMP)", f.anio2027(), version);
+		jdbc.update("INSERT INTO periodo_evaluacion (colegio_id, anio_escolar_id, numero, nombre, inicio, fin, estado, "
+				+ "abierto_por, abierto_en, actualizado_por, creado_en, creado_por, actualizado_en) VALUES (1, ?, 1, "
+				+ "'IDOR-A bimestre', DATE '2027-03-01', DATE '2027-05-07', 'ABIERTO', 'director', CURRENT_TIMESTAMP, "
+				+ "'director', CURRENT_TIMESTAMP, 'director', CURRENT_TIMESTAMP)", f.anio2027());
+		ids.put(Recurso.PERIODO, texto("SELECT MIN(id) FROM periodo_evaluacion WHERE colegio_id = 1"));
+		ids.put(Recurso.CATALOGO, version.toString());
+		// Sprint 10, tanda 2: una nota de Mateo en el I bimestre del colegio A, con su lote (H2: sin triggers). El colegio B
+		// no la ve ni pide su corrección (404).
+		Long competencia = id("SELECT MIN(id) FROM competencia");
+		Long area = id("SELECT area_id FROM competencia WHERE id = ?", competencia);
+		Long periodo = Long.valueOf(ids.get(Recurso.PERIODO));
+		jdbc.update("INSERT INTO lote_calificacion (colegio_id, periodo_id, seccion_id, area_id, secuencia, sesion_id, filas, "
+				+ "creado_en, creado_por, actualizado_en) VALUES (1, ?, ?, ?, 1, ?, 1, CURRENT_TIMESTAMP, 'usuario.a', "
+				+ "CURRENT_TIMESTAMP)", periodo, seccionMateo, area, sesionA);
+		jdbc.update("INSERT INTO calificacion (colegio_id, anio_escolar_id, periodo_id, seccion_id, matricula_id, alumno_id, "
+				+ "competencia_id, nivel_logro, origen, inicial, lote_id, creado_en, creado_por, actualizado_en) VALUES (1, "
+				+ "(SELECT anio_escolar_id FROM seccion WHERE id = ?), ?, ?, ?, ?, ?, 'A', 'REGISTRO', TRUE, (SELECT MAX(id) "
+				+ "FROM lote_calificacion), CURRENT_TIMESTAMP, 'usuario.a', CURRENT_TIMESTAMP)", seccionMateo, periodo,
+				seccionMateo, matriculaMateo, f.mateo(), competencia);
+		ids.put(Recurso.CALIFICACION, texto("SELECT MIN(id) FROM calificacion WHERE colegio_id = 1"));
+		// Sprint 10, tanda 3: la libreta de Mateo de ese periodo en el colegio A (H2: sin triggers). El colegio B no la ve, no
+		// la imprime ni pide su reemisión (404).
+		ids.put(Recurso.LIBRETA, libreta(periodo, seccionMateo, matriculaMateo, f.mateo(), "Quispe Huamán, Mateo").toString());
 		assertThat(ids.values()).as("hay un recurso real de cada tipo en el colegio A").doesNotContainNull();
 
 		Map<Recurso, String> deFlores = new EnumMap<>(Recurso.class);
@@ -519,6 +548,9 @@ class RutasIdorTest {
 		deFlores.put(Recurso.COMUNICADO, comunicado(seccionSebastian, usuarioA, sesionA,
 				id("SELECT familia_id FROM alumno WHERE id = ?", f.sebastian()), "b").toString());
 		deFlores.put(Recurso.COMPROBANTE, texto("SELECT comprobante_id FROM pago WHERE id = ?", pagoFlores));
+		// Sprint 10, tanda 3: la libreta de Sebastián (la familia Quispe no la descarga).
+		deFlores.put(Recurso.LIBRETA, libreta(Long.valueOf(ids.get(Recurso.PERIODO)), seccionSebastian, matriculaDeSebastian,
+				f.sebastian(), "Flores Díaz, Sebastián").toString());
 		deFlores.put(Recurso.RENOVACION, texto("SELECT id FROM renovacion_matricula WHERE alumno_id = ?", f.sebastian()));
 		deFlores.put(Recurso.REFERENCIA_ORDEN, ordenFlores);
 		deFlores.put(Recurso.PAGO, pagoFlores.toString());
@@ -565,4 +597,16 @@ class RutasIdorTest {
 			return "notas";
 		}
 	}
+
+	/** Sprint 10, tanda 3: una libreta emitida en el colegio 1 (H2, sin triggers), como la deja sistema.libretas. */
+	private Long libreta(Long periodo, Long seccion, Long matricula, Long alumno, String nombre) {
+		jdbc.update("INSERT INTO libreta_emitida (colegio_id, anio_escolar_id, periodo_id, seccion_id, matricula_id, alumno_id, "
+				+ "numero_version, motivo, hasta_calificacion_id, hasta_marca_id, hasta_exoneracion_id, alumno_nombre, "
+				+ "alumno_codigo, tipo_codigo, director_nombre, huella_contenido, creado_en, creado_por, actualizado_en) VALUES "
+				+ "(1, (SELECT anio_escolar_id FROM seccion WHERE id = ?), ?, ?, ?, ?, 1, 'CIERRE', 0, 0, 0, ?, '00000000', "
+				+ "'DNI', 'Director IDOR', ?, CURRENT_TIMESTAMP, 'sistema.libretas', CURRENT_TIMESTAMP)", seccion, periodo,
+				seccion, matricula, alumno, nombre, "a".repeat(64));
+		return id("SELECT MAX(id) FROM libreta_emitida WHERE matricula_id = ?", matricula);
+	}
+
 }

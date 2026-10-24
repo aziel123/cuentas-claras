@@ -10,6 +10,9 @@
 5. **Excel para el contador** (*Reportes › Ingresos por medio de pago*): elige el rango y descárgalo. No lleva documentos, nombres de alumnos ni contactos.
 6. **Cada mes:** el cierre bancario a ciegas con el estado de cuenta oficial lo escribe alguien que no subió ni confirmó los extractos del mes.
 
+7. **Calificaciones para el SIAGIE:** solo si Dirección te delegó la descarga (con su firma y por hasta 15 días), en
+   *Académico → SIAGIE · Calificaciones* descargas el Excel de cada sección con el periodo cerrado. Queda a tu nombre.
+
 ## Lo que el sistema no te deja hacer, y por qué
 - **Confirmar un extracto o un archivo que subiste tú:** lo confirma otra persona mirando el banco. Así un archivo alterado no pasa solo.
 - **Ver los saldos antes de que se confirmen:** se muestran después, para que nadie copie el número.

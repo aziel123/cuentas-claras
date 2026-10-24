@@ -27,7 +27,14 @@ public enum TipoAcceso {
 	/** Sprint 9, tanda 2: el reporte mensual de asistencia de una sección o un alumno (con la cantidad). */
 	REPORTE_ASISTENCIA("Reporte de asistencia", false),
 	/** Sprint 9, tanda 3: la nómina de una sección para el SIAGIE (DNI y fechas de nacimiento; con la cantidad). */
-	NOMINA_SIAGIE("Nómina para el SIAGIE", false);
+	NOMINA_SIAGIE("Nómina para el SIAGIE", false),
+	/**
+	 * Sprint 10 (H7): los tres tipos que V35 agrega al CHECK de una vez. Las notas de una sección (tanda 2), una libreta
+	 * (con el alumno; tanda 3) y la exportación de calificaciones para el SIAGIE (tanda 3). La tanda 1 aún no los registra.
+	 */
+	NOTAS_SECCION("Notas de una sección", false),
+	LIBRETA("Libreta de un alumno", false),
+	CALIFICACIONES_SIAGIE("Calificaciones para el SIAGIE", false);
 
 	private final String etiqueta;
 

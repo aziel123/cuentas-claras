@@ -46,3 +46,20 @@ comunicado_adjunto
 comunicado_destinatario
 confirmacion_lectura
 exportacion_nomina
+# Sprint 10, tanda 1 (V35): las áreas de cada asignación son de solo inserción (el poder de poner notas): un borrado del DBA
+# aparece como «faltan filas» del colegio. El catálogo nacional (sin colegio) no se cuenta aquí: lo vigila
+# VerificadorCatalogoCurriculo con su huella, al arrancar y a diario. La configuración y los periodos cambian de estado (no
+# son de solo inserción), pero nunca se borran (sin DELETE).
+asignacion_area
+# Sprint 10, tanda 2 (V36): las notas, sus lotes, las exoneraciones y los borradores de conclusión son de solo inserción:
+# un borrado del DBA (una nota que desaparece) aparece como «faltan filas» del colegio.
+lote_calificacion
+calificacion
+exoneracion_area
+borrador_conclusion
+# Sprint 10, tanda 3 (V37): las libretas emitidas, sus entregas, la exportación de calificaciones y la delegación del SIAGIE
+# son de solo inserción: un borrado del DBA (una libreta que desaparece) aparece como «faltan filas» del colegio.
+libreta_emitida
+entrega_libreta
+exportacion_calificaciones
+delegacion_siagie

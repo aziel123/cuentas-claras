@@ -104,7 +104,7 @@ arrancar)
 		exit 1
 	fi
 	logs=$(docker compose -f "$compose" --env-file /etc/cc/imagen.env logs app 2>&1)
-	for linea in "Huellas de los 99 triggers y las 14 funciones verificadas" "Privilegios verificados" \
+	for linea in "Huellas de los 112 triggers y las 16 funciones verificadas" "Privilegios verificados" \
 			"Conexiones a MySQL cifradas (TLS) verificadas" "Plataforma verificada" "Triggers verificados"; do
 		if ! echo "$logs" | grep -q "$linea"; then
 			docker compose -f "$compose" --env-file /etc/cc/imagen.env stop app

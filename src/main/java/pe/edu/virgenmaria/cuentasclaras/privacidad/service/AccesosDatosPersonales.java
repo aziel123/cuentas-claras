@@ -111,6 +111,14 @@ public class AccesosDatosPersonales implements ConsultaAccesos {
 				.map(SesionAbierta::sesionId).filter(id -> sesiones.findById(id).isPresent()).orElse(null);
 		List<AccesoDatoPersonal> filas = new ArrayList<>();
 		if (mostrado != null && mostrado.solicitudId() != null) {
+			// Sprint 10, tanda 2 (M8, riesgo 5): la corrección de una nota muestra a quien aprueba la conclusión propuesta (su
+			// borrador): queda como una consulta de las notas de una sección.
+			if (solicitudes.findById(mostrado.solicitudId()).filter(s -> s.getTipo() == TipoSolicitud.CORRECCION_CALIFICACION)
+					.isPresent()) {
+				accesos.saveAndFlush(AccesoDatoPersonal.de(persona.usuarioId(), sesionId, TipoAcceso.NOTAS_SECCION, null, null,
+						1, ip));
+				return 1;
+			}
 			// Una solicitud de la bandeja: solo el cambio de contacto de un apoderado muestra datos de una familia.
 			Optional<Long> familia = solicitudes.findById(mostrado.solicitudId())
 					.filter(s -> s.getTipo() == TipoSolicitud.CAMBIO_CONTACTO_APODERADO && "apoderado".equals(s.getEntidad()))
