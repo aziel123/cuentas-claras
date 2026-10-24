@@ -105,7 +105,7 @@ public class GeneradorLibretaPdf {
 
 	private static final float ALTO = PDRectangle.A4.getHeight();
 
-	private static final float PIE = 46f;
+	private static final float PIE = 42f;
 
 	/** Lo que se imprime de la versión (no entra en la huella del contenido). */
 	public record Version(String codigo, int numero, LocalDateTime emitidaEn, MotivoLibreta motivo, String cambios) {
@@ -341,32 +341,32 @@ public class GeneradorLibretaPdf {
 		}
 
 		private void cabecera() throws IOException {
-			float alto = 64;
+			float alto = 60;
 			rect(MARGEN, y - alto, ANCHO - 2 * MARGEN, alto, AZUL);
 			rect(MARGEN, y - alto - 3, ANCHO - 2 * MARGEN, 3, CELESTE);
 			float x = MARGEN + 12;
 			if (logo != null) {
-				float lado = 44;
+				float lado = 42;
 				float escala = Math.min(lado / logo.getWidth(), lado / logo.getHeight());
 				float w = logo.getWidth() * escala;
 				float h = logo.getHeight() * escala;
-				rect(x - 3, y - 10 - lado - 3, lado + 6, lado + 6, BLANCO);
-				lienzo.drawImage(logo, x + (lado - w) / 2, y - 10 - lado + (lado - h) / 2, w, h);
+				rect(x - 3, y - 9 - lado - 3, lado + 6, lado + 6, BLANCO);
+				lienzo.drawImage(logo, x + (lado - w) / 2, y - 9 - lado + (lado - h) / 2, w, h);
 				x += lado + 16;
 			}
 			else {
 				// El monograma de la marca mientras no haya logo oficial.
-				rect(x, y - 54, 44, 44, AZUL_PROFUNDO);
-				rect(x, y - 54, 44, 4, CELESTE);
-				escribirTexto(x + 9, y - 37, 16, BLANCO, iniciales(c.colegio()), 30);
+				rect(x, y - 51, 42, 42, AZUL_PROFUNDO);
+				rect(x, y - 51, 42, 4, CELESTE);
+				escribirTexto(x + 8, y - 35, 16, BLANCO, iniciales(c.colegio()), 30);
 				x += 60;
 			}
 			float ancho = ANCHO - MARGEN - 12 - x;
-			escribirTexto(x, y - 24, 14, BLANCO, c.colegio(), ancho);
-			escribirTexto(x, y - 40, 10, BLANCO, "Informe de progreso del aprendizaje · " + c.periodoNombre() + " · "
+			escribirTexto(x, y - 22, 14, BLANCO, c.colegio(), ancho);
+			escribirTexto(x, y - 37, 10, BLANCO, "Informe de progreso del aprendizaje · " + c.periodoNombre() + " · "
 					+ c.anio(), ancho);
-			escribirTexto(x, y - 54, 8.5f, BLANCO, "Educación Básica Regular · Nivel " + c.nivel(), ancho);
-			y -= alto + 16;
+			escribirTexto(x, y - 51, 8.5f, BLANCO, "Educación Básica Regular · Nivel " + c.nivel(), ancho);
+			y -= alto + 14;
 		}
 
 		private void aviso() throws IOException {
@@ -396,7 +396,7 @@ public class GeneradorLibretaPdf {
 					{ "Grado y sección", c.grado() + " " + c.seccion(), k.tipoCodigo().etiqueta(), k.alumnoCodigo() },
 					{ "Apellidos y nombres", k.alumnoNombre(), "", "" },
 					{ "Tutor(a)", valor(k.tutorNombre()), "", "" } };
-			float alto = filas.length * 17f + 8;
+			float alto = filas.length * 16f + 8;
 			espacio(alto);
 			rect(MARGEN, y - alto, ANCHO - 2 * MARGEN, alto, SUPERFICIE);
 			float yy = y - 15;
@@ -409,9 +409,9 @@ public class GeneradorLibretaPdf {
 					escribirTexto(col2 + 6, yy, 7.5f, SECUNDARIO, f[2].toUpperCase(java.util.Locale.ROOT), 95);
 					escribirTexto(col2 + 104, yy, 9.5f, TEXTO, f[3], ANCHO - MARGEN - col2 - 112);
 				}
-				yy -= 17;
+				yy -= 16;
 			}
-			y -= alto + 14;
+			y -= alto + 12;
 		}
 
 		private void tabla(String titulo, List<ContenidoLibreta.Area> lista) throws IOException {
@@ -428,15 +428,18 @@ public class GeneradorLibretaPdf {
 			encabezadoTabla(anchoNombre, anchoNivel);
 			for (ContenidoLibreta.Area area : lista) {
 				espacio(40);
-				rect(MARGEN, y - 16, anchoTotal, 16, CELESTE_SUAVE);
-				escribirTexto(MARGEN + 6, y - 11.5f, 9.5f, AZUL_PROFUNDO, area.nombre(), anchoTotal - 12);
-				y -= 16;
+				// Las transversales ya tienen su título: sin la franja del área (repetiría «Competencias transversales»).
+				if (!area.transversal()) {
+					rect(MARGEN, y - 15, anchoTotal, 15, CELESTE_SUAVE);
+					escribirTexto(MARGEN + 6, y - 11, 9.5f, AZUL_PROFUNDO, area.nombre(), anchoTotal - 12);
+					y -= 15;
+				}
 				for (ContenidoLibreta.Competencia comp : area.competencias()) {
 					List<String> nombre = envolver(comp.nombre(), 8.5f, anchoNombre - 14);
 					ContenidoLibreta.Nota actual = comp.delPeriodo();
 					List<String> conclusion = actual.conclusion() == null ? List.of()
 							: envolver("Conclusión descriptiva: " + actual.conclusion(), 7.5f, anchoTotal - 22);
-					float altoFila = Math.max(16, nombre.size() * 10.5f + 6);
+					float altoFila = Math.max(15, nombre.size() * 10.5f + 5);
 					float altoConclusion = conclusion.isEmpty() ? 0 : conclusion.size() * 9.5f + 6;
 					if (y - altoFila - Math.min(altoConclusion, 40) < PIE + 8) {
 						nuevaPagina();
@@ -471,7 +474,7 @@ public class GeneradorLibretaPdf {
 					linea(MARGEN, y, MARGEN + anchoTotal, y, BORDE);
 				}
 			}
-			y -= 14;
+			y -= 10;
 		}
 
 		private void encabezadoTabla(float anchoNombre, float anchoNivel) throws IOException {
@@ -515,7 +518,7 @@ public class GeneradorLibretaPdf {
 				y -= 15;
 				linea(MARGEN, y, MARGEN + anchoTotal, y, BORDE);
 			}
-			y -= 14;
+			y -= 10;
 		}
 
 		private void leyenda() throws IOException {
@@ -532,18 +535,18 @@ public class GeneradorLibretaPdf {
 					escribirTexto(MARGEN + 30, y, 7.5f, SECUNDARIO, l, anchoTotal - 40);
 					y -= 9.5f;
 				}
-				y -= 3;
+				y -= 2;
 			}
 			escribirTexto(MARGEN, y, 7.5f, SECUNDARIO, "EXO: exonerado del área. —: sin nota en el periodo.", anchoTotal);
-			y -= 16;
+			y -= 14;
 		}
 
 		private void cierre() throws IOException {
 			float anchoTotal = ANCHO - 2 * MARGEN;
-			espacio(80);
+			espacio(44);
 			escribirTexto(MARGEN, y, 9, TEXTO, "Situación al finalizar el periodo lectivo: se informa al cierre del año.",
 					anchoTotal);
-			y -= 46;
+			y -= 30;
 			float mitad = anchoTotal / 2;
 			linea(MARGEN + 10, y, MARGEN + mitad - 20, y, SECUNDARIO);
 			linea(MARGEN + mitad + 20, y, MARGEN + anchoTotal - 10, y, SECUNDARIO);
@@ -690,11 +693,15 @@ public class GeneradorLibretaPdf {
 		};
 	}
 
-	private static String iniciales(String colegio) {
+	/** El monograma de la marca (sistema-diseno): las iniciales del nombre sin «Colegio», «I.E.P.» ni artículos. */
+	static String iniciales(String colegio) {
+		java.util.Set<String> fuera = java.util.Set.of("colegio", "i.e.p.", "iep", "institución", "educativa", "privada",
+				"de", "del", "la", "el", "los", "las", "y");
 		StringBuilder s = new StringBuilder();
 		for (String p : colegio.split("\\s+")) {
-			if (!p.isEmpty() && Character.isUpperCase(p.charAt(0)) && s.length() < 2) {
-				s.append(p.charAt(0));
+			if (!p.isEmpty() && !fuera.contains(p.toLowerCase(java.util.Locale.ROOT)) && Character.isLetter(p.charAt(0))
+					&& s.length() < 2) {
+				s.append(Character.toUpperCase(p.charAt(0)));
 			}
 		}
 		return s.isEmpty() ? "VM" : s.toString();

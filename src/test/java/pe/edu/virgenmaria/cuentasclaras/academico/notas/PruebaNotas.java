@@ -58,15 +58,15 @@ import java.util.function.Supplier;
  */
 @PruebaIntegracion
 @Import(ConfiguracionRelojAjustable.class)
-abstract class PruebaNotas {
+public abstract class PruebaNotas {
 
-	static final LocalDate INICIO = LocalDate.of(2026, 3, 2);
+	protected static final LocalDate INICIO = LocalDate.of(2026, 3, 2);
 
-	static final LocalDate FIN = LocalDate.of(2026, 5, 8);
+	protected static final LocalDate FIN = LocalDate.of(2026, 5, 8);
 
-	static final String MOTIVO = "Carga horaria 2026 aprobada por Dirección";
+	protected static final String MOTIVO = "Carga horaria 2026 aprobada por Dirección";
 
-	static final String MOTIVO_CORRECCION = "El examen recalificado muestra que logró lo esperado";
+	protected static final String MOTIVO_CORRECCION = "El examen recalificado muestra que logró lo esperado";
 
 	@Autowired
 	protected RegistroNotas registro;
@@ -137,7 +137,7 @@ abstract class PruebaNotas {
 	protected Long periodo;
 
 	@BeforeEach
-	void prepararNotas() {
+	protected void prepararNotas() {
 		LimpiezaBaseDatos.limpiar(jdbc);
 		tokens.olvidar();
 		hoyEs(INICIO);
@@ -172,7 +172,7 @@ abstract class PruebaNotas {
 	}
 
 	@AfterEach
-	void limpiarNotas() {
+	protected void limpiarNotas() {
 		SecurityContextHolder.clearContext();
 		tokens.olvidar();
 		LimpiezaBaseDatos.limpiar(jdbc);

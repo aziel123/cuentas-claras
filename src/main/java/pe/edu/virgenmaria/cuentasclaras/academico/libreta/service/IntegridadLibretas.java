@@ -142,7 +142,7 @@ public class IntegridadLibretas implements AlertasRevision {
 							+ plazo + ": ") + "Dirección pide su reemisión y Promotoría la aprueba.",
 					"/auditoria?accion=LIBRETA_HUELLA_NO_COINCIDE",
 					new Aviso(TipoAviso.INTEGRIDAD_LIBRETAS, "LIBHUELLA:" + id + (vencido ? ":" + hoy : ""),
-							vencido ? "vencido" : plazo.toString())));
+							plazo.toString())));
 		});
 		return alertas;
 	}
