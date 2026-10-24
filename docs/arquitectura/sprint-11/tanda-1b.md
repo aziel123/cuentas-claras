@@ -6,7 +6,7 @@
 > está en verde.** Skills: `sistema-diseno` (marca, componentes y accesibilidad) y `evaluacion-ux` (microcopy).
 
 ## 1. Decisiones (pendientes del usuario: se implementan los valores por defecto)
-1. **Sin cambios en la base** (tampoco en F-D1, F-D2 ni F-D3): sin migración, triggers, funciones ni huellas. Conteos sin cambio: **117 triggers, 19 funciones y
+1. **Sin cambios en la base** (tampoco en F-D1 a F-D4): sin migración, triggers, funciones ni huellas. Conteos sin cambio: **117 triggers, 19 funciones y
    136 huellas** (los de la tanda 1). Si algo pareciera pedir una columna, se calcula en Java desde lo que ya existe.
 2. **Avance (206):** «Tu colegio está en preparación: faltan N de 15 pasos», con N = obligatorios pendientes; «(y 2 opcionales)»
    si faltan; la barra sobre los 13 obligatorios.
@@ -38,8 +38,9 @@
   recaudación («Confirmar lote») y renovación.
 - **Puesta en marcha** (`puesta-en-marcha/lista.html`): número, título, estado con texto e ícono, responsable, conteo, «Ir» o
   «Lo hace …», «Siguiente» marcado con texto, «Pasar a producción» deshabilitado con el motivo.
-- **Tres correcciones de Pensiones (sección 2b):** la tarjeta de Secundaria desalineada (F-D1), los vencimientos propuestos
-  según el inicio de clases (F-D2) y las fechas del formulario con `min` y `max` iguales a la validación (F-D3).
+- **Cuatro correcciones de Pensiones (sección 2b):** la tarjeta de Secundaria desalineada (F-D1), los vencimientos propuestos
+  según el inicio de clases (F-D2), las fechas del formulario con `min` y `max` iguales a la validación (F-D3) y los textos del
+  plan en borrador (F-D4).
 - **Fuera de alcance:** cambios de lógica de los pasos (son de la tanda 1); avisos por WhatsApp o correo de los pasos
   pendientes (después, si el usuario lo pide); la guía para el operador (ya ve la lista como sí o no).
 
@@ -101,6 +102,26 @@ validación del servidor no cambia.**
   - **coherencia con el servidor:** `validar` acepta una fecha en el `min` y otra en el `max` de cada campo, y rechaza un día
     antes del `min` y un día después del `max` (la matrícula, la primera pensión y «Cobrar desde» del día 1 del año siguiente).
 
+**F-D4. Textos del plan en borrador.** Al guardar un plan nuevo, `PlanPensionController` (línea 62) muestra «Listo: propusiste
+el plan. Ahora debe aprobarlo otra persona de Promotoría o Dirección.», pero el plan sigue en `BORRADOR`: falta pulsar «Enviar
+para aprobación» (`pensiones/plan.html`). Y la etiqueta del borrador, «En preparación», choca con el «En preparación» del
+colegio que muestra la guía de esta misma tanda.
+- **Mensaje al guardar:** «Guardaste el borrador. Revísalo y pulsa «Enviar para aprobación» para que otra persona de
+  Promotoría o Dirección lo apruebe.» El de «Enviar para aprobación» queda (o pasa a ser): «Enviaste el plan. Ahora debe
+  aprobarlo otra persona de Promotoría o Dirección.»
+- **Etiquetas de `EstadoPlan`:** `BORRADOR` «Borrador» (antes «En preparación»); `ENVIADO` «Por aprobar» (antes «Enviado, por
+  aprobar»), igual que la etiqueta que ya usa `pensiones/resumen.html` y que `EstadoDescuento.SOLICITADO`. `APROBADO`,
+  `REEMPLAZADO` y `DESCARTADO` no cambian. Solo cambia el texto: los nombres del enum, la base y los estados no cambian.
+- **Por la misma razón, `EstadoLote.BORRADOR`** (lote del saldo inicial) pasa de «En preparación» a «Borrador». Su `ENVIADO`
+  («Enviado, por confirmar») queda: ahí se confirma, no se aprueba.
+- **Lo que «En preparación» sigue nombrando:** solo el estado del colegio (`EstadoColegio.PREPARACION`). `TextosEstadosTest`
+  recorre las etiquetas de todos los enums de estado con `etiqueta()` y falla si otra que no sea la del colegio dice «En
+  preparación».
+- **Pruebas que cambian:** `PensionesWebTest` (línea 99: espera «Guardaste el borrador» en el aviso de éxito) y las que comparan
+  «En preparación» o «Enviado, por aprobar» de un plan o un lote. **Prueba nueva:** `PlanBorradorTextosTest` (guardar un plan
+  nuevo: el aviso dice «Guardaste el borrador» y menciona «Enviar para aprobación»; la ficha del plan muestra «Borrador»; después
+  de enviarlo, «Por aprobar» y el aviso de enviado).
+
 ## 3. Textos (microcopy; revisar con `investigador-ux` antes de cerrar)
 - Banner, le toca: «Tu colegio está en preparación: faltan 6 de 15 pasos.» · «Siguiente: Crear las secciones del año 2026 — lo
   hace Administración o Dirección.» · botón «Crear las secciones».
@@ -147,7 +168,8 @@ validación del servidor no cambia.**
 - **F-D1:** `templates/pensiones/resumen.html` y su CSS. **F-D2:** `cobranza.model.ConfiguracionPlan` (`porDefecto(AnioEscolar,
   …)`), `ServicioPlanesPension.propuestaPorDefecto`, `PensionesDemo`, `DatosDemoPensionesDev` y las pruebas que usan la firma vieja.
   **F-D3:** `ConfiguracionPlan` (rangos y `validar`), `PlanPensionController` (`rangos`), `fragments/componentes.html`
-  (`campoFecha`) y `pensiones/plan-formulario.html`.
+  (`campoFecha`) y `pensiones/plan-formulario.html`. **F-D4:** `PlanPensionController` (avisos), `EstadoPlan` y `EstadoLote`
+  (etiquetas) y las pruebas que comparan esos textos.
 - **Documentos:** `docs/manuales/promotoria.md`, `direccion.md`, `administracion.md`, `caja.md` y `docente.md` («Qué ves mientras tu colegio
   está en preparación»); sección «Tanda 1b · Implementación» del diseño.
 
@@ -158,7 +180,7 @@ validación del servidor no cambia.**
 4. La Puesta en marcha con responsable, estado e «Ir».
 5. `ColegioEnPreparacionException`, `PreparacionAdvice`, traducción de los 1644 y botones deshabilitados.
 6. Los 7 estados vacíos.
-7. F-D1 (tarjetas de Pensiones), F-D2 (vencimientos según el inicio de clases) y F-D3 (`min` y `max`), cada una con su prueba.
+7. F-D1 (tarjetas de Pensiones), F-D2 (vencimientos según el inicio de clases) F-D3 (`min` y `max`) y F-D4 (textos del borrador), cada una con su prueba.
 8. Accesibilidad, microcopy con `investigador-ux`, revisión en celular con `disenador-ui`, manuales y CI en verde.
 
 ## 7. Pruebas obligatorias
@@ -209,5 +231,5 @@ y quién lo hace, con un botón que la lleva a la pantalla correcta solo si pued
 cómo seguir; cobrar o enviar algo bloqueado explica por qué y enlaza a la Puesta en marcha; la Puesta en marcha muestra estado,
 responsable e «Ir» de los 15 pasos; las familias no ven nada de esto; las tres tarjetas de Pensiones quedan
 alineadas y la propuesta de vencimientos pasa la validación con clases desde marzo, desde abril o desde mitad de mes; el
-calendario del plan no deja elegir fechas que el servidor rechazaría; la revisión de accesibilidad pasa; y el CI del PR en
+calendario del plan no deja elegir fechas que el servidor rechazaría; un plan guardado dice «Borrador» y cómo enviarlo; la revisión de accesibilidad pasa; y el CI del PR en
 borrador está en verde, con los conteos de la tanda 1 sin cambios (117 triggers, 19 funciones, 136 huellas).
