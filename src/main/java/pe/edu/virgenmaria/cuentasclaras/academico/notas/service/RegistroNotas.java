@@ -146,7 +146,8 @@ public class RegistroNotas {
 		List<CompetenciaDelCatalogo> competencias = contexto.competencias(seccion, configuracion, areaId);
 		List<Matricula> matriculas = contexto.matriculas(seccionId);
 		Set<Long> exonerados = contexto.exonerados(matriculas.stream().map(Matricula::getId).toList(), areaId, periodo);
-		Map<String, Calificacion> vigentes = vigentes(periodo, seccionId, competencias);
+		Map<String, Calificacion> vigentes = vigentes(periodo, matriculas.stream().map(Matricula::getId).toList(),
+				competencias);
 		List<HojaNotas.FilaAlumno> filas = new ArrayList<>();
 		int sinNota = 0;
 		for (Matricula m : matriculas) {
@@ -206,7 +207,7 @@ public class RegistroNotas {
 		Map<Long, Matricula> matriculas = new LinkedHashMap<>();
 		contexto.matriculas(seccionId).forEach(m -> matriculas.put(m.getId(), m));
 		Set<Long> exonerados = contexto.exonerados(List.copyOf(matriculas.keySet()), areaId, periodo);
-		Map<String, Calificacion> vigentes = vigentes(periodo, seccionId, competencias);
+		Map<String, Calificacion> vigentes = vigentes(periodo, List.copyOf(matriculas.keySet()), competencias);
 		Map<String, Boolean> exige = new HashMap<>();
 		contexto.catalogo().escalaDe(configuracion.getCurriculoVersionId(), seccion.nivel())
 				.forEach(v -> exige.put(v.valor(), v.exigeConclusion() || configuracion.isConclusionSiempre()));
@@ -268,7 +269,8 @@ public class RegistroNotas {
 				nuevas++;
 			}
 			else {
-				nueva = Calificacion.cambio(f.vigente(), f.nivel(), f.conclusion(), lote.getId(), ahora);
+				// Traslado a mitad de periodo: la vigente puede ser de la sección anterior; el cambio va en esta.
+				nueva = Calificacion.cambio(f.vigente(), seccionId, f.nivel(), f.conclusion(), lote.getId(), ahora);
 				if (f.nivel() == null) {
 					sinNota++;
 				}
@@ -310,13 +312,19 @@ public class RegistroNotas {
 		return texto;
 	}
 
-	private Map<String, Calificacion> vigentes(PeriodoEvaluacion periodo, long seccionId,
+	/**
+	 * Las vigentes de las matrículas de la hoja (QA del sprint 10): por matrícula y no por sección, porque la cadena es de la
+	 * matrícula. Con la sección, un alumno trasladado a mitad de periodo aparecía «sin nota» y su primera nota en la sección
+	 * nueva chocaba con uk_calificacion_inicial: el guardado de toda la hoja fallaba.
+	 */
+	private Map<String, Calificacion> vigentes(PeriodoEvaluacion periodo, List<Long> matriculas,
 			List<CompetenciaDelCatalogo> competencias) {
-		if (competencias.isEmpty()) {
+		if (competencias.isEmpty() || matriculas.isEmpty()) {
 			return Map.of();
 		}
 		Map<String, Calificacion> vigentes = new HashMap<>();
-		calificaciones.vigentes(periodo.getId(), seccionId, competencias.stream().map(CompetenciaDelCatalogo::id).toList())
+		calificaciones.vigentesDeMatriculas(periodo.getId(), matriculas, competencias.stream()
+				.map(CompetenciaDelCatalogo::id).toList())
 				.forEach(c -> vigentes.put(c.getMatriculaId() + ":" + c.getCompetenciaId(), c));
 		return vigentes;
 	}

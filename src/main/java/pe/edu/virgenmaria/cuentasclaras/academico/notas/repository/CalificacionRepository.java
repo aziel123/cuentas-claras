@@ -27,6 +27,15 @@ public interface CalificacionRepository extends Repository<Calificacion, Long> {
 	@Query("select c from Calificacion c where c.periodoId = :periodo and c.seccionId = :seccion and c.competenciaId in :competencias and not exists (select 1 from Calificacion x where x.reemplazaId = c.id)")
 	List<Calificacion> vigentes(@Param("periodo") Long periodoId, @Param("seccion") Long seccionId, @Param("competencias") Collection<Long> competencias);
 
+	/**
+	 * QA del sprint 10: las vigentes de esas matrículas en un periodo y esas competencias, sin mirar la sección donde se
+	 * registraron. La cadena de una nota es de la matrícula (periodo, matrícula y competencia): un alumno trasladado a mitad
+	 * de periodo conserva su nota y la nueva sección la continúa; un retirado o un exonerado no cuenta si no está en la lista.
+	 */
+	@Query("select c from Calificacion c where c.periodoId = :periodo and c.matriculaId in :matriculas and c.competenciaId in :competencias and not exists (select 1 from Calificacion x where x.reemplazaId = c.id)")
+	List<Calificacion> vigentesDeMatriculas(@Param("periodo") Long periodoId, @Param("matriculas") Collection<Long> matriculas,
+			@Param("competencias") Collection<Long> competencias);
+
 	/** Las vigentes de un periodo (de todas las secciones), para el avance y el cierre. */
 	@Query("select c from Calificacion c where c.periodoId = :periodo and not exists (select 1 from Calificacion x where x.reemplazaId = c.id)")
 	List<Calificacion> vigentesDelPeriodo(@Param("periodo") Long periodoId);

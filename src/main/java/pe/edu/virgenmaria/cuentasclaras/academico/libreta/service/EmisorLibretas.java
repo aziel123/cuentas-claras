@@ -128,9 +128,13 @@ public class EmisorLibretas {
 			Map<Long, LibretaEmitida> vigentes = vigentesPorMatricula(p.getId());
 			Map<Long, Long> corregidas = ultimaCorreccionPorMatricula(p.getId());
 			for (Seccion s : secciones.findByAnioEscolarIdOrderByGradoAscNombreAsc(p.getAnioEscolarId())) {
-				boolean falta = matriculas.deLaSeccionEnOrden(s.getId(), RECIBEN_LIBRETA).stream()
-						.anyMatch(m -> !vigentes.containsKey(m.getId()));
+				Set<Long> hoyEnLaSeccion = matriculas.deLaSeccionEnOrden(s.getId(), RECIBEN_LIBRETA).stream()
+						.map(Matricula::getId).collect(Collectors.toSet());
+				boolean falta = hoyEnLaSeccion.stream().anyMatch(m -> !vigentes.containsKey(m));
+				// QA del sprint 10: como emitir(), solo las matrículas que siguen en la sección (la libreta de un retirado
+				// con una corrección posterior no se reemite: sin este filtro la sección quedaba pendiente para siempre).
 				boolean corregir = vigentes.values().stream().filter(l -> l.getSeccionId().equals(s.getId()))
+						.filter(l -> hoyEnLaSeccion.contains(l.getMatriculaId()))
 						.anyMatch(l -> corregidas.getOrDefault(l.getMatriculaId(), 0L) > l.marcas().calificacion());
 				if (falta || corregir) {
 					pendientes.add(new Pendiente(p.getId(), s.getId()));

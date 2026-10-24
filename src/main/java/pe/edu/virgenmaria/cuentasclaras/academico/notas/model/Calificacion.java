@@ -97,7 +97,19 @@ public class Calificacion extends BaseEntity {
 	/** Un cambio con el periodo abierto: reemplaza la vigente (puede dejarla «sin nota»). */
 	public static Calificacion cambio(Calificacion vigente, NivelLogro nivel, String conclusion, Long loteId,
 			LocalDateTime ahora) {
-		Calificacion c = base(vigente.donde(), nivel, conclusion, ahora);
+		return cambio(vigente, vigente.getSeccionId(), nivel, conclusion, loteId, ahora);
+	}
+
+	/**
+	 * QA del sprint 10: el cambio con el periodo abierto en la sección del lote. Si el alumno se trasladó a mitad de periodo,
+	 * la nota vigente es de su sección anterior y el cambio queda en la nueva (la del lote y la de su matrícula: así lo exige
+	 * trg_calificacion_nace); la cadena sigue siendo la de la matrícula.
+	 */
+	public static Calificacion cambio(Calificacion vigente, Long seccionId, NivelLogro nivel, String conclusion, Long loteId,
+			LocalDateTime ahora) {
+		Donde antes = vigente.donde();
+		Calificacion c = base(new Donde(antes.anioEscolarId(), antes.periodoId(), Objects.requireNonNull(seccionId, "seccion"),
+				antes.matriculaId(), antes.alumnoId(), antes.competenciaId()), nivel, conclusion, ahora);
 		c.origen = OrigenCalificacion.CAMBIO_ABIERTO;
 		c.reemplazaId = Objects.requireNonNull(vigente.getId(), "vigente");
 		c.loteId = Objects.requireNonNull(loteId, "loteId");

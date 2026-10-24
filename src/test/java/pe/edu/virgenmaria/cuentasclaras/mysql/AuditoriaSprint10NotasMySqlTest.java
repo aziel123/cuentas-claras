@@ -447,6 +447,38 @@ class AuditoriaSprint10NotasMySqlTest {
 		assertThat(codigo).isEqualTo(1644);
 	}
 
+	/**
+	 * QA del sprint 10 (QA-1): un alumno trasladado a mitad de periodo. Su nota de la sección anterior sigue siendo la
+	 * vigente y el docente de la sección nueva la cambia: la base acepta el CAMBIO_ABIERTO en la sección del lote y de la
+	 * matrícula, reemplazando la vigente de la otra sección (la cadena es de la matrícula). Antes la aplicación intentaba una
+	 * nota inicial y chocaba con uk_calificacion_inicial.
+	 */
+	@Test
+	void qaTrasladoAMitadDePeriodoContinuaLaCadenaEnLaSeccionNueva() {
+		Escuela s = escuela();
+		long otra = como(s.administracion(), () -> estructura.crearSeccion(s.anio(),
+				new CrearSeccionRequest(Grado.PRIMARIA_5, "T" + sufijo.substring(sufijo.length() - 4))));
+		asignar(s.e(), otra, s.ana(), TipoAsignacion.DOCENTE, List.of(area("MAT")));
+		long competencia = competencias("MAT").get(0);
+		long anterior = jdbc.queryForObject("SELECT c.id FROM calificacion c WHERE c.periodo_id = ? AND c.matricula_id = ? "
+				+ "AND c.competencia_id = ? AND NOT EXISTS (SELECT 1 FROM calificacion x WHERE x.reemplaza_id = c.id)",
+				Long.class, s.p2(), s.lucas(), competencia);
+		Long[] nueva = new Long[2];
+		Integer cambios = enTransaccion(s.ana(), () -> {
+			jdbc.update("UPDATE matricula SET seccion_id = ? WHERE id = ?", otra, s.lucas());
+			int r = registro.guardar(otra, area("MAT"), s.p2(), new NotasRequest(List.of(new NotaPedida(s.lucas(),
+					competencia, "AD", null)), null)).cambios();
+			nueva[0] = jdbc.queryForObject("SELECT seccion_id FROM calificacion WHERE reemplaza_id = ?", Long.class,
+					anterior);
+			nueva[1] = jdbc.queryForObject("SELECT COUNT(*) FROM calificacion WHERE reemplaza_id = ? AND origen = "
+					+ "'CAMBIO_ABIERTO' AND nivel_logro = 'AD'", Long.class, anterior);
+			return r;
+		});
+		assertThat(cambios).isEqualTo(1);
+		assertThat(nueva[0]).isEqualTo(otra);
+		assertThat(nueva[1]).isEqualTo(1L);
+	}
+
 	/** C1 (crítico): la matrícula RESERVADA (impaga, del año siguiente) recibe nota igual, por la aplicación y la base. */
 	@Test
 	void c1NotaAMatriculaReservadaPasa() {

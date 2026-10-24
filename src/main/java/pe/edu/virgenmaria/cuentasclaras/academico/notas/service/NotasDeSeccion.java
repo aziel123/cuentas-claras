@@ -93,8 +93,10 @@ public class NotasDeSeccion {
 		List<Matricula> matriculas = contexto.matriculas(seccionId);
 		Map<String, Calificacion> vigentes = new HashMap<>();
 		if (!competencias.isEmpty() && !matriculas.isEmpty()) {
-			calificaciones.vigentes(periodo.getId(), seccionId, competencias.stream().map(CompetenciaDelCatalogo::id)
-					.toList()).forEach(c -> vigentes.put(c.getMatriculaId() + ":" + c.getCompetenciaId(), c));
+			// QA del sprint 10: por matrícula (la cadena es de la matrícula: un trasladado trae su nota de la otra sección).
+			calificaciones.vigentesDeMatriculas(periodo.getId(), matriculas.stream().map(Matricula::getId).toList(),
+					competencias.stream().map(CompetenciaDelCatalogo::id).toList())
+					.forEach(c -> vigentes.put(c.getMatriculaId() + ":" + c.getCompetenciaId(), c));
 		}
 		List<NotasSeccionVista.AreaConNotas> areas = new ArrayList<>();
 		for (AreaDelCatalogo area : contexto.catalogo().areasDe(configuracion.getCurriculoVersionId(), seccion.nivel())) {

@@ -175,8 +175,8 @@ public class CalificacionesSiagie {
 				exportaciones.findByPeriodoIdAndSeccionIdOrderByIdDesc(p.getId(), s.getId()).stream().findFirst()
 						.ifPresent(e -> ultimas.add(new Ultima(s.etiqueta(), p.getNombre(), e.getCodigo(),
 								e.getCreadoEn().format(MOMENTO), e.getCreadoPor(),
-								!e.getHuellaLibretas().equals(huellaLibretas(libretas.vigentesDeSeccion(p.getId(),
-										s.getId()))))));
+								!e.getHuellaLibretas().equals(huellaLibretas(vigentesDe(p, matriculas.deLaSeccionEnOrden(
+										s.getId(), List.of(EstadoMatricula.ACTIVA, EstadoMatricula.RESERVADA))))))));
 			}
 		}
 		return new Vista(true, direccion, delAnio.stream().map(s -> new Opcion(s.getId(), s.etiqueta())).toList(),
@@ -201,7 +201,13 @@ public class CalificacionesSiagie {
 		}
 		List<Matricula> lista = matriculas.deLaSeccionEnOrden(seccion.getId(), List.of(EstadoMatricula.ACTIVA,
 				EstadoMatricula.RESERVADA));
-		Map<Long, LibretaEmitida> vigentes = libretas.vigentesDeSeccion(periodo.getId(), seccion.getId()).stream()
+		if (lista.isEmpty()) {
+			throw new ReglaNegocioException(seccion.etiqueta() + " no tiene alumnos con matrícula activa o reservada: no hay "
+					+ "calificaciones que exportar.");
+		}
+		// QA del sprint 10: las libretas vigentes de los alumnos de HOY en la sección (la de un trasladado después del cierre
+		// está en su sección anterior; la de un retirado no entra ni frena la exportación).
+		Map<Long, LibretaEmitida> vigentes = vigentesDe(periodo, lista).stream()
 				.collect(Collectors.toMap(LibretaEmitida::getMatriculaId, Function.identity()));
 		long sinLibreta = lista.stream().filter(m -> !vigentes.containsKey(m.getId())).count();
 		if (sinLibreta > 0) {
@@ -211,7 +217,7 @@ public class CalificacionesSiagie {
 		Map<Long, Long> ultimaCorreccion = calificaciones.findByPeriodoIdAndOrigenInOrderByIdAsc(periodo.getId(),
 				CAMBIAN_LA_LIBRETA).stream().collect(Collectors.toMap(Calificacion::getMatriculaId, Calificacion::getId,
 						Math::max));
-		boolean pendientes = vigentes.values().stream()
+		boolean pendientes = lista.stream().map(m -> vigentes.get(m.getId()))
 				.anyMatch(l -> ultimaCorreccion.getOrDefault(l.getMatriculaId(), 0L) > l.marcas().calificacion());
 		if (pendientes) {
 			throw new ReglaNegocioException("Hay correcciones o notas tardías aprobadas que todavía no llegan a su libreta. "
@@ -219,7 +225,11 @@ public class CalificacionesSiagie {
 					+ "familias.");
 		}
 		List<LibretaEmitida> usadas = lista.stream().map(m -> vigentes.get(m.getId())).toList();
-		List<RegeneracionLibreta.Regenerada> regeneradas = regeneracion.regenerar(usadas);
+		// La regeneración carga los datos de UNA sección: se agrupan por la sección de cada libreta (un trasladado trae la
+		// suya; mezclarlas daría una huella distinta y una alerta de integridad falsa).
+		List<RegeneracionLibreta.Regenerada> regeneradas = new ArrayList<>();
+		usadas.stream().collect(Collectors.groupingBy(LibretaEmitida::getSeccionId, java.util.LinkedHashMap::new,
+				Collectors.toList())).values().forEach(grupo -> regeneradas.addAll(regeneracion.regenerar(grupo)));
 		if (regeneradas.stream().anyMatch(r -> !r.coincide())) {
 			throw new ReglaNegocioException("Una libreta de la sección no coincide con su huella y está en revisión: "
 					+ "Promotoría ya recibió la alerta. Se exporta cuando se reemita.");
@@ -350,6 +360,18 @@ public class CalificacionesSiagie {
 			primera.add("");
 		}
 		return primera;
+	}
+
+	/**
+	 * Las libretas vigentes del periodo de esas matrículas (las de la sección hoy), donde se hayan emitido. La misma lista
+	 * da la huella al exportar y al decir si una exportación quedó desactualizada (antes, la de la pantalla contaba la libreta
+	 * de un retirado y toda exportación de esa sección figuraba «desactualizada»).
+	 */
+	private List<LibretaEmitida> vigentesDe(PeriodoEvaluacion periodo, List<Matricula> lista) {
+		if (lista.isEmpty()) {
+			return List.of();
+		}
+		return libretas.vigentesDeMatriculas(periodo.getId(), lista.stream().map(Matricula::getId).toList());
 	}
 
 	/** A6: SHA-256 de los «id:huella» de las libretas usadas, en orden de id (la base solo la guarda). */

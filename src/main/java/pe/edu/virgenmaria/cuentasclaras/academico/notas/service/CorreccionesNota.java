@@ -216,11 +216,13 @@ public class CorreccionesNota {
 		List<CompetenciaDelCatalogo> competencias = contexto.competencias(seccion, configuracion, areaId);
 		List<Matricula> delaSeccion = contexto.matriculas(seccionId);
 		Set<Long> exonerados = contexto.exonerados(delaSeccion.stream().map(Matricula::getId).toList(), areaId, periodo);
-		long conNota = competencias.isEmpty() ? 0 : calificaciones.vigentes(periodo.getId(), seccionId,
-				competencias.stream().map(CompetenciaDelCatalogo::id).toList()).stream()
+		// QA del sprint 10: solo las notas de quienes reciben nota hoy y no están exonerados (las de un retirado inflaban la
+		// cuenta y la nota tardía se rechazaba con «todas tienen nota» aunque un alumno vigente no la tuviera).
+		List<Long> conDerecho = delaSeccion.stream().map(Matricula::getId).filter(m -> !exonerados.contains(m)).toList();
+		long conNota = competencias.isEmpty() || conDerecho.isEmpty() ? 0 : calificaciones.vigentesDeMatriculas(
+				periodo.getId(), conDerecho, competencias.stream().map(CompetenciaDelCatalogo::id).toList()).stream()
 				.filter(c -> c.getNivelLogro() != null).count();
-		long esperadas = (long) competencias.size() * delaSeccion.stream().filter(m -> !exonerados.contains(m.getId()))
-				.count();
+		long esperadas = (long) competencias.size() * conDerecho.size();
 		if (conNota >= esperadas) {
 			throw new ReglaNegocioException("Todas las competencias de " + area.nombre() + " tienen nota: un cambio va por "
 					+ "corrección.");

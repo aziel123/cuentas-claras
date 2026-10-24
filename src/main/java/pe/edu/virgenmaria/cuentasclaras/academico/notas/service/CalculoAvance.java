@@ -85,11 +85,13 @@ class CalculoAvance {
 			List<CompetenciaDelCatalogo> competencias = contexto.catalogo()
 					.competenciasDe(c.getCurriculoVersionId(), seccion.getGrado());
 			List<Long> matriculas = contexto.matriculas(seccion.getId()).stream().map(Matricula::getId).toList();
-			Map<Long, Long> conNotaPorCompetencia = matriculas.isEmpty() || competencias.isEmpty() ? Map.of()
-					: calificaciones.vigentes(periodo.getId(), seccion.getId(),
+			// QA del sprint 10: solo las notas de las matrículas que reciben nota hoy (no las de un retirado ni las que dejó un
+			// trasladado en esta sección), y de cada área sin los exonerados: si no, el avance se inflaba y escondía
+			// pendientes (el cierre y la alerta NOTAS_PENDIENTES decían «completo» con un alumno sin nota).
+			List<Calificacion> deLasMatriculas = matriculas.isEmpty() || competencias.isEmpty() ? List.of()
+					: calificaciones.vigentesDeMatriculas(periodo.getId(), matriculas,
 							competencias.stream().map(CompetenciaDelCatalogo::id).toList()).stream()
-							.filter(x -> x.getNivelLogro() != null)
-							.collect(Collectors.groupingBy(Calificacion::getCompetenciaId, Collectors.counting()));
+							.filter(x -> x.getNivelLogro() != null).toList();
 			List<AsignacionDocente> deLaSeccion = vigentes.getOrDefault(seccion.getId(), List.of());
 			for (AreaDelCatalogo area : contexto.catalogo().areasDe(c.getCurriculoVersionId(), seccion.nivel())) {
 				List<CompetenciaDelCatalogo> delArea = competencias.stream().filter(k -> k.areaId().equals(area.id()))
@@ -99,8 +101,9 @@ class CalculoAvance {
 				}
 				Set<Long> exonerados = contexto.exonerados(matriculas, area.id(), periodo);
 				int esperadas = delArea.size() * (matriculas.size() - exonerados.size());
-				int conNota = delArea.stream().mapToInt(k -> conNotaPorCompetencia.getOrDefault(k.id(), 0L).intValue())
-						.sum();
+				Set<Long> idsDelArea = delArea.stream().map(CompetenciaDelCatalogo::id).collect(Collectors.toSet());
+				int conNota = (int) deLasMatriculas.stream().filter(x -> idsDelArea.contains(x.getCompetenciaId())
+						&& !exonerados.contains(x.getMatriculaId())).count();
 				Set<String> quienes = new TreeSet<>();
 				for (AsignacionDocente a : deLaSeccion) {
 					boolean califica = area.transversal() ? a.getTipo() == TipoAsignacion.TUTOR

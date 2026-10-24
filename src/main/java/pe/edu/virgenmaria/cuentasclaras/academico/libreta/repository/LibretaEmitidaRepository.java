@@ -34,6 +34,15 @@ public interface LibretaEmitidaRepository extends Repository<LibretaEmitida, Lon
 			+ "(select 1 from LibretaEmitida x where x.reemplazaId = l.id) order by l.id asc")
 	List<LibretaEmitida> vigentesDeSeccion(@Param("periodo") Long periodoId, @Param("seccion") Long seccionId);
 
+	/**
+	 * QA del sprint 10: las vigentes de esas matrículas en un periodo, en la sección que sea (la exportación para el SIAGIE:
+	 * un alumno trasladado después del cierre tiene su libreta en la sección anterior).
+	 */
+	@Query("select l from LibretaEmitida l where l.periodoId = :periodo and l.matriculaId in :matriculas and not exists "
+			+ "(select 1 from LibretaEmitida x where x.reemplazaId = l.id) order by l.id asc")
+	List<LibretaEmitida> vigentesDeMatriculas(@Param("periodo") Long periodoId,
+			@Param("matriculas") Collection<Long> matriculas);
+
 	/** Todas las versiones de unos alumnos (el portal de la familia: nada desaparece). */
 	List<LibretaEmitida> findByAlumnoIdInOrderByPeriodoIdDescAlumnoIdAscNumeroVersionDesc(Collection<Long> alumnos);
 
