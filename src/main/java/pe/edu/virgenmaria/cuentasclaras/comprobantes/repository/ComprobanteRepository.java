@@ -23,6 +23,12 @@ public interface ComprobanteRepository extends Repository<Comprobante, Long> {
 	/** Cuántos comprobantes tiene la serie: debe ser igual a su último número (si no, hay un hueco). */
 	long countBySerie(String serie);
 
+	/** Sprint 11, tanda 1 (F12): si el colegio ya emitió algún comprobante (la baja no procede). */
+	boolean existsByIdNotNull();
+
+	/** Sprint 11, tanda 1 (AP-4): los comprobantes que el OSE todavía no aceptó (la suspensión espera). */
+	long countByEstadoEnvioIn(java.util.Collection<pe.edu.virgenmaria.cuentasclaras.comprobantes.model.EstadoEnvio> estados);
+
 	/** La nota de crédito que anula ese comprobante (como máximo una). */
 	Optional<Comprobante> findByModificaId(Long comprobanteId);
 

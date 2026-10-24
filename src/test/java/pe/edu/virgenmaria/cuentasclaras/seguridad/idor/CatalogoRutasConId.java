@@ -49,7 +49,9 @@ final class CatalogoRutasConId {
 		/** Sprint 10, tanda 2: una nota (la corrección después del cierre). */
 		CALIFICACION,
 		/** Sprint 10, tanda 3: una libreta emitida (la descarga de la familia, la impresión y la reemisión). */
-		LIBRETA
+		LIBRETA,
+		/** Sprint 11, tanda 1: un cambio de estado del colegio (la bandeja del operador y la objeción del titular). */
+		CAMBIO_ESTADO
 	}
 
 	static final Map<String, Map<String, Recurso>> CATALOGO = new LinkedHashMap<>();
@@ -243,6 +245,14 @@ final class CatalogoRutasConId {
 		r("POST /puesta-en-marcha/correo-control/{id}/rechazar", "id", Recurso.CAMBIO_CORREO);
 		r("GET /marca/logo/{id:[0-9]+}", "id", Recurso.LOGO);
 		r("POST /plataforma/colegios/{id:\\d+}/correo-control", "id", Recurso.COLEGIO);
+		// Sprint 11, tanda 1: el estado del colegio (operadores) y la objeción del titular (en su colegio).
+		r("GET /plataforma/colegios/{id:\\d+}/estado", "id", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/estado", "id", Recurso.COLEGIO);
+		for (String accion : new String[] { "aprobar", "rechazar", "anular", "objecion" }) {
+			r("POST /plataforma/colegios/{id:\\d+}/cambios-estado/{cambio:\\d+}/" + accion, "id", Recurso.COLEGIO, "cambio",
+					Recurso.CAMBIO_ESTADO);
+		}
+		r("POST /colegio/estado/{id:\\d+}/objecion", "id", Recurso.CAMBIO_ESTADO);
 		// Sprint 8, tanda 2: los conectores del colegio (proponer un tipo y probar uno propuesto).
 		r("POST /conectores/{tipo:[a-z-]{3,20}}", "tipo", Recurso.TIPO_CONECTOR);
 		r("POST /conectores/{id:\\d{1,12}}/probar", "id", Recurso.CONECTOR);

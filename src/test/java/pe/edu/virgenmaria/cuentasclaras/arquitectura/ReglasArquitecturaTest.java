@@ -1578,6 +1578,32 @@ class ReglasArquitecturaTest {
 			})
 			.because("el dinero se convierte en un solo lugar y con comprobación de ida y vuelta");
 
+	/** Sprint 11, tanda 1: los cambios de estado del colegio los escribe solo la plataforma (dos operadores). */
+	@ArchTest
+	static final ArchRule soloLaPlataformaEscribeCambiosDeEstado = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".plataforma..")
+			.should().callMethodWhere(new DescribedPredicate<>("un save de CambioEstadoColegioRepository") {
+				@Override
+				public boolean test(JavaMethodCall llamada) {
+					return llamada.getTargetOwner().getSimpleName().equals("CambioEstadoColegioRepository")
+							&& llamada.getName().startsWith("save");
+				}
+			})
+			.because("el estado del colegio lo deciden dos operadores (sección 3.3); en MySQL, trg_cambio_estado_colegio_*");
+
+	/** Sprint 11, tanda 1 (AP-2): cada uso de la facultad del titular lo registra solo FacultadTitular. */
+	@ArchTest
+	static final ArchRule soloLaFacultadRegistraSusUsos = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".seguridad.service.FacultadTitular")
+			.should().callMethodWhere(new DescribedPredicate<>("un save de UsoFacultadTitularRepository") {
+				@Override
+				public boolean test(JavaMethodCall llamada) {
+					return llamada.getTargetOwner().getSimpleName().equals("UsoFacultadTitularRepository")
+							&& llamada.getName().startsWith("save");
+				}
+			})
+			.because("el uso de la facultad exige el código, la firma y los avisos en la misma transacción (sección 3.12)");
+
 	private static DescribedPredicate<JavaMethodCall> llamadaA(String prefijo, String descripcion) {
 		return new DescribedPredicate<>(descripcion) {
 			@Override

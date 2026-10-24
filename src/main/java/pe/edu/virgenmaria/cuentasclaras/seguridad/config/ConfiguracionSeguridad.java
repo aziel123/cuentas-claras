@@ -113,7 +113,8 @@ public class ConfiguracionSeguridad {
 			ManejadorFalloIngreso manejadorFalloIngreso, ManejadorAccesoDenegado manejadorAccesoDenegado,
 			SessionRegistry registroSesiones, ServicioCierreSesion cierreSesion, LimiteIngresos limiteIngresos,
 			PropiedadesSesion propiedadesSesion, Clock reloj, Environment entorno,
-			@Value("${server.servlet.session.cookie.name:JSESSIONID}") String cookieSesion) throws Exception {
+			@Value("${server.servlet.session.cookie.name:JSESSIONID}") String cookieSesion,
+			pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository colegiosDeLaBase) throws Exception {
 		boolean demo = entorno.matchesProfiles("demo");
 		http
 			.authorizeHttpRequests(auth -> {
@@ -143,6 +144,9 @@ public class ConfiguracionSeguridad {
 			// Sprint 7, tanda 3 (decisión 83): 10 horas como máximo desde el ingreso, aunque haya actividad.
 			.addFilterAfter(new FiltroSesionMaxima(propiedadesSesion.vigenciaMaxima(), reloj),
 				SecurityContextHolderFilter.class)
+			// Sprint 11, tanda 1 (F10): el personal de un colegio suspendido o dado de baja sale en el pedido siguiente.
+			.addFilterAfter(new pe.edu.virgenmaria.cuentasclaras.seguridad.web.FiltroColegioQueOpera(colegiosDeLaBase),
+				FiltroSesionMaxima.class)
 			// Sprint 7, tanda 2: antes de invalidar la sesión HTTP, se cierra la sesión de la base (su secreto ya no firma).
 			.logout(l -> l.logoutUrl("/salir").logoutSuccessUrl("/login?salio").addLogoutHandler(cierreSesion)
 				.invalidateHttpSession(true).deleteCookies(cookieSesion))

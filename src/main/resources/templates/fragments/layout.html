@@ -20,6 +20,8 @@
 	<a class="saltar" href="#contenido">Saltar al contenido</a>
 	<div class="franja-entorno" role="status" th:if="${franjaEntorno != null}"><span th:text="${franjaEntorno}">PILOTO</span>
 		<a class="franja-enlace" th:if="${entornoDemo == true}" th:href="@{/demo/guia}">Ver el recorrido guiado</a></div>
+	<!--/* Sprint 11, tanda 1: la baja o la suspensión aprobada (personal) o el modo consulta (familias). */-->
+	<div class="franja-colegio" role="status" data-franja-colegio th:if="${franjaColegio != null}" th:text="${franjaColegio}">Estado del colegio</div>
 	<header class="barra">
 		<div class="barra-in">
 			<a class="marca" th:href="@{/inicio}">

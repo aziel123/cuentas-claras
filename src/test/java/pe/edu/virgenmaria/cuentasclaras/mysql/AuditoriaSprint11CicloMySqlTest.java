@@ -22,6 +22,8 @@ import pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension;
 import pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest;
 import pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearSeccionRequest;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Grado;
+import pe.edu.virgenmaria.cuentasclaras.colegio.model.MotivoCambioEstado;
+import pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoCambioEstado;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura;
@@ -75,6 +77,9 @@ class AuditoriaSprint11CicloMySqlTest {
 
 	@Autowired
 	private FacultadTitular facultad;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.plataforma.service.CambiosEstadoColegio cambios;
 
 	@Autowired
 	private ServicioUsuarios servicioUsuarios;
@@ -328,6 +333,72 @@ class AuditoriaSprint11CicloMySqlTest {
 				+ "titular, usuario_id, rol, accion, cuenta_nueva, mensaje_id, creado_en, creado_por, actualizado_en) SELECT "
 				+ "colegio_id, numero + 1, titular_id, titular, usuario_id, 'PROMOTOR', accion, cuenta_nueva, mensaje_id, "
 				+ "NOW(6), creado_por, NOW(6) FROM uso_facultad_titular WHERE id = ?", uso))).isIn(1062, 1644);
+	}
+
+	/**
+	 * Secciones 3.3 a 3.6 con los permisos mínimos: dos operadores dan de baja un colegio sin cuentas activadas (inmediata:
+	 * trg_cambio_estado_colegio_* y trg_colegio_cambio la dejan pasar en una transacción) y bloquean la facultad de otro;
+	 * y lo que la base rechaza por fuera de ese camino (F2, F6, 1142 y 1143).
+	 */
+	@Test
+	void dosOperadoresDanDeBajaYBloqueanLaFacultadYLaBaseRechazaElRestoDelCamino() {
+		Usuario ana = EscenarioPlataforma.operador(usuarios, codificador, colegios, "operador.s11");
+		Usuario beto = EscenarioPlataforma.operador(usuarios, codificador, colegios, "operador.s11b");
+
+		// La baja: un colegio recién dado de alta, sin cuentas activadas (inmediata).
+		ingresar(ana);
+		ColegioCreado creado = alta.crear(EscenarioPlataforma.alta("Colegio S11 Baja " + sufijo, "20600000081",
+				"tbaja." + sufijo, "4" + String.format("%07d", Math.floorMod(("b" + sufijo).hashCode(), 10_000_000)),
+				"987663001"), null, null);
+		long baja = creado.colegioId();
+		Long idBaja = cambios.proponer(baja, TipoCambioEstado.BAJA, MotivoCambioEstado.PRUEBA,
+				"Era una instalación de prueba del sprint 11 en MySQL.", null);
+		// F2: el mismo operador no aprueba (la aplicación lo dice; la base también, con cc_sistema).
+		assertThatThrownBy(() -> cambios.aprobar(baja, idBaja))
+				.isInstanceOf(pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException.class);
+		assertThat(codigoAl(() -> sistema().update("UPDATE cambio_estado_colegio SET estado = 'APROBADO', aprobado_por = "
+				+ "propuesto_por, aprobador_id = operador_id WHERE id = ?", idBaja))).isIn(1644, 3819);
+		// F6: el colegio no cambia a BAJA sin su cambio aprobado.
+		assertThat(codigoAl(() -> sistema().update("UPDATE colegio SET estado = 'BAJA', cambio_estado_id = ? WHERE id = ?",
+				idBaja, baja))).isEqualTo(1644);
+		ingresar(beto);
+		cambios.aprobar(baja, idBaja);
+		assertThat(jdbc.queryForObject("SELECT estado FROM colegio WHERE id = ?", String.class, baja)).isEqualTo("BAJA");
+		assertThat(jdbc.queryForObject("SELECT estado FROM cambio_estado_colegio WHERE id = ?", String.class, idBaja))
+				.isEqualTo("APLICADO");
+		// Resuelto, no cambia.
+		assertThat(codigoAl(() -> sistema().update("UPDATE cambio_estado_colegio SET estado = 'ANULADO', resuelto_por = ?, "
+				+ "resuelto_en = NOW(6) WHERE id = ?", "operador.s11b", idBaja))).isIn(1644, 3819);
+
+		// El bloqueo de la facultad: lo propone uno y lo aprueba otro; el titular ya no pide su código.
+		Nuevo n = colegioNuevo("20600000099", "4" + String.format("%07d", Math.floorMod(("f" + sufijo).hashCode(),
+				10_000_000)), "987663002");
+		ingresar(ana);
+		Long idBloqueo = cambios.proponer(n.colegio(), TipoCambioEstado.BLOQUEO_FACULTAD, MotivoCambioEstado.SEGURIDAD,
+				"El titular reportó que perdió su celular con la sesión abierta.", null);
+		ingresar(beto);
+		cambios.aprobar(n.colegio(), idBloqueo);
+		assertThat(jdbc.queryForObject("SELECT facultad_bloqueada FROM colegio WHERE id = ?", Boolean.class, n.colegio()))
+				.isTrue();
+		ingresar(n.titular());
+		assertThatThrownBy(() -> facultad.pedirCodigo()).isInstanceOf(RuntimeException.class);
+
+		// cc_app no escribe cambios de estado (1142) y nadie cambia el tipo ni el motivo (1143).
+		assertThat(codigoAl(() -> jdbc.update("INSERT INTO cambio_estado_colegio (colegio_id, plataforma_id, tipo, ambito, "
+				+ "motivo_tipo, motivo, estado_origen, estado_destino, estado, pendiente, propuesto_por, operador_id, creado_en, "
+				+ "creado_por, actualizado_en) VALUES (?, 0, 'BAJA', 'ESTADO', 'PRUEBA', 'Un motivo de prueba bastante largo', "
+				+ "'PREPARACION', 'BAJA', 'PROPUESTO', TRUE, 'x', 0, NOW(6), 'x', NOW(6))", n.colegio()))).isEqualTo(1142);
+		assertThat(codigoAl(() -> sistema().update("UPDATE cambio_estado_colegio SET tipo = tipo WHERE 1 = 0")))
+				.isEqualTo(1143);
+		assertThat(codigoAl(() -> sistema().update("UPDATE cambio_estado_colegio SET motivo = motivo WHERE 1 = 0")))
+				.isEqualTo(1143);
+		// Un cambio que nace APROBADO.
+		assertThat(codigoAl(() -> sistema().update("INSERT INTO cambio_estado_colegio (colegio_id, plataforma_id, tipo, "
+				+ "ambito, motivo_tipo, motivo, estado_origen, estado_destino, estado, pendiente, propuesto_por, operador_id, "
+				+ "aprobado_por, aprobador_id, creado_en, creado_por, actualizado_en) SELECT ?, plataforma_id, "
+				+ "'DESBLOQUEO_FACULTAD', 'FACULTAD', 'SEGURIDAD', 'Un motivo de prueba bastante largo', estado_origen, "
+				+ "estado_destino, 'APROBADO', TRUE, 'operador.s11', operador_id, 'operador.s11b', aprobador_id, NOW(6), "
+				+ "'operador.s11', NOW(6) FROM cambio_estado_colegio WHERE id = ?", n.colegio(), idBloqueo))).isIn(1644, 3819);
 	}
 
 	private static int codigoAl(Runnable sentencia) {

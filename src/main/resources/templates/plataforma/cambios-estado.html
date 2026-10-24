@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cambios de estado', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="plataforma-cambios-estado">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Plataforma</p>
+			<h1>Cambios de estado de los colegios</h1>
+			<p class="secundario">Dar de baja, suspender, reactivar o bloquear la facultad del titular lo deciden dos operadores:
+				uno propone y otro aprueba, cada uno con su sesión. Cada paso se avisa al titular, a la Promotoría y al correo de control.</p>
+		</div>
+		<div class="acciones">
+			<a class="btn btn-secundario" th:href="@{/plataforma}">Colegios</a>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+	<th:block th:unless="${suspensionDisponible}">
+		<div th:replace="~{fragments/componentes :: alerta('info', 'La suspensión estará disponible cuando exista la exportación completa de los datos del colegio: el colegio debe recibir sus datos el día que se aplica.')}"></div>
+	</th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-pendientes">
+		<h2 id="titulo-pendientes">Pendientes</h2>
+		<th:block th:if="${#lists.isEmpty(cambios)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('No hay cambios pendientes', 'Para proponer uno, abre el estado del colegio desde la lista de colegios.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(cambios)}">
+			<caption class="solo-lectores">Cambios de estado propuestos o aprobados que todavía no se aplican.</caption>
+			<thead>
+				<tr><th scope="col">Colegio</th><th scope="col">Cambio</th><th scope="col">Estado</th><th scope="col">Motivo</th>
+					<th scope="col">Quiénes</th><th scope="col">Acciones</th></tr>
+			</thead>
+			<tbody>
+				<tr th:each="c : ${cambios}" th:attr="data-cambio=${c.id}">
+					<td data-etiqueta="Colegio"><a th:href="@{/plataforma/colegios/{id}/estado(id=${c.colegioId})}" th:text="${c.colegio}">Colegio</a></td>
+					<td data-etiqueta="Cambio" th:text="${c.tipoEtiqueta}">Dar de baja</td>
+					<td data-etiqueta="Estado">
+						<span th:replace="~{fragments/componentes :: badge(${c.estadoEtiqueta}, ${c.propuesto()} ? 'alerta' : 'info')}"></span>
+						<p class="ayuda" th:if="${c.efectivaDesde != null}" th:text="|Rige desde el ${#temporals.format(c.efectivaDesde, 'dd/MM/yyyy HH:mm')}|">Rige desde</p>
+						<p class="ayuda" data-bloqueada th:if="${c.bloqueadaPor != null}" th:text="|Bloqueada por: ${c.bloqueadaPor}|">Bloqueada por</p>
+					</td>
+					<td data-etiqueta="Motivo">
+						<strong th:text="${c.motivoTipo}">Motivo</strong>
+						<p th:text="${c.motivo}">Detalle</p>
+						<p class="ayuda" th:if="${c.referenciaAviso != null}" th:text="|Aviso: ${c.referenciaAviso}|">Aviso</p>
+						<th:block th:if="${c.objecion != null}">
+							<p data-objecion><strong>Objeción del titular:</strong> <span th:text="${c.objecion}">Objeción</span></p>
+							<p th:if="${c.objecionRespuesta != null}" th:text="|Respuesta de ${c.objecionResueltaPor}: ${c.objecionRespuesta}|">Respuesta</p>
+						</th:block>
+					</td>
+					<td data-etiqueta="Quiénes">
+						<span th:text="|Propuso ${c.propuestoPor}|">Propuso</span>
+						<span th:if="${c.aprobadoPor != null}" th:text="|; aprobó ${c.aprobadoPor}|">aprobó</span>
+					</td>
+					<td data-etiqueta="Acciones">
+						<div class="acciones">
+							<form method="post" th:if="${c.puedeAprobar}" th:action="@{/plataforma/colegios/{id}/cambios-estado/{c}/aprobar(id=${c.colegioId},c=${c.id})}">
+								<button type="submit" class="btn btn-primario btn-chico" data-aprobar>Aprobar</button>
+							</form>
+							<form method="post" th:if="${c.puedeAprobar}" th:action="@{/plataforma/colegios/{id}/cambios-estado/{c}/rechazar(id=${c.colegioId},c=${c.id})}">
+								<button type="submit" class="btn btn-secundario btn-chico">Rechazar</button>
+							</form>
+							<form method="post" th:action="@{/plataforma/colegios/{id}/cambios-estado/{c}/anular(id=${c.colegioId},c=${c.id})}">
+								<button type="submit" class="btn btn-texto btn-chico">Anular</button>
+							</form>
+						</div>
+						<p class="ayuda" th:if="${c.propuesto() and !c.puedeAprobar}">Lo propusiste tú: lo aprueba otro operador.</p>
+						<form method="post" class="formulario" th:if="${c.puedeResolverObjecion}"
+							th:action="@{/plataforma/colegios/{id}/cambios-estado/{c}/objecion(id=${c.colegioId},c=${c.id})}">
+							<div class="campo">
+								<label th:for="|respuesta-${c.id}|">Respuesta a la objeción</label>
+								<textarea class="input" th:id="|respuesta-${c.id}|" name="texto" required minlength="20" maxlength="500"></textarea>
+							</div>
+							<button type="submit" class="btn btn-secundario btn-chico">Responder la objeción</button>
+						</form>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

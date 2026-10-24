@@ -16,6 +16,12 @@ cuentasclaras:
   plataforma:
     # Sprint 8, tanda 1: las pruebas dan de alta colegios nuevos junto al colegio 1 (instalación compartida).
     instalacion: COMPARTIDA
+  ciclo:
+    # Sprint 11, tanda 1 (AP-8): en H2 se prueba el flujo de la suspensión (en MySQL la base lo rechaza sin V40). Las
+    # tareas programadas no corren solas: las pruebas llaman a cada pasada.
+    aplicacion-cron: "-"
+    revision-cron: "-"
+    suspension-disponible: true
   conectores:
     # Sprint 8, tanda 2: clave SOLO de pruebas (32 bytes en base64; su texto empieza con «clave-conectores-», que el
     # verificador rechaza fuera de dev y test). El job mysql del CI la cambia por la suya (CC_CLAVE_CONECTORES): con ella

@@ -111,6 +111,10 @@ public final class LimpiezaBaseDatos {
 		// Sprint 11, tanda 1 (V39): el uso de la facultad del titular apunta a su mensaje y a las cuentas; el colegio apunta a
 		// su cambio de estado (FK circular) y el cambio a los operadores.
 		jdbc.update("DELETE FROM uso_facultad_titular");
+		// Un colegio dado de baja o suspendido vuelve a PRODUCCION (los de las pruebas se borran abajo; el 1 queda así).
+		jdbc.update("UPDATE colegio SET estado = 'PRODUCCION', suspendido_en = NULL, produccion_desde = "
+				+ "COALESCE(produccion_desde, CURRENT_TIMESTAMP), produccion_por = COALESCE(produccion_por, 'prueba') "
+				+ "WHERE estado NOT IN ('PREPARACION', 'PRODUCCION')");
 		jdbc.update("UPDATE colegio SET cambio_estado_id = NULL, facultad_cambio_id = NULL, facultad_bloqueada = FALSE "
 				+ "WHERE cambio_estado_id IS NOT NULL OR facultad_cambio_id IS NOT NULL");
 		jdbc.update("DELETE FROM cambio_estado_colegio");

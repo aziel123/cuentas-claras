@@ -57,8 +57,9 @@ public class PlataformaController {
 	}
 
 	@GetMapping
-	public String lista(Model model) {
-		model.addAttribute("colegios", colegios.todos());
+	public String lista(@RequestParam(name = "baja", defaultValue = "false") boolean dadosDeBaja, Model model) {
+		model.addAttribute("colegios", colegios.todos(dadosDeBaja));
+		model.addAttribute("dadosDeBaja", dadosDeBaja);
 		return "plataforma/lista";
 	}
 

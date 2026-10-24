@@ -28,6 +28,9 @@ public interface SesionUsuarioRepository extends Repository<SesionUsuario, Long>
 	/** Correcciones del sprint 8 (QA-S8-3): si la persona abrió alguna vez una sesión (su cuenta ya se activó). */
 	boolean existsByUsuarioId(Long usuarioId);
 
+	/** Sprint 11, tanda 1 (AP-6): si alguna cuenta del colegio en contexto abrió alguna vez una sesión (se activó). */
+	boolean existsByIdNotNull();
+
 	/** Todas las abiertas (al arrancar se cierran: las sesiones HTTP anteriores ya no existen). */
 	@Query("select s from SesionUsuario s where s.cerradaEn is null order by s.id")
 	List<SesionUsuario> abiertas();

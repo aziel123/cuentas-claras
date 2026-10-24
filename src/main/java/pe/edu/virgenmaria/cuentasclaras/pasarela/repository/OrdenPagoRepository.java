@@ -57,4 +57,11 @@ public interface OrdenPagoRepository extends Repository<OrdenPago, Long> {
 	List<OrdenPago> abiertasConCuotas(@Param("cuotas") Collection<Long> cuotas, @Param("ahora") LocalDateTime ahora);
 
 	long countByProveedor(pe.edu.virgenmaria.cuentasclaras.pasarela.model.ProveedorPasarela proveedor);
+
+	/** Sprint 11, tanda 1 (F12): si el colegio ya tuvo alguna orden de pago (la baja no procede). */
+	boolean existsByIdNotNull();
+
+	/** Sprint 11, tanda 1 (H3): las órdenes en vuelo (CREADAS sin vencer): la suspensión espera. */
+	long countByEstadoAndVenceEnAfter(pe.edu.virgenmaria.cuentasclaras.pasarela.model.EstadoOrden estado,
+			java.time.LocalDateTime ahora);
 }

@@ -41,4 +41,7 @@ public interface CierreCajaRepository extends Repository<CierreCaja, Long> {
 			+ "and c.creadoEn < :hasta")
 	List<Object[]> cierresConDiferenciaEntre(@Param("desde") java.time.LocalDateTime desde,
 			@Param("hasta") java.time.LocalDateTime hasta);
+
+	/** Sprint 11, tanda 1 (AP-4): los cierres por revisar u observados (la suspensión espera). */
+	long countByEstadoIn(java.util.Collection<pe.edu.virgenmaria.cuentasclaras.caja.model.EstadoCierre> estados);
 }

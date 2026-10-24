@@ -521,6 +521,11 @@ input[type="file"].input { padding: var(--esp-2); }
   text-align: center; font-weight: 700; letter-spacing: 0.04em; font-size: var(--texto-sm);
 }
 /* Sprint 8, tanda 3: en la demo la franja enlaza al recorrido guiado (blanco subrayado sobre rojo: 6.0:1). */
+/* Sprint 11, tanda 1: la franja ámbar del estado del colegio (texto oscuro sobre el fondo de advertencia). */
+.franja-colegio {
+  padding: var(--esp-2) var(--esp-4); background: var(--color-alerta-suave); color: var(--color-texto);
+  border-bottom: 2px solid var(--color-alerta); text-align: center; font-size: var(--texto-sm);
+}
 .franja-enlace { color: var(--color-superficie); text-decoration: underline; margin-left: var(--esp-2); white-space: nowrap; }
 .franja-enlace:focus-visible { outline: 2px solid var(--color-superficie); outline-offset: 2px; }
 .marca-simulado {

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Estado del colegio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="colegio-estado">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Colegio</p>
+			<h1>Estado del colegio</h1>
+			<p class="secundario">Los cambios que propusieron los operadores de la plataforma: dar de baja, suspender, reactivar o
+				bloquear la facultad del titular. Cada uno lo deciden dos operadores, y se te avisa en cada paso.</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-cambios">
+		<h2 id="titulo-cambios">Cambios</h2>
+		<th:block th:if="${#lists.isEmpty(cambios)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Sin cambios de estado', 'El colegio opera con normalidad.')}"></div>
+		</th:block>
+		<article class="tarjeta" th:each="c : ${cambios}" th:attr="data-cambio=${c.id}">
+			<h3 th:text="${c.tipo}">Dar de baja</h3>
+			<p><span th:replace="~{fragments/componentes :: badge(${c.estadoEtiqueta}, ${c.pendiente()} ? 'alerta' : 'neutro')}"></span>
+				<span th:if="${c.efectivaDesde != null}" th:text="|Rige desde el ${#temporals.format(c.efectivaDesde, 'dd/MM/yyyy HH:mm')}|">Rige desde</span></p>
+			<p><strong th:text="${c.motivoTipo}">Motivo</strong>: <span th:text="${c.motivo}">Detalle</span></p>
+			<p th:if="${c.objecion != null}"><strong>Objeción del titular:</strong> <span th:text="${c.objecion}">Objeción</span></p>
+			<p th:if="${c.objecionRespuesta != null}"><strong>Respuesta de la plataforma:</strong> <span th:text="${c.objecionRespuesta}">Respuesta</span></p>
+			<form class="formulario" method="post" th:if="${c.puedeObjetar}" th:action="@{/colegio/estado/{id}/objecion(id=${c.id})}">
+				<div class="campo">
+					<label th:for="|objecion-${c.id}|">¿No estás de acuerdo? Escribe tu objeción</label>
+					<textarea class="input" th:id="|objecion-${c.id}|" name="texto" required minlength="20" maxlength="500"
+						th:aria-describedby="|objecion-ayuda-${c.id}|"></textarea>
+					<p class="ayuda" th:id="|objecion-ayuda-${c.id}|">De 20 a 500 caracteres. Mientras un operador no la responda, el
+						cambio no se aplica. Se firma con tu sesión.</p>
+				</div>
+				<button type="submit" class="btn btn-primario">Enviar mi objeción</button>
+			</form>
+		</article>
+	</section>
+</main>
+</body>
+</html>

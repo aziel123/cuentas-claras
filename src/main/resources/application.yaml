@@ -101,6 +101,13 @@ cuentasclaras:
     operadores: ${CC_OPERADORES:}
     max-colegios: 25                 # decisión 138: tope de una instalación compartida
     max-alumnos: 8000
+  ciclo:
+    # Sprint 11, tanda 1 (secciones 3.3 a 3.6): los cambios de estado del colegio. sistema.plataforma aplica los aprobados
+    # cada 15 minutos y revisa cada día que todo estado tenga su cambio (F7). La suspensión queda apagada hasta que exista
+    # la exportación de los datos (V40, AP-8); en MySQL la base la rechaza igual.
+    aplicacion-cron: "0 */15 * * * *"
+    revision-cron: "0 10 5 * * *"
+    suspension-disponible: false
   conectores:
     # Sprint 8, tanda 2 (sección 3.6, decisión 118): los secretos de los conectores de cada colegio (token del OSE, llaves
     # de la pasarela) van cifrados con AES-256-GCM; la clave maestra (32 bytes en base64) vive en el gestor de secretos.
