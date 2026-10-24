@@ -57,7 +57,7 @@
 				</dl>
 				<table class="tabla" th:unless="${#lists.isEmpty(h.matriculas)}">
 					<caption class="solo-lectores">Matrículas</caption>
-					<thead><tr><th scope="col">Año</th><th scope="col">Grado</th><th scope="col">Sección</th><th scope="col">Estado</th></tr></thead>
+					<thead><tr><th scope="col" class="num">Año</th><th scope="col">Grado</th><th scope="col">Sección</th><th scope="col">Estado</th></tr></thead>
 					<tbody>
 						<tr th:each="m : ${h.matriculas}">
 							<td data-etiqueta="Año" class="num" th:text="${m.anio}">2026</td>

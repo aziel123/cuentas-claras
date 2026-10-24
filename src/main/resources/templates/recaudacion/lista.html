@@ -19,7 +19,7 @@
 			<div th:replace="~{fragments/componentes :: estadoVacio('Nada por confirmar', 'Cuando Administración suba el archivo del banco, aparecerá aquí.')}"></div>
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(r.porConfirmar)}">
-			<thead><tr><th scope="col">Lote</th><th scope="col">Pagos del</th><th scope="col">Pagos</th><th scope="col">Subido por</th><th scope="col">Acción</th></tr></thead>
+			<thead><tr><th scope="col">Lote</th><th scope="col">Pagos del</th><th scope="col" class="num">Pagos</th><th scope="col">Subido por</th><th scope="col">Acción</th></tr></thead>
 			<tbody>
 				<tr th:each="l : ${r.porConfirmar}" th:data-lote="${l.id}">
 					<td data-etiqueta="Lote"><a th:href="@{/recaudacion/lotes/{id}(id=${l.id})}" th:text="|N.° ${l.id}|">N.° 1</a></td>
@@ -42,7 +42,7 @@
 			<div th:replace="~{fragments/componentes :: estadoVacio('Nada por revisar', 'Todos los pagos por banco se aplicaron solos.')}"></div>
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(r.excepciones)}">
-			<thead><tr><th scope="col">Pago</th><th scope="col">Código</th><th scope="col">Alumno</th><th scope="col" class="num">Monto</th><th scope="col">Motivo</th><th scope="col">Solicitud</th></tr></thead>
+			<thead><tr><th scope="col">Pago</th><th scope="col" class="num">Código</th><th scope="col">Alumno</th><th scope="col" class="num">Monto</th><th scope="col">Motivo</th><th scope="col">Solicitud</th></tr></thead>
 			<tbody>
 				<tr th:each="e : ${r.excepciones}" th:data-linea="${e.id}">
 					<td data-etiqueta="Pago"><a th:href="@{/recaudacion/lineas/{id}(id=${e.id})}" th:text="|Lote ${e.loteId} · línea ${e.numero}|">Lote 1 · línea 3</a></td>
@@ -82,7 +82,7 @@
 			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay archivos confirmados', 'Aquí verás cada archivo del banco con sus pagos aplicados y por revisar.')}"></div>
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(r.lotes)}">
-			<thead><tr><th scope="col">Lote</th><th scope="col">Pagos del</th><th scope="col">Estado</th><th scope="col" class="num">Total</th><th scope="col">Aplicados</th><th scope="col">Por revisar</th></tr></thead>
+			<thead><tr><th scope="col">Lote</th><th scope="col">Pagos del</th><th scope="col">Estado</th><th scope="col" class="num">Total</th><th scope="col" class="num">Aplicados</th><th scope="col" class="num">Por revisar</th></tr></thead>
 			<tbody>
 				<tr th:each="l : ${r.lotes}" th:data-lote="${l.id}">
 					<td data-etiqueta="Lote"><a th:href="@{/recaudacion/lotes/{id}(id=${l.id})}" th:text="|N.° ${l.id}|">N.° 1</a></td>

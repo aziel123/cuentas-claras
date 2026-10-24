@@ -47,7 +47,7 @@
 			<table class="tabla" th:unless="${accesos.empty}">
 				<caption class="solo-lectores">Consultas a datos personales, de la más reciente a la más antigua. Horas de Lima.</caption>
 				<thead>
-					<tr><th scope="col">Fecha y hora</th><th scope="col">Quién</th><th scope="col">Pantalla</th><th scope="col">Familia o alumno</th><th scope="col">Filas</th><th scope="col">IP</th></tr>
+					<tr><th scope="col" class="num">Fecha y hora</th><th scope="col">Quién</th><th scope="col">Pantalla</th><th scope="col">Familia o alumno</th><th scope="col" class="num">Filas</th><th scope="col" class="num">IP</th></tr>
 				</thead>
 				<tbody>
 					<tr th:each="a : ${accesos}" data-acceso>

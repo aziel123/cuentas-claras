@@ -96,7 +96,7 @@
 			</th:block>
 			<table class="tabla" th:unless="${#lists.isEmpty(paraRevisar)}">
 				<caption class="solo-lectores">Cambios de claves y usuarios de los últimos 7 días</caption>
-				<thead><tr><th scope="col">Cuándo</th><th scope="col">Quién</th><th scope="col">Qué hizo</th><th scope="col">A quién</th></tr></thead>
+				<thead><tr><th scope="col" class="num">Cuándo</th><th scope="col">Quién</th><th scope="col">Qué hizo</th><th scope="col">A quién</th></tr></thead>
 				<tbody>
 					<tr th:each="r : ${paraRevisar}">
 						<td data-etiqueta="Cuándo" class="num" th:text="${#temporals.format(r.cuando, 'dd/MM HH:mm')}">02/10 08:15</td>

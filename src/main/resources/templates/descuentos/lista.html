@@ -32,7 +32,7 @@
 			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay descuentos', 'Cuando pidas uno, aparecerá aquí con su estado.')}"></div>
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(descuentos)}">
-			<thead><tr><th scope="col">Alumno</th><th scope="col">Tipo</th><th scope="col">Valor</th><th scope="col">Cuotas</th>
+			<thead><tr><th scope="col">Alumno</th><th scope="col">Tipo</th><th scope="col">Valor</th><th scope="col" class="num">Cuotas</th>
 				<th scope="col" class="num">Se deja de cobrar</th><th scope="col">Estado</th><th scope="col">Pedido por</th></tr></thead>
 			<tbody>
 				<tr th:each="d : ${descuentos}" th:data-descuento="${d.id}">
