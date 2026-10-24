@@ -256,6 +256,15 @@ nueva de `trg_mensaje_nace` (los avisos de libretas sin cobranza y con el consen
 112 triggers y las 16 funciones verificadas». Una base existente: `migrar`, `02` y `03`, en ese orden y con la aplicación
 detenida; no hay usuarios nuevos.
 
+**Correcciones del sprint 10 (V38): siguen 112 triggers y 16 funciones con huella (128).** Sin triggers nuevos: cambian
+`trg_lote_calificacion_nace` (guarda `CONNECTION_ID()` en `lote_calificacion.conexion_id`; la nota tardía la aprobó Dirección
+o Promotoría con rol activo), `trg_calificacion_nace` (las notas de un lote solo desde la conexión que lo guardó y hasta
+sus filas; la corrección de un trasladado, en la sección de la nota que reemplaza), `trg_libreta_emitida_nace` (sección y
+estado de la matrícula al cierre, la matrícula existía al cierre, la corrección de un periodo anterior, los niveles guardados
+en `libreta_emitida.niveles` y la reemisión con los mismos) y `trg_matricula_estado` (escribe `matricula_historial`, que
+NADIE más escribe: ni `cc_app` ni `cc_sistema` tienen GRANT, 1142; está en `tablas-vigiladas.txt`). Una base existente:
+`migrar`, `02` y `03`, en ese orden y con la aplicación detenida.
+
 **Clave de los conectores (decisión 118).** Los secretos de los conectores (el token del OSE, las llaves de la pasarela)
 van cifrados con AES-256-GCM; la clave maestra es `CC_CLAVE_CONECTORES` (32 bytes en base64, del gestor de secretos, con la
 custodia de la clave de auditoría) y su versión `CC_CLAVE_CONECTORES_VERSION`. Prod no arranca si esa clave no descifra

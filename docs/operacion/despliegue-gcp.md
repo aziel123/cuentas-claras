@@ -97,7 +97,7 @@ de punta a punta con Cloud SQL):
    de prod con su verificador, M2, M3, M4 y la rotación de la clave de los conectores. La única línea que se quita es
    `SET PERSIST log_bin_trust_function_creators` (en Cloud SQL esa marca va en la instancia: H13).
 2. Las comprobaciones a mano de la sección 6.6: los privilegios del administrador del servicio (`ROLE_ADMIN`, `CREATE ROLE`,
-   `DROP ROLE`, `CREATE USER`; sin `SUPER`), `huellas_objetos()` = 91, `permisos_objetos()` sin error, ningún `cc_*` con un rol
+   `DROP ROLE`, `CREATE USER`; sin `SUPER`), `huellas_objetos()` = 128, `permisos_objetos()` sin error, ningún `cc_*` con un rol
    de más, la marca de las funciones, `general_log` apagado y `Ssl_cipher` con `VERIFY_CA`.
 3. Un respaldo con `respaldar.sh` como `cc_respaldo` y su restauración real en un MySQL desechable.
 4. Pasa la instancia a TLS obligatorio (`ENCRYPTED_ONLY`): sin TLS no conecta y prod arranca con `sslMode=VERIFY_CA`

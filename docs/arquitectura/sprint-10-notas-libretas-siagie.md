@@ -344,8 +344,8 @@ de HTML y CSS. Controles:
    emoji, PDFBox lanzaría una excepción).
 3. **Fuente incrustada del jar:** la Liberation Sans que trae PDFBox (licencia SIL OFL), como `FuentesDelJar`; nunca las del
    sistema (no se crea la caché de fuentes en el directorio del usuario).
-4. **Límites:** executor propio de 2 hilos con cola de 8 y `AbortPolicy` («intente en unos minutos»); una libreta, 6 páginas
-   como máximo; la de una sección completa, hasta 45 alumnos por archivo y una a la vez por colegio; memoria con
+4. **Límites:** executor propio de 2 hilos con cola de 8 y `AbortPolicy` («intente en unos minutos»); una libreta, 12 páginas
+   como máximo (corrección P-4: desde `max-paginas` = 6 solo se avisa en el log; el corte es al doble); la de una sección completa, hasta 45 alumnos por archivo y una a la vez por colegio; memoria con
    `MemoryUsageSetting.setupMixed(32 MB, 64 MB)` en el `/tmp` en tmpfs que ya existe.
 5. **Salida:** sin JavaScript, acciones, formularios ni enlaces; metadatos mínimos (título, «Cuotaria» como productor y la
    fecha de emisión, no la de descarga); descarga con `Content-Disposition: attachment; filename="libreta-{id}-v{n}.pdf"`,

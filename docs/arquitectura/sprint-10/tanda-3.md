@@ -110,7 +110,8 @@
 tipo), `PDDocumentInformation`, `MemoryUsageSetting` y `RandomAccessStreamCache`. **Prohibidos expresamente:**
 `PDImageXObject.createFrom*`, `PDFMergerUtility`, `importPage`, `PDAcroForm`, los paquetes `interactive.action` e
 `interactive.annotation` y `Loader`. Las pruebas, excluidas de forma explícita (`ImportOption.DoNotIncludeTests`). Controles
-de la sección 3.9: texto saneado (`TextoSeguroPdf`), Liberation Sans del jar, executor de 2 hilos con cola de 8, 6 páginas,
+de la sección 3.9: texto saneado (`TextoSeguroPdf`), Liberation Sans del jar, executor de 2 hilos con cola de 8, 12 páginas como máximo
+(corrección P-4: aviso en el log desde la 6),
 `setupMixed(32 MB, 64 MB)`, cabeceras de descarga del sprint 9.
 
 ## 8. SIAGIE (A6, M12, decisión 189)
