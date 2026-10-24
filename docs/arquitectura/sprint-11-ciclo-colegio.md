@@ -1555,6 +1555,7 @@ que no entra en las tandas sin su confirmación). Sigue la numeración del sprin
 | 209 | Bandeja de Aprobaciones | **[Lista y cuenta también lo que se aprueba en otra pantalla (8 tipos), con «Revisar» a esa pantalla y la regla de `puedeResolver`; la aprobación sigue en su pantalla]** |
 | 210 | Inicio en preparación | **[Domina la guía; sin cifras ni gráficos hasta producción; en producción, estados vacíos por gráfico sin datos]** |
 | 211 | «Preparaste la cuenta» (A5) en un colegio nuevo | **[La regla no cambia; crear primero a Dirección, que aprueba lo de las cuentas que creó el titular; la cuenta bancaria la propone el titular y la aprueba Dirección; las trabas T1 a T5 de 3.15 duran 30 días y la guía las explica]** |
+| 212 | Menos texto (F-D7) | **[Lo no crucial se quita; lo crucial pasa a un tooltip accesible (`popover` y `aria-describedby`, sin JS); lo que se verifica y los controles antifraude quedan; inventario en `docs/ux/inventario-textos-sprint-11.md` para revisión del usuario antes de implementar]** |
 
 ## Fuentes
 - Código Tributario, art. 87 num. 7 (texto del DL 1315) y art. 43: resumen en [Noticiero Contable](https://noticierocontable.com/guardar-los-libros-contables/),

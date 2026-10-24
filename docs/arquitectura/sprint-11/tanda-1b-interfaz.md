@@ -13,6 +13,8 @@
 3. **Bandeja de Aprobaciones (209):** lista también lo que hoy se aprueba en otra pantalla, con «Revisar» que lleva a esa
    pantalla; el contador del menú lo suma con la regla de `puedeResolver`.
 4. **Inicio en preparación (210):** domina la guía; las cifras y los gráficos aparecen cuando hay datos.
+5. **Menos texto (212, F-D7):** lo no crucial se quita; lo crucial, a un tooltip accesible; lo que se verifica y los controles
+   antifraude no se borran. Se implementa después de que el usuario revise `docs/ux/inventario-textos-sprint-11.md`.
 
 ## 2. Pensiones (F-D1 a F-D4)
 **F-D1. Tarjeta de Secundaria desalineada en Pensiones.** «Sin plan aprobado» baja a una segunda línea junto a «Secundaria» y su
@@ -204,6 +206,81 @@ en preparación aparecen tarjetas en S/ 0.00 y gráficos vacíos.
   - la bandeja de Aprobaciones.
   Las capturas quedan en la sección «Tanda 1b · Implementación» del diseño.
 
+## 4c. Menos texto (F-D7, principio para toda la plataforma)
+**Pedido del usuario:** hay demasiado texto y confunde. **Regla:**
+- lo que **no es crucial**, se quita;
+- lo **crucial** va en un **tooltip accesible** (ícono «i», o «?» junto a un campo);
+- **lo que el aprobador debe verificar queda visible**: montos, número de cuenta y CCI completos, comprobante, familia y celular
+  al que se llama. Es antifraude: solo se recorta la explicación;
+- **un texto que es un control antifraude** («Caja no decide montos», «quien pide no aprueba», «nada se borra») **nunca se
+  borra**: a lo sumo pasa a tooltip.
+
+**Inventario para que el usuario lo revise:** `docs/ux/inventario-textos-sprint-11.md`, con 151 textos de 60 caracteres o más en
+las pantallas del alcance, más las 3 piezas del ejemplo. Tiene una propuesta automática por fila (103 a tooltip, 35 a quitar y 13
+con una línea visible y el resto en tooltip) y una columna «Decisión». **No se implementa F-D7 hasta que el usuario marque el
+inventario** (o acepte las propuestas en bloque); `investigador-ux` lo revisa con él.
+
+**El componente (CSP estricta: sin JS inline, sin `title=` como único mecanismo).**
+- Fragmento `componentes.html :: info(id, texto, etiqueta)`:
+  ```html
+  <span class="info">
+    <button type="button" class="info-boton" popovertarget="info-{id}" aria-describedby="info-{id}"
+            aria-label="Más información: {etiqueta}">i</button>
+    <span id="info-{id}" class="info-texto" popover="auto" role="tooltip">{texto}</span>
+  </span>
+  ```
+- **El HTML hace el trabajo, sin JavaScript:**
+  - `popover` nativo (ya se usa en los modales del proyecto) abre y cierra con clic o toque, y con Escape;
+  - `aria-describedby` hace que el lector de pantalla lea el texto al enfocar el botón.
+- **El CSS:** también se muestra con `:hover` y `:focus-visible` en escritorio (`.info-boton:is(:hover, :focus-visible) +
+  .info-texto`). El botón mide 44 × 44 px de área táctil aunque el ícono sea de 20 px. Contraste AA con los tokens, en
+  `--color-celeste-texto` sobre blanco, sin colores nuevos.
+- **Advertencias:** la variante `aviso(id, texto, etiqueta)` usa ⚠ y `--color-alerta`, y lleva el texto «Atención» para el
+  lector de pantalla (no solo el color).
+- **El detalle largo** va en `<details><summary>Ver detalle</summary>…</details>`, sin JS.
+- Las animaciones (aparecer del tooltip), solo con CSS y dentro de `prefers-reduced-motion: no-preference` (4b).
+
+**El ejemplo, la bandeja de Aprobaciones:**
+- **Se elimina el subtítulo** «Cambios que una sola persona no puede hacer: …». Junto al título queda un «i»: «Quien pide un
+  cambio no lo aprueba.»
+- **Tarjeta de cambio de conector:**
+  - título corto, por ejemplo «Cuenta bancaria → BCP ···2022»;
+  - 1 o 2 datos clave: qué cambia, quién lo pidió y cuándo;
+  - un ⚠ con «Confirma el número con el banco antes de aprobar»;
+  - **número de cuenta y CCI completos, visibles**;
+  - titular, prueba de conexión y motivo en «Ver detalle»;
+  - Aprobar y Rechazar.
+- **Las demás tarjetas siguen el mismo molde:** título, 1 o 2 datos, ⚠ si hay algo que verificar, «Ver detalle» y los botones.
+  En la devolución de dinero, la línea «Llama a la familia a un celular registrado» queda visible (es lo que se verifica) y la
+  explicación de la bitácora pasa a tooltip.
+
+**Alcance** (con `impeccable` en modo *distill* y *clarify*, y `emil-design-eng`):
+- los inicios por rol: la tarjeta «Cómo te cuida el sistema» se elimina, y queda un «i» junto al título del inicio con una línea
+  («Cada pago queda con su boleta y aviso a la familia; nada se borra»);
+- Aprobaciones;
+- Conectores;
+- Pensiones;
+- Puesta en marcha;
+- Caja (cobro y cierre a ciegas: «No ves lo esperado hasta contar» pasa a tooltip, porque es un control);
+- Conciliación y Recaudación (las instrucciones de formato de archivo, en «Ver formato»);
+- el portal de las familias («Algo no cuadra» sigue visible: es la transparencia que hace del padre un auditor).
+
+**Textos que dependen de la tanda 1c:** donde hoy se lee «aprobación de Dirección» para la Promotoría, el texto se ajusta a la
+tanda 1c (Promotoría aplica directo).
+
+**Pruebas:**
+- `InfoTooltipTest`: el fragmento renderiza un `button` con `aria-label` y `aria-describedby` que apunta a un elemento con ese
+  `id` y `role="tooltip"`. Ninguna plantilla usa `title=` como única ayuda (`PlantillasSinTitleSoloTest`).
+- **Las pruebas que asertan textos eliminados se actualizan sin debilitarse:** si un texto pasó a tooltip, la prueba busca el
+  mismo texto dentro de `.info-texto`. Si se quitó, la prueba pasa a asertar el comportamiento o el dato que el texto describía
+  (por ejemplo, que el monto no es editable en caja, no la frase).
+- `ControlesVisiblesTest`: en la tarjeta de un cambio de cuenta bancaria, el número completo y el CCI están fuera de `<details>`
+  y fuera de un tooltip. En la devolución, el campo del celular está visible. En caja, el monto es de solo lectura.
+- `ControlesAntifraudeTest`: cada frase de control del inventario marcada como tal sigue en la plantilla, visible o en
+  `.info-texto`.
+- Revisión con `break-ui`: tarjetas con nombres largos y sin «Ver detalle» abierto. Con `emil-design-eng`: el ritmo de las
+  tarjetas sin párrafos.
+
 ## 4b. Cómo verificar
 Al implementar la 1b se usan cuatro skills juntas: `sistema-diseno` (tokens, componentes y AA), `impeccable` (crítica de
 interfaz), y las dos nuevas de `~/.claude/skills`:
@@ -251,7 +328,8 @@ Los hallazgos de las cuatro skills se anotan en «Tanda 1b · Implementación» 
 2. F-D2 (vencimientos según el inicio de clases) y F-D3 (`min` y `max`), con una sola fuente de rangos.
 3. F-D5: primero el paso 1 (comprobar la tabla de los 8 tipos); después el puerto, los 7 adaptadores, la bandeja y el contador.
 4. F-D6: tokens y armazón; tableros; inicio en preparación.
-5. Revisión visual en los 4 anchos, accesibilidad, manuales y CI en verde.
+5. F-D7: fragmentos `info` y `aviso`; tarjetas de la bandeja; después, pantalla por pantalla según el inventario revisado.
+6. Revisión visual en los 4 anchos, accesibilidad, manuales y CI en verde.
 
 ## 7. Riesgos
 - **F-D5 toca el contador del menú, que se calcula en cada página:** 8 consultas de conteo más. Cada puerto cuenta con una
@@ -270,5 +348,7 @@ Los hallazgos de las cuatro skills se anotan en «Tanda 1b · Implementación» 
 - Aprobaciones muestra y cuenta todo lo que la persona puede resolver, con «Revisar» a su pantalla.
 - En 1920 px el contenido aprovecha el ancho, con las 4 cifras en una fila desde 1600 px, sin desbordes en 390 px.
 - El inicio de un colegio en preparación muestra la guía, no ceros.
+- Las pantallas del alcance siguen el inventario revisado: sin párrafos de explicación, con tooltips accesibles y con los datos que
+  se verifican a la vista.
 - La revisión visual de `disenador-ui` pasa en los 4 anchos.
 - El CI del PR en borrador está en verde, con 117, 19 y 136 sin cambios.
