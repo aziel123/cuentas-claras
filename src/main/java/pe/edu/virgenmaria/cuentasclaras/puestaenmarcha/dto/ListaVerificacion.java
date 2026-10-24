@@ -24,6 +24,11 @@ public record ListaVerificacion(Long colegioId, String nombre, EstadoColegio est
 		return puntos.stream().filter(p -> p.obligatorio() && !p.hecho()).count();
 	}
 
+	/** Si el punto con esa clave ya está hecho (por ejemplo, para no ofrecer de nuevo una firma ya dada). */
+	public boolean hecho(String clave) {
+		return puntos.stream().anyMatch(p -> p.clave().equals(clave) && p.hecho());
+	}
+
 	/** La misma lista sin enlaces (para el operador, que no tiene rutas del colegio). */
 	public ListaVerificacion paraOperador() {
 		return new ListaVerificacion(colegioId, nombre, estado, puntos.stream().map(PuntoLista::paraOperador).toList());

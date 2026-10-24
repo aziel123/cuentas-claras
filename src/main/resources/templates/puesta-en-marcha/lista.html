@@ -41,14 +41,17 @@
 		</table>
 	</section>
 
-	<section class="tarjeta" th:if="${puedePasar}" aria-labelledby="titulo-aceptos">
+	<section class="tarjeta" th:if="${puedePasar and !(lista.hecho('saldo-inicial') and lista.hecho('ose'))}"
+			aria-labelledby="titulo-aceptos">
 		<h2 id="titulo-aceptos">Lo que firma la Promotoría</h2>
 		<p class="secundario">Dos pasos de la lista se pueden cumplir con tu firma, si así es el colegio. Quedan resaltados en la
 			bitácora y no se deshacen.</p>
-		<form method="post" th:action="@{/puesta-en-marcha/sin-saldo-inicial}" class="acciones acciones-izquierda" data-acepto="sin-saldo-inicial">
+		<form th:unless="${lista.hecho('saldo-inicial')}" method="post" th:action="@{/puesta-en-marcha/sin-saldo-inicial}"
+				class="acciones acciones-izquierda" data-acepto="sin-saldo-inicial">
 			<button type="submit" class="btn btn-secundario">Firmar: el colegio empieza sin deudas anteriores</button>
 		</form>
-		<form method="post" th:action="@{/puesta-en-marcha/ose-simulado}" class="acciones acciones-izquierda" data-acepto="ose-simulado">
+		<form th:unless="${lista.hecho('ose')}" method="post" th:action="@{/puesta-en-marcha/ose-simulado}"
+				class="acciones acciones-izquierda" data-acepto="ose-simulado">
 			<button type="submit" class="btn btn-secundario">Firmar: uso el comprobante simulado y emito el legal aparte</button>
 		</form>
 	</section>
