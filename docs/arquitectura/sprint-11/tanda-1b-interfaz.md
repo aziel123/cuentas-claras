@@ -13,6 +13,8 @@
 3. **Bandeja de Aprobaciones (209):** lista también lo que hoy se aprueba en otra pantalla, con «Revisar» que lleva a esa
    pantalla; el contador del menú lo suma con la regla de `puedeResolver`.
 4. **Inicio en preparación (210):** domina la guía; las cifras y los gráficos aparecen cuando hay datos.
+6. **Aceptos en su flujo (213, F-D8):** el acepto del OSE simulado y el «sin deudas anteriores» se firman donde se usan y desde
+   la Puesta en marcha, con la misma firma de hoy.
 5. **Menos texto (212, F-D7):** lo no crucial se quita; lo crucial, a un tooltip accesible; lo que se verifica y los controles
    antifraude no se borran. Se implementa después de que el usuario revise `docs/ux/inventario-textos-sprint-11.md`.
 
@@ -281,6 +283,38 @@ tanda 1c (Promotoría aplica directo).
 - Revisión con `break-ui`: tarjetas con nombres largos y sin «Ver detalle» abierto. Con `emil-design-eng`: el ritmo de las
   tarjetas sin párrafos.
 
+## 4d. Pasos que se cierran con una firma de Promotoría (F-D8)
+**El problema:** el usuario aprobó el conector OSE en modo «Simulado», pero el paso «Comprobantes (OSE)» siguió «Pendiente»
+(«falta el OSE real o el acepto firmado»). El acepto se firma en otra pantalla (Puesta en marcha → «Lo que firma la Promotoría»),
+y eso no se ve. Con el saldo inicial pasa lo mismo: el paso lleva a la pantalla de lotes, cuando un colegio nuevo solo necesita
+la firma «sin deudas anteriores». Los dos aceptos ya existen (`colegio:{id}:OSE_SIMULADO` y `colegio:{id}:SIN_SALDO_INICIAL`,
+sprint 8): **no cambia ninguna regla ni la base**, solo dónde se ofrecen.
+
+**Decisión 213 (por defecto):**
+1. **En el mismo flujo, si quien está en sesión es Promotoría.**
+   - Al **proponer** un OSE en modo «Simulado», el formulario muestra una casilla «Acepto usar el comprobante simulado y emitir mi
+     comprobante legal aparte», con su tooltip (F-D7). Al **aprobarlo**, igual. Marcarla firma el acepto con la sesión en la misma
+     operación.
+   - Si quien propone es Administración (que no firma aceptos), el formulario dice en una línea «Falta que la Promotoría firme el
+     acepto», con el enlace directo a esa firma.
+2. **En la Puesta en marcha y en la guía**, el detalle del paso pendiente lleva el botón **«Firmar acepto»** (OSE) o **«Firmar:
+   empezamos sin deudas anteriores»** (saldo inicial) si el rol puede firmarlo (Promotoría). Si no, dice «Lo firma la
+   Promotoría».
+   - El paso de **saldo inicial ofrece primero la firma** y deja «Cargar saldos anteriores» como segunda opción, porque un colegio
+     nuevo casi nunca tiene deudas que traer. Pasa al revés si ya hay un lote en preparación.
+   - El botón abre la confirmación de siempre (`modalConfirmacion`): título, consecuencia en una línea y firma de la sesión. Nunca
+     firma con un solo clic.
+3. **La firma es la misma:** clave, firma de sesión, bitácora y avisos de hoy. Se reutiliza el servicio que ya la registra, que no
+   se duplica en el conector.
+
+**Pruebas:**
+- `OseSimuladoConAceptoTest`: Promotoría propone o aprueba un OSE simulado con la casilla marcada, y el paso queda «Hecho». Sin la
+  casilla, el paso sigue pendiente con «Firmar acepto». Administración no ve la casilla, pero sí el enlace y el texto «Falta que la
+  Promotoría firme el acepto». La firma queda con la clave de siempre y su evento en la bitácora.
+- `SaldoInicialPasoTest`: en un colegio sin lotes, el paso ofrece primero «Firmar: empezamos sin deudas anteriores»; con un lote
+  en preparación, ofrece «Ir al lote». Firmarlo deja el paso «Hecho».
+- `PuestaEnMarchaVistaTest` (tanda 1b) suma los dos botones de firma y su ausencia para los roles que no firman.
+
 ## 4b. Cómo verificar
 Al implementar la 1b se usan cuatro skills juntas: `sistema-diseno` (tokens, componentes y AA), `impeccable` (crítica de
 interfaz), y las dos nuevas de `~/.claude/skills`:
@@ -329,7 +363,8 @@ Los hallazgos de las cuatro skills se anotan en «Tanda 1b · Implementación» 
 3. F-D5: primero el paso 1 (comprobar la tabla de los 8 tipos); después el puerto, los 7 adaptadores, la bandeja y el contador.
 4. F-D6: tokens y armazón; tableros; inicio en preparación.
 5. F-D7: fragmentos `info` y `aviso`; tarjetas de la bandeja; después, pantalla por pantalla según el inventario revisado.
-6. Revisión visual en los 4 anchos, accesibilidad, manuales y CI en verde.
+6. F-D8 (aceptos en el flujo del OSE y en la Puesta en marcha).
+7. Revisión visual en los 4 anchos, accesibilidad, manuales y CI en verde.
 
 ## 7. Riesgos
 - **F-D5 toca el contador del menú, que se calcula en cada página:** 8 consultas de conteo más. Cada puerto cuenta con una
@@ -348,6 +383,8 @@ Los hallazgos de las cuatro skills se anotan en «Tanda 1b · Implementación» 
 - Aprobaciones muestra y cuenta todo lo que la persona puede resolver, con «Revisar» a su pantalla.
 - En 1920 px el contenido aprovecha el ancho, con las 4 cifras en una fila desde 1600 px, sin desbordes en 390 px.
 - El inicio de un colegio en preparación muestra la guía, no ceros.
+- Un OSE simulado aprobado por Promotoría con su acepto deja el paso «Hecho», y el saldo inicial de un colegio nuevo se cierra con
+  una firma desde el mismo paso.
 - Las pantallas del alcance siguen el inventario revisado: sin párrafos de explicación, con tooltips accesibles y con los datos que
   se verifican a la vista.
 - La revisión visual de `disenador-ui` pasa en los 4 anchos.
