@@ -25,7 +25,7 @@
 		<h2 id="titulo-lista">Lista de verificación</h2>
 		<table class="tabla">
 			<caption class="solo-lectores">Pasos de la puesta en marcha y su estado.</caption>
-			<thead><tr><th scope="col">Paso</th><th scope="col">Estado</th><th scope="col">Detalle</th></tr></thead>
+			<thead><tr><th scope="col">Paso</th><th scope="col">Estado</th><th scope="col">Quién lo hace</th><th scope="col">Detalle</th></tr></thead>
 			<tbody>
 				<tr th:each="p : ${lista.puntos}" th:data-paso="${p.clave}">
 					<td data-etiqueta="Paso">
@@ -34,6 +34,7 @@
 					</td>
 					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${p.estado.etiqueta()},
 						${p.hecho()} ? 'exito' : (${p.obligatorio()} ? 'alerta' : 'neutro'))}"></span></td>
+					<td data-etiqueta="Quién lo hace" th:text="${p.responsable()}">Administración</td>
 					<td data-etiqueta="Detalle" th:text="${p.conteo}">Detalle</td>
 				</tr>
 			</tbody>
