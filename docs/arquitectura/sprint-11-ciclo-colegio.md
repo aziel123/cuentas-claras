@@ -53,8 +53,9 @@
 - **URL por colegio (parte B):** se recomienda `virgenmaria.cuotaria.pe` **ya** para la instalación dedicada (un registro DNS,
   sin código), y **dejar los subdominios de la compartida para cuando 3 colegios lo pidan** (1 tanda; sección 10).
   **Es una decisión abierta: no entra en las tandas hasta que el usuario la confirme.**
-- **Dos tandas:** (1) estados, baja, suspensión, reactivación, modo consulta, año escolar del colegio y facultad del titular (V39; 116 triggers,
-  19 funciones, 135 huellas); (2) exportación, cierre y supresión con acta (V40; 123 triggers, 20 funciones, 143 huellas).
+- **Dos tandas:** (1) estados, baja, suspensión, reactivación, modo consulta, año escolar del colegio y facultad del titular (V39; 117 triggers,
+  19 funciones, 136 huellas); (2) exportación, cierre y supresión con acta (V40; 124 triggers, 20 funciones, 144 huellas).
+  **La auditoría del diseño en papel (sección 3.13, 14 hallazgos) prevalece sobre lo que sigue.**
 
 ## 2. Plazos legales (investigación del 24-oct-2026)
 
@@ -117,7 +118,7 @@ con acta»; el colegio conserva su copia el plazo tributario).
    5 minutos de las firmas). `SYSDATE()` no obedece a `SET timestamp` (salvo con `--sysdate-is-now`). **Corrección en este
    sprint:** función nueva `cc_ahora_lima_real()` (`CONVERT_TZ(SYSDATE(6), @@session.time_zone, '-05:00')`, que da lo mismo
    cualquiera sea la zona de la sesión) en los controles de fecha nuevos (`efectiva_desde`, la aplicación, las órdenes de las
-   2 horas); `VerificadorPermisosBaseDatos` exige `@@global.sysdate_is_now = 0`. **El resto de los triggers** (firmas,
+   2 horas); `VerificadorPermisosBaseDatos` exige `@@global.sysdate_is_now = 0`. **Ajustado por AP-3 (sección 3.13): el cambio cubre también `cc_hoy_lima`, las firmas y las sesiones en la tanda 1, y el resto en la tanda 2.** Texto original: el resto de los triggers (firmas,
    periodos, cierres) queda como hallazgo para la auditoría del diseño: cambiarlos todos es una tanda propia.
 
 ### 3.2 Estados y transiciones
@@ -153,7 +154,7 @@ CERRADO ──(tanda 2: acta de supresión de dos operadores, al vencer conserva
 - **Aprobar** (`POST /plataforma/cambios-estado/{id}/aprobar`): el operador B, con su firma
   `cambio_estado_colegio:{id}:APROBADO`. La base calcula `efectiva_desde`:
   - **SUSPENSION:** las 00:00 de Lima del día siguiente a `aprobado_en + 30 días` (decisión 194);
-  - **BAJA:** inmediata si el titular **nunca activó** su cuenta; si la activó, a los 7 días (el colegio pudo empezar a
+  - **BAJA** (ajustada por AP-6): inmediata solo sin datos y sin ninguna cuenta activada; si hay cuentas activadas, a los 7 días (el colegio pudo empezar a
     preparar con datos reales y tiene derecho a enterarse antes; decisión 193);
   - **REACTIVACION:** inmediata.
 - **Aplicar:** el cambio APROBADO cuyo `efectiva_desde` llegó lo aplica `sistema.plataforma` (proceso `AplicacionCambiosEstado`,
@@ -388,6 +389,135 @@ Dirección (`primera_direccion`, V27), una vez y con una sola Promotoría. Un co
   Promotoría o Dirección», con el texto «Como titular del contrato puedes hacerlo sin aprobación. Se avisará al correo de
   control, a la Promotoría y a la plataforma». En la Puesta en marcha, el paso 2 («Equipo con segregación») enlaza ahí.
 
+### 3.13 Auditoría del diseño en papel (sobre 8dd46fb): 14 hallazgos incorporados (esta sección prevalece)
+Revisión de `auditor-seguridad-antifraude`: 1 crítico, 6 altos, 5 medios y 2 bajos. Donde esta sección contradice a las
+anteriores, vale esta. Los conteos nuevos: **tanda 1, 117 triggers, 19 funciones y 136 huellas** (`trg_anio_escolar_cambio`
+se suma); **tanda 2, 124, 20 y 144**.
+
+**AP-1 (crítico). Quitar al único contrapeso en producción.** Con el conteo que excluía al destino, el titular podía quitarle
+Dirección a la única otra persona directiva sin que nadie lo aprobara. **Corrección:** en DAR, el conteo de la decisión 201
+excluye al destino (como estaba); **en PRODUCCION, QUITAR va siempre por `CAMBIO_ROLES`** con la aprobación de otra persona. En
+PREPARACION el titular sigue quitando con la facultad. `trg_uso_facultad_titular_nace`: `IF NEW.accion = 'QUITAR' AND
+cc_colegio_en_produccion(NEW.colegio_id) THEN SIGNAL`. Prueba nueva `f16bQuitarAlUnicoDirectivoEnProduccionFalla` (MySQL y H2).
+
+**AP-2 (alto). La facultad del titular, más dura:**
+- **Código por WhatsApp en cada uso**, al contacto del titular (que solo cambian dos operadores: `cambio_contacto_titular`, V31).
+  `TipoMensaje.CODIGO_FACULTAD`; el mensaje guarda **solo la SHA-256 del código** (el código va al proveedor y no se persiste);
+  `uso_facultad_titular.mensaje_id` (UNIQUE) apunta a ese mensaje, del titular, a su contacto vigente y de hace 10 minutos o
+  menos. Aunque la base no ve lo que escribió la persona (lo compara la aplicación), **sí prueba que el teléfono del titular
+  recibió un aviso por cada uso**.
+- **Las cuentas creadas con la facultad se activan con un contacto distinto al del titular** (`cc_contacto_normal` del celular y
+  del correo de la cuenta nueva distinto de los del titular): el titular no puede crearse «otra persona».
+- **Sin correo de control registrado no hay facultad** (`configuracion_colegio` con la clave del correo externo de control).
+- **Dos operadores bloquean la facultad de inmediato:** `cambio_estado_colegio` con los tipos `BLOQUEO_FACULTAD` y
+  `DESBLOQUEO_FACULTAD` (origen = destino = el estado actual; inmediatos al aprobarse), que ponen `colegio.facultad_bloqueada`.
+  `cc_es_titular` exige `NOT facultad_bloqueada`. La columna `ambito` (`ESTADO` o `FACULTAD`) separa los pendientes: un bloqueo
+  no espera a que se resuelva una suspensión (`UNIQUE (colegio_id, ambito, pendiente)`).
+
+**AP-3 (alto). H9 en toda la base, no solo en lo nuevo.**
+- `cc_ahora_lima_real()` pasa a tener cuerpo y **lanza SIGNAL si devuelve NULL** (por ejemplo, una zona de sesión que
+  `CONVERT_TZ` no conoce):
+  ```sql
+  CREATE FUNCTION cc_ahora_lima_real() RETURNS DATETIME(6) NOT DETERMINISTIC NO SQL
+  BEGIN
+      DECLARE v DATETIME(6) DEFAULT CONVERT_TZ(SYSDATE(6), @@session.time_zone, '-05:00');
+      IF v IS NULL THEN
+          SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: no se pudo leer la hora real de la base';
+      END IF;
+      RETURN v;
+  END$$
+  ```
+- **Tanda 1:** versiones nuevas de las funciones `cc_hoy_lima` (`DATE(cc_ahora_lima_real())`), `cc_firma_valida` y
+  `cc_sesion_abierta`; los triggers nuevos y **todas** las versiones nuevas de la tanda usan `cc_ahora_lima_real()`; también
+  `trg_firma_operacion_nace` (versión nueva: `firmada_bd` con el reloj real; si no, una firma fechada en el futuro duraría
+  días) y `trg_sesion_usuario_nace` (`abierta_en` comparada con el reloj real).
+- **CI:** el paso `reloj-real` cuenta `UTC_TIMESTAMP`, `NOW(`, `CURDATE`, `CURRENT_TIMESTAMP` y `CURRENT_DATE` en
+  `03-triggers.sql` (fuera de comentarios) y **falla si el conteo supera el de `scripts/mysql/reloj-pendiente.txt`**, que en la
+  tanda 1 queda con los usos que todavía no se cambian y **en la tanda 2 baja a 0**. Así el conteo solo puede bajar.
+- **Tanda 2:** se reemplazan los usos que queden; `cc_supresion_en_curso` usa el mismo reloj.
+- **Paso 1 de la tanda 1:** confirmar en MySQL 8.4 que `cc_app` (y `cc_sistema`) pueden hacer `SET timestamp = …` sin
+  privilegios, y que `SYSDATE()` no lo obedece con `sysdate_is_now` apagado. Si `SET timestamp` exigiera privilegio, H9 baja a
+  medio, pero el cambio se hace igual (no cuesta y quita la duda).
+
+**AP-4 (alto). La suspensión con caja y comprobantes en orden.** La aplicación de una SUSPENSION (`trg_colegio_cambio`, bloque
+c) exige además: **ningún `cierre_caja` del colegio en `POR_REVISAR` u `OBSERVADO`** y **ningún `comprobante` en `PENDIENTE`,
+`ENVIADO` o `RECHAZADO`**. **No se cobra efectivo el último día:** versión nueva de `trg_pago_registro`, que rechaza un pago
+`EFECTIVO` si el colegio tiene una SUSPENSION APROBADA con `efectiva_desde` en menos de 24 horas. Mientras la aplicación espera,
+`AplicacionCambiosEstado` manda **cada día una alerta por cada cierre pendiente** (y cada comprobante no aceptado) al correo de
+control, a la Promotoría y a los operadores. La bandeja del operador muestra «Bloqueada por: 2 cierres por revisar, 1
+comprobante rechazado». Así nadie usa la suspensión para dejar un faltante de caja sin revisar.
+
+**AP-5 (alto). Mensajes a las familias en SUSPENDIDO y CERRADO.** La regla «apoderados solo en producción» de
+`trg_mensaje_nace` cortaba también la activación del portal y el restablecimiento de clave, que el modo consulta necesita.
+**Versión nueva de `trg_mensaje_nace`:** en SUSPENDIDO y CERRADO, a un apoderado solo pasa `ACTIVACION_CUENTA` (es el mismo
+enlace de acceso para activar y para restablecer la clave); todo lo demás (pagos, recordatorios, comunicados, asistencia,
+libretas) se rechaza. Pruebas: `a5ActivacionDeApoderadoEnSuspendidoPasa`, `a5RecordatorioEnSuspendidoFalla`,
+`a5ComunicadoEnSuspendidoFalla`.
+
+**AP-6 (alto). La baja de un colegio con datos.** «Datos» = alguna fila de `alumno`, `apoderado` o `matricula` del colegio.
+- **Sin datos y sin ninguna cuenta activada** (tampoco la del titular): baja inmediata.
+- **Sin datos pero con alguna cuenta activada:** a los 7 días.
+- **Con datos:** exige una `exportacion_colegio` del colegio `ENTREGADA` o `VENCIDA`. Como esa tabla llega en V40, **en la tanda 1
+  la base rechaza la baja de un colegio con datos** y la tanda 2 trae la versión que la permite con la exportación.
+
+**AP-7 (alto). `conservar_hasta` exacto.** V40: `CHECK (conservar_hasta IS NULL OR conservar_hasta =
+DATE(suspendido_en) + INTERVAL 12 MONTH OR conservar_hasta = DATE(cerrado_en) + INTERVAL 30 DAY)` y el trigger lo calcula (no
+lo recibe de la aplicación). Ver AP-11 para la fecha de partida y la variante sin autorización.
+
+**AP-8 (medio). No hay suspensión sin exportación.** Mientras no exista V40, **la base rechaza proponer una SUSPENSION** (la
+suspensión debe entregar los datos el día que se aplica). `trg_cambio_estado_colegio_nace`: `IF NEW.tipo = 'SUSPENSION' AND NOT
+EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'exportacion_colegio') THEN
+SIGNAL`. Se habilita sola cuando llega V40, sin versión nueva del trigger. En la tanda 1 se construye y se prueba todo el flujo
+(las pruebas de MySQL crean la suspensión como DBA, que conserva su camino); en producción no se puede usar hasta la tanda 2.
+`CambiosEstadoColegio` lo repite en la aplicación (`suspensionDisponible()`), y la pantalla dice «Disponible cuando esté la
+exportación de datos (tanda 2)».
+
+**AP-9 (medio). El año escolar tampoco cambia sin firma.** Trigger nuevo **`trg_anio_escolar_cambio`** (BEFORE UPDATE):
+`colegio_id` y `anio` fijos para todos; con cc_app, `actualizado_por` (columna nueva en V39) es PROMOTOR o DIRECTOR activo del
+colegio con su firma `anio_escolar:{id}:{version}` sobre la versión anterior; con cc_sistema, solo `estado` y `vigente` por un
+`sistema.*` (comprobar en el paso 1 quién llama hoy a `AnioEscolar.iniciar()` y `cerrar()`). Es el trigger que lleva el conteo
+a 117.
+
+**AP-10 (medio). El titular puede objetar.** Columnas nuevas en `cambio_estado_colegio`: `objecion` (20 a 500 caracteres),
+`objetado_por`, `objetado_en`, `objecion_respuesta`, `objecion_resuelta_por` y `objecion_resuelta_en`. El titular objeta una
+BAJA o una SUSPENSION en PROPUESTO o APROBADO con la firma de su sesión (`cambio_estado_colegio:{id}:OBJETADO`, en su colegio;
+lo escribe cc_sistema por la ruta de identidad). La objeción se ve en la bandeja del operador y se avisa al correo de control y
+a los operadores. La resuelve un operador **distinto de quien propuso**, con respuesta escrita y firma (`:OBJECION_RESUELTA`).
+**APLICADO exige que no haya objeción o que esté resuelta** (`trg_cambio_estado_colegio_estado`). Una objeción por cambio.
+Pruebas: `a10ObjecionSinResolverImpideAplicar`, `a10ObjecionLaResuelveOtroOperador`, `a10ObjecionDeQuienNoEsTitularFalla`.
+
+**AP-11 (medio). Desde cuándo se cuentan los 24 meses, y la autorización expresa.**
+- **Los 24 meses del DS 016-2024-JUS (L5) se cuentan desde que se aplica la suspensión** (es cuando termina el encargo útil):
+  12 meses de conservación en la base más 12 de respaldos mensuales. Como el cierre llega unos 30 días después de la
+  suspensión, la consulta de las familias dura **unos 11 meses** después del cierre. `colegio.suspendido_en` (V39) guarda
+  cuándo se aplicó la suspensión (vuelve a NULL al reactivar). AP-7 queda así: `conservar_hasta = DATE(suspendido_en) +
+  12 meses`, exacto.
+- **La autorización expresa de L4 queda en la base:** `colegio.conservacion_autorizada_por` y `conservacion_autorizada_en` (V40),
+  que pone el titular con su firma (`colegio:{id}:CONSERVACION`) al aceptar el contrato de encargo en la Puesta en marcha (paso
+  nuevo, no bloqueante) o después. **Sin ella, el plazo es de 30 días desde el cierre** (`conservar_hasta = DATE(cerrado_en) +
+  30 días`) y no hay modo consulta de 12 meses: las familias reciben su información por la exportación del colegio.
+- Decisión 196 actualizada.
+
+**AP-12 (medio). La exportación, fila por fila del colegio.** `ContextoColegio` no basta (las tablas sin `@TenantId` o leídas con
+SQL nativo): cada consulta del exportador **filtra por `colegio_id` de forma explícita**, o con un join al dueño que lo tiene
+(por ejemplo, `aplicacion_pago` por su `pago`). `exportacion/tablas.txt` dice, por tabla, la columna o el join. Prueba
+`ExportacionDosColegiosTest`: con dos colegios cargados, **cada fila de cada CSV** del colegio A tiene su `colegio_id` (o su
+dueño) en A, y ningún valor único de B aparece en el ZIP de A. **Descifrar la clave del ZIP con `CC_CLAVE_CONECTORES` deja el
+evento `EXPORTACION_CLAVE_DESCIFRADA`** en la bitácora del colegio y en la de la plataforma (quién, cuándo, desde qué IP).
+
+**AP-13 (bajo). Las libretas, antes del corte.** `AplicacionCambiosEstado` no aplica una SUSPENSION mientras haya un periodo
+CERRADO del colegio con matrículas sin su `libreta_emitida` (las emite `EmisionLibretas` de siempre; espera como con las órdenes
+en vuelo). Así la familia en modo consulta encuentra la libreta del último periodo y la exportación la trae. Prueba
+`a13SuspensionEsperaLasLibretas`.
+
+**AP-14 (bajo). La ficha mínima tras la supresión** (`colegio` en SUPRIMIDO, tanda 2). **Quedan:** `id`, `tipo`, `nombre`,
+`razon_social`, `ruc`, `direccion` (la fiscal, pública en SUNAT), `niveles`, `contrato_codigo`, `titular_nombre`, `estado`,
+`estado_desde`, `cambio_estado_id`, `suspendido_en`, `conservar_hasta`, `conservacion_autorizada_en`, `produccion_desde`,
+`creado_en`, `creado_por`, `actualizado_en` y `version`. **Se ponen en NULL:** `titular_documento`, `correo_institucional`,
+`produccion_por`, `actualizado_por`, `conservacion_autorizada_por` y los tres `aviso_privacidad_*`. Se borran su logo, su
+`configuracion_colegio` (el correo de control) y todas sus cuentas. `suprimir.sql` lo hace en este orden y `SupresionFichaMinimaTest`
+lo comprueba columna por columna.
+
 ## 4. Modelo
 ```mermaid
 erDiagram
@@ -448,6 +578,10 @@ MySQL es OR). Lección de V32 a V34: un CHECK que evalúa NULL pasa; cada CHECK 
 -- 1. colegio (H5)
 ALTER TABLE colegio ADD COLUMN estado_desde DATETIME(6);
 ALTER TABLE colegio ADD COLUMN cambio_estado_id BIGINT;
+ALTER TABLE colegio ADD COLUMN suspendido_en DATETIME(6);                    -- AP-11: cuándo se aplicó la suspensión
+ALTER TABLE colegio ADD COLUMN facultad_bloqueada BOOLEAN NOT NULL DEFAULT FALSE;  -- AP-2: la bloquean dos operadores
+ALTER TABLE colegio ADD COLUMN facultad_cambio_id BIGINT;                    -- el BLOQUEO o DESBLOQUEO aplicado
+ALTER TABLE anio_escolar ADD COLUMN actualizado_por VARCHAR(60);             -- AP-9: quién firmó el último cambio
 UPDATE colegio SET estado_desde = COALESCE(produccion_desde, creado_en);
 ALTER TABLE colegio MODIFY COLUMN estado_desde DATETIME(6) NOT NULL;           -- comprobar MODIFY en H2 MODE=MySQL
 ALTER TABLE colegio DROP CONSTRAINT ck_colegio_estado;
@@ -461,6 +595,8 @@ ALTER TABLE colegio ADD CONSTRAINT ck_colegio_produccion CHECK (
     OR estado = 'SUPRIMIDO');
 ALTER TABLE colegio ADD CONSTRAINT ck_colegio_cambio_estado CHECK (
     estado IN ('PREPARACION', 'PRODUCCION') OR cambio_estado_id IS NOT NULL);
+ALTER TABLE colegio ADD CONSTRAINT ck_colegio_suspendido CHECK ((estado IN ('SUSPENDIDO', 'CERRADO') AND suspendido_en IS NOT NULL)
+    OR (estado NOT IN ('SUSPENDIDO', 'CERRADO') AND suspendido_en IS NULL) OR estado = 'SUPRIMIDO');
 -- (la reactivación deja PRODUCCION con cambio_estado_id: el CHECK no lo prohíbe)
 
 -- 2. cambio_estado_colegio: lo propone un operador y lo aprueba OTRO (como cambio_contacto_titular, V31)
@@ -468,7 +604,8 @@ CREATE TABLE cambio_estado_colegio (
     id                BIGINT        NOT NULL AUTO_INCREMENT PRIMARY KEY,
     colegio_id        BIGINT        NOT NULL,
     plataforma_id     BIGINT        NOT NULL,
-    tipo              VARCHAR(14)   NOT NULL,   -- BAJA, SUSPENSION, REACTIVACION (CIERRE en V40)
+    tipo              VARCHAR(20)   NOT NULL,   -- BAJA, SUSPENSION, REACTIVACION, BLOQUEO_FACULTAD, DESBLOQUEO_FACULTAD (CIERRE en V40)
+    ambito            VARCHAR(8)    NOT NULL,   -- ESTADO o FACULTAD (AP-2: un bloqueo no espera a una suspensión)
     motivo_tipo       VARCHAR(16)   NOT NULL,
     motivo            VARCHAR(500)  NOT NULL,
     referencia_aviso  VARCHAR(120),             -- la carta o el correo al representante legal (SUSPENSION)
@@ -485,12 +622,18 @@ CREATE TABLE cambio_estado_colegio (
     aplicado_en       DATETIME(6),              -- lo pone la base
     resuelto_por      VARCHAR(60),              -- quien rechaza o anula
     resuelto_en       DATETIME(6),
+    objecion              VARCHAR(500),         -- AP-10: la objeción del titular, con su firma
+    objetado_por          VARCHAR(60),
+    objetado_en           DATETIME(6),
+    objecion_respuesta    VARCHAR(500),
+    objecion_resuelta_por VARCHAR(60),
+    objecion_resuelta_en  DATETIME(6),
     creado_en         DATETIME(6)   NOT NULL,
     creado_por        VARCHAR(60)   NOT NULL,
     actualizado_en    DATETIME(6)   NOT NULL,
     version           BIGINT        NOT NULL DEFAULT 0,
     CONSTRAINT uk_cambio_estado_colegio_id_colegio UNIQUE (id, colegio_id),
-    CONSTRAINT uk_cambio_estado_colegio_pendiente UNIQUE (colegio_id, pendiente),
+    CONSTRAINT uk_cambio_estado_colegio_pendiente UNIQUE (colegio_id, ambito, pendiente),
     CONSTRAINT fk_cambio_estado_colegio_colegio FOREIGN KEY (colegio_id) REFERENCES colegio (id),
     CONSTRAINT fk_cambio_estado_colegio_operador FOREIGN KEY (operador_id, plataforma_id) REFERENCES usuario (id, colegio_id),
     CONSTRAINT fk_cambio_estado_colegio_aprobador FOREIGN KEY (aprobador_id, plataforma_id) REFERENCES usuario (id, colegio_id),
@@ -501,7 +644,18 @@ CREATE TABLE cambio_estado_colegio (
             AND motivo_tipo IN ('FALTA_PAGO', 'FIN_CONTRATO', 'PEDIDO_COLEGIO', 'OTRO')
             AND referencia_aviso IS NOT NULL AND CHAR_LENGTH(TRIM(referencia_aviso)) >= 5)
         OR (tipo = 'REACTIVACION' AND estado_origen = 'SUSPENDIDO' AND estado_destino = 'PRODUCCION'
-            AND motivo_tipo IN ('PAGO_RECIBIDO', 'ACUERDO', 'OTRO'))),
+            AND motivo_tipo IN ('PAGO_RECIBIDO', 'ACUERDO', 'OTRO'))
+        OR (tipo IN ('BLOQUEO_FACULTAD', 'DESBLOQUEO_FACULTAD') AND estado_origen = estado_destino
+            AND estado_origen IN ('PREPARACION', 'PRODUCCION') AND motivo_tipo IN ('SEGURIDAD', 'PEDIDO_COLEGIO', 'OTRO'))),
+    CONSTRAINT ck_cambio_estado_colegio_ambito CHECK ((ambito = 'FACULTAD' AND tipo IN ('BLOQUEO_FACULTAD', 'DESBLOQUEO_FACULTAD'))
+        OR (ambito = 'ESTADO' AND tipo NOT IN ('BLOQUEO_FACULTAD', 'DESBLOQUEO_FACULTAD'))),
+    CONSTRAINT ck_cambio_estado_colegio_objecion CHECK ((objecion IS NULL AND objetado_por IS NULL AND objetado_en IS NULL
+            AND objecion_resuelta_por IS NULL)
+        OR (objecion IS NOT NULL AND CHAR_LENGTH(TRIM(objecion)) >= 20 AND objetado_por IS NOT NULL AND objetado_en IS NOT NULL
+            AND tipo IN ('BAJA', 'SUSPENSION')
+            AND ((objecion_resuelta_por IS NULL AND objecion_resuelta_en IS NULL AND objecion_respuesta IS NULL)
+                OR (objecion_resuelta_por IS NOT NULL AND objecion_resuelta_por <> propuesto_por
+                    AND objecion_resuelta_en IS NOT NULL AND CHAR_LENGTH(TRIM(objecion_respuesta)) >= 20)))),
     CONSTRAINT ck_cambio_estado_colegio_motivo CHECK (CHAR_LENGTH(TRIM(motivo)) BETWEEN 20 AND 500),
     CONSTRAINT ck_cambio_estado_colegio_estado CHECK (estado IN ('PROPUESTO', 'APROBADO', 'APLICADO', 'RECHAZADO', 'ANULADO')
         AND ((estado IN ('PROPUESTO', 'APROBADO') AND pendiente IS NOT NULL AND pendiente)
@@ -539,9 +693,12 @@ CREATE TABLE uso_facultad_titular (
     rol          VARCHAR(30)  NOT NULL,
     accion       VARCHAR(6)   NOT NULL,
     cuenta_nueva BOOLEAN      NOT NULL,   -- TRUE si la cuenta se creó en esta misma operación
+    mensaje_id   BIGINT       NOT NULL,   -- AP-2: el CODIGO_FACULTAD que recibió el titular (una vez)
     creado_en    DATETIME(6)  NOT NULL,   -- lo pone la base
     creado_por   VARCHAR(60)  NOT NULL,
     CONSTRAINT uk_uso_facultad_titular_numero UNIQUE (colegio_id, numero),
+    CONSTRAINT uk_uso_facultad_titular_mensaje UNIQUE (mensaje_id),
+    CONSTRAINT fk_uso_facultad_titular_mensaje FOREIGN KEY (mensaje_id) REFERENCES mensaje (id),
     CONSTRAINT fk_uso_facultad_titular_colegio FOREIGN KEY (colegio_id) REFERENCES colegio (id),
     CONSTRAINT fk_uso_facultad_titular_titular FOREIGN KEY (titular_id, colegio_id) REFERENCES usuario (id, colegio_id),
     CONSTRAINT fk_uso_facultad_titular_usuario FOREIGN KEY (usuario_id, colegio_id) REFERENCES usuario (id, colegio_id),
@@ -557,7 +714,9 @@ ALTER TABLE sesion_usuario ADD CONSTRAINT ck_sesion_usuario_cierre CHECK ((cerra
     OR (cerrada_en IS NOT NULL AND motivo_cierre IS NOT NULL
         AND motivo_cierre IN ('SALIO', 'VENCIO', 'OTRA_SESION', 'CUENTA_CAMBIADA', 'REINICIO', 'COLEGIO_SUSPENDIDO')));
 ```
-- `anio_escolar` no cambia de esquema (solo gana un trigger). `AltaColegio` deja de insertarlo.
+- `anio_escolar` gana `actualizado_por` y dos triggers (`_nace` y `_cambio`, AP-9). `AltaColegio` deja de insertarlo.
+- Los nombres de columnas de `mensaje` (`usuario_id`, `destino`) y de `configuracion_colegio` (`clave`, `valor`) usados en los
+  triggers se confirman contra V17 y V21 en el paso 1.
 - Entidades: `CambioEstadoColegio` (`plataforma.model`; `tipo`, `colegioId`, `motivo*`, `estadoOrigen`, `estadoDestino`,
   `propuestoPor`, `operadorId` con `updatable = false`); `UsoFacultadTitular` (`seguridad.model`, `@Immutable`, repositorio
   `Repository` sin `delete*`); `Colegio` con `estadoDesde` y `cambioEstadoId` (en `@DynamicUpdate`, como hoy) y los métodos
@@ -604,10 +763,10 @@ GRANT INSERT ON cuentasclaras.uso_facultad_titular TO 'cc_sistema'@'%';
 - `permisos_objetos()` y `PermisosEsperados` con las filas nuevas.
 
 ### 6.3 `scripts/mysql/03-triggers.sql`, bloque «Sprint 11 · tanda 1 (V39)»
-Encabezado: «Versión de la migración V39 (sprint 11, tanda 1): 116 triggers y 16 funciones (19 con huella; 135 huellas).
+Encabezado: «Versión de la migración V39 (sprint 11, tanda 1): 117 triggers y 16 funciones (19 con huella; 136 huellas).
 Versión anterior (V38, correcciones del sprint 10): 112 triggers y 13 funciones (16 con huella; 128 huellas).»
 **Comparar siempre con `<=>`** sobre variables de `SELECT … INTO` y en todo lo que pueda ser NULL. Las horas son de Lima en la
-base: `UTC_TIMESTAMP(6) - INTERVAL 5 HOUR`, como el resto del archivo.
+base: siempre `cc_ahora_lima_real()` (AP-3), nunca `UTC_TIMESTAMP()`.
 
 **Funciones nuevas (al principio del archivo, junto a `cc_colegio_en_produccion`):**
 ```sql
@@ -621,7 +780,13 @@ CREATE FUNCTION cc_colegio_en_preparacion(p_colegio BIGINT) RETURNS BOOLEAN NOT 
 -- CONVERT_TZ la lleva a Lima, sea cual sea esa zona.
 DROP FUNCTION IF EXISTS cc_ahora_lima_real$$
 CREATE FUNCTION cc_ahora_lima_real() RETURNS DATETIME(6) NOT DETERMINISTIC NO SQL
-    RETURN CONVERT_TZ(SYSDATE(6), @@session.time_zone, '-05:00')$$
+BEGIN
+    DECLARE v DATETIME(6) DEFAULT CONVERT_TZ(SYSDATE(6), @@session.time_zone, '-05:00');
+    IF v IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: no se pudo leer la hora real de la base';
+    END IF;
+    RETURN v;
+END$$
 
 -- Sprint 11, tanda 1 (sección 3.12): ¿es el titular del contrato? La cuenta de la primera Promotoría del colegio, activada,
 -- activa, del personal y con PROMOTOR, en un colegio en preparación o en producción.
@@ -633,7 +798,7 @@ CREATE FUNCTION cc_es_titular(p_colegio BIGINT, p_nombre VARCHAR(60)) RETURNS BO
         JOIN colegio c ON c.id = p.colegio_id
         WHERE p.colegio_id = p_colegio AND u.nombre_usuario = p_nombre AND u.activo AND u.apoderado_id IS NULL
           AND r.rol = 'PROMOTOR' AND c.tipo = 'COLEGIO' AND c.estado IN ('PREPARACION', 'PRODUCCION')
-          AND cc_cuenta_activada(u.id))$$
+          AND cc_cuenta_activada(u.id) AND NOT c.facultad_bloqueada)$$
 ```
 
 **Triggers nuevos (4):**
@@ -658,6 +823,17 @@ BEGIN
     IF NEW.tipo <=> 'BAJA' AND (EXISTS (SELECT 1 FROM comprobante k WHERE k.colegio_id = NEW.colegio_id)
             OR EXISTS (SELECT 1 FROM orden_pago o WHERE o.colegio_id = NEW.colegio_id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un colegio con comprobantes u ordenes de pago no se da de baja';
+    END IF;
+    -- AP-6 (tanda 1): con datos, la baja exige la exportación entregada o vencida, que llega en V40: hasta entonces, no.
+    IF NEW.tipo <=> 'BAJA' AND (EXISTS (SELECT 1 FROM alumno a WHERE a.colegio_id = NEW.colegio_id)
+            OR EXISTS (SELECT 1 FROM apoderado d WHERE d.colegio_id = NEW.colegio_id)
+            OR EXISTS (SELECT 1 FROM matricula x WHERE x.colegio_id = NEW.colegio_id)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un colegio con datos se da de baja con su exportacion entregada';
+    END IF;
+    -- AP-8: sin la exportación (V40) no hay suspensión.
+    IF NEW.tipo <=> 'SUSPENSION' AND NOT EXISTS (SELECT 1 FROM information_schema.tables t
+            WHERE t.table_schema = DATABASE() AND t.table_name = 'exportacion_colegio') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la suspension llega con la exportacion de datos (V40)';
     END IF;
 END$$
 
@@ -694,12 +870,13 @@ BEGIN
         SET NEW.aprobado_en = v_ahora;
         SET NEW.efectiva_desde = CASE OLD.tipo
             WHEN 'SUSPENSION' THEN TIMESTAMP(DATE(v_ahora) + INTERVAL 31 DAY)
-            WHEN 'BAJA' THEN IF(EXISTS (SELECT 1 FROM primera_promotoria p WHERE p.colegio_id = OLD.colegio_id
-                AND cc_cuenta_activada(p.usuario_id)), v_ahora + INTERVAL 7 DAY, v_ahora)
+            WHEN 'BAJA' THEN IF(EXISTS (SELECT 1 FROM usuario u WHERE u.colegio_id = OLD.colegio_id
+                AND cc_cuenta_activada(u.id)), v_ahora + INTERVAL 7 DAY, v_ahora)   -- AP-6: cualquier cuenta activada
             ELSE v_ahora END;
     ELSEIF OLD.estado = 'APROBADO' AND NEW.estado <=> 'APLICADO' THEN
-        IF OLD.efectiva_desde > v_ahora OR NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = OLD.colegio_id
-                AND c.estado <=> OLD.estado_destino AND c.cambio_estado_id <=> OLD.id) THEN
+        IF OLD.efectiva_desde > v_ahora OR (OLD.objecion IS NOT NULL AND NEW.objecion_resuelta_en IS NULL)
+                OR NOT EXISTS (SELECT 1 FROM colegio c WHERE c.id = OLD.colegio_id
+                AND c.estado <=> OLD.estado_destino AND c.cambio_estado_id <=> OLD.id) THEN   -- AP-10: objeción resuelta
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cambio se aplica en su fecha, con el colegio en el estado destino';
         END IF;
         SET NEW.aplicado_en = v_ahora;
@@ -759,16 +936,65 @@ BEGIN
             OR NOT cc_firma_valida(NEW.colegio_id, CONCAT('facultad_titular:', NEW.colegio_id, ':', NEW.numero), NEW.titular) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la facultad del titular la usa el titular con su firma, sobre otra cuenta del personal';
     END IF;
+    -- AP-1: en producción, QUITAR va siempre por CAMBIO_ROLES (nunca se quita solo al contrapeso).
+    IF NEW.accion <=> 'QUITAR' AND cc_colegio_en_produccion(NEW.colegio_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: en produccion, quitar Promotoria o Direccion se aprueba con CAMBIO_ROLES';
+    END IF;
+    -- AP-2: código por WhatsApp al contacto del titular (de hace 10 minutos, usado una vez), cuenta nueva con otro contacto,
+    -- correo de control registrado y facultad no bloqueada (esto último lo mira cc_es_titular).
+    IF NOT EXISTS (SELECT 1 FROM mensaje m JOIN usuario t ON t.id = NEW.titular_id WHERE m.id = NEW.mensaje_id
+            AND m.colegio_id = NEW.colegio_id AND m.tipo = 'CODIGO_FACULTAD' AND m.usuario_id <=> NEW.titular_id
+            AND cc_contacto_normal(m.destino) IN (cc_contacto_normal(t.telefono_whatsapp), cc_contacto_normal(t.correo))
+            AND m.creado_en >= cc_ahora_lima_real() - INTERVAL 10 MINUTE)
+            OR NOT EXISTS (SELECT 1 FROM configuracion_colegio k WHERE k.colegio_id = NEW.colegio_id
+                AND k.clave = 'huella_correo_externo' AND k.valor IS NOT NULL)
+            OR (NEW.cuenta_nueva AND EXISTS (SELECT 1 FROM usuario u JOIN usuario t ON t.id = NEW.titular_id
+                WHERE u.id = NEW.usuario_id AND (
+                    (u.telefono_whatsapp IS NOT NULL AND cc_contacto_normal(u.telefono_whatsapp) IN
+                        (cc_contacto_normal(t.telefono_whatsapp), cc_contacto_normal(t.correo)))
+                    OR (u.correo IS NOT NULL AND cc_contacto_normal(u.correo) IN
+                        (cc_contacto_normal(t.telefono_whatsapp), cc_contacto_normal(t.correo)))))) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la facultad pide el codigo del titular, correo de control y una cuenta con otro contacto';
+    END IF;
     IF cc_colegio_en_produccion(NEW.colegio_id) AND EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
             WHERE u.colegio_id = NEW.colegio_id AND u.activo AND u.id <> NEW.titular_id AND u.id <> NEW.usuario_id
               AND r.rol IN ('PROMOTOR', 'DIRECTOR')) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: en produccion, con otra Promotoria o Direccion activa, el rol se aprueba con CAMBIO_ROLES';
     END IF;
-    SET NEW.creado_en = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    SET NEW.creado_en = cc_ahora_lima_real();
 END$$
 ```
 
-**Versiones nuevas (8; no cambian el conteo):**
+**Trigger nuevo (5.º), AP-9:**
+```sql
+-- El año escolar no cambia sin firma: colegio y año fijos; cc_app, Promotoría o Dirección con su firma sobre la versión
+-- anterior (anio_escolar:{id}:{version}); cc_sistema, solo estado y vigente, por un sistema.*.
+DROP TRIGGER IF EXISTS trg_anio_escolar_cambio$$
+CREATE TRIGGER trg_anio_escolar_cambio BEFORE UPDATE ON anio_escolar FOR EACH ROW
+BEGIN
+    IF NOT (NEW.colegio_id <=> OLD.colegio_id) OR NOT (NEW.anio <=> OLD.anio) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el colegio y el anio de un anio escolar no cambian';
+    END IF;
+    IF SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_app' AND NOT (
+            (cc_rol_activo(NEW.colegio_id, NEW.actualizado_por, 'PROMOTOR') OR cc_rol_activo(NEW.colegio_id, NEW.actualizado_por, 'DIRECTOR'))
+            AND cc_firma_valida(NEW.colegio_id, CONCAT('anio_escolar:', OLD.id, ':', OLD.version), NEW.actualizado_por)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el anio escolar lo cambia Promotoria o Direccion con su firma';
+    END IF;
+    IF cc_es_sistema() AND (NOT (NEW.actualizado_por <=> OLD.actualizado_por OR NEW.actualizado_por LIKE 'sistema.%')
+            OR NOT (NEW.inicio_clases <=> OLD.inicio_clases) OR NOT (NEW.fin_clases <=> OLD.fin_clases)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el sistema solo cambia el estado del anio escolar';
+    END IF;
+END$$
+```
+
+**Versiones nuevas (11 triggers y 3 funciones; no cambian el conteo). Todas con `cc_ahora_lima_real()` (AP-3):**
+- **funciones** `cc_hoy_lima` (`DATE(cc_ahora_lima_real())`), `cc_firma_valida` (la ventana de 5 minutos con el reloj real) y
+  `cc_sesion_abierta` (`vence_en > cc_ahora_lima_real()`);
+- **`trg_firma_operacion_nace`** (`firmada_bd = cc_ahora_lima_real()` y la sesión vigente con el reloj real);
+- **`trg_pago_registro`** (AP-4): un pago `EFECTIVO` se rechaza con una SUSPENSION APROBADA cuyo `efectiva_desde` está a menos de
+  24 horas;
+- **`trg_mensaje_nace`** (AP-5): en SUSPENDIDO y CERRADO, a un apoderado solo `ACTIVACION_CUENTA`; y `CODIGO_FACULTAD` (AP-2)
+  solo al titular, a su contacto vigente;
 - **`trg_colegio_cambio`** (estados nuevos, año escolar y ficha congelada). Sobre la versión de las correcciones del sprint 8:
   ```sql
   -- (a) reemplaza «IF OLD.estado = 'PRODUCCION' AND (NOT (NEW.estado <=> 'PRODUCCION') OR …ruc…)»:
@@ -793,6 +1019,27 @@ END$$
             AND x.efectiva_desde <= cc_ahora_lima_real()) THEN
       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el estado cambia solo con su cambio aprobado por dos operadores y en su fecha';
   END IF;
+  -- AP-4: la suspensión se aplica con la caja revisada y los comprobantes aceptados.
+  IF NEW.estado <=> 'SUSPENDIDO' AND NOT (OLD.estado <=> 'SUSPENDIDO') AND (
+          EXISTS (SELECT 1 FROM cierre_caja k WHERE k.colegio_id = NEW.id AND k.estado IN ('POR_REVISAR', 'OBSERVADO'))
+          OR EXISTS (SELECT 1 FROM comprobante k WHERE k.colegio_id = NEW.id
+              AND k.estado_envio IN ('PENDIENTE', 'ENVIADO', 'RECHAZADO'))) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la suspension espera los cierres de caja aprobados y los comprobantes aceptados';
+  END IF;
+  -- AP-11: suspendido_en lo pone la base y vuelve a NULL al reactivar.
+  IF NEW.estado <=> 'SUSPENDIDO' AND NOT (OLD.estado <=> 'SUSPENDIDO') THEN
+      SET NEW.suspendido_en = cc_ahora_lima_real();
+  ELSEIF NEW.estado <=> 'PRODUCCION' AND OLD.estado <=> 'SUSPENDIDO' THEN
+      SET NEW.suspendido_en = NULL;
+  ELSEIF NOT (NEW.suspendido_en <=> OLD.suspendido_en) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la fecha de suspension la pone la base';
+  END IF;
+  -- AP-2: la facultad se bloquea o desbloquea solo con SU cambio de ámbito FACULTAD aprobado por dos operadores.
+  IF NOT (NEW.facultad_bloqueada <=> OLD.facultad_bloqueada) AND NOT (v_quien = 'cc_sistema' AND EXISTS (
+          SELECT 1 FROM cambio_estado_colegio x WHERE x.id = NEW.facultad_cambio_id AND x.colegio_id = NEW.id
+            AND x.estado = 'APROBADO' AND x.tipo = IF(NEW.facultad_bloqueada, 'BLOQUEO_FACULTAD', 'DESBLOQUEO_FACULTAD'))) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la facultad del titular la bloquean dos operadores';
+  END IF;
   IF NOT (NEW.cambio_estado_id <=> OLD.cambio_estado_id) AND NEW.estado <=> OLD.estado THEN
       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cambio de estado solo cambia con el estado';
   END IF;
@@ -805,7 +1052,7 @@ END$$
   --     con el mensaje «a produccion lo pasa la Promotoria con su firma, con anio escolar, Direccion y Caja activas».
   -- (e) al final: la hora del estado la pone la base.
   IF NOT (NEW.estado <=> OLD.estado) THEN
-      SET NEW.estado_desde = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+      SET NEW.estado_desde = cc_ahora_lima_real();
   END IF;
   ```
   (a) a (d) van dentro del `IF v_quien IN ('cc_app', 'cc_sistema')` de hoy: el DBA conserva su camino y lo delata F7.
@@ -830,7 +1077,7 @@ END$$
 - **`trg_usuario_rol_alta`** (3.12): en la condición grande de PROMOTOR y DIRECTOR, una excepción más:
   ```sql
   AND NOT EXISTS (SELECT 1 FROM uso_facultad_titular f WHERE f.colegio_id = v_colegio AND f.usuario_id = NEW.usuario_id
-      AND f.rol = NEW.rol AND f.accion = 'DAR' AND f.creado_en >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE)
+      AND f.rol = NEW.rol AND f.accion = 'DAR' AND f.creado_en >= cc_ahora_lima_real() - INTERVAL 5 MINUTE)
   ```
   Las combinaciones prohibidas se comprueban antes y no cambian («quien cobra no aprueba» rige también para el titular).
 - **`trg_usuario_rol_baja`** (3.12): quitar PROMOTOR o DIRECTOR vale también con SU uso `QUITAR` de hace 5 minutos o menos; y
@@ -844,19 +1091,19 @@ END$$
   primera_promotoria p WHERE p.usuario_id = OLD.id) THEN SIGNAL … 'la cuenta del titular no se desactiva con la aplicacion'`.
   El bloqueo por intentos fallidos sigue igual (no toca `activo`).
 
-**Conteo esperado (tanda 1):** 112 → **116 triggers** (`trg_cambio_estado_colegio_nace`, `trg_cambio_estado_colegio_estado`,
-`trg_anio_escolar_nace`, `trg_uso_facultad_titular_nace`) y 8 con versión nueva; funciones de `03` 13 → **16**
+**Conteo esperado (tanda 1):** 112 → **117 triggers** (`trg_cambio_estado_colegio_nace`, `trg_cambio_estado_colegio_estado`,
+`trg_anio_escolar_nace`, `trg_anio_escolar_cambio`, `trg_uso_facultad_titular_nace`) y 11 con versión nueva; funciones de `03` 13 → **16**
 (`cc_colegio_en_preparacion`, `cc_es_titular`, `cc_ahora_lima_real`), con huella 16 → **19** (16 + 3 de `02`); huellas 128 → **135**. Prod:
-«Huellas de los 116 triggers y las 19 funciones verificadas».
+«Huellas de los 117 triggers y las 19 funciones verificadas».
 
 **Tanda 2 (V40), adelanto del conteo:** 7 triggers nuevos (`trg_exportacion_colegio_nace`, `trg_exportacion_colegio_cambio`,
 `trg_descarga_exportacion_nace`, `trg_acta_supresion_nace`, `trg_acta_supresion_estado`, `trg_evento_auditoria_tachado`,
-`trg_evento_auditoria_sin_borrado`) y la función `cc_supresion_en_curso`: **123 triggers, 20 funciones, 143 huellas**. Versiones
+`trg_evento_auditoria_sin_borrado`) y la función `cc_supresion_en_curso`: **124 triggers, 20 funciones, 144 huellas**. Versiones
 nuevas: `trg_cambio_estado_colegio_*` y `trg_colegio_cambio` (CIERRE, `conservar_hasta`), `trg_sesion_usuario_nace` (CERRADO
 hasta `conservar_hasta`) y los triggers de UPDATE y DELETE de las tablas del inventario (3.11).
 
 ### 6.4 `VerificadorPermisosBaseDatos`, `HuellasObjetosBd` y verificadores
-- `TRIGGERS_ESPERADOS` con los 4 nuevos; `HuellasObjetosBd` = 135; `triggers_instalados()` (02) con la lista nueva.
+- `TRIGGERS_ESPERADOS` con los 5 nuevos; `HuellasObjetosBd` = 136; `triggers_instalados()` (02) con la lista nueva.
 - Pruebas imposibles al arrancar: 1142 (`INSERT INTO cambio_estado_colegio` con cc_app; `UPDATE uso_facultad_titular`;
   `DELETE FROM uso_facultad_titular`); 1143 (`UPDATE cambio_estado_colegio SET tipo = tipo`, `… SET motivo = motivo`,
   `UPDATE colegio SET cambio_estado_id = cambio_estado_id` con cc_app); 1644 (un `cambio_estado_colegio` que nace APROBADO;
@@ -865,7 +1112,7 @@ hasta `conservar_hasta`) y los triggers de UPDATE y DELETE de las tablas del inv
 - `VerificadorConfiguracion`: sin cambios. `RevisionEstadosColegio` (diaria, 05:10, `sistema.plataforma`) cubre F7.
 
 ### 6.5 CI y respaldo
-- `.github/workflows/ci.yml`: paso «Sprint 11, tanda 1» del job `mysql` (V1–V39, 135 huellas, 116 y 19); `paso-0.sh`,
+- `.github/workflows/ci.yml`: paso «Sprint 11, tanda 1» del job `mysql` (V1–V39, 136 huellas, 117 y 19); `paso-0.sh`,
   `en-la-vm.sh`, `despliegue-gcp.md` y `mysql-usuarios.md` con los conteos nuevos.
 - `scripts/respaldo/tablas-vigiladas.txt` y `respaldar.sh`: `uso_facultad_titular` (solo inserción, por colegio).
   `cambio_estado_colegio` no es de solo inserción (cambia de estado): no se vigila por conteo; lo cubre la bitácora.
@@ -1026,26 +1273,27 @@ certificado comodín por DNS-01 y la zona `_acme-challenge` delegada; la demo sa
 | `MODIFY COLUMN` y la FK circular en H2 | Se comprueban primero en las dos bases (paso 1 de la tanda 1); si H2 no acepta `MODIFY`, `estado_desde` queda nulo y lo exige la aplicación |
 
 ## 12. Plan de implementación en 2 tandas
-**Antes de codear:** auditoría del diseño en papel (`auditor-seguridad-antifraude`); sus hallazgos críticos y altos se
-corrigen aquí y en el brief. PR en borrador desde el inicio; **la tanda está terminada cuando el CI del PR está en verde.**
+**Auditoría del diseño en papel: hecha** (sobre 8dd46fb; 14 hallazgos incorporados en la sección 3.13 y en el brief). PR en borrador desde el inicio; **la tanda está terminada cuando el CI del PR está en verde.**
 
-### Tanda 1 · Estados, baja, suspensión, año escolar y facultad del titular (V39; 116 triggers; 19 funciones; 135 huellas)
+### Tanda 1 · Estados, baja, suspensión, año escolar y facultad del titular (V39; 117 triggers; 19 funciones; 136 huellas)
 Brief: `docs/arquitectura/sprint-11/tanda-1.md`. Pasos pequeños y verificables:
 1. V39 aplicada sobre V1–V38 en H2 y en MySQL 8.4 (CHECK nuevos con NULL, FK circular, `MODIFY`).
-2. `03` y `02`: 3 funciones, 4 triggers nuevos, 8 versiones; `huellas_objetos()` = 135; job `mysql` local de lo tocado.
+2. `03` y `02`: 3 funciones nuevas y 3 con versión nueva, 5 triggers nuevos y 11 versiones (AP-3: el reloj real); `huellas_objetos()` = 136; job `mysql` local de lo tocado.
 3. **Año escolar al colegio** (3.7): alta sin año, `crearAnio` con firma, 15 pasos, paso a producción con año; demo y escenario.
 4. **Facultad del titular** (3.12): `FacultadTitular`, pantallas de «Usuarios», avisos; `ServicioUsuarios` delega.
 5. `CambiosEstadoColegio`, bandeja de operadores, `AplicacionCambiosEstado`, cierre de sesiones, franja y avisos.
 6. Modo consulta de las familias (3.8) y `RecorridoColegios` (H2).
 7. Pruebas H2 y MySQL del brief; CI en verde.
 
-### Tanda 2 · Exportación, cierre y supresión (V40; 123 triggers; 20 funciones; 143 huellas)
+### Tanda 2 · Exportación, cierre y supresión (V40; 124 triggers; 20 funciones; 144 huellas)
 1. Inventario `scripts/fin-de-colegio/inventario.txt` (tablas con `colegio_id`, datos personales, triggers que las protegen).
-2. V40, triggers y `cc_supresion_en_curso`.
-3. Exportación (3.9): generador en flujo, CSV, libretas comparadas con su huella, ZIP AES-256, manifiesto, constancia, entrega
+2. V40, triggers y `cc_supresion_en_curso`; versiones que habilitan la BAJA con datos (AP-6) y el CIERRE; `conservar_hasta`
+   exacto (AP-7, AP-11) y la autorización expresa del titular; `reloj-pendiente.txt` en 0 (AP-3).
+3. Exportación (3.9; AP-12: `colegio_id` explícito o join al dueño, prueba con dos colegios fila por fila, evento al descifrar
+   la clave): generador en flujo, CSV, libretas comparadas con su huella, ZIP AES-256, manifiesto, constancia, entrega
    con enlace, DNI y código, limpieza a los 30 días.
 4. Cierre (3.10) y modo consulta hasta `conservar_hasta`.
-5. Acta de supresión (3.11), `suprimir.sql`, `reaplicar.sh`, tachado y verificador de la cadena.
+5. Acta de supresión (3.11; ficha mínima de AP-14), `suprimir.sql`, `reaplicar.sh`, tachado y verificador de la cadena.
 6. Documentos: cláusula 8 de los términos y 9 del encargo (para el abogado), `docs/operacion/fin-de-un-colegio.md` (procedimiento
    y acta), `suscripcion.md` («la plataforma no tiene un botón de suspensión» deja de ser cierto).
 7. CI en verde.
@@ -1057,17 +1305,19 @@ que no entra en las tandas sin su confirmación). Sigue la numeración del sprin
 | # | Tema | Por defecto |
 |---|---|---|
 | 192 | La segunda persona del proveedor | **[Otro operador activo de `CC_OPERADORES`; de preferencia, el responsable técnico y el gerente o representante legal del proveedor. Con un solo operador no hay baja, suspensión ni reactivación]** |
-| 193 | Baja de un colegio en preparación | **[Dos operadores; inmediata si el titular nunca activó su cuenta, a los 7 días si la activó; sin comprobantes ni órdenes de pago; sale de la lista principal; supresión a los 30 días (tanda 2)]** |
+| 193 | Baja de un colegio en preparación (**ajustada por AP-6**) | **[Dos operadores; sin comprobantes ni órdenes de pago; inmediata solo sin datos y sin ninguna cuenta activada; sin datos pero con cuentas activadas, a los 7 días; con datos (alumnos, apoderados o matrículas), con la exportación entregada o vencida (tanda 2; en la tanda 1, rechazada); el titular puede objetar (AP-10); sale de la lista principal]** |
 | 194 | Plazo de la suspensión | **[30 días desde la aprobación, fijado por la base; desde 2 horas antes no hay pagos en línea; se puede anular hasta que se aplica]** |
 | 195 | Quién entra durante la suspensión | **[Nadie del personal, tampoco la Promotoría; las familias en modo consulta (estado de cuenta, comprobantes, libretas y comunicados); a las familias no se les escribe, ven el aviso en el portal; la huella diaria y el resumen al correo de control siguen]** |
-| 196 | Conservación después del cierre (**corrige la 132**) | **[12 meses con consulta de las familias, con la autorización expresa del colegio en el contrato de encargo; después, supresión con acta. Lo tributario (5 años o la prescripción) lo conserva el colegio con su exportación (DS 016-2024-JUS, art. 31.2)]**. Lo revisa el abogado |
+| 196 | Conservación (**corrige la 132; ajustada por AP-7 y AP-11**) | **[Con la autorización expresa del titular registrada en la base: `conservar_hasta` = fecha en que se aplicó la suspensión + 12 meses, exacto (unos 11 meses de consulta para las familias después del cierre; con los respaldos mensuales, 24 meses desde la suspensión). Sin autorización: 30 días desde el cierre. Después, supresión con acta. Lo tributario lo conserva el colegio con su exportación]**. Lo revisa el abogado |
 | 197 | Quién crea el año escolar | **[Promotoría o Dirección, con su firma y sin segunda aprobación; Administración ya no crea años; el operador nunca]** |
 | 198 | Formato de la exportación | **[Un ZIP con AES-256: un CSV por tabla (UTF-8 con BOM, sin fórmulas), libretas y comunicados en PDF, `MANIFIESTO.csv` con SHA-256 y `LEEME.pdf`; los comprobantes como CSV, con el XML y el CDR en su OSE y SUNAT; 30 días para descargarla]** |
 | 199 | Cifrado del ZIP | **[`zip4j` (Apache 2.0): ZIP AES-256 que abre 7-Zip y el Explorador de Windows 11]**. Alternativas: `age` (lo usan los respaldos, pero el colegio no sabe abrirlo) o 7z por línea de comandos (otra herramienta en la imagen) |
 | 200 | Fin definitivo | **[Dedicada: se elimina la instalación completa con acta. Compartida: el DBA borra las filas del colegio y tacha sus eventos de la bitácora con un acta de dos operadores; la fila del colegio queda con la ficha mínima]** |
-| 201 | Facultad del titular en PRODUCCION | **[Vale solo mientras no haya otra persona activa con Promotoría o Dirección además del titular; si la hay, `CAMBIO_ROLES` con la aprobación de otra persona, como hoy. En PREPARACION vale siempre]**. Alternativa: libre siempre, solo con avisos |
+| 201 | Facultad del titular (**ajustada por AP-1 y AP-2**) | **[En PREPARACION da y quita. En PRODUCCION solo da, y solo mientras no haya otra persona activa con Promotoría o Dirección además del titular y del destino; quitar en PRODUCCION va siempre por `CAMBIO_ROLES`. Cada uso pide un código por WhatsApp al contacto del titular; la cuenta nueva lleva un contacto distinto; sin correo de control no hay facultad; dos operadores la bloquean de inmediato]** |
 | 202 | Una dirección por colegio (**abierta, fuera de las tandas**) | **[Virgen María en `virgenmaria.cuotaria.pe` ya, sin código; subdominios de la compartida cuando 3 colegios lo pidan (una tanda, comodín por DNS-01); demo fuera del dominio de la marca; correo desde `notifica.cuotaria.pe` con SPF, DKIM y DMARC y `Reply-To` al colegio]** |
 | 203 | Reactivación | **[Dos operadores, inmediata, sin pedir nada al colegio; las cuentas vuelven como estaban; los pagos del periodo se registran por la conciliación]** |
+| 204 | Suspensión antes de la tanda 2 (AP-8) | **[No: la base la rechaza hasta que exista V40 (la exportación)]** |
+| 205 | Objeción del titular (AP-10) | **[El titular objeta con su firma; la resuelve otro operador con respuesta escrita; sin resolver, no se aplica]** |
 
 ## Fuentes
 - Código Tributario, art. 87 num. 7 (texto del DL 1315) y art. 43: resumen en [Noticiero Contable](https://noticierocontable.com/guardar-los-libros-contables/),

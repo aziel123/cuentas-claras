@@ -217,7 +217,8 @@ Antes del diseño, la decisión D12 (normas vigentes confirmadas con un colegio 
 Diseño: `docs/arquitectura/sprint-11-ciclo-colegio.md`.
 - **Tanda 1 · Estados, año escolar del colegio y facultad del titular:**
   - dar de baja un colegio en preparación y suspender uno en producción, siempre con **dos operadores** y aviso al titular, la
-    Promotoría y el correo de control; la suspensión **se aplica 30 días después** y se puede reactivar;
+    Promotoría y el correo de control; la suspensión **se aplica 30 días después**, con la caja revisada, y se puede reactivar (se habilita con la
+    exportación de la tanda 2);
   - en suspensión el personal no ingresa ni cobra y las familias consultan (también su libreta);
   - el alta del operador ya no pide el año escolar: lo crea **Promotoría o Dirección** con su firma, y sin él no se pasa a producción;
   - el **titular del contrato** crea las cuentas de Promotoría y Dirección sin esperar a una segunda persona, con avisos.
