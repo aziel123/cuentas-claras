@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.seguridad.inicial;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.BaseH2Local;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,7 +31,7 @@ import java.util.Set;
  * Usuarios de demostración para desarrollo local: uno por rol en el Colegio Virgen María y un
  * promotor en un "Colegio de Prueba B" para ver el aislamiento entre colegios.
  * <p>
- * Solo con el perfil {@code dev}, solo si la base es H2 en memoria ({@code jdbc:h2:mem:}) y solo si
+ * Solo con el perfil {@code dev}, solo si la base es H2 local ({@link BaseH2Local}: en memoria o en archivo) y solo si
  * todavía no hay usuarios. La clave de todos es {@code cuentasclaras.demo.clave} (variable
  * {@code CC_DEMO_CLAVE}); no se escribe en el log.
  */
@@ -38,8 +39,6 @@ import java.util.Set;
 @Profile("dev")
 @Order(1)
 public class DatosDemoDev implements ApplicationRunner {
-
-	static final String PREFIJO_H2_MEMORIA = "jdbc:h2:mem:";
 
 	public static final long COLEGIO_PRINCIPAL = 1L;
 
@@ -108,8 +107,8 @@ public class DatosDemoDev implements ApplicationRunner {
 
 	/** @return {@code true} si creó los usuarios */
 	boolean crearSiCorresponde() {
-		if (urlBaseDatos == null || !urlBaseDatos.startsWith(PREFIJO_H2_MEMORIA)) {
-			LOG.warn("No se crean usuarios de demostración: la base no es H2 en memoria.");
+		if (!BaseH2Local.es(urlBaseDatos)) {
+			LOG.warn("No se crean usuarios de demostración: la base no es H2 local (en memoria o en archivo).");
 			return false;
 		}
 		if (ContextoColegio.comoSistema(usuarios::count) > 0) {

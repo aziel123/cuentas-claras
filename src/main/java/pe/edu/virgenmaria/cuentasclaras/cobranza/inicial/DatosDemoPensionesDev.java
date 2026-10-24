@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.cobranza.inicial;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.BaseH2Local;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -104,7 +105,7 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 
 	/** @return {@code true} si creó los datos */
 	boolean crearSiCorresponde() {
-		if (!habilitado || urlBaseDatos == null || !urlBaseDatos.startsWith("jdbc:h2:mem:")) {
+		if (!habilitado || !BaseH2Local.es(urlBaseDatos)) {
 			return false;
 		}
 		if (!personaDemo.existen(DatosDemoDev.COLEGIO_PRINCIPAL, "administracion", "director")) {
