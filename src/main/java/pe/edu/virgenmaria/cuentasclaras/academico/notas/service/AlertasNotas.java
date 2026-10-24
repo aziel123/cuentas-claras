@@ -65,9 +65,13 @@ public class AlertasNotas implements AlertasRevision {
 
 	private final int maxPorPersona;
 
+	private final pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository usuarios;
+
 	public AlertasNotas(CalificacionRepository calificaciones, PeriodoEvaluacionRepository periodos,
 			AnioEscolarRepository anios, CalculoAvance calculo, Clock reloj,
-			@Value("${cuentasclaras.notas.alerta-correcciones-por-persona:5}") int maxPorPersona) {
+			@Value("${cuentasclaras.notas.alerta-correcciones-por-persona:5}") int maxPorPersona,
+			pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository usuarios) {
+		this.usuarios = usuarios;
 		this.calificaciones = calificaciones;
 		this.periodos = periodos;
 		this.anios = anios;
@@ -119,6 +123,15 @@ public class AlertasNotas implements AlertasRevision {
 						+ (sinNota ? "Quedó sin nota." : "Subió el nivel.") + " Revisa que tenga sustento.",
 						"/auditoria?accion=CALIFICACION_CORREGIDA",
 						new Aviso(TipoAviso.CORRECCIONES_NOTAS, "NOTA:" + c.getId(), null, Set.of(c.getCreadoPor()))));
+				// Correcciones del sprint 10 (hallazgo 3): si aprobó Promotoría, la alerta de Promotoría no le llega a ella
+				// (quien aprobó no la recibe); va también a Dirección.
+				if (aprobadaPorPromotoria(c.getCreadoPor())) {
+					alertas.add(new AlertaRevision(AlertaRevision.Gravedad.ATENCION, MODULO, "Promotoría (" + c.getCreadoPor()
+							+ ") aprobó una corrección de nota después del cierre: " + de + " → " + a + " (nota " + c.getId()
+							+ "). Revisa que tenga sustento.", "/auditoria?accion=CALIFICACION_CORREGIDA",
+							new Aviso(TipoAviso.CORRECCION_NOTA_POR_PROMOTORIA, "NOTAPROM:" + c.getId(), null,
+									Set.of(c.getCreadoPor()))));
+				}
 			}
 		}
 		Map<String, Map<Long, Long>> porPersona = recientes.stream().collect(Collectors.groupingBy(
@@ -135,6 +148,12 @@ public class AlertasNotas implements AlertasRevision {
 			}
 		}));
 		return alertas;
+	}
+
+	private boolean aprobadaPorPromotoria(String aprobador) {
+		return usuarios.findByNombreUsuario(aprobador).filter(pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario::isActivo)
+				.map(u -> u.getRoles().contains(pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.PROMOTOR))
+				.orElse(false);
 	}
 
 	private java.util.Optional<AlertaRevision> pendientes(PeriodoEvaluacion p) {

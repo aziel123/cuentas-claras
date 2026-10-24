@@ -46,6 +46,13 @@ public interface CalificacionRepository extends Repository<Calificacion, Long> {
 
 	boolean existsByReemplazaId(Long id);
 
+	/** Correcciones del sprint 10 (hallazgo 1): las notas de esos lotes en el orden en que se registraron. */
+	List<Calificacion> findByLoteIdInOrderByIdAsc(Collection<Long> lotes);
+
+	/** Correcciones del sprint 10 (hallazgo 4): las corregidas o tardías de esos periodos (los anteriores del año). */
+	List<Calificacion> findByPeriodoIdInAndOrigenInOrderByIdAsc(Collection<Long> periodos,
+			Collection<pe.edu.virgenmaria.cuentasclaras.academico.notas.model.OrigenCalificacion> origenes);
+
 	/** Las corregidas por solicitud en un periodo (la vigilancia de Dirección y la alerta A5). */
 	List<Calificacion> findByPeriodoIdAndOrigenOrderByIdAsc(Long periodoId, pe.edu.virgenmaria.cuentasclaras.academico.notas.model.OrigenCalificacion origen);
 

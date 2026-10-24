@@ -158,6 +158,24 @@ public class AuditoriaService {
 		return primeras;
 	}
 
+	/**
+	 * Correcciones del sprint 10 (hallazgo 1): el valor nuevo del PRIMER evento de esas acciones sobre cada registro del
+	 * colegio actual (solo lectura). Así la integridad de las notas compara cada lote con la huella que dejó al guardarse.
+	 */
+	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+	public java.util.Map<String, String> valoresNuevos(java.util.Collection<AccionAuditoria> acciones, String entidad,
+			java.util.Collection<String> entidadIds) {
+		Long colegio = ContextoColegio.actual();
+		java.util.Map<String, String> valores = new java.util.HashMap<>();
+		if (colegio == null || colegio <= 0 || entidadIds.isEmpty()) {
+			return valores;
+		}
+		eventos.findByColegioIdAndAccionInAndEntidadAndEntidadIdIn(colegio, acciones, entidad, entidadIds).stream()
+				.sorted(java.util.Comparator.comparingLong(EventoAuditoria::getSecuencia))
+				.forEach(e -> valores.putIfAbsent(e.getEntidadId(), e.getValorNuevo()));
+		return valores;
+	}
+
 	/** Sprint 6: cuántos eventos de esa acción hizo cada persona en el colegio actual desde un momento (solo lectura). */
 	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
 	public java.util.Map<String, Long> contarPorUsuarioDesde(AccionAuditoria accion, LocalDateTime desde) {

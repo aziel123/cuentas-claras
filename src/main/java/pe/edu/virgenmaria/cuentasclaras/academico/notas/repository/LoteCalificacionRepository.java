@@ -19,4 +19,11 @@ public interface LoteCalificacionRepository extends Repository<LoteCalificacion,
 	int ultimaSecuencia(@Param("periodo") Long periodoId, @Param("seccion") Long seccionId, @Param("area") Long areaId);
 
 	boolean existsBySolicitudId(Long solicitudId);
+
+	/** Correcciones del sprint 10 (hallazgo 1): los lotes de esos periodos (todas las secciones). */
+	java.util.List<LoteCalificacion> findByPeriodoIdInOrderByIdAsc(java.util.Collection<Long> periodos);
+
+	/** Correcciones del sprint 10 (hallazgo 1): los lotes de una sección en esos periodos. */
+	java.util.List<LoteCalificacion> findBySeccionIdAndPeriodoIdInOrderByIdAsc(Long seccionId,
+			java.util.Collection<Long> periodos);
 }

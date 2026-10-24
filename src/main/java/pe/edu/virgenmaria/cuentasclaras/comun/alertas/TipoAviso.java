@@ -47,6 +47,16 @@ public enum TipoAviso {
 	 * coincide con su huella (alguien tocó la base) y no se ha reemitido. A Promotoría; vencido el plazo, se repite cada día.
 	 */
 	INTEGRIDAD_LIBRETAS("Hay una libreta por revisar: falta o no coincide con su huella"),
+	/**
+	 * Correcciones del sprint 10 (hallazgo 1, CRÍTICA): las notas de un guardado no coinciden con su huella (alguien tocó la
+	 * base): las libretas de esa sección se detienen. A Promotoría.
+	 */
+	INTEGRIDAD_NOTAS("Hay notas que no coinciden con lo que se guardó"),
+	/**
+	 * Correcciones del sprint 10 (hallazgo 3): Promotoría aprobó una corrección de nota que sube el nivel o la deja sin nota
+	 * (A5): como la alerta de Promotoría no le llega a quien aprobó, también va a Dirección.
+	 */
+	CORRECCION_NOTA_POR_PROMOTORIA("Promotoría aprobó una corrección de nota que subió el nivel o la dejó sin nota"),
 	OTRA_CRITICA("Alerta crítica");
 
 	private final String texto;
@@ -65,13 +75,13 @@ public enum TipoAviso {
 		return this == CIERRE_NO_REALIZADO || this == ANULACION_PAGO_PENDIENTE || this == LLAMADA_REEMPLAZADA
 				|| this == LLAMADA_POR_DIRECCION || this == SECCION_SIN_ASISTENCIA || this == SOLICITUDES_PENDIENTES
 				|| this == CONSENTIMIENTOS_DESDE_FICHA || this == CORRECCIONES_NOTAS || this == NOTAS_PENDIENTES
-				|| this == ASIGNACIONES_SIN_AREAS;
+				|| this == ASIGNACIONES_SIN_AREAS || this == CORRECCION_NOTA_POR_PROMOTORIA;
 	}
 
 	/** Sprint 9, tanda 2 (H10): las que van SOLO a Dirección (no a Promotoría, que no ve la asistencia: decisión 143). */
 	public boolean soloDireccion() {
 		return this == SECCION_SIN_ASISTENCIA || this == CONSENTIMIENTOS_DESDE_FICHA || this == NOTAS_PENDIENTES
-				|| this == ASIGNACIONES_SIN_AREAS;
+				|| this == ASIGNACIONES_SIN_AREAS || this == CORRECCION_NOTA_POR_PROMOTORIA;
 	}
 
 	/**
