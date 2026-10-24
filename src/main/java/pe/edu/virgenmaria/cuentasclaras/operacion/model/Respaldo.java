@@ -95,6 +95,37 @@ public class Respaldo {
 		// requerido por JPA
 	}
 
+	/** El actor que exige {@code ck_respaldo_actor} (V24): en una base real solo lo escribe ese usuario de MySQL. */
+	static final String ACTOR_RESPALDO = "cc_respaldo";
+
+	/**
+	 * Un respaldo SIMULADO de la demo local (perfil {@code dev}, H2): solo lo crea {@code RespaldoSimuladoDev} (regla
+	 * ArchUnit). Sin archivo real ni bitácora que comparar: secuencias 0, el hash inicial y la comparación PRIMERO o IGUAL.
+	 * En prod la aplicación no tiene INSERT sobre {@code respaldo} y el destino simulado no cuenta
+	 * ({@code aceptar-respaldo-simulado: false}).
+	 */
+	public static Respaldo simulado(LocalDateTime inicio, LocalDateTime fin, String archivo, String sha256,
+			String versionEsquema, boolean primero) {
+		Respaldo r = new Respaldo();
+		String hashInicial = "0".repeat(64);
+		r.inicio = inicio;
+		r.fin = fin;
+		r.archivo = archivo;
+		r.sha256 = sha256;
+		r.bytes = 1;
+		r.versionEsquema = versionEsquema;
+		r.secuenciaAntes = 0;
+		r.hashAntes = hashInicial;
+		r.secuenciaDespues = 0;
+		r.hashDespues = hashInicial;
+		r.conteos = "{}";
+		r.destino = DESTINO_SIMULADO;
+		r.comparacion = primero ? ComparacionRespaldo.PRIMERO : ComparacionRespaldo.IGUAL;
+		r.creadoEn = fin;
+		r.creadoPor = ACTOR_RESPALDO;
+		return r;
+	}
+
 	public Long getId() {
 		return id;
 	}

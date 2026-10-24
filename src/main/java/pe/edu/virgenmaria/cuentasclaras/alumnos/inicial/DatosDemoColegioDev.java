@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.alumnos.inicial;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.BaseH2Local;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -145,8 +146,8 @@ public class DatosDemoColegioDev implements ApplicationRunner {
 			LOG.info("Datos de demostración del colegio desactivados (cuentasclaras.demo.datos-colegio=false).");
 			return false;
 		}
-		if (urlBaseDatos == null || !urlBaseDatos.startsWith("jdbc:h2:mem:")) {
-			LOG.warn("No se crean datos de demostración del colegio: la base no es H2 en memoria.");
+		if (!BaseH2Local.es(urlBaseDatos)) {
+			LOG.warn("No se crean datos de demostración del colegio: la base no es H2 local (en memoria o en archivo).");
 			return false;
 		}
 		if (ContextoColegio.en(DatosDemoDev.COLEGIO_PRINCIPAL, () -> anios.count()) > 0) {

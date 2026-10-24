@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.recaudacion.inicial;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.BaseH2Local;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -106,7 +107,7 @@ public class DatosDemoRecaudacionDev implements ApplicationRunner {
 
 	/** @return {@code true} si cargó el archivo de demostración */
 	boolean crearSiCorresponde() {
-		if (!habilitado || urlBaseDatos == null || !urlBaseDatos.startsWith("jdbc:h2:mem:")) {
+		if (!habilitado || !BaseH2Local.es(urlBaseDatos)) {
 			return false;
 		}
 		try {

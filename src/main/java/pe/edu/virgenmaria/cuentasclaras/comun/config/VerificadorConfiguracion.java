@@ -70,6 +70,9 @@ public class VerificadorConfiguracion implements InitializingBean {
 	/** Sprint 8, tanda 3: el entorno de demostración (H2 en memoria, sin salida, se borra cada noche). */
 	static final String DEMO = "demo";
 
+	/** La demo local persistente (H2 en archivo, {@code .demo-db/}): solo como perfil adicional de {@code dev}. */
+	static final String PERSISTENTE = "persistente";
+
 	static final String DB_URL = "spring.datasource.url";
 
 	/**
@@ -264,6 +267,7 @@ public class VerificadorConfiguracion implements InitializingBean {
 		}
 		boolean prod = activos.contains("prod");
 		verificarDemo(activos, propiedad);
+		verificarPersistente(activos);
 		verificarMarca(prod, propiedad);
 		verificarPasarela(activos, prod, propiedad);
 		verificarComprobantes(prod, propiedad);
@@ -274,6 +278,21 @@ public class VerificadorConfiguracion implements InitializingBean {
 		verificarInstalacion(desarrollo, despliegue == 1, propiedad);
 		variablesRetiradas(propiedad).forEach(v -> LOG.warn("La variable {} ya no se usa: el colegio y su primera "
 				+ "Promotoría se dan de alta desde /plataforma. Retírala del entorno.", v));
+	}
+
+	/**
+	 * La demo local persistente cambia la base por un archivo H2: solo se combina con {@code dev} (nunca con prod, piloto,
+	 * demo ni test), para que nadie la use creyendo que guarda en la base real.
+	 */
+	static void verificarPersistente(List<String> activos) {
+		if (!activos.contains(PERSISTENTE)) {
+			return;
+		}
+		if (!activos.contains("dev") || activos.stream().anyMatch(p -> PERFILES_DE_DESPLIEGUE.contains(p)
+				|| p.equals(DEMO) || p.equals("test"))) {
+			throw new IllegalStateException("El perfil persistente (la demo local en .demo-db/) solo va junto a dev: "
+					+ "SPRING_PROFILES_ACTIVE=dev,persistente. Con " + String.join(",", activos) + " no arranca.");
+		}
 	}
 
 	/**

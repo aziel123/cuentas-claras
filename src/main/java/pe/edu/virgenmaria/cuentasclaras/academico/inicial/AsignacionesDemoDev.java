@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.academico.inicial;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.BaseH2Local;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -81,12 +82,17 @@ public class AsignacionesDemoDev implements ApplicationRunner {
 
 	@Override
 	public void run(ApplicationArguments argumentos) {
-		if (!habilitado || urlBaseDatos == null || !urlBaseDatos.startsWith("jdbc:h2:mem:")
+		if (!habilitado || !BaseH2Local.es(urlBaseDatos)
 				|| !personas.existen(DatosDemoDev.COLEGIO_PRINCIPAL, "administracion", "director", "docente")) {
 			return;
 		}
+		long colegio = DatosDemoDev.COLEGIO_PRINCIPAL;
+		// Demo persistente: en un segundo arranque las asignaciones ya existen (no se proponen otra vez).
+		if (!leer(colegio, () -> solicitudes.findByTipoOrderByIdDesc(TipoSolicitud.ASIGNACION_DOCENTE)).isEmpty()) {
+			LOG.info("Ya hay asignaciones docentes: no se crean las de demostración.");
+			return;
+		}
 		try {
-			long colegio = DatosDemoDev.COLEGIO_PRINCIPAL;
 			Long docente = leer(colegio, () -> usuarios.findByNombreUsuario("docente").orElseThrow().getId());
 			proponerYAprobar(colegio, new ProponerAsignacionRequest(seccion(colegio, Grado.PRIMARIA_3), docente,
 					TipoAsignacion.TUTOR, null, MOTIVO));
