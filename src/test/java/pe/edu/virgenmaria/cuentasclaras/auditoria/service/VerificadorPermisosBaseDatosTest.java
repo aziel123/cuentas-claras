@@ -268,7 +268,7 @@ class VerificadorPermisosBaseDatosTest {
 					+ "firma_operacion|acceso_dato_personal|registro_asistencia|marca_asistencia|consentimiento_aviso|"
 					+ "aviso_asistencia_corte|comunicado_adjunto|confirmacion_lectura|exportacion_nomina|asignacion_area|"
 					+ "competencia|escala_logro|curriculo_version|area_curricular|calificacion|lote_calificacion|exoneracion_area|"
-					+ "borrador_conclusion) ");
+					+ "borrador_conclusion|libreta_emitida|entrega_libreta|exportacion_calificaciones|delegacion_siagie) ");
 
 	/** Sprint 10, tanda 1 (E12): el catálogo nacional no tiene GRANT de escritura: cc_app no inserta (1142). */
 	private static final java.util.regex.Pattern CATALOGO = java.util.regex.Pattern
@@ -390,7 +390,7 @@ class VerificadorPermisosBaseDatosTest {
 	/** Sprint 7, tanda 2: lo que solo escribe cc_sistema (a cc_app le falta el GRANT: 1142). */
 	private static final java.util.regex.Pattern SOLO_SISTEMA = java.util.regex.Pattern.compile(
 			"^INSERT INTO (usuario|usuario_rol|sesion_usuario|semilla_muestreo|muestra_llamada|resumen_diario|primera_direccion|"
-			+ "colegio|primera_promotoria|cambio_contacto_titular|cambio_correo_control|aviso_asistencia_corte) ");
+			+ "colegio|primera_promotoria|cambio_contacto_titular|cambio_correo_control|aviso_asistencia_corte|libreta_emitida) ");
 
 	private static JdbcTemplate mysqlQueDeniega() {
 		JdbcTemplate mysql = mock(JdbcTemplate.class);

@@ -47,7 +47,9 @@ final class CatalogoRutasConId {
 		 */
 		CATALOGO,
 		/** Sprint 10, tanda 2: una nota (la corrección después del cierre). */
-		CALIFICACION
+		CALIFICACION,
+		/** Sprint 10, tanda 3: una libreta emitida (la descarga de la familia, la impresión y la reemisión). */
+		LIBRETA
 	}
 
 	static final Map<String, Map<String, Recurso>> CATALOGO = new LinkedHashMap<>();
@@ -303,6 +305,15 @@ final class CatalogoRutasConId {
 		r("POST /academico/notas/exoneraciones", "seccion", Recurso.SECCION, "matriculaId", Recurso.MATRICULA, "areaId",
 				Recurso.CATALOGO);
 		r("GET /academico/asignaciones/completar", "asignacion", Recurso.ASIGNACION, "seccion", Recurso.SECCION);
+		// Sprint 10, tanda 3: las libretas (la familia, Dirección y el tutor), su reemisión, la exportación para el SIAGIE y
+		// su delegación.
+		r("GET /familia/libretas/{id:\\d+}.pdf", "id", Recurso.LIBRETA);
+		r("GET /academico/libretas", "seccion", Recurso.SECCION, "periodo", Recurso.PERIODO);
+		r("GET /academico/libretas/seccion.pdf", "seccion", Recurso.SECCION, "periodo", Recurso.PERIODO);
+		r("GET /academico/libretas/{id:\\d+}.pdf", "id", Recurso.LIBRETA);
+		r("POST /academico/libretas/{id:\\d+}/reemision", "id", Recurso.LIBRETA);
+		r("GET /academico/siagie/calificaciones", "seccion", Recurso.SECCION, "periodo", Recurso.PERIODO);
+		r("POST /academico/siagie/delegaciones", "usuario", Recurso.USUARIO);
 	}
 
 	private CatalogoRutasConId() {

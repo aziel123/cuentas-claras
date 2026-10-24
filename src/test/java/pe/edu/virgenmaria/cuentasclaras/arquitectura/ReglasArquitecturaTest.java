@@ -536,7 +536,22 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".academico.notas.service.AvanceRegistro#correccionesDelPeriodo", "hasRole('DIRECTOR')"),
 			Map.entry(BASE + ".academico.notas.service.NotasDeSeccion", "hasAnyRole('DIRECTOR','DOCENTE')"),
 			Map.entry(BASE + ".academico.notas.service.AlertasNotas", ALERTAS),
-			Map.entry(BASE + ".academico.service.CompletarAreas", "hasAnyRole('DIRECTOR','ADMINISTRACION')"));
+			Map.entry(BASE + ".academico.service.CompletarAreas", "hasAnyRole('DIRECTOR','ADMINISTRACION')"),
+			// Sprint 10, tanda 3 (secciones 3.7 a 3.10, M9, M12): emite y avisa SOLO sistema.libretas; la familia ve y
+			// descarga las suyas; Dirección y el tutor imprimen (lo exige el servicio); verifica, pide la reemisión y delega
+			// el SIAGIE SOLO Dirección; exporta Dirección o la persona de Administración delegada (lo exige el servicio); la
+			// integridad y la alerta del SIAGIE, Promotoría y sistema.panel.
+			Map.entry(BASE + ".academico.libreta.service.EmisorLibretas", "hasRole('SISTEMA_LIBRETAS')"),
+			Map.entry(BASE + ".academico.libreta.service.LibretasPorAvisarDeLaBase", "hasRole('SISTEMA_LIBRETAS')"),
+			Map.entry(BASE + ".comunicacion.service.AvisosLibretasFamilias", "hasRole('SISTEMA_LIBRETAS')"),
+			Map.entry(BASE + ".academico.libreta.service.LibretasFamilia", "hasRole('APODERADO')"),
+			Map.entry(BASE + ".academico.libreta.service.LibretasColegio", "hasAnyRole('DIRECTOR','DOCENTE')"),
+			Map.entry(BASE + ".academico.libreta.service.VerificacionLibreta", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.libreta.service.ReemisionLibretas", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.libreta.service.IntegridadLibretas", ALERTAS),
+			Map.entry(BASE + ".academico.siagie.CalificacionesSiagie", "hasAnyRole('DIRECTOR','ADMINISTRACION')"),
+			Map.entry(BASE + ".academico.siagie.DelegacionesSiagie", "hasRole('DIRECTOR')"),
+			Map.entry(BASE + ".academico.siagie.AlertasSiagie", ALERTAS));
 
 	/**
 	 * S4-M2 y sprint 5: EnlacesActivacion lo usan solo los servicios protegidos que dan o restablecen el acceso (para
@@ -713,6 +728,8 @@ class ReglasArquitecturaTest {
 					BASE + ".academico.service..",
 					// Sprint 10, tanda 2: la corrección de una nota y la nota tardía crean su solicitud.
 					BASE + ".academico.notas.service..",
+					// Sprint 10, tanda 3 (A3): la reemisión de una libreta la pide Dirección (REEMISION_LIBRETA).
+					BASE + ".academico.libreta.service..",
 					// Sprint 9, tanda 3: el comunicado con PDF (de un docente o que requiere revisión) crea su
 					// PUBLICAR_COMUNICADO.
 					BASE + ".comunicados.service..")
@@ -877,17 +894,37 @@ class ReglasArquitecturaTest {
 			.because("la cobranza no se mezcla con la asistencia ni con los comunicados (sección 3.13)");
 
 	/**
-	 * Sprint 9, tanda 3 (sección 3.9, B5): la librería de PDF solo la usa el analizador, que corre en un PROCESO HIJO con su
-	 * memoria, su tiempo y sin red. La aplicación nunca abre un PDF.
+	 * Sprint 9, tanda 3 (sección 3.9, B5) y sprint 10, tanda 3 (M11, E39): la librería de PDF la usan SOLO el analizador de
+	 * comunicados (que lee, en un PROCESO HIJO) y el generador de la libreta (que solo escribe, con su lista blanca). Ninguna
+	 * otra clase de la aplicación toca PDFBox.
 	 */
 	@ArchTest
-	static final ArchRule pdfboxSoloEnElAnalizador = noClasses()
+	static final ArchRule pdfboxSoloEnElAnalizadorYLaLibreta = noClasses()
 			.that().resideOutsideOfPackage(BASE + ".comunicados.analizador..")
+			.and().resideOutsideOfPackage(BASE + ".academico.libreta.pdf..")
 			.and().resideOutsideOfPackage("org.apache.pdfbox..").and().resideOutsideOfPackage("org.apache.fontbox..")
 			.should().dependOnClassesThat().resideInAnyPackage("org.apache.pdfbox..", "org.apache.fontbox..")
 			.because("un PDF puede traer JavaScript, acciones, bombas o archivos embebidos: lo abre solo el proceso hijo");
 
-	/** B5: el analizador no depende de nada de la aplicación (corre sin Spring, sin base y sin credenciales). */
+	/**
+	 * Sprint 10, tanda 3 (E39, sección 3.9): fuera del analizador nadie ABRE un PDF: ni {@code Loader}, ni el parser, ni
+	 * {@code PDFTextStripper}.
+	 */
+	@ArchTest
+	static final ArchRule pdfboxParseaSoloElAnalizador = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".comunicados.analizador..")
+			.and().resideOutsideOfPackage("org.apache.pdfbox..").and().resideOutsideOfPackage("org.apache.fontbox..")
+			.should().dependOnClassesThat().haveFullyQualifiedName("org.apache.pdfbox.Loader")
+			.orShould().dependOnClassesThat().resideInAnyPackage("org.apache.pdfbox.pdfparser..", "org.apache.pdfbox.text..")
+			.because("abrir un PDF ajeno es la superficie de ataque: solo el proceso hijo del analizador lo hace");
+
+	/** Sprint 10, tanda 3 (M11): la LISTA BLANCA de lo que el generador de la libreta usa de PDFBox (solo escribir). */
+	@ArchTest
+	static void pdfboxEscribeSoloLaLibreta(JavaClasses clases) {
+		ListaBlancaPdfbox.regla(BASE + ".academico.libreta.pdf..").check(clases);
+	}
+
+		/** B5: el analizador no depende de nada de la aplicación (corre sin Spring, sin base y sin credenciales). */
 	@ArchTest
 	static final ArchRule elAnalizadorNoDependeDeLaAplicacion = noClasses()
 			.that().resideInAPackage(BASE + ".comunicados.analizador..")
@@ -1018,6 +1055,39 @@ class ReglasArquitecturaTest {
 				.getRecordComponents()).map(java.lang.reflect.RecordComponent::getName).toList())
 				.containsExactly("matriculaId", "competenciaId", "nivel", "conclusion");
 	}
+
+	/**
+	 * Sprint 10, tanda 3 (E14): las libretas, sus entregas, la exportación de calificaciones y la delegación del SIAGIE son de
+	 * SOLO INSERCIÓN: sus repositorios no heredan {@code delete*} ni declaran borrados, cambios ni {@code @Modifying}.
+	 */
+	@ArchTest
+	static final ArchRule repositoriosDeLibretasYSiagieSoloInsercion = classes()
+			.that().resideInAnyPackage(BASE + ".academico.libreta.repository..", BASE + ".academico.siagie.repository..")
+			.should().notBeAssignableTo(CrudRepository.class)
+			.because("una libreta no se edita ni se borra: se emite la versión siguiente");
+
+	@ArchTest
+	static final ArchRule repositoriosDeLibretasYSiagieSinBorrados = noMethods()
+			.that().areDeclaredInClassesThat().resideInAnyPackage(BASE + ".academico.libreta.repository..",
+					BASE + ".academico.siagie.repository..")
+			.should().beAnnotatedWith(Modifying.class)
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("update"))
+			.orShould().beAnnotatedWith(consultaQueEmpiezaCon("delete"))
+			.orShould().haveNameMatching("(?i)(delete|remove|update).*")
+			.because("las libretas y sus constancias son un libro de solo inserción (sección 3.7)");
+
+	/**
+	 * Sprint 10, tanda 3 (sección 3.7): los avisos de libretas (el proceso y su servicio) leen las libretas SOLO por
+	 * {@code academico.api}: sin notas ni conclusiones.
+	 */
+	@ArchTest
+	static final ArchRule avisosDeLibretasSoloLeenLaApiAcademica = noClasses()
+			.that().haveFullyQualifiedName(BASE + ".comunicacion.proceso.AvisosLibretas")
+			.or().haveFullyQualifiedName(BASE + ".comunicacion.service.AvisosLibretasFamilias")
+			.should().dependOnClassesThat(DescribedPredicate.describe("de academico fuera de academico.api",
+					(JavaClass c) -> c.getPackageName().startsWith(BASE + ".academico")
+							&& !c.getPackageName().startsWith(BASE + ".academico.api")))
+			.because("el aviso a la familia no debe poder leer las notas de la libreta");
 
 	@ArchTest
 	static final ArchRule repositoriosDeAcademicoNoHeredanBorrados = classes()

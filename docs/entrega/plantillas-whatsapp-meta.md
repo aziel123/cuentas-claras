@@ -11,7 +11,7 @@
 - **Encabezado y pie:** sin encabezado ni pie (el colegio va en `{{1}}`).
 - **Botón:** las que dicen «Ver en el portal» llevan un botón de tipo *Visitar sitio web*, URL **estática** `https://app.<dominio>/familia`. Las de activación y verificación, URL **dinámica**: `https://app.<dominio>/activar/{{1}}` y `https://app.<dominio>/verificar/{{1}}` (el sistema manda el resto del enlace de un solo uso). Cambia `<dominio>` por el de la marca elegida.
 - **Ejemplos:** Meta pide un valor de ejemplo por variable: van en la tabla de cada plantilla (son ficticios).
-- Ninguna menciona evaluaciones, notas, exámenes ni constancias, ni amenaza con consecuencias (INDECOPI; lo revisa `PlantillasMensajeTest`). Los mensajes al personal llevan solo cifras y tipos fijos (sin nombres de familias).
+- Ninguna menciona evaluaciones, notas, exámenes ni constancias (las de libretas solo dicen que la libreta está en el portal), ni amenaza con consecuencias (INDECOPI; lo revisa `PlantillasMensajeTest`). Los mensajes al personal llevan solo cifras y tipos fijos (sin nombres de familias).
 
 | # | Nombre en Meta | Para | Variables | Botón |
 |---|---|---|---|---|
@@ -45,6 +45,8 @@
 | 28 | `cc_asistencia_corregida_v2` | Familias | 6 | «Ver asistencia» (`/familia/asistencia`) |
 | 29 | `cc_comunicados_v2` | Familias | 3 | «Ver comunicados» (`/familia/comunicados`) |
 | 30 | `cc_comunicado_urgente_v2` | Familias | 3 | «Ver comunicados» (`/familia/comunicados`) |
+| 31 | `cc_libreta_v1` | Familias | 3 | «Ver libretas» (`/familia/libretas`) |
+| 32 | `cc_libreta_corregida_v1` | Familias | 3 | «Ver libretas» (`/familia/libretas`) |
 
 ## 1. `cc_pago_registrado_v2` · Registramos su pago
 
@@ -461,6 +463,38 @@
 | `{{1}}` | Colegio San Martín (ejemplo) |
 | `{{2}}` | Dirección |
 | `{{3}}` | Suspensión de clases del martes 16 |
+
+## 31. `cc_libreta_v1` · Libreta disponible
+
+> Sprint 10, tanda 3 (sección 3.7 del diseño). Uno por familia y periodo, con los hermanos juntos, cuando el sistema emite
+> la libreta al cerrar el periodo. Nace en la v1 (ya con el colegio en `{{1}}`). Sin notas, conclusiones ni montos: la
+> libreta se ve en el portal. La reciben TODAS las familias, también la que debe (INDECOPI: la libreta no se retiene).
+> Por WhatsApp solo con el «sí» del apoderado a la finalidad «Avisos de libretas»; si no, por correo.
+
+```text
+{{1}}: la libreta del {{2}} de {{3}} ya está en el portal.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | I bimestre |
+| `{{3}}` | Mateo y Valeria |
+
+## 32. `cc_libreta_corregida_v1` · Se corrigió la libreta
+
+> Sprint 10, tanda 3. Cuando una corrección o una nota tardía aprobada (o una reemisión) da la versión siguiente de la
+> libreta. El portal muestra todas las versiones y qué cambió; el mensaje no lo dice (sin notas).
+
+```text
+{{1}}: se corrigió la libreta del {{2}} de {{3}}. Revise el detalle en el portal.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | I bimestre |
+| `{{3}}` | Lucas |
 
 ## Después de la aprobación
 1. Anotar en `docs/estado-del-proyecto.md` la fecha de aprobación de cada plantilla.
