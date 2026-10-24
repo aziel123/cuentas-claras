@@ -19,7 +19,7 @@
 			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay cuentas', 'Promotoría registra la cuenta del colegio cuyo extracto se concilia.')}"></div>
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(x.cuentas)}">
-			<thead><tr><th scope="col">Cuenta</th><th scope="col">Cargado hasta</th><th scope="col">Confirmado hasta</th><th scope="col">Por confirmar</th><th scope="col">Acción</th></tr></thead>
+			<thead><tr><th scope="col">Cuenta</th><th scope="col">Cargado hasta</th><th scope="col">Confirmado hasta</th><th scope="col" class="num">Por confirmar</th><th scope="col">Acción</th></tr></thead>
 			<tbody>
 				<tr th:each="c : ${x.cuentas}" th:classappend="${!c.activa} ? 'fila-quitada'">
 					<td data-etiqueta="Cuenta" th:text="|${c.banco} · ${c.numero} · ${c.alias}${c.activa ? '' : ' (desactivada)'}|">BCP</td>
@@ -63,7 +63,7 @@
 			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay extractos', 'Cuando Administración suba el primero, aparecerá aquí.')}"></div>
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(x.extractos)}">
-			<thead><tr><th scope="col">Extracto</th><th scope="col">Días</th><th scope="col">Movimientos</th><th scope="col">Estado</th><th scope="col" class="num">Saldo final</th><th scope="col">Subido por</th></tr></thead>
+			<thead><tr><th scope="col">Extracto</th><th scope="col">Días</th><th scope="col" class="num">Movimientos</th><th scope="col">Estado</th><th scope="col" class="num">Saldo final</th><th scope="col">Subido por</th></tr></thead>
 			<tbody>
 				<tr th:each="e : ${x.extractos}" th:data-extracto="${e.id}">
 					<td data-etiqueta="Extracto"><a th:href="@{/conciliacion/extractos/{id}(id=${e.id})}" th:text="|${e.cuenta} · N.° ${e.secuencia}|">BCP · N.° 1</a></td>

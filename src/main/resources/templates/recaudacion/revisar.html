@@ -51,7 +51,7 @@
 		<h2 id="titulo-detalle">Cómo quedaría cada pago</h2>
 		<p class="secundario">Así se aplicaría hoy. Si algo cambia antes de que se confirme (por ejemplo, la familia paga en caja), el sistema lo deja por revisar: nunca cobra dos veces.</p>
 		<table class="tabla">
-			<thead><tr><th scope="col">N.°</th><th scope="col">Fecha</th><th scope="col">Código</th><th scope="col">Alumno</th><th scope="col" class="num">Monto</th><th scope="col">Operación</th><th scope="col">Resultado</th></tr></thead>
+			<thead><tr><th scope="col" class="num">N.°</th><th scope="col">Fecha</th><th scope="col" class="num">Código</th><th scope="col">Alumno</th><th scope="col" class="num">Monto</th><th scope="col">Operación</th><th scope="col">Resultado</th></tr></thead>
 			<tbody>
 				<tr th:each="l : ${p.detalle}" th:data-resultado="${l.resultado}" th:classappend="${l.resultado != 'APLICAR'} ? 'fila-atencion'">
 					<td data-etiqueta="N.°" class="num" th:text="${l.numero}">1</td>

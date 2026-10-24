@@ -41,8 +41,8 @@
 		<table class="tabla" th:unless="${#lists.isEmpty(reporte.filas)}">
 			<caption class="solo-lectores">Asistencia del mes por alumno</caption>
 			<thead>
-				<tr><th scope="col">N.°</th><th scope="col">Alumno</th><th scope="col">Presentes</th><th scope="col">Tardanzas</th>
-					<th scope="col">Faltas</th><th scope="col">Justificadas</th><th scope="col">Inasistencia injustificada</th></tr>
+				<tr><th scope="col" class="num">N.°</th><th scope="col">Alumno</th><th scope="col" class="num">Presentes</th><th scope="col" class="num">Tardanzas</th>
+					<th scope="col" class="num">Faltas</th><th scope="col" class="num">Justificadas</th><th scope="col" class="num">Inasistencia injustificada</th></tr>
 			</thead>
 			<tbody>
 				<tr th:each="f : ${reporte.filas}">

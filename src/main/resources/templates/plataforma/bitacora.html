@@ -19,7 +19,7 @@
 		<table class="tabla" th:unless="${eventos.empty}">
 			<caption class="solo-lectores">Eventos de la plataforma, del más reciente al más antiguo. Horas de Lima.</caption>
 			<thead>
-				<tr><th scope="col">Fecha y hora</th><th scope="col">Quién</th><th scope="col">Acción</th><th scope="col">Detalle</th></tr>
+				<tr><th scope="col" class="num">Fecha y hora</th><th scope="col">Quién</th><th scope="col">Acción</th><th scope="col">Detalle</th></tr>
 			</thead>
 			<tbody>
 				<tr th:each="e : ${eventos.content}" th:classappend="${e.requiereAtencion} ? 'fila-atencion'">

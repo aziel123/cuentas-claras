@@ -21,7 +21,7 @@
 		<table class="tabla" th:unless="${familias.empty}">
 			<caption class="solo-lectores">Familias con contactos guardados más allá del plazo, de la más antigua a la más reciente.</caption>
 			<thead>
-				<tr><th scope="col">Familia</th><th scope="col">Dejó el colegio</th><th scope="col">Contactos guardados</th></tr>
+				<tr><th scope="col">Familia</th><th scope="col" class="num">Dejó el colegio</th><th scope="col" class="num">Contactos guardados</th></tr>
 			</thead>
 			<tbody>
 				<tr th:each="f : ${familias}" data-familia-vencida>

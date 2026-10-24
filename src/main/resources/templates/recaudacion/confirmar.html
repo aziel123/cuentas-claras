@@ -27,7 +27,7 @@
 		<p th:text="|Busca la recaudación del ${#temporals.format(c.desde, 'dd/MM/yyyy')}${c.desde != c.hasta ? ' al ' + #temporals.format(c.hasta, 'dd/MM/yyyy') : ''} (${c.lineas} pagos). Comprueba que estos pagos aparezcan con el mismo código y número de operación (el monto lo ves en el banco; aquí no se muestra a propósito):|">Busca la recaudación</p>
 		<table class="tabla" data-seccion="muestra">
 			<caption class="solo-lectores">Pagos elegidos al azar al subir el archivo, para buscarlos en el banco</caption>
-			<thead><tr><th scope="col">Código</th><th scope="col">Fecha</th><th scope="col">Operación</th></tr></thead>
+			<thead><tr><th scope="col" class="num">Código</th><th scope="col">Fecha</th><th scope="col">Operación</th></tr></thead>
 			<tbody>
 				<tr th:each="m : ${c.muestra}">
 					<td data-etiqueta="Código" class="num" th:text="${m.codigo}">1000 0016</td>

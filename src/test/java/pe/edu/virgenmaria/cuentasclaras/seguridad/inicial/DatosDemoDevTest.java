@@ -46,6 +46,9 @@ class DatosDemoDevTest {
 	private ColegioRepository colegios;
 
 	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraPromotoriaRepository primeras;
+
+	@Autowired
 	private AuditoriaService auditoria;
 
 	@Autowired
@@ -91,6 +94,17 @@ class DatosDemoDevTest {
 		assertThat(jdbc.queryForObject("SELECT estado FROM colegio WHERE id = 1", String.class)).isEqualTo("PRODUCCION");
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'USUARIO_CREADO'",
 				Long.class)).isEqualTo(9);
+		// La lista de colegios de la plataforma muestra el RUC de ejemplo (válido y ficticio) y el titular de cada uno.
+		assertThat(jdbc.queryForObject("SELECT ruc FROM colegio WHERE id = ?", String.class, colegioB))
+				.isEqualTo(DatosDemoDev.RUC_COLEGIO_B);
+		assertThat(pe.edu.virgenmaria.cuentasclaras.plataforma.service.ValidadorRuc.valido(DatosDemoDev.RUC_COLEGIO_B))
+				.isTrue();
+		assertThat(pe.edu.virgenmaria.cuentasclaras.plataforma.service.ValidadorRuc
+				.valido(DatosDemoDev.RUC_COLEGIO_PRINCIPAL)).isTrue();
+		assertThat(jdbc.queryForList("SELECT CONCAT(p.colegio_id, ' ', u.nombre_usuario, ' ', o.nombre_usuario) FROM "
+				+ "primera_promotoria p JOIN usuario u ON u.id = p.usuario_id JOIN usuario o ON o.id = p.operador_id "
+				+ "ORDER BY p.colegio_id", String.class)).containsExactly("1 promotor operador",
+						colegioB + " promotor.b operador");
 	}
 
 	@Test
@@ -119,7 +133,7 @@ class DatosDemoDevTest {
 	}
 
 	private DatosDemoDev datosDemo(String url, String clave) {
-		return new DatosDemoDev(usuarios, colegios, codificador, auditoria,
+		return new DatosDemoDev(usuarios, colegios, codificador, auditoria, primeras,
 				new pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad(transacciones), reloj, url, clave);
 	}
 }
