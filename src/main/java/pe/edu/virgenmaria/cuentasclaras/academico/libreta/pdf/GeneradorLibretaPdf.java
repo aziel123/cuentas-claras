@@ -324,9 +324,13 @@ public class GeneradorLibretaPdf {
 			rect(0, ALTO - 6, ANCHO, 6, CELESTE);
 			y = ALTO - 26;
 			if (paginas.size() > 1) {
-				escribirTexto(MARGEN, y, 8.5f, SECUNDARIO, c.cabecera().alumnoNombre() + " · " + c.grado() + " "
-						+ c.seccion() + " · " + c.periodoNombre() + " " + c.anio() + " (continuación)", ANCHO - 2 * MARGEN);
-				y -= 18;
+				// P-3: la cabecera de continuación también pasa a otra línea en vez de recortar el nombre.
+				for (String linea : envolver(c.cabecera().alumnoNombre() + " · " + c.grado() + " " + c.seccion() + " · "
+						+ c.periodoNombre() + " " + c.anio() + " (continuación)", 8.5f, ANCHO - 2 * MARGEN)) {
+					escribirTexto(MARGEN, y, 8.5f, SECUNDARIO, linea, ANCHO - 2 * MARGEN);
+					y -= 11;
+				}
+				y -= 7;
 			}
 		}
 
@@ -396,20 +400,35 @@ public class GeneradorLibretaPdf {
 					{ "Grado y sección", c.grado() + " " + c.seccion(), k.tipoCodigo().etiqueta(), k.alumnoCodigo() },
 					{ "Apellidos y nombres", k.alumnoNombre(), "", "" },
 					{ "Tutor(a)", valor(k.tutorNombre()), "", "" } };
-			float alto = filas.length * 16f + 8;
+			// Correcciones del sprint 10 (P-3): las filas anchas (el nombre y el tutor) pasan a las líneas que hagan falta, sin
+			// recortarse con «…»: el nombre oficial sale completo en el papel.
+			float anchoAncha = ANCHO - 2 * MARGEN - 130;
+			List<List<String>> valores = new ArrayList<>();
+			float alto = 8;
+			for (String[] f : filas) {
+				List<String> lineas = f[2].isEmpty() ? envolver(f[1], 9.5f, anchoAncha) : List.of(f[1]);
+				lineas = lineas.isEmpty() ? List.of("") : lineas;
+				valores.add(lineas);
+				alto += 16f + (lineas.size() - 1) * 12f;
+			}
 			espacio(alto);
 			rect(MARGEN, y - alto, ANCHO - 2 * MARGEN, alto, SUPERFICIE);
 			float yy = y - 15;
 			float col2 = MARGEN + (ANCHO - 2 * MARGEN) / 2;
-			for (String[] f : filas) {
+			for (int i = 0; i < filas.length; i++) {
+				String[] f = filas[i];
 				boolean ancha = f[2].isEmpty();
 				escribirTexto(MARGEN + 10, yy, 7.5f, SECUNDARIO, f[0].toUpperCase(java.util.Locale.ROOT), 105);
-				escribirTexto(MARGEN + 118, yy, 9.5f, TEXTO, f[1], ancha ? ANCHO - 2 * MARGEN - 130 : col2 - MARGEN - 125);
+				List<String> lineas = valores.get(i);
+				for (int l = 0; l < lineas.size(); l++) {
+					escribirTexto(MARGEN + 118, yy - l * 12f, 9.5f, TEXTO, lineas.get(l),
+							ancha ? anchoAncha : col2 - MARGEN - 125);
+				}
 				if (!ancha) {
 					escribirTexto(col2 + 6, yy, 7.5f, SECUNDARIO, f[2].toUpperCase(java.util.Locale.ROOT), 95);
 					escribirTexto(col2 + 104, yy, 9.5f, TEXTO, f[3], ANCHO - MARGEN - col2 - 112);
 				}
-				yy -= 16;
+				yy -= 16 + (lineas.size() - 1) * 12f;
 			}
 			y -= alto + 12;
 		}

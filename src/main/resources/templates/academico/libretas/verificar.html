@@ -37,9 +37,9 @@
 				<div th:replace="~{fragments/componentes :: alerta('advertencia', |Corresponde a la versión ${resultado.version()} de ${resultado.alumno()}, pero ya no es la vigente: la vigente es la ${resultado.versionVigente()}.|)}"></div>
 			</th:block>
 			<th:block th:if="${!resultado.coincide()}">
-				<div th:replace="~{fragments/componentes :: alerta('error', 'La base ya no coincide con la huella de esta libreta: alguien la cambió después de emitirla. Promotoría recibió la alerta. Pide su reemisión.')}"></div>
+				<div th:replace="~{fragments/componentes :: alerta('error', 'La base ya no coincide con la huella de esta libreta: alguien la cambió después de emitirla. Promotoría recibió la alerta. Pide su reemisión. Los niveles no se muestran: los de la base ya no son los del papel.')}"></div>
 			</th:block>
-			<table class="tabla">
+			<table class="tabla" th:if="${resultado.coincide()}">
 				<caption class="solo-lectores">Niveles de esta versión por competencia</caption>
 				<thead><tr><th scope="col">Área</th><th scope="col">Competencia</th><th scope="col">Nivel</th></tr></thead>
 				<tbody>

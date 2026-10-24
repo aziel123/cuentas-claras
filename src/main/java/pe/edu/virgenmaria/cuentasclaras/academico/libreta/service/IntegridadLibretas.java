@@ -9,9 +9,6 @@ import pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.PeriodoEvaluac
 import pe.edu.virgenmaria.cuentasclaras.academico.curriculo.repository.PeriodoEvaluacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.academico.libreta.model.LibretaEmitida;
 import pe.edu.virgenmaria.cuentasclaras.academico.libreta.repository.LibretaEmitidaRepository;
-import pe.edu.virgenmaria.cuentasclaras.alumnos.model.EstadoMatricula;
-import pe.edu.virgenmaria.cuentasclaras.alumnos.model.Matricula;
-import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.MatriculaRepository;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoAnioEscolar;
@@ -56,7 +53,7 @@ public class IntegridadLibretas implements AlertasRevision {
 
 	private final AnioEscolarRepository anios;
 
-	private final MatriculaRepository matriculas;
+	private final MatriculasAlCierre alCierre;
 
 	private final LibretaEmitidaRepository libretas;
 
@@ -69,12 +66,12 @@ public class IntegridadLibretas implements AlertasRevision {
 	private final int diasReemision;
 
 	public IntegridadLibretas(PeriodoEvaluacionRepository periodos, AnioEscolarRepository anios,
-			MatriculaRepository matriculas, LibretaEmitidaRepository libretas, AuditoriaService auditoria,
+			MatriculasAlCierre alCierre, LibretaEmitidaRepository libretas, AuditoriaService auditoria,
 			CalendarioHabil calendario, Clock reloj,
 			@Value("${cuentasclaras.libretas.reemision-dias-habiles:2}") int diasReemision) {
 		this.periodos = periodos;
 		this.anios = anios;
-		this.matriculas = matriculas;
+		this.alCierre = alCierre;
 		this.libretas = libretas;
 		this.auditoria = auditoria;
 		this.calendario = calendario;
@@ -95,16 +92,16 @@ public class IntegridadLibretas implements AlertasRevision {
 		List<AlertaRevision> alertas = new ArrayList<>();
 		LocalDateTime limite = LocalDateTime.now(reloj).minusMinutes(MINUTOS_GRACIA);
 		anios.findByEstado(EstadoAnioEscolar.EN_CURSO).ifPresent(anio -> {
-			List<Matricula> delAnio = new ArrayList<>(matriculas.findByAnioEscolarIdAndEstado(anio.getId(),
-					EstadoMatricula.ACTIVA));
-			delAnio.addAll(matriculas.findByAnioEscolarIdAndEstado(anio.getId(), EstadoMatricula.RESERVADA));
 			for (PeriodoEvaluacion p : periodos.findByAnioEscolarIdOrderByNumeroAsc(anio.getId())) {
 				if (p.getEstado() != EstadoPeriodo.CERRADO || p.getCerradoEn() == null || p.getCerradoEn().isAfter(limite)) {
 					continue;
 				}
 				Set<Long> conLibreta = libretas.findByPeriodoIdOrderByIdAsc(p.getId()).stream()
 						.map(LibretaEmitida::getMatriculaId).collect(Collectors.toSet());
-				long faltan = delAnio.stream().filter(m -> !conLibreta.contains(m.getId())).count();
+				// Correcciones del sprint 10 (hallazgo 8, P-6, P-7): las que estaban activas o reservadas al cierre (también
+				// quien se retiró o se trasladó después); no las matriculadas después del cierre.
+				long faltan = alCierre.recibenLibreta(p).stream().map(MatriculasAlCierre.AlCierre::matricula)
+						.filter(m -> !conLibreta.contains(m.getId())).count();
 				if (faltan > 0) {
 					alertas.add(new AlertaRevision(AlertaRevision.Gravedad.CRITICA, MODULO, faltan + " matrícula(s) activas "
 							+ "o reservadas no tienen la libreta del " + p.getNombre() + ", cerrado el "

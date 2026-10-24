@@ -80,7 +80,9 @@ public class VerificacionLibreta {
 				libreta.getMatriculaId()).map(LibretaEmitida::getNumeroVersion).orElse(libreta.getNumeroVersion());
 		RegeneracionLibreta.Regenerada r = regeneracion.regenerar(libreta);
 		List<VerificacionVista.Nivel> niveles = new ArrayList<>();
-		for (ContenidoLibreta.Area area : r.contenido().areas()) {
+		// Correcciones del sprint 10 (hallazgo 7): si la base ya no coincide con la huella, sus niveles no son los del papel:
+		// no se muestran (se compararía el papel con datos alterados).
+		for (ContenidoLibreta.Area area : r.coincide() ? r.contenido().areas() : List.<ContenidoLibreta.Area>of()) {
 			for (ContenidoLibreta.Competencia c : area.competencias()) {
 				niveles.add(new VerificacionVista.Nivel(area.nombre(), c.nombre(), c.delPeriodo().texto()));
 			}

@@ -17,9 +17,7 @@ import pe.edu.virgenmaria.cuentasclaras.academico.model.EstadoAsignacion;
 import pe.edu.virgenmaria.cuentasclaras.academico.model.TipoAsignacion;
 import pe.edu.virgenmaria.cuentasclaras.academico.repository.AsignacionDocenteRepository;
 import pe.edu.virgenmaria.cuentasclaras.academico.service.SesionDeQuienEscribe;
-import pe.edu.virgenmaria.cuentasclaras.alumnos.model.EstadoMatricula;
 import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.AlumnoRepository;
-import pe.edu.virgenmaria.cuentasclaras.alumnos.repository.MatriculaRepository;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar;
@@ -72,7 +70,7 @@ public class LibretasColegio {
 
 	private final AnioEscolarRepository anios;
 
-	private final MatriculaRepository matriculas;
+	private final MatriculasAlCierre alCierre;
 
 	private final AlumnoRepository alumnos;
 
@@ -88,14 +86,14 @@ public class LibretasColegio {
 
 	public LibretasColegio(LibretaEmitidaRepository libretas, EntregaLibretaRepository entregas,
 			PeriodoEvaluacionRepository periodos, SeccionRepository secciones, AnioEscolarRepository anios,
-			MatriculaRepository matriculas, AlumnoRepository alumnos, AsignacionDocenteRepository asignaciones,
+			MatriculasAlCierre alCierre, AlumnoRepository alumnos, AsignacionDocenteRepository asignaciones,
 			RegeneracionLibreta regeneracion, SesionDeQuienEscribe sesiones, AuditoriaService auditoria, Clock reloj) {
 		this.libretas = libretas;
 		this.entregas = entregas;
 		this.periodos = periodos;
 		this.secciones = secciones;
 		this.anios = anios;
-		this.matriculas = matriculas;
+		this.alCierre = alCierre;
 		this.alumnos = alumnos;
 		this.asignaciones = asignaciones;
 		this.regeneracion = regeneracion;
@@ -142,8 +140,10 @@ public class LibretasColegio {
 						entregasPorLibreta.getOrDefault(l.getId(), 0L).intValue()))
 				.toList();
 		Set<Long> conLibreta = vigentes.stream().map(LibretaEmitida::getMatriculaId).collect(Collectors.toSet());
-		int faltan = (int) matriculas.deLaSeccionEnOrden(seccion.getId(), List.of(EstadoMatricula.ACTIVA,
-				EstadoMatricula.RESERVADA)).stream().filter(m -> !conLibreta.contains(m.getId())).count();
+		// Correcciones del sprint 10 (P-7): la libreta es de la sección del cierre; el trasladado después del cierre no falta
+		// en su sección nueva (su libreta está en la anterior) y quien estaba al cierre sí cuenta.
+		int faltan = (int) alCierre.deLaSeccion(periodo, seccion.getId()).stream()
+				.filter(m -> !conLibreta.contains(m.getId())).count();
 		return new LibretasColegioVista(opcionesSeccion, opcionesPeriodo, seccionId, periodoId, seccion.etiqueta(),
 				periodo.getNombre(), seccion.nivel() == Nivel.INICIAL, filas, faltan, direccion,
 				regeneracion.maxPorArchivo());

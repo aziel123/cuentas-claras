@@ -33,11 +33,25 @@ public class ManejadorReemisionLibreta implements ManejadorSolicitud {
 
 	private final AuditoriaService auditoria;
 
+	private final FotoLibreta foto;
+
 	public ManejadorReemisionLibreta(LibretaEmitidaRepository libretas, UsuarioRepository usuarios,
-			AuditoriaService auditoria) {
+			AuditoriaService auditoria, FotoLibreta foto) {
 		this.libretas = libretas;
 		this.usuarios = usuarios;
 		this.auditoria = auditoria;
+		this.foto = foto;
+	}
+
+	/**
+	 * Correcciones del sprint 10 (hallazgo 2): en qué difieren los niveles emitidos de los que da la base hoy. Vacía si
+	 * coinciden (o si la libreta es anterior a V38 y no guardó sus niveles).
+	 */
+	List<String> diferencias(LibretaEmitida libreta) {
+		if (libreta.getNiveles() == null) {
+			return List.of();
+		}
+		return FotoLibreta.diferencias(libreta.getNiveles(), FotoLibreta.niveles(foto.armar(libreta)));
 	}
 
 	@Override
@@ -65,6 +79,14 @@ public class ManejadorReemisionLibreta implements ManejadorSolicitud {
 		if (!vigente) {
 			throw new ReglaNegocioException("Ya hay una versión más nueva de esta libreta: rechaza la solicitud.");
 		}
+		// Hallazgo 2: la reemisión vuelve a emitir lo emitido. Si la base dice hoy otros niveles, alguien los cambió: no se
+		// reemite; se corrige cada nota por su solicitud (y sale la versión corregida).
+		List<String> distintas = diferencias(libreta);
+		if (!distintas.isEmpty()) {
+			throw new ReglaNegocioException("No se puede reemitir: la base tiene hoy " + distintas.size() + " nivel(es) "
+					+ "distinto(s) de los emitidos (" + String.join("; ", distintas.subList(0, Math.min(3,
+							distintas.size()))) + "). Rechaza la solicitud y corrige esas notas por su solicitud.");
+		}
 		auditoria.registrar(AccionAuditoria.SOLICITUD_APROBADA, RegeneracionLibreta.ENTIDAD, libreta.getId().toString(),
 				null, "REEMISION", "Aprobó reemitir la libreta " + libreta.codigoVerificacion() + " (alumno "
 						+ libreta.getAlumnoId() + "): sistema.libretas emitirá la versión " + (libreta.getNumeroVersion() + 1)
@@ -73,18 +95,32 @@ public class ManejadorReemisionLibreta implements ManejadorSolicitud {
 
 	@Override
 	public List<String> detalle(SolicitudCambio solicitud) {
-		return libretas.findById(solicitud.getEntidadId())
-				.map(l -> List.of("Libreta: " + l.codigoVerificacion() + " (versión " + l.getNumeroVersion() + ")",
-						"Alumno: " + l.cabecera().alumnoNombre(),
-						"Qué pasó: al regenerarla, no coincide con su huella (alguien cambió la base después de emitirla)",
-						"Al aprobar: el sistema emite la versión siguiente con lo que hay hoy en la base"))
-				.orElse(List.of("La libreta ya no existe."));
+		return libretas.findById(solicitud.getEntidadId()).map(l -> {
+			List<String> lineas = new java.util.ArrayList<>(List.of("Libreta: " + l.codigoVerificacion() + " (versión "
+					+ l.getNumeroVersion() + ")", "Alumno: " + l.cabecera().alumnoNombre(),
+					"Qué pasó: al regenerarla, no coincide con su huella (alguien cambió la base después de emitirla)"));
+			if (l.getNiveles() == null) {
+				lineas.add("Al aprobar: el sistema emite la versión siguiente (libreta anterior a V38: sin sus niveles "
+						+ "guardados, revisa la bitácora)");
+				return lineas;
+			}
+			List<String> distintas = diferencias(l);
+			if (distintas.isEmpty()) {
+				lineas.add("Niveles: los de hoy son los emitidos (cambió otro dato: conclusión, asistencia o cabecera)");
+				lineas.add("Al aprobar: el sistema vuelve a emitir los mismos niveles");
+			}
+			else {
+				lineas.add("Niveles distintos de los emitidos (" + distintas.size() + "): " + String.join("; ", distintas));
+				lineas.add("No se puede aprobar: rechaza la solicitud y corrige esas notas por su solicitud");
+			}
+			return lineas;
+		}).orElse(List.of("La libreta ya no existe."));
 	}
 
 	@Override
 	public String advertencia(SolicitudCambio solicitud) {
-		return "La versión nueva tomará lo que hay hoy en la base. Antes de aprobar, revisa en la bitácora qué cambió y por "
-				+ "qué: si alguien alteró notas, corrígelas por su solicitud.";
+		return "La versión nueva vuelve a emitir los niveles emitidos. Si la base tiene hoy otros niveles (se listan arriba), "
+				+ "no se reemite: alguien alteró notas y se corrigen por su solicitud.";
 	}
 
 	private boolean tiene(String nombreUsuario, Rol rol) {

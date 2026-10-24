@@ -296,12 +296,13 @@ cuentasclaras:
     # Sprint 10, tanda 3 (secciones 3.7, 3.9 y 8.1). La libreta se emite para toda matrícula ACTIVA o RESERVADA: no hay ninguna
     # opción que la retenga por deuda (INDECOPI, ConfiguracionSinDeudaTest).
     emision-cada: "0 */5 * * * *"                   # EmisionLibretas (sistema.libretas): periodos CERRADOS y correcciones
-    avisos-cada: "45 */5 7-19 * * MON-SAT"          # AvisosLibretas: un aviso por familia y periodo
+    avisos-cada: "45 */5 7-19 * * MON-SAT"          # AvisosLibretas: un aviso por familia y oleada
     hilos: 2                                        # executor propio del PDF (1 o 2)
     cola: 8                                         # cola llena: 503 «intente en unos minutos» (E38)
     max-paginas: 6                                  # una libreta
     max-alumnos-por-archivo: 45                     # la impresión de una sección
     reemision-dias-habiles: 2                       # decisión 188: «en revisión, se la entrega el colegio a más tardar…»
+    ventana-avisos-minutos: 30                      # P-5: un aviso por familia por oleada de emisión (hermanos y periodos juntos)
   comunicados:
     # Sprint 9, tanda 3 (sección 8). La hora del resumen y el tope mensual de cada colegio están en configuracion_academica.
     revisar-avisos-cada: "30 */5 7-19 * * MON-SAT"  # sistema.comunicados: urgentes pendientes y, a su hora, el resumen

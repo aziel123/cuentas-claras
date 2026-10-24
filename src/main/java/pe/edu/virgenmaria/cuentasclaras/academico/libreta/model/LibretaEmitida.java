@@ -25,6 +25,9 @@ public class LibretaEmitida extends BaseEntity {
 
 	public static final int MAX_CAMBIOS = 1000;
 
+	/** Correcciones del sprint 10 (V38, hallazgo 2): el largo de la columna de los niveles canónicos. */
+	public static final int MAX_NIVELES = 6000;
+
 	@Column(name = "anio_escolar_id", nullable = false, updatable = false)
 	private Long anioEscolarId;
 
@@ -95,6 +98,14 @@ public class LibretaEmitida extends BaseEntity {
 
 	@Column(name = "registrado_bd", updatable = false)
 	private LocalDateTime registradoBd;
+
+	/**
+	 * Correcciones del sprint 10 (V38, hallazgo 2): los niveles emitidos en su forma canónica ({@code FotoLibreta.niveles}).
+	 * La reemisión vuelve a emitir estos mismos (trg_libreta_emitida_nace) y la bandeja muestra en qué difiere la base hoy.
+	 * NULL en las libretas emitidas antes de V38.
+	 */
+	@Column(updatable = false, length = MAX_NIVELES)
+	private String niveles;
 
 	protected LibretaEmitida() {
 		// requerido por JPA
@@ -270,5 +281,22 @@ public class LibretaEmitida extends BaseEntity {
 
 	public LocalDateTime getRegistradoBd() {
 		return registradoBd;
+	}
+
+	public String getNiveles() {
+		return niveles;
+	}
+
+	/** Fija los niveles canónicos ANTES de guardarla (una libreta guardada no cambia). */
+	public LibretaEmitida conNiveles(String canonicos) {
+		if (getId() != null) {
+			throw new IllegalStateException("Una libreta emitida no se cambia: se emite la versión siguiente.");
+		}
+		Objects.requireNonNull(canonicos, "niveles");
+		if (canonicos.length() > MAX_NIVELES) {
+			throw new IllegalStateException("Los niveles de la libreta pasan de " + MAX_NIVELES + " caracteres.");
+		}
+		this.niveles = canonicos;
+		return this;
 	}
 }

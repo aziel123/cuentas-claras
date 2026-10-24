@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 
 /**
  * Sprint 10, tanda 3 (secciones 3.7 y 3.8; decisión 180, E30): los avisos de libretas a las familias, que crea SOLO
- * {@code sistema.libretas} (trg_mensaje_nace). UN aviso por familia y periodo, con los hermanos juntos:
+ * {@code sistema.libretas} (trg_mensaje_nace). UN aviso por familia y oleada de emisión (correcciones del sprint 10, P-5: hermanos y periodos juntos):
  * {@code LIBRETA_DISPONIBLE} si las vigentes son la versión 1 y {@code LIBRETA_CORREGIDA} si alguna es mayor (también en el
  * atraso de la tanda 2: la 1 y la 2 en la misma pasada dan UN solo mensaje). A cada apoderado activo: por WhatsApp con su
  * «sí» a la finalidad LIBRETAS; si no, por correo salvo oposición. Nunca notas, conclusiones ni montos: solo el periodo y
@@ -70,7 +70,7 @@ public class AvisosLibretasFamilias {
 
 	/** @return cuántas familias recibieron aviso en esta pasada */
 	public int pasada(LocalDateTime ahora) {
-		List<LibretasPorAvisar.PorAvisar> pendientes = libretas.emitidasDesde(ahora.minusDays(DIAS_ATRAS));
+		List<LibretasPorAvisar.PorAvisar> pendientes = libretas.emitidasDesde(ahora.minusDays(DIAS_ATRAS), ahora);
 		if (pendientes.isEmpty()) {
 			return 0;
 		}

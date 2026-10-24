@@ -31,20 +31,20 @@ public class PortalLibretasController {
 		this.libretas = libretas;
 	}
 
-	/** {@code revision}: la fecha de entrega de una libreta en revisión (A3), después de intentar descargarla. */
+	/**
+	 * Correcciones del sprint 10 (hallazgo 5, INDECOPI): el aviso de «en revisión» llega SOLO como atributo flash que calcula
+	 * el servidor al intentar la descarga; un parámetro de la URL (como el antiguo {@code ?revision=}) no muestra nada, así
+	 * que un enlace manipulado no puede decirle a una familia que su libreta está retenida.
+	 */
 	@GetMapping("/familia/libretas")
-	public String lista(@RequestParam(name = "revision", required = false)
-			@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate revision, Model model) {
+	public String lista(Model model) {
 		model.addAttribute("vista", libretas.lista());
-		if (revision != null) {
-			model.addAttribute("error", "Su libreta está en revisión. El colegio se la entregará a más tardar el "
-					+ revision.format(FECHA) + ".");
-		}
 		return "familia/libretas";
 	}
 
 	@GetMapping("/familia/libretas/{id:\\d+}.pdf")
-	public ResponseEntity<byte[]> descargar(@PathVariable long id) {
+	public ResponseEntity<byte[]> descargar(@PathVariable long id, jakarta.servlet.http.HttpServletRequest peticion,
+			jakarta.servlet.http.HttpServletResponse respuesta) {
 		Descarga d;
 		try {
 			d = libretas.descargar(id);
@@ -53,8 +53,15 @@ public class PortalLibretasController {
 			return DescargaLibreta.ocupado(e.getMessage());
 		}
 		if (d.enRevision()) {
-			return ResponseEntity.status(303).location(URI.create("/familia/libretas?revision=" + d.enRevisionHasta()))
-					.build();
+			// El mensaje viaja en el flash de la sesión (lo calculó el servidor), nunca en la URL.
+			org.springframework.web.servlet.FlashMap flash = org.springframework.web.servlet.support.RequestContextUtils
+					.getOutputFlashMap(peticion);
+			flash.put("error", "Su libreta está en revisión. El colegio se la entregará a más tardar el "
+					+ d.enRevisionHasta().format(FECHA) + ".");
+			flash.setTargetRequestPath("/familia/libretas");
+			org.springframework.web.servlet.support.RequestContextUtils.saveOutputFlashMap("/familia/libretas", peticion,
+					respuesta);
+			return ResponseEntity.status(303).location(URI.create("/familia/libretas")).build();
 		}
 		return DescargaLibreta.pdf(d.nombreArchivo(), d.pdf());
 	}

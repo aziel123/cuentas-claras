@@ -41,6 +41,10 @@ cuentasclaras:
   sesion:
     intentos-por-ip: 100000
     intentos-por-cuenta-e-ip: 100000
+  libretas:
+    # Correcciones del sprint 10 (P-5): sin ventana de agrupación, el aviso sale en la pasada siguiente a la emisión (las
+    # pruebas corren con el reloj fijo). La ventana la prueba AvisosLibretasVentanaTest con su propio valor.
+    ventana-avisos-minutos: 0
   tareas:
     # Sin tareas programadas en las pruebas: cada prueba invoca el proceso que necesita (reintentos, consultas).
     activas: false

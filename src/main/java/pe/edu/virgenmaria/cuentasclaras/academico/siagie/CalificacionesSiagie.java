@@ -175,8 +175,8 @@ public class CalificacionesSiagie {
 				exportaciones.findByPeriodoIdAndSeccionIdOrderByIdDesc(p.getId(), s.getId()).stream().findFirst()
 						.ifPresent(e -> ultimas.add(new Ultima(s.etiqueta(), p.getNombre(), e.getCodigo(),
 								e.getCreadoEn().format(MOMENTO), e.getCreadoPor(),
-								!e.getHuellaLibretas().equals(huellaLibretas(vigentesDe(p, matriculas.deLaSeccionEnOrden(
-										s.getId(), List.of(EstadoMatricula.ACTIVA, EstadoMatricula.RESERVADA))))))));
+								!e.getHuellaLibretas().equals(huellaLibretas(vigentesDe(p, alCierre(p, matriculas.deLaSeccionEnOrden(
+										s.getId(), List.of(EstadoMatricula.ACTIVA, EstadoMatricula.RESERVADA)))))))));
 			}
 		}
 		return new Vista(true, direccion, delAnio.stream().map(s -> new Opcion(s.getId(), s.etiqueta())).toList(),
@@ -199,8 +199,8 @@ public class CalificacionesSiagie {
 		if (periodo.getEstado() != EstadoPeriodo.CERRADO) {
 			throw new ReglaNegocioException("El " + periodo.getNombre() + " todavía no está cerrado: se exporta al cerrarlo.");
 		}
-		List<Matricula> lista = matriculas.deLaSeccionEnOrden(seccion.getId(), List.of(EstadoMatricula.ACTIVA,
-				EstadoMatricula.RESERVADA));
+		List<Matricula> lista = alCierre(periodo, matriculas.deLaSeccionEnOrden(seccion.getId(),
+				List.of(EstadoMatricula.ACTIVA, EstadoMatricula.RESERVADA)));
 		if (lista.isEmpty()) {
 			throw new ReglaNegocioException(seccion.etiqueta() + " no tiene alumnos con matrícula activa o reservada: no hay "
 					+ "calificaciones que exportar.");
@@ -367,6 +367,15 @@ public class CalificacionesSiagie {
 	 * da la huella al exportar y al decir si una exportación quedó desactualizada (antes, la de la pantalla contaba la libreta
 	 * de un retirado y toda exportación de esa sección figuraba «desactualizada»).
 	 */
+	/**
+	 * Correcciones del sprint 10 (P-6): sin las matrículas creadas después del cierre del periodo (no tienen libreta de ese
+	 * periodo: sus notas son de su colegio anterior). Sin esto, una matrícula nueva frenaba la exportación para siempre.
+	 */
+	private static List<Matricula> alCierre(PeriodoEvaluacion periodo, List<Matricula> lista) {
+		return periodo.getCerradoEn() == null ? lista : lista.stream()
+				.filter(m -> m.getCreadoEn() == null || !m.getCreadoEn().isAfter(periodo.getCerradoEn())).toList();
+	}
+
 	private List<LibretaEmitida> vigentesDe(PeriodoEvaluacion periodo, List<Matricula> lista) {
 		if (lista.isEmpty()) {
 			return List.of();

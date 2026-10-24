@@ -383,6 +383,63 @@ public class FotoLibreta {
 		return sha256(cadena.toString());
 	}
 
+	/**
+	 * Correcciones del sprint 10 (hallazgo 2): los NIVELES de la libreta en forma canónica, sin conclusiones ni asistencia:
+	 * una línea {@code periodo|competencia|nivel} por celda (EXO si está exonerada, - sin nota) y
+	 * {@code anual|competencia|nivel} en el último periodo. Se guarda al emitir: la reemisión vuelve a emitir estos mismos y
+	 * Promotoría ve en qué difiere la base hoy.
+	 */
+	public static String niveles(ContenidoLibreta c) {
+		StringBuilder cadena = new StringBuilder();
+		for (ContenidoLibreta.Area area : c.areas()) {
+			for (ContenidoLibreta.Competencia competencia : area.competencias()) {
+				for (ContenidoLibreta.Nota n : competencia.notas()) {
+					cadena.append(n.periodo()).append('|').append(competencia.codigo()).append('|')
+							.append(n.exonerada() ? "EXO" : n.nivel() == null ? "-" : n.nivel()).append('\n');
+				}
+				if (c.ultimoPeriodo()) {
+					cadena.append("anual|").append(competencia.codigo()).append('|')
+							.append(competencia.anual() == null ? "-" : competencia.anual()).append('\n');
+				}
+			}
+		}
+		return cadena.toString();
+	}
+
+	/**
+	 * Las líneas que difieren entre los niveles emitidos y los de hoy, para la bandeja: «2|C05: emitido B, hoy A». Vacía si
+	 * coinciden.
+	 */
+	public static List<String> diferencias(String emitidos, String hoy) {
+		Map<String, String> antes = porClave(emitidos);
+		Map<String, String> ahora = porClave(hoy);
+		java.util.Set<String> claves = new java.util.LinkedHashSet<>(antes.keySet());
+		claves.addAll(ahora.keySet());
+		List<String> lista = new ArrayList<>();
+		for (String clave : claves) {
+			String a = antes.getOrDefault(clave, "(no estaba)");
+			String b = ahora.getOrDefault(clave, "(no está)");
+			if (!a.equals(b)) {
+				lista.add(clave.replace('|', ' ') + ": emitido " + a + ", hoy " + b);
+			}
+		}
+		return lista;
+	}
+
+	private static Map<String, String> porClave(String niveles) {
+		Map<String, String> mapa = new java.util.LinkedHashMap<>();
+		if (niveles == null) {
+			return mapa;
+		}
+		for (String linea : niveles.split("\n")) {
+			int corte = linea.lastIndexOf('|');
+			if (corte > 0) {
+				mapa.put(linea.substring(0, corte), linea.substring(corte + 1));
+			}
+		}
+		return mapa;
+	}
+
 	static String sha256(String texto) {
 		try {
 			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")

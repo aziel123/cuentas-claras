@@ -53,6 +53,14 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
 	List<Matricula> deLaSeccionEnOrden(@Param("seccionId") Long seccionId,
 			@Param("estados") Collection<EstadoMatricula> estados);
 
+	/**
+	 * Correcciones del sprint 10 (hallazgo 8, P-1, P-7): todas las matrículas de un año (en cualquier estado), con su alumno,
+	 * en orden alfabético. Las libretas eligen después las que estaban en la sección y activas o reservadas al cierre.
+	 */
+	@Query("select m from Matricula m join fetch m.alumno a join fetch m.seccion where m.anioEscolar.id = :anioId "
+			+ "order by a.apellidoPaterno asc, a.apellidoMaterno asc, a.nombres asc, a.id asc")
+	List<Matricula> delAnioEnOrden(@Param("anioId") Long anioId);
+
 	/** [id de sección, matrículas activas] de un año. */
 	@Query("select m.seccion.id, count(m) from Matricula m where m.anioEscolar.id = :anioId and m.estado = ACTIVA "
 			+ "group by m.seccion.id")
