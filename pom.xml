@@ -17,7 +17,7 @@
 	<properties>
 		<java.version>21</java.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<poi.version>5.5.1</poi.version>
+		<poi.version>6.0.0</poi.version>
 		<!-- Sprint 9, tanda 3 (decisión 157): PDFBox 3.0.8, nunca anterior a 3.0.7 (CVE-2026-23907). VersionPdfBoxTest lo
 		     exige; Dependabot y OSV-Scanner lo siguen. -->
 		<pdfbox.version>3.0.8</pdfbox.version>
