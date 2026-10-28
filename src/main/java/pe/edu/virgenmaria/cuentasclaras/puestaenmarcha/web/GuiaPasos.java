@@ -39,6 +39,11 @@ public class GuiaPasos {
 		return new PasoVacio(paso, primero, lista.enPreparacion(), lista.anio());
 	}
 
+	/** Cuántos pasos obligatorios faltan (para el aviso de un bloqueo). */
+	public long faltan() {
+		return estado.actual().pendientes();
+	}
+
 	/** Si quien está en sesión puede abrir la Puesta en marcha (para el enlace de un aviso). */
 	public boolean verLista() {
 		return ModuloApp.puedeEntrar(roles(), "/puesta-en-marcha");

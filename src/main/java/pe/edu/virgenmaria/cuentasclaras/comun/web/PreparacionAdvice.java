@@ -11,7 +11,6 @@ import org.springframework.web.servlet.ModelAndView;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioEnPreparacionException;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
-import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.EstadoPuestaEnMarcha;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.config.ModuloApp;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 
@@ -34,11 +33,12 @@ public class PreparacionAdvice {
 
 	private final ColegioService colegios;
 
-	private final EstadoPuestaEnMarcha estado;
-
-	public PreparacionAdvice(ColegioService colegios, EstadoPuestaEnMarcha estado) {
+	/**
+	 * Solo el estado del colegio: este advice aplica también al portal de libretas, y ningún advice lee la deuda (B14). Los
+	 * pasos que faltan los cuenta la vista ({@code @guiaPasos.faltan()}), solo para el personal.
+	 */
+	public PreparacionAdvice(ColegioService colegios) {
 		this.colegios = colegios;
-		this.estado = estado;
 	}
 
 	@ModelAttribute("colegioEnPreparacion")
@@ -68,7 +68,6 @@ public class PreparacionAdvice {
 		vista.addObject("esFamiliaPreparacion", familia);
 		boolean conEnlace = !familia && ModuloApp.puedeEntrar(roles, "/puesta-en-marcha");
 		vista.addObject("enlacePuestaEnMarcha", conEnlace);
-		vista.addObject("faltanPasos", conEnlace ? estado.actual().pendientes() : null);
 		return vista;
 	}
 

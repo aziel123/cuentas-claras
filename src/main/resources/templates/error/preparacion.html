@@ -14,7 +14,9 @@
 			stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
 		<p>
 			<span th:text="${mensajePreparacion}">Tu colegio está en preparación: todavía no se registran pagos.</span>
-			<span th:if="${faltanPasos != null}" th:text="${faltanPasos == 1} ? 'Falta 1 paso.' : |Faltan ${faltanPasos} pasos.|">Faltan 6 pasos.</span>
+			<th:block th:if="${enlacePuestaEnMarcha}" th:with="faltan=${@guiaPasos.faltan()}">
+				<span th:text="${faltan == 1} ? 'Falta 1 paso.' : |Faltan ${faltan} pasos.|">Faltan 6 pasos.</span>
+			</th:block>
 		</p>
 	</div>
 	<div class="fila">
