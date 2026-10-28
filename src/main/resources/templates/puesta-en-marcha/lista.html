@@ -9,12 +9,12 @@
 		<div>
 			<p class="etiqueta">Puesta en marcha</p>
 			<h1><span th:text="${lista.nombre}">Colegio</span>
-				<span th:if="${lista.enPreparacion()}" th:replace="~{fragments/componentes :: info('estado',
+				<th:block th:if="${lista.enPreparacion()}"><span th:replace="~{fragments/componentes :: info('estado',
 					'En preparación no se registran pagos ni salen recordatorios de cobro. La Promotoría pasa el colegio a producción cuando la lista está completa.',
-					'el colegio en preparación')}"></span>
-				<span th:unless="${lista.enPreparacion()}" th:replace="~{fragments/componentes :: info('estado',
+					'el colegio en preparación')}"></span></th:block>
+				<th:block th:unless="${lista.enPreparacion()}"><span th:replace="~{fragments/componentes :: info('estado',
 					'En producción, esta lista es la salud de la configuración: un paso puede volver a pendiente.',
-					'el colegio en producción')}"></span></h1>
+					'el colegio en producción')}"></span></th:block></h1>
 		</div>
 		<span th:replace="~{fragments/componentes :: badge(${lista.estado.etiqueta()}, ${lista.enPreparacion()} ? 'alerta' : 'exito')}"></span>
 	</div>

@@ -24,6 +24,9 @@ public interface PlanPensionRepository extends Repository<PlanPension, Long> {
 
 	Optional<PlanPension> findById(Long id);
 
+	/** Sprint 11, tanda 1b (F-D5): los planes enviados a aprobación, para la bandeja de Aprobaciones. */
+	List<PlanPension> findByEstadoOrderByIdAsc(pe.edu.virgenmaria.cuentasclaras.cobranza.model.EstadoPlan estado);
+
 	List<PlanPension> findByAnioEscolarIdOrderByNivelAscNumeroVersionDesc(Long anioId);
 
 	List<PlanPension> findByAnioEscolarIdAndNivelOrderByNumeroVersionDesc(Long anioId, Nivel nivel);

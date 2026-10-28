@@ -21,7 +21,7 @@
 	</th:block>
 
 	<!--/* Sprint 11, tanda 1b (sección 3.14): la guía mientras el colegio está en preparación. */-->
-	<section th:if="${guia != null}" th:replace="~{fragments/guia :: bannerPreparacion(${guia}, false, false)}"></section>
+	<th:block th:if="${guia != null}"><section th:replace="~{fragments/guia :: bannerPreparacion(${guia}, false, false)}"></section></th:block>
 
 	<section class="tarjeta cobro-rapido" aria-labelledby="titulo-cobrar">
 		<h2 id="titulo-cobrar">Cobrar</h2>

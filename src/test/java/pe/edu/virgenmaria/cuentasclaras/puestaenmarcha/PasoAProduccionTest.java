@@ -231,9 +231,11 @@ class PasoAProduccionTest {
 		mvc.perform(get("/puesta-en-marcha").with(UsuariosDePrueba.como(promotor))).andExpect(status().isOk())
 				.andExpect(content().string(org.hamcrest.Matchers.containsString("en preparación")))
 				.andExpect(content().string(org.hamcrest.Matchers.containsString("Pasar a producción")))
-				.andExpect(content().string(org.hamcrest.Matchers.containsString("paso(s) obligatorio(s)")))
+				// Sprint 11, tanda 1b: el botón se ve deshabilitado con su motivo, pero no hay formulario que lo envíe.
+				.andExpect(content().string(org.hamcrest.Matchers.containsString("pasos obligatorios.")))
+				.andExpect(content().string(org.hamcrest.Matchers.containsString("aria-disabled=\"true\"")))
 				.andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(
-						"Pasar el colegio a producción"))));
+						"action=\"/puesta-en-marcha/produccion\""))));
 		mvc.perform(post("/puesta-en-marcha/produccion").with(csrf()).with(UsuariosDePrueba.como(promotor)))
 				.andExpect(redirectedUrl("/puesta-en-marcha"));
 		assertThat(estadoDelColegio()).isEqualTo("PREPARACION");

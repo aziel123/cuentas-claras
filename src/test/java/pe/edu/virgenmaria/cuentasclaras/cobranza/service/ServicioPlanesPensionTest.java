@@ -277,7 +277,7 @@ class ServicioPlanesPensionTest {
 		Long id = planes.crearBorrador(escuela.anio2027(), Nivel.PRIMARIA, plan(2027, "450", "350", null));
 		planes.enviar(id);
 		assertThatThrownBy(() -> planes.editarBorrador(id, plan(2027, "300", "300", null)))
-				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("enviado, por aprobar");
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("por aprobar"); // F-D4: «Por aprobar»
 		como(DIRECCION);
 		Long vista = planes.obtener(id).version();
 		// Mientras Dirección revisa, Promotoría lo devuelve y Administración baja la pensión y lo reenvía.

@@ -5,10 +5,9 @@
 	<div class="cabecera">
 		<div>
 			<p class="etiqueta">Aprobaciones</p>
-			<h1>Solicitudes por aprobar</h1>
-			<p class="secundario">Cambios que una sola persona no puede hacer: cierres y reaperturas de caja, anulaciones y
-				correcciones de pagos, descuentos y becas, retiros, celulares y correos de apoderados, responsables de pago,
-				ingresos tardíos y anulaciones de cuotas. Quien los pide (o cobró el pago, o es su caja) no los aprueba.</p>
+			<!--/* Sprint 11, tanda 1b (F-D7): el subtítulo se quita; el control queda en un «i». */-->
+			<h1><span>Solicitudes por aprobar</span>
+				<span th:replace="~{fragments/componentes :: info('bandeja', 'Quien pide un cambio no lo aprueba (ni quien cobró el pago o es su caja).', 'quién aprueba')}"></span></h1>
 		</div>
 		<div class="fila">
 			<a th:replace="~{fragments/componentes :: enlaceBoton('Cajas del día', @{/aprobaciones/cajas}, 'secundario')}"></a>
@@ -18,8 +17,19 @@
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
 
 	<section class="tarjeta" aria-labelledby="titulo-pendientes">
-		<h2 id="titulo-pendientes" th:text="|Pendientes (${#lists.size(b.pendientes)})|">Pendientes</h2>
-		<th:block th:if="${#lists.isEmpty(b.pendientes)}">
+		<!--/* Sprint 11, tanda 1b (F-D5): también lo que se aprueba en otra pantalla (con «Revisar»). */-->
+		<h2 id="titulo-pendientes" th:text="|Pendientes (${#lists.size(b.pendientes) + #lists.size(externos)})|">Pendientes</h2>
+		<ul class="bandeja-lista" th:unless="${#lists.isEmpty(externos)}" aria-label="Se revisan en su pantalla" data-externos>
+			<li th:each="e : ${externos}" class="pendiente pendiente-externo" th:data-externo="${e.tipo()}">
+				<div class="pendiente-texto">
+					<strong th:text="${e.titulo()}">Plan de pensiones de Primaria 2026</strong>
+					<span class="secundario" th:text="${e.detalle()}">Enviado por adm.lopez el 24/10</span>
+					<span class="badge badge-info">Se revisa en su pantalla</span>
+				</div>
+				<a class="btn btn-secundario" th:href="@{${e.enlace()}}" th:aria-label="|Revisar: ${e.titulo()}|" data-revisar>Revisar</a>
+			</li>
+		</ul>
+		<th:block th:if="${#lists.isEmpty(b.pendientes) and #lists.isEmpty(externos)}">
 			<div th:replace="~{fragments/componentes :: estadoVacio('No hay solicitudes pendientes', 'Cuando alguien pida un cambio, aparecerá aquí.')}"></div>
 		</th:block>
 		<ul class="lista-tarjetas" th:unless="${#lists.isEmpty(b.pendientes)}">
@@ -35,8 +45,7 @@
 				<ul class="detalle-solicitud" th:unless="${#lists.isEmpty(s.detalle)}">
 					<li th:each="linea : ${s.detalle}" th:text="${linea}" th:classappend="${#strings.startsWith(linea, 'Palabra que lo envió a aprobación')} ? 'linea-resaltada'">Boleta B001-00000001 · S/ 900.00 · Efectivo</li>
 				</ul>
-				<p class="secundario" th:text="|Motivo: ${s.motivo}|">Motivo</p>
-				<p class="secundario" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM/yyyy HH:mm')}|">Pedida por administracion</p>
+				<p class="secundario" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM/yyyy HH:mm')} · Motivo: ${s.motivo}|">Pedida por administracion · Motivo</p>
 				<!--/* Sprint 11, tanda 1c: lo sensible que pidió la Promotoría se aplica en su detalle, con su código. */-->
 				<p class="fila" th:if="${s.puedeResolver and s.pideCodigo}">
 					<a class="btn btn-primario" th:href="@{/aprobaciones/{id}(id=${s.id})}" data-aplicar-directo>Aplicar con tu código</a>
@@ -67,8 +76,9 @@
 								<th:block th:unless="${#lists.isEmpty(s.llamadas)}">
 									<h2 th:id="|modal-aprobar-${s.id}-titulo|" th:unless="${s.pideComentario}"
 										th:text="${#lists.size(s.llamadas) == 1} ? 'Antes de aprobar, llama al apoderado' : 'Antes de aprobar, llama a ambas familias'">Antes de aprobar, llama al apoderado</h2>
-									<p>Sale dinero ya cobrado. Confirma por teléfono con la familia, a un celular registrado. En la bitácora
-										queda el apoderado con quien hablaste y su número enmascarado.</p>
+									<!--/* F-D7: lo que se verifica queda visible; la bitácora, en un «i». */-->
+									<p>Llama a la familia a un celular registrado.
+										<span th:replace="~{fragments/componentes :: info(|llamada-${s.id}|, 'Sale dinero ya cobrado. En la bitácora queda el apoderado con quien hablaste y su número enmascarado.', 'la llamada de control')}"></span></p>
 									<div class="campo" th:each="familia, i : ${s.llamadas}">
 										<label th:for="|modal-aprobar-${s.id}-tel-${i.index}|" th:text="|Número al que llamaste (${familia})|">Número al que llamaste</label>
 										<input class="input" type="tel" th:id="|modal-aprobar-${s.id}-tel-${i.index}|" name="telefonos" required
@@ -91,15 +101,29 @@
 						'No se cambia nada. Quien la pidió verá tu motivo en la bitácora.',
 						@{/aprobaciones/{id}/rechazar(id=${s.id})}, ${s.accionRechazo}, 'secundario', |${s.accionRechazo} solicitud|)}"></th:block>
 				</div>
-				<p class="secundario" th:unless="${s.puedeResolver}">La pediste tú, cobraste ese pago, es tu caja o preparaste esa cuenta: debe resolverla otra persona.</p>
+				<p class="secundario" th:unless="${s.puedeResolver}">Debe resolverla otra persona.
+					<span th:replace="~{fragments/componentes :: info(|otra-${s.id}|, 'La pediste tú, cobraste ese pago, es tu caja o preparaste esa cuenta.', 'por qué no la resuelves')}"></span></p>
+			</li>
+		</ul>
+	</section>
+
+	<!--/* Sprint 11, tanda 1b (F-D5): lo que pediste (o en lo que participaste) y se aprueba en otra pantalla. */-->
+	<section class="tarjeta" aria-labelledby="titulo-espera" th:unless="${#lists.isEmpty(externosEnEspera)}" data-externos-en-espera>
+		<h2 id="titulo-espera" th:text="|Enviados por ti, esperando a otra persona (${#lists.size(externosEnEspera)})|">Enviados por ti</h2>
+		<ul class="bandeja-lista">
+			<li th:each="e : ${externosEnEspera}" class="pendiente pendiente-externo" th:data-externo="${e.tipo()}">
+				<div class="pendiente-texto">
+					<strong th:text="${e.titulo()}">Plan de pensiones de Primaria 2026</strong>
+					<span class="secundario" th:text="${e.detalle()}">Enviado por ti el 24/10</span>
+				</div>
+				<a class="btn btn-secundario" th:href="@{${e.enlace()}}" th:aria-label="|Ver: ${e.titulo()}|">Ver</a>
 			</li>
 		</ul>
 	</section>
 
 	<section class="tarjeta" aria-labelledby="titulo-tardios">
-		<h2 id="titulo-tardios">Ingresos tardíos</h2>
-		<p class="secundario">Matrículas con fecha de ingreso posterior al inicio de clases: recortan pensiones. Revisa que cada
-			una tenga sustento.</p>
+		<h2 id="titulo-tardios"><span>Ingresos tardíos</span>
+			<span th:replace="~{fragments/componentes :: info('tardios', 'Matrículas con fecha de ingreso posterior al inicio de clases: recortan pensiones. Revisa que cada una tenga sustento.', 'ingresos tardíos')}"></span></h2>
 		<th:block th:if="${#lists.isEmpty(b.ingresosTardios)}">
 			<div th:replace="~{fragments/componentes :: estadoVacio('No hay ingresos tardíos', 'Todas las matrículas cobran desde el inicio de clases.')}"></div>
 		</th:block>

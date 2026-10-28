@@ -15,8 +15,13 @@ class CalculadoraCronogramaTest {
 
 	private static final int ANIO = 2027;
 
+	/** Sprint 11, tanda 1b (F-D2): la propuesta por defecto sale de las fechas de clases; de marzo a diciembre, como antes. */
+	private static final pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar DE_MARZO_A_DICIEMBRE =
+			pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar.nuevo(ANIO, false, LocalDate.of(ANIO, 3, 1),
+					LocalDate.of(ANIO, 12, 18));
+
 	private static ConfiguracionPlan plan(String matricula, LocalDate cobroDesde) {
-		ConfiguracionPlan base = ConfiguracionPlan.porDefecto(ANIO, new BigDecimal(matricula), new BigDecimal("450.00"));
+		ConfiguracionPlan base = ConfiguracionPlan.porDefecto(DE_MARZO_A_DICIEMBRE, new BigDecimal(matricula), new BigDecimal("450.00"));
 		return new ConfiguracionPlan(base.montoMatricula(), base.vencimientoMatricula(), base.montoPension(),
 				base.vencimientos(), cobroDesde);
 	}
@@ -46,7 +51,7 @@ class CalculadoraCronogramaTest {
 
 	@Test
 	void cobroDesdeDiciembre2026SoloGeneraDiciembre() {
-		ConfiguracionPlan base = ConfiguracionPlan.porDefecto(2026, new BigDecimal("350.00"), new BigDecimal("450.00"));
+		ConfiguracionPlan base = ConfiguracionPlan.porDefecto(pe.edu.virgenmaria.cuentasclaras.colegio.model.AnioEscolar.nuevo(2026, false, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 12, 18)), new BigDecimal("350.00"), new BigDecimal("450.00"));
 		ConfiguracionPlan plan2026 = new ConfiguracionPlan(base.montoMatricula(), base.vencimientoMatricula(),
 				base.montoPension(), base.vencimientos(), LocalDate.of(2026, 12, 1));
 
@@ -153,7 +158,7 @@ class CalculadoraCronogramaTest {
 	@Test
 	void montosSonExactamenteLosDelPlanConEscala2() {
 		ConfiguracionPlan plan = new ConfiguracionPlan(new BigDecimal("333.33"), LocalDate.of(2027, 2, 28),
-				new BigDecimal("333.33"), ConfiguracionPlan.porDefecto(ANIO, BigDecimal.ONE, BigDecimal.ONE).vencimientos(),
+				new BigDecimal("333.33"), ConfiguracionPlan.porDefecto(DE_MARZO_A_DICIEMBRE, BigDecimal.ONE, BigDecimal.ONE).vencimientos(),
 				null).validar(CuotasDePrueba.ANIO_2027);
 
 		List<CuotaPlanificada> cuotas = calcular(plan, LocalDate.of(2027, 1, 15));

@@ -33,9 +33,13 @@
 		</div>
 		<th:block th:if="${s.vigente == null}">
 			<!--/* Sprint 11, tanda 1b (sección 3.14): la cuenta del banco guía; los demás tipos, como antes. */-->
-			<div th:if="${s.tipo == 'CUENTA_BANCARIA'}" th:replace="~{fragments/componentes :: estadoVacioPaso('Todavía no registraste la cuenta donde entra el dinero',
-				null, ${@guiaPasos.vacio('cuenta-bancaria')}, 'Registrar la cuenta del banco', |#proponer-${s.tipo}|)}"></div>
-			<div th:unless="${s.tipo == 'CUENTA_BANCARIA'}" th:replace="~{fragments/componentes :: estadoVacio('Sin conector vigente', ${s.sinConector})}"></div>
+			<th:block th:if="${s.tipo == 'CUENTA_BANCARIA'}" th:with="v=${@guiaPasos.vacio('cuenta-bancaria')}">
+				<div th:replace="~{fragments/componentes :: estadoVacioPaso('Todavía no registraste la cuenta donde entra el dinero',
+					null, ${v}, 'Registrar la cuenta del banco', |#proponer-${s.tipo}|)}"></div>
+			</th:block>
+			<th:block th:unless="${s.tipo == 'CUENTA_BANCARIA'}">
+				<div th:replace="~{fragments/componentes :: estadoVacio('Sin conector vigente', ${s.sinConector})}"></div>
+			</th:block>
 		</th:block>
 
 		<div th:each="p : ${s.propuestos}" class="conector-propuesto" data-conector="propuesto">

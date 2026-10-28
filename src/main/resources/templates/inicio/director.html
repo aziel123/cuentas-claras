@@ -18,7 +18,7 @@
 	</th:block>
 
 	<!--/* Sprint 11, tanda 1b (sección 3.14): la guía mientras el colegio está en preparación. */-->
-	<section th:if="${guia != null}" th:replace="~{fragments/guia :: bannerPreparacion(${guia}, true, true)}"></section>
+	<th:block th:if="${guia != null}"><section th:replace="~{fragments/guia :: bannerPreparacion(${guia}, true, true)}"></section></th:block>
 
 	<!--/* Tablero: lo académico, las aprobaciones y la morosidad (sin detalle por alumno). */-->
 	<section th:if="${tablero != null}" class="tablero" aria-labelledby="titulo-tablero">

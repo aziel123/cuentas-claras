@@ -35,7 +35,11 @@ public class AprobacionesController {
 
 	private final ServicioContactoPersonal contactos;
 
-	public AprobacionesController(BandejaAprobaciones bandeja, ServicioContactoPersonal contactos) {
+	private final pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaExterna externa;
+
+	public AprobacionesController(BandejaAprobaciones bandeja, ServicioContactoPersonal contactos,
+			pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaExterna externa) {
+		this.externa = externa;
 		this.bandeja = bandeja;
 		this.contactos = contactos;
 	}
@@ -43,6 +47,10 @@ public class AprobacionesController {
 	@GetMapping
 	public String bandeja(@RequestParam(required = false) String vista, Model model) {
 		model.addAttribute("bandeja", bandeja.bandeja());
+		// Sprint 11, tanda 1b (F-D5): lo que se aprueba en otra pantalla, con «Revisar» (no se aprueba aquí).
+		var externos = externa.pendientes();
+		model.addAttribute("externos", externos.stream().filter(e -> e.puedeResolver()).toList());
+		model.addAttribute("externosEnEspera", externos.stream().filter(e -> !e.puedeResolver()).toList());
 		return MOVIL.equals(vista) ? "aprobaciones/movil" : "aprobaciones/bandeja";
 	}
 

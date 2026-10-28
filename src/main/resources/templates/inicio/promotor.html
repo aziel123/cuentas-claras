@@ -19,7 +19,7 @@
 	</th:block>
 
 	<!--/* Sprint 11, tanda 1b (decisión 210): en preparación domina la guía, sin cifras ni gráficos (estarían en cero). */-->
-	<section th:if="${guia != null}" th:replace="~{fragments/guia :: bannerPreparacion(${guia}, true, true)}"></section>
+	<th:block th:if="${guia != null}"><section th:replace="~{fragments/guia :: bannerPreparacion(${guia}, true, true)}"></section></th:block>
 
 	<!--/* Tablero (pedido del usuario: «un reporte con gráficos para que no se vea todo texto»): cuatro cifras arriba. */-->
 	<section th:if="${tablero != null}" class="tablero" aria-labelledby="titulo-tablero">

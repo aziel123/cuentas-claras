@@ -24,9 +24,8 @@
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
 
 	<!--/* Sprint 11, tanda 1b (sección 3.14): sin año, «Primero: Configurar el año escolar». */-->
-	<th:block th:if="${r.anio == null}">
-		<div th:replace="~{fragments/componentes :: estadoVacioPaso('Todavía no hay pensiones', null,
-			${@guiaPasos.vacio('pensiones')}, null, null)}"></div>
+	<th:block th:if="${r.anio == null}" th:with="v=${@guiaPasos.vacio('pensiones')}">
+		<div th:replace="~{fragments/componentes :: estadoVacioPaso('Todavía no hay pensiones', null, ${v}, null, null)}"></div>
 	</th:block>
 
 	<th:block th:if="${r.anio != null}">
@@ -42,9 +41,11 @@
 		</p>
 
 		<!--/* Sin ningún plan del año (ni vigente ni en borrador): el estado vacío que guía, arriba de las tarjetas. */-->
-		<th:block th:if="${r.niveles.?[vigente != null or !#lists.isEmpty(borradores)].isEmpty()}">
-			<div th:replace="~{fragments/componentes :: estadoVacioPaso(|Todavía no hay pensiones para ${r.anio.anio}|, null,
-				${@guiaPasos.vacio('pensiones')}, 'Proponer pensiones', '#niveles')}"></div>
+		<th:block th:if="${#lists.isEmpty(r.niveles.?[vigente != null or borradores.size() > 0])}">
+			<th:block th:with="v=${@guiaPasos.vacio('pensiones')}">
+				<div th:replace="~{fragments/componentes :: estadoVacioPaso(|Todavía no hay pensiones para ${r.anio.anio}|, null,
+					${v}, 'Proponer pensiones', '#niveles')}"></div>
+			</th:block>
 		</th:block>
 
 		<!--/* Sprint 11, tanda 1b (F-D1): las tarjetas tienen la misma estructura en cualquier estado: título en la primera
