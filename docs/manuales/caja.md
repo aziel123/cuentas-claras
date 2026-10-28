@@ -26,6 +26,14 @@
 - **Aparece una página de error:** anota el código de error y avisa a Promotoría.
 - **A quién avisar:** Promotoría o Dirección. **No toques:** el efectivo de otra caja ni un pago que no registraste tú.
 
+## Qué ves mientras tu colegio está en preparación (sprint 11)
+- **Arriba de tu inicio** ves «Tu colegio está en preparación: faltan N de 15 pasos», una barra con los pasos obligatorios hechos (de 13) y **el siguiente paso**, con quién lo hace.
+- Si el siguiente paso te toca, tienes el botón que te lleva directo a la pantalla. Si no, dice a quién le toca y, si hay algo que sí puedes hacer tú, te lo muestra aparte («Lo que puedes hacer tú»).
+- Las pantallas vacías dicen qué falta, quién lo hace y, si depende de otro paso, «Primero: …».
+- Lo que todavía no se puede (cobrar, enviar un comunicado, confirmar la recaudación, abrir la renovación) se ve deshabilitado con el motivo al lado.
+- Un «i» junto a un título o un botón abre una ayuda corta: tócalo (o pasa el mouse) para leerla.
+- **Mientras el colegio está en preparación no se registran pagos**: «Cobrar» se ve deshabilitado con el motivo. Tu guía dice «Por ahora no tienes pasos pendientes»: cuando la Promotoría pase el colegio a producción, podrás cobrar.
+
 ## Dónde ver el video
 | Video 1 · Cobrar y entregar la boleta | Video 2 · Cerrar la caja a ciegas |
 |---|---|
