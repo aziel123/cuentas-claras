@@ -58,7 +58,7 @@ class EstructuraControllerTest {
 	@ComoUsuario(roles = Rol.DIRECTOR)
 	void direccionCreaAnioYSeccionDesdeLaWeb() throws Exception {
 		mvc.perform(get("/colegio")).andExpect(status().isOk())
-				.andExpect(content().string(containsString("Tu colegio todavía no tiene año escolar") // tanda 1b))
+				.andExpect(content().string(containsString("Tu colegio todavía no tiene año escolar")))
 				// Propone el año actual con clases del primer lunes de marzo a mediados de diciembre.
 				.andExpect(content().string(containsString("value=\"2026\"")))
 				.andExpect(content().string(containsString("value=\"2026-03-02\"")));
