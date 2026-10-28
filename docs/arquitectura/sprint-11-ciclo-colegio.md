@@ -305,8 +305,9 @@ equipo.
 - `cambio_estado_colegio` tipo `CIERRE`, de SUSPENDIDO a CERRADO, propuesto y aprobado por dos operadores; la base exige una
   `exportacion_colegio` del colegio `ENTREGADA`, o `LISTA` o `VENCIDA` con 30 días desde que se generó (el colegio tuvo la
   oportunidad de recuperarla: L6). Inmediato al aprobarse.
-- La base pone `colegio.conservar_hasta = fecha del cierre + 12 meses` (decisión 196; entre 1 y 12 meses, nunca más: así los
-  respaldos mensuales vencen antes de 24 meses, L5). Las familias siguen en modo consulta hasta esa fecha.
+- **(Corregido por AP-11 y AP2-14.)** La base pone `colegio.conservar_hasta` = la fecha en que se aplicó la suspensión + 12
+  meses exactos, con la autorización expresa del titular; sin ella, el cierre + 30 días. Con los respaldos mensuales, el
+  último dato vence antes de 24 meses desde la suspensión (L5). Las familias siguen en modo consulta hasta esa fecha.
 - Aviso al titular, la Promotoría, el correo institucional y el de control, con la fecha de supresión.
 
 ### 3.11 Fin definitivo: supresión con acta (tanda 2)
@@ -1022,6 +1023,111 @@ con `operadores`), porque no hay un socio que las vea.
 | 223 | Esperas de 24 h en roles (A1c-2, A1c-3) | **[Dar PROMOTOR en producción, quitar PROMOTOR y desactivar a una Promotoría: 24 horas, con freno de otra Promotoría antigua, de la persona afectada y de los operadores]** |
 | 224 | Conciliación después de cambiar un conector (A1c-4) | **[30 días en que quien lo cambió no confirma extractos, lotes ni el cierre mensual; alerta si lo intenta]** |
 | 225 | Código por correo (A1c-7) | **[Nunca en conectores ni en roles directivos; en lo demás, solo con el WhatsApp fallido confirmado por el proveedor y aviso al celular]** |
+| 226 | Autorización de conservación (AP2-9) | **[Paso obligatorio de la Puesta en marcha (16 pasos); se retira con la firma del titular y aviso al correo de control; desde SUSPENDIDO queda congelada]** |
+| 227 | Retención legal (AP2-10) | **[La pone un operador con su firma ante un pedido escrito de una autoridad o un litigio, y la quita otro; mientras está, no hay acta de supresión]** |
+| 228 | Actas fuera de la base (AP2-3) | **[Cada acta ejecutada se guarda en un depósito con bloqueo de objetos y se envía al correo de control; la aplicación no arranca con actas externas sin aplicar]** |
+
+### 3.17 Auditoría del diseño en papel de la tanda 2 (sobre feddd6e): 14 hallazgos incorporados (esta sección prevalece)
+Revisión de `auditor-seguridad-antifraude`: sin críticos, 6 altos, 6 medios y 2 bajos. **Los conteos no cambian: 124 triggers,
+22 funciones y 146 huellas.** Todo va en versiones de triggers ya previstos o en columnas de V41.
+
+**AP2-1 (alto). Las fechas que cuentan el plazo no se mueven, ni el DBA.**
+- Desde V41, `trg_colegio_cambio` rechaza (1644) todo cambio de `suspendido_en` y de `estado_desde` que no haga la propia base
+  al cambiar de estado, también con el usuario del DBA.
+- `cc_supresion_en_curso` no lee `colegio.conservar_hasta` ni `suspendido_en`: calcula el plazo desde el `aplicado_en` del
+  `cambio_estado_colegio` SUSPENSION o BAJA guardado (que tampoco cambia).
+
+**AP2-2 (alto). La exportación que habilita el cierre o la baja es la correcta.**
+- **Cierre:** el trigger exige una `exportacion_colegio` del mismo `colegio_id`, con `generada_en >= suspendido_en` y estado
+  distinto de `FALLIDA`, además de `ENTREGADA`, o `LISTA` o `VENCIDA` con 30 días.
+- **BAJA con datos:** la exportación es de los últimos 30 días.
+
+**AP2-3 (alto). Las actas también fuera de la base.**
+- Al pasar a `EJECUTADA`, cada acta se escribe como un archivo firmado (JSON con su SHA-256) en un depósito con bloqueo de objetos
+  (el mismo proveedor de los respaldos, otro prefijo), y se envía al correo de control.
+- `reaplicar.sh` las lee **antes de abrir la aplicación** después de una restauración.
+- `VerificadorSupresion`, al arrancar, se niega si hay un acta externa que la base no tiene aplicada (y si hay filas de un
+  colegio SUPRIMIDO: AP2-11).
+
+**AP2-4 (alto). La entrega por dos canales, con tope de intentos.**
+- El enlace va **solo por correo** (al del titular) y el código **solo por WhatsApp**.
+- Hay **5 intentos** de DNI o código: al llegar al tope se anula el token y hay que generar otra entrega.
+- Cada intento fallido deja `EXPORTACION_INTENTO_FALLIDO` en la bitácora.
+
+**AP2-5 (alto). El acta en ejecución es de una sola conexión y vence.**
+- `acta_supresion` gana `conexion_id` (el `CONNECTION_ID()` de quien la pasó a `EJECUTANDO`) y `ejecutando_vence_en` (+4 horas,
+  con el reloj real).
+- `cc_supresion_en_curso(colegio)` exige:
+  - `SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_migrador'` (no `CURRENT_USER()`, que dentro de un trigger es el definidor);
+  - `CONNECTION_ID() = conexion_id`;
+  - el vencimiento sin pasar;
+  - `@cc_acta` igual al id.
+- Con `colegio` NULL devuelve FALSE, así que un evento de la bitácora de la plataforma (sin `colegio_id`) nunca se tacha.
+- **Prueba nueva `tachadoDeEventoDePlataformaFalla`**, y además `actaDeOtraConexionFalla` y `actaVencidaFalla`.
+
+**AP2-6 (alto). El reloj, con la expresión completa.**
+- Se reemplaza la expresión entera `UTC_TIMESTAMP(6) - INTERVAL 5 HOUR` (y su variante sin `(6)`) por `cc_ahora_lima_real()`.
+- **Los intervalos compuestos se corrigen al reemplazar.** Por ejemplo, `UTC_TIMESTAMP() - INTERVAL 6 HOUR` era «Lima menos 1
+  hora» y pasa a `cc_ahora_lima_real() - INTERVAL 1 HOUR`; `… - INTERVAL 5 HOUR - INTERVAL 5 MINUTE` pasa a
+  `cc_ahora_lima_real() - INTERVAL 5 MINUTE`.
+- El paso `reloj-real` exige además **0 usos de `INTERVAL 5 HOUR`** en `03` fuera de comentarios.
+- **Cada ventana se prueba justo en su límite** (un segundo antes y uno después): las 48 horas de la nota tardía, la hora de la
+  llamada de control, los 5 minutos de las firmas, las 12 horas de la sesión y las demás que cambian.
+
+**AP2-7 (medio). El CHECK de `conservar_hasta`, sin ramas que pasen con NULL.**
+- Cada rama de `ck_colegio_conservar` lleva `IS NOT NULL` en todo lo que compara (`suspendido_en`, `cerrado_en`, `estado_desde`,
+  `conservacion_autorizada_en`).
+- La rama SUPRIMIDO exige `acta_supresion_id IS NOT NULL`: columna nueva de `colegio`, con FK a un acta del mismo colegio. Que el
+  acta esté `EJECUTADA` lo exige el trigger, porque un CHECK no lee otra tabla.
+
+**AP2-8 (medio). `huella_eventos` la calcula la base, encadenada.**
+- Al pasar a `EJECUTANDO`, el trigger recorre los eventos del colegio **por `secuencia`** con un cursor (sin `GROUP_CONCAT`, que se
+  corta en `group_concat_max_len`): `h = SHA2(CONCAT(h, '|', id, '|', hash), 256)`, partiendo de 64 ceros.
+- Guarda `huella_eventos` y `ultima_secuencia`.
+- Antes exige una verificación completa de la cadena hecha por `sistema.auditoria` hace 1 hora o menos (`cadena_verificada_en`
+  del acta, que pone la aplicación con cc_sistema después de correr `VerificadorIntegridadAuditoria`).
+- El `LEEME.pdf` del acta explica la fórmula para que un tercero la recalcule.
+
+**AP2-9 (medio). La autorización de conservación no se quita en silencio.**
+- Quitarla exige la firma del titular (`colegio:{id}:CONSERVACION_RETIRADA`) y avisa al correo de control.
+- **Desde SUSPENDIDO queda congelada** (la base la rechaza).
+- **El paso deja de ser opcional:** la Puesta en marcha pasa a **16 pasos** (paso 16, «Autorización de conservación», del
+  titular, obligatorio), y la guía de la 1b cuenta 14 obligatorios.
+
+**AP2-10 (medio). Retención legal.**
+- `colegio.retencion_legal_motivo` y `retencion_legal_desde`. Los pone un operador con su firma ante un pedido escrito de una
+  autoridad o un litigio (DS 016-2024-JUS, arts. 84 y 85: la supresión no procede si hay que conservar), y los quita otro
+  operador.
+- Con la retención activa, `trg_acta_supresion_nace` y `_estado` **no dejan proponer ni ejecutar el acta**, y el modo consulta
+  sigue.
+
+**AP2-11 (medio). Nada de un colegio suprimido queda fuera del inventario.**
+- `InventarioSupresionTest` compara `information_schema.columns` (toda tabla con `colegio_id`) con `exportacion/tablas.txt`,
+  `fin-de-colegio/inventario.txt` y una lista de exclusiones justificadas (`exclusiones.txt`). Una tabla nueva sin clasificar
+  rompe el CI.
+- `VerificadorSupresion` (al arrancar, prod): 0 filas en las tablas del inventario de los colegios en SUPRIMIDO.
+
+**AP2-12 (medio). Los respaldos no pasan de 24 meses.**
+- El acta guarda `inicio_plazo` (el `aplicado_en` de la SUSPENSION o la BAJA) y `CHECK (respaldos_vencen_el IS NOT NULL AND
+  inicio_plazo IS NOT NULL AND respaldos_vencen_el <= DATE(inicio_plazo) + INTERVAL 24 MONTH)`.
+- `RevisionConservacion` alerta 60 días antes del límite a los operadores y escala al correo de control y al responsable técnico
+  si al llegar quedan respaldos con datos del colegio.
+
+**AP2-13 (medio). Cada paso de la exportación deja rastro.**
+- `ENTREGADA` exige al menos una fila en `descarga_exportacion` (`trg_exportacion_colegio_cambio`).
+- **Cada descarga, cada descifrado de la clave y cada borrado de `LimpiezaExportaciones`** dejan su evento y avisan al correo de
+  control.
+- Una libreta que no coincide con su huella: alerta **CRÍTICA** a los operadores, a la Promotoría y al correo de control, y la
+  exportación queda `FALLIDA`.
+
+**AP2-14 (bajo). Contradicciones y residuales.**
+- Se corrigen la sección 3.10 («`conservar_hasta` = cierre + 12 meses») y la 5 («CHECK `conservar_hasta <= DATE(estado_desde) +
+  12 MONTH`»): **vale AP-11**, la fecha de la suspensión aplicada + 12 meses con autorización, o el cierre + 30 días sin ella.
+- **Riesgos residuales declarados:**
+  - los eventos de la bitácora de la plataforma (sin `colegio_id`) guardan el nombre del colegio y del titular y no se tachan
+    (son la evidencia del contrato del proveedor);
+  - quien tiene `CC_CLAVE_CONECTORES` y el archivo puede descifrar la clave del ZIP fuera de la aplicación sin dejar evento. Lo
+    mitigan el borrado de la clave cifrada después de verla y la custodia de la clave maestra en Secret Manager.
 
 ## 4. Modelo
 ```mermaid
@@ -1230,7 +1336,7 @@ ALTER TABLE sesion_usuario ADD CONSTRAINT ck_sesion_usuario_cierre CHECK ((cerra
   `COLEGIO_SUSPENDIDO`.
 
 ### `V41__exportacion_cierre_y_supresion.sql` (tanda 2, esquema; el SQL completo se escribe con el brief de la tanda 2)
-- `colegio`: `conservar_hasta DATE` (nulo salvo en CERRADO y BAJA; CHECK `conservar_hasta <= DATE(estado_desde) + INTERVAL 12 MONTH`).
+- `colegio`: `conservar_hasta DATE` y su CHECK exacto (**corregido por AP-7, AP-11 y AP2-7**: ver el brief de la tanda 2, sección 3).
 - `cambio_estado_colegio`: `ck_cambio_estado_colegio_tipo` con `CIERRE` (SUSPENDIDO → CERRADO, motivos `FIN_CONTRATO`,
   `FALTA_PAGO`, `PEDIDO_COLEGIO`, `OTRO`) y `exportacion_id`.
 - `exportacion_colegio`: `id`, `colegio_id`, `plataforma_id`, `cambio_estado_id` (nulo en `PEDIDO`), `motivo`
