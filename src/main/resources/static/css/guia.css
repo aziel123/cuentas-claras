@@ -168,3 +168,8 @@
 /* «Ver formato» y «Ver detalle» (F-D7): el detalle largo, sin JavaScript. */
 .desplegable-texto summary { cursor: pointer; min-height: 44px; display: inline-flex; align-items: center;
   font-weight: 600; color: var(--color-primario-texto); }
+
+/* break-ui (tanda 1b): la etiqueta de un pendiente no se estira a todo el ancho en celular; las cifras de 7 dígitos de
+   «Hoy en caja» (5 columnas) se achican antes de partir «S/» del número. */
+.pendiente-texto .badge { justify-self: start; }
+.indicadores .kpi-cifra { font-size: clamp(var(--texto-lg), 1.5vw, var(--texto-2xl)); }
