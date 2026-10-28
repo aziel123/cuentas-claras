@@ -1936,6 +1936,113 @@ Promotoría y la aplica `sistema.roles`, plan y feriado directos).
 real de la base no se adelanta; lo cubre H2), el descuento y la anulación directos en MySQL (los triggers están; los cubre
 H2) y el flujo del titular en `PermisosMySqlTest`.
 
+## Tanda 1b · Implementación
+Rama `claude/sprint-11-ciclo-colegio`, PR #22 en borrador. Antes, el merge del PR #29 (`claude/logo-cuotaria`: logo «dos
+llaves» y favicon). Sin migración, triggers, funciones ni huellas: los conteos siguen en **117, 21 y 138** (los de la 1c).
+Commits por bloque: catálogo y guía (`8a833cf`), Pensiones, estados vacíos y bloqueos (`cfca18d`), bandeja con los externos
+(`65391be`), aceptos, menos texto y pruebas (`2266732`), manuales y skill (`b5b851b`), y los de capturas y este documento.
+
+**Lo que quedó (por bloque):**
+1. **Catálogo y guía.** `puestaenmarcha.model.PasoPuestaEnMarcha` (16 constantes: los 15 pasos y el aviso de las áreas,
+   con `Tipo.AVISO`, que no cuenta). Es **la única fuente de «Quién lo hace»**: `PuntoLista#responsable()` delega en él y el
+   título en pantalla sale de él («Equipo del colegio», sin «segregación»). `GuiaPuestaEnMarcha` (siguiente, tuyo,
+   próximos 3, plataforma, avance de la decisión 206) y `ModuloApp.puedeEntrar` (la primera regla que coincide gana, como el
+   filtro). Con la 1c, los textos ya no dicen «aprueba Dirección» para la Promotoría: pensiones, saldo inicial y OSE dicen
+   «Administración o Promotoría», con un «i» («Lo que propone Administración lo aprueba Promotoría o Dirección. Lo de la
+   Promotoría se aplica directo»), y la cuenta del banco dice «Se aplica 24 horas después de aprobarla, o al instante si la
+   aprueba otra Promotoría».
+2. **Banner** (`fragments/guia.html :: bannerPreparacion(guia, primario, ampliada)`) en los 5 inicios del personal; el de
+   Promotoría y Dirección, ampliado con los 3 pasos que siguen y **sin tablero** (no se calcula: decisión 210).
+3. **Puesta en marcha:** `<ol>` de pasos con número, título, estado en texto e ícono, «Lo hace: …», «Ir» (con
+   `aria-label="Ir: {acción}"`) o «Lo hace …», «Siguiente» en texto, las dos firmas en su paso (F-D8, con `modalFirma`:
+   nunca un clic) y «Pasar a producción» deshabilitado con «Faltan N pasos obligatorios.».
+4. **Bloqueos:** `ColegioEnPreparacionException` + `AccionBloqueada`; `ColegioService.exigirEnProduccion(colegio, acción)`;
+   `PreparacionAdvice` (409, `error/preparacion.html` con `role="alert"`, cuántos pasos faltan y el enlace si el rol puede
+   abrir la Puesta en marcha; a las familias, «El colegio todavía no recibe pagos por aquí», sin enlace) y la traducción de
+   los tres 1644 de preparación (prueba que fija sus textos en `03-triggers.sql`). Botones deshabilitados con su motivo
+   (`aria-disabled`, `type="button"`, `aria-describedby`): «Cobrar», «Revisar cobro», «Enviar con mi firma», «Confirmar y
+   aplicar los pagos» y «Abrir la renovación».
+5. **Estados vacíos que guían** (`componentes :: estadoVacioPaso` con `@guiaPasos.vacio('clave')`): año escolar, secciones,
+   pensiones (sin año: «Primero: Configurar el año escolar»), alumnos, cuenta del banco, usuarios (falta Dirección o Caja) y
+   saldo inicial.
+6. **F-D1 a F-D4 (Pensiones):** tarjetas con título, etiqueta, cuerpo y acciones al final (`margin-top: auto`);
+   `ConfiguracionPlan.porDefecto(AnioEscolar, …)` según las fechas de clases (máximo 12); `rangoMatricula`,
+   `rangoPensiones` y `rangoCobroDesde`, que usan **el formulario (`campoFecha`, min y max) y `validar`**; «Guardaste el
+   borrador…», «Enviaste el plan…», `EstadoPlan` «Borrador» y «Por aprobar», `EstadoLote` (saldo) «Borrador».
+7. **F-D5 (bandeja):** `aprobaciones.api.PendientesExternos` y 7 adaptadores; `BandejaExterna`; «Pendientes (N)» y el
+   contador del menú suman los externos con `puedeResolver`; quien lo pidió los ve en «Enviados por ti, esperando a otra
+   persona». **Paso 1 (tabla de los 8 tipos, comprobada en el código):** el cierre de caja (fila 7) **ya es una solicitud de la
+   bandeja** (`CIERRE_CAJA`, con su manejador): no lleva puerto, para no contarlo dos veces. Los otros 7 coinciden con la
+   tabla: plan `ENVIADO` (participantes del plan), lote de saldo `ENVIADO` (quien lo armó o lo envió), lote de recaudación
+   `CARGADO` y extracto `CARGADO` (quien lo subió), feriado `pendiente` (quien lo propuso), correo de control propuesto
+   (solo Promotoría) y respaldo con `porResolverId` (solo Promotoría).
+8. **F-D6:** `--ancho-max: 1760px`, `--margen-lateral: clamp(24px, 2vw, 32px)` en el armazón y el encabezado; texto corrido
+   a 70ch; desde 1600 px, 4 cifras en una fila y «Para revisar» + los gráficos en 2 columnas (el DOM no cambia de orden); el
+   gráfico de 30 días sin pagos muestra «Todavía no hay pagos en estos 30 días».
+9. **F-D7 (menos texto):** componente `info` y `aviso` (popover nativo, `aria-describedby`, botón de 44 × 44 px, CSS con
+   `:hover` y `:focus-visible`, animación solo con `prefers-reduced-motion: no-preference`). Aplicado en los inicios,
+   Aprobaciones, Conectores, Pensiones, Puesta en marcha, Caja (cobro y cierre a ciegas), Conciliación y Recaudación («Ver
+   formato»). El portal de las familias queda visible (transparencia; «Algo no cuadra» sigue a la vista). **Inventario:**
+   la decisión final de cada una de las 154 filas está en `docs/ux/inventario-textos-sprint-11.md` (Q, T o V; aplicado o
+   pendiente para la tanda 2).
+10. **F-D8:** casilla «Acepto usar el comprobante simulado y emitir mi comprobante legal aparte» al proponer un OSE (solo
+    Promotoría; la misma firma de `PasoAProduccion.aceptarOseSimulado`); Administración ve «Falta que la Promotoría firme el
+    acepto» con el enlace. En la Puesta en marcha, el saldo inicial ofrece primero la firma y, con un lote en curso, «Ir al
+    lote».
+
+**Desviaciones (anotadas en el código):**
+- `PuntoLista` no gana un campo `paso` de tipo enum (ese nombre ya era el título, que usan el operador y `PasoAProduccion`):
+  gana `bloqueadoPor` y el método `definicion()`.
+- El saldo inicial depende del **año** (paso 3), no de los alumnos (paso 6): con la dependencia de la tabla, la firma «sin
+  deudas anteriores» (F-D8) quedaba bloqueada en un colegio nuevo.
+- `PreparacionAdvice` responde con una pantalla propia (`error/preparacion.html`), no con «la misma pantalla»: un
+  `@ControllerAdvice` no conoce la vista de cada controlador. Donde el controlador ya atrapa la excepción, el aviso de error
+  muestra el mismo texto y, abajo, el enlace «Ver la Puesta en marcha» (`componentes :: avisos`).
+- Enviar un comunicado en preparación se bloquea en el controlador (`ComunicadosController`), no en el servicio: es la capa
+  de interfaz y en MySQL ya lo impide `trg_mensaje_nace`. La vista previa sigue permitida.
+- En la bandeja, las solicitudes conservan su orden por prioridad (los cierres con diferencia primero) y los externos van
+  antes, por fecha. `contarPendientes` (el resumen diario de `sistema.panel`) **no** suma los externos: los puertos filtran
+  por el rol de la sesión y `sistema.panel` no tiene esos roles (queda para la tanda 2).
+- El acepto del OSE se ofrece al **proponer**; al aprobar el cambio en la bandeja, no (la firma ya se puede dar en la Puesta
+  en marcha). La tarjeta de cambio de conector conserva su detalle completo (número y CCI siempre visibles); el ⚠ y «Ver
+  detalle» de esa tarjeta quedan para la tanda 2.
+- Hallazgo de paso: un `th:if` junto a un `th:replace` en el mismo elemento **no** evita que el fragmento se evalúe (el
+  `th:replace` tiene precedencia). En las plantillas de esta tanda van en un `th:block`; hay usos anteriores con el mismo
+  patrón (badges de comunicados, `aprobaciones/cajas.html`) que conviene revisar en la tanda 2.
+
+**Pruebas nuevas:** `PasoPuestaEnMarchaTest`, `GuiaPuestaEnMarchaTest`, `GuiaPreparacionWebTest` (banner en los 5 inicios,
+sin tablero en preparación, sin banner en producción, **ningún botón ni «Ir» termina en 403**, Puesta en marcha, estados
+vacíos, 409 del comunicado y traducción de los 1644), `BandejaPendientesExternosTest`, `PropuestaVencimientosSegunInicioTest`
+(los 4 casos y la coherencia de min y max con `validar`) y `EstilosYTextosTandaUnoBTest` (tokens, movimiento reducido,
+«En preparación» solo del colegio, anchos en línea y `title=`). **Cambiaron de texto sin debilitarse:** `PensionesWebTest`,
+`ServicioPlanesPensionTest`, `PasoAProduccionTest` (ahora exige `aria-disabled` y que no exista el formulario de producción)
+y `CajaControllerTest` (busca «Caja no decide montos» dentro del tooltip).
+
+**Revisión visual** (`docs/ux/sprint-11/`, capturas antes y después en 1920 y 390 px; break-ui en 390, 1280, 1600 y 1920):
+- **Capturas:** `*-antes.png` (1920 y 390, sobre `cae2eb7` + PR #29) y `*-despues.png` (1920, 1600, 1280 y 390): inicios de
+  Promotoría, Dirección, Caja y Docente en preparación (con el «Colegio de Prueba C» de dev, que se activa con
+  `cuentasclaras.demo.colegio-en-preparacion=true`; apagado por defecto), inicio de Promotoría y Dirección en producción,
+  Puesta en marcha, Pensiones y Aprobaciones. Ninguna desborda en los 4 anchos.
+- **Hallazgos y correcciones:**
+  - *Antes:* el inicio del colegio en preparación mostraba 13 cifras en S/ 0.00 y un gráfico con ejes vacíos; el armazón
+    quedaba en 1440 px con mucho vacío a los lados en 1920. *Después:* domina la guía; desde 1600 px, cifras en una fila y
+    «Para revisar» al lado de los últimos 30 días.
+  - La lista de la Puesta en marcha usaba `.pasos`/`.paso`, que `app.css` ya define (los pasos numerados horizontales):
+    en 390 px desbordaba 57 px y la columna «Lo hace» se partía letra por letra. Pasa a `.pm-pasos`/`.pm-paso`.
+  - break-ui (`docs/ux/sprint-11/peor-caso/`): bandeja con 0 y con 50 pendientes, títulos y correos largos («Plan de
+    pensiones de Secundaria 2026 · Enviado por administración.contabilidad.sede.norte», «Peñaloza Ñahui, María José»);
+    Pensiones con «Secundaria», «Sin plan aprobado», S/ 0.00 y S/ 99,999.99; tableros con 7 dígitos y 100 %. Sin desborde
+    en los 4 anchos. Dos correcciones: la etiqueta «Se revisa en su pantalla» se estiraba a todo el ancho en celular
+    (`justify-self: start`), y en «Hoy en caja» (5 columnas) «S/» quedaba solo en una línea con 7 dígitos (la cifra se
+    achica con `clamp`). Queda como aviso: en la morosidad por grado, una etiqueta larga pasa a 2 líneas (se lee completa).
+  - emil-design-eng: botones con `scale(0.97)` al presionar y tooltips que aparecen desde su botón (`@starting-style`,
+    125 ms), todo dentro de `prefers-reduced-motion: no-preference`; un solo primario por pantalla en el banner (en Caja y
+    Docente, el botón de la guía es secundario).
+- **Pendiente para la tanda 2:** el ⚠ y «Ver detalle» de la tarjeta de cambio de conector; las filas «pendiente» del
+  inventario; `contarPendientes` con los externos; el acepto del OSE al aprobar el cambio en la bandeja; la revisión con
+  lector de pantalla (NVDA) del banner, que pide una persona.
+
+
 ## 13. Decisiones abiertas para el usuario
 Valor por defecto entre corchetes; se implementa el valor por defecto mientras el usuario no diga otra cosa (salvo la 202,
 que no entra en las tandas sin su confirmación). Sigue la numeración del sprint 10 (la última es la 191).
