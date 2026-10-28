@@ -29,10 +29,10 @@
 					<div><dt>Documento</dt><dd th:text="${a.documento}">DNI 41234567</dd></div>
 					<div><dt>Celular</dt>
 					<dd><span th:text="${a.celular} ?: 'No registrado'">+51 912 345 678</span>
-						<span th:if="${a.celular != null}" th:replace="~{fragments/componentes :: badge(${a.celularVerificado} ? 'Confirmado por ti' : 'Sin confirmar', ${a.celularVerificado} ? 'exito' : 'alerta')}"></span></dd></div>
+						<th:block th:if="${a.celular != null}"><span th:replace="~{fragments/componentes :: badge(${a.celularVerificado} ? 'Confirmado por ti' : 'Sin confirmar', ${a.celularVerificado} ? 'exito' : 'alerta')}"></span></th:block></dd></div>
 					<div><dt>Correo</dt>
 					<dd><span th:text="${a.correo} ?: 'No registrado'">rosa@correo.pe</span>
-						<span th:if="${a.correo != null}" th:replace="~{fragments/componentes :: badge(${a.correoVerificado} ? 'Confirmado por ti' : 'Sin confirmar', ${a.correoVerificado} ? 'exito' : 'alerta')}"></span></dd></div>
+						<th:block th:if="${a.correo != null}"><span th:replace="~{fragments/componentes :: badge(${a.correoVerificado} ? 'Confirmado por ti' : 'Sin confirmar', ${a.correoVerificado} ? 'exito' : 'alerta')}"></span></th:block></dd></div>
 					<th:block th:if="${a.ruc != null}">
 						<div><dt>RUC</dt><dd th:text="|${a.ruc} · ${a.razonSocial}|">20123456789 · Empresa</dd></div>
 					</th:block>

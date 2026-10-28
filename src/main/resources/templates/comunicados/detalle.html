@@ -16,14 +16,14 @@
 			</p>
 		</div>
 		<div class="fila">
-			<a th:if="${c.puedeCorregir()}" th:replace="~{fragments/componentes :: enlaceBoton('Fe de erratas', @{/comunicados/{id}/fe-de-erratas(id=${c.resumen().id()})}, 'secundario')}"></a>
-			<th:block th:if="${c.puedeRetirar()}" th:replace="~{fragments/componentes :: modalMotivo('retirar', 'Retirar el comunicado', 'Las familias verán que se retiró, con el motivo. El texto queda para Dirección y en la bitácora.', @{/comunicados/{id}/retirar(id=${c.resumen().id()})}, 'Retirar', 'secundario', 'Retirar con mi firma')}"></th:block>
+			<th:block th:if="${c.puedeCorregir()}"><a th:replace="~{fragments/componentes :: enlaceBoton('Fe de erratas', @{/comunicados/{id}/fe-de-erratas(id=${c.resumen().id()})}, 'secundario')}"></a></th:block>
+			<th:block th:if="${c.puedeRetirar()}"><th:block th:replace="~{fragments/componentes :: modalMotivo('retirar', 'Retirar el comunicado', 'Las familias verán que se retiró, con el motivo. El texto queda para Dirección y en la bitácora.', @{/comunicados/{id}/retirar(id=${c.resumen().id()})}, 'Retirar', 'secundario', 'Retirar con mi firma')}"></th:block></th:block>
 		</div>
 	</div>
 
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
 
-	<div th:if="${c.motivoRetiro() != null}" th:replace="~{fragments/componentes :: alerta('advertencia', |Retirado por ${c.retiradoPor()} el ${#temporals.format(c.retiradoEn(), 'dd/MM/yyyy HH:mm')}. Motivo: ${c.motivoRetiro()}|)}"></div>
+	<th:block th:if="${c.motivoRetiro() != null}"><div th:replace="~{fragments/componentes :: alerta('advertencia', |Retirado por ${c.retiradoPor()} el ${#temporals.format(c.retiradoEn(), 'dd/MM/yyyy HH:mm')}. Motivo: ${c.motivoRetiro()}|)}"></div></th:block>
 
 	<section class="tarjeta" aria-label="Estadísticas">
 		<div class="indicadores">

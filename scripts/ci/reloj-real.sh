@@ -22,4 +22,11 @@ fi
 if [ "$usos" -lt "$permitidos" ]; then
   echo "AVISO: bajaron a $usos: actualiza $PENDIENTE (el conteo solo baja)."
 fi
+# Sprint 11, tanda 2 (AP2-6): tampoco la resta a mano de la zona («INTERVAL 5 HOUR»): usa cc_ahora_lima_real().
+zona=$(sed -e 's/--.*$//' "$TRIGGERS" | grep -oE 'INTERVAL 5 HOUR' | wc -l | tr -d '[:space:]')
+if [ "$zona" -gt 0 ]; then
+  echo "ERROR: hay $zona usos de «INTERVAL 5 HOUR» (la zona de Lima a mano). Usa cc_ahora_lima_real() o cc_hoy_lima()."
+  sed -e 's/--.*$//' "$TRIGGERS" | grep -nE 'INTERVAL 5 HOUR' || true
+  exit 1
+fi
 echo "OK: ningún uso nuevo del reloj que la conexión mueve."

@@ -47,4 +47,12 @@ public class PendientesRecaudacion implements PendientesExternos {
 		});
 		return lista;
 	}
+
+	/** Sprint 11, tanda 2 (F-D5): lo que espera en el colegio en contexto, sin filtro de rol (lo lee el resumen diario). */
+	@Override
+	@PreAuthorize("hasRole('SISTEMA_PANEL')")
+	@Transactional(readOnly = true)
+	public long contarPendientesDelColegio() {
+		return lotes.findByEstadoOrderByIdAsc(EstadoLote.CARGADO).size();
+	}
 }

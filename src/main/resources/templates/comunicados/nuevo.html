@@ -117,11 +117,11 @@
 		<p class="etiqueta">Así lo verá la familia</p>
 		<h2 th:text="${previa.titulo()}">Título</h2>
 		<p class="secundario" th:text="|${previa.etiqueta()} · ${previa.alcance()} · ${previa.destinatarias()} familia(s)|">De</p>
-		<span th:if="${previa.urgente()}" th:replace="~{fragments/componentes :: badge('Urgente', 'alerta')}"></span>
+		<th:block th:if="${previa.urgente()}"><span th:replace="~{fragments/componentes :: badge('Urgente', 'alerta')}"></span></th:block>
 		<p th:each="p : ${previa.parrafos()}" th:text="${p}">Párrafo</p>
 		<p class="secundario" th:if="${previa.paginasAdjunto() != null}" th:text="|PDF adjunto: ${previa.paginasAdjunto()} página(s).|">PDF</p>
 		<p class="ayuda" th:text="${previa.pie()}">Pie</p>
-		<div th:if="${previa.porAprobar()}" th:replace="~{fragments/componentes :: alerta('advertencia', |Con este PDF, el comunicado queda por aprobar: lo revisa ${previa.quienAprueba()} antes de que salga.|)}"></div>
+		<th:block th:if="${previa.porAprobar()}"><div th:replace="~{fragments/componentes :: alerta('advertencia', |Con este PDF, el comunicado queda por aprobar: lo revisa ${previa.quienAprueba()} antes de que salga.|)}"></div></th:block>
 		<form class="formulario" method="post"
 			th:action="${original != null} ? @{/comunicados/{id}/fe-de-erratas(id=${original.resumen.id})} : @{/comunicados/nuevo}">
 			<input type="hidden" name="emisor" th:value="${borrador.emisor()}">

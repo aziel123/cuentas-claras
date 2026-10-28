@@ -10,7 +10,7 @@
 			<p class="secundario">Llegan al portal de las familias con confirmación de lectura. Un comunicado enviado no se
 				edita: se corrige con una fe de erratas.</p>
 		</div>
-		<a th:if="${opciones.puedeEscribir}" th:replace="~{fragments/componentes :: enlaceBoton('Nuevo comunicado', @{/comunicados/nuevo}, 'primario')}"></a>
+		<th:block th:if="${opciones.puedeEscribir}"><a th:replace="~{fragments/componentes :: enlaceBoton('Nuevo comunicado', @{/comunicados/nuevo}, 'primario')}"></a></th:block>
 	</div>
 
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
@@ -27,8 +27,8 @@
 			<tbody>
 				<tr th:each="c : ${comunicados}">
 					<td><a th:href="@{/comunicados/{id}(id=${c.id()})}" th:text="${c.titulo()}">Título</a>
-						<span th:if="${c.urgente()}" th:replace="~{fragments/componentes :: badge('Urgente', 'alerta')}"></span>
-						<span th:if="${c.feDeErratas()}" th:replace="~{fragments/componentes :: badge('Fe de erratas', 'neutro')}"></span></td>
+						<th:block th:if="${c.urgente()}"><span th:replace="~{fragments/componentes :: badge('Urgente', 'alerta')}"></span></th:block>
+						<th:block th:if="${c.feDeErratas()}"><span th:replace="~{fragments/componentes :: badge('Fe de erratas', 'neutro')}"></span></th:block></td>
 					<td th:text="${c.emisor()}">Dirección</td>
 					<td th:text="${c.alcance()}">3.° Primaria B</td>
 					<td th:text="${c.estadoTexto()}">Enviado</td>

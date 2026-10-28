@@ -1924,8 +1924,8 @@ BEGIN
         INSERT INTO matricula_historial (colegio_id, matricula_id, seccion_anterior_id, seccion_nueva_id, estado_anterior,
                 estado_nuevo, cambiado_bd, creado_en, creado_por, actualizado_en)
             VALUES (OLD.colegio_id, OLD.id, OLD.seccion_id, NEW.seccion_id, OLD.estado, NEW.estado,
-                UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, UTC_TIMESTAMP(6) - INTERVAL 5 HOUR, 'base',
-                UTC_TIMESTAMP(6) - INTERVAL 5 HOUR);
+                cc_ahora_lima_real(), cc_ahora_lima_real(), 'base',
+                cc_ahora_lima_real());
     END IF;
 END$$
 
@@ -1962,7 +1962,7 @@ END$$
 DROP TRIGGER IF EXISTS trg_feriado_registro$$
 CREATE TRIGGER trg_feriado_registro BEFORE INSERT ON feriado FOR EACH ROW
 BEGIN
-    IF NOT (NEW.fecha > DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR)) OR NOT (NEW.vigente <=> TRUE)
+    IF NOT (NEW.fecha > cc_hoy_lima()) OR NOT (NEW.vigente <=> TRUE)
             OR NEW.anulado_por IS NOT NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: un feriado se registra solo para una fecha futura';
     END IF;
@@ -2139,7 +2139,7 @@ DELIMITER $$
 DROP TRIGGER IF EXISTS trg_resumen_diario_registro$$
 CREATE TRIGGER trg_resumen_diario_registro BEFORE INSERT ON resumen_diario FOR EACH ROW
 BEGIN
-    DECLARE v_ahora DATETIME(6) DEFAULT UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    DECLARE v_ahora DATETIME(6) DEFAULT cc_ahora_lima_real();
     DECLARE v_total DECIMAL(12,2);
     DECLARE v_cantidad INT;
     DECLARE v_efectivo DECIMAL(12,2);
@@ -2187,8 +2187,16 @@ BEGIN
      WHERE k.colegio_id = NEW.colegio_id AND k.canal = 'VENTANILLA' AND k.fecha = NEW.fecha AND k.estado = 'ABIERTA';
     SELECT COUNT(*) INTO v_con_diferencia FROM cierre_caja ci JOIN caja_diaria k ON k.id = ci.caja_diaria_id
      WHERE k.colegio_id = NEW.colegio_id AND k.canal = 'VENTANILLA' AND k.fecha = NEW.fecha AND ci.diferencia <> 0;
-    SELECT COUNT(*) INTO v_pendientes FROM solicitud_cambio s
-     WHERE s.colegio_id = NEW.colegio_id AND s.estado = 'PENDIENTE';
+    -- Sprint 11, tanda 2 (F-D5): más lo que se aprueba fuera de la bandeja (lo mismo que contarPendientesDelColegio).
+    SELECT (SELECT COUNT(*) FROM solicitud_cambio s WHERE s.colegio_id = NEW.colegio_id AND s.estado = 'PENDIENTE')
+         + (SELECT COUNT(*) FROM plan_pension x WHERE x.colegio_id = NEW.colegio_id AND x.estado = 'ENVIADO')
+         + (SELECT COUNT(*) FROM lote_saldo_inicial x WHERE x.colegio_id = NEW.colegio_id AND x.estado = 'ENVIADO')
+         + (SELECT COUNT(*) FROM feriado x WHERE x.colegio_id = NEW.colegio_id AND x.vigente AND x.pendiente)
+         + (SELECT COUNT(*) FROM extracto_bancario x WHERE x.colegio_id = NEW.colegio_id AND x.estado = 'CARGADO')
+         + (SELECT COUNT(*) FROM lote_recaudacion x WHERE x.colegio_id = NEW.colegio_id AND x.estado = 'CARGADO')
+         + (SELECT LEAST(COUNT(*), 1) FROM cambio_correo_control x WHERE x.colegio_id = NEW.colegio_id
+              AND x.estado = 'PROPUESTO')
+      INTO v_pendientes;
     SELECT COUNT(*) INTO v_avisos FROM mensaje m
      WHERE m.colegio_id = NEW.colegio_id AND m.tipo IN ('PAGO_REGISTRADO', 'PAGO_ANULADO', 'DESCUENTO_APROBADO')
        AND m.creado_en >= NEW.fecha AND m.creado_en < NEW.fecha + INTERVAL 1 DAY;
@@ -2309,8 +2317,8 @@ DELIMITER $$
 DROP TRIGGER IF EXISTS trg_llamada_control_registro$$
 CREATE TRIGGER trg_llamada_control_registro BEFORE INSERT ON llamada_control FOR EACH ROW
 BEGIN
-    DECLARE v_ahora DATETIME(6) DEFAULT UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
-    DECLARE v_hoy DATE DEFAULT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR);
+    DECLARE v_ahora DATETIME(6) DEFAULT cc_ahora_lima_real();
+    DECLARE v_hoy DATE DEFAULT cc_hoy_lima();
     DECLARE v_promotoria BOOLEAN;
     DECLARE v_direccion BOOLEAN;
     SET v_promotoria = EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
@@ -2369,7 +2377,7 @@ DELIMITER $$
 DROP TRIGGER IF EXISTS trg_muestra_llamada_registro$$
 CREATE TRIGGER trg_muestra_llamada_registro BEFORE INSERT ON muestra_llamada FOR EACH ROW
 BEGIN
-    DECLARE v_hoy DATE DEFAULT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR);
+    DECLARE v_hoy DATE DEFAULT cc_hoy_lima();
     DECLARE v_efectivo BOOLEAN;
     DECLARE v_deuda BOOLEAN;
     SET v_efectivo = EXISTS (SELECT 1 FROM pago p WHERE p.colegio_id = NEW.colegio_id
@@ -2406,7 +2414,7 @@ END$$
 DROP TRIGGER IF EXISTS trg_delegacion_llamada_registro$$
 CREATE TRIGGER trg_delegacion_llamada_registro BEFORE INSERT ON delegacion_llamada FOR EACH ROW
 BEGIN
-    DECLARE v_hoy DATE DEFAULT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR);
+    DECLARE v_hoy DATE DEFAULT cc_hoy_lima();
     IF NOT EXISTS (SELECT 1 FROM usuario u JOIN usuario_rol r ON r.usuario_id = u.id
             WHERE u.nombre_usuario = NEW.creado_por AND u.colegio_id = NEW.colegio_id AND u.activo
               AND u.apoderado_id IS NULL AND r.rol = 'PROMOTOR') THEN
@@ -2434,7 +2442,7 @@ DELIMITER $$
 DROP TRIGGER IF EXISTS trg_respaldo_registro$$
 CREATE TRIGGER trg_respaldo_registro BEFORE INSERT ON respaldo FOR EACH ROW
 BEGIN
-    DECLARE v_ahora DATETIME(6) DEFAULT UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    DECLARE v_ahora DATETIME(6) DEFAULT cc_ahora_lima_real();
     IF NOT (SUBSTRING_INDEX(SESSION_USER(), '@', 1) <=> 'cc_respaldo') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el respaldo lo registra solo cc_respaldo';
     END IF;
@@ -2580,7 +2588,7 @@ END$$
 DROP TRIGGER IF EXISTS trg_semilla_muestreo_registro$$
 CREATE TRIGGER trg_semilla_muestreo_registro BEFORE INSERT ON semilla_muestreo FOR EACH ROW
 BEGIN
-    DECLARE v_hoy DATE DEFAULT DATE(UTC_TIMESTAMP() - INTERVAL 5 HOUR);
+    DECLARE v_hoy DATE DEFAULT cc_hoy_lima();
     IF NOT cc_es_sistema() OR NOT (NEW.creado_por <=> 'sistema.muestreo')
             OR NOT ((NEW.ambito <=> 'CAJA' AND NEW.fecha <=> v_hoy)
                 OR (NEW.ambito <=> 'LLAMADA_CONTROL' AND NEW.fecha <=> v_hoy - INTERVAL WEEKDAY(v_hoy) DAY)) THEN
@@ -3365,7 +3373,7 @@ DELIMITER $$
 DROP TRIGGER IF EXISTS trg_registro_asistencia_nace$$
 CREATE TRIGGER trg_registro_asistencia_nace BEFORE INSERT ON registro_asistencia FOR EACH ROW
 BEGIN
-    SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    SET NEW.registrado_bd = cc_ahora_lima_real();
     IF NOT (NEW.fuente <=> 'DOCENTE') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el marcador todavia no esta habilitado; la asistencia la registra el docente';
     END IF;
@@ -3453,7 +3461,7 @@ BEGIN
                 OR NOT EXISTS (SELECT 1 FROM matricula m WHERE m.id = NEW.matricula_id AND m.colegio_id = NEW.colegio_id
                     AND m.alumno_id = NEW.alumno_id AND m.seccion_id = NEW.seccion_id AND m.estado = 'ACTIVA')
                 OR NOT ((v_origen_registro <=> 'DEL_DIA' AND v_fecha = cc_hoy_lima())
-                    OR (v_origen_registro <=> 'TARDIO' AND v_registrado_bd >= UTC_TIMESTAMP(6) - INTERVAL 6 HOUR)) THEN
+                    OR (v_origen_registro <=> 'TARDIO' AND v_registrado_bd >= cc_ahora_lima_real() - INTERVAL 1 HOUR)) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la marca inicial es de hoy, de un alumno de la seccion y de quien registra';
         END IF;
     ELSE
@@ -3469,7 +3477,7 @@ BEGIN
         SET v_cierre = COALESCE((SELECT c.hora_segundo_aviso FROM configuracion_academica c
             WHERE c.colegio_id = NEW.colegio_id), '16:00:00');
         IF NEW.origen = 'CORRECCION_DEL_DIA' AND NOT (v_es_personal AND v_fecha = cc_hoy_lima()
-                AND TIME(UTC_TIMESTAMP(6) - INTERVAL 5 HOUR) < v_cierre
+                AND TIME(cc_ahora_lima_real()) < v_cierre
                 AND v_origen_anterior NOT IN ('JUSTIFICACION', 'REVERSION_JUSTIFICACION')
                 AND cc_firma_valida(NEW.colegio_id, CONCAT('marca_asistencia:', NEW.reemplaza_id, ':CORREGIDA'),
                     NEW.creado_por)) THEN
@@ -3608,8 +3616,8 @@ BEGIN
             NEW.creado_por) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el envio lleva la firma de la sesion de quien lo envia';
     END IF;
-    IF NEW.estado = 'ENVIADO' AND NOT (NEW.enviado_en BETWEEN UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE
-            AND UTC_TIMESTAMP(6) - INTERVAL 5 HOUR + INTERVAL 5 MINUTE) THEN
+    IF NEW.estado = 'ENVIADO' AND NOT (NEW.enviado_en BETWEEN cc_ahora_lima_real() - INTERVAL 5 MINUTE
+            AND cc_ahora_lima_real() + INTERVAL 5 MINUTE) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la hora del envio la pone el reloj de la base';
     END IF;
     IF NEW.tipo = 'FE_DE_ERRATAS' AND NOT EXISTS (SELECT 1 FROM comunicado o WHERE o.id = NEW.corrige_id
@@ -3728,8 +3736,8 @@ DROP TRIGGER IF EXISTS trg_comunicado_destinatario_cambio$$
 CREATE TRIGGER trg_comunicado_destinatario_cambio BEFORE UPDATE ON comunicado_destinatario FOR EACH ROW
 BEGIN
     IF NOT (NEW.abierto_en <=> OLD.abierto_en) AND (OLD.abierto_en IS NOT NULL OR NEW.abierto_en IS NULL
-            OR NOT (NEW.abierto_en BETWEEN UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 5 MINUTE
-                AND UTC_TIMESTAMP(6) - INTERVAL 5 HOUR + INTERVAL 5 MINUTE)) THEN
+            OR NOT (NEW.abierto_en BETWEEN cc_ahora_lima_real() - INTERVAL 5 MINUTE
+                AND cc_ahora_lima_real() + INTERVAL 5 MINUTE)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la apertura de un comunicado se marca una vez, con la hora de la base';
     END IF;
     IF (NOT (NEW.avisado_mensaje_id <=> OLD.avisado_mensaje_id) AND (OLD.avisado_mensaje_id IS NOT NULL
@@ -3890,7 +3898,7 @@ BEGIN
                     OR NOT (NEW.cerrado_por <=> NULL) THEN
                 SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el periodo no se puede abrir';
             END IF;
-            SET NEW.abierto_en = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+            SET NEW.abierto_en = cc_ahora_lima_real();
         ELSEIF OLD.estado <=> 'ABIERTO' AND NEW.estado <=> 'CERRADO' THEN
             SELECT c.dias_cierre_anticipado INTO v_dias FROM configuracion_evaluacion c
                 WHERE c.anio_escolar_id = NEW.anio_escolar_id AND c.colegio_id = NEW.colegio_id;
@@ -3903,7 +3911,7 @@ BEGIN
                           AND p.numero = NEW.numero - 1 AND p.estado = 'CERRADO')) THEN
                 SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el periodo lo cierra Direccion con su firma, en su fecha';
             END IF;
-            SET NEW.cerrado_en = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+            SET NEW.cerrado_en = cc_ahora_lima_real();
         ELSE
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: transicion de periodo no permitida';
         END IF;
@@ -3995,10 +4003,10 @@ BEGIN
                       AND JSON_UNQUOTE(JSON_EXTRACT(s.datos, '$.area_id')) <=> CAST(NEW.area_id AS CHAR)
                       AND (cc_rol_activo(s.colegio_id, s.resuelto_por, 'DIRECTOR')
                           OR cc_rol_activo(s.colegio_id, s.resuelto_por, 'PROMOTOR'))
-                      AND f.firmada_bd >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 48 HOUR))) THEN
+                      AND f.firmada_bd >= cc_ahora_lima_real() - INTERVAL 48 HOUR))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el periodo esta cerrado: la nota va por solicitud';
     END IF;
-    SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    SET NEW.registrado_bd = cc_ahora_lima_real();
     -- Correcciones del sprint 10 (V38, hallazgo 1): la conexión que guarda el lote; sus notas, solo desde ella.
     SET NEW.conexion_id = CONNECTION_ID();
 END$$
@@ -4075,7 +4083,7 @@ BEGIN
     END IF;
     IF NEW.origen IN ('REGISTRO', 'CAMBIO_ABIERTO', 'REGISTRO_TARDIO') THEN
         IF v_lote_por IS NULL OR NOT (NEW.creado_por <=> v_lote_por)
-                OR NOT (v_lote_bd >= UTC_TIMESTAMP(6) - INTERVAL 5 HOUR - INTERVAL 10 MINUTE)
+                OR NOT (v_lote_bd >= cc_ahora_lima_real() - INTERVAL 10 MINUTE)
                 -- Correcciones del sprint 10 (hallazgo 1): desde la conexión que guardó el lote y no más notas que sus filas.
                 OR NOT (v_lote_conexion <=> CONNECTION_ID())
                 OR NOT ((SELECT COUNT(*) FROM calificacion x WHERE x.lote_id = NEW.lote_id
@@ -4110,7 +4118,7 @@ BEGIN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la correccion no es la que se aprobo';
         END IF;
     END IF;
-    SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    SET NEW.registrado_bd = cc_ahora_lima_real();
 END$$
 
 -- La exoneración (Religión o Educación Física): el área es exonerable, de la versión del año y del nivel de la sección de
@@ -4274,7 +4282,7 @@ BEGIN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la libreta la emite el sistema al cierre o por una correccion aprobada';
         END IF;
     END IF;
-    SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    SET NEW.registrado_bd = cc_ahora_lima_real();
 END$$
 
 -- La constancia de entrega, con la sesión de quien entrega. PORTAL: la cuenta activa del apoderado activo de la familia del
@@ -4313,7 +4321,7 @@ BEGIN
     ELSE
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la entrega de la libreta es por el portal, impresa o en la entrevista';
     END IF;
-    SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    SET NEW.registrado_bd = cc_ahora_lima_real();
 END$$
 
 -- La exportación de calificaciones para el SIAGIE: DIRECTOR, o la persona delegada (M12: una delegación con hoy en Lima
@@ -4338,7 +4346,7 @@ BEGIN
             WHERE p.id = NEW.periodo_id AND p.colegio_id = NEW.colegio_id AND p.estado = 'CERRADO' AND s.id = NEW.seccion_id) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: se exporta un periodo cerrado de una seccion del anio';
     END IF;
-    SET NEW.registrado_bd = UTC_TIMESTAMP(6) - INTERVAL 5 HOUR;
+    SET NEW.registrado_bd = cc_ahora_lima_real();
 END$$
 
 -- M12: la delegación la da una persona activa con DIRECTOR con su firma (delegacion_siagie:{usuario}:{desde}:DELEGADA),

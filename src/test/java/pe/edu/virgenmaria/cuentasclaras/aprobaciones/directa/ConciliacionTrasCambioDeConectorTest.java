@@ -75,6 +75,8 @@ class ConciliacionTrasCambioDeConectorTest extends BaseDirecta {
 
 	@Test
 	void quienCambioLaCuentaNoConfirmaElExtractoPeroOtraPromotoriaSi() {
+		Usuario operador = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioPlataforma.operador(usuarios, codificador,
+				colegios, "operador.conciliacion");
 		var banco = extracto("10000.00").abono("2026-10-01", "ABONO A", "", "100.00");
 		Long id = EscenarioConciliacion.registrar(extractos, UsuariosDePrueba.autenticado(e.administracion()), banco);
 		SecurityContextHolder.clearContext();
@@ -83,8 +85,14 @@ class ConciliacionTrasCambioDeConectorTest extends BaseDirecta {
 				.hasMessageContaining("30 días");
 		// La socia la aprobó: también cambió la cuenta.
 		assertThatThrownBy(() -> confirmar(e.socia(), banco)).isInstanceOf(AutoaprobacionException.class);
-		assertThat(EscenarioDirecta.eventos(jdbc, "CONCILIACION_TRAS_CAMBIO_RECHAZADA")).isEqualTo(2L);
+		// Dos en el colegio y dos en la bitácora de la plataforma (el aviso a los operadores).
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = "
+				+ "'CONCILIACION_TRAS_CAMBIO_RECHAZADA' AND colegio_id = 1", Long.class)).isEqualTo(2L);
+		assertThat(EscenarioDirecta.eventos(jdbc, "CONCILIACION_TRAS_CAMBIO_RECHAZADA")).isEqualTo(4L);
 		assertThat(EscenarioDirecta.destinos(jdbc, "CONCILIACION_BLOQUEADA")).contains(CORREO_CONTROL);
+		// Sprint 11, tanda 2 (pendiente de la 1c): también los operadores de la plataforma.
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE plantilla = 'CONCILIACION_BLOQUEADA' AND "
+				+ "usuario_id = ?", Long.class, operador.getId())).isEqualTo(2L);
 		assertThat(EscenarioConciliacion.estadoExtracto(jdbc, id)).isNotEqualTo("CONFIRMADO");
 
 		// Otra persona (Dirección) sí lo confirma.

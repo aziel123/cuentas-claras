@@ -80,6 +80,9 @@ public class CambiosRecientesConectores {
 		eventos.publishEvent(new AvisoPlataforma(ContextoColegio.actual(), AvisoPlataforma.Tipo.CONCILIACION_BLOQUEADA,
 				List.of(nombre, que), entidad, entidadId, LocalDateTime.now(reloj).withNano(0).toString(), null, false, true,
 				true));
+		// Sprint 11, tanda 2 (pendiente de la 1c): también los operadores, al confirmarse esta transacción.
+		eventos.publishEvent(new pe.edu.virgenmaria.cuentasclaras.colegio.service.ConciliacionBloqueada(ContextoColegio.actual(),
+				List.of(nombre, que), entidad, entidadId));
 		return true;
 	}
 

@@ -42,10 +42,29 @@
 				<th:block th:if="${s.advertencia != null}">
 					<div th:replace="~{fragments/componentes :: alerta('advertencia', ${s.advertencia})}"></div>
 				</th:block>
-				<ul class="detalle-solicitud" th:unless="${#lists.isEmpty(s.detalle)}">
+				<ul class="detalle-solicitud" th:unless="${#lists.isEmpty(s.detalle) or s.tipo == 'CAMBIO_CONECTOR'}">
 					<li th:each="linea : ${s.detalle}" th:text="${linea}" th:classappend="${#strings.startsWith(linea, 'Palabra que lo envió a aprobación')} ? 'linea-resaltada'">Boleta B001-00000001 · S/ 900.00 · Efectivo</li>
 				</ul>
-				<p class="secundario" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM/yyyy HH:mm')} · Motivo: ${s.motivo}|">Pedida por administracion · Motivo</p>
+				<!--/* Sprint 11, tanda 2 (F-D7): la tarjeta del cambio de conector. El número de cuenta y el CCI completos quedan a la
+				     vista, con el ⚠; el titular, la prueba de conexión y el motivo van en «Ver detalle». */-->
+				<th:block th:if="${s.tipo == 'CAMBIO_CONECTOR'}">
+					<ul class="detalle-solicitud" data-conector="visible">
+						<li th:each="linea : ${s.detalle}" th:unless="${#strings.startsWith(linea, 'Titular de la cuenta') or #strings.startsWith(linea, 'Prueba de conexión') or #strings.startsWith(linea, 'Una Promotoría')}">
+							<span th:text="${linea}">Número de cuenta completo: 191-2345678-0-12 · CCI completo: 00219100234567801255</span>
+							<span th:if="${#strings.startsWith(linea, 'Número de cuenta completo')}" class="aviso-cuenta" role="img"
+								aria-label="Confirma el número con el banco antes de aprobar" title="Confirma el número con el banco antes de aprobar">⚠</span>
+						</li>
+					</ul>
+					<details class="ver-detalle">
+						<summary>Ver detalle</summary>
+						<ul class="detalle-solicitud" data-conector="detalle">
+							<li th:each="linea : ${s.detalle}" th:if="${#strings.startsWith(linea, 'Titular de la cuenta') or #strings.startsWith(linea, 'Prueba de conexión') or #strings.startsWith(linea, 'Una Promotoría')}" th:text="${linea}">Titular de la cuenta</li>
+							<li th:text="|Motivo: ${s.motivo}|">Motivo</li>
+						</ul>
+					</details>
+				</th:block>
+				<p class="secundario" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM/yyyy HH:mm')} · Motivo: ${s.motivo}|" th:unless="${s.tipo == 'CAMBIO_CONECTOR'}">Pedida por administracion · Motivo</p>
+				<p class="secundario" th:if="${s.tipo == 'CAMBIO_CONECTOR'}" th:text="|Pedida por ${s.solicitadoPor} · ${#temporals.format(s.solicitadaEn, 'dd/MM/yyyy HH:mm')}|">Pedida por administracion</p>
 				<!--/* Sprint 11, tanda 1c: lo sensible que pidió la Promotoría se aplica en su detalle, con su código. */-->
 				<p class="fila" th:if="${s.puedeResolver and s.pideCodigo}">
 					<a class="btn btn-primario" th:href="@{/aprobaciones/{id}(id=${s.id})}" data-aplicar-directo>Aplicar con tu código</a>

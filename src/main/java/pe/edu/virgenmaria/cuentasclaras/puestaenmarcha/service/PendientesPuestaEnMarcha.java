@@ -22,8 +22,12 @@ public class PendientesPuestaEnMarcha implements PendientesExternos {
 
 	private final CorreoDeControl correo;
 
-	public PendientesPuestaEnMarcha(CorreoDeControl correo) {
+	private final pe.edu.virgenmaria.cuentasclaras.comunicacion.repository.CambioCorreoControlRepository cambios;
+
+	public PendientesPuestaEnMarcha(CorreoDeControl correo,
+			pe.edu.virgenmaria.cuentasclaras.comunicacion.repository.CambioCorreoControlRepository cambios) {
 		this.correo = correo;
+		this.cambios = cambios;
 	}
 
 	@Override
@@ -38,5 +42,14 @@ public class PendientesPuestaEnMarcha implements PendientesExternos {
 				"Correo externo de control", PendientesExternos.detalle("Propuesto", p.propuestoPor(), p.propuestoEn()),
 				p.propuestoPor(), p.propuestoEn(), enlace, promotoria && !usuario.equals(p.propuestoPor()))));
 		return lista;
+	}
+
+	/** Sprint 11, tanda 2 (F-D5): lo que espera en el colegio en contexto, sin filtro de rol (lo lee el resumen diario). */
+	@Override
+	@PreAuthorize("hasRole('SISTEMA_PANEL')")
+	@Transactional(readOnly = true)
+	public long contarPendientesDelColegio() {
+		return cambios.findFirstByEstado(pe.edu.virgenmaria.cuentasclaras.comunicacion.model.CambioCorreoControl.Estado.PROPUESTO)
+				.isPresent() ? 1 : 0;
 	}
 }

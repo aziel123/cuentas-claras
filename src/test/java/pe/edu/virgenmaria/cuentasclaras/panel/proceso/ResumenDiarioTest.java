@@ -97,6 +97,9 @@ class ResumenDiarioTest {
 	private ServicioPlanesPension planes;
 
 	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioFeriados feriados;
+
+	@Autowired
 	private ServicioCobro cobro;
 
 	@Autowired
@@ -205,6 +208,27 @@ class ResumenDiarioTest {
 		});
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evento_auditoria WHERE accion = 'RESUMEN_DIARIO_GUARDADO' "
 				+ "AND entidad_id = ?", Long.class, f.get("id").toString())).isEqualTo(1);
+	}
+
+	/**
+	 * Sprint 11, tanda 2 (F-D5): el resumen cuenta también lo que se aprueba fuera de la bandeja. Un plan enviado y un día no
+	 * laborable propuesto suman 2 a las pendientes (en MySQL, trg_resumen_diario_registro cuenta lo mismo).
+	 */
+	@Test
+	void cuentaLasAprobacionesExternas() {
+		a(19, 30);
+		long enBandeja = jdbc.queryForObject("SELECT COUNT(*) FROM solicitud_cambio WHERE estado = 'PENDIENTE'", Long.class);
+		como(EscenarioCobranza.ADMINISTRACION);
+		Long plan = planes.crearBorrador(datos.f().anio2027(), pe.edu.virgenmaria.cuentasclaras.colegio.model.Nivel.SECUNDARIA,
+				EscenarioCobranza.plan(2027, "500", "350", null));
+		planes.enviar(plan);
+		como(EscenarioCobranza.DIRECCION);
+		feriados.registrar(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.FeriadoRequest(LocalDate.of(2027, 4, 20),
+				"Aniversario del colegio"));
+		SecurityContextHolder.clearContext();
+
+		resumenDe(JUEVES);
+		assertThat(((Number) foto().get("solicitudes_pendientes")).longValue()).isEqualTo(enBandeja + 2);
 	}
 
 	/** P3: el panel y el resumen dicen lo mismo (los dos usan CifrasDelDia). */

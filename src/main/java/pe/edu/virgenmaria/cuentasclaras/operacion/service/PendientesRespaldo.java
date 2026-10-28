@@ -45,4 +45,14 @@ public class PendientesRespaldo implements PendientesExternos {
 				+ respaldo.porResolverArchivo(), "sistema", respaldo.fin(), enlace, roles.contains(Rol.PROMOTOR)));
 		return lista;
 	}
+
+	/**
+	 * Sprint 11, tanda 2 (F-D5): el respaldo con filas faltantes no es una aprobación (el resumen diario lo informa en sus
+	 * alertas): no suma a las pendientes. trg_resumen_diario_registro cuenta lo mismo.
+	 */
+	@Override
+	@PreAuthorize("hasRole('SISTEMA_PANEL')")
+	public long contarPendientesDelColegio() {
+		return 0;
+	}
 }

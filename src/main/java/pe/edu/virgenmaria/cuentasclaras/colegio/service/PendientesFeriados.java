@@ -45,4 +45,12 @@ public class PendientesFeriados implements PendientesExternos {
 				enlace, aprueba && !usuario.equals(f.getCreadoPor()))));
 		return lista;
 	}
+
+	/** Sprint 11, tanda 2 (F-D5): lo que espera en el colegio en contexto, sin filtro de rol (lo lee el resumen diario). */
+	@Override
+	@PreAuthorize("hasRole('SISTEMA_PANEL')")
+	@Transactional(readOnly = true)
+	public long contarPendientesDelColegio() {
+		return feriados.findByVigenteTrue().stream().filter(f -> f.isPendiente()).count();
+	}
 }

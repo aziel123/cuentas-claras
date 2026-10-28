@@ -176,6 +176,27 @@ class CambioConectorTest {
 		return jdbc.queryForObject("SELECT estado FROM conector_colegio WHERE id = ?", String.class, id);
 	}
 
+	/**
+	 * Sprint 11, tanda 2 (F-D7, «ControlesVisibles»): en la bandeja, la tarjeta del cambio de cuenta bancaria deja a la vista
+	 * el número y el CCI COMPLETOS con el ⚠ («Confirma el número con el banco antes de aprobar»); el titular, la prueba de
+	 * conexión y el motivo van en «Ver detalle».
+	 */
+	@Test
+	void laTarjetaDeLaCuentaBancariaDejaElNumeroALaVista() throws Exception {
+		PropuestaConectorRequest pedido = cuenta(ProveedorConector.BCP, "1912345678901");
+		Long id = proponer(administracion, TipoConector.CUENTA_BANCARIA, pedido);
+		probar(administracion, id);
+		String html = mvc.perform(get("/aprobaciones").with(UsuariosDePrueba.como(directora))).andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+		int numero = html.indexOf("Número de cuenta completo: 1912345678901 · CCI completo: " + pedido.cci());
+		int detalle = html.indexOf("<details class=\"ver-detalle\">");
+		assertThat(numero).as("número y CCI completos a la vista").isPositive();
+		assertThat(detalle).as("«Ver detalle» después").isGreaterThan(numero);
+		assertThat(html).contains("title=\"Confirma el número con el banco antes de aprobar\"", "<summary>Ver detalle</summary>");
+		assertThat(html.indexOf("Titular de la cuenta", detalle)).as("el titular, en «Ver detalle»").isPositive();
+		assertThat(html.indexOf("Prueba de conexión", detalle)).isPositive();
+	}
+
 	@Test
 	void promotoriaSinCodigoNoAprueba() {
 		// Sprint 11, tanda 1c: la Promotoría sí aprueba lo suyo, pero solo con su código (sin él no pasa nada).

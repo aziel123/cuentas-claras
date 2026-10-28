@@ -30,6 +30,12 @@ public interface PendientesExternos {
 		return pendientes(usuario).stream().filter(PendienteExterno::puedeResolver).count();
 	}
 
+	/**
+	 * Sprint 11, tanda 2 (F-D5): cuántos pendientes hay en el colegio en contexto, sin filtro de rol ni de participantes.
+	 * Solo lo llama el resumen diario ({@code sistema.panel}).
+	 */
+	long contarPendientesDelColegio();
+
 	/** Los roles de quien está en sesión. */
 	static Set<Rol> rolesActuales() {
 		Authentication autenticacion = SecurityContextHolder.getContext().getAuthentication();

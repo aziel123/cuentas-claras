@@ -108,10 +108,15 @@ public class ResumenesDiarios {
 
 	private final LlamadasControl llamadas;
 
+	/** Sprint 11, tanda 2 (F-D5): los puertos de lo que se aprueba fuera de la bandeja. */
+	private final java.util.List<pe.edu.virgenmaria.cuentasclaras.aprobaciones.api.PendientesExternos> externos;
+
 	public ResumenesDiarios(ResumenDiarioRepository resumenes, CifrasDelDia cifras, CifrasCaja caja,
 			BandejaAprobaciones bandeja, ConsultaMensajes mensajes, ConsultaHuellas huellas,
 			ObjectProvider<AlertasRevision> alertas, CalendarioHabil calendario, AuditoriaService auditoria,
-			ApplicationEventPublisher eventos, PropiedadesPanel propiedades, Clock reloj, LlamadasControl llamadas) {
+			ApplicationEventPublisher eventos, PropiedadesPanel propiedades, Clock reloj, LlamadasControl llamadas,
+			java.util.List<pe.edu.virgenmaria.cuentasclaras.aprobaciones.api.PendientesExternos> externos) {
+		this.externos = externos;
 		this.resumenes = resumenes;
 		this.cifras = cifras;
 		this.caja = caja;
@@ -149,7 +154,9 @@ public class ResumenesDiarios {
 			return Optional.empty();
 		}
 		Optional<ConsultaHuellas.HuellaDeLaHora> huella = huellas.ultimaHasta(fecha.atTime(HORA_HUELLA));
-		long pendientes = bandeja.contarPendientes();
+		// Sprint 11, tanda 2 (F-D5): también lo que se aprueba fuera de la bandeja (planes, feriados, extractos...).
+		long pendientes = bandeja.contarPendientes() + externos.stream()
+				.mapToLong(pe.edu.virgenmaria.cuentasclaras.aprobaciones.api.PendientesExternos::contarPendientesDelColegio).sum();
 		long criticas = alertasCriticas();
 		AvisosDelDia avisos = mensajes.avisosFinancieros(fecha);
 		LocalDateTime desdeElAnterior = resumenes.findFirstByFechaLessThanOrderByFechaDesc(fecha)
