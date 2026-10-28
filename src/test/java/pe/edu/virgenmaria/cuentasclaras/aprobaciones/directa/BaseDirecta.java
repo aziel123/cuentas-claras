@@ -75,9 +75,14 @@ abstract class BaseDirecta {
 		e = EscenarioDirecta.preparar(usuarios, codificador, jdbc, reloj);
 	}
 
+	@Autowired
+	protected pe.edu.virgenmaria.cuentasclaras.comun.fecha.CalendarioHabil calendarioHabil;
+
 	@AfterEach
 	void limpiarEquipo() {
 		SecurityContextHolder.clearContext();
+		// Los días no laborables que aprobaron estas pruebas no quedan en la caché del calendario (la base se limpia).
+		calendarioHabil.invalidarTodo();
 		LimpiezaBaseDatos.limpiar(jdbc);
 	}
 

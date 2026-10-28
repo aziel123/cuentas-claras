@@ -138,10 +138,12 @@ class AuditoriaSprint6MySqlTest {
 		Usuario directora = guardar("dir.a1b." + sufijo, Rol.DIRECTOR);
 		UsuariosDePrueba.iniciarSesion(promotora);
 		Long primera = contactoPersonal.solicitar(promotora.getId(), nueve(), null, "Cambié de número de celular este mes");
+		confirmarDesdeElAnterior(promotora, primera);
 		UsuariosDePrueba.iniciarSesion(directora);
 		bandeja.aprobar(primera, null);
 		UsuariosDePrueba.iniciarSesion(promotora);
 		Long segunda = contactoPersonal.solicitar(promotora.getId(), nueve(), null, "Volví a cambiar de número de celular");
+		confirmarDesdeElAnterior(promotora, segunda);
 		UsuariosDePrueba.iniciarSesion(directora);
 		bandeja.aprobar(segunda, null);
 		SecurityContextHolder.clearContext();
@@ -222,6 +224,17 @@ class AuditoriaSprint6MySqlTest {
 	private JdbcTemplate sistema() {
 		return new JdbcTemplate(((pe.edu.virgenmaria.cuentasclaras.comun.basedatos.FuenteDatosEnrutada) fuenteDatos).sistema());
 	}
+
+	/** Sprint 11, tanda 1c (A1c-1): la dueña de la cuenta directiva confirma el cambio desde su contacto anterior. */
+	private void confirmarDesdeElAnterior(Usuario duena, Long solicitud) {
+		UsuariosDePrueba.iniciarSesion(duena);
+		var pedido = contactoPersonal.pedirCodigoDelContactoAnterior(solicitud);
+		contactoPersonal.confirmarDesdeContactoAnterior(solicitud, pe.edu.virgenmaria.cuentasclaras.comun.prueba
+				.CodigosDePrueba.escrito(jdbc, derivador, 1L, pedido));
+	}
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comun.cripto.DerivadorSecreto derivador;
 
 	private Usuario guardar(String nombre, Rol rol) {
 		return UsuariosDePrueba.guardar(usuarios, codificador, 1L, nombre, UsuariosDePrueba.CLAVE, false, rol);

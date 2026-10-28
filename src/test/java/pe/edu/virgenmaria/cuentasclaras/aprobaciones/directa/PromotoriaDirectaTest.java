@@ -101,6 +101,7 @@ class PromotoriaDirectaTest {
 	@AfterEach
 	void limpiar() {
 		SecurityContextHolder.clearContext();
+		calendario.invalidarTodo();
 		LimpiezaBaseDatos.limpiar(jdbc);
 	}
 
