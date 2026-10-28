@@ -207,7 +207,9 @@ class PasoAProduccionTest {
 		UsuariosDePrueba.iniciarSesion(caja);
 
 		assertThatThrownBy(() -> cobro.cobrar(EscenarioCaja.digital(1L, List.of(1L), MedioPago.YAPE, "OP-PREP-1", "450.00")))
-				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("todavía no está en producción");
+				// Sprint 11, tanda 1b: el mismo bloqueo, con el texto de la guía (la excepción de la preparación).
+				.isInstanceOf(pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioEnPreparacionException.class)
+				.hasMessageContaining("Tu colegio está en preparación: todavía no se registran pagos");
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM pago WHERE colegio_id = ?", Long.class, colegio)).isZero();
 	}
 

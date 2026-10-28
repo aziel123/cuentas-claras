@@ -4,10 +4,10 @@
 <main id="contenido" class="contenido" data-pantalla="conectores">
 	<div class="cabecera">
 		<div>
-			<h1>Conectores del colegio</h1>
-			<p class="secundario">Adónde entra el dinero del colegio y quién emite sus boletas. Cambiar un conector lo propone una
-				persona y lo aprueba otra de Promotoría o Dirección con su firma; en todos participa una Promotoría. Toda la
-				Promotoría y el correo externo de control reciben un aviso.</p>
+			<!--/* Sprint 11, tanda 1b (F-D7): la explicación (un control) pasa a un «i»; con la 1c, lo de la Promotoría no pide
+			     segunda firma, pero sí su código y la espera de 24 horas en lo que mueve dinero. */-->
+			<h1><span>Conectores del colegio</span>
+				<span th:replace="~{fragments/componentes :: info('conectores', 'Adónde entra el dinero y quién emite las boletas. Lo que propone Administración lo aprueba otra persona; lo de la Promotoría se aplica con su código, y la cuenta del banco 24 horas después. Toda la Promotoría y el correo de control reciben un aviso.', 'cómo cambia un conector')}"></span></h1>
 		</div>
 	</div>
 
@@ -18,8 +18,8 @@
 	</th:block>
 
 	<section class="tarjeta" th:each="s : ${vista.porTipo}" th:attr="aria-labelledby=${'titulo-' + s.tipo}" th:data-tipo="${s.tipo}">
-		<h2 th:id="${'titulo-' + s.tipo}" th:text="${s.etiqueta}">Cuenta bancaria</h2>
-		<p class="secundario" th:text="|Define ${s.descripcion}.| + (${s.mueveDinero} ? ' Mueve dinero: una Promotoría debe proponerlo o aprobarlo.' : '')">Define...</p>
+		<h2 th:id="${'titulo-' + s.tipo}"><span th:text="${s.etiqueta}">Cuenta bancaria</span>
+			<span th:replace="~{fragments/componentes :: info(|tipo-${s.tipo}|, |Define ${s.descripcion}.| + (${s.mueveDinero} ? ' Mueve dinero: una Promotoría debe proponerlo o aprobarlo.' : ''), ${s.etiqueta})}"></span></h2>
 
 		<div th:if="${s.vigente != null}" class="conector-vigente" data-conector="vigente">
 			<p>
@@ -32,7 +32,10 @@
 			<p class="secundario" th:text="|Propuso ${s.vigente.propuestoPor}; aprobó ${s.vigente.resueltoPor} el ${#temporals.format(s.vigente.resueltoEn, 'dd/MM/yyyy HH:mm')}.|">Propuso…</p>
 		</div>
 		<th:block th:if="${s.vigente == null}">
-			<div th:replace="~{fragments/componentes :: estadoVacio('Sin conector vigente', ${s.sinConector})}"></div>
+			<!--/* Sprint 11, tanda 1b (sección 3.14): la cuenta del banco guía; los demás tipos, como antes. */-->
+			<div th:if="${s.tipo == 'CUENTA_BANCARIA'}" th:replace="~{fragments/componentes :: estadoVacioPaso('Todavía no registraste la cuenta donde entra el dinero',
+				null, ${@guiaPasos.vacio('cuenta-bancaria')}, 'Registrar la cuenta del banco', |#proponer-${s.tipo}|)}"></div>
+			<div th:unless="${s.tipo == 'CUENTA_BANCARIA'}" th:replace="~{fragments/componentes :: estadoVacio('Sin conector vigente', ${s.sinConector})}"></div>
 		</th:block>
 
 		<div th:each="p : ${s.propuestos}" class="conector-propuesto" data-conector="propuesto">
@@ -76,7 +79,7 @@
 
 		<details th:if="${vista.puedeProponer and #lists.isEmpty(s.propuestos)}" class="conector-formulario">
 			<summary th:text="${s.vigente == null} ? 'Registrar el conector' : 'Proponer un cambio'">Proponer un cambio</summary>
-			<form method="post" class="formulario formulario-angosto" th:action="@{/conectores/{t}(t=${#strings.toLowerCase(#strings.replace(s.tipo, '_', '-'))})}">
+			<form method="post" class="formulario formulario-angosto" th:id="|proponer-${s.tipo}|" th:action="@{/conectores/{t}(t=${#strings.toLowerCase(#strings.replace(s.tipo, '_', '-'))})}">
 				<div class="campo">
 					<label th:for="${'proveedor-' + s.tipo}">Proveedor</label>
 					<select class="input" th:id="${'proveedor-' + s.tipo}" name="proveedor" required>

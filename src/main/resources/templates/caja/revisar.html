@@ -111,7 +111,11 @@
 				<h2 id="titulo-total" class="etiqueta">Total a cobrar · <span th:text="${r.medio.etiqueta()}">Efectivo</span></h2>
 				<p class="total-cobro-monto" data-total th:text="|S/ ${#numbers.formatDecimal(r.total, 1, 'COMMA', 2, 'POINT')}|">S/ 900.00</p>
 				<p class="secundario" th:text="|${r.familia} · ${#lists.size(r.lineas) == 1 ? '1 cuota' : #lists.size(r.lineas) + ' cuotas'}|">Familia Quispe Huamán · 2 cuotas</p>
-				<button type="submit" class="btn btn-primario btn-grande btn-bloque" data-cobrar th:text="|Cobrar S/ ${#numbers.formatDecimal(r.total, 1, 'COMMA', 2, 'POINT')}|">Cobrar S/ 900.00</button>
+				<button th:type="${colegioEnPreparacion} ? 'button' : 'submit'" class="btn btn-primario btn-grande btn-bloque" data-cobrar
+					th:attr="aria-disabled=${colegioEnPreparacion} ? 'true', aria-describedby=${colegioEnPreparacion} ? 'motivo-cobrar'"
+					th:text="|Cobrar S/ ${#numbers.formatDecimal(r.total, 1, 'COMMA', 2, 'POINT')}|">Cobrar S/ 900.00</button>
+				<p th:if="${colegioEnPreparacion}" class="motivo-bloqueo" id="motivo-cobrar" data-motivo-bloqueo>Tu colegio está en
+					preparación: todavía no se registran pagos.</p>
 				<a class="btn btn-secundario btn-bloque" th:href="@{/caja/familias/{id}(id=${r.familiaId})}">Cambiar cuotas</a>
 				<p class="ayuda">Al cobrar se emite la boleta y el apoderado recibe el aviso con el monto y el número.</p>
 			</section>

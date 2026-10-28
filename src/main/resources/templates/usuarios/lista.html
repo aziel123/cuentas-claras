@@ -5,14 +5,21 @@
 	<div class="cabecera">
 		<div>
 			<p class="etiqueta">Usuarios y roles</p>
-			<h1>Usuarios del colegio</h1>
-			<p class="secundario">Cada persona usa su propia cuenta. Nadie se borra: si alguien deja el colegio, se desactiva.</p>
+			<h1><span>Usuarios del colegio</span>
+				<span th:replace="~{fragments/componentes :: info('usuarios', 'Cada persona usa su propia cuenta. Nadie se borra: si alguien deja el colegio, se desactiva.', 'las cuentas del colegio')}"></span></h1>
 		</div>
 		<a th:replace="~{fragments/componentes :: enlaceBoton('Nuevo usuario', @{/usuarios/nuevo}, 'primario')}"></a>
 	</div>
 
 	<section class="tarjeta" aria-labelledby="titulo-lista">
 		<h2 id="titulo-lista" th:text="|${#lists.size(usuarios)} usuarios|">Usuarios</h2>
+		<!--/* Sprint 11, tanda 1b (sección 3.14): si falta Dirección o Caja (el paso 2), el estado vacío lo dice. */-->
+		<th:block th:with="sinDireccion=${#lists.isEmpty(usuarios.?[roles.contains('Dirección') and estado != 'INACTIVO'])},
+				sinCaja=${#lists.isEmpty(usuarios.?[roles.contains('Caja') and estado != 'INACTIVO'])}">
+			<div th:if="${sinDireccion or sinCaja}" th:replace="~{fragments/componentes :: estadoVacioPaso(
+				${sinDireccion} ? 'Falta la cuenta de Dirección' : 'Falta la cuenta de Caja', null, ${@guiaPasos.vacio('equipo')},
+				'Crear la cuenta', '/usuarios/nuevo')}"></div>
+		</th:block>
 		<th:block th:if="${#lists.isEmpty(usuarios)}">
 			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay usuarios', 'Crea el primero con «Nuevo usuario».')}"></div>
 		</th:block>

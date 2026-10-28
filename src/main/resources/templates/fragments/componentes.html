@@ -186,7 +186,19 @@
 	</th:block>
 	<th:block th:if="${error != null}">
 		<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+		<!--/* Sprint 11, tanda 1b: si el error es de la preparación, el enlace a la Puesta en marcha (si el rol puede abrirla). */-->
+		<p th:if="${colegioEnPreparacion == true and #strings.startsWith(error, 'Tu colegio está en preparación') and @guiaPasos.verLista()}">
+			<a class="enlace-tactil" th:href="@{/puesta-en-marcha}" data-enlace-puesta>Ver la Puesta en marcha</a></p>
 	</th:block>
+</th:block>
+
+<!--/* Sprint 11, tanda 1b (sección 3.14, punto 3): botón de envío que se deshabilita mientras el colegio está en
+     preparación, con su motivo al lado (aria-describedby). Deshabilitado es type="button" y aria-disabled: sigue enfocable
+     para leer el motivo y no envía nada. El servidor lo bloquea igual (409). */-->
+<th:block th:fragment="botonBloqueable(texto, variante, bloqueado, idMotivo, motivo)">
+	<button th:type="${bloqueado} ? 'button' : 'submit'" class="btn" th:classappend="'btn-' + ${variante}" th:text="${texto}"
+		th:attr="aria-disabled=${bloqueado} ? 'true', aria-describedby=${bloqueado} ? ${idMotivo}" data-bloqueable>Enviar</button>
+	<p th:if="${bloqueado}" class="motivo-bloqueo" th:id="${idMotivo}" th:text="${motivo}" data-motivo-bloqueo>Tu colegio está en preparación.</p>
 </th:block>
 
 <!--/* Etiqueta de estado: siempre con texto, nunca solo color. variante: exito, alerta, peligro, info o neutro. */-->
@@ -215,28 +227,28 @@
 	<p th:text="${texto}">Cuando los haya, aparecerán aquí.</p>
 </div>
 
-<!--/* Sprint 11, tanda 1b (sección 3.14): estado vacío que guía. punto: el paso de la guía (GuiaVista.PasoGuia) o nulo.
-     enPreparacion: si es falso, no menciona la puesta en marcha (un año nuevo en producción también queda vacío).
-     primero: el paso pendiente del que depende (o nulo): se muestra «Primero: …» en lugar del botón. */-->
-<div th:fragment="estadoVacioPaso(titulo, texto, punto, primero, enPreparacion)" class="estado-vacio estado-vacio-paso"
-	data-estado-vacio-paso th:data-paso="${punto != null} ? ${punto.paso().clave()}">
+<!--/* Sprint 11, tanda 1b (sección 3.14, punto 2): estado vacío que guía. v: GuiaPasos.PasoVacio (${@guiaPasos.vacio('clave')}).
+     Dice qué falta, quién lo hace y el botón (si el rol puede entrar) o «Pídeselo a …»; con la dependencia pendiente,
+     «Primero: …» en lugar del botón. En producción, sin mencionar la puesta en marcha. accion: el texto del botón (o nulo
+     para usar el del paso). ancla: adónde lleva el botón si no es la pantalla del paso (el formulario de la misma
+     pantalla, «#titulo-nuevo»), o nulo. El botón es secundario: la pantalla ya tiene su primario. */-->
+<div th:fragment="estadoVacioPaso(titulo, texto, v, accion, ancla)" class="estado-vacio estado-vacio-paso"
+	data-estado-vacio-paso th:data-paso="${v.paso().paso().clave()}">
 	<h3 th:text="${titulo}">Este año todavía no tiene secciones</h3>
 	<p th:if="${texto != null}" th:text="${texto}">Texto</p>
-	<th:block th:if="${punto != null}">
-		<p th:if="${primero != null}" data-primero>
-			<span th:text="|Primero: ${primero.accion()}|">Primero: Configurar el año escolar</span>
-			<span class="secundario" th:text="|(lo hace ${primero.responsable()})|">(lo hace Promotoría o Dirección)</span>
-			<a th:if="${primero.enlace() != null}" class="enlace-tactil" th:href="@{${primero.enlace()}}"
-				th:aria-label="|Ir: ${primero.accion()}|">Ir</a>
-		</p>
-		<th:block th:if="${primero == null}">
-			<a th:if="${punto.conBoton()}" class="btn btn-primario" th:href="@{${punto.enlace()}}" th:text="${punto.accion()}"
-				data-estado-vacio-boton>Crear las secciones</a>
-			<p th:unless="${punto.conBoton()}" class="secundario" data-pidelo
-				th:text="|Pídeselo a ${punto.responsable()}.|">Pídeselo a Administración o Dirección.</p>
-		</th:block>
-		<p th:if="${enPreparacion and punto.conBoton()}" class="secundario" th:text="|Lo hace: ${punto.responsable()}.|">Lo hace:
-			Administración o Dirección.</p>
+	<p th:if="${v.primero() != null}" data-primero>
+		<span th:text="|Primero: ${v.primero().accion()}|">Primero: Configurar el año escolar</span>
+		<span class="secundario" th:text="|(lo hace ${v.primero().responsable()})|">(lo hace Promotoría o Dirección)</span>
+		<a th:if="${v.primero().conBoton()}" class="enlace-tactil" th:href="@{${v.primero().enlace()}}"
+			th:aria-label="|Ir: ${v.primero().accion()}|">Ir</a>
+	</p>
+	<th:block th:if="${v.primero() == null}">
+		<a th:if="${v.paso().conBoton()}" class="btn btn-secundario" th:href="${ancla != null} ? @{${ancla}} : @{${v.paso().enlace()}}"
+			th:text="${accion != null} ? ${accion} : ${v.paso().accion()}" data-estado-vacio-boton>Crear las secciones</a>
+		<p th:unless="${v.paso().conBoton()}" class="secundario" data-pidelo
+			th:text="|Pídeselo a ${v.paso().responsable()}.|">Pídeselo a Administración o Dirección.</p>
+		<p th:if="${v.enPreparacion() and v.paso().conBoton()}" class="secundario" data-lo-hace
+			th:text="|Lo hace: ${v.paso().responsable()}.|">Lo hace: Administración o Dirección.</p>
 	</th:block>
 </div>
 

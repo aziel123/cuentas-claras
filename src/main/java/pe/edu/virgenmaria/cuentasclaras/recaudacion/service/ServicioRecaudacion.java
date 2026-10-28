@@ -504,6 +504,7 @@ public class ServicioRecaudacion {
 
 	private void exigirProduccion() {
 		colegios.exigirEnProduccion(pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio.actual(),
+				pe.edu.virgenmaria.cuentasclaras.colegio.service.AccionBloqueada.RECAUDACION,
 				"El colegio todavía no está en producción: no se registran pagos del banco. La Promotoría lo pasa a "
 						+ "producción desde «Puesta en marcha».");
 	}

@@ -49,7 +49,8 @@
 				autocomplete="off" aria-describedby="totalVisto-ayuda">
 			<p class="ayuda" id="totalVisto-ayuda" th:text="|Cópialo del portal del banco (no se muestra aquí a propósito). Con punto decimal, sin comas: 12500.00. Te ${c.intentosRestantes == 1 ? 'queda 1 intento' : 'quedan ' + c.intentosRestantes + ' intentos'}.|">Cópialo del portal del banco.</p>
 		</div>
-		<button th:replace="~{fragments/componentes :: boton('Confirmar y aplicar los pagos', 'primario')}"></button>
+		<th:block th:replace="~{fragments/componentes :: botonBloqueable('Confirmar y aplicar los pagos', 'primario',
+			${colegioEnPreparacion}, 'motivo-confirmar', 'Tu colegio está en preparación: todavía no se aplican los pagos del banco.')}"></th:block>
 	</form>
 </main>
 </body>

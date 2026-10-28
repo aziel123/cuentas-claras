@@ -41,7 +41,11 @@ public class ComunicadosController {
 
 	private final AdjuntosComunicado adjuntos;
 
-	public ComunicadosController(EnvioComunicados envio, ConsultaComunicados consulta, AdjuntosComunicado adjuntos) {
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios;
+
+	public ComunicadosController(EnvioComunicados envio, ConsultaComunicados consulta, AdjuntosComunicado adjuntos,
+			pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService colegios) {
+		this.colegios = colegios;
 		this.envio = envio;
 		this.consulta = consulta;
 		this.adjuntos = adjuntos;
@@ -119,6 +123,13 @@ public class ComunicadosController {
 
 	private String procesar(Long corrige, BorradorComunicado borrador, BindingResult validacion, MultipartFile archivo,
 			String accion, HttpSession sesion, Model model, RedirectAttributes avisos) {
+		// Sprint 11, tanda 1b (sección 3.14): en preparación no salen mensajes a las familias (en MySQL, trg_mensaje_nace).
+		// La vista previa sí se puede ver; enviar responde 409 con el motivo (PreparacionAdvice).
+		if ("enviar".equals(accion) && colegios.enPreparacion(
+				pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio.actual())) {
+			throw new pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioEnPreparacionException(
+					pe.edu.virgenmaria.cuentasclaras.colegio.service.AccionBloqueada.COMUNICADO);
+		}
 		model.addAttribute("opciones", envio.opciones());
 		model.addAttribute("borrador", borrador);
 		if (validacion.hasErrors()) {

@@ -16,8 +16,9 @@
 	<section class="tarjeta" aria-labelledby="titulo-lotes">
 		<h2 id="titulo-lotes">Lotes</h2>
 		<th:block th:if="${#lists.isEmpty(lotes)}">
-			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay lotes de saldo inicial',
-				${puedeCrear} ? 'Crea uno con el formulario «Nuevo lote».' : 'Administración los arma.')}"></div>
+			<!--/* Sprint 11, tanda 1b (sección 3.14): estado vacío que guía; la firma «sin deudas anteriores», en la Puesta en marcha. */-->
+			<div th:replace="~{fragments/componentes :: estadoVacioPaso('Falta el saldo inicial',
+				'Carga las deudas anteriores o, si no hay, la Promotoría lo firma en la Puesta en marcha.', ${@guiaPasos.vacio('saldo-inicial')}, 'Cargar el saldo', '#titulo-nuevo')}"></div>
 		</th:block>
 		<table class="tabla" th:unless="${#lists.isEmpty(lotes)}">
 			<thead><tr><th scope="col">Lote</th><th scope="col">Corte</th><th scope="col">Informe</th>

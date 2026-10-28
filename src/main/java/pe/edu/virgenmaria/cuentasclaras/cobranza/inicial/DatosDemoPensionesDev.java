@@ -130,9 +130,10 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 
 	private void crearPlanes(AnioOpcion anio) {
 		for (Nivel nivel : Nivel.values()) {
-			ConfiguracionPlan porDefecto = ConfiguracionPlan.porDefecto(anio.anio(), MATRICULA, PENSIONES.get(nivel));
-			PlanRequest solicitud = new PlanRequest(porDefecto.montoMatricula(), porDefecto.vencimientoMatricula(),
-					porDefecto.montoPension(), porDefecto.vencimientos(), anio.anio() == 2026 ? COBRO_DESDE_2026 : null);
+			// Sprint 11, tanda 1b (F-D2): los vencimientos según las fechas de clases del año (el servicio).
+			PlanRequest porDefecto = como("administracion", () -> planes.propuestaPorDefecto(anio.id(), nivel));
+			PlanRequest solicitud = new PlanRequest(MATRICULA, porDefecto.vencimientoMatricula(),
+					PENSIONES.get(nivel), porDefecto.vencimientos(), anio.anio() == 2026 ? COBRO_DESDE_2026 : null);
 			Long id = como("administracion", () -> {
 				Long creado = planes.crearBorrador(anio.id(), nivel, solicitud);
 				planes.enviar(creado);

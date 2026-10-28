@@ -26,10 +26,55 @@ public record ConfiguracionPlan(BigDecimal montoMatricula, LocalDate vencimiento
 
 	public static final int MAX_PENSIONES = 12;
 
-	/** Pensiones de marzo a diciembre (el último día de cada mes) y matrícula al último día de febrero. */
-	public static ConfiguracionPlan porDefecto(int anio, BigDecimal montoMatricula, BigDecimal montoPension) {
-		return new ConfiguracionPlan(montoMatricula, Calendario.ultimoDiaDelMes(anio, 2), montoPension,
-				Calendario.vencimientosPorDefecto(anio, 3, 10), null);
+	/**
+	 * Sprint 11, tanda 1b (F-D2): una pensión por mes, el último día de cada mes, desde el mes del inicio de clases hasta el
+	 * mes del fin de clases (dentro del año del plan y como máximo {@link #MAX_PENSIONES}); la matrícula, al último día de
+	 * febrero. Si las clases empiezan a mitad de mes (16/03), la primera pensión es la de ese mes (31/03), que
+	 * {@link #validar} acepta porque compara por mes. Antes era siempre de marzo a diciembre.
+	 */
+	public static ConfiguracionPlan porDefecto(AnioEscolar anio, BigDecimal montoMatricula, BigDecimal montoPension) {
+		int a = anio.getAnio();
+		YearMonth primero = YearMonth.from(anio.getInicioClases());
+		YearMonth ultimo = YearMonth.from(anio.getFinClases());
+		if (primero.getYear() < a) {
+			primero = YearMonth.of(a, 1);
+		}
+		if (ultimo.getYear() > a) {
+			ultimo = YearMonth.of(a, 12);
+		}
+		int cantidad = Math.max(1, Math.min(MAX_PENSIONES, (int) primero.until(ultimo, java.time.temporal.ChronoUnit.MONTHS) + 1));
+		return new ConfiguracionPlan(montoMatricula, Calendario.ultimoDiaDelMes(a, 2), montoPension,
+				Calendario.vencimientosPorDefecto(a, primero.getMonthValue(), cantidad), null);
+	}
+
+	/** Sprint 11, tanda 1b (F-D3): un rango de fechas válido (los {@code min} y {@code max} del formulario). */
+	public record RangoFechas(LocalDate desde, LocalDate hasta) {
+
+		public boolean contiene(LocalDate fecha) {
+			return !fecha.isBefore(desde) && !fecha.isAfter(hasta);
+		}
+
+		/** «Entre el 01/01/2025 y el 18/12/2026». */
+		public String enPalabras() {
+			return "Entre el " + Calendario.formatear(desde) + " y el " + Calendario.formatear(hasta);
+		}
+	}
+
+	/** Vencimiento de la matrícula: del 01/01 del año anterior al fin de clases. */
+	public static RangoFechas rangoMatricula(AnioEscolar anio) {
+		return new RangoFechas(LocalDate.of(anio.getAnio() - 1, 1, 1), anio.getFinClases());
+	}
+
+	/** Cada pensión: del día 1 del mes de inicio de clases (o del 01/01, si empezó el año anterior) al 31/12 del plan. */
+	public static RangoFechas rangoPensiones(AnioEscolar anio) {
+		LocalDate inicio = anio.getInicioClases().withDayOfMonth(1);
+		LocalDate enero = LocalDate.of(anio.getAnio(), 1, 1);
+		return new RangoFechas(inicio.isBefore(enero) ? enero : inicio, LocalDate.of(anio.getAnio(), 12, 31));
+	}
+
+	/** «Cobrar desde»: del 01/01 al 31/12 del año del plan (que sea el día 1 de un mes lo valida solo el servidor). */
+	public static RangoFechas rangoCobroDesde(AnioEscolar anio) {
+		return new RangoFechas(LocalDate.of(anio.getAnio(), 1, 1), LocalDate.of(anio.getAnio(), 12, 31));
 	}
 
 	public ConfiguracionPlan {
@@ -53,12 +98,12 @@ public record ConfiguracionPlan(BigDecimal montoMatricula, LocalDate vencimiento
 		if (vencimientoMatricula == null) {
 			throw new ReglaNegocioException("Indica el vencimiento de la matrícula.");
 		}
-		LocalDate primeraMatricula = LocalDate.of(a - 1, 1, 1);
-		if (vencimientoMatricula.isBefore(primeraMatricula) || vencimientoMatricula.isAfter(anio.getFinClases())) {
-			throw new ReglaNegocioException("La matrícula debe vencer entre el " + Calendario.formatear(primeraMatricula)
-					+ " y el fin de clases (" + Calendario.formatear(anio.getFinClases()) + ").");
+		RangoFechas rangoMatricula = rangoMatricula(anio);
+		if (!rangoMatricula.contiene(vencimientoMatricula)) {
+			throw new ReglaNegocioException("La matrícula debe vencer entre el " + Calendario.formatear(rangoMatricula.desde())
+					+ " y el fin de clases (" + Calendario.formatear(rangoMatricula.hasta()) + ").");
 		}
-		if (cobroDesde != null && (cobroDesde.getDayOfMonth() != 1 || cobroDesde.getYear() != a)) {
+		if (cobroDesde != null && (cobroDesde.getDayOfMonth() != 1 || !rangoCobroDesde(anio).contiene(cobroDesde))) {
 			throw new ReglaNegocioException("«Cobrar desde» debe ser el día 1 de un mes de " + a
 					+ " (por ejemplo 01/12/" + a + ").");
 		}
@@ -75,15 +120,15 @@ public record ConfiguracionPlan(BigDecimal montoMatricula, LocalDate vencimiento
 		if (vencimientos.isEmpty() || vencimientos.size() > MAX_PENSIONES) {
 			throw new ReglaNegocioException("El plan debe tener de 1 a " + MAX_PENSIONES + " pensiones.");
 		}
-		YearMonth inicioClases = YearMonth.from(anio.getInicioClases());
+		RangoFechas rango = rangoPensiones(anio);
 		YearMonth anterior = null;
 		for (LocalDate vencimiento : vencimientos) {
-			if (vencimiento.getYear() != a) {
+			if (vencimiento.isAfter(rango.hasta()) || vencimiento.getYear() != a) {
 				throw new ReglaNegocioException("La pensión con vencimiento " + Calendario.formatear(vencimiento)
 						+ " está fuera del año " + a + ".");
 			}
 			YearMonth mes = YearMonth.from(vencimiento);
-			if (mes.isBefore(inicioClases)) {
+			if (vencimiento.isBefore(rango.desde())) {
 				throw new ReglaNegocioException("La pensión de " + Calendario.nombreMes(mes.getMonthValue())
 						+ " vence antes del inicio de clases (" + Calendario.formatear(anio.getInicioClases())
 						+ "): no se cobra por adelantado.");

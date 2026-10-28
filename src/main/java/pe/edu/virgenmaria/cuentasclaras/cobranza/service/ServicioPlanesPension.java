@@ -169,9 +169,17 @@ public class ServicioPlanesPension {
 		return opcion(buscarAnio(anioId));
 	}
 
+	/** Sprint 11, tanda 1b (F-D3): los rangos de fechas del formulario, los mismos que valida {@code ConfiguracionPlan}. */
+	public pe.edu.virgenmaria.cuentasclaras.cobranza.dto.RangosPlan rangos(Long anioId) {
+		AnioEscolar anio = buscarAnio(anioId);
+		return new pe.edu.virgenmaria.cuentasclaras.cobranza.dto.RangosPlan(ConfiguracionPlan.rangoMatricula(anio),
+				ConfiguracionPlan.rangoPensiones(anio), ConfiguracionPlan.rangoCobroDesde(anio));
+	}
+
 	/**
 	 * Propuesta para un plan nuevo: los montos del último plan aprobado del nivel en años anteriores (si hay) y los
-	 * vencimientos por defecto (último día de marzo a diciembre; matrícula, último día de febrero).
+	 * vencimientos por defecto (sprint 11, tanda 1b, F-D2: el último día de cada mes de clases; matrícula, último día de
+	 * febrero).
 	 */
 	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public PlanRequest propuestaPorDefecto(Long anioId, Nivel nivel) {
@@ -179,7 +187,7 @@ public class ServicioPlanesPension {
 		Optional<PlanPension> anterior = planes.vigentesAnteriores(nivel, anio.getAnio()).stream().findFirst();
 		BigDecimal matricula = anterior.map(PlanPension::getMontoMatricula).orElse(null);
 		BigDecimal pension = anterior.map(PlanPension::getMontoPension).orElse(null);
-		return PlanRequest.de(ConfiguracionPlan.porDefecto(anio.getAnio(), matricula, pension));
+		return PlanRequest.de(ConfiguracionPlan.porDefecto(anio, matricula, pension));
 	}
 
 	@Transactional
