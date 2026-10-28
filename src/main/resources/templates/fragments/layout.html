@@ -12,6 +12,7 @@
 	<title th:text="|${entornoDemo == true ? '[DEMO] ' : ''}${titulo} · ${marca?.nombre}|">Título</title>
 	<!--/* Sprint 4: una página que espera una confirmación se recarga sola (sin JavaScript en línea, por la CSP). */-->
 	<meta th:if="${recargarCada != null}" http-equiv="refresh" th:content="${recargarCada}">
+	<link rel="icon" type="image/svg+xml" th:href="@{/css/marca/favicon.svg}">
 	<link rel="stylesheet" th:href="@{/css/tokens.css}">
 	<link rel="stylesheet" th:href="@{/css/app.css}">
 	<link rel="stylesheet" th:href="@{/css/rediseno.css}">
@@ -29,7 +30,9 @@
 				     Los colores no cambian por colegio (contraste AA). */-->
 				<img class="logo-colegio" th:if="${marcaColegio != null and marcaColegio.conLogo}" th:src="@{/marca/logo}" alt="">
 				<!--/* Monograma: iniciales calculadas en ModeloSesionAdvice (colegio de la sesión o, sin sesión, el producto). */-->
-				<span class="monograma" aria-hidden="true" th:unless="${marcaColegio != null and marcaColegio.conLogo}" th:text="${monograma} ?: 'C'">C</span>
+				<!--/* Sin colegio (ingreso, operador): el logo del producto, «dos llaves» (24-oct-2026). */-->
+				<img class="logo-producto" th:if="${marcaColegio == null}" th:src="@{/css/marca/cuotaria.svg}" alt="">
+				<span class="monograma" aria-hidden="true" th:if="${marcaColegio != null and !marcaColegio.conLogo}" th:text="${monograma} ?: 'C'">C</span>
 				<span class="marca-texto">
 					<strong th:text="${usuarioActual != null} ? ${usuarioActual.colegio} : ${nombreInstitucional}">Nombre del colegio</strong>
 					<small th:text="|Plataforma ${marca?.nombre}|">Plataforma</small>
@@ -106,6 +109,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<!--/* Sprint 8, tanda 3 (sección 8.3): en la demo el título empieza con «[DEMO]». */-->
 	<title th:text="|${entornoDemo == true ? '[DEMO] ' : ''}${titulo} · ${marca?.nombre}|">Título</title>
+	<link rel="icon" type="image/svg+xml" th:href="@{/css/marca/favicon.svg}">
 	<link rel="stylesheet" th:href="@{/css/tokens.css}">
 	<link rel="stylesheet" th:href="@{/css/app.css}">
 	<link rel="stylesheet" th:href="@{/css/rediseno.css}">
@@ -116,7 +120,7 @@
 	<header class="barra">
 		<div class="barra-in">
 			<span class="marca">
-				<span class="monograma" aria-hidden="true" th:text="${monograma} ?: 'C'">C</span>
+				<img class="logo-producto" th:src="@{/css/marca/cuotaria.svg}" alt="">
 				<span class="marca-texto">
 					<strong th:text="${nombreInstitucional} ?: ${marca?.nombre}">Marca</strong>
 					<small th:text="|Plataforma ${marca?.nombre}|">Plataforma</small>
