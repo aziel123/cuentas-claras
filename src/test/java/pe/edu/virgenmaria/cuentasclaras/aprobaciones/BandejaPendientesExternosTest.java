@@ -115,7 +115,8 @@ class BandejaPendientesExternosTest {
 				"/pensiones/planes/" + id)).isTrue();
 		mvc.perform(get("/pensiones/planes/" + id).with(UsuariosDePrueba.como(PROMOTORIA))).andExpect(status().isOk());
 
-		// Después de aprobarlo, desaparece y el contador baja.
+		// Después de aprobarlo, desaparece y el contador baja (MockMvc deja la sesión vacía: se vuelve a Promotoría).
+		como(PROMOTORIA);
 		planes.aprobar(id, planes.obtener(id).version());
 		assertThat(externa.porResolver()).isEmpty();
 		assertThat(contador.contar()).isEqualTo(bandeja.contarPorResolver());
