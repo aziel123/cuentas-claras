@@ -16,6 +16,14 @@ public record BarrasVerticales(String id, String titulo, String resumen, List<Gu
 		columnas = List.copyOf(columnas);
 	}
 
+	/**
+	 * Sprint 11, tanda 1b (F-D6): ninguna barra tiene altura (por ejemplo, el primer día en producción). El gráfico muestra
+	 * su estado vacío en lugar de ejes vacíos.
+	 */
+	public boolean sinDatos() {
+		return barras.stream().allMatch(b -> new java.math.BigDecimal(b.alto()).signum() == 0);
+	}
+
 	/** {@code y}: la altura de la línea desde arriba, en % («0.00» es el tope). */
 	public record Guia(String y, String texto) {
 	}

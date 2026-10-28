@@ -36,6 +36,7 @@ import pe.edu.virgenmaria.cuentasclaras.operacion.salud.EstadoTecnico;
 import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.dto.ListaVerificacion;
 import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.dto.PuntoLista;
 import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.dto.PuntoLista.Estado;
+import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.model.PasoPuestaEnMarcha;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.FirmaOperacionRepository;
@@ -108,7 +109,7 @@ public class EstadoPuestaEnMarcha {
 			CUENTA_BANCARIA, MENSAJERIA, CORREO_CONTROL, PRIVACIDAD, RESPALDO, PASARELA, RECAUDACION, AREAS_DOCENTES);
 
 	/** Lo que dicen los pasos que dependen del año mientras el año no está configurado (sin enlace). */
-	static final String PRIMERO_EL_ANIO = "Primero configure el año escolar";
+	static final String PRIMERO_EL_ANIO = "Primero: Configurar el año escolar";
 
 	private static final Set<EstadoMensaje> SALIDOS = EnumSet.of(EstadoMensaje.ENVIADO, EstadoMensaje.ENTREGADO,
 			EstadoMensaje.LEIDO);
@@ -181,6 +182,16 @@ public class EstadoPuestaEnMarcha {
 			throw new RecursoNoEncontradoException("Colegio no encontrado");
 		}
 		return lectura.execute(t -> calcular(colegioId));
+	}
+
+	/**
+	 * Sprint 11, tanda 1b (F-D8): el lote de saldo inicial en curso (borrador o enviado) del colegio en contexto, si hay:
+	 * la Puesta en marcha ofrece «Ir al lote» antes que la firma «sin deudas anteriores».
+	 */
+	public Optional<Long> loteSaldoEnCurso() {
+		return lectura.execute(t -> lotes.findAllByOrderByCreadoEnDescIdDesc().stream()
+				.filter(l -> l.getEstado() == EstadoLote.BORRADOR || l.getEstado() == EstadoLote.ENVIADO)
+				.map(l -> l.getId()).findFirst());
 	}
 
 	/** La lista de otro colegio, para el operador: sin enlaces. */
@@ -325,7 +336,22 @@ public class EstadoPuestaEnMarcha {
 				sinAreas == 0 ? "Todas las asignaciones tienen sus áreas del catálogo" : sinAreas
 						+ " asignaciones sin áreas del catálogo: esos docentes no pueden poner notas", "/academico/asignaciones"));
 
-		return new ListaVerificacion(colegio.getId(), colegio.getNombre(), colegio.getEstado(), List.copyOf(puntos));
+		return new ListaVerificacion(colegio.getId(), colegio.getNombre(), colegio.getEstado(), conCatalogo(puntos),
+				vigente.map(AnioEscolar::getAnio).orElse(null));
+	}
+
+	/**
+	 * Sprint 11, tanda 1b (sección 3.14): el título de cada punto sale del catálogo ({@link PasoPuestaEnMarcha}: en
+	 * pantalla, «Equipo del colegio», sin jerga) y cada pendiente sabe el primer paso pendiente del que depende.
+	 */
+	static List<PuntoLista> conCatalogo(List<PuntoLista> puntos) {
+		Set<String> hechos = puntos.stream().filter(PuntoLista::hecho).map(PuntoLista::clave).collect(Collectors.toSet());
+		return puntos.stream().map(p -> {
+			PasoPuestaEnMarcha paso = p.definicion();
+			PasoPuestaEnMarcha bloqueo = p.hecho() ? null : paso.dependeDe().stream()
+					.filter(d -> !hechos.contains(d.clave())).findFirst().orElse(null);
+			return new PuntoLista(p.clave(), paso.titulo(), p.estado(), p.conteo(), p.enlace(), bloqueo);
+		}).toList();
 	}
 
 	private Optional<ConectorColegio> vigenteDe(TipoConector tipo) {

@@ -334,6 +334,31 @@ public enum ModuloApp {
 		return roles;
 	}
 
+	/**
+	 * Sprint 11, tanda 1b (sección 3.14): si alguien con estos roles puede entrar a la ruta, con el mismo cálculo del filtro
+	 * de seguridad (la primera regla cuyo patrón coincide gana; sin regla, se niega). Para no mostrar nunca un botón que
+	 * termina en 403. Ignora la consulta ({@code ?anio=…}).
+	 */
+	public static boolean puedeEntrar(Set<Rol> rolesDelUsuario, String ruta) {
+		if (ruta == null || ruta.isBlank() || rolesDelUsuario == null || rolesDelUsuario.isEmpty()) {
+			return false;
+		}
+		int consulta = ruta.indexOf('?');
+		org.springframework.http.server.PathContainer camino = org.springframework.http.server.PathContainer
+				.parsePath(consulta >= 0 ? ruta.substring(0, consulta) : ruta);
+		for (ModuloApp modulo : values()) {
+			for (String patron : modulo.patrones) {
+				if (PATRONES.parse(patron).matches(camino)) {
+					return modulo.roles.stream().anyMatch(rolesDelUsuario::contains);
+				}
+			}
+		}
+		return false;
+	}
+
+	private static final org.springframework.web.util.pattern.PathPatternParser PATRONES =
+			org.springframework.web.util.pattern.PathPatternParser.defaultInstance;
+
 	public boolean permite(Rol rol) {
 		return roles.contains(rol);
 	}

@@ -7,14 +7,18 @@
 	<div class="cabecera">
 		<div>
 			<p class="etiqueta">Dirección</p>
-			<h1 th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</h1>
-			<p class="secundario">Apruebas anulaciones, descuentos y becas y cierres de caja, y revisas la bitácora de auditoría.</p>
+			<!--/* Sprint 11, tanda 1b (F-D7): «Cómo te cuida el sistema» pasa a un «i» junto al título. */-->
+			<h1><span th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</span>
+				<span th:replace="~{fragments/componentes :: info('inicio', 'Caja no anula ni da descuentos: te lo pide a ti. Cada decisión queda con tu nombre y el motivo; nada se borra.', 'cómo te cuida el sistema')}"></span></h1>
 		</div>
 	</div>
 
 	<th:block th:if="${avisoClave != null}">
 		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
 	</th:block>
+
+	<!--/* Sprint 11, tanda 1b (sección 3.14): la guía mientras el colegio está en preparación. */-->
+	<section th:if="${guia != null}" th:replace="~{fragments/guia :: bannerPreparacion(${guia}, true, true)}"></section>
 
 	<!--/* Tablero: lo académico, las aprobaciones y la morosidad (sin detalle por alumno). */-->
 	<section th:if="${tablero != null}" class="tablero" aria-labelledby="titulo-tablero">
@@ -33,9 +37,8 @@
 				<div class="item-revisar-texto">
 					<p th:text="${porAprobar == 0} ? 'No hay solicitudes esperando tu aprobación.'
 						: (${porAprobar == 1} ? '1 solicitud espera tu aprobación.' : |${porAprobar} solicitudes esperan tu aprobación.|)">3 solicitudes esperan tu aprobación.</p>
-					<p class="secundario">Quien pide un cambio no lo aprueba: lo decides tú u otra persona de Promotoría.</p>
 				</div>
-				<a class="btn" th:classappend="${porAprobar > 0} ? 'btn-primario' : 'btn-secundario'" th:href="@{/aprobaciones}">Ir a aprobaciones</a>
+				<a class="btn" th:classappend="${porAprobar > 0 and guia == null} ? 'btn-primario' : 'btn-secundario'" th:href="@{/aprobaciones}">Ir a aprobaciones</a>
 			</li>
 			<li class="item-revisar">
 				<div class="item-revisar-texto">
@@ -72,15 +75,6 @@
 		</section>
 	</div>
 
-	<section class="tarjeta" aria-labelledby="titulo-controles">
-		<h2 id="titulo-controles">Cómo te cuida el sistema</h2>
-		<ul class="lista-controles">
-			<li>Caja no puede anular ni dar descuentos: te lo pide a ti y tú decides.</li>
-			<li>Cada aprobación o rechazo queda registrado con tu nombre y el motivo.</li>
-			<li>Puedes crear usuarios del personal, pero no cambiar a Promotoría ni a otra Dirección.</li>
-			<li>Tu sesión se cierra sola tras 30 minutos sin actividad.</li>
-		</ul>
-	</section>
 </main>
 </body>
 </html>

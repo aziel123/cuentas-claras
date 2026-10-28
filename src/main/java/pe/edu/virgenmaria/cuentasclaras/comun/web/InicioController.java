@@ -10,6 +10,9 @@ import pe.edu.virgenmaria.cuentasclaras.comun.alertas.AlertasRevision;
 import pe.edu.virgenmaria.cuentasclaras.comun.alertas.IndicadoresInicio;
 import pe.edu.virgenmaria.cuentasclaras.comun.graficos.TableroDireccion;
 import pe.edu.virgenmaria.cuentasclaras.comun.graficos.TableroPromotoria;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
+import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
+import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.GuiaPuestaEnMarcha;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ServicioInicio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
@@ -36,9 +39,15 @@ public class InicioController {
 
 	private final ObjectProvider<TableroDireccion> tableroDireccion;
 
+	private final ColegioService colegios;
+
+	private final GuiaPuestaEnMarcha guia;
+
 	public InicioController(ServicioInicio servicioInicio, ObjectProvider<AlertasRevision> alertas,
 			ObjectProvider<IndicadoresInicio> indicadores, ObjectProvider<TableroPromotoria> tableroPromotoria,
-			ObjectProvider<TableroDireccion> tableroDireccion) {
+			ObjectProvider<TableroDireccion> tableroDireccion, ColegioService colegios, GuiaPuestaEnMarcha guia) {
+		this.colegios = colegios;
+		this.guia = guia;
 		this.servicioInicio = servicioInicio;
 		this.alertas = alertas;
 		this.indicadores = indicadores;
@@ -59,6 +68,12 @@ public class InicioController {
 			return "redirect:/plataforma";
 		}
 		model.addAttribute("avisoClave", servicioInicio.avisoClaveRestablecida(usuario.usuarioId()));
+		// Sprint 11, tanda 1b (secciones 3.14 y decisión 210): en PREPARACION domina la guía; el tablero (cifras y gráficos)
+		// no se calcula: estaría en ceros. Las familias nunca ven la preparación.
+		boolean preparacion = principal != Rol.APODERADO && colegios.enPreparacion(ContextoColegio.actual());
+		if (preparacion) {
+			model.addAttribute("guia", guia.guiaPara(usuario.roles()));
+		}
 		if (principal == Rol.PROMOTOR) {
 			model.addAttribute("paraRevisar", servicioInicio.paraRevisar());
 			// Las críticas primero (un faltante de caja antes que una matrícula sin cronograma).
@@ -69,15 +84,15 @@ public class InicioController {
 			model.addAttribute("criticasRevision", todas.stream()
 					.filter(a -> a.gravedad() == AlertaRevision.Gravedad.CRITICA).toList());
 			model.addAttribute("avisosPorArea", porArea(todas));
-			model.addAttribute("indicadores", indicadores.orderedStream().toList());
+			model.addAttribute("indicadores", preparacion ? List.of() : indicadores.orderedStream().toList());
 			TableroPromotoria tablero = tableroPromotoria.getIfAvailable();
-			if (tablero != null) {
+			if (tablero != null && !preparacion) {
 				model.addAttribute("tablero", tablero.tablero());
 			}
 		}
 		if (principal == Rol.DIRECTOR) {
 			TableroDireccion tablero = tableroDireccion.getIfAvailable();
-			if (tablero != null) {
+			if (tablero != null && !preparacion) {
 				model.addAttribute("tablero", tablero.tablero());
 			}
 		}

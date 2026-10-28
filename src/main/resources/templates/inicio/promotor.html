@@ -8,8 +8,9 @@
 	<div class="cabecera">
 		<div>
 			<p class="etiqueta">Promotoría</p>
-			<h1 th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</h1>
-			<p class="secundario">Cuánto entra cada día, la morosidad y las alertas de caja, sin esperar al fin de mes.</p>
+			<!--/* Sprint 11, tanda 1b (F-D7): «Cómo te cuida el sistema» pasa a un «i» junto al título. */-->
+			<h1><span th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</span>
+				<span th:replace="~{fragments/componentes :: info('inicio', 'Cada pago queda con su boleta y aviso a la familia; nada se borra.', 'cómo te cuida el sistema')}"></span></h1>
 		</div>
 	</div>
 
@@ -17,12 +18,18 @@
 		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
 	</th:block>
 
+	<!--/* Sprint 11, tanda 1b (decisión 210): en preparación domina la guía, sin cifras ni gráficos (estarían en cero). */-->
+	<section th:if="${guia != null}" th:replace="~{fragments/guia :: bannerPreparacion(${guia}, true, true)}"></section>
+
 	<!--/* Tablero (pedido del usuario: «un reporte con gráficos para que no se vea todo texto»): cuatro cifras arriba. */-->
 	<section th:if="${tablero != null}" class="tablero" aria-labelledby="titulo-tablero">
 		<h2 id="titulo-tablero" class="solo-lectores">Cifras de hoy</h2>
 		<ul th:replace="~{fragments/graficos :: kpis(${tablero.kpis()})}"></ul>
 	</section>
 
+	<!--/* Sprint 11, tanda 1b (F-D6): «Para revisar» y los gráficos en una sola grilla. Hasta 1599 px, una columna; desde
+	     1600 px, «Para revisar» al lado de los últimos 30 días, y la morosidad al lado de los medios de pago. */-->
+	<div class="tablero-cuerpo" th:attr="data-tablero-graficos=${tablero != null} ? ''">
 	<!--/* «Para revisar» compacto: las críticas siempre a la vista; los avisos, por área y desplegables. */-->
 	<section class="tarjeta revisar" th:classappend="${total == 0} ? 'revisar-vacio'" aria-labelledby="titulo-revisar">
 		<div class="revisar-cabecera">
@@ -41,7 +48,7 @@
 					<span th:replace="~{fragments/componentes :: badge(|${a.modulo()} · ${a.gravedad().etiqueta()}|, ${a.gravedad().variante()})}"></span>
 					<p th:text="${a.texto()}">Faltante de S/ 50.00 en la caja de Lucía Ramos</p>
 				</div>
-				<a th:if="${a.enlace() != null}" class="btn btn-primario" th:href="@{${a.enlace()}}">Revisar<span
+				<a th:if="${a.enlace() != null}" class="btn" th:classappend="${guia != null} ? 'btn-secundario' : 'btn-primario'" th:href="@{${a.enlace()}}">Revisar<span
 					class="solo-lectores" th:text="|: ${a.texto()}|"></span></a>
 			</li>
 		</ul>
@@ -65,11 +72,11 @@
 		</div>
 	</section>
 
-	<!--/* Los gráficos: en escritorio la serie diaria a lo ancho y debajo dos columnas; en celular, una sola. */-->
-	<div th:if="${tablero != null}" class="graficos" data-tablero-graficos>
+	<th:block th:if="${tablero != null}">
 		<section th:replace="~{fragments/graficos :: barrasVerticales(${tablero.diaria()})}"></section>
 		<section th:replace="~{fragments/graficos :: barrasHorizontales(${tablero.morosidad()})}"></section>
 		<section th:replace="~{fragments/graficos :: barraApilada(${tablero.medios()})}"></section>
+	</th:block>
 	</div>
 
 	<section class="tarjeta" th:each="ind, i : ${indicadores}" th:aria-labelledby="|titulo-indicadores-${i.index}|" data-indicadores>
@@ -86,42 +93,29 @@
 		</ul>
 	</section>
 
-	<div class="dos-col">
-		<section class="tarjeta" aria-labelledby="titulo-cambios">
-			<h2 id="titulo-cambios">Cambios de claves y usuarios</h2>
-			<p class="secundario">Claves restablecidas, usuarios creados y cambios de roles de los últimos 7 días. Si algo no lo
-				reconoces, revísalo con quien lo hizo.</p>
-			<th:block th:if="${#lists.isEmpty(paraRevisar)}">
-				<div th:replace="~{fragments/componentes :: estadoVacio('Nada para revisar', 'No hubo cambios de claves ni de usuarios en los últimos 7 días.')}"></div>
-			</th:block>
-			<table class="tabla" th:unless="${#lists.isEmpty(paraRevisar)}">
-				<caption class="solo-lectores">Cambios de claves y usuarios de los últimos 7 días</caption>
-				<thead><tr><th scope="col" class="num">Cuándo</th><th scope="col">Quién</th><th scope="col">Qué hizo</th><th scope="col">A quién</th></tr></thead>
-				<tbody>
-					<tr th:each="r : ${paraRevisar}">
-						<td data-etiqueta="Cuándo" class="num" th:text="${#temporals.format(r.cuando, 'dd/MM HH:mm')}">02/10 08:15</td>
-						<td data-etiqueta="Quién" th:text="${r.quien}">director</td>
-						<td data-etiqueta="Qué hizo">
-							<span th:text="${r.accion}">Restableció la clave de un usuario</span>
-							<small class="bloque secundario" th:if="${r.cambio != null}" th:text="${r.cambio}">Roles: Caja</small>
-						</td>
-						<td data-etiqueta="A quién" th:text="${r.aQuien}">Lucía Ramos (lucia.ramos)</td>
-					</tr>
-				</tbody>
-			</table>
-			<a class="btn btn-texto btn-chico" th:href="@{/auditoria(soloRevisar=true)}">Ver todo lo marcado «Revisar» en la bitácora</a>
-		</section>
-
-		<section class="tarjeta" aria-labelledby="titulo-controles">
-			<h2 id="titulo-controles">Cómo te cuida el sistema</h2>
-			<ul class="lista-controles">
-				<li>Cada sol cobrado queda registrado con su boleta y el apoderado recibe un aviso.</li>
-				<li>Nadie puede borrar un pago: solo anularlo con motivo y aprobación de Dirección.</li>
-				<li>La bitácora de auditoría guarda quién hizo qué, y puedes comprobar que nadie la alteró.</li>
-				<li>Tu sesión se cierra sola tras 30 minutos sin actividad.</li>
-			</ul>
-		</section>
-	</div>
+	<section class="tarjeta" aria-labelledby="titulo-cambios">
+		<h2 id="titulo-cambios"><span>Cambios de claves y usuarios</span>
+			<span th:replace="~{fragments/componentes :: info('cambios', 'Claves restablecidas, usuarios creados y cambios de roles de los últimos 7 días. Si algo no lo reconoces, revísalo con quien lo hizo.', 'cambios de claves y usuarios')}"></span></h2>
+		<th:block th:if="${#lists.isEmpty(paraRevisar)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Nada para revisar', 'No hubo cambios de claves ni de usuarios en los últimos 7 días.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(paraRevisar)}">
+			<caption class="solo-lectores">Cambios de claves y usuarios de los últimos 7 días</caption>
+			<thead><tr><th scope="col" class="num">Cuándo</th><th scope="col">Quién</th><th scope="col">Qué hizo</th><th scope="col">A quién</th></tr></thead>
+			<tbody>
+				<tr th:each="r : ${paraRevisar}">
+					<td data-etiqueta="Cuándo" class="num" th:text="${#temporals.format(r.cuando, 'dd/MM HH:mm')}">02/10 08:15</td>
+					<td data-etiqueta="Quién" th:text="${r.quien}">director</td>
+					<td data-etiqueta="Qué hizo">
+						<span th:text="${r.accion}">Restableció la clave de un usuario</span>
+						<small class="bloque secundario" th:if="${r.cambio != null}" th:text="${r.cambio}">Roles: Caja</small>
+					</td>
+					<td data-etiqueta="A quién" th:text="${r.aQuien}">Lucía Ramos (lucia.ramos)</td>
+				</tr>
+			</tbody>
+		</table>
+		<a class="btn btn-texto btn-chico" th:href="@{/auditoria(soloRevisar=true)}">Ver todo lo marcado «Revisar» en la bitácora</a>
+	</section>
 </main>
 </body>
 </html>

@@ -74,6 +74,13 @@ public class ColegioService {
 		return colegioId != null && colegios.findById(colegioId).map(Colegio::enProduccion).orElse(false);
 	}
 
+	/** Sprint 11, tanda 1b (sección 3.14): el colegio está en PREPARACION (la guía de la puesta en marcha se muestra). */
+	public boolean enPreparacion(Long colegioId) {
+		return colegioId != null && colegios.findById(colegioId)
+				.map(c -> c.getEstado() == pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoColegio.PREPARACION)
+				.orElse(false);
+	}
+
 	/** Sprint 8, tanda 1 (E9): la aplicación tampoco cobra en un colegio en preparación (en MySQL, trg_pago_registro). */
 	public void exigirEnProduccion(Long colegioId) {
 		if (!enProduccion(colegioId)) {

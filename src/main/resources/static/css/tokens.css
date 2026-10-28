@@ -44,8 +44,10 @@
   --sombra: 0 1px 3px rgb(27 79 156 / 0.08);
   --sombra-alta: 0 12px 32px rgb(15 23 42 / 0.18);
   --color-velo: rgb(15 23 42 / 0.45);   /* fondo detrás de un modal */
-  /* Rediseño (hallazgo 2): el armazón se estira hasta 1440 px; el menú tiene 264 px y el contenido es fluido. */
-  --ancho-max: 1440px;
+  /* Sprint 11, tanda 1b (decisión 208): el armazón es fluido hasta 1760 px, con un margen lateral de 24 a 32 px que
+     comparten el armazón y el encabezado; el menú tiene 264 px. */
+  --ancho-max: 1760px;
+  --margen-lateral: clamp(24px, 2vw, 32px);
   --ancho-menu: 264px;
   --color-texto-numero: #0b1f3f;   /* cifras grandes: azul casi negro, 15:1 sobre blanco */
   /* Gráficos (tablero del inicio). Orden fijo, validado con el validador de dataviz (CVD ΔE ≥ 15). La serie 2 (celeste)

@@ -43,6 +43,33 @@
 	<p class="error" th:if="${#fields.hasErrors(nombre)}" th:errors="*{__${nombre}__}">Error</p>
 </div>
 
+<!--/* Sprint 11, tanda 1b (F-D3): fecha con min y max iguales a la validación del servidor (ConfiguracionPlan.rango*).
+     min y max en ISO (aaaa-mm-dd); la ayuda dice el rango en palabras (no todos los lectores anuncian min y max). */-->
+<div th:fragment="campoFecha(nombre, etiqueta, ayuda, requerido, min, max)" class="campo">
+	<label th:for="${nombre}" th:text="${etiqueta}">Etiqueta</label>
+	<input type="date" class="input" th:field="*{__${nombre}__}" th:errorclass="input-con-error"
+		th:min="${min}" th:max="${max}" autocomplete="off" th:aria-describedby="${ayuda != null} ? ${nombre + '-ayuda'}"
+		th:aria-invalid="${#fields.hasErrors(nombre)} ? 'true'" th:required="${requerido}">
+	<p class="ayuda" th:if="${ayuda != null}" th:id="${nombre + '-ayuda'}" th:text="${ayuda}">Ayuda</p>
+	<p class="error" th:if="${#fields.hasErrors(nombre)}" th:errors="*{__${nombre}__}">Error</p>
+</div>
+
+<!--/* Sprint 11, tanda 1b (F-D7, decisión 212): ayuda accesible «i». Sin JavaScript (CSP): popover nativo (clic, toque y
+     Escape) y aria-describedby (el lector la lee al enfocar el botón). También se ve con :hover y :focus-visible (CSS).
+     id: único en la pantalla. texto: lo crucial, en una o dos líneas. etiqueta: de qué es la ayuda. */-->
+<span th:fragment="info(id, texto, etiqueta)" class="info" data-info>
+	<button type="button" class="info-boton" th:popovertarget="|info-${id}|" th:aria-describedby="|info-${id}|"
+		th:aria-label="|Más información: ${etiqueta}|"><span aria-hidden="true">i</span></button>
+	<span th:id="|info-${id}|" class="info-texto" popover="auto" role="tooltip" th:text="${texto}">Ayuda</span>
+</span>
+
+<!--/* Variante de advertencia: ⚠ con el color de alerta y «Atención» para el lector de pantalla (no solo el color). */-->
+<span th:fragment="aviso(id, texto, etiqueta)" class="info info-aviso" data-info>
+	<button type="button" class="info-boton" th:popovertarget="|info-${id}|" th:aria-describedby="|info-${id}|"
+		th:aria-label="|Atención: ${etiqueta}|"><span aria-hidden="true">!</span></button>
+	<span th:id="|info-${id}|" class="info-texto" popover="auto" role="tooltip" th:text="|Atención: ${texto}|">Atención</span>
+</span>
+
 <!--/* Acción sensible con motivo obligatorio, sin JavaScript (popover). A diferencia de modalConfirmacion, el botón
      que abre el modal puede ser discreto. textoAbrir: texto del botón que abre; variante: secundario, texto o peligro. */-->
 <th:block th:fragment="modalMotivo(id, titulo, consecuencia, accion, textoAbrir, variante, textoBoton)">
@@ -188,6 +215,31 @@
 	<p th:text="${texto}">Cuando los haya, aparecerán aquí.</p>
 </div>
 
+<!--/* Sprint 11, tanda 1b (sección 3.14): estado vacío que guía. punto: el paso de la guía (GuiaVista.PasoGuia) o nulo.
+     enPreparacion: si es falso, no menciona la puesta en marcha (un año nuevo en producción también queda vacío).
+     primero: el paso pendiente del que depende (o nulo): se muestra «Primero: …» en lugar del botón. */-->
+<div th:fragment="estadoVacioPaso(titulo, texto, punto, primero, enPreparacion)" class="estado-vacio estado-vacio-paso"
+	data-estado-vacio-paso th:data-paso="${punto != null} ? ${punto.paso().clave()}">
+	<h3 th:text="${titulo}">Este año todavía no tiene secciones</h3>
+	<p th:if="${texto != null}" th:text="${texto}">Texto</p>
+	<th:block th:if="${punto != null}">
+		<p th:if="${primero != null}" data-primero>
+			<span th:text="|Primero: ${primero.accion()}|">Primero: Configurar el año escolar</span>
+			<span class="secundario" th:text="|(lo hace ${primero.responsable()})|">(lo hace Promotoría o Dirección)</span>
+			<a th:if="${primero.enlace() != null}" class="enlace-tactil" th:href="@{${primero.enlace()}}"
+				th:aria-label="|Ir: ${primero.accion()}|">Ir</a>
+		</p>
+		<th:block th:if="${primero == null}">
+			<a th:if="${punto.conBoton()}" class="btn btn-primario" th:href="@{${punto.enlace()}}" th:text="${punto.accion()}"
+				data-estado-vacio-boton>Crear las secciones</a>
+			<p th:unless="${punto.conBoton()}" class="secundario" data-pidelo
+				th:text="|Pídeselo a ${punto.responsable()}.|">Pídeselo a Administración o Dirección.</p>
+		</th:block>
+		<p th:if="${enPreparacion and punto.conBoton()}" class="secundario" th:text="|Lo hace: ${punto.responsable()}.|">Lo hace:
+			Administración o Dirección.</p>
+	</th:block>
+</div>
+
 <!--/* Confirmación de una acción sensible, sin JavaScript (atributo popover).
      accion: URL ya resuelta del POST. conMotivo: exige un motivo de 10 a 500 caracteres (también se valida en el servidor). */-->
 <th:block th:fragment="modalConfirmacion(id, titulo, consecuencia, accion, textoBoton, conMotivo)">
@@ -205,6 +257,22 @@
 			<div class="acciones">
 				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
 				<button type="submit" class="btn btn-peligro" th:text="${textoBoton}">Anular</button>
+			</div>
+		</form>
+	</div>
+</th:block>
+
+<!--/* Sprint 11, tanda 1b (F-D8): una firma de la Promotoría (acepto), siempre con confirmación (nunca con un solo clic).
+     No es destructiva: el botón que confirma es primario, distinto del de peligro. accion: URL ya resuelta del POST. */-->
+<th:block th:fragment="modalFirma(id, textoAbrir, titulo, consecuencia, accion, textoBoton)">
+	<button type="button" class="btn btn-secundario" th:popovertarget="${id}" th:text="${textoAbrir}" data-firma>Firmar</button>
+	<div class="modal" th:id="${id}" popover role="dialog" aria-modal="true" th:aria-labelledby="${id + '-titulo'}">
+		<form method="post" th:action="${accion}" class="modal-cuerpo">
+			<h2 th:id="${id + '-titulo'}" th:text="${titulo}">¿Firmas?</h2>
+			<p th:text="${consecuencia}">Queda con la firma de tu sesión.</p>
+			<div class="acciones">
+				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
+				<button type="submit" class="btn btn-primario" th:text="${textoBoton}">Firmar</button>
 			</div>
 		</form>
 	</div>
