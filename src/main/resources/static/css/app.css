@@ -74,6 +74,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: var(--color-superficie);
   border-bottom: 3px solid var(--color-celeste);
 }
+/* Logo del producto («dos llaves»): en el ingreso, el operador y donde no hay colegio en la sesión. */
+.logo-producto { width: 36px; height: 36px; flex: none; display: block; }
 .monograma {
   width: 36px; height: 36px; flex: none;
   display: grid; place-items: center;
