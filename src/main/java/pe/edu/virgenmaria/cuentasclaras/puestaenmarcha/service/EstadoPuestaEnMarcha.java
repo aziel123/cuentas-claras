@@ -344,7 +344,7 @@ public class EstadoPuestaEnMarcha {
 	 * Sprint 11, tanda 1b (sección 3.14): el título de cada punto sale del catálogo ({@link PasoPuestaEnMarcha}: en
 	 * pantalla, «Equipo del colegio», sin jerga) y cada pendiente sabe el primer paso pendiente del que depende.
 	 */
-	static List<PuntoLista> conCatalogo(List<PuntoLista> puntos) {
+	public static List<PuntoLista> conCatalogo(List<PuntoLista> puntos) {
 		Set<String> hechos = puntos.stream().filter(PuntoLista::hecho).map(PuntoLista::clave).collect(Collectors.toSet());
 		return puntos.stream().map(p -> {
 			PasoPuestaEnMarcha paso = p.definicion();

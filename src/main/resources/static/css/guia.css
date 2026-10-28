@@ -164,3 +164,7 @@
   .tablero-cuerpo > .revisar { grid-column: 1; grid-row: 1; }
   .graficos.graficos-pares, .graficos-inicio { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* «Ver formato» y «Ver detalle» (F-D7): el detalle largo, sin JavaScript. */
+.desplegable-texto summary { cursor: pointer; min-height: 44px; display: inline-flex; align-items: center;
+  font-weight: 600; color: var(--color-primario-texto); }

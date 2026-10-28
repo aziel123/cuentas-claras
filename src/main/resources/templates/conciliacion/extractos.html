@@ -5,8 +5,9 @@
 	<div class="cabecera">
 		<div>
 			<p class="etiqueta"><a th:href="@{/conciliacion}">Conciliación bancaria</a></p>
-			<h1>Extractos del banco</h1>
-			<p class="secundario">Cada día se sube el extracto del día anterior. Es una cadena: cada extracto empieza con el saldo final del anterior y el día siguiente. Lo confirma otra persona escribiendo a ciegas el saldo que ve en su app del banco.</p>
+			<!--/* Sprint 11, tanda 1b (F-D7): el control (confirmación a ciegas por otra persona) a un «i». */-->
+			<h1><span>Extractos del banco</span>
+				<span th:replace="~{fragments/componentes :: info('extractos', 'Cada día se sube el extracto del día anterior. Es una cadena: cada extracto empieza con el saldo final del anterior. Lo confirma otra persona escribiendo a ciegas el saldo que ve en su app del banco.', 'cómo se confirma un extracto')}"></span></h1>
 		</div>
 		<a class="btn btn-secundario" th:href="@{/conciliacion/cuentas}">Cuentas del colegio</a>
 	</div>
@@ -43,12 +44,15 @@
 			<li>Revisar</li>
 			<li>Registrar</li>
 		</ol>
-		<p class="secundario">Descarga el extracto de días completos (hasta ayer) de la banca por internet y súbelo sin abrirlo ni cambiarlo: se guarda tal cual, con su huella. Si trae días ya cargados, deben ser idénticos.</p>
+		<p class="secundario">Súbelo tal como lo descargas del banco, sin abrirlo.
+			<span th:replace="~{fragments/componentes :: info('subir-extracto', 'Días completos, hasta ayer. Se guarda tal cual, con su huella. Si trae días ya cargados, deben ser idénticos.', 'cómo subir el extracto')}"></span></p>
 		<form class="formulario" method="post" th:action="@{/conciliacion/extractos/vista-previa}" enctype="multipart/form-data">
 			<div class="campo">
 				<label for="archivo">Extracto del banco (.csv, .txt o .xlsx)</label>
 				<input class="input" type="file" id="archivo" name="archivo" required accept=".csv,.txt,.xlsx,text/csv" aria-describedby="archivo-ayuda">
-				<p class="ayuda" id="archivo-ayuda">Hasta 2 MB. La línea «cuenta;número» y las columnas fecha, descripcion, numero_operacion, referencia, cargo, abono y saldo (obligatorio).</p>
+				<p class="ayuda" id="archivo-ayuda">Hasta 2 MB.</p>
+				<details class="desplegable-texto"><summary>Ver formato</summary>
+					<p class="ayuda">La línea «cuenta;número» y las columnas fecha, descripcion, numero_operacion, referencia, cargo, abono y saldo (obligatorio).</p></details>
 			</div>
 			<div class="acciones">
 				<button type="submit" class="btn btn-primario">Subir y revisar</button>

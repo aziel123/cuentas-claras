@@ -4,8 +4,9 @@
 <main id="contenido" class="contenido" data-pantalla="recaudacion">
 	<div class="cabecera">
 		<div>
-			<h1>Recaudación bancaria</h1>
-			<p class="secundario">Pagos que las familias hacen en el banco con el código del alumno. Nadie los digita: Administración sube el archivo del banco, otra persona lo confirma mirando el banco y el sistema registra los pagos con su boleta.</p>
+			<!--/* Sprint 11, tanda 1b (F-D7): la explicación (un control) a un «i»; el formato del archivo, en «Ver formato». */-->
+			<h1><span>Recaudación bancaria</span>
+				<span th:replace="~{fragments/componentes :: info('recaudacion', 'Pagos que las familias hacen en el banco con el código del alumno. Nadie los digita: Administración sube el archivo, otra persona lo confirma mirando el banco y el sistema registra los pagos con su boleta.', 'cómo funciona la recaudación')}"></span></h1>
 		</div>
 		<a class="btn btn-secundario" th:if="${puedeSubir}" th:href="@{/recaudacion/base-deudas}" download>Exportar base de deudas</a>
 	</div>
@@ -13,8 +14,8 @@
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
 
 	<section class="tarjeta" aria-labelledby="titulo-confirmar" data-seccion="por-confirmar">
-		<h2 id="titulo-confirmar">Por confirmar</h2>
-		<p class="secundario">Quien confirma entra al portal del banco y escribe el total recaudado que ve ahí. Nunca lo confirma quien subió el archivo.</p>
+		<h2 id="titulo-confirmar"><span>Por confirmar</span>
+			<span th:replace="~{fragments/componentes :: info('confirmar', 'Quien confirma entra al portal del banco y escribe el total recaudado que ve ahí. Nunca lo confirma quien subió el archivo.', 'quién confirma')}"></span></h2>
 		<th:block th:if="${#lists.isEmpty(r.porConfirmar)}">
 			<div th:replace="~{fragments/componentes :: estadoVacio('Nada por confirmar', 'Cuando Administración suba el archivo del banco, aparecerá aquí.')}"></div>
 		</th:block>
@@ -68,7 +69,9 @@
 			<div class="campo">
 				<label for="archivo">Archivo del banco (.csv, .txt o .xlsx)</label>
 				<input class="input" type="file" id="archivo" name="archivo" required accept=".csv,.txt,.xlsx,text/csv" aria-describedby="archivo-ayuda">
-				<p class="ayuda" id="archivo-ayuda">Hasta 2 MB. Columnas: fecha_pago, codigo_alumno, referencia_deuda, monto, moneda, numero_operacion y, al final, el pie TOTAL;monto;cantidad.</p>
+				<p class="ayuda" id="archivo-ayuda">Hasta 2 MB.</p>
+				<details class="desplegable-texto"><summary>Ver formato</summary>
+					<p class="ayuda">Columnas: fecha_pago, codigo_alumno, referencia_deuda, monto, moneda, numero_operacion y, al final, el pie TOTAL;monto;cantidad.</p></details>
 			</div>
 			<div class="acciones">
 				<button type="submit" class="btn btn-primario">Subir y revisar</button>

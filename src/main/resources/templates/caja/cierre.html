@@ -27,8 +27,10 @@
 			<p class="secundario">
 				Cuenta todo el efectivo, incluido el fondo fijo de <span th:replace="~{fragments/componentes :: monto(${c.fondo})}"></span>.
 			</p>
-			<div th:replace="~{fragments/componentes :: alerta('info',
-				'¿Por qué no ves cuánto deberías tener? Es un cierre a ciegas: si vieras el monto registrado, cualquiera podría acomodar su conteo para que cuadre. Cuentas primero y, en cuanto registras tu conteo, ves lo registrado y la diferencia. Así tu conteo te protege a ti.')}"></div>
+			<!--/* Sprint 11, tanda 1b (F-D7): «No ves lo esperado hasta contar» queda visible en una línea; la explicación del
+			     control (cierre a ciegas), en un «i». Lo esperado sigue sin mostrarse aquí. */-->
+			<p class="secundario" data-cierre-a-ciegas>No ves lo esperado hasta contar.
+				<span th:replace="~{fragments/componentes :: info('a-ciegas', 'Es un cierre a ciegas: si vieras el monto registrado, cualquiera podría acomodar su conteo para que cuadre. Cuentas primero y, en cuanto registras tu conteo, ves lo registrado y la diferencia. Así tu conteo te protege a ti.', 'por qué no ves lo esperado')}"></span></p>
 			<form method="post" th:action="@{/caja/cierre/conteo}" class="formulario">
 				<div class="campo">
 					<label for="contado">Total contado (S/)</label>
@@ -127,8 +129,8 @@
 	<!--/* Depósito del efectivo de las cajas cerradas. */-->
 	<section class="tarjeta" aria-labelledby="titulo-deposito" th:unless="${#lists.isEmpty(k.porDepositar)}" data-paso="deposito">
 		<h2 id="titulo-deposito">Registrar depósito</h2>
-		<p class="secundario">Deposita en el banco lo contado menos el fondo fijo (el sencillo se queda en caja) y registra el
-			número de operación del voucher. Administración lo verificará con el estado de cuenta.</p>
+		<p class="secundario">Deposita lo contado menos el fondo fijo y registra el número del voucher.
+			<span th:replace="~{fragments/componentes :: info('deposito', 'El sencillo se queda en caja. Administración verificará el depósito con el estado de cuenta.', 'el depósito')}"></span></p>
 		<form method="post" th:action="@{/caja/cierre/deposito}" class="formulario" th:each="p : ${k.porDepositar}"
 			th:data-caja="${p.cajaId}">
 			<input type="hidden" name="cajaId" th:value="${p.cajaId}">

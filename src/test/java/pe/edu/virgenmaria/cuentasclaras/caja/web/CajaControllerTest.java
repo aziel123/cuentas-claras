@@ -104,7 +104,7 @@ class CajaControllerTest {
 						.param("medio", "EFECTIVO"))
 				.andExpect(status().isOk()).andExpect(view().name("caja/revisar"))
 				.andExpect(content().string(containsString("Cobrar S/ 900.00")))
-				.andExpect(content().string(containsString("Caja no decide montos")))
+				.andExpect(content().string(containsString("role=\"tooltip\">Caja no decide montos")))
 				.andReturn();
 		RevisionCobro revision = (RevisionCobro) revisar.getModelAndView().getModel().get("revision");
 

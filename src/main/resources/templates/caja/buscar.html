@@ -8,8 +8,8 @@
 	<div class="cabecera">
 		<div>
 			<p class="etiqueta">Caja</p>
-			<h1>Cobrar</h1>
-			<p class="secundario">Busca al alumno o a su apoderado. El sistema ya sabe cuánto debe cada familia.</p>
+			<h1><span>Cobrar</span>
+				<span th:replace="~{fragments/componentes :: info('cobrar', 'El sistema ya sabe cuánto debe cada familia: tú no decides montos.', 'de dónde sale la deuda')}"></span></h1>
 		</div>
 		<div class="fila">
 			<a th:replace="~{fragments/componentes :: enlaceBoton('Pagos de hoy', @{/caja/hoy}, 'secundario')}"></a>

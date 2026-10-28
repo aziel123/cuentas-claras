@@ -47,7 +47,9 @@ public class BandejaExterna {
 	/** La suma del contador del menú. */
 	public long contarPorResolver() {
 		String usuario = usuario();
-		return puertos.stream().mapToLong(p -> p.contarPorResolver(usuario)).sum();
+		// Por el proxy de cada puerto (su transacción de lectura), no por el método por defecto de la interfaz.
+		return puertos.stream().mapToLong(p -> p.pendientes(usuario).stream().filter(PendienteExterno::puedeResolver).count())
+				.sum();
 	}
 
 	private static String usuario() {

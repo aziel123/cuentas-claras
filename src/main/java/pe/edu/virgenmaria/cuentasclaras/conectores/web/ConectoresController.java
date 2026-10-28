@@ -35,8 +35,16 @@ public class ConectoresController {
 
 	private final pe.edu.virgenmaria.cuentasclaras.conectores.service.EsperaConectores espera;
 
+	private final pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.PasoAProduccion aceptos;
+
+	private final pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.EstadoPuestaEnMarcha puesta;
+
 	public ConectoresController(ConsultaConectores consulta, PropuestaConector propuesta,
-			pe.edu.virgenmaria.cuentasclaras.conectores.service.EsperaConectores espera) {
+			pe.edu.virgenmaria.cuentasclaras.conectores.service.EsperaConectores espera,
+			pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.PasoAProduccion aceptos,
+			pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.EstadoPuestaEnMarcha puesta) {
+		this.aceptos = aceptos;
+		this.puesta = puesta;
 		this.consulta = consulta;
 		this.propuesta = propuesta;
 		this.espera = espera;
@@ -89,14 +97,22 @@ public class ConectoresController {
 	}
 
 	@GetMapping("/conectores")
-	public String lista(Model model) {
+	public String lista(@org.springframework.security.core.annotation.AuthenticationPrincipal
+			pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado usuario, Model model) {
 		model.addAttribute("vista", consulta.vista());
+		// Sprint 11, tanda 1b (F-D8, decisión 213): el acepto del OSE simulado se ofrece en el mismo formulario.
+		model.addAttribute("esPromotoria", usuario != null
+				&& usuario.roles().contains(pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.PROMOTOR));
+		model.addAttribute("oseAceptado", puesta.actual().hecho(
+				pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.EstadoPuestaEnMarcha.OSE));
 		return "conectores/lista";
 	}
 
 	@PostMapping("/conectores/{tipo:[a-z-]{3,20}}")
 	public String proponer(@PathVariable String tipo, @Valid @ModelAttribute PropuestaConectorRequest pedido,
-			BindingResult validacion, RedirectAttributes avisos) {
+			BindingResult validacion,
+			@org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean aceptoOseSimulado,
+			RedirectAttributes avisos) {
 		TipoConector conector = tipoDe(tipo);
 		if (validacion.hasErrors()) {
 			avisos.addFlashAttribute("error", Formularios.primerError(validacion));
@@ -106,6 +122,14 @@ public class ConectoresController {
 			propuesta.proponer(conector, pedido);
 			avisos.addFlashAttribute("exito", "Listo: propusiste el cambio de «" + conector.etiqueta().toLowerCase()
 					+ "». Ahora prueba la conexión; después otra persona de Promotoría o Dirección lo aprueba en su bandeja.");
+			// F-D8: con la casilla marcada, la Promotoría firma el acepto del simulado en el mismo envío (la misma firma de
+			// siempre: PasoAProduccion.aceptarOseSimulado, con su clave, bitácora y avisos). Exige el rol en el servicio.
+			if (aceptoOseSimulado && conector == TipoConector.OSE
+					&& pedido.modo() == pe.edu.virgenmaria.cuentasclaras.conectores.model.ModoConector.SIMULADO
+					&& !puesta.actual().hecho(pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.EstadoPuestaEnMarcha.OSE)) {
+				aceptos.aceptarOseSimulado();
+				avisos.addFlashAttribute("exito", "Listo: propusiste el comprobante simulado y firmaste su acepto.");
+			}
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());

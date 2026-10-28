@@ -82,7 +82,9 @@
 					<label class="opcion"><input type="checkbox" name="hablo" value="true" required>
 						<span th:text="${#lists.size(s.llamadas) == 1} ? 'Hablé con el apoderado' : 'Hablé con ambas familias'">Hablé con el apoderado</span></label>
 				</th:block>
-				<button type="submit" class="btn btn-primario btn-bloque" title="Se aplica directo. Se avisa a las demás Promotorías y al correo de control.">Aprobar y aplicar</button>
+				<!--/* Sprint 11, tanda 1b (F-D7): la ayuda, en un «i» (no solo en title=). */-->
+				<p class="fila"><button type="submit" class="btn btn-primario btn-bloque">Aprobar y aplicar</button>
+					<span th:replace="~{fragments/componentes :: info(|aplicar-${s.id}|, 'Se aplica directo. Se avisa a las demás Promotorías y al correo de control.', 'aprobar y aplicar')}"></span></p>
 			</form>
 		</th:block>
 

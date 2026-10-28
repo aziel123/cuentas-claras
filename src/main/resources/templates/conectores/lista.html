@@ -114,6 +114,16 @@
 						<label for="afectacion">Afectación al IGV</label>
 						<select class="input" id="afectacion" name="afectacionIgv"><option value="INAFECTO">Inafecto</option><option value="EXONERADO">Exonerado</option></select>
 					</div>
+					<!--/* Sprint 11, tanda 1b (F-D8): el acepto del simulado, en el mismo formulario si es Promotoría. */-->
+					<th:block th:unless="${oseAceptado}">
+						<label class="opcion" th:if="${esPromotoria}" data-acepto-ose>
+							<input type="checkbox" name="aceptoOseSimulado" value="true">
+							<span>Acepto usar el comprobante simulado y emitir mi comprobante legal aparte</span>
+							<span th:replace="~{fragments/componentes :: info('acepto-ose', 'Solo si eliges el modo Simulado. Queda con la firma de tu sesión, en la bitácora, y no se deshace. El comprobante simulado no tiene valor ante SUNAT.', 'el acepto del comprobante simulado')}"></span>
+						</label>
+						<p th:unless="${esPromotoria}" class="secundario" data-falta-acepto>Falta que la Promotoría firme el acepto.
+							<a class="enlace-tactil" th:href="@{/puesta-en-marcha}">Ver dónde lo firma</a></p>
+					</th:block>
 					<div class="campo">
 						<label for="secreto-OSE">Token del OSE (solo Nubefact)</label>
 						<input class="input" type="password" id="secreto-OSE" name="secreto" autocomplete="off" aria-describedby="secreto-ose-ayuda">

@@ -29,7 +29,7 @@
 
 	<!--/* Sprint 11, tanda 1b (F-D6): «Para revisar» y los gráficos en una sola grilla. Hasta 1599 px, una columna; desde
 	     1600 px, «Para revisar» al lado de los últimos 30 días, y la morosidad al lado de los medios de pago. */-->
-	<div class="tablero-cuerpo" th:attr="data-tablero-graficos=${tablero != null} ? ''">
+	<div class="tablero-cuerpo" th:attr="data-tablero-graficos=${tablero != null} ? 'si'">
 	<!--/* «Para revisar» compacto: las críticas siempre a la vista; los avisos, por área y desplegables. */-->
 	<section class="tarjeta revisar" th:classappend="${total == 0} ? 'revisar-vacio'" aria-labelledby="titulo-revisar">
 		<div class="revisar-cabecera">
