@@ -109,7 +109,7 @@ class AislamientoCobranzaWebTest {
 	@Test
 	void colegioBNoVePlanesCuotasNiLotesDelA() throws Exception {
 		mvc.perform(get("/pensiones").with(UsuariosDePrueba.como(directorB))).andExpect(status().isOk())
-				.andExpect(content().string(containsString("Todavía no hay años escolares")))
+				.andExpect(content().string(containsString("Primero: Configurar el año escolar") // tanda 1b: estado vacío que guía))
 				.andExpect(content().string(not(containsString("Plan Primaria 2027"))));
 		mvc.perform(get("/pensiones/saldo-inicial").with(UsuariosDePrueba.como(directorB))).andExpect(status().isOk())
 				.andExpect(content().string(not(containsString("Informe A"))));

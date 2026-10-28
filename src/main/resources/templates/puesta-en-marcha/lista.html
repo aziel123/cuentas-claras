@@ -34,11 +34,11 @@
 		</div>
 		<h2 id="titulo-lista" th:unless="${lista.enPreparacion()}">Salud de la configuración</h2>
 
-		<ol class="pasos" aria-labelledby="titulo-lista">
-			<li th:each="f : ${filas}" class="paso" th:classappend="${f.siguiente()} ? 'paso-siguiente'"
+		<ol class="pm-pasos" aria-labelledby="titulo-lista">
+			<li th:each="f : ${filas}" class="pm-paso" th:classappend="${f.siguiente()} ? 'pm-paso-siguiente'"
 				th:data-paso="${f.punto().clave()}" th:with="p=${f.punto()}, v=${f.vista()}, d=${f.punto().definicion()}">
 				<span class="guia-numero num" th:text="${d.numero()}" aria-hidden="true">1</span>
-				<div class="paso-titulo">
+				<div class="pm-paso-titulo">
 					<strong>
 						<span class="solo-lectores" th:text="|Paso ${d.numero()}:|">Paso 1:</span>
 						<span th:text="${p.paso()}">Datos y logo del colegio</span>
@@ -47,7 +47,7 @@
 							<span th:replace="~{fragments/componentes :: info(|paso-${d.clave()}|, ${d.ayuda()}, ${p.paso()})}"></span>
 						</th:block>
 					</strong>
-					<span class="paso-detalle" th:if="${p.conteo() != null}" th:text="${p.conteo()}">Detalle</span>
+					<span class="pm-paso-detalle" th:if="${p.conteo() != null}" th:text="${p.conteo()}">Detalle</span>
 				</div>
 				<span class="badge" th:classappend="|badge-${f.variante()}|" data-estado-paso>
 					<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
@@ -57,8 +57,8 @@
 					</svg>
 					<span th:text="${f.estado()}">Pendiente</span>
 				</span>
-				<span class="paso-detalle" data-responsable th:text="|Lo hace: ${d.responsable()}|">Lo hace: Promotoría</span>
-				<div class="paso-accion">
+				<span class="pm-paso-detalle" data-responsable th:text="|Lo hace: ${d.responsable()}|">Lo hace: Promotoría</span>
+				<div class="pm-paso-accion">
 					<!--/* F-D8: las dos firmas de la Promotoría, en su paso y con confirmación. */-->
 					<th:block th:if="${!f.hecho() and d.clave() == 'ose'}">
 						<th:block th:if="${puedePasar}">

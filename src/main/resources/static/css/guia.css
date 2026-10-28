@@ -113,22 +113,22 @@
 .motivo-bloqueo { margin: 0; font-size: var(--texto-sm); color: var(--color-alerta); font-weight: 600; }
 
 /* ---------- Puesta en marcha: lista de pasos (tabla en escritorio, tarjetas en celular) ---------- */
-.pasos { list-style: none; margin: 0; padding: 0; display: grid; }
-.paso {
+.pm-pasos { list-style: none; margin: 0; padding: 0; display: grid; }
+.pm-paso {
   display: grid; grid-template-columns: 36px minmax(0, 2fr) minmax(9rem, auto) minmax(0, 1.4fr) auto;
   gap: var(--esp-2) var(--esp-4); align-items: center; padding: var(--esp-3) 0; border-bottom: 1px solid var(--color-borde);
 }
-.paso:last-child { border-bottom: 0; }
-.paso-titulo { display: grid; gap: 2px; min-width: 0; }
-.paso-titulo strong { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-1) var(--esp-2); }
-.paso-detalle { font-size: var(--texto-sm); color: var(--color-texto-secundario); min-width: 0; overflow-wrap: anywhere; }
-.paso-accion { justify-self: end; text-align: right; font-size: var(--texto-sm); color: var(--color-texto-secundario); }
-.paso-siguiente { background: var(--color-celeste-suave); border-radius: var(--radio); padding-left: var(--esp-2);
+.pm-paso:last-child { border-bottom: 0; }
+.pm-paso-titulo { display: grid; gap: 2px; min-width: 0; }
+.pm-paso-titulo strong { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-1) var(--esp-2); }
+.pm-paso-detalle { font-size: var(--texto-sm); color: var(--color-texto-secundario); min-width: 0; overflow-wrap: anywhere; }
+.pm-paso-accion { justify-self: end; text-align: right; font-size: var(--texto-sm); color: var(--color-texto-secundario); }
+.pm-paso-siguiente { background: var(--color-celeste-suave); border-radius: var(--radio); padding-left: var(--esp-2);
   padding-right: var(--esp-2); }
-.paso .badge svg { flex: none; }
+.pm-paso .badge svg { flex: none; }
 @media (max-width: 900px) {
-  .paso { grid-template-columns: 36px minmax(0, 1fr); }
-  .paso > :nth-child(n+3) { grid-column: 2; justify-self: start; text-align: left; }
+  .pm-paso { grid-template-columns: 36px minmax(0, 1fr); }
+  .pm-paso > :nth-child(n+3) { grid-column: 2; justify-self: start; text-align: left; }
 }
 
 /* ---------- Pensiones: tarjetas alineadas (F-D1) ---------- */
