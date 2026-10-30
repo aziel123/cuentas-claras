@@ -75,13 +75,12 @@ class RelojEnSuLimiteMySqlTest {
 		Map<String, Object> cuenta = DbaMySql.exigir().queryForMap("SELECT u.id, u.colegio_id FROM usuario u JOIN colegio c ON "
 				+ "c.id = u.colegio_id WHERE u.activo AND u.apoderado_id IS NULL AND c.tipo = 'COLEGIO' AND c.estado IN "
 				+ "('PREPARACION', 'PRODUCCION') ORDER BY u.id LIMIT 1");
-		assertThat(sesion(cuenta, "cc_ahora_lima_real()", "cc_ahora_lima_real() + INTERVAL 12 HOUR")).isZero();
-		assertThat(sesion(cuenta, "cc_ahora_lima_real()", "cc_ahora_lima_real() + INTERVAL 12 HOUR + INTERVAL 1 SECOND"))
-				.isEqualTo(1644);
-		assertThat(sesion(cuenta, "cc_ahora_lima_real() - INTERVAL 298 SECOND", "cc_ahora_lima_real() + INTERVAL 1 HOUR"))
-				.isZero();
-		assertThat(sesion(cuenta, "cc_ahora_lima_real() - INTERVAL 302 SECOND", "cc_ahora_lima_real() + INTERVAL 1 HOUR"))
-				.isEqualTo(1644);
+		// Vence a las 12 horas de abierta, no un segundo más.
+		assertThat(sesion(cuenta, 0, 12 * 3600)).isZero();
+		assertThat(sesion(cuenta, 0, 12 * 3600 + 1)).isEqualTo(1644);
+		// Nace «ahora» según el reloj real: hasta 300 segundos de diferencia.
+		assertThat(sesion(cuenta, -298, 3600)).isZero();
+		assertThat(sesion(cuenta, -302, 3600)).isEqualTo(1644);
 	}
 
 	private static boolean firmaValida(JdbcTemplate dba, Map<String, Object> firma, String desplazamiento) {
@@ -98,13 +97,17 @@ class RelojEnSuLimiteMySqlTest {
 				+ " FROM firma_operacion WHERE id = ?", Boolean.class, id));
 	}
 
-	private int sesion(Map<String, Object> cuenta, String abierta, String vence) {
+	/** Abierta {@code desdeAhora} segundos respecto del reloj real de la base; vence {@code vence} segundos después. */
+	private int sesion(Map<String, Object> cuenta, long desdeAhora, long vence) {
 		JdbcTemplate sistema = new JdbcTemplate(((FuenteDatosEnrutada) fuenteDatos).sistema());
+		java.time.LocalDateTime ahora = DbaMySql.exigir().queryForObject("SELECT cc_ahora_lima_real()",
+				java.sql.Timestamp.class).toLocalDateTime();
+		java.time.LocalDateTime abierta = ahora.plusSeconds(desdeAhora);
 		try {
 			sistema.update("INSERT INTO sesion_usuario (colegio_id, usuario_id, hash_token, abierta_en, vence_en, creado_en, "
-					+ "creado_por, actualizado_en) VALUES (?, ?, ?, " + abierta + ", " + vence + ", NOW(6), "
-					+ "'sistema.identidad', NOW(6))", cuenta.get("colegio_id"), cuenta.get("id"),
-					Sha256.hex("reloj" + System.nanoTime()));
+					+ "creado_por, actualizado_en) VALUES (?, ?, ?, ?, ?, NOW(6), 'sistema.identidad', NOW(6))",
+					cuenta.get("colegio_id"), cuenta.get("id"), Sha256.hex("reloj" + System.nanoTime()), abierta,
+					abierta.plusSeconds(vence));
 			return 0;
 		}
 		catch (DataAccessException e) {

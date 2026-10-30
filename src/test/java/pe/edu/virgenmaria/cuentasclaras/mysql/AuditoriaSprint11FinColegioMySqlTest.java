@@ -136,10 +136,8 @@ class AuditoriaSprint11FinColegioMySqlTest {
 		Colegio a = cerrado("20600000501", "987681001");
 		Colegio b = suspendido("20600000502", "987681002");
 		// conservarHastaExacto (sin autorización): el cierre + 30 días.
-		Map<String, Object> ca = jdbc.queryForMap("SELECT cerrado_en, conservar_hasta, estado_desde FROM colegio WHERE id = ?",
-				a.id());
-		assertThat(((java.sql.Date) ca.get("conservar_hasta")).toLocalDate())
-				.isEqualTo(((java.sql.Timestamp) ca.get("cerrado_en")).toLocalDateTime().toLocalDate().plusDays(30));
+		assertThat(jdbc.queryForObject("SELECT conservar_hasta = DATE(cerrado_en) + INTERVAL 30 DAY AND cerrado_en = "
+				+ "estado_desde FROM colegio WHERE id = ?", Boolean.class, a.id())).isTrue();
 
 		envejecer(a.id(), 45);
 		Long acta = proponerYAprobar(a.id());
@@ -193,7 +191,7 @@ class AuditoriaSprint11FinColegioMySqlTest {
 		assertThat(suprimido.get("titular_nombre")).isNull();
 		assertThat(suprimido.get("correo_institucional")).isNull();
 		assertThat(suprimido.get("nombre")).isNotNull();
-		assertThat(suprimido.get("ruc")).isEqualTo("20600000501");
+		assertThat((String) suprimido.get("ruc")).startsWith("2060000050");
 		Map<String, Object> ejecutada = jdbc.queryForMap("SELECT * FROM acta_supresion WHERE id = ?", acta);
 		assertThat(ejecutada).containsEntry("estado", "EJECUTADA");
 		assertThat((String) ejecutada.get("filas_suprimidas")).contains("\"alumno\"").contains("\"usuario\"");
@@ -223,8 +221,11 @@ class AuditoriaSprint11FinColegioMySqlTest {
 				verificador::verificarComoSistema);
 		assertThat(resultado.integra()).as(resultado.detalle()).isTrue();
 		assertThat(verificadorSupresion.problemas()).isEmpty();
-		// supresión repetida: ya no hay acta APROBADA.
-		assertThat(codigoEjecutar(acta)).isNotZero();
+		// Un acta ejecutada no vuelve atrás, ni con el DBA; el colegio suprimido tampoco cambia su ficha mínima.
+		assertThat(codigoAl(() -> DbaMySql.exigir().update("UPDATE acta_supresion SET estado = 'EJECUTANDO' WHERE id = ?",
+				acta))).isEqualTo(1644);
+		assertThat(codigoAl(() -> DbaMySql.exigir().update("UPDATE colegio SET titular_documento = '45678900' WHERE id = ?",
+				a.id()))).isEqualTo(1644);
 	}
 
 	// ------------------------------------------------------------------------------------- la exportación y el cierre
@@ -358,10 +359,11 @@ class AuditoriaSprint11FinColegioMySqlTest {
 
 	/** La sesión de esa cuenta, como la abriría cc_sistema al ingresar (0 si la base la deja nacer). */
 	private int sesion(long colegio, long usuario) {
+		LocalDateTime ahora = DbaMySql.exigir().queryForObject("SELECT cc_ahora_lima_real()", java.sql.Timestamp.class)
+				.toLocalDateTime();
 		return codigoAl(() -> sistema().update("INSERT INTO sesion_usuario (colegio_id, usuario_id, hash_token, abierta_en, "
-				+ "vence_en, creado_en, creado_por, actualizado_en) VALUES (?, ?, ?, cc_ahora_lima_real(), "
-				+ "cc_ahora_lima_real() + INTERVAL 1 HOUR, NOW(6), 'sistema.identidad', NOW(6))", colegio, usuario,
-				Sha256.hex(sufijo + colegio + System.nanoTime())));
+				+ "vence_en, creado_en, creado_por, actualizado_en) VALUES (?, ?, ?, ?, ?, NOW(6), 'sistema.identidad', NOW(6))",
+				colegio, usuario, Sha256.hex(sufijo + colegio + System.nanoTime()), ahora, ahora.plusHours(1)));
 	}
 
 	// ------------------------------------------------------------------------------------------------------ apoyo
@@ -369,7 +371,10 @@ class AuditoriaSprint11FinColegioMySqlTest {
 	private record Colegio(long id, Usuario titular, String dni) {
 	}
 
-	private Colegio enProduccion(String ruc, String celular) {
+	private Colegio enProduccion(String rucBase, String celular) {
+		// El dígito verificador del RUC (módulo 11 de SUNAT), sobre los 10 primeros dígitos.
+		String ruc = java.util.stream.IntStream.rangeClosed(0, 9).mapToObj(d -> rucBase.substring(0, 10) + d)
+				.filter(pe.edu.virgenmaria.cuentasclaras.plataforma.service.ValidadorRuc::valido).findFirst().orElseThrow();
 		ingresar(operadorA());
 		String dni = "4" + celular.substring(2);
 		String titular = "t" + celular.substring(5) + "." + sufijo;
@@ -396,7 +401,7 @@ class AuditoriaSprint11FinColegioMySqlTest {
 	private Colegio suspendido(String ruc, String celular) {
 		Colegio c = enProduccion(ruc, celular);
 		Long id = suspensionAprobada(c.id());
-		DbaMySql.exigir().update("UPDATE cambio_estado_colegio SET efectiva_desde = NOW(6) - INTERVAL 1 MINUTE WHERE id = ?",
+		DbaMySql.exigir().update("UPDATE cambio_estado_colegio SET efectiva_desde = cc_ahora_lima_real() - INTERVAL 1 MINUTE WHERE id = ?",
 				id);
 		assertThat(aplicacion.enColegio(c.id())).isEqualTo(1);
 		return c;
@@ -501,8 +506,9 @@ class AuditoriaSprint11FinColegioMySqlTest {
 				}
 				return c;
 			});
-			String filas = columnas.contains("id") ? "COUNT(*), COALESCE(SUM(id), 0), COALESCE(MAX(actualizado_en), 0)"
-					: "COUNT(*), 0, 0";
+			String filas = "COUNT(*), " + (columnas.contains("id") ? "COALESCE(SUM(id), 0)" : "0") + ", "
+					+ (columnas.contains("actualizado_en") ? "COALESCE(MAX(actualizado_en), 0)" : "0")
+					+ (columnas.contains("hash") ? ", COALESCE(MAX(hash), '')" : "");
 			huellas.put(t.nombre(), jdbc.queryForObject("SELECT CONCAT_WS('|', " + filas + ") FROM " + t.nombre() + " WHERE "
 					+ t.where(), String.class, colegio));
 		}
