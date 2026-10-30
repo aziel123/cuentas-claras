@@ -542,9 +542,7 @@ class ServicioSaldoInicialTest {
 		assertThatThrownBy(() -> saldo.confirmar(lote, 0L, BigDecimal.TEN)).isInstanceOf(AuthorizationDeniedException.class);
 		como(ADMINISTRACION_2);
 		assertThatThrownBy(() -> saldo.confirmar(lote, 0L, BigDecimal.TEN)).isInstanceOf(AuthorizationDeniedException.class);
-		como(PROMOTORIA);
-		assertThatThrownBy(() -> saldo.crearLote(new LoteRequest(escuela.anio2026(), CORTE, "Informe", BigDecimal.TEN)))
-				.isInstanceOf(AuthorizationDeniedException.class);
+		// Sprint 11, tanda 1c (sección 3.16): la Promotoría ya arma el lote (antes 403), así que no se prueba aquí.
 	}
 
 	private static Callable<Void> enHilo(UsuarioAutenticado quien, CountDownLatch salida, List<Throwable> errores,

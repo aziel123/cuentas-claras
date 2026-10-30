@@ -213,6 +213,26 @@ Antes del diseño, la decisión D12 (normas vigentes confirmadas con un colegio 
   - exportación de las notas de cada sección en la plantilla de carga del SIAGIE.
 - **Terminado cuando:** un docente registra las notas de su curso por competencias; Dirección cierra el periodo; cada familia descarga su libreta en PDF desde el portal, también si tiene deuda; una nota cambiada después del cierre exige aprobación y queda en la bitácora; y el archivo de una sección real se carga sin errores en el SIAGIE.
 
+### Sprint 11 · Ciclo de vida del colegio (corto, 2 tandas)
+Diseño: `docs/arquitectura/sprint-11-ciclo-colegio.md`.
+- **Tanda 1 · Estados, año escolar del colegio y facultad del titular:**
+  - dar de baja un colegio en preparación y suspender uno en producción, siempre con **dos operadores** y aviso al titular, la
+    Promotoría y el correo de control; la suspensión **se aplica 30 días después**, con la caja revisada, y se puede reactivar (se habilita con la
+    exportación de la tanda 2);
+  - en suspensión el personal no ingresa ni cobra y las familias consultan (también su libreta);
+  - el alta del operador ya no pide el año escolar: lo crea **Promotoría o Dirección** con su firma, y sin él no se pasa a producción;
+  - el **titular del contrato** crea las cuentas de Promotoría y Dirección sin esperar a una segunda persona, con avisos.
+- **Tanda 1c · La Promotoría aplica directo:** el dueño no pide aprobación a personas de menor jerarquía; sus acciones quedan
+  en la bitácora y avisan al correo de control y a las demás Promotorías; lo sensible pide un código por WhatsApp; una cuenta
+  bancaria nueva espera 24 horas (o la aprueba un socio). Lo que piden los demás roles sigue con dos personas.
+- **Tanda 1b · Guía de puesta en marcha (solo interfaz):** mientras el colegio está en preparación, cada persona del personal
+  ve en su inicio cuántos pasos faltan, el siguiente y quién lo hace, con un botón directo; las pantallas vacías dicen qué falta;
+  lo bloqueado explica por qué y enlaza a la Puesta en marcha, que muestra el responsable de cada paso.
+- **Tanda 2 · Exportación, cierre y supresión:** ZIP cifrado con CSV y PDF y su huella; cierre del contrato; 12 meses de
+  consulta para las familias; supresión con acta de dos operadores.
+- **Terminado cuando:** un colegio nuevo arranca solo con su titular; ningún operador suspende a un colegio de un día para otro;
+  la exportación entregada coincide con la huella del correo de control; y el CI está en verde.
+
 ### Adopción de cada colegio nuevo (en paralelo a los sprints)
 | Momento | Con quién | Qué se hace |
 |---|---|---|

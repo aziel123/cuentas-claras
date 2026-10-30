@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<!--/* Sprint 11, tanda 1b (sección 3.14): la guía de la puesta en marcha. Solo personal del colegio, nunca familias.
+     Sin datos de familias ni montos: títulos, roles y (si guia.conConteos) los conteos que ya muestra la lista.
+     Sin JavaScript (CSP): el «i» es el fragmento componentes :: info (popover nativo). */-->
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<!--/* Banner del inicio. primario: si el botón del siguiente paso es el primario de la pantalla (uno por pantalla).
+     ampliada: Promotoría y Dirección en preparación también ven los 3 pasos que siguen (decisión 210). */-->
+<section th:fragment="bannerPreparacion(guia, primario, ampliada)" class="guia" aria-labelledby="guia-titulo" data-guia>
+	<div class="guia-cabecera">
+		<h2 id="guia-titulo" th:text="${guia.textoAvance()}" data-guia-avance>Tu colegio está en preparación: faltan 6 de 15 pasos.</h2>
+		<a th:if="${guia.verLista()}" class="guia-enlace" th:href="@{/puesta-en-marcha}" data-guia-lista th:text="|Ver los ${guia.total()} pasos|">Ver los 16 pasos</a>
+	</div>
+	<div class="guia-avance">
+		<label for="guia-progreso" class="guia-barra-etiqueta" th:text="${guia.etiquetaBarra()}">7 de 13 pasos obligatorios hechos</label>
+		<progress id="guia-progreso" class="guia-barra" th:max="${guia.maximoBarra()}"
+			th:value="${guia.obligatoriosHechos()}">7</progress>
+	</div>
+
+	<!--/* El siguiente paso: con botón si le toca y puede entrar; si no, a quién le toca. */-->
+	<div class="guia-paso" th:if="${guia.siguiente() != null}" th:with="s=${guia.siguiente()}" data-guia-siguiente
+		th:data-paso="${s.paso().clave()}">
+		<div class="guia-paso-texto">
+			<p><span class="guia-marca">Siguiente</span>
+				<strong th:text="${s.accion()}">Crear las secciones del año 2026</strong>
+				<span class="secundario" th:text="|— lo hace ${s.responsable()}|">— lo hace Administración o Dirección</span>
+				<th:block th:if="${s.ayuda() != null}">
+					<span th:replace="~{fragments/componentes :: info(|guia-siguiente|, ${s.ayuda()}, ${s.titulo()})}"></span>
+				</th:block>
+			</p>
+			<p class="secundario" th:unless="${s.conBoton()}" data-guia-no-toca
+				th:text="|Este paso lo hace ${s.responsable()}.|">Este paso lo hace Administración o Dirección.</p>
+		</div>
+		<a th:if="${s.conBoton()}" class="btn" th:classappend="${primario} ? 'btn-primario' : 'btn-secundario'"
+			th:href="@{${s.enlace()}}" th:text="${s.accion()}" data-guia-boton>Crear las secciones del año 2026</a>
+	</div>
+
+	<!--/* Lo que sí le toca, si el siguiente es de otra persona. */-->
+	<div class="guia-paso guia-tuyo" th:if="${guia.tuyo() != null}" th:with="t=${guia.tuyo()}" data-guia-tuyo
+		th:data-paso="${t.paso().clave()}">
+		<div class="guia-paso-texto">
+			<p><span class="guia-marca guia-marca-tuyo">Lo que puedes hacer tú</span>
+				<strong th:text="${t.accion()}">Aprobar el aviso de privacidad</strong></p>
+		</div>
+		<a class="btn btn-secundario" th:href="@{${t.enlace()}}" th:text="${t.accion()}" data-guia-boton>Aprobar el aviso de privacidad</a>
+	</div>
+
+	<p class="guia-nada" th:if="${guia.tuyo() == null and (guia.siguiente() == null or !guia.siguiente().conBoton())}"
+		data-guia-nada>Por ahora no tienes pasos pendientes. Te avisaremos aquí cuando haya uno.</p>
+
+	<!--/* Lo que hace la plataforma (10, 11 y 13): no es del colegio. */-->
+	<p class="guia-plataforma secundario" th:unless="${#lists.isEmpty(guia.esperandoPlataforma())}" data-guia-plataforma>
+		<span th:text="|Lo hace la plataforma: ${#strings.listJoin(guia.esperandoPlataforma().![titulo()], ', ')}.|">Lo hace la
+			plataforma: WhatsApp y correo, Respaldo.</span>
+		<span th:replace="~{fragments/componentes :: info('guia-plataforma',
+			'Se activa sola. Si lleva más de 2 días, escribe a soporte.', 'lo que hace la plataforma')}"></span>
+	</p>
+
+	<!--/* Variante ampliada (inicio de Promotoría y Dirección): los 3 pasos que siguen, con quién los hace. */-->
+	<th:block th:if="${ampliada and !#lists.isEmpty(guia.proximos())}">
+		<h3 class="guia-subtitulo" id="guia-proximos-titulo">Después</h3>
+		<ol class="guia-proximos" aria-labelledby="guia-proximos-titulo" data-guia-proximos>
+			<li th:each="p : ${guia.proximos()}" th:data-paso="${p.paso().clave()}">
+				<span class="guia-numero num" th:text="${p.numero()}" aria-hidden="true">5</span>
+				<span class="guia-proximo-texto">
+					<strong th:text="${p.titulo()}">Pensiones</strong>
+					<span class="secundario" th:text="${p.responsable()}">Administración o Promotoría</span>
+				</span>
+			</li>
+		</ol>
+	</th:block>
+</section>
+
+</body>
+</html>

@@ -36,6 +36,8 @@ public enum AccionAuditoria {
 
 	// Estructura del colegio (sprint 2)
 	ANIO_ESCOLAR_CREADO("Creó un año escolar", false),
+	/** Sprint 11, tanda 1 (AP-9): Promotoría o Dirección cambió las fechas de clases de un año, con su firma. */
+	ANIO_ESCOLAR_CAMBIADO("Cambió las fechas de clases de un año escolar", false),
 	SECCION_CREADA("Creó una sección", false),
 	SECCION_DESACTIVADA("Desactivó una sección", false),
 
@@ -469,6 +471,107 @@ public enum AccionAuditoria {
 	CALIFICACIONES_SIAGIE_EXPORTADAS("Descargó las calificaciones de una sección para el SIAGIE", false),
 	/** Se resalta (M12): Dirección delegó con su firma la exportación para el SIAGIE a una persona de Administración. */
 	DELEGACION_SIAGIE_OTORGADA("Delegó la exportación de calificaciones para el SIAGIE", true),
+
+	// Sprint 11, tanda 1: ciclo de vida del colegio (dos operadores) y facultad del titular. Todos se resaltan.
+	/** Un operador propuso dar de baja, suspender o reactivar el colegio (o bloquear la facultad del titular). */
+	CAMBIO_ESTADO_COLEGIO_PROPUESTO("Propuso un cambio de estado del colegio", true),
+	/** Otro operador aprobó el cambio de estado (la base fijó su fecha efectiva). */
+	CAMBIO_ESTADO_COLEGIO_APROBADO("Aprobó un cambio de estado del colegio", true),
+	/** Otro operador rechazó el cambio de estado propuesto. */
+	CAMBIO_ESTADO_COLEGIO_RECHAZADO("Rechazó un cambio de estado del colegio", true),
+	/** Un operador anuló el cambio de estado antes de que se aplicara. */
+	CAMBIO_ESTADO_COLEGIO_ANULADO("Anuló un cambio de estado del colegio", true),
+	/** AP-10: el titular objetó una baja o una suspensión. */
+	CAMBIO_ESTADO_OBJETADO("El titular objetó un cambio de estado del colegio", true),
+	/** AP-10: un operador que no propuso resolvió la objeción del titular, con su respuesta. */
+	OBJECION_RESUELTA("Resolvió la objeción del titular", true),
+	/** sistema.plataforma aplicó la baja del colegio. */
+	COLEGIO_DADO_DE_BAJA("El colegio fue dado de baja", true),
+	/** sistema.plataforma aplicó la suspensión: el personal no ingresa; las familias, en modo consulta. */
+	COLEGIO_SUSPENDIDO("El colegio fue suspendido", true),
+	/** sistema.plataforma aplicó la reactivación del colegio. */
+	COLEGIO_REACTIVADO("El colegio fue reactivado", true),
+	/** AP-2: dos operadores bloquearon la facultad del titular. */
+	FACULTAD_BLOQUEADA("Se bloqueó la facultad del titular", true),
+	/** AP-2: dos operadores desbloquearon la facultad del titular. */
+	FACULTAD_DESBLOQUEADA("Se desbloqueó la facultad del titular", true),
+	/** Recordatorio de la suspensión próxima (7 días y 1 día antes). */
+	SUSPENSION_PROXIMA("Recordó la suspensión próxima del colegio", false),
+	/** AP-4 y AP-13: la suspensión espera cierres, comprobantes, órdenes o libretas (alerta diaria). */
+	SUSPENSION_EN_ESPERA("La suspensión espera que el colegio ponga en orden su caja", true),
+	/** F10: alguien del personal intentó ingresar a un colegio que no opera (mensaje genérico en pantalla). */
+	INGRESO_RECHAZADO_COLEGIO_SUSPENDIDO("Intentó ingresar a un colegio suspendido o dado de baja", false),
+	/** F7: un colegio está en un estado sin su cambio aplicado (o una suspensión con menos de 30 días): alerta CRÍTICA. */
+	ESTADO_COLEGIO_SIN_CAMBIO("Estado del colegio sin su cambio aprobado (revisión diaria)", true),
+	/** Sección 3.12: el titular dio o quitó Promotoría o Dirección sin segunda aprobación, con su firma y su código. */
+	FACULTAD_TITULAR_USADA("El titular usó su facultad para dar o quitar Promotoría o Dirección", true),
+	/** AP-2: el titular pidió el código de un uso de su facultad (le llegó por WhatsApp o correo). */
+	CODIGO_FACULTAD_PEDIDO("El titular pidió el código para usar su facultad", false),
+	// Sprint 11, tanda 1c (secciones 3.16 y 3.16b): la Promotoría aplica directo
+	/** Una Promotoría pidió y aplicó ella misma un cambio (con su firma y, si es sensible, su código). Se resalta. */
+	ACCION_DIRECTA_PROMOTORIA("Una Promotoría aplicó un cambio directo, sin segunda aprobación", true),
+	/** Una Promotoría pidió el código de una acción sensible (le llegó por WhatsApp). */
+	CODIGO_PROMOTORIA_ENVIADO("Una Promotoría pidió el código de una acción sensible", false),
+	/** A1c-1: la persona dueña de una cuenta directiva pidió el código a su contacto anterior. */
+	CODIGO_CONTACTO_ENVIADO("Se envió el código al contacto anterior para confirmar un cambio de contacto", false),
+	/** A1c-1: la persona confirmó el cambio de su contacto desde su contacto anterior. */
+	CONTACTO_CONFIRMADO("La persona confirmó desde su contacto anterior el cambio de su contacto", false),
+	/** Un cambio aplicado directo espera 24 horas (dar o quitar Promotoría, desactivar una Promotoría). */
+	DIRECTA_EN_ESPERA("Un cambio directo de Promotoría espera 24 horas antes de aplicarse", true),
+	/** Se frenó un cambio que esperaba. */
+	DIRECTA_FRENADA("Se frenó un cambio que esperaba (no se aplica)", true),
+	/** sistema.roles aplicó un cambio cuya espera venció. */
+	DIRECTA_APLICADA_AL_VENCER("Se aplicó un cambio al terminar su espera", true),
+	/** La cuenta bancaria, la pasarela o la recaudación que aprobó directo una Promotoría espera 24 horas. */
+	CONECTOR_EN_ESPERA("Un conector que mueve dinero espera 24 horas antes de entrar en vigencia", true),
+	/** Se frenó un conector que esperaba. */
+	CONECTOR_FRENADO("Se frenó un conector que esperaba (no entra en vigencia)", true),
+	/** A1c-4: quien cambió la cuenta intentó confirmar la conciliación dentro de los 30 días. */
+	CONCILIACION_TRAS_CAMBIO_RECHAZADA("Quien cambió la cuenta intentó confirmar la conciliación (se rechazó)", true),
+
+	// Sprint 11, tanda 2 (V41): exportación, cierre, conservación, retención legal y supresión
+	/** sistema.plataforma aplicó el cierre del colegio (dos operadores, con su exportación). */
+	COLEGIO_CERRADO("El colegio fue cerrado", true),
+	/** sistema.exportacion generó la exportación completa de los datos del colegio (con sus huellas). */
+	EXPORTACION_COLEGIO_GENERADA("Se generó la exportación de los datos del colegio", false),
+	/** Un operador pidió la exportación (pedido escrito del colegio o la de cierre). */
+	EXPORTACION_PEDIDA("Se pidió la exportación de los datos del colegio", true),
+	/** AP2-13: la exportación falló (una libreta no coincide con su huella, o el archivo no se pudo generar). */
+	EXPORTACION_FALLIDA("La exportación de los datos del colegio falló", true),
+	/** AP2-4: empezó la entrega al titular (el enlace, solo por correo). */
+	EXPORTACION_ENTREGA_INICIADA("Se envió el enlace de la exportación al titular", false),
+	/** AP2-4: un intento fallido de DNI o código en la entrega (al quinto se anula el enlace). */
+	EXPORTACION_INTENTO_FALLIDO("Intento fallido en la entrega de la exportación", true),
+	/** AP2-4: el código de la entrega salió por WhatsApp al titular. */
+	EXPORTACION_CODIGO_ENVIADO("Se envió el código de la entrega de la exportación", false),
+	/** AP2-13: el titular vio la clave del ZIP (una vez): se descifró y se borró de la base. */
+	EXPORTACION_CLAVE_DESCIFRADA("Se descifró la clave de la exportación", true),
+	/** AP2-13: una descarga del ZIP (hasta 3). */
+	EXPORTACION_DESCARGADA("Se descargó la exportación", false),
+	/** AP2-13: LimpiezaExportaciones borró el archivo a los 30 días (la fila queda VENCIDA). */
+	EXPORTACION_BORRADA("Se borró el archivo de la exportación vencida", false),
+	/** AP-11: el titular autorizó conservar los datos 12 meses después de la suspensión. */
+	CONSERVACION_AUTORIZADA("El titular autorizó la conservación de los datos", false),
+	/** AP2-9: el titular retiró la autorización de conservación. */
+	CONSERVACION_RETIRADA("El titular retiró la autorización de conservación", true),
+	/** Correcciones (A2): el titular pidió el retiro (con su código); se aplica a las 24 horas. */
+	CONSERVACION_RETIRO_PEDIDO("El titular pidió retirar la autorización de conservación", true),
+	/** Correcciones (A2): un operador frenó el retiro pedido. */
+	CONSERVACION_RETIRO_FRENADO("Un operador frenó el retiro de la autorización de conservación", true),
+	/** RevisionConservacion: la conservación vence (30 días antes y el día). */
+	CONSERVACION_POR_VENCER("La conservación de los datos del colegio vence", true),
+	/** AP2-10: un operador puso la retención legal (no se suprime). */
+	RETENCION_LEGAL_PUESTA("Se puso la retención legal del colegio", true),
+	/** AP2-10: otro operador quitó la retención legal. */
+	RETENCION_LEGAL_QUITADA("Se quitó la retención legal del colegio", true),
+	/** Un operador propuso el acta de supresión del colegio. */
+	ACTA_SUPRESION_PROPUESTA("Se propuso el acta de supresión", true),
+	/** Otro operador aprobó el acta de supresión. */
+	ACTA_SUPRESION_APROBADA("Se aprobó el acta de supresión", true),
+	/** AP2-8: sistema.auditoria verificó la cadena completa para el acta. */
+	ACTA_CADENA_VERIFICADA("Se verificó la cadena para el acta de supresión", false),
+	/** AP2-12: los respaldos con datos de un colegio suprimido llegan a su límite de 24 meses. */
+	RESPALDOS_CON_DATOS_POR_VENCER("Quedan respaldos con datos de un colegio suprimido", true),
 
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */

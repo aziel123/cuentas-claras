@@ -59,8 +59,9 @@ public class PlanPensionController {
 		if (!validacion.hasErrors()) {
 			try {
 				Long id = servicio.crearBorrador(anioId, nivel, solicitud);
-				avisos.addFlashAttribute("exito", "Listo: propusiste el plan. Ahora debe aprobarlo otra persona de "
-						+ "Promotoría o Dirección.");
+				// Sprint 11, tanda 1b (F-D4): el plan queda en BORRADOR hasta que se envía.
+				avisos.addFlashAttribute("exito", "Guardaste el borrador. Revísalo y pulsa «Enviar para aprobación» para que "
+						+ "otra persona de Promotoría o Dirección lo apruebe.");
 				return "redirect:/pensiones/planes/" + id;
 			}
 			catch (ReglaNegocioException e) {
@@ -130,8 +131,8 @@ public class PlanPensionController {
 	public String enviar(@PathVariable Long id, RedirectAttributes avisos) {
 		try {
 			servicio.enviar(id);
-			avisos.addFlashAttribute("exito", "Listo: enviaste el plan. Ya no se puede editar; lo aprueba otra persona "
-					+ "de Promotoría o Dirección.");
+			avisos.addFlashAttribute("exito", "Enviaste el plan. Ahora debe aprobarlo otra persona de Promotoría o "
+					+ "Dirección.");
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());
@@ -202,10 +203,13 @@ public class PlanPensionController {
 		model.addAttribute("anio", servicio.anio(anioId));
 		model.addAttribute("nivel", nivel);
 		model.addAttribute("planId", null);
+		model.addAttribute("rangos", servicio.rangos(anioId));
 	}
 
 	private void prepararEdicion(Model model, Long id) {
-		model.addAttribute("plan", servicio.obtener(id));
+		var plan = servicio.obtener(id);
+		model.addAttribute("plan", plan);
 		model.addAttribute("planId", id);
+		model.addAttribute("rangos", servicio.rangos(plan.anioId()));
 	}
 }

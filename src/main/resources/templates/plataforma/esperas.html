@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Cambios en espera', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="plataforma-esperas">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Plataforma</p>
+			<h1>Cambios en espera</h1>
+			<p class="secundario">Lo que una Promotoría aplicó directo y espera 24 horas: una cuenta bancaria, una pasarela o una
+				recaudación nuevas, dar o quitar Promotoría y desactivar a una Promotoría. Si no lo reconoce el colegio, frénalo
+				con un motivo: no entra y se avisa a todas las Promotorías y al correo de control. El operador nunca aplica nada.</p>
+		</div>
+		<div class="acciones">
+			<a class="btn btn-secundario" th:href="@{/plataforma}">Colegios</a>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-esperas">
+		<h2 id="titulo-esperas">Pendientes</h2>
+		<th:block th:if="${#lists.isEmpty(esperas)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Nada en espera', 'Cuando una Promotoría cambie la cuenta del colegio o aparte a otra Promotoría, aparecerá aquí durante 24 horas.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(esperas)}">
+			<caption class="solo-lectores">Cambios que esperan 24 horas, con su colegio y cuándo se aplican.</caption>
+			<thead><tr><th scope="col">Colegio</th><th scope="col">Cambio</th><th scope="col">Lo pidió</th><th scope="col">Se aplica</th><th scope="col">Frenar</th></tr></thead>
+			<tbody>
+				<tr th:each="e : ${esperas}" th:attr="data-espera=${e.espera.clase + ':' + e.espera.id}">
+					<td data-etiqueta="Colegio" th:text="${e.colegio}">Colegio</td>
+					<td data-etiqueta="Cambio" th:text="${e.espera.que}">Cambio</td>
+					<td data-etiqueta="Lo pidió" th:text="${e.espera.pidio}">promotora</td>
+					<td data-etiqueta="Se aplica" th:text="${e.espera.vence != null} ? ${#temporals.format(e.espera.vence, 'dd/MM/yyyy HH:mm')} : '—'">—</td>
+					<td data-etiqueta="Frenar">
+						<form method="post" class="formulario" th:action="${e.espera.clase == 'CONECTOR'} ? @{/plataforma/colegios/{id}/esperas/conectores/{c}/frenar(id=${e.colegioId},c=${e.espera.id})} : @{/plataforma/colegios/{id}/esperas/solicitudes/{s}/frenar(id=${e.colegioId},s=${e.espera.id})}">
+							<div class="campo">
+								<label th:for="|motivo-${e.espera.clase}-${e.espera.id}|">Motivo</label>
+								<textarea class="input" th:id="|motivo-${e.espera.clase}-${e.espera.id}|" name="motivo" required minlength="20" maxlength="500"></textarea>
+							</div>
+							<button type="submit" class="btn btn-peligro btn-chico">Frenar</button>
+						</form>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

@@ -77,7 +77,7 @@ class AprobacionesControllerTest {
 	void quienPidioVeLaSolicitudSinBotonesYSiFuerzaLaAprobacionRecibeUnMensaje() throws Exception {
 		mvc.perform(get("/aprobaciones").with(UsuariosDePrueba.como(subdirector()))).andExpect(status().isOk())
 				.andExpect(content().string(containsString("Retirar a Mateo Quispe Huamán desde el 01/10/2026")))
-				.andExpect(content().string(containsString("debe resolverla otra persona")))
+				.andExpect(content().string(containsString("Debe resolverla otra persona.")))
 				.andExpect(content().string(not(containsString("/aprobaciones/" + solicitud + "/aprobar"))));
 
 		mvc.perform(post("/aprobaciones/" + solicitud + "/aprobar").with(UsuariosDePrueba.como(subdirector()))

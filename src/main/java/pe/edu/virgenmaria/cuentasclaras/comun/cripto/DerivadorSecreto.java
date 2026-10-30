@@ -41,6 +41,48 @@ public class DerivadorSecreto {
 		return ByteBuffer.wrap(huella, 0, Long.BYTES).getLong();
 	}
 
+	/**
+	 * Sprint 11, tanda 1 (AP-2): el código de 6 dígitos de un uso de la facultad del titular, derivado de la clave del
+	 * mensaje que lo lleva ({@code HMAC(clave, "codigo_facultad|" + colegio + "|" + claveDelMensaje)}). Ni el mensaje ni la
+	 * base lo guardan: lo calcula el envío y lo vuelve a calcular la aplicación al comparar lo que escribió el titular.
+	 */
+	public String codigoFacultad(long colegioId, String claveMensaje) {
+		Objects.requireNonNull(claveMensaje, "claveMensaje");
+		byte[] huella = hmac("codigo_facultad|" + colegioId + "|" + claveMensaje);
+		long valor = ByteBuffer.wrap(huella, 0, Long.BYTES).getLong() & Long.MAX_VALUE;
+		return String.format("%06d", valor % 1_000_000L);
+	}
+
+	/**
+	 * Sprint 11, tanda 1c (decisión 216, A1c-1 y A1c-5): el código de 6 dígitos de una acción de Promotoría (o de la
+	 * confirmación del contacto anterior), derivado de la clave del mensaje que lo lleva. El mensaje guarda solo su SHA-256
+	 * (la base la compara con la de lo que escribió la persona); el envío lo vuelve a calcular.
+	 */
+	public String codigoPromotoria(long colegioId, String claveMensaje) {
+		Objects.requireNonNull(claveMensaje, "claveMensaje");
+		byte[] huella = hmac("codigo_promotoria|" + colegioId + "|" + claveMensaje);
+		long valor = ByteBuffer.wrap(huella, 0, Long.BYTES).getLong() & Long.MAX_VALUE;
+		return String.format("%06d", valor % 1_000_000L);
+	}
+
+	/** Sprint 11, tanda 2 (AP2-4): el código de 6 dígitos de la entrega de una exportación (lo deriva el envío). */
+	public String codigoExportacion(long colegioId, String claveMensaje) {
+		Objects.requireNonNull(claveMensaje, "claveMensaje");
+		byte[] huella = hmac("codigo_exportacion|" + colegioId + "|" + claveMensaje);
+		long valor = ByteBuffer.wrap(huella, 0, Long.BYTES).getLong() & Long.MAX_VALUE;
+		return String.format("%06d", valor % 1_000_000L);
+	}
+
+	/**
+	 * Sprint 11, tanda 2 (AP2-4): el token del enlace de la entrega de una exportación, derivado de la clave del mensaje
+	 * que lo lleva (solo por correo). La base guarda solo su SHA-256 ({@code exportacion_colegio.token_hash}).
+	 */
+	public String tokenExportacion(long colegioId, String claveMensaje) {
+		Objects.requireNonNull(claveMensaje, "claveMensaje");
+		return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+				hmac("token_exportacion|" + colegioId + "|" + claveMensaje));
+	}
+
 	private byte[] hmac(String mensaje) {
 		try {
 			Mac mac = Mac.getInstance(ALGORITMO);

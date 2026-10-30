@@ -63,9 +63,18 @@ public class AcademicoDemoDev implements ApplicationRunner {
 
 	private final boolean habilitado;
 
+	private final pe.edu.virgenmaria.cuentasclaras.aprobaciones.repository.SolicitudCambioRepository solicitudes;
+
+	private final org.springframework.transaction.support.TransactionTemplate lectura;
+
 	public AcademicoDemoDev(EjemploAcademico academico, PersonaDemo personas, Clock reloj,
 			@Value("${spring.datasource.url:}") String urlBaseDatos,
-			@Value("${cuentasclaras.demo.datos-colegio:true}") boolean habilitado) {
+			@Value("${cuentasclaras.demo.datos-colegio:true}") boolean habilitado,
+			pe.edu.virgenmaria.cuentasclaras.aprobaciones.repository.SolicitudCambioRepository solicitudes,
+			org.springframework.transaction.PlatformTransactionManager transacciones) {
+		this.solicitudes = solicitudes;
+		this.lectura = new org.springframework.transaction.support.TransactionTemplate(transacciones);
+		this.lectura.setReadOnly(true);
 		this.academico = academico;
 		this.personas = personas;
 		this.reloj = reloj;
@@ -80,8 +89,15 @@ public class AcademicoDemoDev implements ApplicationRunner {
 
 	/** @return {@code true} si cargó lo académico */
 	boolean crearSiCorresponde() {
-		if (!habilitado || urlBaseDatos == null || !urlBaseDatos.startsWith("jdbc:h2:mem:")
+		if (!habilitado || !pe.edu.virgenmaria.cuentasclaras.comun.basedatos.BaseH2Local.es(urlBaseDatos)
 				|| !personas.existen(DatosDemoDev.COLEGIO_PRINCIPAL, "promotor", "director", "administracion", "docente")) {
+			return false;
+		}
+		// Demo persistente (H2 en archivo): en un segundo arranque lo académico ya existe (no se carga otra vez).
+		if (Boolean.TRUE.equals(pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio.en(
+				DatosDemoDev.COLEGIO_PRINCIPAL, () -> lectura.execute(t -> !solicitudes.findByTipoOrderByIdDesc(
+						pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.TipoSolicitud.ASIGNACION_DOCENTE).isEmpty())))) {
+			LOG.info("Ya hay asignaciones docentes: lo académico de demostración no se carga otra vez.");
 			return false;
 		}
 		long inicio = System.nanoTime();

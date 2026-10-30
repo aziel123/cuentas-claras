@@ -140,6 +140,8 @@ class AcademicoDemoDevTest {
 					false, Rol.DOCENTE);
 		}
 		// Los beans compartidos con la demo son de los perfiles dev y demo: aquí se arman con los servicios del contexto.
-		return new AcademicoDemoDev(fabrica.createBean(EjemploAcademico.class), personaDemo, reloj, url, true);
+		return new AcademicoDemoDev(fabrica.createBean(EjemploAcademico.class), personaDemo, reloj, url, true,
+				fabrica.getBean(pe.edu.virgenmaria.cuentasclaras.aprobaciones.repository.SolicitudCambioRepository.class),
+				fabrica.getBean(org.springframework.transaction.PlatformTransactionManager.class));
 	}
 }

@@ -390,14 +390,16 @@ class EscenariosFraudeAnulacionesTest {
 		Long id = descuentos.solicitar(descuento(f.mateo(), TipoDescuento.BECA, "100", List.of(marzoMateo)));
 		Long solicitud = EscenarioAprobaciones.pendiente(jdbc, "descuento", id);
 
-		// Ella misma (también tiene el rol de Promotoría).
-		assertThatThrownBy(() -> bandeja.aprobar(solicitud, null)).isInstanceOf(AutoaprobacionSolicitudException.class);
+		// Ella misma (también tiene el rol de Promotoría). Sprint 11, tanda 1c: como Promotoría lo aplicaría directo, pero el
+		// descuento es sensible y pide su código por WhatsApp; sin él, no pasa nada (antes: autoaprobación rechazada).
+		assertThatThrownBy(() -> bandeja.aprobar(solicitud, null)).isInstanceOf(ReglaNegocioException.class)
+				.hasMessageContaining("pide tu código");
 		// Quien le creó la cuenta hace una semana.
 		como(PROMOTORIA);
 		assertThatThrownBy(() -> bandeja.aprobar(solicitud, null)).isInstanceOf(AutoaprobacionSolicitudException.class);
 		assertThat(estado(jdbc, marzoMateo)).isEqualTo("PENDIENTE");
 		assertThat(contar(jdbc, "ajuste_cuota")).isZero();
-		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'AUTOAPROBACION_RECHAZADA'")).isEqualTo(2);
+		assertThat(contar(jdbc, "evento_auditoria WHERE accion = 'AUTOAPROBACION_RECHAZADA'")).isEqualTo(1);
 
 		EscenarioAprobaciones.aprueba(DIRECCION, bandeja, jdbc, "descuento", id);
 		assertThat(estado(jdbc, marzoMateo)).isEqualTo("EXONERADA");

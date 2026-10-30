@@ -61,9 +61,12 @@ public class PasoAProduccion {
 
 	private final Clock reloj;
 
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository anios;
+
 	public PasoAProduccion(ColegioRepository colegios, UsuarioRepository usuarios, EstadoPuestaEnMarcha estado,
 			FirmaSesion firma, FirmaOperacionRepository firmas, AuditoriaService auditoria, ApplicationEventPublisher eventos,
-			Clock reloj) {
+			Clock reloj, pe.edu.virgenmaria.cuentasclaras.colegio.repository.AnioEscolarRepository anios) {
+		this.anios = anios;
 		this.colegios = colegios;
 		this.usuarios = usuarios;
 		this.estado = estado;
@@ -86,6 +89,10 @@ public class PasoAProduccion {
 		if (colegio.enProduccion()) {
 			throw new ReglaNegocioException("El colegio ya está en producción.");
 		}
+		if (colegio.getEstado() != pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoColegio.PREPARACION) {
+			throw new ReglaNegocioException("El colegio está " + colegio.getEstado().etiqueta().toLowerCase(java.util.Locale.ROOT)
+					+ ": solo un colegio en preparación pasa a producción.");
+		}
 		if (usuarios.contarActivosConRol(Rol.DIRECTOR) == 0 || usuarios.contarActivosConRol(Rol.CAJA) == 0) {
 			throw new ReglaNegocioException("Para pasar a producción el colegio necesita al menos una cuenta de Dirección y "
 					+ "una de Caja activas, de personas distintas de la Promotoría (quien cobra no aprueba).");
@@ -94,6 +101,11 @@ public class PasoAProduccion {
 		if (!lista.completa()) {
 			throw new ReglaNegocioException("Para pasar a producción completa la lista de verificación. Faltan: "
 					+ pendientes(lista) + ".");
+		}
+		// Sprint 11, tanda 1 (sección 3.7, F18): sin año escolar no hay producción (la base también lo exige).
+		if (anios.findAllByOrderByAnioDesc().stream().noneMatch(a -> !a.cerrado())) {
+			throw new ReglaNegocioException("Para pasar a producción el colegio necesita su año escolar con las fechas de "
+					+ "clases (paso 3 de la puesta en marcha): lo crea Promotoría o Dirección, con su firma.");
 		}
 		UsuarioAutenticado promotor = actor();
 		LocalDateTime ahora = LocalDateTime.now(reloj);

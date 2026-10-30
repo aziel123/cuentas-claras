@@ -7,7 +7,7 @@ import pe.edu.virgenmaria.cuentasclaras.caja.repository.ReembolsoRepository;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.model.ObjetoPartida;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LineaRecaudacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.recaudacion.repository.LoteRecaudacionRepository;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -32,16 +32,16 @@ public class ResponsablesPartida {
 
 	private final LineaRecaudacionRepository lineas;
 
-	private final ControlParticipantes participantes;
+	private final SegundaFirma segundaFirma;
 
 	public ResponsablesPartida(PagoRepository pagos, DepositoCajaRepository depositos, ReembolsoRepository reembolsos,
-			LoteRecaudacionRepository lotes, LineaRecaudacionRepository lineas, ControlParticipantes participantes) {
+			LoteRecaudacionRepository lotes, LineaRecaudacionRepository lineas, SegundaFirma segundaFirma) {
 		this.pagos = pagos;
 		this.depositos = depositos;
 		this.reembolsos = reembolsos;
 		this.lotes = lotes;
 		this.lineas = lineas;
-		this.participantes = participantes;
+		this.segundaFirma = segundaFirma;
 	}
 
 	/** Los responsables directos del objeto, ampliados con quienes prepararon sus cuentas. */
@@ -70,6 +70,6 @@ public class ResponsablesPartida {
 			}
 		}
 		responsables.remove(null);
-		return participantes.ampliar(responsables);
+		return segundaFirma.excluidosPara(responsables);
 	}
 }

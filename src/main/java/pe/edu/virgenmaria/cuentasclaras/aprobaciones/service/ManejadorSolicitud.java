@@ -91,6 +91,14 @@ public interface ManejadorSolicitud {
 	}
 
 	/** Un aviso resaltado para quien aprueba (por ejemplo, «el dinero pasa a OTRA familia») o {@code null}. */
+	/**
+	 * Sprint 11, tanda 1c (decisión 218): si, al aplicarla directo una Promotoría, también se avisa a los operadores de la
+	 * plataforma (la cuenta bancaria, la pasarela o la recaudación que entran en espera: los operadores la pueden frenar).
+	 */
+	default boolean avisaOperadoresAlAplicarDirecta(SolicitudCambio solicitud) {
+		return false;
+	}
+
 	default String advertencia(SolicitudCambio solicitud) {
 		return null;
 	}

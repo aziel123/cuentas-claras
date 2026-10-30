@@ -349,6 +349,37 @@ GRANT INSERT ON cuentasclaras.delegacion_siagie TO 'cc_negocio';
 -- Correcciones del sprint 10 (V38): matricula_historial NO tiene GRANT de escritura para nadie: la escribe SOLO
 -- trg_matricula_estado (con los permisos de su DEFINER). cc_app y cc_sistema solo la leen (SELECT de arriba): 1142.
 
+-- ===================== Sprint 11 · tanda 1 (V39): ciclo de vida del colegio y facultad del titular =====================
+-- cambio_estado_colegio y uso_facultad_titular: cc_app solo los lee (el SELECT de cuentasclaras.* del rol, para la franja
+-- del personal, el aviso del portal y la Puesta en marcha); los escribe solo cc_sistema (bloque 2): 1142 con cc_app.
+-- colegio: la Promotoría (cc_app) pasa a producción y la hora del estado viaja con él (la pone la base:
+-- trg_colegio_cambio); el cambio de estado aplicado y la facultad del titular, NO (1143).
+-- anio_escolar: sin cambios (INSERT y UPDATE de la tabla, también actualizado_por); quién lo crea y quién lo cambia lo
+-- deciden trg_anio_escolar_nace y trg_anio_escolar_cambio.
+GRANT UPDATE (estado_desde, suspendido_en) ON cuentasclaras.colegio TO 'cc_negocio';
+
+-- ===================== Sprint 11 · tanda 1c (V40): la Promotoría aplica directo =====================
+-- solicitud_cambio: la directa, su código (y la confirmación del contacto anterior, A1c-1) y el freno de la espera.
+-- conector_colegio: la directa, el freno y el código del socio que aprueba al instante. Las columnas se suman a las de
+-- arriba (cc_sistema las hereda del rol). A1c-6: NINGÚN GRANT sobre aplica_desde ni frenado_en en ninguna de las dos (las
+-- pone el trigger, cuyo definidor es cc_migrador: comprobado en el paso 1; con cc_app o cc_sistema, 1143).
+GRANT UPDATE (directa, codigo_mensaje_id, codigo_escrito_sha256, frenado_por, motivo_freno)
+    ON cuentasclaras.solicitud_cambio TO 'cc_negocio';
+GRANT UPDATE (directa, frenado_por, motivo_freno, codigo_mensaje_id, codigo_escrito_sha256)
+    ON cuentasclaras.conector_colegio TO 'cc_negocio';
+-- configuracion_bd sigue SIN GRANT: espera_directa_horas (24) la escribe solo el DBA; el verificador de prod exige 24.
+-- La directa del plan, del lote de saldo inicial y del descuento (anulacion_pago es solo inserción: ya tiene INSERT). Que
+-- la marque una Promotoría activa (y, en el descuento, con su solicitud directa) lo exigen sus triggers.
+GRANT UPDATE (directa) ON cuentasclaras.plan_pension TO 'cc_negocio';
+GRANT UPDATE (directa) ON cuentasclaras.lote_saldo_inicial TO 'cc_negocio';
+GRANT UPDATE (directa) ON cuentasclaras.descuento TO 'cc_negocio';
+
+-- ===================== Sprint 11 · tanda 2 (V41): exportación, cierre y supresión =====================
+-- colegio: el titular autoriza (o retira con su firma) la conservación de 12 meses (AP-11, AP2-9): la hora la pone la base.
+-- cerrado_en y conservar_hasta son columnas generadas: NINGÚN GRANT (1143 con cc_app y cc_sistema; el DBA, 3105).
+-- exportacion_colegio, descarga_exportacion y acta_supresion: cc_app solo las lee (el SELECT de cuentasclaras.*).
+GRANT UPDATE (conservacion_autorizada_por, conservacion_autorizada_en) ON cuentasclaras.colegio TO 'cc_negocio';
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se
@@ -378,6 +409,38 @@ GRANT INSERT, UPDATE (estado, pendiente, resuelto_por, resuelto_en, actualizado_
     ON cuentasclaras.cambio_contacto_titular TO 'cc_sistema'@'%';
 GRANT INSERT, UPDATE (estado, pendiente, resuelto_por, resuelto_en, actualizado_en, version)
     ON cuentasclaras.cambio_correo_control TO 'cc_sistema'@'%';
+--    Sprint 11, tanda 1 (V39). Los cambios de estado del colegio (y el bloqueo de la facultad del titular) los escriben
+--    solo los operadores (EjecucionPlataforma) y sistema.plataforma (AplicacionCambiosEstado), con cc_sistema; la objeción
+--    del titular va por la ruta de identidad. Tipo, colegio, motivo, origen, destino y quién propuso no cambian (1143).
+--    Qué transición vale lo decide trg_cambio_estado_colegio_estado.
+GRANT INSERT, UPDATE (estado, pendiente, aprobado_por, aprobador_id, aprobado_en, efectiva_desde, aplicado_en, resuelto_por,
+    resuelto_en, objecion, objetado_por, objetado_en, objecion_respuesta, objecion_resuelta_por, objecion_resuelta_en,
+    actualizado_en, version) ON cuentasclaras.cambio_estado_colegio TO 'cc_sistema'@'%';
+--    H6: sistema.plataforma aplica el estado y la facultad (las columnas se suman a las del bloque del sprint 8).
+GRANT UPDATE (estado, estado_desde, cambio_estado_id, suspendido_en, facultad_bloqueada, facultad_cambio_id)
+    ON cuentasclaras.colegio TO 'cc_sistema'@'%';
+--    La facultad del titular: solo inserción y solo por la ruta de identidad (como primera_promotoria).
+GRANT INSERT ON cuentasclaras.uso_facultad_titular TO 'cc_sistema'@'%';
+--    Sprint 11, tanda 2 (V41). La exportación la escribe sistema.exportacion (y el operador a pedido del colegio); la
+--    entrega, sistema.exportacion con la sesión pública del titular. El colegio, el motivo y quién la creó no cambian
+--    (1143); que las huellas del ZIP no cambien una vez puestas lo exige trg_exportacion_colegio_cambio.
+GRANT INSERT, UPDATE (estado, vigente, archivo, archivos, filas, bytes, sha256_zip, sha256_manifiesto, clave_cifrada,
+    clave_version, clave_vista_en, token_hash, token_vence_en, dni_confirmado_en, codigo_hash, codigo_vence_en,
+    intentos_fallidos, intentos_totales, descargas, detalle_fallo, generada_en, vence_en, entregada_en, actualizado_en,
+    version) ON cuentasclaras.exportacion_colegio TO 'cc_sistema'@'%';
+GRANT INSERT ON cuentasclaras.descarga_exportacion TO 'cc_sistema'@'%';            -- solo inserción
+--    El acta de supresión la proponen y aprueban dos operadores (cc_sistema); sistema.auditoria pone cadena_verificada_en.
+--    EJECUTANDO y EJECUTADA las escribe SOLO el DBA (cc_migrador) con suprimir.sql (trg_acta_supresion_estado).
+GRANT INSERT, UPDATE (estado, aprobado_por, aprobador_id, aprobado_en, cadena_verificada_en, actualizado_en, version)
+    ON cuentasclaras.acta_supresion TO 'cc_sistema'@'%';
+--    La retención legal (AP2-10): la pone un operador y la quita otro, cada uno con su firma.
+GRANT UPDATE (retencion_legal_motivo, retencion_legal_desde, retencion_legal_por) ON cuentasclaras.colegio TO 'cc_sistema'@'%';
+--    Correcciones del sprint 11 (A2, V42): el titular PIDE el retiro de la conservación (cc_negocio, con su firma y su
+--    código); sistema.plataforma lo aplica a las 24 horas y un operador lo frena (cc_sistema). Las fechas, la base.
+GRANT UPDATE (conservacion_retiro_por, conservacion_retiro_pedido_en, conservacion_retiro_aplica_desde,
+    conservacion_codigo_mensaje_id, conservacion_codigo_sha256) ON cuentasclaras.colegio TO 'cc_negocio';
+GRANT UPDATE (conservacion_autorizada_por, conservacion_autorizada_en, conservacion_retiro_por,
+    conservacion_retiro_pedido_en, conservacion_retiro_aplica_desde) ON cuentasclaras.colegio TO 'cc_sistema'@'%';
 --    Escrituras que solo hace un proceso: con cc_app, 1142.
 GRANT INSERT ON cuentasclaras.semilla_muestreo TO 'cc_sistema'@'%';               -- sistema.muestreo, solo inserción
 GRANT INSERT ON cuentasclaras.muestra_llamada TO 'cc_sistema'@'%';                -- sistema.panel, solo inserción
@@ -406,14 +469,19 @@ GRANT UPDATE (estado, proveedor, proveedor_mensaje_id, intentos, proximo_intento
 --    comentarios y el 8.4 los deja; el archivo puede tener CRLF). Al arrancar, VerificadorPermisosBaseDatos compara este
 --    JSON con las huellas calculadas desde 03-triggers.sql y este archivo, empaquetados en el jar: falta, sobra o difiere
 --    un objeto y prod no arranca. El patrón del comentario se arma con CONCAT para que este cuerpo no contenga «--».
+--    Correcciones del sprint 11 (M2): un trigger creado más de 2 minutos después del primero de 03 (un DROP/CREATE
+--    posterior a la carga, aunque deje el mismo texto) devuelve «recreado <fecha>» en vez de su huella: no arranca. Cargar
+--    03 completo vuelve a crearlos todos juntos.
 --    Residual: un DBA puede reemplazar esta función por otra que devuelva lo esperado (lo cubre el simulacro semanal,
 --    que lee information_schema como administrador: docs/operacion/respaldos.md).
 DROP FUNCTION IF EXISTS cuentasclaras.huellas_objetos;
 CREATE FUNCTION cuentasclaras.huellas_objetos() RETURNS JSON READS SQL DATA SQL SECURITY DEFINER
     RETURN (SELECT JSON_OBJECTAGG(o.nombre, o.huella) FROM (
-        SELECT t.TRIGGER_NAME AS nombre, SHA2(CONCAT_WS('|', t.ACTION_TIMING, t.EVENT_MANIPULATION, t.EVENT_OBJECT_TABLE,
+        SELECT t.TRIGGER_NAME AS nombre, IF(t.CREATED > (SELECT MIN(p.CREATED) FROM information_schema.TRIGGERS p
+                WHERE p.TRIGGER_SCHEMA = 'cuentasclaras') + INTERVAL 2 MINUTE, CONCAT('recreado ', t.CREATED),
+            SHA2(CONCAT_WS('|', t.ACTION_TIMING, t.EVENT_MANIPULATION, t.EVENT_OBJECT_TABLE,
             TRIM(REGEXP_REPLACE(REGEXP_REPLACE(t.ACTION_STATEMENT, CONCAT('-', '-[^\n]*'), ''), '[[:space:]]+', ' '))),
-            256) AS huella
+            256)) AS huella
           FROM information_schema.TRIGGERS t WHERE t.TRIGGER_SCHEMA = 'cuentasclaras'
         UNION ALL
         SELECT r.ROUTINE_NAME, SHA2(CONCAT_WS('|', r.ROUTINE_TYPE,

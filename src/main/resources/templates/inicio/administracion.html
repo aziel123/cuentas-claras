@@ -6,8 +6,9 @@
 	<div class="cabecera">
 		<div>
 			<p class="etiqueta">Administración</p>
-			<h1 th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</h1>
-			<p class="secundario">Configuras pensiones, cargas alumnos y familias, concilias el banco y sacas reportes.</p>
+			<!--/* Sprint 11, tanda 1b (F-D7): «Cómo te cuida el sistema» pasa a un «i» junto al título. */-->
+			<h1><span th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</span>
+				<span th:replace="~{fragments/componentes :: info('inicio', 'La deuda la genera el sistema desde las pensiones: nadie decide montos a mano. Tus descuentos los aprueba otra persona.', 'cómo te cuida el sistema')}"></span></h1>
 		</div>
 	</div>
 
@@ -15,12 +16,15 @@
 		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
 	</th:block>
 
+	<!--/* Sprint 11, tanda 1b (sección 3.14): la guía mientras el colegio está en preparación. */-->
+	<th:block th:if="${guia != null}"><section th:replace="~{fragments/guia :: bannerPreparacion(${guia}, true, false)}"></section></th:block>
+
 	<section class="tarjeta" aria-labelledby="titulo-dia">
 		<h2 id="titulo-dia">Lo de cada día</h2>
 		<ul class="lista-revisar">
 			<li class="item-revisar">
 				<div class="item-revisar-texto"><p>Sube el extracto del banco: el sistema empareja solo y te muestra las diferencias.</p></div>
-				<a class="btn btn-primario" th:href="@{/conciliacion}">Conciliar el banco</a>
+				<a class="btn" th:classappend="${guia == null} ? 'btn-primario' : 'btn-secundario'" th:href="@{/conciliacion}">Conciliar el banco</a>
 			</li>
 			<li class="item-revisar">
 				<div class="item-revisar-texto"><p>Pagos en línea por revisar, de hoy y vencidos.</p></div>
@@ -33,15 +37,6 @@
 		</ul>
 	</section>
 
-	<section class="tarjeta" aria-labelledby="titulo-controles">
-		<h2 id="titulo-controles">Cómo te cuida el sistema</h2>
-		<ul class="lista-controles">
-			<li>La deuda de cada alumno la genera el sistema desde las pensiones: nadie decide montos a mano.</li>
-			<li>Los descuentos y becas que registres los aprueba Dirección.</li>
-			<li>La conciliación cruza cada pago registrado con el movimiento del banco.</li>
-			<li>Tu sesión se cierra sola tras 30 minutos sin actividad.</li>
-		</ul>
-	</section>
 </main>
 </body>
 </html>

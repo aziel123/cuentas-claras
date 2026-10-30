@@ -94,7 +94,8 @@
 						</label>
 					</div>
 				</fieldset>
-				<button th:replace="~{fragments/componentes :: boton('Revisar cobro', 'primario')}"></button>
+				<th:block th:replace="~{fragments/componentes :: botonBloqueable('Revisar cobro', 'primario', ${colegioEnPreparacion},
+					'motivo-cobrar', 'Tu colegio está en preparación: todavía no se registran pagos.')}"></th:block>
 				<p class="ayuda">En el siguiente paso ves el total exacto y recién ahí se registra el pago.</p>
 			</section>
 		</aside>

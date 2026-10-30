@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('En preparación', ~{::main})}">
+<body>
+<!--/* Sprint 11, tanda 1b (sección 3.14, punto 3): lo que no se puede hacer mientras el colegio está en preparación (409).
+     Al personal, el motivo, cuántos pasos faltan y el enlace a la Puesta en marcha; a las familias, sin enlace ni pasos. */-->
+<main id="contenido" class="contenido" data-preparacion>
+	<div class="cabecera">
+		<div>
+			<h1>Todavía no se puede</h1>
+		</div>
+	</div>
+	<div class="alerta alerta-advertencia" role="alert" data-alerta-preparacion>
+		<svg class="alerta-icono" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+			stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+		<p>
+			<span th:text="${mensajePreparacion}">Tu colegio está en preparación: todavía no se registran pagos.</span>
+			<th:block th:if="${enlacePuestaEnMarcha}" th:with="faltan=${@guiaPasos.faltan()}">
+				<span th:text="${faltan == 1} ? 'Falta 1 paso.' : |Faltan ${faltan} pasos.|">Faltan 6 pasos.</span>
+			</th:block>
+		</p>
+	</div>
+	<div class="fila">
+		<a th:if="${enlacePuestaEnMarcha}" class="btn btn-primario" th:href="@{/puesta-en-marcha}" data-enlace-puesta>Ver la Puesta en marcha</a>
+		<a class="btn btn-secundario" th:href="@{/inicio}">Volver al inicio</a>
+	</div>
+</main>
+</body>
+</html>

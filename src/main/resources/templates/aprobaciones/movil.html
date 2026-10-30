@@ -5,9 +5,8 @@
 	<div class="cabecera">
 		<div>
 			<p class="etiqueta">Aprobaciones</p>
-			<h1 th:text="|Para aprobar: ${#lists.size(b.pendientes)}|">Para aprobar: 3</h1>
-			<p class="secundario">Toca una solicitud para ver el detalle y resolverla. Quien la pidió (o cobró ese pago) no la
-				aprueba, desde ningún dispositivo.</p>
+			<h1><span th:text="|Para aprobar: ${#lists.size(b.pendientes) + #lists.size(externos)}|">Para aprobar: 3</span>
+				<span th:replace="~{fragments/componentes :: info('bandeja-movil', 'Quien la pidió (o cobró ese pago) no la aprueba, desde ningún dispositivo.', 'quién aprueba')}"></span></h1>
 		</div>
 		<div class="fila">
 			<a th:replace="~{fragments/componentes :: enlaceBoton('Ver la bandeja completa', @{/aprobaciones}, 'secundario')}"></a>
@@ -16,7 +15,16 @@
 
 	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
 
-	<th:block th:if="${#lists.isEmpty(b.pendientes)}">
+	<!--/* Sprint 11, tanda 1b (F-D5): lo que se aprueba en otra pantalla, como tarjetas con «Revisar». */-->
+	<ul class="lista-tarjetas" th:unless="${#lists.isEmpty(externos)}" data-externos>
+		<li th:each="e : ${externos}" class="tarjeta panel-bloque pendiente-externo" th:data-externo="${e.tipo()}">
+			<p class="fila entre"><strong th:text="${e.titulo()}">Plan de pensiones de Primaria 2026</strong>
+				<span class="badge badge-info">Se revisa en su pantalla</span></p>
+			<p class="secundario" th:text="${e.detalle()}">Enviado por adm.lopez el 24/10</p>
+			<a class="btn btn-secundario btn-bloque" th:href="@{${e.enlace()}}" th:aria-label="|Revisar: ${e.titulo()}|" data-revisar>Revisar</a>
+		</li>
+	</ul>
+	<th:block th:if="${#lists.isEmpty(b.pendientes) and #lists.isEmpty(externos)}">
 		<div th:replace="~{fragments/componentes :: estadoVacio('No hay solicitudes pendientes', 'Cuando alguien pida un cambio, aparecerá aquí.')}"></div>
 	</th:block>
 	<ul class="lista-tarjetas" th:unless="${#lists.isEmpty(b.pendientes)}">

@@ -29,6 +29,9 @@ public interface EnlaceActivacionRepository extends Repository<EnlaceActivacion,
 	 */
 	boolean existsByUsuarioIdAndUsadoEnIsNotNull(Long usuarioId);
 
+	/** Sprint 11, tanda 1 (AP-6): si alguna cuenta del colegio en contexto usó su enlace de activación. */
+	boolean existsByUsadoEnIsNotNull();
+
 	/** Los usados desde una fecha (alerta: activados desde la IP de quien los creó). */
 	List<EnlaceActivacion> findByUsadoEnAfterOrderByIdDesc(LocalDateTime desde);
 }

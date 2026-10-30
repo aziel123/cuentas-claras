@@ -113,7 +113,9 @@ public class DespachoMensajes {
 			ApoderadoRepository apoderados, CreadorMensajes creador, AuditoriaService auditoria,
 			PropiedadesMensajeria propiedades, RecorridoColegios colegios, PlatformTransactionManager transacciones,
 			Clock reloj, CalendarioHabil calendario, VerificacionesContacto verificaciones, CuotaRepository cuotas,
-			ColegioService nombresColegios, Marca marca) {
+			ColegioService nombresColegios, Marca marca,
+			pe.edu.virgenmaria.cuentasclaras.comun.cripto.DerivadorSecreto derivador) {
+		this.derivador = derivador;
 		this.calendario = calendario;
 		this.verificaciones = verificaciones;
 		this.cuotas = cuotas;
@@ -133,6 +135,8 @@ public class DespachoMensajes {
 		this.transaccion.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 		this.reloj = reloj;
 	}
+
+	private final pe.edu.virgenmaria.cuentasclaras.comun.cripto.DerivadorSecreto derivador;
 
 	@Scheduled(fixedDelayString = "${cuentasclaras.mensajeria.envio-cada:30s}", initialDelayString = "20s")
 	public void despachar() {
@@ -285,6 +289,36 @@ public class DespachoMensajes {
 					mensaje.getApoderadoId(), whatsappCanal, mensaje.getDestino(), propiedades.vigenciaEnlace());
 			List<String> parametros = List.of(colegio, whatsappCanal ? "número" : "correo", vence.format(VENCE));
 			String cuerpo = PlantillaMensaje.VERIFICACION.componer(parametros) + "\n\n" + propiedades.urlPublica() + ruta
+					+ pieDelCorreo(colegio);
+			return new Envio(parametros, ruta, cuerpo);
+		}
+		if (mensaje.getTipo() == TipoMensaje.CODIGO_FACULTAD) {
+			// Sprint 11, tanda 1 (AP-2): el código se deriva AQUÍ de la clave del mensaje (no está guardado en ninguna parte).
+			List<String> guardados = mensaje.parametrosLista();
+			String vence = guardados.size() > 2 ? guardados.get(2) : "";
+			List<String> parametros = List.of(colegio, derivador.codigoFacultad(ContextoColegio.actual(), mensaje.getClave()),
+					vence);
+			return new Envio(parametros, null, PlantillaMensaje.CODIGO_FACULTAD.componer(parametros) + pieDelCorreo(colegio));
+		}
+		if (mensaje.getTipo() == TipoMensaje.CODIGO_PROMOTORIA || mensaje.getTipo() == TipoMensaje.CODIGO_CONTACTO) {
+			// Sprint 11, tanda 1c (A1c-5): el código se deriva AQUÍ de la clave del mensaje (la base guarda solo su SHA-256).
+			List<String> guardados = mensaje.parametrosLista();
+			List<String> parametros = List.of(colegio, derivador.codigoPromotoria(ContextoColegio.actual(), mensaje.getClave()),
+					guardados.size() > 2 ? guardados.get(2) : "", guardados.size() > 3 ? guardados.get(3) : "");
+			return new Envio(parametros, null, mensaje.getPlantilla().componer(parametros) + pieDelCorreo(colegio));
+		}
+		if (mensaje.getTipo() == TipoMensaje.CODIGO_EXPORTACION) {
+			// Sprint 11, tanda 2 (AP2-4): el código de la entrega se deriva AQUÍ (la base guarda solo su SHA-256).
+			List<String> guardados = mensaje.parametrosLista();
+			List<String> parametros = List.of(colegio, derivador.codigoExportacion(ContextoColegio.actual(),
+					mensaje.getClave()), guardados.size() > 2 ? guardados.get(2) : "");
+			return new Envio(parametros, null, mensaje.getPlantilla().componer(parametros) + pieDelCorreo(colegio));
+		}
+		if (mensaje.getTipo() == TipoMensaje.EXPORTACION_ENLACE) {
+			// Sprint 11, tanda 2 (AP2-4): el enlace se deriva AQUÍ de la clave del mensaje (solo por correo).
+			List<String> parametros = mensaje.parametrosLista();
+			String ruta = "/exportacion/" + derivador.tokenExportacion(ContextoColegio.actual(), mensaje.getClave());
+			String cuerpo = mensaje.getPlantilla().componer(parametros) + "\n\n" + propiedades.urlPublica() + ruta
 					+ pieDelCorreo(colegio);
 			return new Envio(parametros, ruta, cuerpo);
 		}

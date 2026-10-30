@@ -6,6 +6,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioService;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.EstadoDelColegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.MarcaColegio;
 import pe.edu.virgenmaria.cuentasclaras.comun.marca.Marca;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Monograma;
@@ -33,10 +34,27 @@ public class ModeloSesionAdvice {
 
 	private final ObjectProvider<ContadorMenu> contadores;
 
-	public ModeloSesionAdvice(ColegioService colegios, Marca marca, ObjectProvider<ContadorMenu> contadores) {
+	private final ObjectProvider<EstadoDelColegio> estados;
+
+	public ModeloSesionAdvice(ColegioService colegios, Marca marca, ObjectProvider<ContadorMenu> contadores,
+			ObjectProvider<EstadoDelColegio> estados) {
 		this.colegios = colegios;
 		this.marca = marca;
 		this.contadores = contadores;
+		this.estados = estados;
+	}
+
+	/**
+	 * Sprint 11, tanda 1 (secciones 3.4 y 3.8): la franja ámbar con la fecha de una baja o una suspensión aprobada (el
+	 * personal) o el modo consulta (las familias). Sin datos del motivo.
+	 */
+	@ModelAttribute("franjaColegio")
+	public String franjaColegio(@AuthenticationPrincipal UsuarioAutenticado usuario) {
+		EstadoDelColegio estado = estados.getIfAvailable();
+		if (usuario == null || estado == null) {
+			return null;
+		}
+		return estado.franja(usuario.colegioId(), esFamilia(usuario)).orElse(null);
 	}
 
 	/** Con pocas opciones (Caja, Docente, la familia) todos los grupos van abiertos: no hay nada que esconder. */

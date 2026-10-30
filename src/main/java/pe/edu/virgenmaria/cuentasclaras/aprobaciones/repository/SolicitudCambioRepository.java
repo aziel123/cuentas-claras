@@ -9,6 +9,7 @@ import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.EstadoSolicitud;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.SolicitudCambio;
 import pe.edu.virgenmaria.cuentasclaras.aprobaciones.model.TipoSolicitud;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,6 +40,14 @@ public interface SolicitudCambioRepository extends Repository<SolicitudCambio, L
 	List<SolicitudCambio> findTop30ByEstadoNotOrderByResueltoEnDescIdDesc(EstadoSolicitud estado);
 
 	List<SolicitudCambio> findByTipoOrderByIdDesc(TipoSolicitud tipo);
+
+	/** Sprint 11, tanda 1c (A1c-6): el fin de la espera tal como lo puso la base (MySQL; en H2, nulo). */
+	@Query("select s.aplicaDesde from SolicitudCambio s where s.id = :id")
+	LocalDateTime aplicaDesdeDe(@Param("id") Long id);
+
+	/** Sprint 11, tanda 1c (A1c-2, A1c-3): las directas aprobadas de unos tipos (las que esperan, para sistema.roles). */
+	List<SolicitudCambio> findByEstadoAndDirectaTrueAndFrenadoPorIsNullAndTipoInOrderByIdAsc(EstadoSolicitud estado,
+			java.util.Collection<TipoSolicitud> tipos);
 
 	/** La última solicitud de ese tipo para esa entidad en ese estado (por ejemplo, la devolución APROBADA de una orden). */
 	Optional<SolicitudCambio> findFirstByTipoAndEntidadAndEntidadIdAndEstadoOrderByIdDesc(TipoSolicitud tipo, String entidad,

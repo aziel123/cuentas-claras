@@ -130,7 +130,62 @@ public enum PlantillaMensaje {
 	LIBRETA("cc_libreta_v1", "Libreta disponible", 3, true,
 			"{{1}}: la libreta del {{2}} de {{3}} ya está en el portal."),
 	LIBRETA_CORREGIDA("cc_libreta_corregida_v1", "Se corrigió la libreta", 3, true,
-			"{{1}}: se corrigió la libreta del {{2}} de {{3}}. Revise el detalle en el portal.");
+			"{{1}}: se corrigió la libreta del {{2}} de {{3}}. Revise el detalle en el portal."),
+	// Sprint 11, tanda 1 (sección 9): el ciclo de vida del colegio y la facultad del titular. Van al personal (titular,
+	// Promotoría y operadores) y al correo institucional y al de control; nunca a las familias (ven el aviso en el portal,
+	// decisión 195). Qué cambia va como parámetro ({{3}} o {{2}}): la plantilla no lleva palabras de cobranza ni amenazas.
+	CAMBIO_ESTADO_PROPUESTO("cc_cambio_estado_propuesto_v2", "Cambio propuesto en el acceso del colegio", 4, false,
+			"{{1}}: el operador {{2}} de la plataforma propone {{3}}. Motivo: {{4}}. Todavía no cambia nada: lo debe "
+					+ "aprobar otro operador. Si cree que es un error, escriba hoy al proveedor."),
+	CAMBIO_ESTADO_APROBADO("cc_cambio_estado_aprobado_v2", "Cambio aprobado en el acceso del colegio", 4, false,
+			"{{1}}: los operadores {{4}} de la plataforma aprobaron {{2}}, que rige desde el {{3}}. Hasta esa fecha todo "
+					+ "funciona. Si cree que es un error, escriba hoy al proveedor."),
+	CAMBIO_ESTADO_RESUELTO("cc_cambio_estado_resuelto_v2", "Se dejó sin efecto un cambio en el colegio", 4, false,
+			"{{1}}: el operador {{4}} de la plataforma {{3}} el cambio propuesto ({{2}}). No cambia nada."),
+	CAMBIO_ESTADO_APLICADO("cc_cambio_estado_aplicado_v2", "Cambió el acceso del colegio", 3, false,
+			"{{1}}: desde el {{3}}, {{2}}. Para cualquier consulta, escriba al proveedor."),
+	CAMBIO_ESTADO_EN_ESPERA("cc_cambio_estado_en_espera_v2", "Un cambio del colegio espera", 3, false,
+			"{{1}}: {{2}} espera que el colegio resuelva lo siguiente: {{3}}. Mientras tanto no se aplica."),
+	CAMBIO_ESTADO_PROXIMO("cc_cambio_estado_proximo_v2", "Recordatorio de un cambio en el colegio", 3, false,
+			"{{1}}: recuerde que {{2}} rige desde el {{3}}. Si cree que es un error, escriba hoy al proveedor."),
+	OBJECION_TITULAR("cc_objecion_titular_v2", "El titular objetó un cambio del colegio", 3, false,
+			"{{1}}: el titular {{2}} objetó {{3}}. No se aplica hasta que otro operador responda la objeción."),
+	OBJECION_RESPONDIDA("cc_objecion_respondida_v2", "Se respondió la objeción del titular", 4, false,
+			"{{1}}: el operador {{2}} de la plataforma respondió la objeción sobre {{3}}: {{4}}"),
+	FACULTAD_TITULAR_USADA("cc_facultad_titular_usada_v2", "El titular cambió Promotoría o Dirección", 5, false,
+			"{{1}}: el titular {{2}} {{3}} {{4}} a la cuenta {{5}} sin segunda aprobación (facultad del titular). Si no "
+					+ "lo reconoce, escriba hoy al proveedor y a la Promotoría."),
+	CODIGO_FACULTAD("cc_codigo_facultad_v2", "Su código para dar o quitar Promotoría o Dirección", 3, false,
+			"{{1}}: su código para dar o quitar Promotoría o Dirección es {{2}}. Vence a las {{3}}. Si usted no lo pidió, "
+					+ "escriba hoy al proveedor."),
+	// Sprint 11, tanda 1c (secciones 3.16 y 3.16b): la Promotoría aplica directo.
+	CODIGO_PROMOTORIA("cc_codigo_promotoria_v2", "Su código para una acción en el colegio", 4, false,
+			"{{1}}: código {{2}} para: {{3}}. Vence a las {{4}}. Si usted no lo pidió, no lo comparta y escriba hoy al proveedor."),
+	CODIGO_CONTACTO("cc_codigo_contacto_v2", "Confirme el cambio de su celular o correo", 4, false,
+			"{{1}}: código {{2}} para confirmar: {{3}}. Vence a las {{4}}. Si usted no lo pidió, no lo comparta y avise hoy al colegio."),
+	ACCION_DIRECTA("cc_accion_directa_v2", "Una Promotoría aplicó un cambio directo", 3, false,
+			"{{1}}: {{2}} aplicó directo: {{3}}. Si no lo reconoce, cambie su clave y avise hoy al colegio y al proveedor."),
+	DIRECTA_EN_ESPERA("cc_directa_en_espera_v2", "Un cambio espera 24 horas", 4, false,
+			"{{1}}: {{2}} pidió {{3}}. Se aplica el {{4}} si nadie lo frena. Si no lo reconoce, frénelo desde el sistema o escriba hoy al proveedor."),
+	DIRECTA_FRENADA("cc_directa_frenada_v2", "Se frenó un cambio en espera", 4, false,
+			"{{1}}: {{2}} frenó {{3}}. Motivo: {{4}}. No se aplica: se puede volver a pedir."),
+	CONCILIACION_BLOQUEADA("cc_conciliacion_bloqueada_v2", "Alerta: confirmación rechazada", 3, false,
+			"{{1}}: {{2}} intentó confirmar {{3}} después de cambiar la cuenta del colegio. Se rechazó: la confirma otra persona. Revíselo hoy."),
+	// Sprint 11, tanda 2 (secciones 3.9 a 3.11): la exportación, la conservación y el acta de supresión.
+	EXPORTACION_LISTA("cc_exportacion_lista_v2", "Los datos del colegio están listos", 4, false,
+			"{{1}}: la exportación de los datos del colegio ({{2}}) está lista. Huella del ZIP: {{3}}. Huella del manifiesto: {{4}}. Guárdelas para comprobar el archivo."),
+	EXPORTACION_ENLACE("cc_exportacion_enlace_v2", "Descargue los datos del colegio", 2, false,
+			"{{1}}: los datos del colegio están listos para descargar hasta el {{2}}. Abra el enlace de este correo, escriba su DNI y el código que le llegará por WhatsApp."),
+	CODIGO_EXPORTACION("cc_codigo_exportacion_v2", "Su código para descargar los datos del colegio", 3, false,
+			"{{1}}: código {{2}} para descargar los datos del colegio. Vence a las {{3}}. Si usted no lo pidió, no lo comparta y escriba hoy al proveedor."),
+	EXPORTACION_MOVIMIENTO("cc_exportacion_movimiento_v2", "Movimiento en la exportación de los datos", 3, false,
+			"{{1}}: en la exportación de los datos del colegio: {{2}} ({{3}}). Si no lo reconoce, escriba hoy al proveedor."),
+	EXPORTACION_FALLIDA("cc_exportacion_fallida_v2", "Alerta: la exportación de los datos falló", 2, false,
+			"{{1}}: la exportación de los datos del colegio no se entregó: {{2}}. Se revisa hoy y se genera otra."),
+	CONSERVACION("cc_conservacion_v2", "Conservación de los datos del colegio", 3, false,
+			"{{1}}: {{2}}: {{3}}. Si no lo reconoce, escriba hoy al proveedor."),
+	ACTA_SUPRESION("cc_acta_supresion_v2", "Acta de supresión de los datos del colegio", 3, false,
+			"{{1}}: {{2}} el acta de supresión de los datos del colegio ({{3}}).");
 
 	/** Sprint 10, tanda 3: las plantillas de libretas (botón a {@code /familia/libretas}). */
 	public boolean deLibretas() {

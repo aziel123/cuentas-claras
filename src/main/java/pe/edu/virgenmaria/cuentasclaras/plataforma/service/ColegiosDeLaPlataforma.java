@@ -77,7 +77,17 @@ public class ColegiosDeLaPlataforma {
 	}
 
 	public List<ResumenColegio> todos() {
-		List<Colegio> lista = lectura.execute(t -> colegios.findByTipoOrderByIdAsc(TipoColegio.COLEGIO));
+		return todos(false);
+	}
+
+	/**
+	 * Sprint 11, tanda 1: la lista principal (sin los dados de baja) o, con {@code dadosDeBaja}, solo los dados de baja
+	 * (el filtro «Dados de baja»).
+	 */
+	public List<ResumenColegio> todos(boolean dadosDeBaja) {
+		List<Colegio> lista = lectura.execute(t -> colegios.findByTipoOrderByIdAsc(TipoColegio.COLEGIO)).stream()
+				.filter(c -> (c.getEstado() == pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoColegio.BAJA)
+						== dadosDeBaja).toList();
 		return lista.stream().map(c -> ContextoColegio.en(c.getId(), () -> lectura.execute(t -> {
 			Optional<Usuario> titular = titular();
 			return new ResumenColegio(c.getId(), c.getNombre(), c.getRuc(), c.getEstado(), titular.isPresent(),

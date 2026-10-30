@@ -437,7 +437,7 @@ class ServicioImportacionAlumnosTest {
 		long colegioB = colegios.save(new Colegio("Colegio de Prueba B")).getId();
 		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(colegioB, 7L, "director.b", "Directora B", false,
 				EnumSet.of(Rol.DIRECTOR)));
-		Long anioB = estructura.crearAnio(new CrearAnioEscolarRequest(2026, LocalDate.of(2026, 3, 2),
+		Long anioB = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(estructura, new CrearAnioEscolarRequest(2026, LocalDate.of(2026, 3, 2),
 				LocalDate.of(2026, 12, 18), true));
 		estructura.crearSeccion(anioB, new CrearSeccionRequest(Grado.PRIMARIA_5, "A"));
 		assertThat(servicio.historial()).isEmpty();

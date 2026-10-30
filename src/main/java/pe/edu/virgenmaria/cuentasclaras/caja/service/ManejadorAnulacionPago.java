@@ -163,7 +163,7 @@ public class ManejadorAnulacionPago implements ManejadorSolicitud {
 				hoy);
 		boolean posteriorAlCierre = !caja.aceptaEfectivo();
 		anulaciones.save(AnulacionPago.registrar(pago, solicitud.getId(), nota, tipo, solicitud.getMotivo(),
-				solicitud.getSolicitadoPor(), aprobador, posteriorAlCierre));
+				solicitud.getSolicitadoPor(), aprobador, posteriorAlCierre, solicitud.isDirecta()));
 		pago.anular();
 		pagos.saveAndFlush(pago);
 		// 5. Reversiones: las cuotas vuelven a deberse.

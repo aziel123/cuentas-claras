@@ -6,8 +6,9 @@
 	<div class="cabecera">
 		<div>
 			<p class="etiqueta">Caja</p>
-			<h1 th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</h1>
-			<p class="secundario">Registra los pagos presenciales y cierra tu caja al final del día.</p>
+			<!--/* Sprint 11, tanda 1b (F-D7): «Cómo te cuida el sistema» pasa a un «i» junto al título. */-->
+			<h1><span th:text="|Hola, ${usuarioActual.nombreCompleto}|">Hola</span>
+				<span th:replace="~{fragments/componentes :: info('inicio', 'Cada pago emite su boleta al momento. Si te equivocas, pides la anulación: nadie borra pagos. Cierras a ciegas: cuentas el efectivo sin ver lo registrado.', 'cómo te cuida el sistema')}"></span></h1>
 		</div>
 		<div class="fila">
 			<a th:replace="~{fragments/componentes :: enlaceBoton('Pagos de hoy', @{/caja/hoy}, 'secundario')}"></a>
@@ -18,6 +19,9 @@
 	<th:block th:if="${avisoClave != null}">
 		<div th:replace="~{fragments/componentes :: alerta('advertencia', ${avisoClave})}"></div>
 	</th:block>
+
+	<!--/* Sprint 11, tanda 1b (sección 3.14): la guía mientras el colegio está en preparación. */-->
+	<th:block th:if="${guia != null}"><section th:replace="~{fragments/guia :: bannerPreparacion(${guia}, false, false)}"></section></th:block>
 
 	<section class="tarjeta cobro-rapido" aria-labelledby="titulo-cobrar">
 		<h2 id="titulo-cobrar">Cobrar</h2>
@@ -32,15 +36,6 @@
 		</form>
 	</section>
 
-	<section class="tarjeta" aria-labelledby="titulo-controles">
-		<h2 id="titulo-controles">Cómo te cuida el sistema</h2>
-		<ul class="lista-controles">
-			<li>Cada pago emite su boleta al momento: tienes respaldo de todo lo que cobras.</li>
-			<li>Si te equivocas, pides la anulación a Dirección: nadie borra pagos.</li>
-			<li>Cierras a ciegas: cuentas el efectivo sin ver lo registrado, y el sistema compara tu conteo el mismo día.</li>
-			<li>Tu sesión se cierra sola tras 30 minutos sin actividad.</li>
-		</ul>
-	</section>
 </main>
 </body>
 </html>

@@ -24,6 +24,9 @@ public interface CambioContactoTitularRepository extends Repository<CambioContac
 	/** El cambio pendiente de ese titular (uno a la vez). */
 	Optional<CambioContactoTitular> findFirstByUsuarioIdAndEstado(Long usuarioId, CambioContactoTitular.Estado estado);
 
+	/** Sprint 11, tanda 1c (A1c-1): el cambio por aplicar del colegio (de su titular o de otra cuenta directiva). */
+	Optional<CambioContactoTitular> findFirstByEstadoOrderByIdAsc(CambioContactoTitular.Estado estado);
+
 	/** Cuántos cambios tuvo ese titular: la firma de quien propone lleva el número del intento (única por clave). */
 	long countByUsuarioId(Long usuarioId);
 

@@ -29,7 +29,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.texto.Motivo;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
@@ -68,7 +68,11 @@ public class ServicioPlanesPension {
 
 	private final LoteSaldoInicialRepository lotes;
 
-	private final ControlParticipantes participantes;
+	private final SegundaFirma segundaFirma;
+
+	/** Sprint 11, tanda 1c: los avisos de lo que la Promotoría aplica directo. */
+	@org.springframework.beans.factory.annotation.Autowired
+	private pe.edu.virgenmaria.cuentasclaras.seguridad.service.AvisosAccionDirecta avisosDirecta;
 
 	private final AuditoriaService auditoria;
 
@@ -78,11 +82,11 @@ public class ServicioPlanesPension {
 	private final FirmaSesion firmaSesion;
 
 	public ServicioPlanesPension(PlanPensionRepository planes, AnioEscolarRepository anios, CuotaRepository cuotas,
-			GeneradorCronograma generador, LoteSaldoInicialRepository lotes, ControlParticipantes participantes,
+			GeneradorCronograma generador, LoteSaldoInicialRepository lotes, SegundaFirma segundaFirma,
 			AuditoriaService auditoria, Clock reloj, FirmaSesion firmaSesion) {
 		this.firmaSesion = firmaSesion;
 		this.lotes = lotes;
-		this.participantes = participantes;
+		this.segundaFirma = segundaFirma;
 		this.planes = planes;
 		this.anios = anios;
 		this.cuotas = cuotas;
@@ -103,7 +107,7 @@ public class ServicioPlanesPension {
 		}
 		AnioEscolar anio = elegido.get();
 		List<PlanPension> delAnio = planes.findByAnioEscolarIdOrderByNivelAscNumeroVersionDesc(anio.getId());
-		boolean puedeProponer = SesionActual.tieneAlgunRol("ADMINISTRACION") && !anio.cerrado();
+		boolean puedeProponer = SesionActual.tieneAlgunRol("ADMINISTRACION", "PROMOTOR") && !anio.cerrado();
 		long totalSinCronograma = 0;
 		List<TarjetaNivel> tarjetas = new java.util.ArrayList<>();
 		for (Nivel nivel : Nivel.values()) {
@@ -125,8 +129,8 @@ public class ServicioPlanesPension {
 		PlanPension plan = buscar(id);
 		String usuario = SesionActual.usuario();
 		boolean aprobador = SesionActual.tieneAlgunRol("PROMOTOR", "DIRECTOR");
-		boolean administracion = SesionActual.tieneAlgunRol("ADMINISTRACION");
-		boolean autor = participantes.ampliar(plan.participantes()).contains(usuario);
+		boolean administracion = SesionActual.tieneAlgunRol("ADMINISTRACION", "PROMOTOR");
+		boolean autor = segundaFirma.participantesPara(plan.participantes()).contains(usuario);
 		boolean hayBorrador = hayPendiente(plan.getAnioEscolar(), plan.getNivel());
 		String avisoAutor = plan.pendiente() && aprobador && autor
 				? "Tú creaste, editaste o enviaste este plan (o preparaste la cuenta de quien lo hizo): debe aprobarlo "
@@ -150,7 +154,7 @@ public class ServicioPlanesPension {
 	}
 
 	/** Valores del borrador para su formulario de edición. */
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public PlanRequest datosParaEditar(Long id) {
 		PlanPension plan = buscar(id);
 		if (!plan.borrador()) {
@@ -165,21 +169,29 @@ public class ServicioPlanesPension {
 		return opcion(buscarAnio(anioId));
 	}
 
+	/** Sprint 11, tanda 1b (F-D3): los rangos de fechas del formulario, los mismos que valida {@code ConfiguracionPlan}. */
+	public pe.edu.virgenmaria.cuentasclaras.cobranza.dto.RangosPlan rangos(Long anioId) {
+		AnioEscolar anio = buscarAnio(anioId);
+		return new pe.edu.virgenmaria.cuentasclaras.cobranza.dto.RangosPlan(ConfiguracionPlan.rangoMatricula(anio),
+				ConfiguracionPlan.rangoPensiones(anio), ConfiguracionPlan.rangoCobroDesde(anio));
+	}
+
 	/**
 	 * Propuesta para un plan nuevo: los montos del último plan aprobado del nivel en años anteriores (si hay) y los
-	 * vencimientos por defecto (último día de marzo a diciembre; matrícula, último día de febrero).
+	 * vencimientos por defecto (sprint 11, tanda 1b, F-D2: el último día de cada mes de clases; matrícula, último día de
+	 * febrero).
 	 */
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public PlanRequest propuestaPorDefecto(Long anioId, Nivel nivel) {
 		AnioEscolar anio = buscarAnio(anioId);
 		Optional<PlanPension> anterior = planes.vigentesAnteriores(nivel, anio.getAnio()).stream().findFirst();
 		BigDecimal matricula = anterior.map(PlanPension::getMontoMatricula).orElse(null);
 		BigDecimal pension = anterior.map(PlanPension::getMontoPension).orElse(null);
-		return PlanRequest.de(ConfiguracionPlan.porDefecto(anio.getAnio(), matricula, pension));
+		return PlanRequest.de(ConfiguracionPlan.porDefecto(anio, matricula, pension));
 	}
 
 	@Transactional
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public Long crearBorrador(Long anioId, Nivel nivel, PlanRequest solicitud) {
 		AnioEscolar anio = buscarAnio(anioId);
 		exigirAbierto(anio);
@@ -199,7 +211,7 @@ public class ServicioPlanesPension {
 	}
 
 	@Transactional
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public void editarBorrador(Long id, PlanRequest solicitud) {
 		PlanPension plan = buscar(id);
 		String anterior = DescripcionCobranza.plan(plan);
@@ -211,7 +223,7 @@ public class ServicioPlanesPension {
 
 	/** «Cambiar montos»: un borrador nuevo copiado del plan vigente, con motivo. Las cuotas ya generadas no cambian. */
 	@Transactional
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public Long nuevaVersion(Long planId, String motivo) {
 		PlanPension vigente = buscar(planId);
 		exigirAbierto(vigente.getAnioEscolar());
@@ -226,7 +238,7 @@ public class ServicioPlanesPension {
 
 	/** Lo bloquea para que otra persona lo revise: desde aquí nadie lo edita (auditoría A1, «cebo y cambio»). */
 	@Transactional
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public void enviar(Long planId) {
 		PlanPension plan = buscar(planId);
 		plan.configuracion().validar(plan.getAnioEscolar());
@@ -258,12 +270,21 @@ public class ServicioPlanesPension {
 	public ResultadoGeneracion aprobar(Long planId, Long version) {
 		PlanPension plan = bloquearConAnio(planId);
 		String usuario = SesionActual.usuario();
+		// Sprint 11, tanda 1c (sección 3.16): la Promotoría que armó el borrador lo envía y lo aprueba en un paso.
+		boolean directa = segundaFirma.aplicaDirecto(usuario) && plan.participantes().contains(usuario);
+		if (directa && !plan.enviado() && plan.getEstado() == EstadoPlan.BORRADOR) {
+			exigirVersion(plan, version);
+			plan.configuracion().validar(plan.getAnioEscolar());
+			plan.enviar(usuario, ahora());
+			planes.saveAndFlush(plan);
+			version = plan.getVersion();
+		}
 		if (!plan.enviado()) {
 			throw new ReglaNegocioException("Solo se aprueba un plan enviado (este está "
 					+ plan.getEstado().etiqueta().toLowerCase() + ").");
 		}
 		exigirVersion(plan, version);
-		if (participantes.ampliar(plan.participantes()).contains(usuario)) {
+		if (segundaFirma.participantesPara(plan.participantes()).contains(usuario)) {
 			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "plan_pension", plan.getId().toString(),
 					null, DescripcionCobranza.plan(plan), "Intentó aprobar " + plan.nombre()
 							+ ", en el que participó (lo creó, lo editó, lo envió o preparó la cuenta de quien lo hizo). "
@@ -287,12 +308,20 @@ public class ServicioPlanesPension {
 			planes.saveAndFlush(a);
 		});
 		firmaSesion.firmar(ClaveFirma.planPension(plan.getId()));
-		plan.aprobar(usuario, ahora);
+		if (directa) {
+			plan.aprobarDirecta(usuario, ahora);
+		}
+		else {
+			plan.aprobar(usuario, ahora);
+		}
 		planes.saveAndFlush(plan);
 		auditoria.registrar(AccionAuditoria.PLAN_PENSION_APROBADO, "plan_pension", plan.getId().toString(),
 				anterior.map(DescripcionCobranza::plan).orElse(null), DescripcionCobranza.plan(plan),
 				plan.nombre() + " aprobado." + anterior.map(a -> " Reemplaza a " + a.nombre()
 						+ " (sus cuotas ya generadas no cambian).").orElse(""));
+		if (directa) {
+			avisosDirecta.registrar("plan_pension", plan.getId(), "Plan de pensiones " + plan.nombre() + " aprobado", false);
+		}
 		return generador.generarPendientesDelNivel(plan.getAnioEscolar().getId(), plan.getNivel());
 	}
 
@@ -315,7 +344,7 @@ public class ServicioPlanesPension {
 	}
 
 	@Transactional
-	@PreAuthorize("hasRole('ADMINISTRACION')")
+	@PreAuthorize("hasAnyRole('ADMINISTRACION','PROMOTOR')")
 	public void descartar(Long id, String motivo) {
 		PlanPension plan = buscar(id);
 		String texto = Motivo.exigir(motivo);

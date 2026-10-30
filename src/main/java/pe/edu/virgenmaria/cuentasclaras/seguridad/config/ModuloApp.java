@@ -245,7 +245,10 @@ public enum ModuloApp {
 			"/privacidad",
 			// Sprint 7, tanda 3 (H9): la página de ingreso con el aviso «Demasiados intentos» (429), a donde reenvía
 			// FiltroLimiteIngresos. Sin datos: solo el formulario y un mensaje genérico.
-			"/login/demasiados-intentos" };
+			"/login/demasiados-intentos",
+			// Sprint 11, tanda 2 (AP2-4): la entrega de la exportación al titular (enlace por correo, DNI y código por
+			// WhatsApp; 5 intentos). Sin sesión: el enlace de un solo uso es la llave.
+			"/exportacion/*", "/exportacion/*/dni", "/exportacion/*/codigo", "/exportacion/*/descargar" };
 
 	/**
 	 * Sprint 8, tanda 3 (sección 8.2): las páginas públicas de la demo («Crear mi demo», el recorrido guiado, los archivos de
@@ -333,6 +336,31 @@ public enum ModuloApp {
 		}
 		return roles;
 	}
+
+	/**
+	 * Sprint 11, tanda 1b (sección 3.14): si alguien con estos roles puede entrar a la ruta, con el mismo cálculo del filtro
+	 * de seguridad (la primera regla cuyo patrón coincide gana; sin regla, se niega). Para no mostrar nunca un botón que
+	 * termina en 403. Ignora la consulta ({@code ?anio=…}).
+	 */
+	public static boolean puedeEntrar(Set<Rol> rolesDelUsuario, String ruta) {
+		if (ruta == null || ruta.isBlank() || rolesDelUsuario == null || rolesDelUsuario.isEmpty()) {
+			return false;
+		}
+		int consulta = ruta.indexOf('?');
+		org.springframework.http.server.PathContainer camino = org.springframework.http.server.PathContainer
+				.parsePath(consulta >= 0 ? ruta.substring(0, consulta) : ruta);
+		for (ModuloApp modulo : values()) {
+			for (String patron : modulo.patrones) {
+				if (PATRONES.parse(patron).matches(camino)) {
+					return modulo.roles.stream().anyMatch(rolesDelUsuario::contains);
+				}
+			}
+		}
+		return false;
+	}
+
+	private static final org.springframework.web.util.pattern.PathPatternParser PATRONES =
+			org.springframework.web.util.pattern.PathPatternParser.defaultInstance;
 
 	public boolean permite(Rol rol) {
 		return roles.contains(rol);

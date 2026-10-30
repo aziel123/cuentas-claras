@@ -20,6 +20,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -46,7 +47,7 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 	/** Prefijo del nombre registrado en la bitácora para quien no es usuario. */
 	public static final String PREFIJO_DESCONOCIDO = "desconocido-";
 
-	private enum Resultado { CORRECTO, BLOQUEADA, INACTIVA, CLAVE_INCORRECTA, CLAVE_TEMPORAL_VENCIDA }
+	private enum Resultado { CORRECTO, BLOQUEADA, INACTIVA, CLAVE_INCORRECTA, CLAVE_TEMPORAL_VENCIDA, COLEGIO_NO_OPERA }
 
 	private record Intento(Resultado resultado, UsuarioAutenticado usuario) {
 	}
@@ -69,9 +70,13 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 
 	private final String hashSenuelo;
 
+	private final pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository colegios;
+
 	public ProveedorAutenticacion(UsuarioRepository usuarios, ServicioDetallesUsuario detalles,
 			PasswordEncoder codificador, AuditoriaService auditoria, SelladorAuditoria sellador,
-			PropiedadesSeguridad propiedades, EjecucionIdentidad identidad, Clock reloj) {
+			PropiedadesSeguridad propiedades, EjecucionIdentidad identidad, Clock reloj,
+			pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository colegios) {
+		this.colegios = colegios;
 		this.usuarios = usuarios;
 		this.detalles = detalles;
 		this.codificador = codificador;
@@ -106,6 +111,8 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 			}
 			case BLOQUEADA -> throw new LockedException("Cuenta bloqueada");
 			case INACTIVA -> throw new DisabledException("Cuenta desactivada");
+			// Sprint 11, tanda 1 (F10): el mismo mensaje genérico que una cuenta desactivada.
+			case COLEGIO_NO_OPERA -> throw new DisabledException("Colegio sin acceso");
 			case CLAVE_TEMPORAL_VENCIDA -> throw new CredentialsExpiredException("Clave temporal vencida");
 			case CLAVE_INCORRECTA -> throw new BadCredentialsException("Usuario o clave incorrectos");
 		};
@@ -123,6 +130,15 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 			auditoria.registrar(actor, AccionAuditoria.INGRESO_RECHAZADO_BLOQUEADA, "usuario", id, null, null,
 					"La cuenta está bloqueada por intentos fallidos.");
 			return new Intento(Resultado.BLOQUEADA, null);
+		}
+		// Sprint 11, tanda 1 (F10, sección 3.4): en un colegio suspendido o dado de baja el personal no ingresa (tampoco la
+		// Promotoría); la familia, solo en SUSPENDIDO y CERRADO (modo consulta). La base lo exige igual
+		// (trg_sesion_usuario_nace). Mensaje genérico; el intento queda en la bitácora.
+		if (!puedeIngresar(usuario)) {
+			codificador.matches(clave, hashSenuelo);
+			auditoria.registrar(actor, AccionAuditoria.INGRESO_RECHAZADO_COLEGIO_SUSPENDIDO, "usuario", id, null, null,
+					"El colegio no está operando (suspendido o dado de baja): el personal no ingresa.");
+			return new Intento(Resultado.COLEGIO_NO_OPERA, null);
 		}
 		if (!usuario.isActivo()) {
 			codificador.matches(clave, hashSenuelo);
@@ -158,6 +174,12 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 		}
 		auditoria.registrar(actor, AccionAuditoria.INGRESO_EXITOSO, "usuario", id, null, null, detalle);
 		return new Intento(Resultado.CORRECTO, UsuarioAutenticado.de(usuario, ahora));
+	}
+
+	/** El colegio opera; o la cuenta es de una familia y el colegio está en modo consulta. */
+	private boolean puedeIngresar(Usuario usuario) {
+		return colegios.findById(usuario.getColegioId()).map(c -> c.esPlataforma() || c.getEstado().opera()
+				|| (usuario.getApoderadoId() != null && c.consultaFamilias(LocalDate.now(reloj)))).orElse(true);
 	}
 
 	private Actor actorDe(Usuario usuario) {

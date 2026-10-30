@@ -11,6 +11,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.dto.ListaVerificacion;
 import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.CorreoDeControl;
+import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.EstadoPuestaEnMarcha;
+import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.GuiaPuestaEnMarcha;
 import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.PasoAProduccion;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
@@ -26,17 +28,26 @@ public class PuestaEnMarchaController {
 
 	private final CorreoDeControl correoDeControl;
 
-	public PuestaEnMarchaController(PasoAProduccion paso, CorreoDeControl correoDeControl) {
+	private final EstadoPuestaEnMarcha estado;
+
+	public PuestaEnMarchaController(PasoAProduccion paso, CorreoDeControl correoDeControl, EstadoPuestaEnMarcha estado) {
 		this.paso = paso;
+		this.estado = estado;
 		this.correoDeControl = correoDeControl;
 	}
 
 	@GetMapping("/puesta-en-marcha")
 	public String lista(@AuthenticationPrincipal UsuarioAutenticado usuario, Model model) {
 		ListaVerificacion lista = paso.lista();
+		java.util.Set<Rol> roles = usuario == null ? java.util.Set.of() : usuario.roles();
 		model.addAttribute("lista", lista);
 		model.addAttribute("pendientes", PasoAProduccion.pendientesDe(lista));
-		model.addAttribute("puedePasar", usuario != null && usuario.roles().contains(Rol.PROMOTOR));
+		model.addAttribute("puedePasar", roles.contains(Rol.PROMOTOR));
+		// Sprint 11, tanda 1b (sección 3.14): estado, responsable e «Ir» de cada paso, y el mismo avance del banner.
+		model.addAttribute("guia", GuiaPuestaEnMarcha.guia(lista, roles));
+		model.addAttribute("filas", GuiaPuestaEnMarcha.filas(lista, roles));
+		// F-D8: con un lote de saldo inicial en curso, primero «Ir al lote»; si no, primero la firma.
+		model.addAttribute("loteEnCurso", estado.loteSaldoEnCurso().orElse(null));
 		model.addAttribute("correoControl", correoDeControl.vista());
 		return "puesta-en-marcha/lista";
 	}
@@ -58,8 +69,7 @@ public class PuestaEnMarchaController {
 	public String sinSaldoInicial(RedirectAttributes avisos) {
 		try {
 			paso.sinSaldoInicial();
-			avisos.addFlashAttribute("exito", "Listo: firmaste que el colegio empieza sin deudas anteriores. Quedó en la "
-					+ "bitácora.");
+			avisos.addFlashAttribute("exito", "Listo: firmaste que el colegio empieza sin deudas anteriores.");
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());
@@ -71,8 +81,7 @@ public class PuestaEnMarchaController {
 	public String oseSimulado(RedirectAttributes avisos) {
 		try {
 			paso.aceptarOseSimulado();
-			avisos.addFlashAttribute("exito", "Listo: firmaste que el colegio usa el comprobante simulado y emite su "
-					+ "comprobante legal aparte. Quedó en la bitácora.");
+			avisos.addFlashAttribute("exito", "Listo: firmaste el uso del comprobante simulado.");
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());

@@ -59,7 +59,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .barra-in {
   max-width: var(--ancho-max);
   margin: 0 auto;
-  padding: var(--esp-3) var(--esp-4);
+  padding: var(--esp-3) var(--margen-lateral);
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
   gap: var(--esp-3);
 }
@@ -74,6 +74,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: var(--color-superficie);
   border-bottom: 3px solid var(--color-celeste);
 }
+/* Logo del producto («dos llaves»): en el ingreso, el operador y donde no hay colegio en la sesión. */
+.logo-producto { width: 36px; height: 36px; flex: none; display: block; }
 .monograma {
   width: 36px; height: 36px; flex: none;
   display: grid; place-items: center;
@@ -97,7 +99,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   width: 100%;
   max-width: var(--ancho-max);
   margin: 0 auto;
-  padding: var(--esp-6) var(--esp-6) var(--esp-12);
+  padding: var(--esp-6) var(--margen-lateral) var(--esp-12);
   display: grid;
   grid-template-columns: var(--ancho-menu) minmax(0, 1fr);
   gap: var(--esp-8);
@@ -127,7 +129,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .grupo-menu > summary::after {
   content: ""; width: 8px; height: 8px; flex: none; margin-right: 2px;
   border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
-  transform: rotate(-45deg); transition: transform 0.15s ease-out;
+  transform: rotate(-45deg);
 }
 .grupo-menu[open] > summary::after { transform: rotate(45deg); }
 .grupo-menu > summary:hover { background: var(--color-superficie-2); color: var(--color-texto); }
@@ -138,7 +140,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-size: var(--texto-xs); font-weight: 700; font-variant-numeric: tabular-nums;
 }
 .contador-aviso { background: var(--color-alerta-suave); color: var(--color-alerta); }
-@media (prefers-reduced-motion: reduce) { .grupo-menu > summary::after { transition: none; } }
+/* Sprint 11, tanda 1b: el movimiento, solo si la persona no pidió reducirlo. */
+@media (prefers-reduced-motion: no-preference) { .grupo-menu > summary::after { transition: transform 0.15s ease-out; } }
 .menu-movil { display: none; }
 /* minmax(0, 1fr): una etiqueta larga ("Conciliación bancaria" + "Próximamente") no ensancha la columna
    y el resaltado del elemento activo no se sale del contenedor. */
@@ -192,7 +195,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .contenido { display: grid; gap: var(--esp-4); min-width: 0; align-content: start; }
 .cabecera { display: flex; flex-wrap: wrap; gap: var(--esp-2) var(--esp-4); align-items: flex-end; justify-content: space-between; }
 .cabecera > div { display: grid; gap: var(--esp-1); }
-.cabecera > div > .secundario { max-width: 72ch; }
+.cabecera > div > .secundario { max-width: 70ch; }
 .tarjeta {
   background: var(--color-superficie);
   border: 1px solid var(--color-borde);
@@ -521,6 +524,11 @@ input[type="file"].input { padding: var(--esp-2); }
   text-align: center; font-weight: 700; letter-spacing: 0.04em; font-size: var(--texto-sm);
 }
 /* Sprint 8, tanda 3: en la demo la franja enlaza al recorrido guiado (blanco subrayado sobre rojo: 6.0:1). */
+/* Sprint 11, tanda 1: la franja ámbar del estado del colegio (texto oscuro sobre el fondo de advertencia). */
+.franja-colegio {
+  padding: var(--esp-2) var(--esp-4); background: var(--color-alerta-suave); color: var(--color-texto);
+  border-bottom: 2px solid var(--color-alerta); text-align: center; font-size: var(--texto-sm);
+}
 .franja-enlace { color: var(--color-superficie); text-decoration: underline; margin-left: var(--esp-2); white-space: nowrap; }
 .franja-enlace:focus-visible { outline: 2px solid var(--color-superficie); outline-offset: 2px; }
 .marca-simulado {

@@ -39,6 +39,18 @@ class VerificadorConfiguracionTest {
 	}
 
 	@Test
+	void laDemoPersistenteSoloVaJuntoADev() {
+		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "dev", "persistente" }, CLAVE_DEV))
+				.doesNotThrowAnyException();
+		for (String[] perfiles : new String[][] { { "persistente" }, { "test", "persistente" },
+				{ "prod", "persistente" }, { "piloto", "persistente" }, { "demo", "persistente" } }) {
+			assertThatThrownBy(() -> VerificadorConfiguracion.verificarPersistente(java.util.List.of(perfiles)))
+					.as(String.join(",", perfiles)).isInstanceOf(IllegalStateException.class)
+					.hasMessageContaining("dev,persistente");
+		}
+	}
+
+	@Test
 	void conPerfilYClaveCorrectosArranca() {
 		assertThatCode(() -> VerificadorConfiguracion.verificar(new String[] { "prod" }, config()))
 				.doesNotThrowAnyException();

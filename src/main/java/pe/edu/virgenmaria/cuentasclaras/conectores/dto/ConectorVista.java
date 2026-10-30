@@ -9,5 +9,6 @@ import java.time.LocalDateTime;
 public record ConectorVista(Long id, String tipo, String tipoEtiqueta, String proveedor, String modo, String resumen,
 		String pista, String estado, String estadoEtiqueta, String estadoVariante, String propuestoPor,
 		LocalDateTime propuestoEn, String resueltoPor, LocalDateTime resueltoEn, Boolean pruebaOk, String pruebaDetalle,
-		Long solicitudId, boolean puedeProbar) {
+		Long solicitudId, boolean puedeProbar, boolean enEspera, LocalDateTime venceEspera, boolean puedeAprobarAhora,
+		boolean puedeFrenar) {
 }

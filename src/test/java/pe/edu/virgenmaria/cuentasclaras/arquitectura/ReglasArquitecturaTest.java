@@ -79,7 +79,9 @@ class ReglasArquitecturaTest {
 			// busca ESE conector (por su clave exacta) y nada más.
 			BASE + ".conectores.service.BusquedaPorClavePublica",
 			// Correcciones del sprint 8 (QA-S8-6): las series que ya usan las OTRAS sedes con el mismo RUC (solo sus nombres).
-			BASE + ".comprobantes.service.SeriesDeOtrasSedes");
+			BASE + ".comprobantes.service.SeriesDeOtrasSedes",
+			// Sprint 11, tanda 2 (3.11): la huella y la última secuencia de las actas EJECUTADAS, para verificar la cadena.
+			BASE + ".colegio.service.ActasEjecutadasBitacora");
 
 	/** Única clase que puede usar JDBC directo: comprueba los permisos de MySQL (paso 9). */
 	private static final String VERIFICADOR_PERMISOS = BASE + ".auditoria.service.VerificadorPermisosBaseDatos";
@@ -117,9 +119,25 @@ class ReglasArquitecturaTest {
 			.orShould().dependOnClassesThat().haveFullyQualifiedName("java.net.HttpURLConnection")
 			.because("una petición saliente a una URL que no es de la lista cerrada permitiría SSRF");
 
+	/**
+	 * Sprint 11, tanda 1c (sección 3.16b): A5 (quien preparó la cuenta no aprueba lo de ella) se consulta SIEMPRE por
+	 * {@code SegundaFirma}, que sabe que la Promotoría aplica directo. Un servicio que llamara directo a
+	 * {@code ControlParticipantes} volvería a bloquear (o a dejar pasar) a quien no corresponde.
+	 */
+	@ArchTest
+	static final ArchRule soloSegundaFirmaConsultaLosParticipantes = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".seguridad.service.SegundaFirma")
+			.and().doNotHaveFullyQualifiedName(BASE + ".seguridad.service.ControlParticipantes")
+			.and().resideInAPackage(BASE + "..")
+			.should().dependOnClassesThat().haveFullyQualifiedName(BASE + ".seguridad.service.ControlParticipantes")
+			.because("la regla de quién aprueba lo de quién (A5 y la directa de Promotoría) vive en SegundaFirma");
+
 	@ArchTest
 	static final ArchRule soloVerificadorPermisosUsaJdbcTemplate = noClasses()
 			.that().doNotHaveFullyQualifiedName(VERIFICADOR_PERMISOS)
+			// Sprint 11, tanda 2 (3.9): la exportación lee por JDBC, en flujo, las tablas de tablas.txt; cada consulta
+			// lleva su WHERE por colegio (TablasExportacion.Tabla.where) y corre como sistema.exportacion.
+			.and().doNotHaveFullyQualifiedName(BASE + ".exportacion.service.LectorTablas")
 			.should().dependOnClassesThat().belongToAnyOf(JdbcTemplate.class, JdbcOperations.class,
 					NamedParameterJdbcTemplate.class, NamedParameterJdbcOperations.class, JdbcClient.class)
 			.because("JDBC directo no pasa por el filtro por colegio ni por la auditoría");
@@ -142,7 +160,9 @@ class ReglasArquitecturaTest {
 					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.CurriculoVersion.class,
 					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.AreaCurricular.class,
 					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.Competencia.class,
-					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.EscalaLogro.class)
+					pe.edu.virgenmaria.cuentasclaras.academico.curriculo.model.EscalaLogro.class,
+					// Sprint 11, tanda 1c (A1c-2): la antigüedad de un rol se lee de usuario_rol (sin colegio: por la cuenta).
+					pe.edu.virgenmaria.cuentasclaras.seguridad.model.AntiguedadRol.class)
 			.should().beAssignableTo(BaseEntity.class)
 			.because("BaseEntity aporta colegioId (@TenantId), autoría y versión");
 
@@ -247,6 +267,9 @@ class ReglasArquitecturaTest {
 
 	private static final String SOLO_ADMINISTRACION = "hasRole('ADMINISTRACION')";
 
+	/** Sprint 11, tanda 1c (sección 3.16): la Promotoría también arma (y aplica directo) el plan y el saldo inicial. */
+	private static final String ADMINISTRACION_O_PROMOTORIA = "hasAnyRole('ADMINISTRACION','PROMOTOR')";
+
 	private static final String APROBACION = "hasAnyRole('PROMOTOR','DIRECTOR')";
 
 	/** Sprint 6, tanda 2: las alertas las calculan Promotoría y sistema.panel (resumen diario y avisos al celular). */
@@ -263,7 +286,9 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".auditoria.service.VerificadorIntegridadAuditoria#verificar", "hasRole('PROMOTOR')"),
 			// Sprint 2: Promotoría consulta; Dirección y Administración registran y corrigen.
 			Map.entry(BASE + ".colegio.service.ServicioEstructura", LECTURA_ESCOLAR),
-			Map.entry(BASE + ".colegio.service.ServicioEstructura#crearAnio", ESCRITURA_ESCOLAR),
+			// Sprint 11, tanda 1 (sección 3.7): el año escolar lo crean y lo cambian Promotoría o Dirección con su firma.
+			Map.entry(BASE + ".colegio.service.ServicioEstructura#crearAnio", APROBACION),
+			Map.entry(BASE + ".colegio.service.ServicioEstructura#cambiarFechas", APROBACION),
 			Map.entry(BASE + ".colegio.service.ServicioEstructura#crearSeccion", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".colegio.service.ServicioEstructura#desactivarSeccion", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".alumnos.service.ServicioAlumnos", LECTURA_ESCOLAR),
@@ -284,24 +309,24 @@ class ReglasArquitecturaTest {
 			Map.entry(BASE + ".alumnos.importacion.ServicioImportacionAlumnos", ESCRITURA_ESCOLAR),
 			// Sprint 2, tanda 3: Administración propone y arma; Promotoría o Dirección aprueban y confirman.
 			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension", LECTURA_ESCOLAR),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#propuestaPorDefecto", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#datosParaEditar", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#crearBorrador", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#editarBorrador", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#nuevaVersion", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#descartar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#propuestaPorDefecto", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#datosParaEditar", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#crearBorrador", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#editarBorrador", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#nuevaVersion", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#descartar", ADMINISTRACION_O_PROMOTORIA),
 			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#aprobar", APROBACION),
-			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#enviar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#enviar", ADMINISTRACION_O_PROMOTORIA),
 			Map.entry(BASE + ".cobranza.service.ServicioPlanesPension#devolver", APROBACION),
 			Map.entry(BASE + ".cobranza.service.AlertasCobranza", ALERTAS),
 			Map.entry(BASE + ".cobranza.service.ServicioCronograma", LECTURA_ESCOLAR),
 			Map.entry(BASE + ".cobranza.service.GeneradorCronograma#generarPendientes", ESCRITURA_ESCOLAR),
 			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial", LECTURA_ESCOLAR),
-			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#crearLote", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#agregarLinea", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#quitarLinea", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#enviar", SOLO_ADMINISTRACION),
-			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#descartar", SOLO_ADMINISTRACION),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#crearLote", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#agregarLinea", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#quitarLinea", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#enviar", ADMINISTRACION_O_PROMOTORIA),
+			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#descartar", ADMINISTRACION_O_PROMOTORIA),
 			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#confirmar", APROBACION),
 			Map.entry(BASE + ".cobranza.service.ServicioSaldoInicial#devolver", APROBACION),
 			Map.entry(BASE + ".cobranza.service.ServicioAnulacionCuotas", LECTURA_ESCOLAR),
@@ -778,6 +803,39 @@ class ReglasArquitecturaTest {
 				}
 			})
 			.because("la demo crea colegios y cuentas sin una persona detrás: nunca debe existir fuera de la demo");
+
+	/**
+	 * Demo local: el respaldo SIMULADO que deja «Hecho» el paso «Respaldo» de la Puesta en marcha existe solo con el perfil
+	 * dev (nunca en prod, piloto, demo ni test). En prod, además, el destino simulado no cuenta y cc_app no tiene INSERT.
+	 */
+	@ArchTest
+	static final ArchRule elRespaldoSimuladoSoloEnDev = classes()
+			.that().haveFullyQualifiedName(BASE + ".operacion.inicial.RespaldoSimuladoDev")
+			.should(new ArchCondition<>("estar anotada con @Profile(\"dev\")") {
+				@Override
+				public void check(JavaClass clase, ConditionEvents eventos) {
+					boolean ok = clase.tryGetAnnotationOfType(org.springframework.context.annotation.Profile.class)
+							.map(p -> Set.of(p.value()).equals(Set.of("dev"))).orElse(false);
+					if (!ok) {
+						eventos.add(SimpleConditionEvent.violated(clase, clase.getName() + " no está limitada al perfil dev"));
+					}
+				}
+			})
+			.because("un respaldo simulado haría creer que la instalación tiene respaldo: solo en la demo local");
+
+	/** Solo RespaldoSimuladoDev crea un respaldo simulado (la aplicación nunca registra respaldos reales). */
+	@ArchTest
+	static final ArchRule soloLaDemoDeDevCreaRespaldosSimulados = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".operacion.inicial.RespaldoSimuladoDev")
+			.and().doNotHaveFullyQualifiedName(BASE + ".operacion.model.Respaldo")
+			.should().callMethodWhere(new DescribedPredicate<>("llamar a Respaldo.simulado") {
+				@Override
+				public boolean test(JavaMethodCall llamada) {
+					return llamada.getTarget().getOwner().getFullName().equals(BASE + ".operacion.model.Respaldo")
+							&& llamada.getTarget().getName().equals("simulado");
+				}
+			})
+			.because("los respaldos los registra cc_respaldo desde respaldar.sh; el simulado es solo de la demo local");
 
 	/** RegistroAlumnos no tiene @PreAuthorize: solo lo usan los servicios protegidos de alumnos y la demo de dev. */
 	@ArchTest
@@ -1575,6 +1633,32 @@ class ReglasArquitecturaTest {
 				}
 			})
 			.because("el dinero se convierte en un solo lugar y con comprobación de ida y vuelta");
+
+	/** Sprint 11, tanda 1: los cambios de estado del colegio los escribe solo la plataforma (dos operadores). */
+	@ArchTest
+	static final ArchRule soloLaPlataformaEscribeCambiosDeEstado = noClasses()
+			.that().resideOutsideOfPackage(BASE + ".plataforma..")
+			.should().callMethodWhere(new DescribedPredicate<>("un save de CambioEstadoColegioRepository") {
+				@Override
+				public boolean test(JavaMethodCall llamada) {
+					return llamada.getTargetOwner().getSimpleName().equals("CambioEstadoColegioRepository")
+							&& llamada.getName().startsWith("save");
+				}
+			})
+			.because("el estado del colegio lo deciden dos operadores (sección 3.3); en MySQL, trg_cambio_estado_colegio_*");
+
+	/** Sprint 11, tanda 1 (AP-2): cada uso de la facultad del titular lo registra solo FacultadTitular. */
+	@ArchTest
+	static final ArchRule soloLaFacultadRegistraSusUsos = noClasses()
+			.that().doNotHaveFullyQualifiedName(BASE + ".seguridad.service.FacultadTitular")
+			.should().callMethodWhere(new DescribedPredicate<>("un save de UsoFacultadTitularRepository") {
+				@Override
+				public boolean test(JavaMethodCall llamada) {
+					return llamada.getTargetOwner().getSimpleName().equals("UsoFacultadTitularRepository")
+							&& llamada.getName().startsWith("save");
+				}
+			})
+			.because("el uso de la facultad exige el código, la firma y los avisos en la misma transacción (sección 3.12)");
 
 	private static DescribedPredicate<JavaMethodCall> llamadaA(String prefijo, String descripcion) {
 		return new DescribedPredicate<>(descripcion) {

@@ -43,6 +43,33 @@
 	<p class="error" th:if="${#fields.hasErrors(nombre)}" th:errors="*{__${nombre}__}">Error</p>
 </div>
 
+<!--/* Sprint 11, tanda 1b (F-D3): fecha con min y max iguales a la validación del servidor (ConfiguracionPlan.rango*).
+     min y max en ISO (aaaa-mm-dd); la ayuda dice el rango en palabras (no todos los lectores anuncian min y max). */-->
+<div th:fragment="campoFecha(nombre, etiqueta, ayuda, requerido, min, max)" class="campo">
+	<label th:for="${nombre}" th:text="${etiqueta}">Etiqueta</label>
+	<input type="date" class="input" th:field="*{__${nombre}__}" th:errorclass="input-con-error"
+		th:min="${min}" th:max="${max}" autocomplete="off" th:aria-describedby="${ayuda != null} ? ${nombre + '-ayuda'}"
+		th:aria-invalid="${#fields.hasErrors(nombre)} ? 'true'" th:required="${requerido}">
+	<p class="ayuda" th:if="${ayuda != null}" th:id="${nombre + '-ayuda'}" th:text="${ayuda}">Ayuda</p>
+	<p class="error" th:if="${#fields.hasErrors(nombre)}" th:errors="*{__${nombre}__}">Error</p>
+</div>
+
+<!--/* Sprint 11, tanda 1b (F-D7, decisión 212): ayuda accesible «i». Sin JavaScript (CSP): popover nativo (clic, toque y
+     Escape) y aria-describedby (el lector la lee al enfocar el botón). También se ve con :hover y :focus-visible (CSS).
+     id: único en la pantalla. texto: lo crucial, en una o dos líneas. etiqueta: de qué es la ayuda. */-->
+<span th:fragment="info(id, texto, etiqueta)" class="info" data-info>
+	<button type="button" class="info-boton" th:popovertarget="|info-${id}|" th:aria-describedby="|info-${id}|"
+		th:aria-label="|Más información: ${etiqueta}|"><span aria-hidden="true">i</span></button>
+	<span th:id="|info-${id}|" class="info-texto" popover="auto" role="tooltip" th:text="${texto}">Ayuda</span>
+</span>
+
+<!--/* Variante de advertencia: ⚠ con el color de alerta y «Atención» para el lector de pantalla (no solo el color). */-->
+<span th:fragment="aviso(id, texto, etiqueta)" class="info info-aviso" data-info>
+	<button type="button" class="info-boton" th:popovertarget="|info-${id}|" th:aria-describedby="|info-${id}|"
+		th:aria-label="|Atención: ${etiqueta}|"><span aria-hidden="true">!</span></button>
+	<span th:id="|info-${id}|" class="info-texto" popover="auto" role="tooltip" th:text="|Atención: ${texto}|">Atención</span>
+</span>
+
 <!--/* Acción sensible con motivo obligatorio, sin JavaScript (popover). A diferencia de modalConfirmacion, el botón
      que abre el modal puede ser discreto. textoAbrir: texto del botón que abre; variante: secundario, texto o peligro. */-->
 <th:block th:fragment="modalMotivo(id, titulo, consecuencia, accion, textoAbrir, variante, textoBoton)">
@@ -159,7 +186,19 @@
 	</th:block>
 	<th:block th:if="${error != null}">
 		<div th:replace="~{fragments/componentes :: alerta('error', ${error})}"></div>
+		<!--/* Sprint 11, tanda 1b: si el error es de la preparación, el enlace a la Puesta en marcha (si el rol puede abrirla). */-->
+		<p th:if="${colegioEnPreparacion == true and #strings.startsWith(error, 'Tu colegio está en preparación') and @guiaPasos.verLista()}">
+			<a class="enlace-tactil" th:href="@{/puesta-en-marcha}" data-enlace-puesta>Ver la Puesta en marcha</a></p>
 	</th:block>
+</th:block>
+
+<!--/* Sprint 11, tanda 1b (sección 3.14, punto 3): botón de envío que se deshabilita mientras el colegio está en
+     preparación, con su motivo al lado (aria-describedby). Deshabilitado es type="button" y aria-disabled: sigue enfocable
+     para leer el motivo y no envía nada. El servidor lo bloquea igual (409). */-->
+<th:block th:fragment="botonBloqueable(texto, variante, bloqueado, idMotivo, motivo)">
+	<button th:type="${bloqueado} ? 'button' : 'submit'" class="btn" th:classappend="'btn-' + ${variante}" th:text="${texto}"
+		th:attr="aria-disabled=${bloqueado} ? 'true', aria-describedby=${bloqueado} ? ${idMotivo}" data-bloqueable>Enviar</button>
+	<p th:if="${bloqueado}" class="motivo-bloqueo" th:id="${idMotivo}" th:text="${motivo}" data-motivo-bloqueo>Tu colegio está en preparación.</p>
 </th:block>
 
 <!--/* Etiqueta de estado: siempre con texto, nunca solo color. variante: exito, alerta, peligro, info o neutro. */-->
@@ -188,6 +227,31 @@
 	<p th:text="${texto}">Cuando los haya, aparecerán aquí.</p>
 </div>
 
+<!--/* Sprint 11, tanda 1b (sección 3.14, punto 2): estado vacío que guía. v: GuiaPasos.PasoVacio (${@guiaPasos.vacio('clave')}).
+     Dice qué falta, quién lo hace y el botón (si el rol puede entrar) o «Pídeselo a …»; con la dependencia pendiente,
+     «Primero: …» en lugar del botón. En producción, sin mencionar la puesta en marcha. accion: el texto del botón (o nulo
+     para usar el del paso). ancla: adónde lleva el botón si no es la pantalla del paso (el formulario de la misma
+     pantalla, «#titulo-nuevo»), o nulo. El botón es secundario: la pantalla ya tiene su primario. */-->
+<div th:fragment="estadoVacioPaso(titulo, texto, v, accion, ancla)" class="estado-vacio estado-vacio-paso"
+	data-estado-vacio-paso th:data-paso="${v.paso().paso().clave()}">
+	<h3 th:text="${titulo}">Este año todavía no tiene secciones</h3>
+	<p th:if="${texto != null}" th:text="${texto}">Texto</p>
+	<p th:if="${v.primero() != null}" data-primero>
+		<span th:text="|Primero: ${v.primero().accion()}|">Primero: Configurar el año escolar</span>
+		<span class="secundario" th:text="|(lo hace ${v.primero().responsable()})|">(lo hace Promotoría o Dirección)</span>
+		<a th:if="${v.primero().conBoton()}" class="enlace-tactil" th:href="@{${v.primero().enlace()}}"
+			th:aria-label="|Ir: ${v.primero().accion()}|">Ir</a>
+	</p>
+	<th:block th:if="${v.primero() == null}">
+		<a th:if="${v.paso().conBoton()}" class="btn btn-secundario" th:href="${ancla != null} ? @{${ancla}} : @{${v.paso().enlace()}}"
+			th:text="${accion != null} ? ${accion} : ${v.paso().accion()}" data-estado-vacio-boton>Crear las secciones</a>
+		<p th:unless="${v.paso().conBoton()}" class="secundario" data-pidelo
+			th:text="|Pídeselo a ${v.paso().responsable()}.|">Pídeselo a Administración o Dirección.</p>
+		<p th:if="${v.enPreparacion() and v.paso().conBoton()}" class="secundario" data-lo-hace
+			th:text="|Lo hace: ${v.paso().responsable()}.|">Lo hace: Administración o Dirección.</p>
+	</th:block>
+</div>
+
 <!--/* Confirmación de una acción sensible, sin JavaScript (atributo popover).
      accion: URL ya resuelta del POST. conMotivo: exige un motivo de 10 a 500 caracteres (también se valida en el servidor). */-->
 <th:block th:fragment="modalConfirmacion(id, titulo, consecuencia, accion, textoBoton, conMotivo)">
@@ -205,6 +269,22 @@
 			<div class="acciones">
 				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
 				<button type="submit" class="btn btn-peligro" th:text="${textoBoton}">Anular</button>
+			</div>
+		</form>
+	</div>
+</th:block>
+
+<!--/* Sprint 11, tanda 1b (F-D8): una firma de la Promotoría (acepto), siempre con confirmación (nunca con un solo clic).
+     No es destructiva: el botón que confirma es primario, distinto del de peligro. accion: URL ya resuelta del POST. */-->
+<th:block th:fragment="modalFirma(id, textoAbrir, titulo, consecuencia, accion, textoBoton)">
+	<button type="button" class="btn btn-secundario" th:popovertarget="${id}" th:text="${textoAbrir}" data-firma>Firmar</button>
+	<div class="modal" th:id="${id}" popover role="dialog" aria-modal="true" th:aria-labelledby="${id + '-titulo'}">
+		<form method="post" th:action="${accion}" class="modal-cuerpo">
+			<h2 th:id="${id + '-titulo'}" th:text="${titulo}">¿Firmas?</h2>
+			<p th:text="${consecuencia}">Queda con la firma de tu sesión.</p>
+			<div class="acciones">
+				<button type="button" class="btn btn-secundario" th:popovertarget="${id}" popovertargetaction="hide">Cancelar</button>
+				<button type="submit" class="btn btn-primario" th:text="${textoBoton}">Firmar</button>
 			</div>
 		</form>
 	</div>

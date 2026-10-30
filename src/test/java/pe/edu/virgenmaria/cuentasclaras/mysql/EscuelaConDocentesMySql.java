@@ -36,10 +36,11 @@ final class EscuelaConDocentesMySql {
 			ServicioEstructura estructura, org.springframework.jdbc.core.JdbcTemplate jdbc) {
 		ColegioConEquipoMySql.Equipo equipo = ColegioConEquipoMySql.crear(sufijo, ruc, celular, alta, servicioUsuarios,
 				usuarios, codificador, colegios);
+		// Sprint 11, tanda 1 (sección 3.7): el alta ya no crea el año; lo crea la Dirección con su firma (2027, en curso).
+		UsuariosDePrueba.iniciarSesion(equipo.directora());
+		long anio = estructura.crearAnio(new pe.edu.virgenmaria.cuentasclaras.colegio.dto.CrearAnioEscolarRequest(2027,
+				java.time.LocalDate.of(2027, 3, 1), java.time.LocalDate.of(2027, 12, 17), true));
 		UsuariosDePrueba.iniciarSesion(equipo.administracion());
-		// El alta deja el año 2027 en curso (EscenarioPlataforma.alta).
-		long anio = jdbc.queryForObject("SELECT id FROM anio_escolar WHERE colegio_id = ? AND anio = 2027", Long.class,
-				equipo.colegioId());
 		long a = estructura.crearSeccion(anio, new CrearSeccionRequest(Grado.PRIMARIA_3, "A"));
 		long b = estructura.crearSeccion(anio, new CrearSeccionRequest(Grado.PRIMARIA_4, "A"));
 		SecurityContextHolder.clearContext();

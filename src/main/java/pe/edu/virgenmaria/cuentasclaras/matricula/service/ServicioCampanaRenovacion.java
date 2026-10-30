@@ -151,6 +151,7 @@ public class ServicioCampanaRenovacion {
 	@PreAuthorize("hasRole('ADMINISTRACION')")
 	public int abrir(Long anioDestinoId, LocalDate venceEn) {
 		colegios.exigirEnProduccion(pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio.actual(),
+				pe.edu.virgenmaria.cuentasclaras.colegio.service.AccionBloqueada.RENOVACION,
 				"El colegio todavía no está en producción: la renovación de matrícula (y sus avisos a las familias) se abre "
 						+ "después de la puesta en marcha.");
 		AnioEscolar destino = anios.bloquear(anioDestinoId)

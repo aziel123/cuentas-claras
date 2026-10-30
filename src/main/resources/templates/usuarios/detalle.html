@@ -78,6 +78,9 @@
 			</div>
 			</th:block>
 
+			<!--/* Sprint 11, tanda 1c: dar o quitar Promotoría o Dirección va por «Cambiar roles» (directo con el código de la
+			     Promotoría); la facultad del titular solo crea cuentas nuevas. */-->
+
 			<th:block th:if="${usuario.bloqueado}">
 				<th:block th:replace="~{fragments/componentes :: modalConfirmacion('modal-desbloquear', '¿Desbloquear la cuenta?',
 					'Podrá volver a intentar ingresar de inmediato.', @{/usuarios/{id}/desbloquear(id=${usuario.id})},

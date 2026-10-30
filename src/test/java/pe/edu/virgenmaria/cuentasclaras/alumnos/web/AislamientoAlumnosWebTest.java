@@ -74,7 +74,7 @@ class AislamientoAlumnosWebTest {
 		directorB = UsuariosDePrueba.autenticado(colegioB, 99L, "director.b", "Directora B", false,
 				EnumSet.of(Rol.DIRECTOR));
 		UsuariosDePrueba.iniciarSesion(directorB);
-		estructura.crearAnio(new CrearAnioEscolarRequest(2026, LocalDate.of(2026, 3, 2), LocalDate.of(2026, 12, 18), true));
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioEscolar.crearAnio(estructura, new CrearAnioEscolarRequest(2026, LocalDate.of(2026, 3, 2), LocalDate.of(2026, 12, 18), true));
 		alumnoB = alumnos.registrar(EscenarioEscolar.conApoderadoNuevo("70000001", "Torres", "Lima", "Andrés",
 				LocalDate.of(2015, 2, 1), "40000001", "Lima", "Paz", "Gloria", "999888777", null, null)).alumnoId();
 		// MockMvc reutiliza el contexto del hilo: se limpia antes de cada petición.

@@ -114,6 +114,46 @@
 		</th:block>
 	</section>
 
+	<!--/* Sprint 11, tanda 1c (A1c-1, decisión 221): el contacto de una cuenta de Promotoría o Dirección que lo perdió. */-->
+	<section class="tarjeta" aria-labelledby="titulo-contacto-directivo" th:unless="${ficha.enPreparacion()}">
+		<h2 id="titulo-contacto-directivo">Contacto de una cuenta de Promotoría o Dirección</h2>
+		<p class="secundario">Solo si la persona perdió su celular o su correo (si no, lo confirma ella desde el anterior). Lo
+			propones tú y lo aplica OTRO operador; se avisa al contacto anterior, al correo institucional y al de control.</p>
+		<th:block th:if="${ficha.contactoPorAplicar != null}">
+			<dl class="datos">
+				<div><dt>Contacto actual</dt><dd th:text="${ficha.contactoPorAplicar.anterior}">WhatsApp</dd></div>
+				<div><dt>Contacto nuevo</dt><dd th:text="${ficha.contactoPorAplicar.nuevo}">WhatsApp</dd></div>
+				<div><dt>Motivo</dt><dd th:text="${ficha.contactoPorAplicar.motivo}">Motivo</dd></div>
+				<div><dt>Lo propuso</dt><dd th:text="${ficha.contactoPorAplicar.propuestoPor}">operador</dd></div>
+			</dl>
+			<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/titular/{c}/aplicar(id=${ficha.id},c=${ficha.contactoPorAplicar.id})}">
+				<button type="submit" class="btn btn-secundario">Aplicar el cambio</button>
+			</form>
+			<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/titular/{c}/rechazar(id=${ficha.id},c=${ficha.contactoPorAplicar.id})}">
+				<button type="submit" class="btn btn-texto">Rechazar el cambio</button>
+			</form>
+		</th:block>
+		<form class="formulario" method="post" th:if="${ficha.contactoPorAplicar == null}" th:action="@{/plataforma/colegios/{id}/contacto-directivo(id=${ficha.id})}">
+			<div class="campo">
+				<label for="cuentaDirectiva">Usuario de la cuenta</label>
+				<input type="text" class="input" id="cuentaDirectiva" name="cuenta" required maxlength="60" autocapitalize="none" spellcheck="false">
+			</div>
+			<div class="campo">
+				<label for="telefonoDirectivo">Celular con WhatsApp nuevo</label>
+				<input type="tel" class="input" id="telefonoDirectivo" name="telefonoWhatsapp" inputmode="tel" maxlength="20">
+			</div>
+			<div class="campo">
+				<label for="correoDirectivo">Correo nuevo</label>
+				<input type="email" class="input" id="correoDirectivo" name="correo" maxlength="150">
+			</div>
+			<div class="campo">
+				<label for="motivoDirectivo">Motivo (cómo lo confirmaste con la persona)</label>
+				<textarea class="input" id="motivoDirectivo" name="motivo" required minlength="10" maxlength="500"></textarea>
+			</div>
+			<button type="submit" class="btn btn-secundario">Proponer el cambio</button>
+		</form>
+	</section>
+
 	<section class="tarjeta" aria-labelledby="titulo-correo">
 		<h2 id="titulo-correo">Correo externo de control</h2>
 		<p class="secundario">El contador o un tercero de confianza del contrato: recibe el resumen diario y la huella de la

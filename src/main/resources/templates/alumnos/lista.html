@@ -61,8 +61,11 @@
 				<div th:replace="~{fragments/componentes :: estadoVacio('No encontramos alumnos', 'Revisa lo que escribiste o quita algún filtro.')}"></div>
 			</th:block>
 			<th:block th:unless="${busqueda.conFiltros()}">
-				<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay alumnos',
-					${puedeEditar} ? 'Impórtalos con «Importar desde Excel» o registra el primero con «Registrar alumno».' : 'Dirección o Administración los registran.')}"></div>
+				<!--/* Sprint 11, tanda 1b (sección 3.14): estado vacío que guía. */-->
+				<th:block th:with="v=${@guiaPasos.vacio('alumnos')}">
+					<div th:replace="~{fragments/componentes :: estadoVacioPaso(${v.anio() != null} ? |Todavía no hay alumnos matriculados en ${v.anio()}| : 'Todavía no hay alumnos', null,
+						${v}, 'Importar alumnos del Excel', '/alumnos/importar')}"></div>
+				</th:block>
 			</th:block>
 		</th:block>
 

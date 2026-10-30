@@ -36,6 +36,15 @@ concilia con el banco, deja cada operación en una bitácora que no se puede edi
 - El colegio decide sus pensiones, moras y reglamento conforme a la ley (el proveedor no da asesoría legal ni tributaria).
 - La plataforma **no bloquea evaluaciones ni notas por deuda** (Código de Protección y Defensa del Consumidor e INDECOPI).
 
+### 3.1 La Promotoría aplica directo; la espera y el freno (sprint 11, para revisión del abogado)
+- Las acciones de la Promotoría del colegio se aplican directo, con su firma y aviso inmediato a las demás Promotorías y al
+  correo externo de control; las sensibles piden además un código de un solo uso enviado a su celular registrado.
+- Los cambios que mueven el dinero del colegio (cuenta bancaria, pago en línea, recaudación) y los que dan o quitan la
+  Promotoría esperan **24 horas** antes de aplicarse. Durante la espera los puede **frenar** otra Promotoría del colegio con
+  30 días o más en el rol, la persona afectada o un operador de la plataforma.
+- **El operador de la plataforma interviene en el dinero del colegio solo para frenar, nunca para aplicar.** Lo hace con su
+  sesión firmada y un motivo, y queda en la bitácora del colegio y en la de la plataforma.
+
 ## 4. Datos
 Los datos de las familias, alumnos y personal son **del colegio**. El colegio es el **responsable del tratamiento** y el
 proveedor, el **encargado**: el contrato de encargo de tratamiento (anexo A, `contrato-encargo-tratamiento-datos.md`) es
@@ -69,11 +78,21 @@ parte de estos términos.
 
 ## 8. Fin del contrato
 - Cualquiera de las partes puede terminarlo con [60 días] de aviso por escrito.
-- **Exportación:** en los 30 días siguientes, el proveedor entrega los datos del colegio (un Excel por tabla), cifrados para
-  la clave que indique el colegio.
-- **Conservación:** después, los datos quedan **bloqueados, sin acceso**, durante el plazo de conservación tributaria que
-  indique el contador del colegio (por defecto, [5 años], a confirmar; decisión 132), y luego se eliminan con un **acta** del
-  responsable técnico del proveedor.
+- **Exportación (sprint 11, decisiones 198 y 199; para revisión del abogado):** el día que se aplica la suspensión (y antes
+  del cierre, o a pedido escrito del colegio) el proveedor genera **todos los datos del colegio** en un ZIP cifrado con
+  AES-256: un **CSV por tabla**, las libretas y los comunicados en **PDF**, un manifiesto con la huella SHA-256 de cada
+  archivo y una constancia (`LEEME.pdf`). El enlace llega **solo por correo** al titular; con su DNI recibe un código **solo
+  por WhatsApp**, ve la clave **una vez** y descarga hasta 3 veces en 30 días. El correo externo de control recibe las
+  huellas del ZIP y del manifiesto.
+- **Conservación (decisión 196, AP-11):** con la **autorización expresa** del titular (paso 16 de la Puesta en marcha), las
+  familias siguen consultando y los datos se conservan hasta **12 meses** desde que se aplicó la suspensión; sin ella,
+  hasta **30 días después del cierre**. Una baja: 30 días. Lo tributario (5 años, Código Tributario art. 87 num. 7) lo
+  conserva el colegio con su exportación: el proveedor **no** guarda 5 años.
+- **Retención legal (AP2-10):** ante un pedido escrito de una autoridad o un litigio, el proveedor no suprime mientras dure.
+- **Supresión con acta (decisión 200):** al vencer el plazo, dos operadores aprueban un **acta de supresión**; el DBA borra
+  los datos del colegio y anonimiza (tacha) sus eventos de la bitácora, que es común. El acta se envía al correo
+  institucional y al de control. Los respaldos no se reescriben: vencen como máximo 24 meses después del inicio del plazo
+  (DS 016-2024-JUS, art. 31.2) y, si se restaura uno, la supresión se vuelve a aplicar.
 
 ## 9. Responsabilidad
 - El proveedor responde por los daños que cause por incumplir estos términos, hasta un límite de [lo pagado por el colegio en

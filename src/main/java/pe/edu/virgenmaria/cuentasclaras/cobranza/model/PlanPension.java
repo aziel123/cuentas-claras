@@ -101,6 +101,10 @@ public class PlanPension extends BaseEntity {
 	@Column(name = "aprobado_por", length = 60)
 	private String aprobadoPor;
 
+	/** Sprint 11, tanda 1c (sección 3.16): TRUE si lo resolvió directo la Promotoría que lo hizo (si no, nulo). */
+	@Column
+	private Boolean directa;
+
 	@Column(name = "aprobado_en")
 	private LocalDateTime aprobadoEn;
 
@@ -212,6 +216,24 @@ public class PlanPension extends BaseEntity {
 			throw new AutoaprobacionException("No puedes aprobar un plan que tú creaste o editaste: debe aprobarlo "
 					+ "otra persona de Promotoría o Dirección.");
 		}
+		aprobarEnCurso(aprobador, ahora);
+	}
+
+	/**
+	 * Sprint 11, tanda 1c (sección 3.16): la Promotoría aprueba el plan que ella armó (la aplicación ya comprobó que es
+	 * una Promotoría activa; en MySQL lo exige trg_plan_pension_inmutable).
+	 */
+	public void aprobarDirecta(String promotoria, LocalDateTime ahora) {
+		exigirEnviado("aprobar");
+		directa = Boolean.TRUE;
+		aprobarEnCurso(promotoria, ahora);
+	}
+
+	public boolean isDirecta() {
+		return Boolean.TRUE.equals(directa);
+	}
+
+	private void aprobarEnCurso(String aprobador, LocalDateTime ahora) {
 		estado = EstadoPlan.APROBADO;
 		vigente = Boolean.TRUE;
 		aprobadoPor = aprobador;

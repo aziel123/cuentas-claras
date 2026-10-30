@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: publica('Datos del colegio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido-publico" data-pantalla="exportacion-entrega">
+	<section class="tarjeta tarjeta-publica" aria-labelledby="titulo-entrega">
+		<th:block th:if="${entrega == null}">
+			<h1 id="titulo-entrega">Este enlace ya no sirve</h1>
+			<div th:replace="~{fragments/componentes :: alerta('advertencia', 'El enlace se anuló, venció o se reemplazó por otro. Pide otra entrega al proveedor.')}"></div>
+		</th:block>
+		<th:block th:if="${entrega != null}">
+			<h1 id="titulo-entrega" th:text="|Datos de ${entrega.colegio}|">Datos del colegio</h1>
+			<p class="secundario" th:text="|Disponibles hasta el ${#temporals.format(entrega.venceEn, 'dd/MM/yyyy')}. Te quedan ${entrega.descargasRestantes} descargas.|">Disponibles hasta el 25/11/2026.</p>
+
+			<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+			<th:block th:if="${clave != null}">
+				<div class="alerta alerta-advertencia" role="status" data-clave>
+					<p><strong>La clave del archivo</strong> (se muestra una sola vez; anótala):</p>
+					<p class="num clave-exportacion" th:text="${clave}">AbCd-EfGh-JkLm-NpQr-StUv-WxYz</p>
+				</div>
+			</th:block>
+
+			<form class="formulario" method="post" th:unless="${entrega.codigoEnviado}" th:action="@{/exportacion/{t}/dni(t=${token})}">
+				<div class="campo">
+					<label for="dni">Tu DNI (el del contrato)</label>
+					<input type="text" class="input" id="dni" name="dni" inputmode="numeric" maxlength="12" required autofocus autocomplete="off">
+					<p class="ayuda" th:text="|Te llega un código por WhatsApp. Intentos que quedan: ${entrega.intentosRestantes}.|">Te llega un código por WhatsApp.</p>
+				</div>
+				<div class="acciones acciones-izquierda">
+					<button th:replace="~{fragments/componentes :: boton('Enviarme el código', 'primario')}">Enviarme el código</button>
+				</div>
+			</form>
+
+			<form class="formulario" method="post" th:if="${entrega.codigoEnviado and clave == null and codigo == null}" th:action="@{/exportacion/{t}/codigo(t=${token})}">
+				<div class="campo">
+					<label for="codigo">Código de WhatsApp</label>
+					<input type="text" class="input" id="codigo" name="codigo" inputmode="numeric" maxlength="6" required autofocus autocomplete="one-time-code">
+				</div>
+				<div class="acciones acciones-izquierda">
+					<button th:replace="~{fragments/componentes :: boton('Continuar', 'primario')}">Continuar</button>
+				</div>
+			</form>
+
+			<form method="post" th:if="${codigo != null and entrega.descargasRestantes > 0}" th:action="@{/exportacion/{t}/descargar(t=${token})}">
+				<input type="hidden" name="codigo" th:value="${codigo}">
+				<div class="acciones acciones-izquierda">
+					<button th:replace="~{fragments/componentes :: boton('Descargar el archivo', 'primario')}">Descargar el archivo</button>
+				</div>
+			</form>
+
+			<details class="ver-detalle">
+				<summary>Ver detalle</summary>
+				<p class="secundario">Es un ZIP cifrado: ábrelo con 7-Zip o con el Explorador de Windows 11 y la clave. Adentro, LEEME.pdf explica cómo comprobar que no cambió con la huella que recibió el correo de control.</p>
+			</details>
+		</th:block>
+	</section>
+</main>
+</body>
+</html>

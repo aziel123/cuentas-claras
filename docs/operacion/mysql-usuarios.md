@@ -423,6 +423,15 @@ La aplicación **no migra** en producción (`spring.flyway.enabled: false`) y **
 - **Tablas financieras** (pago, cuota, comprobante, cierre de caja): INSERT y UPDATE (para anular con estado), **nunca DELETE**.
 - El CI (job `mysql`) corre las migraciones y las pruebas con estos mismos permisos: si falta un GRANT, falla.
 
+## La Promotoría aplica directo (sprint 11, tanda 1c)
+- `configuracion_bd` lleva `('espera_directa_horas', '24')` (V40): la espera de los conectores que mueven dinero y de
+  dar o quitar Promotoría. **El arranque de prod exige 24.** Solo las pruebas de MySQL la bajan como DBA (y la restauran);
+  nunca se cambia `aplica_desde`: ni `cc_app` ni `cc_sistema` tienen GRANT sobre esa columna ni sobre `frenado_en` (1143) y
+  el trigger rechaza cualquier cambio, también del DBA (1644).
+- Las directas de un paso se marcan con `directa = TRUE` en `solicitud_cambio`, `conector_colegio`, `plan_pension`,
+  `lote_saldo_inicial`, `descuento` y `anulacion_pago`; los triggers exigen que sea una Promotoría activa (y, en lo
+  sensible, su código del mensaje `CODIGO_PROMOTORIA`, comprobado con `cc_codigo_promotoria`).
+
 ## Pasarela simulada y perfil `piloto` (sprint 4)
 - La tabla `configuracion_bd` (V13) la escribe **solo el DBA**; `cc_app` solo la lee. En **producción no existe** la fila
   `pasarela_simulada`: el trigger `trg_orden_pago_nace` rechaza toda orden de la pasarela simulada y la aplicación en

@@ -96,7 +96,7 @@ class PensionesWebTest {
 		MvcResult creado = mvc.perform(planValido(post("/pensiones/planes/nuevo"), "450.00")
 						.with(UsuariosDePrueba.como(ADMINISTRACION)))
 				.andExpect(status().is3xxRedirection())
-				.andExpect(flash().attribute("exito", containsString("propusiste el plan")))
+				.andExpect(flash().attribute("exito", containsString("Guardaste el borrador")))
 				.andReturn();
 		String ruta = creado.getResponse().getRedirectedUrl();
 		assertThat(jdbc.queryForObject("SELECT vencimientos_pension FROM plan_pension", String.class))
@@ -111,7 +111,7 @@ class PensionesWebTest {
 		mvc.perform(get(ruta).with(UsuariosDePrueba.como(DIRECCION)))
 				.andExpect(content().string(not(containsString("Aprobar plan"))));
 		mvc.perform(post(ruta + "/enviar").with(UsuariosDePrueba.como(ADMINISTRACION)).with(csrf()))
-				.andExpect(flash().attribute("exito", containsString("enviaste el plan")));
+				.andExpect(flash().attribute("exito", containsString("Enviaste el plan")));
 		mvc.perform(get(ruta).with(UsuariosDePrueba.como(DIRECCION))).andExpect(status().isOk())
 				.andExpect(content().string(containsString("Aprobar plan")))
 				.andExpect(content().string(containsString("name=\"version\"")))

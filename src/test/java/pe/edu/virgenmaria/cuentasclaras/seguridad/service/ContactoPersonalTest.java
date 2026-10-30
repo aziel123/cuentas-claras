@@ -78,6 +78,9 @@ class ContactoPersonalTest {
 	private ServicioPlanesPension planes;
 
 	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comun.cripto.DerivadorSecreto derivador;
+
+	@Autowired
 	private JdbcTemplate jdbc;
 
 	private Usuario lucia;
@@ -167,6 +170,12 @@ class ContactoPersonalTest {
 				.isInstanceOf(AutoaprobacionSolicitudException.class);
 		assertThatThrownBy(() -> aprueba(promotora2, porOtra)).as("quien la pidió")
 				.isInstanceOf(AutoaprobacionSolicitudException.class);
+		// Sprint 11, tanda 1c (A1c-1): la dueña de la cuenta directiva lo confirma desde su contacto anterior.
+		UsuariosDePrueba.iniciarSesion(promotora);
+		var pedidoContacto = servicio.pedirCodigoDelContactoAnterior(porOtra);
+		servicio.confirmarDesdeContactoAnterior(porOtra, pe.edu.virgenmaria.cuentasclaras.comun.prueba.CodigosDePrueba
+				.escrito(jdbc, derivador, 1L, pedidoContacto));
+		SecurityContextHolder.clearContext();
 		aprueba(directora, porOtra);
 		assertThat(jdbc.queryForObject("SELECT telefono_whatsapp FROM usuario WHERE id = ?", String.class,
 				promotora.getId())).isEqualTo("+51987333444");

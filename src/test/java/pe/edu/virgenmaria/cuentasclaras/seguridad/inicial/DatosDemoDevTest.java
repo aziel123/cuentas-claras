@@ -108,9 +108,10 @@ class DatosDemoDevTest {
 	}
 
 	@Test
-	void seNiegaSiLaBaseNoEsH2EnMemoria() {
+	void seNiegaSiLaBaseNoEsH2Local() {
+		// La H2 en archivo (demo persistente, perfil dev,persistente) sí se acepta: ver BaseH2LocalTest.
 		assertThat(datosDemo("jdbc:mysql://localhost:3306/cuentasclaras", CLAVE_DEMO).crearSiCorresponde()).isFalse();
-		assertThat(datosDemo("jdbc:h2:file:./datos/cc", CLAVE_DEMO).crearSiCorresponde()).isFalse();
+		assertThat(datosDemo("jdbc:h2:tcp://localhost/~/cc", CLAVE_DEMO).crearSiCorresponde()).isFalse();
 		assertThat(datosDemo("", CLAVE_DEMO).crearSiCorresponde()).isFalse();
 
 		assertThat(ContextoColegio.comoSistema(() -> usuarios.count())).isZero();

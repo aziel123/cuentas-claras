@@ -50,10 +50,19 @@ public class AlertasConectores implements AlertasRevision {
 	public List<AlertaRevision> alertas() {
 		LocalDateTime desde = LocalDateTime.now(reloj).minusDays(propiedades.avisoCambioDias());
 		return conectores.findByResueltoEnGreaterThanEqualAndEstadoInOrderByResueltoEnDesc(desde,
-				List.of(EstadoConector.VIGENTE, EstadoConector.REEMPLAZADO)).stream().map(this::alerta).toList();
+				List.of(EstadoConector.VIGENTE, EstadoConector.REEMPLAZADO, EstadoConector.EN_ESPERA)).stream()
+				.map(this::alerta).toList();
 	}
 
 	private AlertaRevision alerta(ConectorColegio c) {
+		if (c.getEstado() == EstadoConector.EN_ESPERA) {
+			// Sprint 11, tanda 1c (decisión 218): la cuenta bancaria, la pasarela o la recaudación en espera.
+			return new AlertaRevision(Gravedad.CRITICA, MODULO, "Cambio de " + c.getTipo().descripcion() + " ("
+					+ c.getProveedor().etiqueta() + ") en espera: lo propuso y lo aprobó directo " + c.getPropuestoPor()
+					+ ". Entra en vigencia el " + FECHA.format(EsperaConectores.venceEspera(c)) + " si nadie lo frena. Si no "
+					+ "lo reconoces, frénalo hoy desde Conectores y avisa al proveedor.", "/conectores",
+					new Aviso(TipoAviso.CONECTOR_CAMBIADO, "ESP:" + c.getId()));
+		}
 		return new AlertaRevision(Gravedad.CRITICA, MODULO, "Cambió " + c.getTipo().descripcion() + " ("
 				+ c.getProveedor().etiqueta() + ") el " + FECHA.format(c.getResueltoEn()) + ": lo propuso "
 				+ c.getPropuestoPor() + " y lo aprobó " + c.getResueltoPor() + ". Si no lo reconoces, avisa hoy al "

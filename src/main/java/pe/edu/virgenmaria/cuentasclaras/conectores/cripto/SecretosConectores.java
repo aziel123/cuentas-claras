@@ -88,6 +88,31 @@ public class SecretosConectores {
 		}
 	}
 
+	/**
+	 * Sprint 11, tanda 2 (sección 3.9): cifra la clave de una exportación con la clave vigente (AAD
+	 * {@code exportacion|{colegio}|{id}}). Se guarda hasta que el titular la ve.
+	 */
+	public byte[] cifrarClaveExportacion(String claveZip, long colegioId, long exportacionId) {
+		if (clave == null) {
+			throw new ReglaNegocioException("Falta la clave maestra (CC_CLAVE_CONECTORES): sin ella no se guarda la clave "
+					+ "de la exportación.");
+		}
+		return CifradoAesGcm.cifrar(clave, claveZip.getBytes(StandardCharsets.UTF_8),
+				new CifradoAesGcm.Aad(colegioId, "exportacion", Long.toString(exportacionId)));
+	}
+
+	/** Descifra la clave de una exportación (una vez: después la columna queda en NULL). */
+	public String descifrarClaveExportacion(byte[] cifrada, int versionClave, long colegioId, long exportacionId) {
+		byte[] texto = CifradoAesGcm.descifrar(llaveDe(versionClave), cifrada,
+				new CifradoAesGcm.Aad(colegioId, "exportacion", Long.toString(exportacionId)));
+		try {
+			return new String(texto, StandardCharsets.UTF_8);
+		}
+		finally {
+			Arrays.fill(texto, (byte) 0);
+		}
+	}
+
 	/** Los secretos de un conector (nombre → valor). Solo desde el paquete {@code conectores}. */
 	public Map<String, String> descifrar(ConectorColegio conector) {
 		if (!conector.conSecreto()) {

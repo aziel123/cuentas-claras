@@ -34,11 +34,14 @@ public class ConsultaConectores {
 
 	private final ConectoresColegio colegio;
 
+	private final pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma segundaFirma;
+
 	public ConsultaConectores(ConectorColegioRepository conectores, SecretosConectores secretos,
-			ConectoresColegio colegio) {
+			ConectoresColegio colegio, pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma segundaFirma) {
 		this.conectores = conectores;
 		this.secretos = secretos;
 		this.colegio = colegio;
+		this.segundaFirma = segundaFirma;
 	}
 
 	public VistaConectores vista() {
@@ -49,10 +52,12 @@ public class ConsultaConectores {
 			List<ConectorColegio> delTipo = todos.stream().filter(c -> c.getTipo() == tipo).toList();
 			ConectorVista vigente = delTipo.stream().filter(c -> c.getEstado() == EstadoConector.VIGENTE).findFirst()
 					.map(c -> vista(c, false)).orElse(null);
-			List<ConectorVista> propuestos = delTipo.stream().filter(c -> c.getEstado() == EstadoConector.PROPUESTO)
-					.map(c -> vista(c, puedeProponer)).toList();
+			// Sprint 11, tanda 1c (decisión 218): el que espera 24 horas se muestra junto a los por aprobar.
+			List<ConectorVista> propuestos = delTipo.stream().filter(c -> c.getEstado() == EstadoConector.PROPUESTO
+					|| c.getEstado() == EstadoConector.EN_ESPERA).map(c -> vista(c, puedeProponer)).toList();
 			List<ConectorVista> historial = delTipo.stream().filter(c -> c.getEstado() == EstadoConector.REEMPLAZADO
-					|| c.getEstado() == EstadoConector.RECHAZADO).limit(10).map(c -> vista(c, false)).toList();
+					|| c.getEstado() == EstadoConector.RECHAZADO || c.getEstado() == EstadoConector.FRENADO).limit(10)
+					.map(c -> vista(c, false)).toList();
 			secciones.add(new VistaConectores.SeccionTipo(tipo.name(), tipo.etiqueta(), tipo.descripcion(),
 					tipo.mueveDinero(), tipo.proveedores().stream().map(ProveedorConector::name).toList(), vigente,
 					propuestos, historial, sinConector(tipo)));
@@ -77,13 +82,23 @@ public class ConsultaConectores {
 		};
 	}
 
-	private static ConectorVista vista(ConectorColegio c, boolean puedeProbar) {
+	private ConectorVista vista(ConectorColegio c, boolean puedeProbar) {
 		ConfiguracionConector configuracion = ConfiguracionConector.deJson(c.getTipo(), c.getConfiguracion());
+		boolean enEspera = c.getEstado() == EstadoConector.EN_ESPERA;
+		String quien = usuario();
+		boolean otraPromotoriaAntigua = enEspera && quien != null && !quien.equals(c.getPropuestoPor())
+				&& tieneRol("ROLE_PROMOTOR") && segundaFirma.promotoriaAntigua(quien);
 		return new ConectorVista(c.getId(), c.getTipo().name(), c.getTipo().etiqueta(), c.getProveedor().etiqueta(),
 				c.getModo().etiqueta(), configuracion.resumen(), c.getSecretoPista(), c.getEstado().name(),
 				c.getEstado().etiqueta(), c.getEstado().variante(), c.getPropuestoPor(), c.getCreadoEn(), c.getResueltoPor(),
 				c.getResueltoEn(), c.getPruebaOk(), c.getPruebaDetalle(), c.getSolicitudId(),
-				puedeProbar && c.getEstado() == EstadoConector.PROPUESTO);
+				puedeProbar && c.getEstado() == EstadoConector.PROPUESTO, enEspera,
+				enEspera ? EsperaConectores.venceEspera(c) : null, otraPromotoriaAntigua, otraPromotoriaAntigua);
+	}
+
+	private static String usuario() {
+		Authentication autenticacion = SecurityContextHolder.getContext().getAuthentication();
+		return autenticacion == null ? null : autenticacion.getName();
 	}
 
 	private static boolean tieneRol(String rol) {

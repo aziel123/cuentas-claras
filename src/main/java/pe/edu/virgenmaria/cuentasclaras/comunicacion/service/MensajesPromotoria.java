@@ -20,7 +20,7 @@ import pe.edu.virgenmaria.cuentasclaras.comunicacion.repository.MensajeRepositor
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -42,7 +42,7 @@ import java.util.Set;
  *       dónde recibirlo, la excepción revierte también la foto: sin mensaje no hay foto.</li>
  *   <li>{@link AvisosPromotoriaListos}: cada alerta difundible UNA sola vez a cada persona de Promotoría activa (y de
  *       Dirección, la anulación de pago por aprobar), nunca a quien la pidió ni a la cajera del pago (ni a quienes
- *       prepararon sus cuentas: {@link ControlParticipantes}). Texto FIJO del tipo y un monto, una hora o la fecha: nunca
+ *       prepararon sus cuentas: {@link SegundaFirma}). Texto FIJO del tipo y un monto, una hora o la fecha: nunca
  *       la explicación de la cajera ni un nombre (hallazgo 2). Tope diario por persona SOLO para las ATENCIÓN (S6-B2,
  *       QA-S6-7: las CRÍTICAS no cuentan ni se retienen); lo retenido en una pasada sale en un solo «hoy hay N alertas
  *       más» de ESA pasada. Domingos y feriados no sale nada (sale el siguiente día de mensajes a las 07:00), salvo un
@@ -65,7 +65,7 @@ public class MensajesPromotoria {
 
 	private final ConfiguracionColegioRepository configuracion;
 
-	private final ControlParticipantes participantes;
+	private final SegundaFirma segundaFirma;
 
 	private final CalendarioHabil calendario;
 
@@ -82,14 +82,14 @@ public class MensajesPromotoria {
 	private static final DateTimeFormatter PASADA = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss");
 
 	public MensajesPromotoria(CreadorMensajes creador, UsuarioRepository usuarios, MensajeRepository mensajes,
-			ConfiguracionColegioRepository configuracion, ControlParticipantes participantes, CalendarioHabil calendario,
+			ConfiguracionColegioRepository configuracion, SegundaFirma segundaFirma, CalendarioHabil calendario,
 			AuditoriaService auditoria, @Value("${cuentasclaras.panel.avisos-tope-diario:10}") int topeDiario,
 			Clock reloj) {
 		this.creador = creador;
 		this.usuarios = usuarios;
 		this.mensajes = mensajes;
 		this.configuracion = configuracion;
-		this.participantes = participantes;
+		this.segundaFirma = segundaFirma;
 		this.calendario = calendario;
 		this.auditoria = auditoria;
 		this.topeDiario = topeDiario;
@@ -133,7 +133,7 @@ public class MensajesPromotoria {
 		List<String> avisados = new ArrayList<>();
 		for (Aviso aviso : evento.avisos()) {
 			String claveBase = "ALERTA:" + aviso.tipo().name() + ":" + aviso.referencia();
-			Set<String> excluidos = aviso.excluidos().isEmpty() ? Set.of() : participantes.ampliar(aviso.excluidos());
+			Set<String> excluidos = aviso.excluidos().isEmpty() ? Set.of() : segundaFirma.participantes(aviso.excluidos());
 			int aEste = 0;
 			for (Usuario destinatario : destinatarios(aviso.tipo(), promotores, directores)) {
 				if (excluidos.contains(destinatario.getNombreUsuario())

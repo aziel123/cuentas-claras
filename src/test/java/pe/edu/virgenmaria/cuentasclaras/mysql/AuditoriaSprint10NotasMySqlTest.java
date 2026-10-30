@@ -208,7 +208,7 @@ class AuditoriaSprint10NotasMySqlTest {
 		LocalDate hoy = hoy();
 		long anio = e.anioId();
 		// El año del alta (2027, en curso) pasa a cubrir hoy (cc_app tiene UPDATE de anio_escolar; sin trigger).
-		jdbc.update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(100),
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.DbaMySql.exigir().update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(100),
 				hoy.plusDays(100), anio);
 		long seccion = como(e.equipo().administracion(), () -> estructura.crearSeccion(anio,
 				new CrearSeccionRequest(Grado.PRIMARIA_5, "N" + sufijo.substring(sufijo.length() - 4))));
@@ -271,9 +271,9 @@ class AuditoriaSprint10NotasMySqlTest {
 		guardar(e.docente(), seccion, "MAT", p2, List.of(mateo, lucas), "A", null);
 		// C1: el año siguiente PLANIFICADO (que también cubre hoy), una sección, Ana con Matemática y la matrícula RESERVADA
 		// de Mateo (la deja nacer así trg_matricula_nace: hay un año en curso).
-		long siguiente = como(e.equipo().administracion(), () -> estructura.crearAnio(new CrearAnioEscolarRequest(2028,
+		long siguiente = como(e.equipo().directora(), () -> estructura.crearAnio(new CrearAnioEscolarRequest(2028,
 				LocalDate.of(2028, 1, 2), LocalDate.of(2028, 12, 30), false)));
-		jdbc.update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(100),
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.DbaMySql.exigir().update("UPDATE anio_escolar SET inicio_clases = ?, fin_clases = ? WHERE id = ?", hoy.minusDays(100),
 				hoy.plusDays(100), siguiente);
 		long seccionSiguiente = como(e.equipo().administracion(), () -> estructura.crearSeccion(siguiente,
 				new CrearSeccionRequest(Grado.PRIMARIA_5, "R" + sufijo.substring(sufijo.length() - 4))));

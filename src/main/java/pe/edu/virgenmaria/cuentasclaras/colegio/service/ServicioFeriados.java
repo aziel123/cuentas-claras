@@ -63,8 +63,13 @@ public class ServicioFeriados {
 	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
 	private final FirmaSesion firmaSesion;
 
+	/** Sprint 11, tanda 1c (sección 3.16): la Promotoría propone y aprueba en un paso. */
+	private final pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma segundaFirma;
+
 	public ServicioFeriados(FeriadoRepository feriados, CalendarioHabil calendario, AuditoriaService auditoria,
-			Clock reloj, UsuarioRepository usuarios, ApplicationEventPublisher eventos, FirmaSesion firmaSesion) {
+			Clock reloj, UsuarioRepository usuarios, ApplicationEventPublisher eventos, FirmaSesion firmaSesion,
+			pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma segundaFirma) {
+		this.segundaFirma = segundaFirma;
 		this.firmaSesion = firmaSesion;
 		this.usuarios = usuarios;
 		this.eventos = eventos;
@@ -84,7 +89,8 @@ public class ServicioFeriados {
 						f.isVigente() && f.getFecha().isAfter(hoy), f.getCreadoPor(),
 						f.isVigente() ? null : "Anulado por " + f.getAnuladoPor() + ": " + f.getMotivoAnulacion(),
 						f.isVigente() && f.isPendiente(), f.isVigente() && f.isPendiente() && f.getFecha().isAfter(hoy)
-								&& !f.getCreadoPor().equals(usuarioOVacio()), f.getAprobadoPor()))
+								&& (!f.getCreadoPor().equals(usuarioOVacio()) || segundaFirma.aplicaDirecto(usuarioOVacio())),
+						f.getAprobadoPor()))
 				.toList();
 		return new FeriadosVista(anio, nacionales, extras, puedeEditar());
 	}
@@ -128,6 +134,10 @@ public class ServicioFeriados {
 						+ "como hábil hasta que lo apruebe otra persona de Promotoría o Dirección. Se avisó por mensaje a "
 						+ "Promotoría.");
 		eventos.publishEvent(new FeriadoPropuesto(feriado.getId(), fecha, descripcion, quien));
+		// Sprint 11, tanda 1c (sección 3.16): la Promotoría lo aprueba en el mismo paso (con su firma y los avisos).
+		if (segundaFirma.aplicaDirecto(quien)) {
+			aprobarEnCurso(feriado, quien);
+		}
 		return feriado.getId();
 	}
 
@@ -147,17 +157,25 @@ public class ServicioFeriados {
 			throw new ReglaNegocioException("Ese día ya llegó: no se aprueba un día no laborable del pasado.");
 		}
 		String quien = usuario();
-		if (quien.equals(feriado.getCreadoPor())) {
+		boolean directa = segundaFirma.aplicaDirecto(quien);
+		if (quien.equals(feriado.getCreadoPor()) && !directa) {
 			throw new ReglaNegocioException("No puedes aprobar un día que tú propusiste: debe aprobarlo otra persona.");
 		}
 		Set<Rol> dePropone = usuarios.findByNombreUsuario(feriado.getCreadoPor()).map(u -> (Set<Rol>) u.getRoles())
 				.orElse(Set.of());
 		Rol otro = dePropone.contains(Rol.PROMOTOR) && !dePropone.contains(Rol.DIRECTOR) ? Rol.DIRECTOR
 				: dePropone.contains(Rol.DIRECTOR) && !dePropone.contains(Rol.PROMOTOR) ? Rol.PROMOTOR : null;
-		if (otro != null && !tieneRol(otro)) {
+		// Tanda 1c: la Promotoría aprueba también lo que propuso (directo) y lo de cualquiera.
+		if (!directa && otro != null && !tieneRol(otro)) {
 			throw new ReglaNegocioException("Lo propuso " + (otro == Rol.DIRECTOR ? "Promotoría" : "Dirección")
 					+ ": debe aprobarlo " + (otro == Rol.DIRECTOR ? "Dirección." : "Promotoría."));
 		}
+		aprobarEnCurso(feriado, quien);
+	}
+
+	/** La aprobación con la firma de quien aprueba; si es la Promotoría que lo propuso, es una directa (con sus avisos). */
+	private void aprobarEnCurso(Feriado feriado, String quien) {
+		Long id = feriado.getId();
 		exigirTopes(feriado.getFecha(), feriado.getId());
 		firmaSesion.firmar(ClaveFirma.feriado(feriado.getId()));
 		feriado.aprobar(quien, LocalDateTime.now(reloj));
@@ -167,6 +185,16 @@ public class ServicioFeriados {
 				Calendario.formatear(feriado.getFecha()) + " · " + feriado.getDescripcion() + ". Propuesto por "
 						+ feriado.getCreadoPor() + ", aprobado por " + quien + ". Ya no cuenta como hábil en las alertas de "
 						+ "depósito, abono y verificación, ni salen recordatorios ese día.");
+		if (quien.equals(feriado.getCreadoPor())) {
+			String que = "Día no laborable " + Calendario.formatear(feriado.getFecha()) + " (" + feriado.getDescripcion() + ")";
+			auditoria.registrar(AccionAuditoria.ACCION_DIRECTA_PROMOTORIA, "feriado", id.toString(), null, que,
+					"Lo propuso y lo aprobó directo " + quien + ", con su firma. Se avisó a todas las Promotorías y al correo "
+							+ "de control.");
+			eventos.publishEvent(new pe.edu.virgenmaria.cuentasclaras.colegio.service.AvisoPlataforma(ContextoColegio.actual(),
+					pe.edu.virgenmaria.cuentasclaras.colegio.service.AvisoPlataforma.Tipo.ACCION_DIRECTA,
+					java.util.List.of(usuarios.findByNombreUsuario(quien).map(u -> u.getNombreCompleto()).orElse(quien), que),
+					"feriado", id, null, null, false, true, true));
+		}
 	}
 
 	/**

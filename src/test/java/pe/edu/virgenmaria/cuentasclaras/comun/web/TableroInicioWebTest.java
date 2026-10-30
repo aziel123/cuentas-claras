@@ -33,10 +33,45 @@ class TableroInicioWebTest {
 	@Autowired
 	private MockMvc mvc;
 
+	@Autowired
+	private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.colegio.service.ServicioEstructura estructura;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.alumnos.service.ServicioAlumnos alumnos;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.cobranza.service.ServicioPlanesPension planes;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.caja.service.ServicioCobro cobro;
+
 	@Test
 	@ComoUsuario(roles = Rol.PROMOTOR, nombreCompleto = "Rosa Huamán")
 	void promotoriaVeLasCifrasYLosGraficosConSuTablaDeDatos() throws Exception {
-		String html = mvc.perform(get("/inicio"))
+		// Sprint 11, tanda 1b (F-D6): sin pagos, el gráfico de 30 días muestra su estado vacío; con un pago, el SVG.
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.LimpiezaBaseDatos.limpiar(jdbc);
+		mvc.perform(get("/inicio").with(pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba.como(Rol.PROMOTOR)))
+				.andExpect(content().string(containsString("Todavía no hay pagos en estos 30 días")))
+				.andExpect(content().string(org.hamcrest.Matchers.not(containsString("<svg class=\"grafico-svg barras-v\""))));
+		var f = pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.preparar(estructura, alumnos, planes, jdbc);
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCobranza.como(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.CAJA);
+		cobro.cobrar(pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.efectivo(f.quispe(), java.util.List.of(
+				pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioCaja.cuota(jdbc, f.mateo(), "PEN-2027-03")), "450.00",
+				"450.00"));
+		try {
+			promotoriaVeElTablero();
+		}
+		finally {
+			org.springframework.security.core.context.SecurityContextHolder.clearContext();
+			pe.edu.virgenmaria.cuentasclaras.comun.prueba.LimpiezaBaseDatos.limpiar(jdbc);
+		}
+	}
+
+	private void promotoriaVeElTablero() throws Exception {
+		String html = mvc.perform(get("/inicio").with(pe.edu.virgenmaria.cuentasclaras.comun.prueba.UsuariosDePrueba.como(Rol.PROMOTOR)))
 				.andExpect(status().isOk())
 				.andExpect(model().attribute("tablero", org.hamcrest.Matchers.instanceOf(TableroPromotoria.Tablero.class)))
 				.andExpect(content().string(containsString("data-tablero-kpis")))

@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.cobranza.inicial;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.BaseH2Local;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -104,7 +105,7 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 
 	/** @return {@code true} si creó los datos */
 	boolean crearSiCorresponde() {
-		if (!habilitado || urlBaseDatos == null || !urlBaseDatos.startsWith("jdbc:h2:mem:")) {
+		if (!habilitado || !BaseH2Local.es(urlBaseDatos)) {
 			return false;
 		}
 		if (!personaDemo.existen(DatosDemoDev.COLEGIO_PRINCIPAL, "administracion", "director")) {
@@ -129,9 +130,10 @@ public class DatosDemoPensionesDev implements ApplicationRunner {
 
 	private void crearPlanes(AnioOpcion anio) {
 		for (Nivel nivel : Nivel.values()) {
-			ConfiguracionPlan porDefecto = ConfiguracionPlan.porDefecto(anio.anio(), MATRICULA, PENSIONES.get(nivel));
-			PlanRequest solicitud = new PlanRequest(porDefecto.montoMatricula(), porDefecto.vencimientoMatricula(),
-					porDefecto.montoPension(), porDefecto.vencimientos(), anio.anio() == 2026 ? COBRO_DESDE_2026 : null);
+			// Sprint 11, tanda 1b (F-D2): los vencimientos según las fechas de clases del año (el servicio).
+			PlanRequest porDefecto = como("administracion", () -> planes.propuestaPorDefecto(anio.id(), nivel));
+			PlanRequest solicitud = new PlanRequest(MATRICULA, porDefecto.vencimientoMatricula(),
+					PENSIONES.get(nivel), porDefecto.vencimientos(), anio.anio() == 2026 ? COBRO_DESDE_2026 : null);
 			Long id = como("administracion", () -> {
 				Long creado = planes.crearBorrador(anio.id(), nivel, solicitud);
 				planes.enviar(creado);

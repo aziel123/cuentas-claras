@@ -36,7 +36,8 @@
 					<p class="ayuda">Después de esta fecha la propuesta vence y no se genera deuda.</p>
 				</div>
 				<div class="acciones acciones-izquierda">
-					<button th:replace="~{fragments/componentes :: boton('Abrir la renovación', 'primario')}"></button>
+					<th:block th:replace="~{fragments/componentes :: botonBloqueable('Abrir la renovación', 'primario',
+						${colegioEnPreparacion}, 'motivo-renovacion', 'Tu colegio está en preparación: todavía no se abre la renovación.')}"></th:block>
 				</div>
 			</form>
 		</section>

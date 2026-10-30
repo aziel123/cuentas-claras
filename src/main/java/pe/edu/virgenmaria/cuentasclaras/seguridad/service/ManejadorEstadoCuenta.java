@@ -47,8 +47,12 @@ public class ManejadorEstadoCuenta implements ManejadorSolicitud {
 
 	private final Clock reloj;
 
+	private final pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraPromotoriaRepository primeras;
+
 	public ManejadorEstadoCuenta(UsuarioRepository usuarios, AuditoriaService auditoria, SesionesUsuario sesionesHttp,
-			SesionesFirmadas sesiones, Clock reloj) {
+			SesionesFirmadas sesiones, Clock reloj,
+			pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraPromotoriaRepository primeras) {
+		this.primeras = primeras;
 		this.usuarios = usuarios;
 		this.auditoria = auditoria;
 		this.sesionesHttp = sesionesHttp;
@@ -87,6 +91,11 @@ public class ManejadorEstadoCuenta implements ManejadorSolicitud {
 		if (usuario.isActivo() == activar) {
 			throw new ReglaNegocioException("La cuenta de " + usuario.getNombreCompleto() + " ya está "
 					+ (activar ? "activa" : "desactivada") + ": rechaza esta solicitud.");
+		}
+		// Sprint 11, tanda 1 (sección 3.12): la cuenta del titular no se desactiva con la aplicación (también la base).
+		if (!activar && primeras.existsByUsuarioId(usuario.getId())) {
+			throw new ReglaNegocioException("Es la cuenta del titular del contrato: no se desactiva. Cambiar de titular se hace "
+					+ "con el proveedor, con una carta del representante legal.");
 		}
 		if (!activar && usuario.getRoles().contains(Rol.PROMOTOR)
 				&& usuarios.bloquearActivosConRol(Rol.PROMOTOR).size() <= 1) {

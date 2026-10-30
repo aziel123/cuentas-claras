@@ -1,6 +1,7 @@
 package pe.edu.virgenmaria.cuentasclaras.colegio.web;
 
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -29,7 +30,8 @@ import java.util.List;
 
 /**
  * Años escolares y secciones. Sin lógica: valida el formulario, delega en {@link ServicioEstructura} y muestra el
- * resultado. Los permisos de escritura los exige el servicio (Dirección y Administración).
+ * resultado. Los permisos de escritura los exige el servicio (las secciones, Dirección y Administración; el año escolar,
+ * Promotoría o Dirección con su firma: sprint 11, tanda 1).
  */
 @Controller
 @RequestMapping("/colegio")
@@ -106,6 +108,22 @@ public class EstructuraController {
 		return "redirect:/colegio/anios/" + id;
 	}
 
+	/** Sprint 11, tanda 1 (AP-9): Promotoría o Dirección cambia las fechas de clases, con su firma. */
+	@PostMapping("/anios/{id:\\d+}/fechas")
+	public String cambiarFechas(@PathVariable Long id,
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicioClases,
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate finClases,
+			@AuthenticationPrincipal UsuarioAutenticado sesion, RedirectAttributes avisos) {
+		try {
+			servicio.cambiarFechas(id, inicioClases, finClases, sesion.getUsername());
+			avisos.addFlashAttribute("exito", "Listo: cambiaste las fechas de clases, con tu firma. Quedó en la bitácora.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/colegio/anios/" + id;
+	}
+
 	@PostMapping("/secciones/{id:\\d+}/desactivar")
 	public String desactivarSeccion(@PathVariable Long id, @RequestParam Long anioId, @Valid MotivoRequest solicitud,
 			BindingResult validacion, RedirectAttributes avisos) {
@@ -129,6 +147,7 @@ public class EstructuraController {
 		model.addAttribute("anios", anios);
 		model.addAttribute("hayEnCurso", anios.stream().anyMatch(AnioEscolarVista::enCurso));
 		model.addAttribute("puedeEditar", Formularios.puedeEditar(sesion));
+		model.addAttribute("puedeCrearAnio", Formularios.puedeCrearAnio(sesion));
 		return anios;
 	}
 
@@ -137,6 +156,7 @@ public class EstructuraController {
 		model.addAttribute("grados", Grado.values());
 		model.addAttribute("niveles", Nivel.values());
 		model.addAttribute("puedeEditar", Formularios.puedeEditar(sesion));
+		model.addAttribute("puedeCrearAnio", Formularios.puedeCrearAnio(sesion));
 	}
 
 	private int siguienteAnio(List<AnioEscolarVista> anios) {

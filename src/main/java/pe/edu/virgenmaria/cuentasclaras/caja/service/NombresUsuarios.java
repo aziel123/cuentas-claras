@@ -40,6 +40,9 @@ public class NombresUsuarios {
 					case ASISTENCIA -> "Avisos de asistencia (automático)";
 					case COMUNICADOS -> "Avisos de comunicados (automático)";
 					case LIBRETAS -> "Libretas (automático)";
+					case CONECTORES -> "Conectores en espera (automático)";
+					case ROLES -> "Cambios de roles en espera (automático)";
+					case EXPORTACION -> "Exportación de los datos (automático)";
 				};
 			}
 		}

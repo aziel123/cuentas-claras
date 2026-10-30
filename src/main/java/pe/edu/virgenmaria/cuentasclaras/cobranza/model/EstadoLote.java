@@ -3,7 +3,7 @@ package pe.edu.virgenmaria.cuentasclaras.cobranza.model;
 /** BORRADOR → ENVIADO → CONFIRMADO, o devuelto a BORRADOR, o DESCARTADO. */
 public enum EstadoLote {
 
-	BORRADOR("En preparación", "neutro"),
+	BORRADOR("Borrador", "neutro"),
 	ENVIADO("Enviado, por confirmar", "alerta"),
 	CONFIRMADO("Confirmado", "exito"),
 	DESCARTADO("Descartado", "neutro");

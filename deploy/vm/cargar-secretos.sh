@@ -48,6 +48,9 @@ trap 'rm -f "$tmp" "$tmp.r"' EXIT INT TERM
 	linea AUDITORIA_CLAVE_HMAC "$(secreto auditoria-hmac)"
 	linea CC_CLAVE_CONECTORES "$(secreto clave-conectores)"
 	linea CC_CLAVE_CONECTORES_VERSION "${CC_CLAVE_CONECTORES_VERSION:-1}"
+	# Correcciones del sprint 11 (A1 y B3): las rutas DENTRO del contenedor (el compose monta /var/lib/cuentasclaras).
+	linea CC_DIR_EXPORTACIONES "${CC_DIR_EXPORTACIONES:-/var/lib/cuentasclaras/exportaciones}"
+	linea CC_DIR_ACTAS "${CC_DIR_ACTAS:-/var/lib/cuentasclaras/actas}"
 	linea CC_MARCA_NOMBRE "${CC_MARCA_NOMBRE:?Falta CC_MARCA_NOMBRE en $instalacion}"
 	linea CC_MARCA_EMPRESA "${CC_MARCA_EMPRESA:-}"
 	linea CC_MARCA_RUC "${CC_MARCA_RUC:-}"

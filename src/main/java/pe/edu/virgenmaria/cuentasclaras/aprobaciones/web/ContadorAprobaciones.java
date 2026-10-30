@@ -16,8 +16,12 @@ public class ContadorAprobaciones implements ContadorMenu {
 
 	private final BandejaAprobaciones bandeja;
 
-	public ContadorAprobaciones(BandejaAprobaciones bandeja) {
+	private final pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaExterna externa;
+
+	public ContadorAprobaciones(BandejaAprobaciones bandeja,
+			pe.edu.virgenmaria.cuentasclaras.aprobaciones.service.BandejaExterna externa) {
 		this.bandeja = bandeja;
+		this.externa = externa;
 	}
 
 	@Override
@@ -27,7 +31,8 @@ public class ContadorAprobaciones implements ContadorMenu {
 
 	@Override
 	public long contar() {
-		return bandeja.contarPorResolver();
+		// Sprint 11, tanda 1b (F-D5): también lo que se aprueba en otra pantalla, con la misma regla de puedeResolver.
+		return bandeja.contarPorResolver() + externa.contarPorResolver();
 	}
 
 	@Override

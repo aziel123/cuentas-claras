@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Estado del colegio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="plataforma-estado-colegio">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Plataforma</p>
+			<h1 th:text="${ficha.nombre}">Colegio</h1>
+			<p class="secundario">El estado del colegio y la facultad de su titular. Lo que propones no cambia nada hasta que lo
+				apruebe otro operador.</p>
+		</div>
+		<div class="acciones">
+			<span th:replace="~{fragments/componentes :: badge(${ficha.estado.etiqueta()}, ${ficha.estado.opera()} ? 'exito' : 'alerta')}"></span>
+			<a class="btn btn-secundario" th:href="@{/plataforma/colegios/{id}(id=${ficha.id})}">Ficha</a>
+			<a class="btn btn-secundario" th:href="@{/plataforma/cambios-estado}">Bandeja</a>
+			<a class="btn btn-secundario" th:href="@{/plataforma/colegios/{id}/fin(id=${ficha.id})}" data-fin-colegio>Exportación y supresión</a>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-proponer">
+		<h2 id="titulo-proponer">Proponer un cambio</h2>
+		<p class="secundario">Dar de baja: solo en preparación y sin comprobantes; con alumnos, con su exportación entregada.
+			Cerrar: un suspendido, con su exportación entregada o de 30 días. Bloquear o desbloquear la facultad: inmediato.</p>
+		<p class="secundario" th:unless="${suspensionDisponible}">La suspensión está desactivada en esta instalación.</p>
+		<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/estado(id=${ficha.id})}">
+			<div class="campo">
+				<label for="tipo">Cambio</label>
+				<select class="input" id="tipo" name="tipo" required>
+					<option value="">Elige…</option>
+					<option th:each="t : ${tipos}" th:value="${t.name()}" th:text="${t.etiqueta()}" th:selected="${t == propuesta.tipo}">Dar de baja</option>
+				</select>
+			</div>
+			<div class="campo">
+				<label for="motivoTipo">Motivo</label>
+				<select class="input" id="motivoTipo" name="motivoTipo" required aria-describedby="motivoTipo-ayuda">
+					<option value="">Elige…</option>
+					<option th:each="m : ${motivos}" th:value="${m.name()}" th:text="${m.etiqueta()}" th:selected="${m == propuesta.motivoTipo}">Otro</option>
+				</select>
+				<p class="ayuda" id="motivoTipo-ayuda">Cada cambio admite solo algunos motivos; si eliges uno que no corresponde, te lo diremos.</p>
+			</div>
+			<div class="campo">
+				<label for="motivo">Explica el motivo</label>
+				<textarea class="input" id="motivo" name="motivo" required minlength="20" maxlength="500" th:text="${propuesta.motivo}"
+					aria-describedby="motivo-ayuda"></textarea>
+				<p class="ayuda" id="motivo-ayuda">De 20 a 500 caracteres. Lo leen el titular, la Promotoría y el correo de control.</p>
+			</div>
+			<div class="campo">
+				<label for="referenciaAviso">Referencia del aviso escrito (para suspender)</label>
+				<input type="text" class="input" id="referenciaAviso" name="referenciaAviso" maxlength="120" th:value="${propuesta.referenciaAviso}">
+			</div>
+			<button type="submit" class="btn btn-primario">Proponer</button>
+		</form>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-historial">
+		<h2 id="titulo-historial">Historia</h2>
+		<th:block th:if="${#lists.isEmpty(historial)}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Sin cambios de estado', 'Cuando dos operadores decidan un cambio, aparecerá aquí.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${#lists.isEmpty(historial)}">
+			<caption class="solo-lectores">Cambios de estado del colegio, del más nuevo al más viejo.</caption>
+			<thead><tr><th scope="col">Cambio</th><th scope="col">Estado</th><th scope="col">Motivo</th><th scope="col">Quiénes</th></tr></thead>
+			<tbody>
+				<tr th:each="c : ${historial}">
+					<td data-etiqueta="Cambio" th:text="${c.tipoEtiqueta}">Dar de baja</td>
+					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${c.estadoEtiqueta}, 'neutro')}"></span></td>
+					<td data-etiqueta="Motivo"><strong th:text="${c.motivoTipo}">Motivo</strong> <span th:text="${c.motivo}">Detalle</span></td>
+					<td data-etiqueta="Quiénes" th:text="${c.aprobadoPor != null} ? |${c.propuestoPor} y ${c.aprobadoPor}| : ${c.propuestoPor}">Operadores</td>
+				</tr>
+			</tbody>
+		</table>
+	</section>
+</main>
+</body>
+</html>

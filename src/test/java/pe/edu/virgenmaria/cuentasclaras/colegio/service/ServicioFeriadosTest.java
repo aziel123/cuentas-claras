@@ -200,16 +200,20 @@ class ServicioFeriadosTest {
 		assertThat(contar(jdbc, "feriado WHERE pendiente")).isEqualTo(3);
 	}
 
-	/** S5-M3: Promotoría propone y la aprueba Dirección (y al revés): otro promotor no basta. */
+	/**
+	 * Antes S5-M3 (Promotoría propone y aprueba Dirección). Cambia de sentido en el sprint 11, tanda 1c (sección 3.16):
+	 * el día no laborable que propone la Promotoría queda aprobado en el mismo paso, y otro promotor ya no tiene nada
+	 * que aprobar.
+	 */
 	@Test
-	void loQuePropusoPromotoriaLoApruebaDireccion() {
+	void loQuePropusoPromotoriaQuedaAprobadoDirecto() {
 		UsuariosDePrueba.guardar(usuarios, codificador, 1L, "promotor", UsuariosDePrueba.CLAVE, false, Rol.PROMOTOR);
 		UsuariosDePrueba.iniciarSesion(PROMOTORIA);
 		Long id = feriados.registrar(new FeriadoRequest(VIERNES_9, "Aniversario del colegio"));
+		assertThat(calendario.esHabil(VIERNES_9)).isFalse();
 		UsuariosDePrueba.iniciarSesion(UsuariosDePrueba.autenticado(1L, 91L, "promotora.dos", "Promotora Dos", false,
 				EnumSet.of(Rol.PROMOTOR)));
 		assertThatThrownBy(() -> feriados.aprobar(id)).isInstanceOf(ReglaNegocioException.class)
-				.hasMessageContaining("debe aprobarlo Dirección");
-		assertThat(calendario.esHabil(VIERNES_9)).isTrue();
+				.hasMessageContaining("no está por aprobar");
 	}
 }

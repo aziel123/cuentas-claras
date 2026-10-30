@@ -47,4 +47,9 @@ public final class Formularios {
 	public static boolean puedeEditar(UsuarioAutenticado sesion) {
 		return sesion != null && (sesion.roles().contains(Rol.DIRECTOR) || sesion.roles().contains(Rol.ADMINISTRACION));
 	}
+
+	/** Sprint 11, tanda 1 (sección 3.7): el año escolar lo crean y cambian Promotoría o Dirección (con su firma). */
+	public static boolean puedeCrearAnio(UsuarioAutenticado sesion) {
+		return sesion != null && (sesion.roles().contains(Rol.PROMOTOR) || sesion.roles().contains(Rol.DIRECTOR));
+	}
 }

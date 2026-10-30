@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.seguridad.inicial;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.BaseH2Local;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,7 +35,7 @@ import java.util.Set;
  * Usuarios de demostración para desarrollo local: uno por rol en el Colegio Virgen María y un
  * promotor en un "Colegio de Prueba B" para ver el aislamiento entre colegios.
  * <p>
- * Solo con el perfil {@code dev}, solo si la base es H2 en memoria ({@code jdbc:h2:mem:}) y solo si
+ * Solo con el perfil {@code dev}, solo si la base es H2 local ({@link BaseH2Local}: en memoria o en archivo) y solo si
  * todavía no hay usuarios. La clave de todos es {@code cuentasclaras.demo.clave} (variable
  * {@code CC_DEMO_CLAVE}); no se escribe en el log.
  */
@@ -42,8 +43,6 @@ import java.util.Set;
 @Profile("dev")
 @Order(1)
 public class DatosDemoDev implements ApplicationRunner {
-
-	static final String PREFIJO_H2_MEMORIA = "jdbc:h2:mem:";
 
 	public static final long COLEGIO_PRINCIPAL = 1L;
 
@@ -104,6 +103,23 @@ public class DatosDemoDev implements ApplicationRunner {
 
 	private final String claveDemo;
 
+	/**
+	 * Sprint 11, tanda 1b: con {@code cuentasclaras.demo.colegio-en-preparacion=true}, un tercer colegio («Colegio de Prueba
+	 * C») queda EN PREPARACION con su equipo (promotor.c, director.c, administracion.c, caja.c y docente.c), para ver y
+	 * mostrar la guía de la puesta en marcha. Apagado por defecto: la demostración de siempre no cambia.
+	 */
+	@Value("${cuentasclaras.demo.colegio-en-preparacion:false}")
+	private boolean colegioEnPreparacion;
+
+	static final String NOMBRE_COLEGIO_C = "Colegio de Prueba C";
+
+	static final List<UsuarioDemo> USUARIOS_COLEGIO_C = List.of(
+			new UsuarioDemo("promotor.c", "Promotora del Colegio C", Rol.PROMOTOR),
+			new UsuarioDemo("director.c", "Director del Colegio C", Rol.DIRECTOR),
+			new UsuarioDemo("administracion.c", "Administración del Colegio C", Rol.ADMINISTRACION),
+			new UsuarioDemo("caja.c", "Cajera del Colegio C", Rol.CAJA),
+			new UsuarioDemo("docente.c", "Docente del Colegio C", Rol.DOCENTE));
+
 	public DatosDemoDev(UsuarioRepository usuarios, ColegioRepository colegios, PasswordEncoder codificador,
 			AuditoriaService auditoria, PrimeraPromotoriaRepository primeras, EjecucionIdentidad identidad, Clock reloj,
 			@Value("${spring.datasource.url:}") String urlBaseDatos,
@@ -126,8 +142,8 @@ public class DatosDemoDev implements ApplicationRunner {
 
 	/** @return {@code true} si creó los usuarios */
 	boolean crearSiCorresponde() {
-		if (urlBaseDatos == null || !urlBaseDatos.startsWith(PREFIJO_H2_MEMORIA)) {
-			LOG.warn("No se crean usuarios de demostración: la base no es H2 en memoria.");
+		if (!BaseH2Local.es(urlBaseDatos)) {
+			LOG.warn("No se crean usuarios de demostración: la base no es H2 local (en memoria o en archivo).");
 			return false;
 		}
 		if (ContextoColegio.comoSistema(usuarios::count) > 0) {
@@ -157,6 +173,21 @@ public class DatosDemoDev implements ApplicationRunner {
 		if (operador[0] != null) {
 			titular(COLEGIO_PRINCIPAL, promotor, operador);
 			titular(colegioB, promotorB, operador);
+		}
+		if (colegioEnPreparacion) {
+			long colegioC = colegios.save(Colegio.enPreparacion(NOMBRE_COLEGIO_C, NOMBRE_COLEGIO_C + " S.A.C. (ficticio)",
+					"20000000036", "Jr. Ejemplo 789, Lima (dirección ficticia)", "contacto@colegio-c.example",
+					EnumSet.allOf(Nivel.class), USUARIOS_COLEGIO_C.getFirst().nombreCompleto(), DNI_TITULAR_DEMO, null)).getId();
+			Long promotorC = null;
+			for (UsuarioDemo u : USUARIOS_COLEGIO_C) {
+				Long id = crear(colegioC, u);
+				promotorC = promotorC == null ? id : promotorC;
+			}
+			if (operador[0] != null) {
+				titular(colegioC, promotorC, operador);
+			}
+			LOG.info("Colegio en preparación de demostración: {} ({}).", NOMBRE_COLEGIO_C,
+					USUARIOS_COLEGIO_C.stream().map(UsuarioDemo::nombreUsuario).toList());
 		}
 		// Sprint 8, tanda 1: V28 deja en preparación al colegio de una base sin cuentas; en la demostración ya opera (H2 en
 		// memoria, sin triggers: en una base real lo pasa a producción su Promotoría con su firma). Antes, su ficha con el

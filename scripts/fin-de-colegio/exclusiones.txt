@@ -1,0 +1,18 @@
+# Sprint 11, tanda 2 (AP2-11): tablas con colegio_id que no se exportan o no se suprimen, con su motivo.
+#   tabla | no se exporta / no se suprime | motivo
+acta_supresion | no se exporta | de la plataforma: el acta de supresión
+acta_supresion | no se suprime | el acta misma (L6: acreditar la supresión)
+cambio_estado_colegio | no se suprime | evidencia del contrato del proveedor (dos operadores); sin datos de familias
+colegio_logo | no se exporta | solo el logo (imagen): el colegio ya lo tiene
+descarga_exportacion | no se exporta | de la plataforma: las descargas de la exportación
+descarga_exportacion | no se suprime | evidencia de la entrega; la IP truncada
+enlace_activacion | no se exporta | enlaces de activación: tokens, nunca se exportan
+evento_auditoria | no se suprime | la cadena es de todos los colegios: sus eventos se TACHAN, no se borran
+exportacion_colegio | no se exporta | de la plataforma: la entrega de la exportación
+exportacion_colegio | no se suprime | evidencia de la entrega (huellas, fechas); sin datos personales
+firma_operacion | no se exporta | firmas de sesión: secretos, nunca se exportan
+huella_bitacora | no se suprime | las huellas de la cadena (solo códigos, sin datos personales): siguen verificando
+huella_hora | no se suprime | las huellas por hora de la cadena (solo códigos, sin datos personales)
+semilla_muestreo | no se exporta | semilla secreta del muestreo: nunca se exporta
+sesion_usuario | no se exporta | sesiones: tokens y horas de ingreso, nunca se exportan
+verificacion_contacto | no se exporta | enlaces de verificación: tokens, nunca se exportan

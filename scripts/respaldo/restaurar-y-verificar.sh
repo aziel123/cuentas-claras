@@ -221,6 +221,17 @@ if [ -s "$estado" ]; then
 fi
 paso "cargar" "OK" "datos descifrados y cargados sin pasar por el disco"
 
+# --- 4b. Sprint 11, tanda 2 (AP2-3): las supresiones ya ejecutadas (actas externas) se vuelven a aplicar ANTES de abrir la
+#         aplicación: un respaldo anterior a la supresión no resucita los datos de un colegio suprimido.
+if [ -n "${RESTAURAR_ACTAS_DIR:-}" ]; then
+	if sh "$raiz/scripts/fin-de-colegio/reaplicar.sh" "$RESTAURAR_ACTAS_DIR" > "$trabajo/reaplicar.sql" 2>"$trabajo/reaplicar.err" 			&& admin_sql cuentasclaras < "$trabajo/reaplicar.sql" 2>>"$trabajo/reaplicar.err"; then
+		paso "supresiones" "OK" "actas externas reaplicadas: $(grep -c '^-- acta-' "$trabajo/reaplicar.sql" || true)"
+	else
+		paso "supresiones" "FALLA" "$(head -c 300 "$trabajo/reaplicar.err")"
+		terminar
+	fi
+fi
+
 # --- 5. Permisos y triggers de la misma versión ---------------------------------------------------------------------------
 opciones_migrador="$trabajo/migrador.cnf"
 printf '[client]\nhost=%s\nport=%s\nuser=cc_migrador\npassword=%s\nprotocol=TCP\n' "$host" "$puerto" "$clave_migrador" \

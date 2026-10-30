@@ -179,6 +179,10 @@ class RutasIdorTest {
 				pe.edu.virgenmaria.cuentasclaras.comun.prueba.EscenarioPlataforma.RUC_B, "titular.idor.b", "45678950",
 				"987650050"), null, null).colegioId();
 		SecurityContextHolder.clearContext();
+		// Sprint 11, tanda 1 (sección 3.7): el alta ya no crea el año escolar; lo crea el colegio (aquí, en H2, directo).
+		jdbc.update("INSERT INTO anio_escolar (colegio_id, anio, estado, vigente, inicio_clases, fin_clases, creado_en, "
+				+ "creado_por, actualizado_en) VALUES (?, 2027, 'EN_CURSO', TRUE, '2027-03-01', '2027-12-17', CURRENT_TIMESTAMP, "
+				+ "'director.colegio.b', CURRENT_TIMESTAMP)", colegioB);
 		Map<Rol, RequestPostProcessor> personasB = new EnumMap<>(Rol.class);
 		for (Rol rol : List.of(Rol.PROMOTOR, Rol.DIRECTOR, Rol.ADMINISTRACION, Rol.CAJA, Rol.DOCENTE)) {
 			personasB.put(rol, UsuariosDePrueba.como(UsuariosDePrueba.guardar(usuarios, codificador, colegioB,
@@ -431,6 +435,19 @@ class RutasIdorTest {
 			jdbc.execute("SET REFERENTIAL_INTEGRITY TRUE");
 		}
 		ids.put(Recurso.CAMBIO_CORREO, texto("SELECT MAX(id) FROM cambio_correo_control WHERE colegio_id = 1"));
+		// Sprint 11, tanda 1: un bloqueo de la facultad propuesto en el colegio A (el colegio B no lo ve ni lo objeta: 404).
+		jdbc.execute("SET REFERENTIAL_INTEGRITY FALSE");
+		try {
+			jdbc.update("INSERT INTO cambio_estado_colegio (colegio_id, plataforma_id, tipo, ambito, motivo_tipo, motivo, "
+					+ "estado_origen, estado_destino, estado, pendiente, propuesto_por, operador_id, creado_en, creado_por, "
+					+ "actualizado_en) VALUES (1, 0, 'BLOQUEO_FACULTAD', 'FACULTAD', 'SEGURIDAD', 'Motivo de la prueba IDOR del "
+					+ "sprint 11', 'PRODUCCION', 'PRODUCCION', 'PROPUESTO', TRUE, 'operador.idor', 0, CURRENT_TIMESTAMP, "
+					+ "'operador.idor', CURRENT_TIMESTAMP)");
+		}
+		finally {
+			jdbc.execute("SET REFERENTIAL_INTEGRITY TRUE");
+		}
+		ids.put(Recurso.CAMBIO_ESTADO, texto("SELECT MAX(id) FROM cambio_estado_colegio WHERE colegio_id = 1"));
 		// Sprint 8, tanda 2: un conector propuesto del colegio A (el colegio B no lo ve ni lo prueba: 404).
 		jdbc.update("INSERT INTO conector_colegio (colegio_id, tipo, proveedor, modo, configuracion, clave_publica, estado, "
 				+ "propuesto_por, creado_en, creado_por, actualizado_en) VALUES (1, 'CUENTA_BANCARIA', 'BCP', 'REAL', "

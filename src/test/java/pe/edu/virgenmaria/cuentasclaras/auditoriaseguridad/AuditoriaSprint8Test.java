@@ -338,7 +338,7 @@ class AuditoriaSprint8Test {
 				f.rosa()));
 		BigDecimal total = pagoEnLinea.revisar(new SeleccionPagoRequest(List.of(marzo))).total();
 		assertThatThrownBy(() -> pagoEnLinea.crearOrden(new PagoEnLineaRequest(UUID.randomUUID(), List.of(marzo), total,
-				false))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("no recibe pagos en línea");
+				false))).isInstanceOf(ReglaNegocioException.class).hasMessageContaining("no recibe pagos por aquí");
 
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM orden_pago WHERE colegio_id = 1", Long.class)).isZero();
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM pago WHERE origen = 'PASARELA' AND colegio_id = 1", Long.class))

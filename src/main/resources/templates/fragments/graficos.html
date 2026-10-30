@@ -30,6 +30,11 @@
 <section th:fragment="barrasVerticales(g)" class="tarjeta grafico" th:id="${g.id()}" th:aria-labelledby="|${g.id()}-titulo|" data-grafico>
 	<h2 th:id="|${g.id()}-titulo|" th:text="${g.titulo()}">Cobranza de los últimos 30 días</h2>
 	<p class="secundario grafico-resumen" th:id="|${g.id()}-resumen|" th:text="${g.resumen()}">Resumen</p>
+	<!--/* Sprint 11, tanda 1b (F-D6): sin pagos, el estado vacío y no los ejes vacíos. */-->
+	<th:block th:if="${g.sinDatos()}">
+		<div th:replace="~{fragments/componentes :: estadoVacio('Sin cobros', 'Todavía no hay pagos en estos 30 días.')}"></div>
+	</th:block>
+	<th:block th:unless="${g.sinDatos()}">
 	<div class="grafico-area">
 		<div class="grafico-eje" aria-hidden="true">
 			<span th:each="guia : ${g.guias()}" th:text="${guia.texto()}">S/ 2,000</span>
@@ -63,6 +68,7 @@
 			</table>
 		</div>
 	</details>
+	</th:block>
 </section>
 
 <!--/* Barras horizontales: una fila HTML por categoría (etiqueta, barra SVG y valor), escala de 0 a 100 %. */-->

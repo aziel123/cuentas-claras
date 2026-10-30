@@ -78,10 +78,16 @@ que ya tiene la plataforma («Mis datos» de las familias, los pedidos con su pl
 Si un titular le escribe directamente al encargado, este lo deriva al colegio en [2 días hábiles].
 
 ## 9. Fin del encargo
-- **Devolución:** exportación de los datos en 30 días (un Excel por tabla), cifrada para la clave que indique el colegio.
-- **Conservación bloqueada** durante el plazo de conservación tributaria que indique el contador (por defecto [5 años], a
-  confirmar), sin acceso de nadie salvo un pedido escrito del colegio o de una autoridad.
-- **Eliminación** al vencer ese plazo, con un **acta** del responsable técnico del encargado (también de los respaldos).
+- **Devolución (sprint 11; para revisión del abogado):** exportación completa de los datos (CSV por tabla y PDF de libretas y
+  comunicados, en un ZIP cifrado con AES-256 y con su manifiesto de huellas), entregada al titular por dos canales (enlace
+  por correo, código por WhatsApp) el día de la suspensión y disponible 30 días.
+- **Conservación:** 12 meses desde la suspensión aplicada con la autorización expresa del titular; si no, 30 días después
+  del cierre (baja: 30 días). Durante ese plazo las familias solo consultan; después, nadie entra. El encargado no conserva
+  los datos para fines tributarios: los conserva el responsable con su exportación.
+- **Retención legal:** con un pedido escrito de una autoridad o un litigio, el encargado conserva hasta que termine.
+- **Supresión** al vencer el plazo, con un **acta** que aprueban dos operadores y que se envía al responsable: se borran los
+  datos y se anonimizan sus eventos de la bitácora (común a los clientes). Los respaldos vencen a más tardar 24 meses
+  después del inicio del plazo; al restaurar uno, la supresión se reaplica antes de abrir la aplicación.
 
 ## 10. Auditoría
 Una vez al año, o después de un incidente, el colegio puede pedir la **evidencia de los controles**: el informe del último

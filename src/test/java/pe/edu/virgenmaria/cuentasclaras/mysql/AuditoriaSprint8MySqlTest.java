@@ -130,8 +130,9 @@ class AuditoriaSprint8MySqlTest {
 				+ "WHERE u.colegio_id = ?", String.class, creado.colegioId())).isEqualTo("PROMOTOR");
 		assertThat(jdbc.queryForObject("SELECT creado_por FROM primera_promotoria WHERE colegio_id = ?", String.class,
 				creado.colegioId())).isEqualTo("operador.s8");
+		// Sprint 11, tanda 1 (sección 3.7): el colegio nace sin año escolar (lo crea el colegio, nunca el operador).
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM anio_escolar WHERE colegio_id = ?", Long.class,
-				creado.colegioId())).isEqualTo(1L);
+				creado.colegioId())).isZero();
 		assertThat(jdbc.queryForList("SELECT accion FROM evento_auditoria WHERE colegio_id = ?", String.class,
 				creado.colegioId())).contains("PRIMERA_PROMOTORIA_CREADA", "COLEGIO_CREADO");
 
@@ -631,8 +632,8 @@ class AuditoriaSprint8MySqlTest {
 	}
 
 	/**
-	 * QA-S8-3 y S8-M5 en la base: una cuenta que ya abrió una sesión (activada) no recibe un cambio de contacto del operador
-	 * aunque vuelva a «deber cambiar su clave» (1644), y el operador ya no cambia la ficha de ese colegio aunque firme (1644);
+	 * QA-S8-3 y S8-M5 en la base (con la tanda 1c, A1c-1: la base admite que dos operadores cambien el contacto de una cuenta
+	 * directiva activada; la aplicación sigue sin dejar al operador tocar al titular activado por el camino del alta), y el operador ya no cambia la ficha de ese colegio aunque firme (1644);
 	 * la Promotoría sí, con su firma (y sin ella, 1644).
 	 */
 	@Test
@@ -654,7 +655,9 @@ class AuditoriaSprint8MySqlTest {
 				+ "telefono_anterior, telefono_nuevo, motivo, estado, pendiente, propuesto_por, operador_id, plataforma_id, "
 				+ "creado_en, creado_por, actualizado_en) VALUES (?, ?, '+51987651111', '+51987651199', 'Motivo de la prueba', "
 				+ "'PROPUESTO', TRUE, 'operador.s8', ?, ?, NOW(6), 'operador.s8', NOW(6))", colegio, titular.getId(),
-				operador.getId(), plataforma()))).contains("antes de la activacion");
+				operador.getId(), plataforma()))).as("Sprint 11, tanda 1c (A1c-1): el camino de dos operadores vale para toda "
+						+ "cuenta directiva de un colegio que opera, activada o no (antes: «antes de la activacion»)")
+				.isEqualTo("(sin error)");
 		// La aplicación también lo rechaza.
 		UsuariosDePrueba.iniciarSesion(operador);
 		org.assertj.core.api.Assertions.assertThatThrownBy(() -> alta.proponerContactoTitular(colegio,

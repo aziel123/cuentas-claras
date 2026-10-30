@@ -25,7 +25,7 @@
 			<p class="secundario" th:if="${a.derecho != null}" data-pedido-datos>
 				<strong th:text="|Pedido de ${a.derecho} (Ley 29733)|">Pedido de Acceso (Ley 29733)</strong>
 				<span th:if="${a.abierto}" th:text="|· responde a más tardar el ${#temporals.format(a.venceEl, 'dd/MM/yyyy')}|">· responde a más tardar el 20/10/2026</span>
-				<span th:if="${a.vencido}" th:replace="~{fragments/componentes :: badge('Plazo vencido', 'peligro')}"></span>
+				<th:block th:if="${a.vencido}"><span th:replace="~{fragments/componentes :: badge('Plazo vencido', 'peligro')}"></span></th:block>
 			</p>
 			<p class="texto-largo" th:text="${a.texto}">Pagué S/ 380 y no aparece.</p>
 			<p class="texto-largo" th:if="${a.respuesta != null}"><strong>Respuesta:</strong> <span th:text="${a.respuesta}">Ya lo revisamos.</span></p>

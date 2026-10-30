@@ -39,6 +39,13 @@ public class AnioEscolar extends BaseEntity {
 	@Column(name = "fin_clases", nullable = false)
 	private LocalDate finClases;
 
+	/**
+	 * Sprint 11, tanda 1 (AP-9): quién firmó el último cambio. En MySQL, trg_anio_escolar_cambio exige que sea Promotoría
+	 * o Dirección activa con su firma de la versión anterior ({@code anio_escolar:{id}:{version}}).
+	 */
+	@Column(name = "actualizado_por", length = 60)
+	private String actualizadoPor;
+
 	protected AnioEscolar() {
 		// requerido por JPA
 	}
@@ -65,6 +72,35 @@ public class AnioEscolar extends BaseEntity {
 			nuevo.iniciar();
 		}
 		return nuevo;
+	}
+
+	/**
+	 * Sprint 11, tanda 1 (sección 3.7, AP-9): cambia las fechas de clases de un año que no está cerrado, con la firma de
+	 * quien lo cambia (Promotoría o Dirección). Las mismas reglas que al crearlo.
+	 */
+	public void cambiarFechas(LocalDate inicio, LocalDate fin, String por) {
+		if (estado == EstadoAnioEscolar.CERRADO) {
+			throw new ReglaNegocioException("El año " + anio + " ya está cerrado: sus fechas no cambian.");
+		}
+		if (inicio == null || fin == null) {
+			throw new ReglaNegocioException("Indica el inicio y el fin de clases.");
+		}
+		if (!inicio.isBefore(fin)) {
+			throw new ReglaNegocioException("El inicio de clases debe ser antes del fin de clases.");
+		}
+		if (inicio.getYear() != anio || fin.getYear() != anio) {
+			throw new ReglaNegocioException("Las clases del año " + anio + " deben empezar y terminar en " + anio + ".");
+		}
+		if (inicio.equals(inicioClases) && fin.equals(finClases)) {
+			throw new ReglaNegocioException("Las fechas son las mismas: no hay nada que cambiar.");
+		}
+		this.inicioClases = inicio;
+		this.finClases = fin;
+		this.actualizadoPor = java.util.Objects.requireNonNull(por, "por");
+	}
+
+	public String getActualizadoPor() {
+		return actualizadoPor;
 	}
 
 	public boolean enCurso() {

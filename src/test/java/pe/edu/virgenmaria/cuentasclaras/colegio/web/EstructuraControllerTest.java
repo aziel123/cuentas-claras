@@ -43,11 +43,22 @@ class EstructuraControllerTest {
 		LimpiezaBaseDatos.limpiar(jdbc);
 	}
 
+	/** Sprint 11, tanda 1 (sección 3.7): Administración ya no crea años escolares (403); las secciones, sí. */
 	@Test
 	@ComoUsuario(roles = Rol.ADMINISTRACION)
-	void administracionCreaAnioYSeccionDesdeLaWeb() throws Exception {
+	void administracionNoCreaAnios() throws Exception {
 		mvc.perform(get("/colegio")).andExpect(status().isOk())
-				.andExpect(content().string(containsString("Todavía no hay años escolares")))
+				.andExpect(content().string(not(containsString("Nuevo año escolar"))));
+		mvc.perform(post("/colegio/anios").with(csrf()).param("anio", "2026").param("inicioClases", "2026-03-02")
+				.param("finClases", "2026-12-18")).andExpect(status().isForbidden());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM anio_escolar", Long.class)).isZero();
+	}
+
+	@Test
+	@ComoUsuario(roles = Rol.DIRECTOR)
+	void direccionCreaAnioYSeccionDesdeLaWeb() throws Exception {
+		mvc.perform(get("/colegio")).andExpect(status().isOk())
+				.andExpect(content().string(containsString("Tu colegio todavía no tiene año escolar")))
 				// Propone el año actual con clases del primer lunes de marzo a mediados de diciembre.
 				.andExpect(content().string(containsString("value=\"2026\"")))
 				.andExpect(content().string(containsString("value=\"2026-03-02\"")));
@@ -103,13 +114,18 @@ class EstructuraControllerTest {
 	}
 
 	@Test
-	void promotoriaVeLosAniosSinFormularios() throws Exception {
-		mvc.perform(post("/colegio/anios").with(UsuariosDePrueba.como(Rol.DIRECTOR)).with(csrf()).param("anio", "2026")
-				.param("inicioClases", "2026-03-02").param("finClases", "2026-12-18").param("enCurso", "true"));
+	void promotoriaCreaElAnioPeroNoLasSecciones() throws Exception {
+		mvc.perform(post("/colegio/anios").with(UsuariosDePrueba.como(Rol.PROMOTOR)).with(csrf()).param("anio", "2026")
+				.param("inicioClases", "2026-03-02").param("finClases", "2026-12-18").param("enCurso", "true"))
+				.andExpect(status().is3xxRedirection());
+		Long anio = jdbc.queryForObject("SELECT id FROM anio_escolar WHERE anio = 2026", Long.class);
 
 		mvc.perform(get("/colegio").with(UsuariosDePrueba.como(Rol.PROMOTOR)))
 				.andExpect(status().isOk())
 				.andExpect(content().string(containsString("data-anio=\"2026\"")))
-				.andExpect(content().string(not(containsString("Nuevo año escolar"))));
+				.andExpect(content().string(containsString("Nuevo año escolar")));
+		mvc.perform(get("/colegio/anios/" + anio).with(UsuariosDePrueba.como(Rol.PROMOTOR)))
+				.andExpect(content().string(containsString("Fechas de clases")))
+				.andExpect(content().string(not(containsString("Agregar sección"))));
 	}
 }

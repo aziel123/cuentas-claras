@@ -74,8 +74,26 @@ public class ColegioService {
 		return colegioId != null && colegios.findById(colegioId).map(Colegio::enProduccion).orElse(false);
 	}
 
+	/** Sprint 11, tanda 1b (sección 3.14): el colegio está en PREPARACION (la guía de la puesta en marcha se muestra). */
+	public boolean enPreparacion(Long colegioId) {
+		return colegioId != null && colegios.findById(colegioId)
+				.map(c -> c.getEstado() == pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoColegio.PREPARACION)
+				.orElse(false);
+	}
+
 	/** Sprint 8, tanda 1 (E9): la aplicación tampoco cobra en un colegio en preparación (en MySQL, trg_pago_registro). */
 	public void exigirEnProduccion(Long colegioId) {
+		exigirEnProduccion(colegioId, AccionBloqueada.COBRAR);
+	}
+
+	/**
+	 * Sprint 11, tanda 1b (sección 3.14): en PREPARACION lanza {@link ColegioEnPreparacionException} con lo que se intentó
+	 * (la pantalla explica por qué y enlaza a la Puesta en marcha); en otro estado sin producción, el mensaje de siempre.
+	 */
+	public void exigirEnProduccion(Long colegioId, AccionBloqueada accion) {
+		if (enPreparacion(colegioId)) {
+			throw new ColegioEnPreparacionException(accion);
+		}
 		if (!enProduccion(colegioId)) {
 			throw new pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException("El colegio todavía no está en "
 					+ "producción: no se registran pagos. La Promotoría lo pasa a producción desde «Puesta en marcha».");
@@ -87,6 +105,14 @@ public class ColegioService {
 	 * línea, Administración que sube la recaudación o abre la renovación).
 	 */
 	public void exigirEnProduccion(Long colegioId, String mensaje) {
+		exigirEnProduccion(colegioId, null, mensaje);
+	}
+
+	/** Lo mismo, con lo que se intentó: en PREPARACION, {@link ColegioEnPreparacionException} con ese mensaje. */
+	public void exigirEnProduccion(Long colegioId, AccionBloqueada accion, String mensaje) {
+		if (accion != null && enPreparacion(colegioId)) {
+			throw new ColegioEnPreparacionException(accion, mensaje);
+		}
 		if (!enProduccion(colegioId)) {
 			throw new pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException(mensaje);
 		}

@@ -31,7 +31,7 @@ import pe.edu.virgenmaria.cuentasclaras.familias.model.AvisoFamilia;
 import pe.edu.virgenmaria.cuentasclaras.familias.model.DerechoDatos;
 import pe.edu.virgenmaria.cuentasclaras.familias.model.EstadoAvisoFamilia;
 import pe.edu.virgenmaria.cuentasclaras.familias.repository.AvisoFamiliaRepository;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
@@ -85,7 +85,7 @@ public class ServicioAvisosFamilia {
 
 	private final DescuentoRepository descuentos;
 
-	private final ControlParticipantes participantes;
+	private final SegundaFirma segundaFirma;
 
 	/** Sprint 7, tanda 2: la firma de la sesión de quien resuelve (sección 3.4). */
 	private final FirmaSesion firmaSesion;
@@ -103,7 +103,7 @@ public class ServicioAvisosFamilia {
 			CuotaRepository cuotas, FamiliaRepository familias, ApoderadoRepository apoderados, AuditoriaService auditoria,
 			AvisosMatricula mensajes, Clock reloj,
 			@Value("${cuentasclaras.familias.avisos-por-dia:5}") int maximoPorDia, AnulacionPagoRepository anulaciones,
-			DescuentoRepository descuentos, ControlParticipantes participantes, FirmaSesion firmaSesion,
+			DescuentoRepository descuentos, SegundaFirma segundaFirma, FirmaSesion firmaSesion,
 			DiasHabiles calendario, SolicitudCambioRepository solicitudes,
 			@Value("${cuentasclaras.privacidad.plazo-acceso-dias-habiles:20}") int plazoAcceso,
 			@Value("${cuentasclaras.privacidad.plazo-otros-dias-habiles:10}") int plazoOtros) {
@@ -114,7 +114,7 @@ public class ServicioAvisosFamilia {
 		this.plazoOtros = plazoOtros;
 		this.anulaciones = anulaciones;
 		this.descuentos = descuentos;
-		this.participantes = participantes;
+		this.segundaFirma = segundaFirma;
 		this.avisos = avisos;
 		this.sesion = sesion;
 		this.pagos = pagos;
@@ -198,7 +198,7 @@ public class ServicioAvisosFamilia {
 		String quien = SecurityContextHolder.getContext().getAuthentication().getName();
 		// S5-M2: quien registró el pago, o pidió o aprobó la anulación o el descuento del que se queja la familia, no
 		// cierra su queja (ni quien preparó su cuenta).
-		Set<String> involucrados = participantes.ampliar(involucrados(aviso));
+		Set<String> involucrados = segundaFirma.excluidosPara(involucrados(aviso));
 		if (involucrados.contains(quien)) {
 			auditoria.registrar(AccionAuditoria.AUTOAPROBACION_RECHAZADA, "aviso_familia", id.toString(), null,
 					aviso.getTipo().etiqueta(), "Intentó atender el aviso de una familia sobre un pago, una anulación o un "

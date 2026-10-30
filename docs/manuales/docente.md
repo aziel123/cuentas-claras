@@ -73,6 +73,14 @@
 - **Aparece una página de error:** anota el código de error y avísale a Promotoría.
 - **No toques:** la cuenta de otra persona. Nunca prestes tu usuario ni tu clave.
 
+## Qué ves mientras tu colegio está en preparación (sprint 11)
+- **Arriba de tu inicio** ves «Tu colegio está en preparación: faltan N de 16 pasos», una barra con los pasos obligatorios hechos (de 14) y **el siguiente paso**, con quién lo hace.
+- Si el siguiente paso te toca, tienes el botón que te lleva directo a la pantalla. Si no, dice a quién le toca y, si hay algo que sí puedes hacer tú, te lo muestra aparte («Lo que puedes hacer tú»).
+- Las pantallas vacías dicen qué falta, quién lo hace y, si depende de otro paso, «Primero: …».
+- Lo que todavía no se puede (cobrar, enviar un comunicado, confirmar la recaudación, abrir la renovación) se ve deshabilitado con el motivo al lado.
+- Un «i» junto a un título o un botón abre una ayuda corta: tócalo (o pasa el mouse) para leerla.
+- Ves la guía sin cifras (nunca ves cifras de cobranza). Por lo general no te toca ningún paso: la guía te lo dice.
+
 ## Dónde ver el video
 | Video 9 · Si algo no cuadra en el colegio | Video de la fase académica |
 |---|---|

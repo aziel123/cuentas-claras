@@ -62,12 +62,25 @@ public class AnulacionPago extends BaseEntity {
 	@Column(name = "posterior_al_cierre", nullable = false, updatable = false)
 	private boolean posteriorAlCierre;
 
+	/** Sprint 11, tanda 1c (decisión 216): TRUE si la aprobó directo la Promotoría que la pidió (con su código). */
+	@Column(updatable = false)
+	private Boolean directa;
+
 	protected AnulacionPago() {
 		// requerido por JPA
 	}
 
 	public static AnulacionPago registrar(Pago pago, Long solicitudId, Comprobante notaCredito, TipoAnulacion tipo,
 			String motivo, String solicitadoPor, String aprobadoPor, boolean posteriorAlCierre) {
+		return registrar(pago, solicitudId, notaCredito, tipo, motivo, solicitadoPor, aprobadoPor, posteriorAlCierre, false);
+	}
+
+	/**
+	 * Sprint 11, tanda 1c: {@code directa} si la solicitud la resolvió directo la Promotoría que la pidió (en MySQL,
+	 * trg_anulacion_pago_registro exige que coincida con la solicitud).
+	 */
+	public static AnulacionPago registrar(Pago pago, Long solicitudId, Comprobante notaCredito, TipoAnulacion tipo,
+			String motivo, String solicitadoPor, String aprobadoPor, boolean posteriorAlCierre, boolean directa) {
 		Objects.requireNonNull(pago, "pago");
 		Objects.requireNonNull(notaCredito, "notaCredito");
 		if (!pago.vigente()) {
@@ -77,7 +90,7 @@ public class AnulacionPago extends BaseEntity {
 				|| !Objects.equals(notaCredito.getModificaId(), pago.getComprobante().getId())) {
 			throw new IllegalStateException("La nota de crédito debe anular el comprobante del pago");
 		}
-		if (aprobadoPor == null || aprobadoPor.equals(solicitadoPor) || aprobadoPor.equals(pago.getCajero())) {
+		if (aprobadoPor == null || (!directa && aprobadoPor.equals(solicitadoPor)) || aprobadoPor.equals(pago.getCajero())) {
 			throw new ReglaNegocioException("Quien pide la anulación o cobró el pago no la aprueba.");
 		}
 		AnulacionPago anulacion = new AnulacionPago();
@@ -91,6 +104,7 @@ public class AnulacionPago extends BaseEntity {
 		anulacion.solicitadoPor = Objects.requireNonNull(solicitadoPor, "solicitadoPor");
 		anulacion.aprobadoPor = aprobadoPor;
 		anulacion.posteriorAlCierre = posteriorAlCierre;
+		anulacion.directa = directa ? Boolean.TRUE : null;
 		return anulacion;
 	}
 

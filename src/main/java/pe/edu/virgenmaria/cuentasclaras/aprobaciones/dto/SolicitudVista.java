@@ -12,7 +12,9 @@ import java.util.List;
 public record SolicitudVista(Long id, String tipo, String tipoEtiqueta, String resumen, String motivo, String estado,
 		String estadoEtiqueta, String estadoVariante, String solicitadoPor, LocalDateTime solicitadaEn,
 		String resueltoPor, LocalDateTime resueltoEn, String comentario, boolean puedeResolver, List<String> detalle,
-		String advertencia, boolean pideComentario, String accionRechazo, List<String> llamadas) {
+		String advertencia, boolean pideComentario, String accionRechazo, List<String> llamadas,
+		boolean puedeAplicarDirecto, boolean pideCodigo, boolean directa, boolean enEspera, LocalDateTime venceEspera,
+		String frenadoPor, String motivoFreno, boolean puedeFrenar) {
 
 	/** Aprobar abre una ventana: pide comentario o la confirmación de las llamadas. */
 	public boolean apruebaConVentana() {

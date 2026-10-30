@@ -5,10 +5,11 @@
 	<div class="cabecera">
 		<div>
 			<p class="etiqueta"><a th:href="@{/pensiones}">Pensiones</a></p>
-			<h1 th:if="${planId == null}" th:text="|Proponer plan de ${nivel.etiqueta()} ${anio.anio}|">Proponer plan de Primaria 2027</h1>
-			<h1 th:if="${planId != null}" th:text="|Editar ${plan.nombre}|">Editar Plan Primaria 2027 v2</h1>
-			<p class="secundario">Queda en borrador hasta que otra persona de Promotoría o Dirección lo apruebe. Quien lo
-				propone o lo edita no puede aprobarlo.</p>
+			<!--/* Sprint 11, tanda 1b (F-D7): el control (quien propone no aprueba) pasa a un «i»; con la 1c, la Promotoría
+			     aprueba lo suyo directo. */-->
+			<h1><span th:if="${planId == null}" th:text="|Proponer plan de ${nivel.etiqueta()} ${anio.anio}|">Proponer plan de Primaria 2027</span>
+				<span th:if="${planId != null}" th:text="|Editar ${plan.nombre}|">Editar Plan Primaria 2027 v2</span>
+				<span th:replace="~{fragments/componentes :: info('plan', 'Queda en borrador hasta que lo envías. Quien lo propone o lo edita no lo aprueba: lo aprueba otra persona de Promotoría o Dirección. Lo de la Promotoría se aprueba directo.', 'quién aprueba el plan')}"></span></h1>
 		</div>
 	</div>
 
@@ -48,16 +49,21 @@
 		<fieldset class="grupo-formulario">
 			<legend>Fechas</legend>
 			<div class="formulario-doble">
-				<div th:replace="~{fragments/componentes :: campoDe('vencimientoMatricula', 'Vencimiento de la matrícula', null, 'date', true)}"></div>
-				<div th:replace="~{fragments/componentes :: campoDe('cobroDesde', 'Cobrar desde (opcional)',
-					'Día 1 de un mes. Lo anterior se carga como saldo inicial. Déjalo vacío para cobrar todo el año.', 'date', false)}"></div>
+				<!--/* Sprint 11, tanda 1b (F-D3): min y max de ConfiguracionPlan.rango*, los mismos que valida el servidor. */-->
+				<div th:replace="~{fragments/componentes :: campoFecha('vencimientoMatricula', 'Vencimiento de la matrícula',
+					${rangos.matricula().enPalabras()} + '.', true, ${rangos.matricula().desde()}, ${rangos.matricula().hasta()})}"></div>
+				<div th:replace="~{fragments/componentes :: campoFecha('cobroDesde', 'Cobrar desde (opcional)',
+					'El día 1 de un mes de ' + ${anio != null ? anio.anio : plan.anio} + '. Lo anterior se carga como saldo inicial.', false,
+					${rangos.cobroDesde().desde()}, ${rangos.cobroDesde().hasta()})}"></div>
 			</div>
-			<p class="ayuda">Vencimiento de cada pensión: una por mes, en orden. Las casillas vacías no se usan.</p>
+			<p class="ayuda" id="vencimientos-ayuda" th:text="|Una pensión por mes, en orden. ${rangos.pensiones().enPalabras()}. Las casillas vacías no se usan.|">Una
+				pensión por mes, en orden. Entre el 01/03/2026 y el 31/12/2026. Las casillas vacías no se usan.</p>
 			<div class="formulario-doble">
 				<!--/* Si el formulario volvió con un monto ilegible, no hay objeto: se repite lo que escribió. */-->
 				<div class="campo" th:each="i : ${#numbers.sequence(0, 11)}">
 					<label th:for="|vencimientos${i}|" th:text="|Pensión ${i + 1}|">Pensión 1</label>
 					<input type="date" class="input" th:id="|vencimientos${i}|" th:name="|vencimientos[${i}]|"
+						th:min="${rangos.pensiones().desde()}" th:max="${rangos.pensiones().hasta()}" aria-describedby="vencimientos-ayuda"
 						th:value="${solicitud != null} ? ${solicitud.casilla(i)} : (${param['vencimientos[' + i + ']'] != null} ? ${param['vencimientos[' + i + ']'][0]} : '')" autocomplete="off">
 				</div>
 			</div>
@@ -66,7 +72,7 @@
 
 		<div class="acciones">
 			<a class="btn btn-secundario" th:href="${planId == null} ? @{/pensiones(anio=${anio.id})} : @{/pensiones/planes/{id}(id=${planId})}">Cancelar</a>
-			<button th:replace="~{fragments/componentes :: boton(${planId == null} ? 'Proponer plan' : 'Guardar borrador', 'primario')}"></button>
+			<button th:replace="~{fragments/componentes :: boton('Guardar borrador', 'primario')}"></button>
 		</div>
 	</form>
 </main>

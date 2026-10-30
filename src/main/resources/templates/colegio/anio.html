@@ -23,8 +23,11 @@
 			<span class="secundario num" th:text="|${anio.secciones} ${anio.secciones == 1 ? 'sección' : 'secciones'} · ${anio.matriculados} matriculados|">0 secciones</span>
 		</div>
 		<th:block th:if="${detalle.sinSecciones()}">
-			<div th:replace="~{fragments/componentes :: estadoVacio('Este año todavía no tiene secciones',
-				${puedeEditar} ? 'Agrégalas con el formulario «Agregar sección»: por ejemplo, 1.° Primaria A.' : 'Dirección o Administración las agregan.')}"></div>
+			<!--/* Sprint 11, tanda 1b (sección 3.14): estado vacío que guía. */-->
+			<th:block th:with="v=${@guiaPasos.vacio('secciones')}">
+				<div th:replace="~{fragments/componentes :: estadoVacioPaso('Este año todavía no tiene secciones', null,
+					${v}, 'Agregar sección', '#titulo-nueva')}"></div>
+			</th:block>
 		</th:block>
 		<div class="nivel" th:each="n : ${detalle.niveles}">
 			<h3 th:text="${n.etiqueta}">Primaria</h3>
@@ -52,6 +55,26 @@
 				</li>
 			</ul>
 		</div>
+	</section>
+
+	<section class="tarjeta formulario-angosto" th:if="${puedeCrearAnio and !anio.cerrado()}" aria-labelledby="titulo-fechas">
+		<h2 id="titulo-fechas">Fechas de clases</h2>
+		<p class="secundario">Las cuotas ya generadas no cambian: salen del plan de pensiones. El cambio va con tu firma y queda en la bitácora.</p>
+		<form class="formulario" th:action="@{/colegio/anios/{id}/fechas(id=${anio.id})}" method="post">
+			<div class="formulario-doble">
+				<div class="campo">
+					<label for="inicioClases">Inicio de clases</label>
+					<input class="input" type="date" id="inicioClases" name="inicioClases" required th:value="${anio.inicioClases}">
+				</div>
+				<div class="campo">
+					<label for="finClases">Fin de clases</label>
+					<input class="input" type="date" id="finClases" name="finClases" required th:value="${anio.finClases}">
+				</div>
+			</div>
+			<div class="acciones">
+				<button th:replace="~{fragments/componentes :: boton('Cambiar fechas', 'secundario')}"></button>
+			</div>
+		</form>
 	</section>
 
 	<section class="tarjeta formulario-angosto" th:if="${puedeEditar and !anio.cerrado()}" aria-labelledby="titulo-nueva">

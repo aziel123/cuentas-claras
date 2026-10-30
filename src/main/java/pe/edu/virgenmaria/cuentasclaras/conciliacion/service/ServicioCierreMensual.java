@@ -23,7 +23,7 @@ import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.CierreMensualBan
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.CuentaBancariaRepository;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.ExtractoBancarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.conciliacion.repository.MovimientoBancarioRepository;
-import pe.edu.virgenmaria.cuentasclaras.seguridad.service.ControlParticipantes;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.SegundaFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
 
@@ -62,7 +62,11 @@ public class ServicioCierreMensual {
 
 	private final MovimientoBancarioRepository movimientos;
 
-	private final ControlParticipantes participantes;
+	private final SegundaFirma segundaFirma;
+
+	/** Sprint 11, tanda 1c (A1c-4). */
+	@org.springframework.beans.factory.annotation.Autowired
+	private pe.edu.virgenmaria.cuentasclaras.conectores.service.CambiosRecientesConectores cambiosRecientes;
 
 	private final AuditoriaService auditoria;
 
@@ -73,13 +77,13 @@ public class ServicioCierreMensual {
 
 	public ServicioCierreMensual(CierreMensualBancoRepository cierres, CuentaBancariaRepository cuentas,
 			ExtractoBancarioRepository extractos, MovimientoBancarioRepository movimientos,
-			ControlParticipantes participantes, AuditoriaService auditoria, Clock reloj, FirmaSesion firmaSesion) {
+			SegundaFirma segundaFirma, AuditoriaService auditoria, Clock reloj, FirmaSesion firmaSesion) {
 		this.firmaSesion = firmaSesion;
 		this.cierres = cierres;
 		this.cuentas = cuentas;
 		this.extractos = extractos;
 		this.movimientos = movimientos;
-		this.participantes = participantes;
+		this.segundaFirma = segundaFirma;
 		this.auditoria = auditoria;
 		this.reloj = reloj;
 	}
@@ -190,6 +194,13 @@ public class ServicioCierreMensual {
 			throw new AutoaprobacionException("Subiste o confirmaste extractos de este mes: el cierre lo hace otra persona "
 					+ "de Promotoría o Dirección, con el estado de cuenta oficial.");
 		}
+		// Sprint 11, tanda 1c (A1c-4): quien cambió la cuenta bancaria hace menos de 30 días no hace el cierre mensual.
+		if (cambiosRecientes.rechazarSiCambioReciente(pe.edu.virgenmaria.cuentasclaras.conectores.model.TipoConector
+				.CUENTA_BANCARIA, usuario, "cierre_mensual_banco", id, "el cierre mensual de " + nombre(cierre.periodo()))) {
+			throw new AutoaprobacionException("Cambiaste la cuenta bancaria del colegio hace menos de 30 días: el cierre "
+					+ "mensual lo hace otra persona de Promotoría o Dirección. Se avisó a todas las Promotorías y al correo de "
+					+ "control.");
+		}
 		if (abonos == null || cargos == null || saldo == null) {
 			throw new ReglaNegocioException("Escribe los tres números del estado de cuenta oficial: total de abonos, total "
 					+ "de cargos y saldo final.");
@@ -247,7 +258,7 @@ public class ServicioCierreMensual {
 				autores.add(e.getConfirmadoPor());
 			}
 		}
-		return participantes.ampliar(autores);
+		return segundaFirma.participantesPara(autores);
 	}
 
 	static String nombre(YearMonth periodo) {

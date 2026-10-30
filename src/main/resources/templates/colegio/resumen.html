@@ -16,8 +16,11 @@
 	<section class="tarjeta" aria-labelledby="titulo-anios">
 		<h2 id="titulo-anios">Años</h2>
 		<th:block th:if="${#lists.isEmpty(anios)}">
-			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay años escolares',
-				${puedeEditar} ? 'Crea el año en curso con el formulario «Nuevo año escolar».' : 'Dirección o Administración los crean.')}"></div>
+			<!--/* Sprint 11, tanda 1b (sección 3.14): estado vacío que guía. */-->
+			<th:block th:with="v=${@guiaPasos.vacio('anio')}">
+				<div th:replace="~{fragments/componentes :: estadoVacioPaso('Tu colegio todavía no tiene año escolar', null,
+					${v}, 'Nuevo año escolar', '#titulo-nuevo')}"></div>
+			</th:block>
 		</th:block>
 		<ul class="lista-tarjetas" th:unless="${#lists.isEmpty(anios)}">
 			<li th:each="a : ${anios}">
@@ -34,10 +37,11 @@
 		</ul>
 	</section>
 
-	<section class="tarjeta formulario-angosto" th:if="${puedeEditar}" aria-labelledby="titulo-nuevo">
+	<section class="tarjeta formulario-angosto" th:if="${puedeCrearAnio}" aria-labelledby="titulo-nuevo">
 		<div>
 			<h2 id="titulo-nuevo">Nuevo año escolar</h2>
-			<p class="secundario">Después le agregas sus secciones. Puedes crear el año siguiente para matricular por adelantado.</p>
+			<p class="secundario">Después Dirección o Administración le agregan sus secciones. Puedes crear el año siguiente
+				para matricular por adelantado. Se guarda con tu firma y queda en la bitácora.</p>
 		</div>
 		<form class="formulario" th:action="@{/colegio/anios}" th:object="${solicitud}" method="post">
 			<div th:replace="~{fragments/componentes :: campoDe('anio', 'Año', null, 'number', true)}"></div>

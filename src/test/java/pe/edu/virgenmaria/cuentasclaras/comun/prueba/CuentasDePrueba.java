@@ -189,6 +189,29 @@ public class CuentasDePrueba implements InitializingBean, org.springframework.bo
 	 * la prueban {@code PasoAProduccionTest} (H2) y {@code AuditoriaSprint8MySqlTest}.
 	 */
 	public void pasarAProduccion(long colegioId, Usuario promotor) {
+		// Sprint 11, tanda 1 (sección 3.7, F18): la base exige un año escolar EN_CURSO o PLANIFICADO para pasar a producción.
+		// Si la prueba no lo creó, el DBA (camino documentado) deja uno de paso (2099) y lo cierra después: no interfiere con
+		// los años de las pruebas.
+		boolean sinAnio = Integer.valueOf(0).equals(jdbc.queryForObject("SELECT COUNT(*) FROM anio_escolar WHERE colegio_id = ? "
+				+ "AND estado IN ('EN_CURSO', 'PLANIFICADO')", Integer.class, colegioId));
+		org.springframework.jdbc.core.JdbcTemplate dba = sinAnio ? DbaMySql.exigir() : null;
+		if (sinAnio) {
+			dba.update("INSERT INTO anio_escolar (colegio_id, anio, estado, inicio_clases, fin_clases, creado_en, creado_por, "
+					+ "actualizado_en) VALUES (?, 2099, 'PLANIFICADO', '2099-03-02', '2099-12-18', NOW(6), 'dba', NOW(6))",
+					colegioId);
+		}
+		try {
+			pasarConElAnio(colegioId, promotor);
+		}
+		finally {
+			if (sinAnio) {
+				dba.update("UPDATE anio_escolar SET estado = 'CERRADO', vigente = NULL WHERE colegio_id = ? AND anio = 2099",
+						colegioId);
+			}
+		}
+	}
+
+	private void pasarConElAnio(long colegioId, Usuario promotor) {
 		SecurityContext anterior = SecurityContextHolder.getContext();
 		try {
 			ponerSesion(promotor);
@@ -294,6 +317,17 @@ public class CuentasDePrueba implements InitializingBean, org.springframework.bo
 	}
 
 	/** La cuenta base del colegio (la crea la primera vez: el primer PROMOTOR o el primer DIRECTOR del colegio). */
+	/** Sprint 11, tanda 1: la Dirección base del colegio (la crea si falta), para lo que solo hacen Promotoría o Dirección. */
+	public Usuario direccionBase(long colegioId) {
+		SecurityContext anterior = SecurityContextHolder.getContext();
+		try {
+			return base(colegioId, "base.director.c" + colegioId, Rol.DIRECTOR);
+		}
+		finally {
+			SecurityContextHolder.setContext(anterior);
+		}
+	}
+
 	private Usuario base(long colegioId, String nombre, Rol rol) {
 		Usuario existente = ContextoColegio.en(colegioId, () -> usuarios.findByNombreUsuario(nombre).orElse(null));
 		if (existente != null) {

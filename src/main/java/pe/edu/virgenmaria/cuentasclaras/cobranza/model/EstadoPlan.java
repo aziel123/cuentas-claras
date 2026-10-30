@@ -6,9 +6,9 @@ package pe.edu.virgenmaria.cuentasclaras.cobranza.model;
  */
 public enum EstadoPlan {
 
-	BORRADOR("En preparación", "neutro"),
+	BORRADOR("Borrador", "neutro"),
 	/** Bloqueado: nadie lo edita mientras otra persona lo revisa. */
-	ENVIADO("Enviado, por aprobar", "alerta"),
+	ENVIADO("Por aprobar", "alerta"),
 	APROBADO("Aprobado y vigente", "exito"),
 	REEMPLAZADO("Reemplazado", "neutro"),
 	DESCARTADO("Descartado", "neutro");

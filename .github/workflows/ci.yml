@@ -23,6 +23,9 @@ jobs:
           java-version: "21"
           cache: maven
 
+      - name: "Sprint 11, tanda 1 (AP-3, reloj-real): 03 no suma usos del reloj que la conexión mueve con SET timestamp"
+        run: sh scripts/ci/reloj-real.sh
+
       - name: Compilar, migrar y probar
         run: ./mvnw -B verify
 
@@ -300,6 +303,9 @@ jobs:
       # Sprint 8, tanda 2 (decisión 118): la clave de los secretos de los conectores SOLO de este job (32 bytes en base64,
       # no es la de desarrollo). Las pruebas cifran con ella y prod arranca verificando que los descifra todos.
       CC_CLAVE_CONECTORES: "Y2ktY29uZWN0b3Jlcy1zb2xvLWRlbC1qb2ItbXlzcWw="
+      # Correcciones del sprint 11 (A1 y B3): obligatorios en prod (la copia local de las actas y los ZIP).
+      CC_DIR_ACTAS: "/tmp"
+      CC_DIR_EXPORTACIONES: "/tmp/cc-exportaciones"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -327,7 +333,7 @@ jobs:
           DB_MIGRADOR_CLAVE: ${{ env.CC_MYSQL_CLAVE_MIGRADOR }}
         run: java -jar target/cuentas-claras-*.jar migrar
 
-      - name: "Fase 1 (V1–V38): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
+      - name: "Fase 1 (V1–V41): Hibernate valida el esquema con cc_app y cc_sistema y no faltan migraciones"
         run: ./mvnw -B test -Dtest=MigracionMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Permisos de cc_app, cc_sistema y cc_respaldo (02 empieza con REVOKE ALL: es la fuente única)"
@@ -377,6 +383,18 @@ jobs:
 
       - name: "Sprint 10, tanda 3: la libreta la emite solo sistema.libretas con cc_sistema, para toda matrícula ACTIVA o RESERVADA, también la de la familia que debe (INDECOPI); la versión 1 es lo registrado al cierre y la siguiente solo con un cambio aprobado o la reemisión aprobada por Promotoría; la entrega va con la sesión de la familia, de Dirección o del tutor de la sección (en Inicial, en la entrevista); la exportación para el SIAGIE la saca Dirección o la persona de Administración delegada (nunca Caja); los avisos sin cobranza y con consentimiento; 300 libretas en menos de 60 s (E14, E27, E30, E32, C1, A3, M9, M12)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint10LibretasMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 11, tanda 1: del alta al cobro con el equipo que arma el titular con su facultad (firma y código), el año escolar con la firma del titular, el plan y el cierre que aprueba Dirección (A5); la base rechaza la facultad fuera de su camino"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint11CicloMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 11, tanda 1c: la Promotoría aplica directo con su firma y, si es sensible, su código atado a la acción; la cuenta bancaria espera 24 horas (con freno y el socio antiguo); aplica_desde solo lo escribe la base; el contacto de una cuenta directiva nunca cambia directo; quien cambió la cuenta no confirma la conciliación en 30 días; lo que piden los demás roles sigue con dos personas"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint11PromotoriaMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 11, tanda 2: la exportación, el cierre con conservar_hasta exacto, la entrega con tope de intentos y descargas, el acta de supresión de dos operadores que ejecuta el DBA en su conexión y la bitácora que solo se tacha; suprimir.sql de un colegio no toca a otro; la suspensión aplicada"
+        run: ./mvnw -B test -Dtest=AuditoriaSprint11FinColegioMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: "Sprint 11, tanda 2 (AP2-6): cada ventana del reloj real, un segundo antes y uno después de su límite"
+        run: ./mvnw -B test -Dtest=RelojEnSuLimiteMySqlTest -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: "Correcciones del sprint 6: los ataques de la auditoría fallan en MySQL (después de la fase 2, que deja la foto de hoy)"
         run: ./mvnw -B test -Dtest=AuditoriaSprint6MySqlTest -Dsurefire.failIfNoSpecifiedTests=false
@@ -885,11 +903,52 @@ jobs:
           comprobar_sistema 1142 "$historial"
           comprobar 1142 "UPDATE matricula_historial SET estado_nuevo = estado_nuevo WHERE 1 = 0"
           comprobar 1142 "DELETE FROM matricula_historial WHERE 1 = 0"
-          # Huellas (H7): cc_app ve las de los 112 triggers y las 16 funciones con huellas_objetos() (sprint 10, tanda 3).
+          # Sprint 11, tanda 1 (V39, sección 6.4): con cc_app no se escribe un cambio de estado ni un uso de la facultad del
+          # titular, ni se pone el cambio de estado del colegio (1142/1143); con cc_sistema, un cambio que nace APROBADO, un uso
+          # de la facultad del colegio 0 y un año escolar de un proceso los rechazan sus triggers (1644).
+          cambio="INSERT INTO cambio_estado_colegio (colegio_id, plataforma_id, tipo, ambito, motivo_tipo, motivo, estado_origen, estado_destino, estado, pendiente, propuesto_por, operador_id, aprobado_por, aprobador_id, aprobado_en, efectiva_desde, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'BAJA', 'ESTADO', 'PRUEBA', 'verificador de permisos de la base', 'PREPARACION', 'BAJA', 'APROBADO', TRUE, 'ci', 0, 'otro.ci', 0, NOW(6), NOW(6), NOW(6), 'ci', NOW(6))"
+          comprobar 1142 "$cambio"
+          comprobar_sistema 1644 "$cambio"
+          uso="INSERT INTO uso_facultad_titular (colegio_id, numero, titular_id, titular, usuario_id, rol, accion, cuenta_nueva, mensaje_id, creado_en, creado_por, actualizado_en) VALUES (0, 1, 0, 'ci', 1, 'DIRECTOR', 'DAR', FALSE, 0, NOW(6), 'ci', NOW(6))"
+          comprobar 1142 "$uso"
+          comprobar_sistema 1644 "$uso"
+          comprobar_sistema 1644 "INSERT INTO anio_escolar (colegio_id, anio, estado, inicio_clases, fin_clases, creado_en, creado_por, actualizado_en) VALUES (0, 2000, 'PLANIFICADO', '2000-03-01', '2000-12-15', NOW(6), 'ci', NOW(6))"
+          comprobar 1142 "UPDATE uso_facultad_titular SET version = version WHERE 1 = 0"
+          comprobar 1142 "DELETE FROM uso_facultad_titular WHERE 1 = 0"
+          comprobar_sistema 1142 "UPDATE uso_facultad_titular SET version = version WHERE 1 = 0"
+          comprobar 1143 "UPDATE colegio SET cambio_estado_id = cambio_estado_id WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE cambio_estado_colegio SET tipo = tipo WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE cambio_estado_colegio SET motivo = motivo WHERE 1 = 0"
+          # Sprint 11, tanda 1c (V40, secciones 3.16 y 3.16b): una solicitud no nace APROBADA ni directa y un conector no nace
+          # EN_ESPERA (1644); la espera y la hora del freno las pone solo la base (A1c-6: 1143 con cc_app y con cc_sistema);
+          # una pendiente marcada directa viola ck_solicitud_cambio_directa (3819).
+          directa="INSERT INTO solicitud_cambio (colegio_id, tipo, entidad, entidad_id, resumen, datos, motivo, estado, pendiente, solicitado_por, resuelto_por, resuelto_en, directa, creado_en, creado_por, actualizado_en) VALUES (0, 'CAMBIO_ROLES', 'usuario', 0, 'ci', '{}', 'ci', 'APROBADA', NULL, 'ci', 'ci', NOW(6), TRUE, NOW(6), 'ci', NOW(6))"
+          comprobar 1644 "$directa"
+          comprobar_sistema 1644 "$directa"
+          comprobar 1644 "INSERT INTO conector_colegio (colegio_id, tipo, proveedor, modo, configuracion, clave_publica, estado, propuesto_por, resuelto_por, resuelto_en, directa, creado_en, creado_por, actualizado_en) VALUES (0, 'CUENTA_BANCARIA', 'BCP', 'REAL', '{}', '00000000-0000-0000-0000-000000000000', 'EN_ESPERA', 'ci', 'ci', NOW(6), TRUE, NOW(6), 'ci', NOW(6))"
+          for col in aplica_desde frenado_en; do
+            comprobar 1143 "UPDATE solicitud_cambio SET $col = $col WHERE 1 = 0"
+            comprobar_sistema 1143 "UPDATE solicitud_cambio SET $col = $col WHERE 1 = 0"
+            comprobar 1143 "UPDATE conector_colegio SET $col = $col WHERE 1 = 0"
+            comprobar_sistema 1143 "UPDATE conector_colegio SET $col = $col WHERE 1 = 0"
+          done
+          comprobar 3819 "INSERT INTO solicitud_cambio (colegio_id, tipo, entidad, entidad_id, resumen, datos, motivo, estado, pendiente, solicitado_por, directa, creado_en, creado_por, actualizado_en) VALUES (0, 'CAMBIO_ROLES', 'usuario', 0, 'ci', '{}', 'ci', 'PENDIENTE', TRUE, 'ci', TRUE, NOW(6), 'ci', NOW(6))"
+          espera=$($MYSQL_ADMIN cuentasclaras -N -e "SELECT valor FROM configuracion_bd WHERE clave = 'espera_directa_horas'")
+          [ "$espera" = "24" ] || { echo "ERROR: espera_directa_horas es '$espera' y debe ser 24"; exit 1; }
+          # Sprint 11, tanda 2 (V41): la bitácora no se edita ni se borra (1142 con cc_app y cc_sistema; el tachado sin acta, 1644
+          # también para el DBA); conservar_hasta y cerrado_en no los escribe nadie (1143); la huella del ZIP, tampoco cc_app (1142).
+          comprobar 1143 "UPDATE colegio SET conservar_hasta = conservar_hasta WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE colegio SET conservar_hasta = conservar_hasta WHERE 1 = 0"
+          comprobar 1143 "UPDATE colegio SET cerrado_en = cerrado_en WHERE 1 = 0"
+          comprobar_sistema 1143 "UPDATE colegio SET cerrado_en = cerrado_en WHERE 1 = 0"
+          comprobar 1142 "UPDATE exportacion_colegio SET sha256_zip = sha256_zip WHERE 1 = 0"
+          comprobar 1142 "DELETE FROM acta_supresion WHERE 1 = 0"
+          comprobar_sistema 1644 "INSERT INTO acta_supresion (colegio_id, plataforma_id, tipo, estado, motivo, propuesto_por, operador_id, inicio_plazo, respaldos_vencen_el, creado_en, creado_por, actualizado_en) VALUES (0, 0, 'CIERRE', 'PROPUESTA', 'Un motivo de prueba bastante largo', 'ci', 0, NOW(6), CURDATE(), NOW(6), 'ci', NOW(6))"
+          # Huellas (H7): cc_app ve las de los 124 triggers y las 22 funciones con huellas_objetos() (sprint 11, tanda 2).
           objetos=$(mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ucc_app -p"${CC_MYSQL_CLAVE_APP}" cuentasclaras -N -e "SELECT JSON_LENGTH(huellas_objetos())")
-          [ "$objetos" = "$((esperados + 16))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
-          [ "$objetos" = "128" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y la tanda 3 del sprint 10 deja 128"; exit 1; }
-          [ "$esperados" = "112" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 3 del sprint 10 deja 112"; exit 1; }
+          [ "$objetos" = "$((esperados + 22))" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos"; exit 1; }
+          [ "$objetos" = "146" ] || { echo "ERROR: huellas_objetos() devuelve $objetos objetos y la tanda 2 del sprint 11 deja 146"; exit 1; }
+          [ "$esperados" = "124" ] || { echo "ERROR: 03-triggers.sql tiene $esperados triggers y la tanda 2 del sprint 11 deja 124"; exit 1; }
           echo "OK: huellas_objetos() devuelve $objetos objetos (triggers y funciones)"
 
       - name: Arranque real en prod con cc_app y cc_sistema, por TLS (y rechazo con cc_migrador, sin TLS o con un privilegio de más)
@@ -932,7 +991,7 @@ jobs:
           # Sprint 7, tanda 2 (sección 6.5).
           grep -q "Conexiones verificadas: las personas con cc_app y los procesos y la identidad con cc_sistema" prod.log || { cat prod.log; exit 1; }
           grep -q "Identidad, sesiones y firmas verificadas: cc_app no crea cuentas ni firma como sistema" prod.log || { cat prod.log; exit 1; }
-          grep -q "Huellas de los 112 triggers y las 16 funciones verificadas" prod.log || { cat prod.log; exit 1; }
+          grep -q "Huellas de los 124 triggers y las 22 funciones verificadas" prod.log || { cat prod.log; exit 1; }
           # Sprint 10, tanda 1 (E13, M10): prod verificó el catálogo del currículo en las dos direcciones.
           grep -q "logo del curr.culo verificado" prod.log || { cat prod.log; exit 1; }
           # Sprint 8, tanda 2 (sección 3.6): los conectores (GRANT por columna y triggers) y la clave que descifra todos
@@ -1258,6 +1317,9 @@ jobs:
       # Sprint 8, tanda 2: la clave de los secretos de los conectores (la de este job); el arranque de prod sobre la copia
       # verifica que los descifra.
       CC_CLAVE_CONECTORES: "Y2ktY29uZWN0b3Jlcy1kZWwtam9iLXJlc3BhbGRvLTE="
+      # Correcciones del sprint 11 (A1 y B3): obligatorios en prod.
+      CC_DIR_ACTAS: "/tmp"
+      CC_DIR_EXPORTACIONES: "/tmp/cc-exportaciones"
       # La clave HMAC con la que las pruebas sellaron la bitácora (perfil test): la verificación recalcula toda la cadena.
       CLAVE_HMAC_PRUEBAS: "clave-hmac-de-pruebas-no-usar-en-produccion-0001"
     steps:
@@ -1279,7 +1341,7 @@ jobs:
           age --version
           rclone version | head -n 1
 
-      - name: Base de origen como la del job mysql (V1–V38, permisos y triggers)
+      - name: Base de origen como la del job mysql (V1–V41, permisos y triggers)
         run: |
           sed -e "s/__CLAVE_MIGRADOR__/${CC_MYSQL_CLAVE_MIGRADOR}/" -e "s/__CLAVE_APP__/${CC_MYSQL_CLAVE_APP}/" \
               -e "s/__CLAVE_RESPALDO__/${CC_MYSQL_CLAVE_RESPALDO}/" -e "s/__CLAVE_SISTEMA__/${CC_MYSQL_CLAVE_SISTEMA}/" \

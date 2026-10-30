@@ -76,4 +76,29 @@ public enum TipoSolicitud {
 	public String etiqueta() {
 		return etiqueta;
 	}
+
+	/**
+	 * Sprint 11, tanda 1c (decisión 216): las acciones sensibles. Si las aplica directo una Promotoría, llevan además su
+	 * código por WhatsApp atado a la acción (la misma lista fija trg_solicitud_cambio_resuelta).
+	 */
+	public boolean sensible() {
+		return switch (this) {
+			case CAMBIO_ROLES, ESTADO_CUENTA, ANULACION_PAGO, ANULACION_CUOTA, DEVOLVER_INGRESO, DESCUENTO, PARTIDA_MANUAL,
+					CAMBIO_CONTACTO_APODERADO, CAMBIO_RESPONSABLE_PAGO, CAMBIO_CONECTOR -> true;
+			default -> false;
+		};
+	}
+
+	/**
+	 * Tanda 1c (A1c-7): si el código de esta acción puede llegar por correo cuando el WhatsApp falló. Nunca en conectores
+	 * ni en roles o estado de cuentas directivas.
+	 */
+	public boolean admiteCodigoPorCorreo() {
+		return this != CAMBIO_ROLES && this != ESTADO_CUENTA && this != CAMBIO_CONECTOR;
+	}
+
+	/** Tanda 1c (A1c-9): las que devuelven o anulan dinero (con una sola Promotoría, también se avisa a los operadores). */
+	public boolean anulaODevuelveDinero() {
+		return this == ANULACION_PAGO || this == ANULACION_CUOTA || this == DEVOLVER_INGRESO;
+	}
 }

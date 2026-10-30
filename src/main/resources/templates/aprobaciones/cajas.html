@@ -10,7 +10,7 @@
 		</div>
 		<div class="fila">
 			<a th:replace="~{fragments/componentes :: enlaceBoton('Día anterior', @{/aprobaciones/cajas(fecha=${d.anterior})}, 'secundario')}"></a>
-			<a th:if="${d.siguiente != null}" th:replace="~{fragments/componentes :: enlaceBoton('Día siguiente', @{/aprobaciones/cajas(fecha=${d.siguiente})}, 'secundario')}"></a>
+			<th:block th:if="${d.siguiente != null}"><a th:replace="~{fragments/componentes :: enlaceBoton('Día siguiente', @{/aprobaciones/cajas(fecha=${d.siguiente})}, 'secundario')}"></a></th:block>
 		</div>
 	</div>
 

@@ -113,7 +113,8 @@ class InmutabilidadCajaTest {
 		// Tanda 2: del descuento solo cambia su estado al resolverse (nunca el valor, las cuotas ni el total).
 		assertThat(ColumnasActualizables.de(Descuento.class))
 				.isEqualTo(ColumnasActualizables.concedidas(script, "descuento"))
-				.containsExactlyInAnyOrder("estado", "resuelto_por", "resuelto_en", "actualizado_en", "version");
+				// Sprint 11, tanda 1c (V40): y si fue la directa de la Promotoría que lo pidió.
+				.containsExactlyInAnyOrder("estado", "resuelto_por", "resuelto_en", "directa", "actualizado_en", "version");
 		// Tanda 3: del cierre solo cambia su revisión (nunca el conteo, el esperado ni la diferencia).
 		assertThat(ColumnasActualizables.de(CierreCaja.class))
 				.isEqualTo(ColumnasActualizables.concedidas(script, "cierre_caja"))

@@ -29,6 +29,14 @@ logging:
       customizer: pe.edu.virgenmaria.cuentasclaras.operacion.log.EnmascaradoLogs
 
 cuentasclaras:
+  # Correcciones del sprint 11 (A1 y B3): obligatorios en prod, sin valor por defecto (si faltan, no arranca):
+  # CC_DIR_EXPORTACIONES, donde viven los ZIP de las exportaciones (fuera de los respaldos), y CC_DIR_ACTAS, la copia local
+  # de las actas de supresión del depósito con bloqueo de objetos (la sincroniza el despliegue antes de arrancar:
+  # docs/operacion/fin-de-un-colegio.md). VerificadorSupresion se niega a arrancar si están vacíos.
+  exportacion:
+    directorio: ${CC_DIR_EXPORTACIONES}
+  supresion:
+    actas-dir: ${CC_DIR_ACTAS}
   # Sprint 7, tanda 1: sin respaldo en 26 h es CRÍTICA y el destino simulado no cuenta (VerificadorConfiguracion).
   monitoreo:
     respaldo-exigido: true

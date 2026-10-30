@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Colegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.AvisoOperadores;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.AvisoPlataforma;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
@@ -60,20 +61,9 @@ public class AvisosPlataforma {
 			throw new IllegalStateException("El aviso de la plataforma se crea con el colegio " + aviso.colegioId()
 					+ " en contexto");
 		}
-		PlantillaMensaje plantilla = switch (aviso.tipo()) {
-			case ENLACE_TITULAR_REENVIADO -> PlantillaMensaje.ENLACE_TITULAR_REENVIADO;
-			case CONTACTO_TITULAR_CORREGIDO -> PlantillaMensaje.CONTACTO_TITULAR_CORREGIDO;
-			case FICHA_CORREGIDA -> PlantillaMensaje.FICHA_COLEGIO_CORREGIDA;
-			case CORREO_CONTROL_PROPUESTO -> PlantillaMensaje.CORREO_CONTROL_PROPUESTO;
-			case CORREO_CONTROL_CAMBIADO -> PlantillaMensaje.CORREO_CONTROL_CAMBIADO;
-		};
-		TipoMensaje tipo = switch (aviso.tipo()) {
-			case CORREO_CONTROL_PROPUESTO, CORREO_CONTROL_CAMBIADO -> TipoMensaje.CORREO_CONTROL;
-			default -> TipoMensaje.AVISO_ALTA;
-		};
-		CreadorMensajes.Contenido contenido = new CreadorMensajes.Contenido(tipo, plantilla, aviso.parametros(),
-				aviso.entidad(), aviso.entidadId());
-		String sufijo = aviso.tipo().name().substring(0, 4) + (aviso.sufijo() == null ? "" : ":" + aviso.sufijo());
+		CreadorMensajes.Contenido contenido = new CreadorMensajes.Contenido(tipoMensaje(aviso.tipo()),
+				plantilla(aviso.tipo()), aviso.parametros(), aviso.entidad(), aviso.entidadId());
+		String sufijo = aviso.tipo().codigo() + (aviso.sufijo() == null ? "" : ":" + aviso.sufijo());
 		List<Mensaje> creados = new ArrayList<>();
 		Set<Long> avisados = new TreeSet<>();
 		if (aviso.titularId() != null) {
@@ -106,5 +96,66 @@ public class AvisosPlataforma {
 			throw new ReglaNegocioException("No hay a quién avisar de este cambio (ni el titular, ni el correo institucional, "
 					+ "ni el correo de control, ni la Promotoría tienen un contacto registrado). No se guardó nada.");
 		}
+	}
+
+	/**
+	 * Sprint 11, tanda 1 (sección 9): el aviso a cada operador activo de la plataforma con un contacto registrado, en su
+	 * colegio (el de plataforma). Va en una transacción aparte de la del colegio (es otro colegio): el testigo que impide
+	 * el cambio en silencio es el aviso al colegio (titular, Promotoría y correo de control), que va en la misma; este se
+	 * suma a la bitácora de la plataforma. Devuelve cuántos creó.
+	 */
+	@EventListener
+	public void alAvisarOperadores(AvisoOperadores aviso) {
+		if (!Objects.equals(ContextoColegio.actual(), aviso.plataformaId())) {
+			throw new IllegalStateException("El aviso a los operadores se crea con el colegio de plataforma en contexto");
+		}
+		CreadorMensajes.Contenido contenido = new CreadorMensajes.Contenido(tipoMensaje(aviso.tipo()),
+				plantilla(aviso.tipo()), aviso.parametros(), aviso.entidad(), aviso.entidadId());
+		String sufijo = "OP:" + aviso.tipo().codigo() + (aviso.sufijo() == null ? "" : ":" + aviso.sufijo());
+		int creados = 0;
+		for (Usuario operador : usuarios.activosConRol(Rol.OPERADOR_PLATAFORMA)) {
+			if (creador.paraUsuario(operador, contenido, sufijo).isPresent()) {
+				creados++;
+			}
+		}
+		if (creados == 0) {
+			org.slf4j.LoggerFactory.getLogger(AvisosPlataforma.class).warn("Ningún operador activo tiene un contacto "
+					+ "registrado: el aviso {} queda solo en la bitácora de la plataforma.", aviso.tipo());
+		}
+	}
+
+	private static PlantillaMensaje plantilla(AvisoPlataforma.Tipo tipo) {
+		return switch (tipo) {
+			case ENLACE_TITULAR_REENVIADO -> PlantillaMensaje.ENLACE_TITULAR_REENVIADO;
+			case CONTACTO_TITULAR_CORREGIDO -> PlantillaMensaje.CONTACTO_TITULAR_CORREGIDO;
+			case FICHA_CORREGIDA -> PlantillaMensaje.FICHA_COLEGIO_CORREGIDA;
+			case CORREO_CONTROL_PROPUESTO -> PlantillaMensaje.CORREO_CONTROL_PROPUESTO;
+			case CORREO_CONTROL_CAMBIADO -> PlantillaMensaje.CORREO_CONTROL_CAMBIADO;
+			case CAMBIO_ESTADO_PROPUESTO -> PlantillaMensaje.CAMBIO_ESTADO_PROPUESTO;
+			case CAMBIO_ESTADO_APROBADO -> PlantillaMensaje.CAMBIO_ESTADO_APROBADO;
+			case CAMBIO_ESTADO_RESUELTO -> PlantillaMensaje.CAMBIO_ESTADO_RESUELTO;
+			case CAMBIO_ESTADO_APLICADO -> PlantillaMensaje.CAMBIO_ESTADO_APLICADO;
+			case CAMBIO_ESTADO_EN_ESPERA -> PlantillaMensaje.CAMBIO_ESTADO_EN_ESPERA;
+			case SUSPENSION_PROXIMA -> PlantillaMensaje.CAMBIO_ESTADO_PROXIMO;
+			case OBJECION_TITULAR -> PlantillaMensaje.OBJECION_TITULAR;
+			case OBJECION_RESPONDIDA -> PlantillaMensaje.OBJECION_RESPONDIDA;
+			case FACULTAD_TITULAR_USADA -> PlantillaMensaje.FACULTAD_TITULAR_USADA;
+			case ACCION_DIRECTA -> PlantillaMensaje.ACCION_DIRECTA;
+			case DIRECTA_EN_ESPERA -> PlantillaMensaje.DIRECTA_EN_ESPERA;
+			case DIRECTA_FRENADA -> PlantillaMensaje.DIRECTA_FRENADA;
+			case CONCILIACION_BLOQUEADA -> PlantillaMensaje.CONCILIACION_BLOQUEADA;
+			case EXPORTACION_LISTA -> PlantillaMensaje.EXPORTACION_LISTA;
+			case EXPORTACION_MOVIMIENTO -> PlantillaMensaje.EXPORTACION_MOVIMIENTO;
+			case EXPORTACION_FALLIDA -> PlantillaMensaje.EXPORTACION_FALLIDA;
+			case CONSERVACION -> PlantillaMensaje.CONSERVACION;
+			case ACTA_SUPRESION -> PlantillaMensaje.ACTA_SUPRESION;
+		};
+	}
+
+	private static TipoMensaje tipoMensaje(AvisoPlataforma.Tipo tipo) {
+		return switch (tipo) {
+			case CORREO_CONTROL_PROPUESTO, CORREO_CONTROL_CAMBIADO -> TipoMensaje.CORREO_CONTROL;
+			default -> TipoMensaje.AVISO_ALTA;
+		};
 	}
 }

@@ -207,7 +207,9 @@ class PasoAProduccionTest {
 		UsuariosDePrueba.iniciarSesion(caja);
 
 		assertThatThrownBy(() -> cobro.cobrar(EscenarioCaja.digital(1L, List.of(1L), MedioPago.YAPE, "OP-PREP-1", "450.00")))
-				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("todavía no está en producción");
+				// Sprint 11, tanda 1b: el mismo bloqueo, con el texto de la guía (la excepción de la preparación).
+				.isInstanceOf(pe.edu.virgenmaria.cuentasclaras.colegio.service.ColegioEnPreparacionException.class)
+				.hasMessageContaining("Tu colegio está en preparación: todavía no se registran pagos");
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM pago WHERE colegio_id = ?", Long.class, colegio)).isZero();
 	}
 
@@ -217,7 +219,9 @@ class PasoAProduccionTest {
 		assertThat(lista.enPreparacion()).isTrue();
 		// Tanda 2: los 14 pasos de la sección 3.5, en su orden; los dos últimos, opcionales.
 		assertThat(lista.puntos()).extracting(p -> p.clave()).containsExactlyElementsOf(EstadoPuestaEnMarcha.PASOS);
-		assertThat(lista.puntos()).hasSize(15);
+		// Sprint 11, tanda 1: 15 pasos (año escolar y secciones por separado) más el de las áreas de cada docente; tanda 2
+		// (AP2-9): más la autorización de conservación.
+		assertThat(lista.puntos()).hasSize(17);
 		assertThat(lista.puntos().stream().filter(p -> !p.obligatorio()).map(p -> p.clave()).toList())
 				.containsExactly(EstadoPuestaEnMarcha.PASARELA, EstadoPuestaEnMarcha.RECAUDACION);
 		assertThat(lista.puntos()).allMatch(p -> p.enlace() == null);
@@ -228,9 +232,11 @@ class PasoAProduccionTest {
 		mvc.perform(get("/puesta-en-marcha").with(UsuariosDePrueba.como(promotor))).andExpect(status().isOk())
 				.andExpect(content().string(org.hamcrest.Matchers.containsString("en preparación")))
 				.andExpect(content().string(org.hamcrest.Matchers.containsString("Pasar a producción")))
-				.andExpect(content().string(org.hamcrest.Matchers.containsString("paso(s) obligatorio(s)")))
+				// Sprint 11, tanda 1b: el botón se ve deshabilitado con su motivo, pero no hay formulario que lo envíe.
+				.andExpect(content().string(org.hamcrest.Matchers.containsString("pasos obligatorios.")))
+				.andExpect(content().string(org.hamcrest.Matchers.containsString("aria-disabled=\"true\"")))
 				.andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(
-						"Pasar el colegio a producción"))));
+						"action=\"/puesta-en-marcha/produccion\""))));
 		mvc.perform(post("/puesta-en-marcha/produccion").with(csrf()).with(UsuariosDePrueba.como(promotor)))
 				.andExpect(redirectedUrl("/puesta-en-marcha"));
 		assertThat(estadoDelColegio()).isEqualTo("PREPARACION");

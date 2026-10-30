@@ -49,7 +49,9 @@ final class CatalogoRutasConId {
 		/** Sprint 10, tanda 2: una nota (la corrección después del cierre). */
 		CALIFICACION,
 		/** Sprint 10, tanda 3: una libreta emitida (la descarga de la familia, la impresión y la reemisión). */
-		LIBRETA
+		LIBRETA,
+		/** Sprint 11, tanda 1: un cambio de estado del colegio (la bandeja del operador y la objeción del titular). */
+		CAMBIO_ESTADO
 	}
 
 	static final Map<String, Map<String, Recurso>> CATALOGO = new LinkedHashMap<>();
@@ -60,6 +62,11 @@ final class CatalogoRutasConId {
 		r("POST /activar/{colegio:\\d+}/{token:[A-Za-z0-9_-]+}", "colegio", Recurso.PUBLICO, "token", Recurso.PUBLICO);
 		r("GET /verificar/{colegio:\\d+}/{token:[A-Za-z0-9_-]+}", "colegio", Recurso.PUBLICO, "token", Recurso.PUBLICO);
 		r("POST /verificar/{colegio:\\d+}/{token:[A-Za-z0-9_-]+}", "colegio", Recurso.PUBLICO, "token", Recurso.PUBLICO);
+		// Sprint 11, tanda 2 (AP2-4): la entrega de la exportación (el token del enlace decide el colegio).
+		for (String paso : new String[] { "GET /exportacion/{token}", "POST /exportacion/{token}/dni",
+				"POST /exportacion/{token}/codigo", "POST /exportacion/{token}/descargar" }) {
+			r(paso, "token", Recurso.PUBLICO);
+		}
 		r("GET /webhooks/whatsapp/{colegio:\\d{1,12}}", "colegio", Recurso.PUBLICO);
 		r("POST /webhooks/whatsapp/{colegio:\\d{1,12}}", "colegio", Recurso.PUBLICO);
 		r("POST /webhooks/pasarela/{proveedor:[A-Za-z]{3,20}}/{colegio:\\d{1,12}}", "proveedor", Recurso.PUBLICO,
@@ -104,7 +111,12 @@ final class CatalogoRutasConId {
 
 		// Aprobaciones, avisos y usuarios.
 		r("GET /aprobaciones/{id:\\d+}", "id", Recurso.SOLICITUD);
-		r("POST /aprobaciones/{id:\\d+}/aprobar", "id", Recurso.SOLICITUD);
+		// Sprint 11, tanda 1c: la directa sensible con el código de la Promotoría (su mensaje).
+		r("POST /aprobaciones/{id:\\d+}/aprobar", "id", Recurso.SOLICITUD, "codigoMensajeId", Recurso.MENSAJE);
+		r("POST /aprobaciones/{id:\\d+}/codigo", "id", Recurso.SOLICITUD);
+		r("POST /aprobaciones/{id:\\d+}/frenar", "id", Recurso.SOLICITUD);
+		r("POST /aprobaciones/{id:\\d+}/confirmar-contacto/codigo", "id", Recurso.SOLICITUD);
+		r("POST /aprobaciones/{id:\\d+}/confirmar-contacto", "id", Recurso.SOLICITUD, "codigoMensajeId", Recurso.MENSAJE);
 		r("POST /aprobaciones/{id:\\d+}/rechazar", "id", Recurso.SOLICITUD);
 		r("GET /aprobaciones/cajas/{id:\\d+}", "id", Recurso.CAJA);
 		r("POST /avisos-familias/{id:\\d+}/atender", "id", Recurso.AVISO);
@@ -114,6 +126,8 @@ final class CatalogoRutasConId {
 		r("POST /usuarios/{id}/reactivar", "id", Recurso.USUARIO);
 		r("POST /usuarios/{id}/restablecer-clave", "id", Recurso.USUARIO);
 		r("POST /usuarios/{id}/roles", "id", Recurso.USUARIO);
+		// Sprint 11, tanda 1 (sección 3.12): el titular da o quita Promotoría o Dirección con su facultad.
+		r("POST /usuarios/{id}/facultad", "id", Recurso.USUARIO);
 		r("POST /usuarios/{id:\\d+}/contacto", "id", Recurso.USUARIO);
 		r("GET /auditoria/accesos", "usuarioId", Recurso.USUARIO);
 
@@ -166,6 +180,8 @@ final class CatalogoRutasConId {
 		// Colegio, feriados, mensajes y matrícula 2027.
 		r("GET /colegio/anios/{id:\\d+}", "id", Recurso.ANIO);
 		r("POST /colegio/anios/{id:\\d+}/secciones", "id", Recurso.ANIO);
+		// Sprint 11, tanda 1 (AP-9): las fechas de clases, con la firma de Promotoría o Dirección.
+		r("POST /colegio/anios/{id:\\d+}/fechas", "id", Recurso.ANIO);
 		r("POST /colegio/secciones/{id:\\d+}/desactivar", "id", Recurso.SECCION, "anioId", Recurso.ANIO);
 		r("POST /feriados/{id:\\d+}/anular", "id", Recurso.FERIADO);
 		r("POST /feriados/{id:\\d+}/aprobar", "id", Recurso.FERIADO);
@@ -239,9 +255,41 @@ final class CatalogoRutasConId {
 		r("POST /puesta-en-marcha/correo-control/{id}/rechazar", "id", Recurso.CAMBIO_CORREO);
 		r("GET /marca/logo/{id:[0-9]+}", "id", Recurso.LOGO);
 		r("POST /plataforma/colegios/{id:\\d+}/correo-control", "id", Recurso.COLEGIO);
+		// Sprint 11, tanda 1: el estado del colegio (operadores) y la objeción del titular (en su colegio).
+		r("GET /plataforma/colegios/{id:\\d+}/estado", "id", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/estado", "id", Recurso.COLEGIO);
+		for (String accion : new String[] { "aprobar", "rechazar", "anular", "objecion" }) {
+			r("POST /plataforma/colegios/{id:\\d+}/cambios-estado/{cambio:\\d+}/" + accion, "id", Recurso.COLEGIO, "cambio",
+					Recurso.CAMBIO_ESTADO);
+		}
+		r("POST /colegio/estado/{id:\\d+}/objecion", "id", Recurso.CAMBIO_ESTADO);
+		// Correcciones del sprint 11 (A2): el retiro de la conservación con el código que le llegó al titular.
+		r("POST /colegio/conservacion/retirar", "mensajeId", Recurso.MENSAJE);
+		// Sprint 11, tanda 2: el fin del colegio (solo el operador; la exportación y el acta son de ese colegio).
+		for (String paso : new String[] { "GET /plataforma/colegios/{id:\\d+}/fin",
+				"GET /plataforma/colegios/{id:\\d+}/fin/acta.pdf", "POST /plataforma/colegios/{id:\\d+}/fin/acta",
+				"POST /plataforma/colegios/{id:\\d+}/fin/acta/cadena", "POST /plataforma/colegios/{id:\\d+}/fin/exportacion",
+				"POST /plataforma/colegios/{id:\\d+}/fin/exportacion-cierre", "POST /plataforma/colegios/{id:\\d+}/fin/retencion",
+				"POST /plataforma/colegios/{id:\\d+}/fin/retencion/quitar",
+				"POST /plataforma/colegios/{id:\\d+}/fin/conservacion/frenar" }) {
+			r(paso, "id", Recurso.COLEGIO);
+		}
+		r("POST /plataforma/colegios/{id:\\d+}/fin/acta/{acta:\\d+}/aprobar", "id", Recurso.COLEGIO, "acta", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/fin/exportacion/{exportacion:\\d+}/reenviar", "id", Recurso.COLEGIO,
+				"exportacion", Recurso.COLEGIO);
+		// Sprint 11, tanda 1c: el operador frena lo que espera y propone el contacto de una cuenta directiva.
+		r("POST /plataforma/colegios/{id:\\d+}/esperas/conectores/{conector:\\d+}/frenar", "id", Recurso.COLEGIO, "conector",
+				Recurso.CONECTOR);
+		r("POST /plataforma/colegios/{id:\\d+}/esperas/solicitudes/{solicitud:\\d+}/frenar", "id", Recurso.COLEGIO,
+				"solicitud", Recurso.SOLICITUD);
+		r("POST /plataforma/colegios/{id:\\d+}/contacto-directivo", "id", Recurso.COLEGIO);
 		// Sprint 8, tanda 2: los conectores del colegio (proponer un tipo y probar uno propuesto).
 		r("POST /conectores/{tipo:[a-z-]{3,20}}", "tipo", Recurso.TIPO_CONECTOR);
 		r("POST /conectores/{id:\\d{1,12}}/probar", "id", Recurso.CONECTOR);
+		// Sprint 11, tanda 1c (decisión 218): el socio y el freno de un conector en espera.
+		r("POST /conectores/{id:\\d{1,12}}/codigo-socio", "id", Recurso.CONECTOR);
+		r("POST /conectores/{id:\\d{1,12}}/aprobar-ahora", "id", Recurso.CONECTOR, "codigoMensajeId", Recurso.MENSAJE);
+		r("POST /conectores/{id:\\d{1,12}}/frenar", "id", Recurso.CONECTOR);
 		// Sprint 9, tanda 1: la lista de una sección (Dirección o un docente con asignación vigente) y Docentes y secciones.
 		r("GET /academico/secciones/{id:\\d+}", "id", Recurso.SECCION);
 		r("GET /academico/asignaciones", "anio", Recurso.ANIO);

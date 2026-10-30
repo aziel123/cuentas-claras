@@ -74,9 +74,10 @@ public class PensionesDemo {
 				.orElseThrow(() -> new IllegalStateException("La demo no tiene el año " + anio));
 		LocalDate desde = cobroDesde(hoy);
 		for (Nivel nivel : Nivel.values()) {
-			ConfiguracionPlan porDefecto = ConfiguracionPlan.porDefecto(anio, MATRICULA, PENSIONES.get(nivel));
-			PlanRequest solicitud = new PlanRequest(porDefecto.montoMatricula(), porDefecto.vencimientoMatricula(),
-					porDefecto.montoPension(), porDefecto.vencimientos(), desde.getMonthValue() > 3 ? desde : null);
+			// Sprint 11, tanda 1b (F-D2): los vencimientos según las fechas de clases del año (el servicio).
+			PlanRequest porDefecto = personas.como(colegioId, administracion, () -> planes.propuestaPorDefecto(opcion.id(), nivel));
+			PlanRequest solicitud = new PlanRequest(MATRICULA, porDefecto.vencimientoMatricula(),
+					PENSIONES.get(nivel), porDefecto.vencimientos(), desde.getMonthValue() > 3 ? desde : null);
 			Long id = personas.como(colegioId, administracion, () -> {
 				Long creado = planes.crearBorrador(opcion.id(), nivel, solicitud);
 				planes.enviar(creado);

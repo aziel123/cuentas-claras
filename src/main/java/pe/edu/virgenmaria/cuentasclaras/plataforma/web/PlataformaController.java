@@ -57,14 +57,15 @@ public class PlataformaController {
 	}
 
 	@GetMapping
-	public String lista(Model model) {
-		model.addAttribute("colegios", colegios.todos());
+	public String lista(@RequestParam(name = "baja", defaultValue = "false") boolean dadosDeBaja, Model model) {
+		model.addAttribute("colegios", colegios.todos(dadosDeBaja));
+		model.addAttribute("dadosDeBaja", dadosDeBaja);
 		return "plataforma/lista";
 	}
 
 	@GetMapping("/colegios/nuevo")
 	public String nuevo(Model model) {
-		model.addAttribute("solicitud", AltaColegioRequest.vacio(LocalDate.now(reloj).getYear()));
+		model.addAttribute("solicitud", AltaColegioRequest.vacio());
 		model.addAttribute("niveles", Nivel.values());
 		return "plataforma/nuevo";
 	}

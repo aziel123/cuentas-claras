@@ -29,7 +29,7 @@
 		<table class="tabla">
 			<caption class="solo-lectores" th:text="|Notas de ${a.area}|">Notas</caption>
 			<thead>
-				<tr><th scope="col">Alumno</th><th scope="col" th:each="k : ${a.competencias}" th:text="${k.codigo}" th:title="${k.nombre}">PRI-MAT-1</th></tr>
+				<tr><th scope="col">Alumno</th><th scope="col" th:each="k : ${a.competencias}"><abbr th:title="${k.nombre}" th:text="${k.codigo}">PRI-MAT-1</abbr><span class="solo-lectores" th:text="|: ${k.nombre}|"></span></th></tr>
 			</thead>
 			<tbody>
 				<tr th:each="f : ${a.filas}">

@@ -1,5 +1,6 @@
 package pe.edu.virgenmaria.cuentasclaras.caja.inicial;
 
+import pe.edu.virgenmaria.cuentasclaras.comun.basedatos.BaseH2Local;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -158,7 +159,7 @@ public class HistorialCobranzaDemoDev implements ApplicationRunner {
 
 	@Override
 	public void run(ApplicationArguments argumentos) {
-		if (!habilitado || urlBaseDatos == null || !urlBaseDatos.startsWith("jdbc:h2:mem:")
+		if (!habilitado || !BaseH2Local.es(urlBaseDatos)
 				|| !personaDemo.existen(DatosDemoDev.COLEGIO_PRINCIPAL, "caja", "caja2", "director", "administracion")
 				|| ContextoColegio.en(DatosDemoDev.COLEGIO_PRINCIPAL,
 						() -> pagos.contarEntre(LocalDate.of(2000, 1, 1), LocalDate.of(2100, 1, 1))) > 0) {

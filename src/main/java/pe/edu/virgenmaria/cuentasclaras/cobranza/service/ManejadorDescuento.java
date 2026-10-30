@@ -140,7 +140,12 @@ public class ManejadorDescuento implements ManejadorSolicitud {
 					+ Dinero.formatear(descuento.getTotalEstimado()) + "). Recházalo y pide otro.");
 		}
 		firmaSesion.firmar(ClaveFirma.descuento(descuento.getId(), EstadoDescuento.APROBADO));
-		descuento.aprobar(aprobador, ahora());
+		if (solicitud.isDirecta()) {
+			descuento.aprobarDirecta(aprobador, ahora());
+		}
+		else {
+			descuento.aprobar(aprobador, ahora());
+		}
 		descuentos.saveAndFlush(descuento);
 		for (Map.Entry<Cuota, BigDecimal> e : calculo.entrySet()) {
 			Cuota cuota = e.getKey();

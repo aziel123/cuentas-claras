@@ -42,9 +42,15 @@ class HuellasObjetosBdTest {
 		// Sprint 10, tanda 2 (V36): 108 triggers (lotes, notas, exoneraciones y borradores) y cc_docente_de_area: 124.
 		// Sprint 10, tanda 3 (V37): 112 triggers (la libreta, su entrega, la exportación de calificaciones y la delegación
 		// del SIAGIE; versión nueva de trg_mensaje_nace) y las mismas 16 funciones: 128.
-		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(112)
+		// Sprint 11, tanda 1 (V39): 117 triggers (el cambio de estado del colegio, el año escolar y la facultad del titular)
+		// y 19 funciones (cc_ahora_lima_real, cc_colegio_en_preparacion y cc_es_titular): 136.
+		// Sprint 11, tanda 1c (V40): los mismos 117 triggers y 21 funciones (cc_codigo_promotoria y cc_promotoria_antigua): 138.
+		// Sprint 11, tanda 2 (V41): 124 triggers (7 nuevos) y 22 funciones (cc_supresion_en_curso): 146.
+		assertThat(HuellasObjetosBd.triggersEsperados()).hasSize(124)
 				.isEqualTo(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS);
-		assertThat(esperadas).hasSize(128).containsKeys("trg_libreta_emitida_nace", "trg_entrega_libreta_nace",
+		assertThat(esperadas).hasSize(146).containsKeys("cc_supresion_en_curso", "trg_exportacion_colegio_nace", "trg_exportacion_colegio_cambio", "trg_descarga_exportacion_nace", "trg_acta_supresion_nace", "trg_acta_supresion_estado", "trg_evento_auditoria_tachado", "trg_evento_auditoria_sin_borrado", "cc_codigo_promotoria", "cc_promotoria_antigua", "trg_cambio_estado_colegio_nace", "trg_cambio_estado_colegio_estado",
+				"trg_anio_escolar_nace", "trg_anio_escolar_cambio", "trg_uso_facultad_titular_nace", "cc_ahora_lima_real",
+				"cc_colegio_en_preparacion", "cc_es_titular", "trg_libreta_emitida_nace", "trg_entrega_libreta_nace",
 				"trg_exportacion_calificaciones_nace", "trg_delegacion_siagie_nace", "cc_docente_de_area", "trg_lote_calificacion_nace",
 				"trg_calificacion_nace", "trg_exoneracion_area_nace", "trg_borrador_conclusion_nace", "cc_rol_activo", "trg_configuracion_evaluacion_nace",
 				"trg_configuracion_evaluacion_cambio", "trg_periodo_evaluacion_nace", "trg_periodo_evaluacion_cambio",

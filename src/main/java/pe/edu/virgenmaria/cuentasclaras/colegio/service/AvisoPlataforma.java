@@ -35,7 +35,51 @@ public record AvisoPlataforma(Long colegioId, Tipo tipo, List<String> parametros
 		/** El operador propuso cambiar el correo externo de control (falta la aprobación de la Promotoría). */
 		CORREO_CONTROL_PROPUESTO,
 		/** El correo externo de control cambió (el operador en preparación; la Promotoría lo aprobó en producción). */
-		CORREO_CONTROL_CAMBIADO
+		CORREO_CONTROL_CAMBIADO,
+		/** Sprint 11, tanda 1: un operador propuso un cambio de estado (o el bloqueo de la facultad del titular). */
+		CAMBIO_ESTADO_PROPUESTO,
+		/** Sprint 11, tanda 1: otro operador lo aprobó (con la fecha en que rige). */
+		CAMBIO_ESTADO_APROBADO,
+		/** Sprint 11, tanda 1: se rechazó o se anuló el cambio propuesto. */
+		CAMBIO_ESTADO_RESUELTO,
+		/** Sprint 11, tanda 1: sistema.plataforma aplicó el cambio. */
+		CAMBIO_ESTADO_APLICADO,
+		/** Sprint 11, tanda 1 (AP-4, AP-13 y H3): la suspensión espera cierres, comprobantes, órdenes o libretas. */
+		CAMBIO_ESTADO_EN_ESPERA,
+		/** Sprint 11, tanda 1: recordatorio a 7 días y a 1 día de la suspensión. */
+		SUSPENSION_PROXIMA,
+		/** Sprint 11, tanda 1 (AP-10): el titular objetó una baja o una suspensión. */
+		OBJECION_TITULAR,
+		/** Sprint 11, tanda 1 (AP-10): un operador respondió la objeción. */
+		OBJECION_RESPONDIDA,
+		/** Sprint 11, tanda 1 (sección 3.12): el titular usó su facultad. */
+		FACULTAD_TITULAR_USADA,
+		/** Sprint 11, tanda 1c (3.16, A1c-8): una Promotoría aplicó un cambio directo (a todas las Promotorías y al control). */
+		ACCION_DIRECTA,
+		/** Tanda 1c (A1c-2, A1c-3, decisión 218): un cambio directo espera 24 horas y se puede frenar. */
+		DIRECTA_EN_ESPERA,
+		/** Tanda 1c: se frenó un cambio que esperaba. */
+		DIRECTA_FRENADA,
+		/** Tanda 1c (A1c-4): quien cambió la cuenta intentó confirmar la conciliación (alerta CRÍTICA). */
+		CONCILIACION_BLOQUEADA,
+		/** Sprint 11, tanda 2 (3.9): la exportación está lista (sus huellas, al control). */
+		EXPORTACION_LISTA,
+		/** Tanda 2 (AP2-13): una descarga, la clave vista o el archivo borrado. */
+		EXPORTACION_MOVIMIENTO,
+		/** Tanda 2 (AP2-13): la exportación falló (alerta CRÍTICA). */
+		EXPORTACION_FALLIDA,
+		/** Tanda 2 (AP-11, AP2-9 y AP2-10): la autorización de conservación, la retención legal y el vencimiento. */
+		CONSERVACION,
+		/** Tanda 2 (3.11): el acta de supresión (propuesta, aprobada, ejecutada). */
+		ACTA_SUPRESION;
+
+		/**
+		 * Lo que distingue la clave idempotente de cada tipo. Los del sprint 8 conservan sus cuatro letras (las claves ya
+		 * guardadas no cambian); los nuevos llevan su nombre completo (los de cambio de estado empiezan igual).
+		 */
+		public String codigo() {
+			return ordinal() <= CORREO_CONTROL_CAMBIADO.ordinal() ? name().substring(0, 4) : name();
+		}
 	}
 
 	public AvisoPlataforma {
@@ -45,4 +89,5 @@ public record AvisoPlataforma(Long colegioId, Tipo tipo, List<String> parametros
 		Objects.requireNonNull(entidadId, "entidadId");
 		parametros = parametros == null ? List.of() : List.copyOf(parametros);
 	}
+
 }

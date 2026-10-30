@@ -23,6 +23,29 @@ public final class ClaveFirma {
 		return "solicitud_cambio:" + id(id) + ":" + estado.name();
 	}
 
+	/**
+	 * Sprint 11, tanda 1c (A1c-1): la persona dueña de una cuenta directiva confirma el cambio de su contacto con el código
+	 * de su contacto anterior.
+	 */
+	public static String solicitudConfirmada(Long id) {
+		return "solicitud_cambio:" + Objects.requireNonNull(id, "id") + ":CONFIRMADA";
+	}
+
+	/** Sprint 11, tanda 1c (A1c-2, A1c-3): frenar una directa que espera (otra Promotoría, la persona afectada o un operador). */
+	public static String solicitudFrenada(Long id) {
+		return "solicitud_cambio:" + Objects.requireNonNull(id, "id") + ":FRENADA";
+	}
+
+	/** Sprint 11, tanda 1c (decisión 218): el socio aprueba al instante un conector en espera. */
+	public static String conectorAprobadoAhora(Long id) {
+		return "conector_colegio:" + Objects.requireNonNull(id, "id") + ":VIGENTE";
+	}
+
+	/** Sprint 11, tanda 1c (decisión 218): frenar un conector en espera (otra Promotoría o un operador). */
+	public static String conectorFrenado(Long id) {
+		return "conector_colegio:" + Objects.requireNonNull(id, "id") + ":FRENADO";
+	}
+
 	public static String descuento(Long id, Enum<?> estado) {
 		return "descuento:" + id(id) + ":" + estado.name();
 	}
@@ -287,6 +310,85 @@ public final class ClaveFirma {
 	 */
 	public static String delegacionSiagie(Long usuarioId, java.time.LocalDate desde) {
 		return "delegacion_siagie:" + id(usuarioId) + ":" + Objects.requireNonNull(desde, "desde") + ":DELEGADA";
+	}
+
+	/**
+	 * Sprint 11, tanda 1 (sección 3.3): un operador propone el cambio número {@code numero} del colegio (los anteriores más
+	 * uno), en el colegio de plataforma (trg_cambio_estado_colegio_nace: {@code cambio_estado_colegio:{colegio}:{n}}).
+	 */
+	public static String cambioEstadoPropuesto(Long colegioId, long numero) {
+		return "cambio_estado_colegio:" + id(colegioId) + ":" + numero;
+	}
+
+	/**
+	 * Sprint 11, tanda 1: la resolución de un cambio de estado ({@code APROBADO}, {@code RECHAZADO}, {@code ANULADO} y
+	 * {@code OBJECION_RESUELTA}, del operador en el colegio de plataforma; {@code OBJETADO}, del titular en su colegio).
+	 */
+	public static String cambioEstado(Long cambioId, String resolucion) {
+		return "cambio_estado_colegio:" + id(cambioId) + ":" + Objects.requireNonNull(resolucion, "resolucion");
+	}
+
+	/** Sprint 11, tanda 1 (sección 3.7): Promotoría o Dirección crea el año (trg_anio_escolar_nace). */
+	public static String anioEscolarCreado(int anio) {
+		return "anio_escolar:" + anio + ":CREADO";
+	}
+
+	/** Sprint 11, tanda 1 (AP-9): Promotoría o Dirección cambia el año sobre su versión (trg_anio_escolar_cambio). */
+	public static String anioEscolarCambiado(Long anioId, long version) {
+		return "anio_escolar:" + id(anioId) + ":" + version;
+	}
+
+	/** Sprint 11, tanda 1 (sección 3.12): el uso número {@code numero} de la facultad del titular. */
+	public static String facultadTitular(Long colegioId, long numero) {
+		return "facultad_titular:" + id(colegioId) + ":" + numero;
+	}
+
+	/**
+	 * Sprint 11, tanda 2 (3.9): un operador pide por escrito la exportación número {@code numero} del colegio, en el colegio
+	 * de plataforma (trg_exportacion_colegio_nace: {@code exportacion_colegio:{colegio}:{n}}).
+	 */
+	public static String exportacionPedida(Long colegioId, long numero) {
+		return "exportacion_colegio:" + id(colegioId) + ":" + numero;
+	}
+
+	/** El prefijo de una clave numerada del colegio (las firmas anteriores con él cuentan el número siguiente). */
+	public static String prefijoColegio(Long colegioId, String accion) {
+		return "colegio:" + id(colegioId) + ":" + Objects.requireNonNull(accion, "accion") + ":";
+	}
+
+	/** Sprint 11, tanda 2 (AP-11) y correcciones (A2): la vez {@code n} que el titular autoriza conservar 12 meses. */
+	public static String conservacion(Long colegioId, long n) {
+		return prefijoColegio(colegioId, "CONSERVACION") + n;
+	}
+
+	/** Correcciones (A2): la vez {@code n} que el titular pide retirar la autorización (se aplica a las 24 horas). */
+	public static String conservacionRetirada(Long colegioId, long n) {
+		return prefijoColegio(colegioId, "CONSERVACION_RETIRADA") + n;
+	}
+
+	/** Correcciones (A2): la vez {@code n} que un operador frena un retiro pedido (en el colegio de plataforma). */
+	public static String conservacionFrenada(Long colegioId, long n) {
+		return prefijoColegio(colegioId, "CONSERVACION_FRENADA") + n;
+	}
+
+	/** Sprint 11, tanda 2 (AP2-10) y correcciones (M1): la vez {@code n} que un operador pone la retención legal. */
+	public static String retencionLegal(Long colegioId, long n) {
+		return prefijoColegio(colegioId, "RETENCION_LEGAL") + n;
+	}
+
+	/** Correcciones (M1): la vez {@code n} que OTRO operador quita la retención legal (en el colegio de plataforma). */
+	public static String retencionLegalRetirada(Long colegioId, long n) {
+		return prefijoColegio(colegioId, "RETENCION_LEGAL_RETIRADA") + n;
+	}
+
+	/** Sprint 11, tanda 2 (3.11): un operador propone el acta de supresión del colegio (en el colegio de plataforma). */
+	public static String actaSupresion(Long colegioId) {
+		return "acta_supresion:" + id(colegioId);
+	}
+
+	/** Sprint 11, tanda 2 (3.11): OTRO operador aprueba el acta (en el colegio de plataforma). */
+	public static String actaSupresionAprobada(Long actaId) {
+		return "acta_supresion:" + id(actaId) + ":APROBADA";
 	}
 
 	private static Long id(Long id) {

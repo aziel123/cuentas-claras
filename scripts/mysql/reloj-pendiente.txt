@@ -1,0 +1,8 @@
+# Sprint 11, tanda 1 (AP-3): cuántos usos del reloj que la conexión puede mover con SET timestamp (UTC_TIMESTAMP, NOW(,
+# CURDATE, CURRENT_TIMESTAMP y CURRENT_DATE) quedan en scripts/mysql/03-triggers.sql, fuera de los comentarios «--». Los
+# triggers nuevos y las versiones nuevas usan cc_ahora_lima_real(). El paso «reloj-real» del CI (scripts/ci/reloj-real.sh)
+# falla si 03 tiene MÁS que este número: el conteo solo puede bajar. En la tanda 2 del sprint 11 llega a 0.
+# Tanda 1c: 31 → 27 (trg_feriado_anulacion y trg_comunicado_estado pasan al reloj real).
+# Tanda 2 (AP2-6): 27 → 0. Se reemplazó la expresión completa «UTC_TIMESTAMP(6) - INTERVAL 5 HOUR» por cc_ahora_lima_real()
+# (y DATE(...) por cc_hoy_lima()), corrigiendo los intervalos compuestos. Ya no puede subir.
+0

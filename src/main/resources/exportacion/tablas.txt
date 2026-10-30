@@ -1,0 +1,92 @@
+# Sprint 11, tanda 2 (sección 3.9, AP-12): las tablas que van en la exportación de un colegio, una por línea:
+#   tabla  filtro  [-columna,-columna]
+# El filtro es «colegio_id» (WHERE colegio_id = ?) o «usuario» (las filas de las cuentas del colegio). Las columnas
+# con signo menos no se exportan (claves, tokens, secretos); tampoco ninguna columna binaria (BLOB o VARBINARY).
+# InventarioSupresionTest compara esta lista con information_schema: toda tabla con colegio_id va aquí o en
+# scripts/fin-de-colegio/exclusiones.txt (con su motivo).
+acceso_dato_personal  colegio_id
+ajuste_cuota  colegio_id
+alumno  colegio_id
+anio_escolar  colegio_id
+anulacion_pago  colegio_id
+aplicacion_pago  colegio_id
+apoderado  colegio_id
+archivo_cargado  colegio_id
+asignacion_area  colegio_id
+asignacion_docente  colegio_id
+aviso_asistencia_corte  colegio_id
+aviso_familia  colegio_id
+borrador_conclusion  colegio_id
+caja_diaria  colegio_id
+calificacion  colegio_id
+cambio_contacto_titular  colegio_id
+cambio_correo_control  colegio_id
+cambio_estado_colegio  colegio_id
+cierre_caja  colegio_id
+cierre_mensual_banco  colegio_id
+codigo_modular  colegio_id
+comprobante  colegio_id
+comprobante_linea  colegio_id
+comunicado  colegio_id
+comunicado_adjunto  colegio_id
+comunicado_destinatario  colegio_id
+conector_colegio  colegio_id  -secreto_cifrado,-secreto_pista,-clave_publica,-codigo_escrito_sha256
+configuracion_academica  colegio_id
+configuracion_colegio  colegio_id
+configuracion_evaluacion  colegio_id
+confirmacion_lectura  colegio_id
+consentimiento_aviso  colegio_id
+cuenta_bancaria  colegio_id
+cuota  colegio_id
+delegacion_llamada  colegio_id
+delegacion_siagie  colegio_id
+deposito_caja  colegio_id
+descuento  colegio_id
+entrega_libreta  colegio_id
+evento_auditoria  colegio_id
+evento_pasarela  colegio_id
+exoneracion_area  colegio_id
+exportacion_calificaciones  colegio_id
+exportacion_nomina  colegio_id
+extracto_bancario  colegio_id
+familia  colegio_id
+feriado  colegio_id
+huella_bitacora  colegio_id
+huella_hora  colegio_id
+importacion_alumnos  colegio_id
+libreta_emitida  colegio_id
+linea_recaudacion  colegio_id
+linea_saldo_inicial  colegio_id
+liquidacion_linea  colegio_id
+liquidacion_pasarela  colegio_id
+llamada_control  colegio_id
+lote_calificacion  colegio_id
+lote_recaudacion  colegio_id
+lote_saldo_inicial  colegio_id
+marca_asistencia  colegio_id
+matricula  colegio_id
+matricula_historial  colegio_id
+mensaje  colegio_id  -clave,-codigo_sha256,-huella_accion
+movimiento_bancario  colegio_id
+muestra_llamada  colegio_id
+orden_pago  colegio_id  -clave_idempotencia
+orden_pago_cuota  colegio_id
+pago  colegio_id  -clave_idempotencia
+partida_conciliacion  colegio_id
+periodo_evaluacion  colegio_id
+plan_pension  colegio_id
+primera_direccion  colegio_id
+primera_promotoria  colegio_id
+reembolso  colegio_id
+reembolso_pasarela  colegio_id
+registro_asistencia  colegio_id
+renovacion_matricula  colegio_id
+resolucion_respaldo  colegio_id
+resumen_diario  colegio_id
+seccion  colegio_id
+serie_comprobante  colegio_id
+solicitud_cambio  colegio_id  -codigo_escrito_sha256
+uso_facultad_titular  colegio_id  -codigo_escrito_sha256
+usuario  colegio_id  -clave_hash
+verificacion_bancaria  colegio_id
+usuario_rol  usuario

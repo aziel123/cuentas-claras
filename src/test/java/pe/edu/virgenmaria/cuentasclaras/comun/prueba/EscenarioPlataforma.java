@@ -54,7 +54,7 @@ public final class EscenarioPlataforma {
 	public static AltaColegioRequest alta(String nombre, String ruc, String titularUsuario, String dni, String celular) {
 		return new AltaColegioRequest(nombre, "Asociación " + nombre + " S.A.C.", ruc, "Av. Los Educadores 123, Lima",
 				"contacto@" + titularUsuario.replace('.', '-') + ".edu.pe", EnumSet.of(Nivel.PRIMARIA, Nivel.SECUNDARIA),
-				2027, LocalDate.of(2027, 3, 1), LocalDate.of(2027, 12, 17), "CT-" + titularUsuario, "Titular " + nombre, dni,
+				"CT-" + titularUsuario, "Titular " + nombre, dni,
 				titularUsuario, celular, null);
 	}
 }

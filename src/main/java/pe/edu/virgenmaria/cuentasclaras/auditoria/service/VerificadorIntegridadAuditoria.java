@@ -13,11 +13,14 @@ import pe.edu.virgenmaria.cuentasclaras.auditoria.model.EslabonCadena;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.EventoAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EslabonCadenaRepository;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.repository.EventoAuditoriaRepository;
+import pe.edu.virgenmaria.cuentasclaras.comun.cripto.Sha256;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -44,6 +47,9 @@ public class VerificadorIntegridadAuditoria {
 
 	static final int TAMANO_LOTE = 500;
 
+	/** Sprint 11, tanda 2: el nombre que deja el tachado de suprimir.sql. */
+	static final String TACHADO = "suprimido";
+
 	private static final Logger LOG = LoggerFactory.getLogger(VerificadorIntegridadAuditoria.class);
 
 	private final EventoAuditoriaRepository eventos;
@@ -58,6 +64,14 @@ public class VerificadorIntegridadAuditoria {
 
 	/** Sprint 9, tanda 3 (E19): lo guardado coincide con su huella de la bitácora (los comunicados). */
 	private List<VerificacionDeContenido> contenidos = List.of();
+
+	/** Sprint 11, tanda 2 (3.11): las actas de supresión ejecutadas (los eventos tachados de esos colegios). */
+	private SupresionesDeLaBitacora supresiones = Map::of;
+
+	@org.springframework.beans.factory.annotation.Autowired(required = false)
+	void setSupresiones(SupresionesDeLaBitacora supresiones) {
+		this.supresiones = supresiones == null ? Map::of : supresiones;
+	}
 
 	@org.springframework.beans.factory.annotation.Autowired(required = false)
 	void setContenidos(List<VerificacionDeContenido> contenidos) {
@@ -93,7 +107,8 @@ public class VerificadorIntegridadAuditoria {
 	private ResultadoVerificacion ejecutar(HuellaBitacora huellaAnotada) {
 		Long colegioActual = ContextoColegio.actual();
 		Long visor = colegioActual != null && colegioActual > 0 ? colegioActual : null;
-		ResultadoVerificacion resultado = transaccion.execute(estado -> revisarCadena(visor, huellaAnotada));
+		Map<Long, SupresionesDeLaBitacora.ActaEjecutada> actas = supresiones.actasEjecutadas();
+		ResultadoVerificacion resultado = transaccion.execute(estado -> revisarCadena(visor, huellaAnotada, actas));
 		if (resultado.integra() && visor != null && !contenidos.isEmpty()) {
 			List<String> problemas = transaccion.execute(estado -> contenidos.stream()
 					.flatMap(c -> c.problemas().stream()).toList());
@@ -118,8 +133,11 @@ public class VerificadorIntegridadAuditoria {
 	}
 
 	/** @param visor colegio que verifica; {@code null} = proceso del sistema, ve todo */
-	private ResultadoVerificacion revisarCadena(Long visor, HuellaBitacora huellaAnotada) {
+	private ResultadoVerificacion revisarCadena(Long visor, HuellaBitacora huellaAnotada,
+			Map<Long, SupresionesDeLaBitacora.ActaEjecutada> actas) {
 		EslabonCadena eslabon = cadena.bloquear();
+		Map<Long, String> huellasTachadas = new HashMap<>();
+		actas.keySet().forEach(c -> huellasTachadas.put(c, HASH_INICIAL));
 		String hashAnterior = HASH_INICIAL;
 		long esperada = 1;
 		long cursor = Long.MIN_VALUE;
@@ -145,7 +163,17 @@ public class VerificadorIntegridadAuditoria {
 					return ResultadoVerificacion.alterada(delVisor, visible ? secuencia : null,
 							"El evento " + ubicacion(visible, secuencia) + "no fue registrado por la aplicación.");
 				}
-				if (!sellador.esValido(hashAnterior, evento)) {
+				// Tanda 2 (3.11): un evento tachado de un colegio con su acta ejecutada no se recalcula; su hash guardado
+				// entra en la huella encadenada que se compara con la del acta al final.
+				SupresionesDeLaBitacora.ActaEjecutada acta = evento.getColegioId() == null ? null
+						: actas.get(evento.getColegioId());
+				boolean cubierto = acta != null && secuencia <= acta.ultimaSecuencia();
+				if (cubierto) {
+					huellasTachadas.merge(evento.getColegioId(), "", (h, nada) -> Sha256.hex(h + "|" + evento.getId() + "|"
+							+ evento.getHash()));
+				}
+				boolean tachado = cubierto && TACHADO.equals(evento.getNombreUsuario());
+				if (!tachado && !sellador.esValido(hashAnterior, evento)) {
 					return ResultadoVerificacion.alterada(delVisor, visible ? secuencia : null,
 							"El evento " + ubicacion(visible, secuencia) + "fue modificado o insertado fuera de la aplicación.");
 				}
@@ -167,6 +195,12 @@ public class VerificadorIntegridadAuditoria {
 		if (!mismoHash(hashAnterior, eslabon.getUltimoHash())) {
 			return ResultadoVerificacion.alterada(delVisor, visor == null ? ultima : null,
 					"El último evento no coincide con el eslabón de la cadena.");
+		}
+		for (SupresionesDeLaBitacora.ActaEjecutada acta : actas.values()) {
+			if (!mismoHash(huellasTachadas.get(acta.colegioId()), acta.huellaEventos())) {
+				return ResultadoVerificacion.alterada(delVisor, null, "Los eventos tachados de un colegio suprimido no "
+						+ "coinciden con la huella de su acta de supresión (acta " + acta.actaId() + ").");
+			}
 		}
 		if (huellaAnotada != null && !huellaEncontrada) {
 			return ResultadoVerificacion.alterada(delVisor, null, "La huella que anotaste (evento "

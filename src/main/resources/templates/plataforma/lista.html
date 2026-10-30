@@ -10,6 +10,8 @@
 				ficha de cada colegio y el avance de su puesta en marcha.</p>
 		</div>
 		<div class="acciones">
+			<a class="btn btn-secundario" th:href="@{/plataforma/cambios-estado}">Cambios de estado</a>
+			<a class="btn btn-secundario" th:href="@{/plataforma/esperas}">Cambios en espera</a>
 			<a class="btn btn-secundario" th:href="@{/plataforma/bitacora}">Bitácora de la plataforma</a>
 			<a class="btn btn-primario" th:href="@{/plataforma/colegios/nuevo}">Dar de alta un colegio</a>
 		</div>
@@ -20,7 +22,11 @@
 	</th:block>
 
 	<section class="tarjeta" aria-labelledby="titulo-colegios">
-		<h2 id="titulo-colegios">Colegios</h2>
+		<h2 id="titulo-colegios" th:text="${dadosDeBaja} ? 'Dados de baja' : 'Colegios'">Colegios</h2>
+		<p class="secundario">
+			<a th:unless="${dadosDeBaja}" th:href="@{/plataforma(baja=true)}">Ver los dados de baja</a>
+			<a th:if="${dadosDeBaja}" th:href="@{/plataforma}">Volver a los colegios</a>
+		</p>
 		<th:block th:if="${#lists.isEmpty(colegios)}">
 			<div th:replace="~{fragments/componentes :: estadoVacio('Todavía no hay colegios', 'Da de alta el primero con los datos del contrato firmado.')}"></div>
 		</th:block>
@@ -32,7 +38,8 @@
 			</thead>
 			<tbody>
 				<tr th:each="c : ${colegios}">
-					<td data-etiqueta="Colegio"><a class="tactil" th:href="@{/plataforma/colegios/{id}(id=${c.id})}" th:text="${c.nombre}">Colegio</a></td>
+					<td data-etiqueta="Colegio"><a class="tactil" th:href="@{/plataforma/colegios/{id}(id=${c.id})}" th:text="${c.nombre}">Colegio</a>
+						<a class="secundario" th:href="@{/plataforma/colegios/{id}/estado(id=${c.id})}">Estado</a></td>
 					<td data-etiqueta="RUC" class="num" th:text="${c.ruc} ?: '—'">20123456789</td>
 					<td data-etiqueta="Estado"><span th:replace="~{fragments/componentes :: badge(${c.estado.etiqueta()},
 						${c.estado.name() == 'PRODUCCION'} ? 'exito' : 'alerta')}"></span></td>

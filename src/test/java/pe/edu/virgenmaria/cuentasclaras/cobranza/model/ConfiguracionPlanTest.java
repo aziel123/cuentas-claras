@@ -22,7 +22,7 @@ class ConfiguracionPlanTest {
 			LocalDate.of(2027, 12, 17));
 
 	private static ConfiguracionPlan porDefecto(String matricula, String pension) {
-		return ConfiguracionPlan.porDefecto(2027, new BigDecimal(matricula), new BigDecimal(pension));
+		return ConfiguracionPlan.porDefecto(ANIO_2027, new BigDecimal(matricula), new BigDecimal(pension));
 	}
 
 	@Test
@@ -40,7 +40,7 @@ class ConfiguracionPlanTest {
 
 	@Test
 	void en2028LaMatriculaVenceEl29DeFebrero() {
-		assertThat(ConfiguracionPlan.porDefecto(2028, BigDecimal.ONE, BigDecimal.TEN).vencimientoMatricula())
+		assertThat(ConfiguracionPlan.porDefecto(AnioEscolar.nuevo(2028, false, LocalDate.of(2028, 3, 1), LocalDate.of(2028, 12, 18)), BigDecimal.ONE, BigDecimal.TEN).vencimientoMatricula())
 				.isEqualTo(LocalDate.of(2028, 2, 29));
 	}
 

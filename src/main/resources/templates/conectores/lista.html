@@ -4,10 +4,10 @@
 <main id="contenido" class="contenido" data-pantalla="conectores">
 	<div class="cabecera">
 		<div>
-			<h1>Conectores del colegio</h1>
-			<p class="secundario">Adónde entra el dinero del colegio y quién emite sus boletas. Cambiar un conector lo propone una
-				persona y lo aprueba otra de Promotoría o Dirección con su firma; en todos participa una Promotoría. Toda la
-				Promotoría y el correo externo de control reciben un aviso.</p>
+			<!--/* Sprint 11, tanda 1b (F-D7): la explicación (un control) pasa a un «i»; con la 1c, lo de la Promotoría no pide
+			     segunda firma, pero sí su código y la espera de 24 horas en lo que mueve dinero. */-->
+			<h1><span>Conectores del colegio</span>
+				<span th:replace="~{fragments/componentes :: info('conectores', 'Adónde entra el dinero y quién emite las boletas. Lo que propone Administración lo aprueba otra persona; lo de la Promotoría se aplica con su código, y la cuenta del banco 24 horas después. Toda la Promotoría y el correo de control reciben un aviso.', 'cómo cambia un conector')}"></span></h1>
 		</div>
 	</div>
 
@@ -18,8 +18,8 @@
 	</th:block>
 
 	<section class="tarjeta" th:each="s : ${vista.porTipo}" th:attr="aria-labelledby=${'titulo-' + s.tipo}" th:data-tipo="${s.tipo}">
-		<h2 th:id="${'titulo-' + s.tipo}" th:text="${s.etiqueta}">Cuenta bancaria</h2>
-		<p class="secundario" th:text="|Define ${s.descripcion}.| + (${s.mueveDinero} ? ' Mueve dinero: una Promotoría debe proponerlo o aprobarlo.' : '')">Define...</p>
+		<h2 th:id="${'titulo-' + s.tipo}"><span th:text="${s.etiqueta}">Cuenta bancaria</span>
+			<span th:replace="~{fragments/componentes :: info(|tipo-${s.tipo}|, |Define ${s.descripcion}.| + (${s.mueveDinero} ? ' Mueve dinero: una Promotoría debe proponerlo o aprobarlo.' : ''), ${s.etiqueta})}"></span></h2>
 
 		<div th:if="${s.vigente != null}" class="conector-vigente" data-conector="vigente">
 			<p>
@@ -32,7 +32,14 @@
 			<p class="secundario" th:text="|Propuso ${s.vigente.propuestoPor}; aprobó ${s.vigente.resueltoPor} el ${#temporals.format(s.vigente.resueltoEn, 'dd/MM/yyyy HH:mm')}.|">Propuso…</p>
 		</div>
 		<th:block th:if="${s.vigente == null}">
-			<div th:replace="~{fragments/componentes :: estadoVacio('Sin conector vigente', ${s.sinConector})}"></div>
+			<!--/* Sprint 11, tanda 1b (sección 3.14): la cuenta del banco guía; los demás tipos, como antes. */-->
+			<th:block th:if="${s.tipo == 'CUENTA_BANCARIA'}" th:with="v=${@guiaPasos.vacio('cuenta-bancaria')}">
+				<div th:replace="~{fragments/componentes :: estadoVacioPaso('Todavía no registraste la cuenta donde entra el dinero',
+					null, ${v}, 'Registrar la cuenta del banco', |#proponer-${s.tipo}|)}"></div>
+			</th:block>
+			<th:block th:unless="${s.tipo == 'CUENTA_BANCARIA'}">
+				<div th:replace="~{fragments/componentes :: estadoVacio('Sin conector vigente', ${s.sinConector})}"></div>
+			</th:block>
 		</th:block>
 
 		<div th:each="p : ${s.propuestos}" class="conector-propuesto" data-conector="propuesto">
@@ -47,12 +54,36 @@
 			<form th:if="${p.puedeProbar}" method="post" th:action="@{/conectores/{id}/probar(id=${p.id})}">
 				<button th:replace="~{fragments/componentes :: boton('Probar conexión', 'secundario')}">Probar conexión</button>
 			</form>
-			<p class="secundario">Lo aprueba otra persona de Promotoría o Dirección en <a th:href="@{/aprobaciones}">Aprobaciones</a>.</p>
+			<p class="secundario" th:unless="${p.enEspera}">Lo aprueba otra persona de Promotoría o Dirección en <a th:href="@{/aprobaciones}">Aprobaciones</a>. Si lo propusiste tú y eres Promotoría, aplícalo con tu código desde <a th:href="@{/aprobaciones/{id}(id=${p.solicitudId})}" th:if="${p.solicitudId != null}">su solicitud</a>.</p>
+			<!--/* Sprint 11, tanda 1c (decisión 218): la espera de 24 horas, el socio y el freno. */-->
+			<th:block th:if="${p.enEspera}">
+				<div th:replace="~{fragments/componentes :: alerta('advertencia', |Entra en vigencia el ${#temporals.format(p.venceEspera, 'dd/MM/yyyy HH:mm')} si nadie lo frena. Si no lo reconoces, frénalo hoy y avisa al proveedor.|)}"></div>
+				<form method="post" th:if="${p.puedeAprobarAhora and (pedidoConector == null or pedidoConector != p.id)}" th:action="@{/conectores/{id}/codigo-socio(id=${p.id})}">
+					<button type="submit" class="btn btn-secundario">Aprobar ahora (enviar código)</button>
+				</form>
+				<form method="post" class="formulario formulario-angosto" th:if="${p.puedeAprobarAhora and pedidoConector != null and pedidoConector == p.id}" th:action="@{/conectores/{id}/aprobar-ahora(id=${p.id})}">
+					<input type="hidden" name="codigoMensajeId" th:value="${pedido.mensajeId}">
+					<p th:text="|Te enviamos el código a tu ${pedido.destino}. Vale 10 minutos.|">Te enviamos el código.</p>
+					<p class="secundario" th:if="${codigoDemostracion != null}" th:text="|Demo: el código es ${codigoDemostracion}|">Demo</p>
+					<div class="campo">
+						<label th:for="|codigo-socio-${p.id}|">Código de 6 dígitos</label>
+						<input class="input" th:id="|codigo-socio-${p.id}|" name="codigo" required inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+					</div>
+					<button type="submit" class="btn btn-primario">Aprobar ahora</button>
+				</form>
+				<form method="post" class="formulario formulario-angosto" th:if="${p.puedeFrenar}" th:action="@{/conectores/{id}/frenar(id=${p.id})}">
+					<div class="campo">
+						<label th:for="|frenar-${p.id}|">Por qué lo frenas (obligatorio)</label>
+						<textarea class="input" th:id="|frenar-${p.id}|" name="motivo" required minlength="20" maxlength="500"></textarea>
+					</div>
+					<button type="submit" class="btn btn-peligro">Frenar</button>
+				</form>
+			</th:block>
 		</div>
 
 		<details th:if="${vista.puedeProponer and #lists.isEmpty(s.propuestos)}" class="conector-formulario">
 			<summary th:text="${s.vigente == null} ? 'Registrar el conector' : 'Proponer un cambio'">Proponer un cambio</summary>
-			<form method="post" class="formulario formulario-angosto" th:action="@{/conectores/{t}(t=${#strings.toLowerCase(#strings.replace(s.tipo, '_', '-'))})}">
+			<form method="post" class="formulario formulario-angosto" th:id="|proponer-${s.tipo}|" th:action="@{/conectores/{t}(t=${#strings.toLowerCase(#strings.replace(s.tipo, '_', '-'))})}">
 				<div class="campo">
 					<label th:for="${'proveedor-' + s.tipo}">Proveedor</label>
 					<select class="input" th:id="${'proveedor-' + s.tipo}" name="proveedor" required>
@@ -83,6 +114,16 @@
 						<label for="afectacion">Afectación al IGV</label>
 						<select class="input" id="afectacion" name="afectacionIgv"><option value="INAFECTO">Inafecto</option><option value="EXONERADO">Exonerado</option></select>
 					</div>
+					<!--/* Sprint 11, tanda 1b (F-D8): el acepto del simulado, en el mismo formulario si es Promotoría. */-->
+					<th:block th:unless="${oseAceptado}">
+						<label class="opcion" th:if="${esPromotoria}" data-acepto-ose>
+							<input type="checkbox" name="aceptoOseSimulado" value="true">
+							<span>Acepto usar el comprobante simulado y emitir mi comprobante legal aparte</span>
+							<span th:replace="~{fragments/componentes :: info('acepto-ose', 'Solo si eliges el modo Simulado. Queda con la firma de tu sesión, en la bitácora, y no se deshace. El comprobante simulado no tiene valor ante SUNAT.', 'el acepto del comprobante simulado')}"></span>
+						</label>
+						<p th:unless="${esPromotoria}" class="secundario" data-falta-acepto>Falta que la Promotoría firme el acepto.
+							<a class="enlace-tactil" th:href="@{/puesta-en-marcha}">Ver dónde lo firma</a></p>
+					</th:block>
 					<div class="campo">
 						<label for="secreto-OSE">Token del OSE (solo Nubefact)</label>
 						<input class="input" type="password" id="secreto-OSE" name="secreto" autocomplete="off" aria-describedby="secreto-ose-ayuda">

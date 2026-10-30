@@ -75,6 +75,10 @@ public class Descuento extends BaseEntity {
 	@Column(name = "resuelto_por", length = 60)
 	private String resueltoPor;
 
+	/** Sprint 11, tanda 1c (sección 3.16): TRUE si lo resolvió directo la Promotoría que lo hizo (si no, nulo). */
+	@Column
+	private Boolean directa;
+
 	@Column(name = "resuelto_en")
 	private LocalDateTime resueltoEn;
 
@@ -117,6 +121,20 @@ public class Descuento extends BaseEntity {
 
 	public void aprobar(String por, LocalDateTime ahora) {
 		resolver(EstadoDescuento.APROBADO, por, ahora);
+	}
+
+	/**
+	 * Sprint 11, tanda 1c (decisión 216): lo aprueba la Promotoría que lo pidió, con su solicitud directa (y su código).
+	 * En MySQL, trg_descuento_resuelto exige esa solicitud.
+	 */
+	public void aprobarDirecta(String promotoria, LocalDateTime ahora) {
+		if (estado != EstadoDescuento.SOLICITADO) {
+			throw new ReglaNegocioException("El descuento ya fue " + estado.etiqueta().toLowerCase() + ".");
+		}
+		estado = EstadoDescuento.APROBADO;
+		resueltoPor = Objects.requireNonNull(promotoria, "promotoria");
+		resueltoEn = Objects.requireNonNull(ahora, "ahora");
+		directa = Boolean.TRUE;
 	}
 
 	public void rechazar(String por, LocalDateTime ahora) {

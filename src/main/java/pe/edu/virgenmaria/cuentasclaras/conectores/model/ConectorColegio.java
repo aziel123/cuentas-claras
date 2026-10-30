@@ -98,6 +98,31 @@ public class ConectorColegio extends BaseEntity {
 	@Column(name = "prueba_detalle", length = MAX_DETALLE_PRUEBA)
 	private String pruebaDetalle;
 
+	/** Sprint 11, tanda 1c (decisiones 217 y 218): TRUE si lo aprobó directo la Promotoría que lo propuso. */
+	@Column
+	private Boolean directa;
+
+	/** Tanda 1c (A1c-6): fin de la espera de 24 horas. La pone SOLO la base (en H2 queda vacía). */
+	@Column(name = "aplica_desde", insertable = false, updatable = false)
+	private LocalDateTime aplicaDesde;
+
+	@Column(name = "frenado_por", length = 60)
+	private String frenadoPor;
+
+	/** La hora del freno: la pone la base. */
+	@Column(name = "frenado_en", insertable = false, updatable = false)
+	private LocalDateTime frenadoEn;
+
+	@Column(name = "motivo_freno", length = 500)
+	private String motivoFreno;
+
+	/** Tanda 1c (A1c-2, A1c-5): el código del socio que lo aprobó al instante y la SHA-256 de lo que escribió. */
+	@Column(name = "codigo_mensaje_id")
+	private Long codigoMensajeId;
+
+	@Column(name = "codigo_escrito_sha256", length = 64)
+	private String codigoEscritoSha256;
+
 	protected ConectorColegio() {
 		// requerido por JPA
 	}
@@ -178,6 +203,79 @@ public class ConectorColegio extends BaseEntity {
 		resueltoEn = Objects.requireNonNull(ahora, "ahora");
 	}
 
+	/**
+	 * Sprint 11, tanda 1c (decisiones 217 y 218): la Promotoría que lo propuso lo aprueba directo con su solicitud directa
+	 * (ya firmada, con su código). El OSE queda VIGENTE; lo que mueve dinero, EN_ESPERA (la espera la fija la base).
+	 */
+	public void aprobarDirecto(String promotoria, LocalDateTime ahora) {
+		exigir(EstadoConector.PROPUESTO, "aprobar");
+		if (!Boolean.TRUE.equals(pruebaOk)) {
+			throw new ReglaNegocioException("Antes de aprobarlo, prueba la conexión con éxito («Probar conexión»).");
+		}
+		if (!Objects.equals(promotoria, propuestoPor)) {
+			throw new IllegalStateException("La directa la aprueba quien lo propuso");
+		}
+		directa = Boolean.TRUE;
+		resueltoPor = promotoria;
+		resueltoEn = Objects.requireNonNull(ahora, "ahora");
+		if (tipo.mueveDinero()) {
+			estado = EstadoConector.EN_ESPERA;
+		}
+		else {
+			estado = EstadoConector.VIGENTE;
+			vigente = Boolean.TRUE;
+		}
+	}
+
+	/** Tanda 1c: EN_ESPERA → VIGENTE al vencer la espera ({@code sistema.conectores}; quién lo aprobó no cambia). */
+	public void aplicarAlVencer() {
+		exigir(EstadoConector.EN_ESPERA, "aplicar");
+		estado = EstadoConector.VIGENTE;
+		vigente = Boolean.TRUE;
+	}
+
+	/** Tanda 1c (decisión 218, A1c-2): el socio (otra Promotoría con 30 días en el rol) lo aprueba al instante. */
+	public void aprobarAhora(String socio, Long mensajeId, String escritoSha256, LocalDateTime ahora) {
+		exigir(EstadoConector.EN_ESPERA, "aprobar al instante");
+		if (Objects.equals(socio, propuestoPor)) {
+			throw new ReglaNegocioException("Tú lo propusiste: lo aprueba al instante otra Promotoría (tu socio). Si no, se "
+					+ "aplica solo al terminar la espera.");
+		}
+		estado = EstadoConector.VIGENTE;
+		vigente = Boolean.TRUE;
+		resueltoPor = Objects.requireNonNull(socio, "socio");
+		resueltoEn = Objects.requireNonNull(ahora, "ahora");
+		codigoMensajeId = Objects.requireNonNull(mensajeId, "mensajeId");
+		codigoEscritoSha256 = Objects.requireNonNull(escritoSha256, "escritoSha256");
+	}
+
+	/** Tanda 1c (decisión 218): EN_ESPERA → FRENADO, con motivo (de 20 a 500 caracteres). No entra en vigencia. */
+	public void frenar(String por, String motivo, LocalDateTime ahora, LocalDateTime venceEspera) {
+		exigir(EstadoConector.EN_ESPERA, "frenar");
+		if (venceEspera != null && !ahora.isBefore(venceEspera)) {
+			throw new ReglaNegocioException("La espera ya terminó: el conector entra en vigencia.");
+		}
+		String texto = motivo == null ? "" : motivo.strip();
+		if (texto.length() < 20 || texto.length() > 500) {
+			throw new ReglaNegocioException("Escribe por qué lo frenas (de 20 a 500 caracteres): lo leen todas las Promotorías, "
+					+ "el correo de control y los operadores.");
+		}
+		estado = EstadoConector.FRENADO;
+		frenadoPor = Objects.requireNonNull(por, "por");
+		motivoFreno = texto;
+	}
+
+	/**
+	 * Tanda 1c: el fin de la espera: el que puso la base (MySQL) o, si no hay (H2), la aprobación más {@code espera}.
+	 * {@code null} si no está en espera.
+	 */
+	public LocalDateTime venceEspera(java.time.Duration espera) {
+		if (aplicaDesde != null) {
+			return aplicaDesde;
+		}
+		return Boolean.TRUE.equals(directa) && resueltoEn != null && tipo.mueveDinero() ? resueltoEn.plus(espera) : null;
+	}
+
 	/** VIGENTE → REEMPLAZADO: otro del mismo tipo entra en su lugar en esta transacción. */
 	public void reemplazar() {
 		exigir(EstadoConector.VIGENTE, "reemplazar");
@@ -202,6 +300,39 @@ public class ConectorColegio extends BaseEntity {
 
 	public boolean conSecreto() {
 		return secretoCifrado != null;
+	}
+
+	public boolean isDirecta() {
+		return Boolean.TRUE.equals(directa);
+	}
+
+	public LocalDateTime getAplicaDesde() {
+		return aplicaDesde;
+	}
+
+	public String getFrenadoPor() {
+		return frenadoPor;
+	}
+
+	public LocalDateTime getFrenadoEn() {
+		return frenadoEn;
+	}
+
+	public String getMotivoFreno() {
+		return motivoFreno;
+	}
+
+	public Long getCodigoMensajeId() {
+		return codigoMensajeId;
+	}
+
+	/**
+	 * Tanda 1c (A1c-5): la huella del conector que autoriza el código del socio, igual que la calcula la base
+	 * ({@code SHA2(CONCAT_WS('|', tipo, proveedor, clave_publica, configuracion), 256)}).
+	 */
+	public String huellaAccion() {
+		return pe.edu.virgenmaria.cuentasclaras.comun.cripto.Sha256.hex(tipo.name() + "|" + proveedor.name() + "|"
+				+ clavePublica + "|" + configuracion);
 	}
 
 	@PreRemove
