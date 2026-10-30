@@ -119,12 +119,20 @@ public final class LimpiezaBaseDatos {
 				+ "WHERE cambio_estado_id IS NOT NULL OR facultad_cambio_id IS NOT NULL");
 		// Sprint 11, tanda 2 (V41): la exportación apunta a su cambio de estado y la descarga a su exportación; el colegio,
 		// a su acta de supresión.
+		// El cierre apunta a su exportación y la exportación a su suspensión (FK circular, las dos obligatorias por CHECK):
+		// se borran juntas sin revisar las FK (solo en H2).
 		jdbc.update("DELETE FROM descarga_exportacion");
-		jdbc.update("DELETE FROM exportacion_colegio");
 		jdbc.update("UPDATE colegio SET acta_supresion_id = NULL, retencion_legal_motivo = NULL, retencion_legal_desde = NULL, "
 				+ "retencion_legal_por = NULL WHERE acta_supresion_id IS NOT NULL OR retencion_legal_por IS NOT NULL");
 		jdbc.update("DELETE FROM acta_supresion");
-		jdbc.update("DELETE FROM cambio_estado_colegio");
+		jdbc.execute("SET REFERENTIAL_INTEGRITY FALSE");
+		try {
+			jdbc.update("DELETE FROM exportacion_colegio");
+			jdbc.update("DELETE FROM cambio_estado_colegio");
+		}
+		finally {
+			jdbc.execute("SET REFERENTIAL_INTEGRITY TRUE");
+		}
 		jdbc.update("UPDATE enlace_activacion SET mensaje_id = NULL WHERE mensaje_id IS NOT NULL");
 		// Sprint 11, tanda 1c (V40): la solicitud y el conector apuntan al mensaje de su código.
 		jdbc.update("UPDATE solicitud_cambio SET codigo_mensaje_id = NULL, codigo_escrito_sha256 = NULL WHERE codigo_mensaje_id IS NOT NULL");

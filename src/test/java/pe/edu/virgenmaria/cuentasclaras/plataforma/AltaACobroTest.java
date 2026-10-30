@@ -87,6 +87,9 @@ class AltaACobroTest {
 	private PasoAProduccion paso;
 
 	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.ConservacionDatos conservacion;
+
+	@Autowired
 	private ServicioCobro cobro;
 
 	@Autowired
@@ -238,6 +241,9 @@ class AltaACobroTest {
 		paso.sinSaldoInicial();
 		ingresar(titular);
 		paso.aceptarOseSimulado();
+		// Sprint 11, tanda 2 (AP2-9): el paso 16, la autorización de conservación, la firma el titular.
+		ingresar(titular);
+		ContextoColegio.en(colegio, () -> conservacion.autorizar());
 		ingresar(titular);
 		paso.pasar();
 		assertThat(jdbc.queryForObject("SELECT estado FROM colegio WHERE id = ?", String.class, colegio))

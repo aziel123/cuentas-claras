@@ -134,7 +134,8 @@ public class FinDeColegio {
 				c.conservacionAutorizada(), c.getRetencionLegalMotivo(), c.getRetencionLegalPor(),
 				c.getRetencionLegalDesde(), c.conRetencionLegal() && !Objects.equals(c.getRetencionLegalPor(),
 						operador.getUsername()), vistas,
-				!vigente && EnumSet.of(EstadoColegio.PRODUCCION, EstadoColegio.SUSPENDIDO, EstadoColegio.CERRADO)
+				!vigente && EnumSet.of(EstadoColegio.PREPARACION, EstadoColegio.PRODUCCION, EstadoColegio.SUSPENDIDO,
+				EstadoColegio.CERRADO)
 						.contains(c.getEstado()),
 				!vigente && c.getEstado() == EstadoColegio.SUSPENDIDO, vistaActa,
 				acta.isEmpty() && finDeVida && !c.conRetencionLegal());
@@ -148,9 +149,10 @@ public class FinDeColegio {
 		if (ref.length() < 5 || ref.length() > 200) {
 			throw new ReglaNegocioException("Escribe la referencia del pedido escrito del colegio (de 5 a 200 caracteres).");
 		}
-		if (!EnumSet.of(EstadoColegio.PRODUCCION, EstadoColegio.SUSPENDIDO, EstadoColegio.CERRADO)
+		if (!EnumSet.of(EstadoColegio.PREPARACION, EstadoColegio.PRODUCCION, EstadoColegio.SUSPENDIDO,
+				EstadoColegio.CERRADO)
 				.contains(colegio.getEstado())) {
-			throw new ReglaNegocioException("La exportación a pedido es de un colegio en producción, suspendido o cerrado.");
+			throw new ReglaNegocioException("La exportación a pedido es de un colegio en preparación (antes de su baja), en producción, suspendido o cerrado.");
 		}
 		long numero = ContextoColegio.en(colegioId, () -> lectura.execute(t -> {
 			exigirSinVigente();

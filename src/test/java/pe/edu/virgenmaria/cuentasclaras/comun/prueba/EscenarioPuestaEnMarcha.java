@@ -24,6 +24,9 @@ public final class EscenarioPuestaEnMarcha {
 	public static void datos(JdbcTemplate jdbc, long colegioId, Set<Nivel> niveles, long promotorId) {
 		LocalDateTime ahora = LocalDateTime.now(ZoneId.of("America/Lima"));
 		String sufijo = Long.toString(colegioId);
+		// Sprint 11, tanda 2 (AP2-9): el paso 16, la autorización de conservación del titular (aquí, de la Promotoría).
+		jdbc.update("UPDATE colegio SET conservacion_autorizada_por = (SELECT nombre_usuario FROM usuario WHERE id = ?), "
+				+ "conservacion_autorizada_en = ? WHERE id = ?", promotorId, ahora, colegioId);
 		jdbc.update("INSERT INTO anio_escolar (colegio_id, anio, estado, vigente, inicio_clases, fin_clases, creado_en, "
 				+ "creado_por, actualizado_en) VALUES (?, 2026, 'EN_CURSO', TRUE, '2026-03-02', '2026-12-18', ?, 'prueba', ?)",
 				colegioId, ahora, ahora);

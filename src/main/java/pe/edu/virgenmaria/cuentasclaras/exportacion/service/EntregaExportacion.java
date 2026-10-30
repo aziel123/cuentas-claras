@@ -110,7 +110,13 @@ public class EntregaExportacion {
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public boolean iniciar(ExportacionColegio e) {
-		Usuario titular = titular();
+		Usuario titular = primeras.findFirstByIdNotNull().flatMap(p -> usuarios.findById(p.getUsuarioId())).orElse(null);
+		if (titular == null) {
+			auditoria.registrar(AccionAuditoria.EXPORTACION_ENTREGA_INICIADA, "exportacion_colegio", e.getId().toString(),
+					null, "SIN TITULAR", "El colegio no tiene titular registrado: la exportación queda LISTA y se entrega "
+							+ "cuando dos operadores registren al titular (o vence a los 30 días).");
+			return false;
+		}
 		long numero = e.getIntentosFallidos() + 1L + (e.getTokenHash() == null ? 0 : 1);
 		var mensaje = creador.enlaceExportacionPorCorreo(titular, new CreadorMensajes.Contenido(TipoMensaje.EXPORTACION_ENLACE,
 				PlantillaMensaje.EXPORTACION_ENLACE, List.of(e.getVenceEn().format(DIA)), "exportacion_colegio", e.getId()),

@@ -4565,6 +4565,10 @@ DROP TRIGGER IF EXISTS trg_cambio_estado_colegio_estado$$
 CREATE TRIGGER trg_cambio_estado_colegio_estado BEFORE UPDATE ON cambio_estado_colegio FOR EACH ROW
 BEGIN
     DECLARE v_ahora DATETIME(6) DEFAULT cc_ahora_lima_real();
+    -- Tanda 2 (AP2-1): el aplicado_en de un cambio aplicado cuenta el plazo de la supresión: no cambia, ni con el DBA.
+    IF OLD.aplicado_en IS NOT NULL AND NOT (NEW.aplicado_en <=> OLD.aplicado_en) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la fecha en que se aplico un cambio de estado no cambia';
+    END IF;
     IF SUBSTRING_INDEX(SESSION_USER(), '@', 1) = 'cc_app' THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: el cambio de estado lo escribe solo cc_sistema';
     END IF;
@@ -4761,7 +4765,7 @@ BEGIN
             OR (NEW.motivo = 'CIERRE' AND NEW.creado_por <=> 'sistema.exportacion' AND EXISTS (SELECT 1
                 FROM colegio c WHERE c.id = NEW.colegio_id AND c.estado = 'SUSPENDIDO'))
             OR (NEW.motivo = 'PEDIDO' AND cc_operador_activo(NEW.creado_por) AND EXISTS (SELECT 1 FROM colegio c
-                WHERE c.id = NEW.colegio_id AND c.tipo = 'COLEGIO' AND c.estado IN ('PRODUCCION', 'SUSPENDIDO', 'CERRADO'))
+                WHERE c.id = NEW.colegio_id AND c.tipo = 'COLEGIO' AND c.estado IN ('PREPARACION', 'PRODUCCION', 'SUSPENDIDO', 'CERRADO'))
                 AND cc_firma_valida(NEW.plataforma_id, CONCAT('exportacion_colegio:', NEW.colegio_id, ':',
                     (SELECT COUNT(*) FROM exportacion_colegio x WHERE x.colegio_id = NEW.colegio_id) + 1), NEW.creado_por))) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: la exportacion la genera sistema.exportacion o un operador a pedido, con su firma';
