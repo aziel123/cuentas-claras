@@ -950,7 +950,11 @@ public class VerificadorPermisosBaseDatos implements InitializingBean {
 			"trg_delegacion_siagie_nace",
 			// Sprint 11, tanda 1 (V39).
 			"trg_cambio_estado_colegio_nace", "trg_cambio_estado_colegio_estado", "trg_anio_escolar_nace",
-			"trg_anio_escolar_cambio", "trg_uso_facultad_titular_nace");
+			"trg_anio_escolar_cambio", "trg_uso_facultad_titular_nace",
+			// Sprint 11, tanda 2 (V41): la exportación, su descarga, el acta de supresión y la bitácora que solo se tacha.
+			"trg_exportacion_colegio_nace", "trg_exportacion_colegio_cambio", "trg_descarga_exportacion_nace",
+			"trg_acta_supresion_nace", "trg_acta_supresion_estado", "trg_evento_auditoria_tachado",
+			"trg_evento_auditoria_sin_borrado");
 
 	static final String SQL_TRIGGERS_INSTALADOS = "SELECT triggers_instalados()";
 

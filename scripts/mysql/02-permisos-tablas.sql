@@ -374,6 +374,12 @@ GRANT UPDATE (directa) ON cuentasclaras.plan_pension TO 'cc_negocio';
 GRANT UPDATE (directa) ON cuentasclaras.lote_saldo_inicial TO 'cc_negocio';
 GRANT UPDATE (directa) ON cuentasclaras.descuento TO 'cc_negocio';
 
+-- ===================== Sprint 11 · tanda 2 (V41): exportación, cierre y supresión =====================
+-- colegio: el titular autoriza (o retira con su firma) la conservación de 12 meses (AP-11, AP2-9): la hora la pone la base.
+-- cerrado_en y conservar_hasta son columnas generadas: NINGÚN GRANT (1143 con cc_app y cc_sistema; el DBA, 3105).
+-- exportacion_colegio, descarga_exportacion y acta_supresion: cc_app solo las lee (el SELECT de cuentasclaras.*).
+GRANT UPDATE (conservacion_autorizada_por, conservacion_autorizada_en) ON cuentasclaras.colegio TO 'cc_negocio';
+
 -- 2. Exclusivas de cc_sistema (H1, H4 y sección 3.9). El nombre del usuario es FIJO: los triggers lo reconocen con
 --    cc_es_sistema() (SESSION_USER() dentro de un trigger o de una función DEFINER es el usuario de la conexión).
 --    Identidad: altas, claves, bloqueo, desactivación, roles y sesiones. usuario_rol sin UPDATE: un rol no se edita, se
@@ -415,6 +421,20 @@ GRANT UPDATE (estado, estado_desde, cambio_estado_id, suspendido_en, facultad_bl
     ON cuentasclaras.colegio TO 'cc_sistema'@'%';
 --    La facultad del titular: solo inserción y solo por la ruta de identidad (como primera_promotoria).
 GRANT INSERT ON cuentasclaras.uso_facultad_titular TO 'cc_sistema'@'%';
+--    Sprint 11, tanda 2 (V41). La exportación la escribe sistema.exportacion (y el operador a pedido del colegio); la
+--    entrega, sistema.exportacion con la sesión pública del titular. El colegio, el motivo y quién la creó no cambian
+--    (1143); que las huellas del ZIP no cambien una vez puestas lo exige trg_exportacion_colegio_cambio.
+GRANT INSERT, UPDATE (estado, vigente, archivo, archivos, filas, bytes, sha256_zip, sha256_manifiesto, clave_cifrada,
+    clave_version, clave_vista_en, token_hash, token_vence_en, dni_confirmado_en, codigo_hash, codigo_vence_en,
+    intentos_fallidos, descargas, detalle_fallo, generada_en, vence_en, entregada_en, actualizado_en, version)
+    ON cuentasclaras.exportacion_colegio TO 'cc_sistema'@'%';
+GRANT INSERT ON cuentasclaras.descarga_exportacion TO 'cc_sistema'@'%';            -- solo inserción
+--    El acta de supresión la proponen y aprueban dos operadores (cc_sistema); sistema.auditoria pone cadena_verificada_en.
+--    EJECUTANDO y EJECUTADA las escribe SOLO el DBA (cc_migrador) con suprimir.sql (trg_acta_supresion_estado).
+GRANT INSERT, UPDATE (estado, aprobado_por, aprobador_id, aprobado_en, cadena_verificada_en, actualizado_en, version)
+    ON cuentasclaras.acta_supresion TO 'cc_sistema'@'%';
+--    La retención legal (AP2-10): la pone un operador y la quita otro, cada uno con su firma.
+GRANT UPDATE (retencion_legal_motivo, retencion_legal_desde, retencion_legal_por) ON cuentasclaras.colegio TO 'cc_sistema'@'%';
 --    Escrituras que solo hace un proceso: con cc_app, 1142.
 GRANT INSERT ON cuentasclaras.semilla_muestreo TO 'cc_sistema'@'%';               -- sistema.muestreo, solo inserción
 GRANT INSERT ON cuentasclaras.muestra_llamada TO 'cc_sistema'@'%';                -- sistema.panel, solo inserción

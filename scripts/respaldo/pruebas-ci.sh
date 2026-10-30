@@ -119,7 +119,9 @@ e30)
 e32)
 	ancla=$(sed -n 's/^ *"secuencia_despues": *\([0-9]*\),$/\1/p' "$(ultimo_manifiesto)")
 	nueva=$((ancla - 3))
-	admin -e "DELETE FROM evento_auditoria WHERE secuencia > $nueva;
+	# Sprint 11, tanda 2: la bitácora ya no se borra ni con el DBA (trg_evento_auditoria_sin_borrado). El DBA deshonesto
+	# quita primero el trigger (el arranque lo delataría también); el respaldo siguiente igual lo detecta por el ancla.
+	admin -e "DROP TRIGGER IF EXISTS trg_evento_auditoria_sin_borrado; DELETE FROM evento_auditoria WHERE secuencia > $nueva;
 		UPDATE auditoria_cadena SET ultima_secuencia = $nueva,
 			ultimo_hash = (SELECT h FROM (SELECT hash AS h FROM evento_auditoria WHERE secuencia = $nueva) x) WHERE id = 1"
 	set +e

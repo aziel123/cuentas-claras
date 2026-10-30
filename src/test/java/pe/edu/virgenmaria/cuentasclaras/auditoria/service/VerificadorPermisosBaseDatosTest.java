@@ -762,7 +762,7 @@ class VerificadorPermisosBaseDatosTest {
 		// Sprint 10, tanda 3 (V37): 112 (la libreta, su entrega, la exportación de calificaciones y la delegación del SIAGIE).
 		// Sprint 11, tanda 1 (V39): 117 (el cambio de estado del colegio nace y cambia, el año escolar nace y cambia y el uso
 		// de la facultad del titular).
-		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(117);
+		org.assertj.core.api.Assertions.assertThat(VerificadorPermisosBaseDatos.TRIGGERS_ESPERADOS).hasSize(124);
 	}
 
 	/**
