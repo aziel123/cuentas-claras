@@ -173,7 +173,7 @@ class GuiaPreparacionWebTest {
 	void laPuestaEnMarchaMuestraEstadoResponsableEIr() throws Exception {
 		String html = mvc.perform(get("/puesta-en-marcha").with(UsuariosDePrueba.como(personal.get(Rol.PROMOTOR))))
 				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-		assertThat(Pattern.compile("data-paso=\"").matcher(html).results().count()).isEqualTo(16);
+		assertThat(Pattern.compile("data-paso=\"").matcher(html).results().count()).isEqualTo(17);
 		assertThat(Pattern.compile("data-siguiente").matcher(html).results().count()).isEqualTo(1);
 		assertThat(html).contains("data-estado-paso").contains("Lo hace: Promotoría").contains("aria-label=\"Ir: ")
 				.contains("Lo hace la plataforma").contains("Bloqueado: primero el paso 3")

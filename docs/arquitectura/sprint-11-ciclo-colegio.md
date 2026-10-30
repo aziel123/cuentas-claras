@@ -2149,6 +2149,54 @@ y `CajaControllerTest` (busca «Caja no decide montos» dentro del tooltip).
   lector de pantalla (NVDA) del banner, que pide una persona.
 
 
+## Tanda 2 · Implementación
+**Base (V41, 124 triggers, 22 funciones, 146 huellas).** `exportacion_colegio`, `descarga_exportacion` y `acta_supresion`;
+`colegio` gana la autorización de conservación, la retención legal, `acta_supresion_id` y las columnas generadas
+`cerrado_en` y `conservar_hasta`; `cambio_estado_colegio` gana `exportacion_id` y el tipo CIERRE; `mensaje`, los tipos
+`EXPORTACION_ENLACE` y `CODIGO_EXPORTACION`. En 03: `cc_supresion_en_curso` y los 7 triggers nuevos; versiones nuevas de
+`trg_colegio_cambio`, `trg_cambio_estado_colegio_nace` y `_estado`, `trg_sesion_usuario_nace`, `trg_mensaje_nace`,
+`trg_usuario_rol_baja` y `trg_resumen_diario_registro`; el reloj real en los 27 usos que quedaban (`reloj-pendiente.txt` en 0;
+`reloj-real.sh` exige además 0 `INTERVAL 5 HOUR`).
+
+**Aplicación.** Módulo `exportacion` (`TablasExportacion` con `exportacion/tablas.txt`, `LectorTablas`, `EscritorCsv`,
+`ZipCifrado` con zip4j 2.11.5, `Exportador`, `EntregaExportacion`, `VencimientoExportaciones`, `ExportacionesDelColegio`,
+`VerificadorSupresion`; procesos `GeneracionExportaciones`, `EntregaPublica`, `LimpiezaExportaciones` y
+`AlertaExportacionFallida`; la página pública `/exportacion/{token}`). En `plataforma`: `FinDeColegio` (pedido escrito,
+exportación de cierre, nuevo enlace, retención legal, acta, verificación de la cadena, acta en PDF), `TareasFinDeColegio`,
+`RevisionConservacion` y la pantalla `/plataforma/colegios/{id}/fin`. `CambiosEstadoColegio`: CIERRE con su exportación y la
+BAJA con datos (AP-6); la suspensión, habilitada por defecto. `AplicadorCambioEstado` publica `SuspensionAplicada` (la
+exportación se genera tras el commit). `VerificadorIntegridadAuditoria` acepta los eventos tachados con su acta
+(`SupresionesDeLaBitacora` / `ActasEjecutadasBitacora`). Familias en CERRADO hasta `conservar_hasta` (ingreso y filtro).
+Puesta en marcha: paso 16 «Autorización de conservación» (16 pasos, 14 obligatorios), `ConservacionDatos` y
+`/colegio/conservacion`. Scripts `scripts/fin-de-colegio/` (inventario, exclusiones, `suprimir.sql`, `reaplicar.sh`,
+`exportar-acta.sh`) y `restaurar-y-verificar.sh` (paso 4b). Documentos: `docs/operacion/fin-de-un-colegio.md`, términos
+(cláusula 8), encargo (cláusula 9), manuales del operador y de Promotoría, plantillas 49 a 55 para Meta.
+
+**Desviaciones (anotadas para QA y la auditoría del código).**
+- `cerrado_en` y `conservar_hasta` son columnas GENERADAS: el DBA recibe 3105 (no 1644); cc_app y cc_sistema, 1143.
+- Las huellas de la exportación: cc_sistema tiene la columna (las pone una vez) y el trigger rechaza cambiarlas (1644);
+  cc_app, 1142 (sin GRANT).
+- `aplicado_en` de un cambio aplicado no cambia ni con el DBA (AP2-1, nuevo en `trg_cambio_estado_colegio_estado`). Las
+  pruebas de MySQL simulan el plazo retirando ese trigger un momento y volviéndolo a crear con su texto de 03.
+- La exportación a PEDIDO también vale para un colegio en PREPARACION (si no, la BAJA con datos de AP-6 no tenía camino).
+- Las firmas de conservación y de retención son únicas por colegio (`uk_firma_operacion`): se dan y se retiran una vez;
+  volver a darlas necesita una clave numerada (pendiente si el colegio lo pide).
+- Tras 5 intentos fallidos, «Nuevo enlace» del operador manda otro; los intentos no bajan (el trigger lo exige), así que
+  cada intento fallido siguiente vuelve a anular el enlace hasta que el operador mande otro.
+- Un colegio sin titular registrado: la exportación queda LISTA y se audita «SIN TITULAR» (no FALLIDA).
+
+**Pruebas.** H2: `ExportacionDosColegiosTest` (cada fila de cada CSV del A es del A, nada del B; sin secretos),
+`ExportacionTest` (manifiesto y huellas; libreta alterada: FALLIDA y alerta a operadores), `CsvSinFormulasTest`,
+`ExportacionGrandeTest` (50,000 filas en flujo), `EntregaExportacionTest`, `EntregaIntentosTest`, `ExportacionAvisosTest`,
+`InventarioSupresionTest` (information_schema contra las tres listas), `VerificadorSupresionTest`,
+`AutorizacionConservacionTest`, `RetencionLegalTest`, `CierreTest`, `ModoConsultaCerradoTest`, `BajaConDatosTest`,
+`VerificadorCadenaTachadaTest` y `RevisionConservacionTest`. MySQL: `AuditoriaSprint11FinColegioMySqlTest` (el camino
+completo con `suprimir.sql` y dos colegios, `tachadoDeEventoDePlataformaFalla`, `actaDeOtraConexionFalla`,
+`tachadoDeOtraColumnaFalla`, `borradoDeBitacoraFalla`, `huellaEventosLaCalculaLaBase`, las huellas y la entrega, las
+columnas generadas, el acta fuera de su camino y la suspensión aplicada) y `RelojEnSuLimiteMySqlTest` (cada ventana un
+segundo antes y uno después). Quedan solo en H2: `actaVencidaFalla` (4 horas reales), la familia en CERRADO hasta
+`conservar_hasta` y a4/a5 de la suspensión aplicada.
+
 ## 13. Decisiones abiertas para el usuario
 Valor por defecto entre corchetes; se implementa el valor por defecto mientras el usuario no diga otra cosa (salvo la 202,
 que no entra en las tandas sin su confirmación). Sigue la numeración del sprint 10 (la última es la 191).

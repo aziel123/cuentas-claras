@@ -730,7 +730,7 @@
 | `{{2}}` | María Torres |
 | `{{3}}` | el extracto del 25/10/2026 |
 
-## 49. `cc_exportacion_lista_v1` · Los datos del colegio están listos
+## 49. `cc_exportacion_lista_v2` · Los datos del colegio están listos
 
 > Sprint 11, tanda 2 (sección 3.9). Al titular, a la Promotoría y al correo de control: las dos huellas SHA-256 con que se comprueba que el archivo no cambió. Nunca el enlace ni la clave.
 
@@ -745,7 +745,7 @@
 | `{{3}}` | 9f2c…a71b (64 caracteres) |
 | `{{4}}` | 4be0…19c2 (64 caracteres) |
 
-## 50. `cc_exportacion_enlace_v1` · Descargue los datos del colegio
+## 50. `cc_exportacion_enlace_v2` · Descargue los datos del colegio
 
 > Sprint 11, tanda 2 (AP2-4). SOLO por correo, al titular: el enlace de un solo uso lo agrega el envío (la base no lo ve). El código va aparte, solo por WhatsApp.
 
@@ -758,7 +758,7 @@
 | `{{1}}` | Colegio San Martín (ejemplo) |
 | `{{2}}` | 25/11/2026 |
 
-## 51. `cc_codigo_exportacion_v1` · Su código para descargar los datos del colegio
+## 51. `cc_codigo_exportacion_v2` · Su código para descargar los datos del colegio
 
 > Sprint 11, tanda 2 (AP2-4). SOLO por WhatsApp, al titular, después de escribir su DNI. Atado a esa exportación; el mensaje guarda solo su SHA-256.
 
@@ -772,7 +772,7 @@
 | `{{2}}` | 482913 |
 | `{{3}}` | 10:45 |
 
-## 52. `cc_exportacion_movimiento_v1` · Movimiento en la exportación de los datos
+## 52. `cc_exportacion_movimiento_v2` · Movimiento en la exportación de los datos
 
 > Sprint 11, tanda 2 (AP2-13). Cada descarga, cada vez que se ve la clave y el borrado del archivo a los 30 días avisan al correo de control y al titular.
 
@@ -786,7 +786,7 @@
 | `{{2}}` | se descargó el archivo |
 | `{{3}}` | descarga 1 de 3 |
 
-## 53. `cc_exportacion_fallida_v1` · Alerta: la exportación de los datos falló
+## 53. `cc_exportacion_fallida_v2` · Alerta: la exportación de los datos falló
 
 > Sprint 11, tanda 2 (AP2-13). Alerta CRÍTICA: una libreta no coincide con su huella (o el archivo no se pudo generar). No se entrega algo distinto de lo que vio la familia.
 
@@ -799,7 +799,7 @@
 | `{{1}}` | Colegio San Martín (ejemplo) |
 | `{{2}}` | una libreta no coincide con su huella |
 
-## 54. `cc_conservacion_v1` · Conservación de los datos del colegio
+## 54. `cc_conservacion_v2` · Conservación de los datos del colegio
 
 > Sprint 11, tanda 2 (AP-11, AP2-9 y AP2-10). La autorización de conservar 12 meses (o su retiro), la retención legal y el aviso de que la conservación vence.
 
@@ -813,7 +813,7 @@
 | `{{2}}` | el titular autorizó conservar los datos |
 | `{{3}}` | 12 meses después de una suspensión |
 
-## 55. `cc_acta_supresion_v1` · Acta de supresión de los datos del colegio
+## 55. `cc_acta_supresion_v2` · Acta de supresión de los datos del colegio
 
 > Sprint 11, tanda 2 (sección 3.11, L6). Al correo institucional y al de control: la propuesta, la aprobación y la ejecución del acta.
 

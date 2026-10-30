@@ -80,6 +80,16 @@ Detalle en `docs/operacion/`: [respaldos.md](../operacion/respaldos.md), [monito
 - Los avisos de esperas y frenos te llegan por tu contacto registrado; con una sola Promotoría en el colegio, también las
   anulaciones y devoluciones que ella aplica directo.
 
+## El fin de un colegio: exportación, cierre y supresión (sprint 11)
+- En **Plataforma → colegio → Estado → Exportación y supresión** ves las exportaciones (con su huella), la retención legal y
+  el acta. Nunca ves la clave, el enlace ni el código de una entrega.
+- La exportación sale sola al aplicarse la suspensión. Antes de cerrar, si tiene más de 30 días, **Generar la exportación de
+  cierre**. Si el titular agotó sus 5 intentos, **Nuevo enlace**.
+- **Cerrar** (con otro operador) cuando el titular la descargó o pasaron 30 días.
+- **Retención legal:** la pones tú con el motivo; la quita otro operador. Mientras está, no hay acta.
+- **Acta de supresión:** la propones tú, la aprueba otro; **Verificar la cadena** justo antes de que el DBA la ejecute (1 hora).
+  El procedimiento completo: `docs/operacion/fin-de-un-colegio.md`.
+
 ## Dónde ver el video
 | Video 9 · Si algo no cuadra en el colegio |
 |---|

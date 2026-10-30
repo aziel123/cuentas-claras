@@ -68,7 +68,7 @@
 - **Extractos del banco:** si cambiaste la cuenta bancaria hace menos de 30 días, el extracto lo confirma otra persona.
 
 ## Qué ves mientras tu colegio está en preparación (sprint 11)
-- **Arriba de tu inicio** ves «Tu colegio está en preparación: faltan N de 15 pasos», una barra con los pasos obligatorios hechos (de 13) y **el siguiente paso**, con quién lo hace.
+- **Arriba de tu inicio** ves «Tu colegio está en preparación: faltan N de 16 pasos», una barra con los pasos obligatorios hechos (de 14) y **el siguiente paso**, con quién lo hace.
 - Si el siguiente paso te toca, tienes el botón que te lleva directo a la pantalla. Si no, dice a quién le toca y, si hay algo que sí puedes hacer tú, te lo muestra aparte («Lo que puedes hacer tú»).
 - Las pantallas vacías dicen qué falta, quién lo hace y, si depende de otro paso, «Primero: …».
 - Lo que todavía no se puede (cobrar, enviar un comunicado, confirmar la recaudación, abrir la renovación) se ve deshabilitado con el motivo al lado.
@@ -76,6 +76,13 @@
 - **Tu inicio** muestra solo la guía (sin cifras ni gráficos en cero) y los 3 pasos que siguen. Las cifras y los gráficos aparecen cuando el colegio pasa a producción.
 - En la **Puesta en marcha** (`/puesta-en-marcha`), cada paso tiene su estado en palabras, quién lo hace e «Ir». Ahí firmas, con confirmación, «sin deudas anteriores» (en el paso del saldo inicial) y el acepto del comprobante simulado (o al proponerlo en Conectores, con la casilla). «Pasar a producción» se ve deshabilitado hasta que falten 0 pasos obligatorios.
 - Lo que haces tú se aplica directo (tanda 1c); lo que propone Administración lo apruebas tú o Dirección, y aparece en **Aprobaciones** con «Revisar», aunque se apruebe en su pantalla (planes, saldo inicial, extractos, recaudación, feriados, correo de control y respaldo).
+
+## Conservación de los datos y la exportación (sprint 11)
+- **Paso 16 de la Puesta en marcha, solo el titular:** en **Colegio → Conservación de los datos** autorizas con tu firma que,
+  si el colegio deja la plataforma, las familias consulten hasta 12 meses desde la suspensión. Sin tu autorización, los datos
+  se suprimen 30 días después del cierre. Desde la suspensión ya no cambia.
+- Si el colegio se suspende, te llega **por correo** el enlace para descargar todos los datos; escribes tu DNI y recibes un
+  código **por WhatsApp**. La clave del archivo se ve **una sola vez**: anótala. Hasta 3 descargas en 30 días.
 
 ## Dónde ver el video
 | Video 5 · El panel y el resumen | Video 6 · La llamada de control | Video 4 · Aprobar desde el celular |

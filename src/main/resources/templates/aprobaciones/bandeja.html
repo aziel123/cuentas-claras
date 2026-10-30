@@ -51,8 +51,8 @@
 					<ul class="detalle-solicitud" data-conector="visible">
 						<li th:each="linea : ${s.detalle}" th:unless="${#strings.startsWith(linea, 'Titular de la cuenta') or #strings.startsWith(linea, 'Prueba de conexión') or #strings.startsWith(linea, 'Una Promotoría')}">
 							<span th:text="${linea}">Número de cuenta completo: 191-2345678-0-12 · CCI completo: 00219100234567801255</span>
-							<span th:if="${#strings.startsWith(linea, 'Número de cuenta completo')}" class="aviso-cuenta" role="img"
-								aria-label="Confirma el número con el banco antes de aprobar" title="Confirma el número con el banco antes de aprobar">⚠</span>
+							<th:block th:if="${#strings.startsWith(linea, 'Número de cuenta completo')}"><span class="aviso-cuenta" data-aviso-cuenta
+								th:replace="~{fragments/componentes :: aviso(|cuenta-${s.id}|, 'Confirma el número con el banco antes de aprobar', 'el número de cuenta')}"></span></th:block>
 						</li>
 					</ul>
 					<details class="ver-detalle">

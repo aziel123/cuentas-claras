@@ -192,7 +192,7 @@ class CambioConectorTest {
 		int detalle = html.indexOf("<details class=\"ver-detalle\">");
 		assertThat(numero).as("número y CCI completos a la vista").isPositive();
 		assertThat(detalle).as("«Ver detalle» después").isGreaterThan(numero);
-		assertThat(html).contains("title=\"Confirma el número con el banco antes de aprobar\"", "<summary>Ver detalle</summary>");
+		assertThat(html).contains("Atención: Confirma el número con el banco antes de aprobar", "<summary>Ver detalle</summary>");
 		assertThat(html.indexOf("Titular de la cuenta", detalle)).as("el titular, en «Ver detalle»").isPositive();
 		assertThat(html.indexOf("Prueba de conexión", detalle)).isPositive();
 	}

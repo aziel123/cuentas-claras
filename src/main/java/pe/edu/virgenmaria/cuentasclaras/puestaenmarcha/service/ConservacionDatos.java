@@ -38,6 +38,8 @@ import java.util.Objects;
 @Transactional
 public class ConservacionDatos {
 
+	// La vista la ven también Dirección y Administración (la Puesta en marcha les muestra el paso); firmar, solo el titular.
+
 	/** Lo que ve el titular en la pantalla. */
 	public record Vista(boolean esTitular, boolean autorizada, String autorizadaPor, LocalDateTime autorizadaEn,
 			boolean editable, boolean puedeAutorizar, boolean puedeRetirar) {
@@ -69,6 +71,7 @@ public class ConservacionDatos {
 	}
 
 	@Transactional(readOnly = true)
+	@PreAuthorize("hasAnyRole('PROMOTOR', 'DIRECTOR', 'ADMINISTRACION')")
 	public Vista vista() {
 		Colegio c = colegio();
 		boolean titular = esTitular();

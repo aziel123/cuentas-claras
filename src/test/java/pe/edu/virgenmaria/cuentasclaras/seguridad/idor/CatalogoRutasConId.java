@@ -62,6 +62,11 @@ final class CatalogoRutasConId {
 		r("POST /activar/{colegio:\\d+}/{token:[A-Za-z0-9_-]+}", "colegio", Recurso.PUBLICO, "token", Recurso.PUBLICO);
 		r("GET /verificar/{colegio:\\d+}/{token:[A-Za-z0-9_-]+}", "colegio", Recurso.PUBLICO, "token", Recurso.PUBLICO);
 		r("POST /verificar/{colegio:\\d+}/{token:[A-Za-z0-9_-]+}", "colegio", Recurso.PUBLICO, "token", Recurso.PUBLICO);
+		// Sprint 11, tanda 2 (AP2-4): la entrega de la exportación (el token del enlace decide el colegio).
+		for (String paso : new String[] { "GET /exportacion/{token}", "POST /exportacion/{token}/dni",
+				"POST /exportacion/{token}/codigo", "POST /exportacion/{token}/descargar" }) {
+			r(paso, "token", Recurso.PUBLICO);
+		}
 		r("GET /webhooks/whatsapp/{colegio:\\d{1,12}}", "colegio", Recurso.PUBLICO);
 		r("POST /webhooks/whatsapp/{colegio:\\d{1,12}}", "colegio", Recurso.PUBLICO);
 		r("POST /webhooks/pasarela/{proveedor:[A-Za-z]{3,20}}/{colegio:\\d{1,12}}", "proveedor", Recurso.PUBLICO,
@@ -258,6 +263,17 @@ final class CatalogoRutasConId {
 					Recurso.CAMBIO_ESTADO);
 		}
 		r("POST /colegio/estado/{id:\\d+}/objecion", "id", Recurso.CAMBIO_ESTADO);
+		// Sprint 11, tanda 2: el fin del colegio (solo el operador; la exportación y el acta son de ese colegio).
+		for (String paso : new String[] { "GET /plataforma/colegios/{id:\\d+}/fin",
+				"GET /plataforma/colegios/{id:\\d+}/fin/acta.pdf", "POST /plataforma/colegios/{id:\\d+}/fin/acta",
+				"POST /plataforma/colegios/{id:\\d+}/fin/acta/cadena", "POST /plataforma/colegios/{id:\\d+}/fin/exportacion",
+				"POST /plataforma/colegios/{id:\\d+}/fin/exportacion-cierre", "POST /plataforma/colegios/{id:\\d+}/fin/retencion",
+				"POST /plataforma/colegios/{id:\\d+}/fin/retencion/quitar" }) {
+			r(paso, "id", Recurso.COLEGIO);
+		}
+		r("POST /plataforma/colegios/{id:\\d+}/fin/acta/{acta:\\d+}/aprobar", "id", Recurso.COLEGIO, "acta", Recurso.COLEGIO);
+		r("POST /plataforma/colegios/{id:\\d+}/fin/exportacion/{exportacion:\\d+}/reenviar", "id", Recurso.COLEGIO,
+				"exportacion", Recurso.COLEGIO);
 		// Sprint 11, tanda 1c: el operador frena lo que espera y propone el contacto de una cuenta directiva.
 		r("POST /plataforma/colegios/{id:\\d+}/esperas/conectores/{conector:\\d+}/frenar", "id", Recurso.COLEGIO, "conector",
 				Recurso.CONECTOR);

@@ -33,10 +33,10 @@
 			<tr th:each="e : ${fin.exportaciones}" th:attr="data-exportacion=${e.id}">
 				<td class="num" th:text="${e.id}">1</td>
 				<td th:text="${e.motivo}">SUSPENSION</td>
-				<td th:text="${e.estado}" th:title="${e.detalleFallo}">LISTA</td>
+				<td><span th:text="${e.estado}">LISTA</span> <span th:if="${e.detalleFallo != null}" class="secundario" th:text="${e.detalleFallo}">motivo</span></td>
 				<td th:text="${e.generadaEn != null} ? ${#temporals.format(e.generadaEn, 'dd/MM/yyyy HH:mm')} : '—'">—</td>
 				<td class="num" th:text="${e.descargas}">0</td>
-				<td class="num" th:text="${e.sha256Zip != null} ? ${#strings.substring(e.sha256Zip, 0, 12)} + '…' : '—'" th:title="${e.sha256Zip}">—</td>
+				<td class="num" th:text="${e.sha256Zip != null} ? ${#strings.substring(e.sha256Zip, 0, 12)} + '…' : '—'">—</td>
 				<td>
 					<form method="post" th:if="${e.puedeReenviar}" th:action="@{/plataforma/colegios/{id}/fin/exportacion/{x}/reenviar(id=${fin.colegioId},x=${e.id})}">
 						<button th:replace="~{fragments/componentes :: boton('Nuevo enlace', 'secundario')}">Nuevo enlace</button>
