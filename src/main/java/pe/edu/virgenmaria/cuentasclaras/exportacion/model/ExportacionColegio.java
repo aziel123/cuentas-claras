@@ -155,6 +155,10 @@ public class ExportacionColegio extends BaseEntity {
 		exigirEntregable();
 		this.tokenHash = Objects.requireNonNull(tokenHash, "tokenHash");
 		this.tokenVenceEn = venceEn.isAfter(this.venceEn) ? this.venceEn : venceEn;
+		// QA del sprint 11: cada entrega tiene sus 5 intentos. Sin esto, el enlace nuevo que manda el operador tras el
+		// quinto intento nacía con 0 y un solo error de tipeo lo volvía a anular. Los intentos anteriores quedan en la
+		// bitácora (EXPORTACION_INTENTO_FALLIDO) y cada enlace nuevo avisa al correo de control.
+		this.intentosFallidos = 0;
 		this.dniConfirmadoEn = null;
 		this.codigoHash = null;
 		this.codigoVenceEn = null;

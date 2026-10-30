@@ -169,6 +169,47 @@ class GuiaPreparacionWebTest {
 		}
 	}
 
+	/**
+	 * QA del sprint 11 (1b): cada «Ir» que se PINTA en la Puesta en marcha (y en el componente de la guía) abre sin 403 para
+	 * el rol que lo ve, con el colegio recién creado y con año escolar. La prueba anterior recorría la lista calculada, no
+	 * los enlaces de la página.
+	 */
+	@Test
+	void ningunIrPintadoEnLaPuestaEnMarchaDa403ANingunRol() throws Exception {
+		Pattern ir = Pattern.compile("<a [^>]*href=\"([^\"]+)\"[^>]*aria-label=\"Ir: [^\"]*\"|<a [^>]*aria-label=\"Ir: "
+				+ "[^\"]*\"[^>]*href=\"([^\"]+)\"");
+		int revisados = 0;
+		for (boolean conAnio : List.of(false, true)) {
+			if (conAnio) {
+				jdbc.update("INSERT INTO anio_escolar (colegio_id, anio, estado, vigente, inicio_clases, fin_clases, "
+						+ "creado_en, creado_por, actualizado_en) VALUES (?, 2026, 'EN_CURSO', TRUE, '2026-03-02', "
+						+ "'2026-12-18', NOW(), 'prueba', NOW())", colegio);
+			}
+			for (Map.Entry<Rol, Usuario> e : personal.entrySet()) {
+				for (String pagina : List.of("/puesta-en-marcha", "/inicio")) {
+					var respuesta = mvc.perform(get(pagina).with(UsuariosDePrueba.como(e.getValue()))).andReturn()
+							.getResponse();
+					if (respuesta.getStatus() != 200) {
+						continue;
+					}
+					Matcher m = ir.matcher(respuesta.getContentAsString());
+					while (m.find()) {
+						String enlace = (m.group(1) != null ? m.group(1) : m.group(2)).replace("&amp;", "&");
+						if (!enlace.startsWith("/")) {
+							continue;
+						}
+						int codigo = mvc.perform(get(enlace).with(UsuariosDePrueba.como(e.getValue()))).andReturn()
+								.getResponse().getStatus();
+						assertThat(codigo).as("%s en %s (año: %s): Ir a %s", e.getKey(), pagina, conAnio, enlace)
+								.isNotIn(403, 404, 500);
+						revisados++;
+					}
+				}
+			}
+		}
+		assertThat(revisados).isPositive();
+	}
+
 	@Test
 	void laPuestaEnMarchaMuestraEstadoResponsableEIr() throws Exception {
 		String html = mvc.perform(get("/puesta-en-marcha").with(UsuariosDePrueba.como(personal.get(Rol.PROMOTOR))))

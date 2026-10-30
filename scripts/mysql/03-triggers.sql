@@ -4776,7 +4776,8 @@ END$$
 -- La exportación avanza (3.9, AP2-4 y AP2-13): GENERANDO → LISTA (con sus huellas; la base pone generada_en y vence_en
 -- a 30 días) o FALLIDA; LISTA → ENTREGADA (con al menos una descarga registrada); LISTA o ENTREGADA → VENCIDA (vencida
 -- según el reloj real, sin la clave). Las huellas no cambian una vez puestas; la clave solo pasa a NULL; los contadores
--- solo suben de uno en uno (las descargas, iguales a sus filas). Solo cc_sistema.
+-- solo suben de uno en uno (las descargas, iguales a sus filas). Los intentos vuelven a 0 solo con un enlace nuevo (otro
+-- token_hash, sin DNI ni código: QA del sprint 11, cada entrega tiene sus 5 intentos). Solo cc_sistema.
 DROP TRIGGER IF EXISTS trg_exportacion_colegio_cambio$$
 CREATE TRIGGER trg_exportacion_colegio_cambio BEFORE UPDATE ON exportacion_colegio FOR EACH ROW
 BEGIN
@@ -4792,7 +4793,9 @@ BEGIN
             OR (OLD.clave_cifrada IS NOT NULL AND NEW.clave_cifrada IS NOT NULL AND NOT (NEW.clave_cifrada <=> OLD.clave_cifrada)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: las huellas, el archivo y la clave de la exportacion no cambian';
     END IF;
-    IF NEW.intentos_fallidos < OLD.intentos_fallidos OR NEW.intentos_fallidos > OLD.intentos_fallidos + 1
+    IF (NEW.intentos_fallidos < OLD.intentos_fallidos AND NOT (NEW.intentos_fallidos <=> 0 AND NEW.token_hash IS NOT NULL
+                AND NOT (NEW.token_hash <=> OLD.token_hash) AND NEW.codigo_hash IS NULL AND NEW.dni_confirmado_en IS NULL))
+            OR NEW.intentos_fallidos > OLD.intentos_fallidos + 1
             OR NEW.descargas < OLD.descargas OR NEW.descargas > OLD.descargas + 1
             OR NOT (NEW.descargas <=> (SELECT COUNT(*) FROM descarga_exportacion d WHERE d.exportacion_id = OLD.id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'cuentasclaras: los intentos y las descargas suben de uno en uno, con su registro';

@@ -288,6 +288,41 @@ class AuditoriaSprint11FinColegioMySqlTest {
 		assertThat(sesion(c.id(), c.titular().getId())).isEqualTo(1644);
 	}
 
+	/**
+	 * QA del sprint 11 (QA-S11-01): el enlace nuevo que manda el operador tras 5 intentos fallidos empieza con 5 intentos
+	 * (antes nacía con 0: el trigger no dejaba bajar el contador). Sin un enlace nuevo, cc_sistema no baja los intentos.
+	 */
+	@Test
+	void entregaNuevaTrasCincoIntentosEmpiezaEnCeroYSinEnlaceNuevoNoBaja() {
+		Colegio c = suspendido("20600000507", "987681007");
+		Long exportacion = exportacion(c.id());
+		String token = token(c.id());
+		for (int i = 0; i < 5; i++) {
+			assertThat(codigoAl(() -> entrega.confirmarDni(token, "11111111"))).isEqualTo(-2);
+		}
+		assertThat(intentos(exportacion)).isEqualTo(5);
+		String bajar = "UPDATE exportacion_colegio SET intentos_fallidos = 0 WHERE id = ?";
+		assertThat(codigoAl(() -> sistema().update(bajar, exportacion))).isEqualTo(1644);
+		assertThat(codigoAl(() -> sistema().update("UPDATE exportacion_colegio SET intentos_fallidos = 0, codigo_hash = "
+				+ "REPEAT('c', 64), token_hash = REPEAT('b', 64) WHERE id = ?", exportacion))).isEqualTo(1644);
+
+		como(operadorA(), () -> fin.reenviarEntrega(c.id(), exportacion));
+		assertThat(intentos(exportacion)).isZero();
+		String nuevo = token(c.id());
+		assertThat(entrega.ver(nuevo).intentosRestantes()).isEqualTo(5);
+		assertThat(codigoAl(() -> entrega.confirmarDni(nuevo, "11111111"))).isEqualTo(-2);
+		assertThat(intentos(exportacion)).isEqualTo(1);
+		// Con el mismo enlace, los intentos no vuelven a 0.
+		assertThat(codigoAl(() -> sistema().update(bajar, exportacion))).isEqualTo(1644);
+		entrega.confirmarDni(nuevo, c.dni());
+		assertThat(entrega.confirmarCodigo(nuevo, codigo(c.id()))).isNotBlank();
+	}
+
+	private int intentos(Long exportacion) {
+		return jdbc.queryForObject("SELECT intentos_fallidos FROM exportacion_colegio WHERE id = ?", Integer.class,
+				exportacion);
+	}
+
 	// ---------------------------------------------------------------------------------------------------- el acta
 
 	@Test
