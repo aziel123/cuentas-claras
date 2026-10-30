@@ -534,6 +534,8 @@ public enum AccionAuditoria {
 	COLEGIO_CERRADO("El colegio fue cerrado", true),
 	/** sistema.exportacion generó la exportación completa de los datos del colegio (con sus huellas). */
 	EXPORTACION_COLEGIO_GENERADA("Se generó la exportación de los datos del colegio", false),
+	/** Un operador pidió la exportación (pedido escrito del colegio o la de cierre). */
+	EXPORTACION_PEDIDA("Se pidió la exportación de los datos del colegio", true),
 	/** AP2-13: la exportación falló (una libreta no coincide con su huella, o el archivo no se pudo generar). */
 	EXPORTACION_FALLIDA("La exportación de los datos del colegio falló", true),
 	/** AP2-4: empezó la entrega al titular (el enlace, solo por correo). */

@@ -13,6 +13,7 @@
 			<span th:replace="~{fragments/componentes :: badge(${ficha.estado.etiqueta()}, ${ficha.estado.opera()} ? 'exito' : 'alerta')}"></span>
 			<a class="btn btn-secundario" th:href="@{/plataforma/colegios/{id}(id=${ficha.id})}">Ficha</a>
 			<a class="btn btn-secundario" th:href="@{/plataforma/cambios-estado}">Bandeja</a>
+			<a class="btn btn-secundario" th:href="@{/plataforma/colegios/{id}/fin(id=${ficha.id})}" data-fin-colegio>Exportación y supresión</a>
 		</div>
 	</div>
 
@@ -20,10 +21,9 @@
 
 	<section class="tarjeta" aria-labelledby="titulo-proponer">
 		<h2 id="titulo-proponer">Proponer un cambio</h2>
-		<p class="secundario">Dar de baja: solo en preparación y sin datos ni comprobantes (inmediata si nadie activó su cuenta;
-			si no, a los 7 días). Bloquear o desbloquear la facultad del titular: inmediato al aprobarse.</p>
-		<p class="secundario" th:unless="${suspensionDisponible}">La suspensión estará disponible cuando exista la exportación
-			completa de los datos del colegio.</p>
+		<p class="secundario">Dar de baja: solo en preparación y sin comprobantes; con alumnos, con su exportación entregada.
+			Cerrar: un suspendido, con su exportación entregada o de 30 días. Bloquear o desbloquear la facultad: inmediato.</p>
+		<p class="secundario" th:unless="${suspensionDisponible}">La suspensión está desactivada en esta instalación.</p>
 		<form class="formulario" method="post" th:action="@{/plataforma/colegios/{id}/estado(id=${ficha.id})}">
 			<div class="campo">
 				<label for="tipo">Cambio</label>

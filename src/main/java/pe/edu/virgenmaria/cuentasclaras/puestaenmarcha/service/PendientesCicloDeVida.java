@@ -62,12 +62,12 @@ public class PendientesCicloDeVida {
 		if (comprobantes.existsByIdNotNull() || ordenes.existsByIdNotNull()) {
 			motivos.add("el colegio ya emitió comprobantes o tuvo órdenes de pago (ya cobró)");
 		}
-		long datos = alumnos.count() + apoderados.count() + matriculas.count();
-		if (datos > 0) {
-			motivos.add("el colegio tiene alumnos, apoderados o matrículas: su baja llega con la exportación de sus datos "
-					+ "(tanda 2)");
-		}
 		return motivos;
+	}
+
+	/** AP-6: «datos» = alguna fila de alumno, apoderado o matrícula (la baja exige entonces la exportación, tanda 2). */
+	public boolean tieneDatos() {
+		return alumnos.count() + apoderados.count() + matriculas.count() > 0;
 	}
 
 	/** Lo que hace esperar la suspensión, para la bandeja y la alerta diaria (vacío si nada). */

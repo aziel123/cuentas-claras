@@ -98,6 +98,9 @@ public class EstadoPuestaEnMarcha {
 
 	public static final String RECAUDACION = "recaudacion";
 
+	/** Sprint 11, tanda 2 (AP2-9): la autorización de conservación del titular (obligatoria: la decide con su firma). */
+	public static final String CONSERVACION = "conservacion";
+
 	/** Sprint 10, tanda 2: las asignaciones del sprint 9 sin áreas del catálogo (esos docentes no califican). */
 	public static final String AREAS_DOCENTES = "areas-docentes";
 
@@ -106,7 +109,8 @@ public class EstadoPuestaEnMarcha {
 	 * clases» y «Secciones»), y el del sprint 10 (las áreas de cada docente; no bloquea).
 	 */
 	public static final List<String> PASOS = List.of(DATOS, EQUIPO, ANIO, SECCIONES, PENSIONES, ALUMNOS, SALDO_INICIAL, OSE,
-			CUENTA_BANCARIA, MENSAJERIA, CORREO_CONTROL, PRIVACIDAD, RESPALDO, PASARELA, RECAUDACION, AREAS_DOCENTES);
+			CUENTA_BANCARIA, MENSAJERIA, CORREO_CONTROL, PRIVACIDAD, RESPALDO, PASARELA, RECAUDACION, CONSERVACION,
+			AREAS_DOCENTES);
 
 	/** Lo que dicen los pasos que dependen del año mientras el año no está configurado (sin enlace). */
 	static final String PRIMERO_EL_ANIO = "Primero: Configurar el año escolar";
@@ -330,7 +334,14 @@ public class EstadoPuestaEnMarcha {
 		puntos.add(new PuntoLista(RECAUDACION, "Recaudación bancaria", recaudacion ? Estado.HECHO : Estado.OPCIONAL,
 				recaudacion ? "Recaudación vigente" : "Opcional: sin recaudación por código de alumno", "/conectores"));
 
-		// 15 (sprint 10, tanda 2; no bloquea): las asignaciones del sprint 9 sin áreas del catálogo no pueden poner notas.
+		// 16 (sprint 11, tanda 2; AP2-9): el titular decidió con su firma si autoriza conservar 12 meses. Es obligatorio:
+		// la decisión es la firma (autorizar); sin ella, los datos se suprimen 30 días después del cierre.
+		boolean conservacion = colegio.conservacionAutorizada();
+		puntos.add(new PuntoLista(CONSERVACION, "Autorización de conservación", estado(conservacion), conservacion
+				? "El titular autorizó conservar los datos 12 meses desde una suspensión" : "El titular decide con su firma "
+						+ "si autoriza conservar los datos", "/colegio/conservacion"));
+
+		// 17 (sprint 10, tanda 2; no bloquea): las asignaciones del sprint 9 sin áreas del catálogo no pueden poner notas.
 		int sinAreas = porCompletar.sinAreasDelAnioEnCurso();
 		puntos.add(new PuntoLista(AREAS_DOCENTES, "Áreas de cada docente", sinAreas == 0 ? Estado.HECHO : Estado.OPCIONAL,
 				sinAreas == 0 ? "Todas las asignaciones tienen sus áreas del catálogo" : sinAreas

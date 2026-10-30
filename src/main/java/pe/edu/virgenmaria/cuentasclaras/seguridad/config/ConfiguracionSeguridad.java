@@ -145,7 +145,7 @@ public class ConfiguracionSeguridad {
 			.addFilterAfter(new FiltroSesionMaxima(propiedadesSesion.vigenciaMaxima(), reloj),
 				SecurityContextHolderFilter.class)
 			// Sprint 11, tanda 1 (F10): el personal de un colegio suspendido o dado de baja sale en el pedido siguiente.
-			.addFilterAfter(new pe.edu.virgenmaria.cuentasclaras.seguridad.web.FiltroColegioQueOpera(colegiosDeLaBase),
+			.addFilterAfter(new pe.edu.virgenmaria.cuentasclaras.seguridad.web.FiltroColegioQueOpera(colegiosDeLaBase, reloj),
 				FiltroSesionMaxima.class)
 			// Sprint 7, tanda 2: antes de invalidar la sesión HTTP, se cierra la sesión de la base (su secreto ya no firma).
 			.logout(l -> l.logoutUrl("/salir").logoutSuccessUrl("/login?salio").addLogoutHandler(cierreSesion)

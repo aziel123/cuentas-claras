@@ -318,9 +318,7 @@ public class DespachoMensajes {
 			// Sprint 11, tanda 2 (AP2-4): el enlace se deriva AQUÍ de la clave del mensaje (solo por correo).
 			List<String> parametros = mensaje.parametrosLista();
 			String ruta = "/exportacion/" + derivador.tokenExportacion(ContextoColegio.actual(), mensaje.getClave());
-			String cuerpo = mensaje.getPlantilla().componer(parametros) + "
-
-" + propiedades.urlPublica() + ruta
+			String cuerpo = mensaje.getPlantilla().componer(parametros) + "\n\n" + propiedades.urlPublica() + ruta
 					+ pieDelCorreo(colegio);
 			return new Envio(parametros, ruta, cuerpo);
 		}

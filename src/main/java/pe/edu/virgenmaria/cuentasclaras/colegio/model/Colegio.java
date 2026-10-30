@@ -435,6 +435,17 @@ public class Colegio {
 		return estado == EstadoColegio.PRODUCCION;
 	}
 
+	/**
+	 * Sprint 11, tanda 2 (3.8 y 3.10): las familias entran a consultar en SUSPENDIDO y, en CERRADO, hasta
+	 * {@code conservar_hasta} inclusive (la base lo exige igual: trg_sesion_usuario_nace). Después, nadie entra.
+	 */
+	public boolean consultaFamilias(java.time.LocalDate hoy) {
+		if (estado == EstadoColegio.SUSPENDIDO) {
+			return true;
+		}
+		return estado == EstadoColegio.CERRADO && conservarHasta != null && !hoy.isAfter(conservarHasta);
+	}
+
 	/** Sprint 11, tanda 1: el colegio opera (preparación o producción): su personal ingresa. */
 	public boolean opera() {
 		return estado.opera();

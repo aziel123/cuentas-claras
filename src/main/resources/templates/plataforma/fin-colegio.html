@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Fin del colegio', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="plataforma-fin-colegio">
+	<div class="cabecera">
+		<div>
+			<p class="etiqueta">Plataforma</p>
+			<h1 th:text="${fin.colegio}">Colegio</h1>
+			<p class="secundario">Exportación, retención legal y acta de supresión. Cada paso lleva tu firma y lo ve el correo de control.</p>
+		</div>
+		<div class="acciones">
+			<span th:replace="~{fragments/componentes :: badge(${fin.estado}, 'info')}"></span>
+			<a class="btn btn-secundario" th:href="@{/plataforma/colegios/{id}/estado(id=${fin.colegioId})}">Estado</a>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-plazos">
+		<h2 id="titulo-plazos">Plazos</h2>
+		<p data-conservar-hasta th:text="${fin.conservarHasta != null} ? |Las familias consultan hasta el ${#temporals.format(fin.conservarHasta, 'dd/MM/yyyy')}.| : 'Sin fecha de supresión todavía.'">Sin fecha.</p>
+		<p class="secundario" th:text="${fin.conservacionAutorizada} ? 'El titular autorizó conservar 12 meses desde la suspensión.' : 'Sin autorización: 30 días después del cierre.'">Sin autorización.</p>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-exportaciones">
+		<h2 id="titulo-exportaciones">Exportaciones</h2>
+		<th:block th:if="${fin.exportaciones.isEmpty()}">
+			<div th:replace="~{fragments/componentes :: estadoVacio('Sin exportaciones', 'Se genera al aplicarse una suspensión, antes del cierre o por un pedido escrito del colegio.')}"></div>
+		</th:block>
+		<table class="tabla" th:unless="${fin.exportaciones.isEmpty()}">
+			<thead><tr><th>N.º</th><th>Motivo</th><th>Estado</th><th>Generada</th><th>Descargas</th><th>Huella del ZIP</th><th></th></tr></thead>
+			<tbody>
+			<tr th:each="e : ${fin.exportaciones}" th:attr="data-exportacion=${e.id}">
+				<td class="num" th:text="${e.id}">1</td>
+				<td th:text="${e.motivo}">SUSPENSION</td>
+				<td th:text="${e.estado}" th:title="${e.detalleFallo}">LISTA</td>
+				<td th:text="${e.generadaEn != null} ? ${#temporals.format(e.generadaEn, 'dd/MM/yyyy HH:mm')} : '—'">—</td>
+				<td class="num" th:text="${e.descargas}">0</td>
+				<td class="num" th:text="${e.sha256Zip != null} ? ${#strings.substring(e.sha256Zip, 0, 12)} + '…' : '—'" th:title="${e.sha256Zip}">—</td>
+				<td>
+					<form method="post" th:if="${e.puedeReenviar}" th:action="@{/plataforma/colegios/{id}/fin/exportacion/{x}/reenviar(id=${fin.colegioId},x=${e.id})}">
+						<button th:replace="~{fragments/componentes :: boton('Nuevo enlace', 'secundario')}">Nuevo enlace</button>
+					</form>
+				</td>
+			</tr>
+			</tbody>
+		</table>
+		<form class="formulario formulario-angosto" method="post" th:if="${fin.puedePedirExportacion}" th:action="@{/plataforma/colegios/{id}/fin/exportacion(id=${fin.colegioId})}">
+			<div class="campo">
+				<label for="referencia">Referencia del pedido escrito</label>
+				<input type="text" class="input" id="referencia" name="referencia" maxlength="200" required>
+			</div>
+			<div class="acciones acciones-izquierda">
+				<button th:replace="~{fragments/componentes :: boton('Pedir la exportación', 'secundario')}">Pedir la exportación</button>
+			</div>
+		</form>
+		<form method="post" th:if="${fin.puedeExportarParaCierre}" th:action="@{/plataforma/colegios/{id}/fin/exportacion-cierre(id=${fin.colegioId})}">
+			<button th:replace="~{fragments/componentes :: boton('Generar la exportación de cierre', 'primario')}">Generar la exportación de cierre</button>
+		</form>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-retencion">
+		<h2 id="titulo-retencion">Retención legal</h2>
+		<th:block th:if="${fin.retencionPor != null}">
+			<p data-retencion th:text="|Desde el ${#temporals.format(fin.retencionDesde, 'dd/MM/yyyy')}, por ${fin.retencionPor}: ${fin.retencionMotivo}|">Retención.</p>
+			<form method="post" th:if="${fin.puedeQuitarRetencion}" th:action="@{/plataforma/colegios/{id}/fin/retencion/quitar(id=${fin.colegioId})}">
+				<button th:replace="~{fragments/componentes :: boton('Quitar la retención', 'secundario')}">Quitar la retención</button>
+			</form>
+		</th:block>
+		<form class="formulario formulario-angosto" method="post" th:if="${fin.retencionPor == null and fin.estado != 'SUPRIMIDO'}" th:action="@{/plataforma/colegios/{id}/fin/retencion(id=${fin.colegioId})}">
+			<div class="campo">
+				<label for="motivo-retencion">Motivo (autoridad o proceso y su referencia)</label>
+				<textarea class="input" id="motivo-retencion" name="motivo" minlength="20" maxlength="500" required></textarea>
+			</div>
+			<div class="acciones acciones-izquierda">
+				<button th:replace="~{fragments/componentes :: boton('Poner la retención', 'secundario')}">Poner la retención</button>
+			</div>
+		</form>
+	</section>
+
+	<section class="tarjeta" aria-labelledby="titulo-acta">
+		<h2 id="titulo-acta">Acta de supresión</h2>
+		<th:block th:if="${fin.acta != null}">
+			<p data-acta th:text="|Acta ${fin.acta.id} (${fin.acta.tipo}): ${fin.acta.estado}. Propuesta por ${fin.acta.propuestoPor}.|">Acta.</p>
+			<p class="secundario" th:if="${fin.acta.huellaEventos != null}" th:text="|Huella de los eventos: ${fin.acta.huellaEventos}|">Huella.</p>
+			<div class="acciones acciones-izquierda">
+				<form method="post" th:if="${fin.acta.puedeAprobar}" th:action="@{/plataforma/colegios/{id}/fin/acta/{a}/aprobar(id=${fin.colegioId},a=${fin.acta.id})}">
+					<button th:replace="~{fragments/componentes :: boton('Aprobar el acta', 'primario')}">Aprobar el acta</button>
+				</form>
+				<form method="post" th:if="${fin.acta.puedeVerificarCadena}" th:action="@{/plataforma/colegios/{id}/fin/acta/cadena(id=${fin.colegioId})}">
+					<button th:replace="~{fragments/componentes :: boton('Verificar la cadena', 'secundario')}">Verificar la cadena</button>
+				</form>
+				<a class="btn btn-secundario" th:href="@{/plataforma/colegios/{id}/fin/acta.pdf(id=${fin.colegioId})}">Imprimir el acta</a>
+			</div>
+		</th:block>
+		<form class="formulario formulario-angosto" method="post" th:if="${fin.puedeProponerActa}" th:action="@{/plataforma/colegios/{id}/fin/acta(id=${fin.colegioId})}">
+			<div class="campo">
+				<label for="motivo-acta">Motivo</label>
+				<textarea class="input" id="motivo-acta" name="motivo" minlength="20" maxlength="500" required></textarea>
+			</div>
+			<div class="campo">
+				<label for="respaldos">Vence el último respaldo con datos del colegio</label>
+				<input type="date" class="input" id="respaldos" name="respaldosVencenEl" required>
+			</div>
+			<div class="acciones acciones-izquierda">
+				<button th:replace="~{fragments/componentes :: boton('Proponer el acta', 'secundario')}">Proponer el acta</button>
+			</div>
+		</form>
+	</section>
+</main>
+</body>
+</html>

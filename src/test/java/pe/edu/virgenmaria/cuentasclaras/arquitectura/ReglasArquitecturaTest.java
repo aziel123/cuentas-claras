@@ -79,7 +79,9 @@ class ReglasArquitecturaTest {
 			// busca ESE conector (por su clave exacta) y nada más.
 			BASE + ".conectores.service.BusquedaPorClavePublica",
 			// Correcciones del sprint 8 (QA-S8-6): las series que ya usan las OTRAS sedes con el mismo RUC (solo sus nombres).
-			BASE + ".comprobantes.service.SeriesDeOtrasSedes");
+			BASE + ".comprobantes.service.SeriesDeOtrasSedes",
+			// Sprint 11, tanda 2 (3.11): la huella y la última secuencia de las actas EJECUTADAS, para verificar la cadena.
+			BASE + ".colegio.service.ActasEjecutadasBitacora");
 
 	/** Única clase que puede usar JDBC directo: comprueba los permisos de MySQL (paso 9). */
 	private static final String VERIFICADOR_PERMISOS = BASE + ".auditoria.service.VerificadorPermisosBaseDatos";

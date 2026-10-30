@@ -10,7 +10,7 @@
 <section th:fragment="bannerPreparacion(guia, primario, ampliada)" class="guia" aria-labelledby="guia-titulo" data-guia>
 	<div class="guia-cabecera">
 		<h2 id="guia-titulo" th:text="${guia.textoAvance()}" data-guia-avance>Tu colegio está en preparación: faltan 6 de 15 pasos.</h2>
-		<a th:if="${guia.verLista()}" class="guia-enlace" th:href="@{/puesta-en-marcha}" data-guia-lista>Ver los 15 pasos</a>
+		<a th:if="${guia.verLista()}" class="guia-enlace" th:href="@{/puesta-en-marcha}" data-guia-lista th:text="|Ver los ${guia.total()} pasos|">Ver los 16 pasos</a>
 	</div>
 	<div class="guia-avance">
 		<label for="guia-progreso" class="guia-barra-etiqueta" th:text="${guia.etiquetaBarra()}">7 de 13 pasos obligatorios hechos</label>

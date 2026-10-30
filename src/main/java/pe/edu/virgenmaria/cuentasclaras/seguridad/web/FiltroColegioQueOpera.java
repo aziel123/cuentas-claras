@@ -13,18 +13,23 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 
 import java.io.IOException;
+import java.time.Clock;
+import java.time.LocalDate;
 
 /**
  * Sprint 11, tanda 1 (F10): en cada pedido, si quien está en sesión es del personal de un colegio que dejó de operar
  * (suspendido o dado de baja), la sesión se invalida (su sesión de la base ya la cerró la aplicación al suspender) y vuelve
- * al ingreso. Una familia sigue en modo consulta en SUSPENDIDO y CERRADO. No es un bean: lo crea la cadena de seguridad.
+ * al ingreso. Una familia sigue en modo consulta en SUSPENDIDO y en CERRADO hasta {@code conservar_hasta} (tanda 2). No es un bean: lo crea la cadena de seguridad.
  */
 public class FiltroColegioQueOpera extends OncePerRequestFilter {
 
 	private final ColegioRepository colegios;
 
-	public FiltroColegioQueOpera(ColegioRepository colegios) {
+	private final Clock reloj;
+
+	public FiltroColegioQueOpera(ColegioRepository colegios, Clock reloj) {
 		this.colegios = colegios;
+		this.reloj = reloj;
 	}
 
 	@Override
@@ -49,6 +54,6 @@ public class FiltroColegioQueOpera extends OncePerRequestFilter {
 		if (colegio == null || colegio.esPlataforma() || colegio.getEstado().opera()) {
 			return true;
 		}
-		return usuario.apoderadoId() != null && colegio.getEstado().consultaFamilias();
+		return usuario.apoderadoId() != null && colegio.consultaFamilias(LocalDate.now(reloj));
 	}
 }

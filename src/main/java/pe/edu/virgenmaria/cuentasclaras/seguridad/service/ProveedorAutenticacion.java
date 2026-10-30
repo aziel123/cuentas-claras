@@ -20,6 +20,7 @@ import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.UsuarioRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.identidad.EjecucionIdentidad;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -178,7 +179,7 @@ public class ProveedorAutenticacion implements AuthenticationProvider {
 	/** El colegio opera; o la cuenta es de una familia y el colegio está en modo consulta. */
 	private boolean puedeIngresar(Usuario usuario) {
 		return colegios.findById(usuario.getColegioId()).map(c -> c.esPlataforma() || c.getEstado().opera()
-				|| (usuario.getApoderadoId() != null && c.getEstado().consultaFamilias())).orElse(true);
+				|| (usuario.getApoderadoId() != null && c.consultaFamilias(LocalDate.now(reloj)))).orElse(true);
 	}
 
 	private Actor actorDe(Usuario usuario) {

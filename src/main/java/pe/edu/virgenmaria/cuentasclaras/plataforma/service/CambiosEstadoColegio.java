@@ -26,6 +26,7 @@ import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
+import pe.edu.virgenmaria.cuentasclaras.exportacion.service.ExportacionesDelColegio;
 import pe.edu.virgenmaria.cuentasclaras.plataforma.dto.CambioEstadoVista;
 import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.PendientesCicloDeVida;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.EnlaceActivacionRepository;
@@ -62,13 +63,15 @@ import java.util.Objects;
 public class CambiosEstadoColegio {
 
 	/**
-	 * AP-8: hasta V40 (la exportación completa de los datos del colegio), no hay suspensión. Las pruebas de H2 la encienden
-	 * ({@code cuentasclaras.ciclo.suspension-disponible}) para probar el flujo; en MySQL la base la rechaza igual
-	 * (trg_cambio_estado_colegio_nace exige la exportación).
+	 * AP-8: la suspensión se habilitó con V41 (sprint 11, tanda 2: la exportación completa de los datos del colegio, que
+	 * {@code sistema.exportacion} genera al aplicarse). La propiedad {@code cuentasclaras.ciclo.suspension-disponible}
+	 * queda como interruptor de emergencia (por defecto, encendida).
 	 */
 	private final boolean suspensionDisponible;
 
 	private final ColegioRepository colegios;
+
+	private final ExportacionesDelColegio exportacionesDelColegio;
 
 	private final CambioEstadoColegioRepository cambios;
 
@@ -103,9 +106,11 @@ public class CambiosEstadoColegio {
 			PendientesCicloDeVida pendientes, CierreSesionesColegio cierreSesiones, EjecucionPlataforma plataforma,
 			FirmaSesion firma, AuditoriaService auditoria, ApplicationEventPublisher eventos,
 			PlatformTransactionManager transacciones, Clock reloj, AplicadorCambioEstado aplicador,
-			@org.springframework.beans.factory.annotation.Value("${cuentasclaras.ciclo.suspension-disponible:false}")
+			ExportacionesDelColegio exportacionesDelColegio,
+			@org.springframework.beans.factory.annotation.Value("${cuentasclaras.ciclo.suspension-disponible:true}")
 			boolean suspensionDisponible) {
 		this.suspensionDisponible = suspensionDisponible;
+		this.exportacionesDelColegio = exportacionesDelColegio;
 		this.aplicador = aplicador;
 		this.colegios = colegios;
 		this.cambios = cambios;
@@ -135,8 +140,8 @@ public class CambiosEstadoColegio {
 		UsuarioAutenticado operador = operador();
 		Objects.requireNonNull(tipo, "tipo");
 		if (tipo == TipoCambioEstado.SUSPENSION && !suspensionDisponible()) {
-			throw new ReglaNegocioException("La suspensión estará disponible cuando esté la exportación completa de los datos "
-					+ "del colegio (tanda 2): el colegio debe recibir sus datos el día que se aplica.");
+			throw new ReglaNegocioException("La suspensión está desactivada en esta instalación "
+					+ "(cuentasclaras.ciclo.suspension-disponible).");
 		}
 		Colegio colegio = colegio(colegioId);
 		// Antes de firmar (la firma es única por clave): todo lo que rechazaría la propuesta.
@@ -150,7 +155,8 @@ public class CambiosEstadoColegio {
 			CambioEstadoColegio cambio;
 			try {
 				cambio = cambios.saveAndFlush(CambioEstadoColegio.propuesto(tipo, motivoTipo, motivo, referenciaAviso,
-						colegio(colegioId).getEstado(), operador.colegioId(), operador.usuarioId(), operador.getUsername()));
+						colegio(colegioId).getEstado(), operador.colegioId(), operador.usuarioId(), operador.getUsername())
+						.conExportacion(exportacionDelCambio(colegio(colegioId), tipo)));
 			}
 			catch (DataIntegrityViolationException e) {
 				throw new ReglaNegocioException("Este colegio ya tiene un cambio pendiente de ese tipo: resuélvelo primero.");
@@ -319,10 +325,18 @@ public class CambiosEstadoColegio {
 			throw new ReglaNegocioException("Este colegio ya tiene un cambio pendiente: resuélvelo (o anúlalo) primero.");
 		}
 		if (tipo == TipoCambioEstado.BAJA) {
-			List<String> impiden = pendientes.impidenLaBaja();
+			List<String> impiden = new ArrayList<>(pendientes.impidenLaBaja());
+			// AP-6 y AP2-2 (tanda 2): con datos, la baja exige la exportación ENTREGADA o VENCIDA de los últimos 30 días.
+			if (pendientes.tieneDatos() && exportacionesDelColegio.paraBaja().isEmpty()) {
+				impiden.add("el colegio tiene alumnos, apoderados o matrículas: primero se le entrega la exportación de sus "
+						+ "datos (entregada o vencida, de los últimos 30 días)");
+			}
 			if (!impiden.isEmpty()) {
 				throw new ReglaNegocioException("No se da de baja: " + String.join("; ", impiden) + ".");
 			}
+		}
+		if (tipo == TipoCambioEstado.CIERRE) {
+			exportacionDelCambio(colegio, tipo);
 		}
 		if (tipo == TipoCambioEstado.BLOQUEO_FACULTAD && colegio.isFacultadBloqueada()) {
 			throw new ReglaNegocioException("La facultad del titular ya está bloqueada.");
@@ -330,6 +344,19 @@ public class CambiosEstadoColegio {
 		if (tipo == TipoCambioEstado.DESBLOQUEO_FACULTAD && !colegio.isFacultadBloqueada()) {
 			throw new ReglaNegocioException("La facultad del titular no está bloqueada.");
 		}
+	}
+
+	/**
+	 * Tanda 2 (3.10 y AP2-2): la exportación que habilita el CIERRE (del mismo colegio, generada después de la suspensión,
+	 * no FALLIDA; ENTREGADA, o LISTA o VENCIDA con 30 días). {@code null} para los demás tipos.
+	 */
+	private Long exportacionDelCambio(Colegio colegio, TipoCambioEstado tipo) {
+		if (tipo != TipoCambioEstado.CIERRE) {
+			return null;
+		}
+		return exportacionesDelColegio.paraCierre(colegio.getSuspendidoEn()).map(e -> e.getId())
+				.orElseThrow(() -> new ReglaNegocioException("No se cierra: el colegio necesita la exportación de sus datos "
+						+ "generada después de la suspensión, y entregada al titular o con 30 días desde que se generó."));
 	}
 
 	/** AP-6: si alguna cuenta del colegio se activó (usó su enlace o abrió una sesión): la baja va a los 7 días. */

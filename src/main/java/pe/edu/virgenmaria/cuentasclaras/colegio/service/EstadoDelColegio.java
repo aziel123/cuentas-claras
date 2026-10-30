@@ -41,6 +41,7 @@ public class EstadoDelColegio {
 			return Optional.empty();
 		}
 		if (colegio.getEstado().consultaFamilias()) {
+			// Tanda 2: en CERRADO, hasta conservar_hasta (después nadie entra: la franja no se ve).
 			return Optional.of(familia
 					? "El portal está en modo consulta: puedes ver tu estado de cuenta, tus boletas, las libretas y los "
 							+ "comunicados. Por ahora no se puede pagar en línea ni cambiar datos desde aquí."

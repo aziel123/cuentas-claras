@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: pagina('Conservación de los datos', ~{::main})}">
+<body>
+<main id="contenido" class="contenido" data-pantalla="colegio-conservacion">
+	<div class="cabecera">
+		<div>
+			<h1>Conservación de los datos</h1>
+			<p class="secundario">Si el colegio deja la plataforma, ¿cuánto tiempo pueden consultar las familias?</p>
+		</div>
+	</div>
+
+	<th:block th:replace="~{fragments/componentes :: avisos}"></th:block>
+
+	<section class="tarjeta" aria-labelledby="titulo-conservacion">
+		<h2 id="titulo-conservacion">Tu decisión</h2>
+		<p data-conservacion="autorizada" th:if="${conservacion.autorizada}">
+			<strong>Autorizada.</strong>
+			<span th:text="|Firmada por ${conservacion.autorizadaPor} el ${#temporals.format(conservacion.autorizadaEn, 'dd/MM/yyyy HH:mm')}.|">Firmada por titular el 01/03/2027 10:00.</span>
+		</p>
+		<p data-conservacion="pendiente" th:unless="${conservacion.autorizada}"><strong>Sin autorizar.</strong></p>
+		<ul class="lista-simple">
+			<li>Con tu autorización: las familias consultan hasta 12 meses desde que se aplica una suspensión.</li>
+			<li>Sin ella: los datos se suprimen 30 días después del cierre.</li>
+		</ul>
+		<details class="ver-detalle">
+			<summary>Ver detalle</summary>
+			<p class="secundario">Antes del cierre, el colegio recibe todos sus datos en un archivo cifrado. Lo tributario (5 años) lo conserva el colegio con ese archivo. Desde la suspensión esta decisión ya no cambia.</p>
+		</details>
+		<p class="secundario" th:unless="${conservacion.esTitular}" data-conservacion="solo-titular">La decide solo el titular del colegio (la primera Promotoría), con su firma.</p>
+		<p class="secundario" th:if="${conservacion.esTitular and !conservacion.editable}">Desde la suspensión, la decisión queda como estaba.</p>
+		<div class="acciones acciones-izquierda">
+			<form method="post" th:if="${conservacion.puedeAutorizar}" th:action="@{/colegio/conservacion/autorizar}">
+				<button th:replace="~{fragments/componentes :: boton('Autorizar con mi firma', 'primario')}">Autorizar con mi firma</button>
+			</form>
+			<form method="post" th:if="${conservacion.puedeRetirar}" th:action="@{/colegio/conservacion/retirar}">
+				<button th:replace="~{fragments/componentes :: boton('Retirar la autorización', 'secundario')}">Retirar la autorización</button>
+			</form>
+		</div>
+	</section>
+</main>
+</body>
+</html>

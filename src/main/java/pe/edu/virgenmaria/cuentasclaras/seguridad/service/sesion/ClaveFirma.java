@@ -343,6 +343,44 @@ public final class ClaveFirma {
 		return "facultad_titular:" + id(colegioId) + ":" + numero;
 	}
 
+	/**
+	 * Sprint 11, tanda 2 (3.9): un operador pide por escrito la exportación número {@code numero} del colegio, en el colegio
+	 * de plataforma (trg_exportacion_colegio_nace: {@code exportacion_colegio:{colegio}:{n}}).
+	 */
+	public static String exportacionPedida(Long colegioId, long numero) {
+		return "exportacion_colegio:" + id(colegioId) + ":" + numero;
+	}
+
+	/** Sprint 11, tanda 2 (AP-11 y AP2-9): el titular autoriza conservar 12 meses (en su colegio). */
+	public static String conservacion(Long colegioId) {
+		return "colegio:" + id(colegioId) + ":CONSERVACION";
+	}
+
+	/** Sprint 11, tanda 2 (AP2-9): el titular retira la autorización de conservar (en su colegio). */
+	public static String conservacionRetirada(Long colegioId) {
+		return "colegio:" + id(colegioId) + ":CONSERVACION_RETIRADA";
+	}
+
+	/** Sprint 11, tanda 2 (AP2-10): un operador pone la retención legal (en el colegio de plataforma). */
+	public static String retencionLegal(Long colegioId) {
+		return "colegio:" + id(colegioId) + ":RETENCION_LEGAL";
+	}
+
+	/** Sprint 11, tanda 2 (AP2-10): OTRO operador quita la retención legal (en el colegio de plataforma). */
+	public static String retencionLegalRetirada(Long colegioId) {
+		return "colegio:" + id(colegioId) + ":RETENCION_LEGAL_RETIRADA";
+	}
+
+	/** Sprint 11, tanda 2 (3.11): un operador propone el acta de supresión del colegio (en el colegio de plataforma). */
+	public static String actaSupresion(Long colegioId) {
+		return "acta_supresion:" + id(colegioId);
+	}
+
+	/** Sprint 11, tanda 2 (3.11): OTRO operador aprueba el acta (en el colegio de plataforma). */
+	public static String actaSupresionAprobada(Long actaId) {
+		return "acta_supresion:" + id(actaId) + ":APROBADA";
+	}
+
 	private static Long id(Long id) {
 		return Objects.requireNonNull(id, "id");
 	}

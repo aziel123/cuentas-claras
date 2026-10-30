@@ -103,7 +103,7 @@ class GuiaPuestaEnMarchaTest {
 	@Test
 	void laPlataformaVaAparteYNuncaEsElSiguiente() {
 		ListaVerificacion casi = lista(DATOS, EQUIPO, ANIO, SECCIONES, PENSIONES, ALUMNOS, SALDO_INICIAL, OSE,
-				CUENTA_BANCARIA, PRIVACIDAD);
+				CUENTA_BANCARIA, PRIVACIDAD, CONSERVACION);
 		GuiaVista guia = GuiaPuestaEnMarcha.guia(casi, PROMOTORIA);
 		assertThat(guia.siguiente()).isNull();
 		assertThat(guia.esperandoPlataforma()).extracting(GuiaVista.PasoGuia::paso)
@@ -118,19 +118,20 @@ class GuiaPuestaEnMarchaTest {
 	@Test
 	void elAvanceCuentaLosObligatoriosYAgregaLosOpcionales() {
 		GuiaVista nueva = GuiaPuestaEnMarcha.guia(lista(), PROMOTORIA);
-		assertThat(nueva.textoAvance()).isEqualTo("Tu colegio está en preparación: faltan 13 de 15 pasos (y 2 opcionales).");
+		// Sprint 11, tanda 2 (AP2-9): 16 pasos, 14 obligatorios (la autorización de conservación es el 16).
+		assertThat(nueva.textoAvance()).isEqualTo("Tu colegio está en preparación: faltan 14 de 16 pasos (y 2 opcionales).");
 		assertThat(nueva.obligatoriosHechos()).isZero();
-		assertThat(nueva.maximoBarra()).isEqualTo(13);
-		assertThat(nueva.etiquetaBarra()).isEqualTo("0 de 13 pasos obligatorios hechos");
+		assertThat(nueva.maximoBarra()).isEqualTo(14);
+		assertThat(nueva.etiquetaBarra()).isEqualTo("0 de 14 pasos obligatorios hechos");
 
 		GuiaVista media = GuiaPuestaEnMarcha.guia(lista(DATOS, EQUIPO, ANIO, SECCIONES, PENSIONES, ALUMNOS, SALDO_INICIAL,
 				PASARELA), PROMOTORIA);
-		assertThat(media.pendientes()).isEqualTo(6);
-		assertThat(media.textoAvance()).isEqualTo("Tu colegio está en preparación: faltan 6 de 15 pasos (y 1 opcional).");
-		assertThat(media.etiquetaBarra()).isEqualTo("7 de 13 pasos obligatorios hechos");
+		assertThat(media.pendientes()).isEqualTo(7);
+		assertThat(media.textoAvance()).isEqualTo("Tu colegio está en preparación: faltan 7 de 16 pasos (y 1 opcional).");
+		assertThat(media.etiquetaBarra()).isEqualTo("7 de 14 pasos obligatorios hechos");
 
 		GuiaVista sinOpcionales = GuiaPuestaEnMarcha.guia(lista(DATOS, PASARELA, RECAUDACION), PROMOTORIA);
-		assertThat(sinOpcionales.textoAvance()).isEqualTo("Tu colegio está en preparación: faltan 12 de 15 pasos.");
+		assertThat(sinOpcionales.textoAvance()).isEqualTo("Tu colegio está en preparación: faltan 13 de 16 pasos.");
 	}
 
 	@Test

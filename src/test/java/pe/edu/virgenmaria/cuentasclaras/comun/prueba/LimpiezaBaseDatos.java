@@ -117,6 +117,13 @@ public final class LimpiezaBaseDatos {
 				+ "WHERE estado NOT IN ('PREPARACION', 'PRODUCCION')");
 		jdbc.update("UPDATE colegio SET cambio_estado_id = NULL, facultad_cambio_id = NULL, facultad_bloqueada = FALSE "
 				+ "WHERE cambio_estado_id IS NOT NULL OR facultad_cambio_id IS NOT NULL");
+		// Sprint 11, tanda 2 (V41): la exportación apunta a su cambio de estado y la descarga a su exportación; el colegio,
+		// a su acta de supresión.
+		jdbc.update("DELETE FROM descarga_exportacion");
+		jdbc.update("DELETE FROM exportacion_colegio");
+		jdbc.update("UPDATE colegio SET acta_supresion_id = NULL, retencion_legal_motivo = NULL, retencion_legal_desde = NULL, "
+				+ "retencion_legal_por = NULL WHERE acta_supresion_id IS NOT NULL OR retencion_legal_por IS NOT NULL");
+		jdbc.update("DELETE FROM acta_supresion");
 		jdbc.update("DELETE FROM cambio_estado_colegio");
 		jdbc.update("UPDATE enlace_activacion SET mensaje_id = NULL WHERE mensaje_id IS NOT NULL");
 		// Sprint 11, tanda 1c (V40): la solicitud y el conector apuntan al mensaje de su código.

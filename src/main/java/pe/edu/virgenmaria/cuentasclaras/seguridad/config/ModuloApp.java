@@ -245,7 +245,10 @@ public enum ModuloApp {
 			"/privacidad",
 			// Sprint 7, tanda 3 (H9): la página de ingreso con el aviso «Demasiados intentos» (429), a donde reenvía
 			// FiltroLimiteIngresos. Sin datos: solo el formulario y un mensaje genérico.
-			"/login/demasiados-intentos" };
+			"/login/demasiados-intentos",
+			// Sprint 11, tanda 2 (AP2-4): la entrega de la exportación al titular (enlace por correo, DNI y código por
+			// WhatsApp; 5 intentos). Sin sesión: el enlace de un solo uso es la llave.
+			"/exportacion/*", "/exportacion/*/dni", "/exportacion/*/codigo", "/exportacion/*/descargar" };
 
 	/**
 	 * Sprint 8, tanda 3 (sección 8.2): las páginas públicas de la demo («Crear mi demo», el recorrido guiado, los archivos de

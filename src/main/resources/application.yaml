@@ -109,11 +109,18 @@ cuentasclaras:
     conectores-cron: "0 */15 * * * *"
   ciclo:
     # Sprint 11, tanda 1 (secciones 3.3 a 3.6): los cambios de estado del colegio. sistema.plataforma aplica los aprobados
-    # cada 15 minutos y revisa cada día que todo estado tenga su cambio (F7). La suspensión queda apagada hasta que exista
-    # la exportación de los datos (V40, AP-8); en MySQL la base la rechaza igual.
+    # cada 15 minutos y revisa cada día que todo estado tenga su cambio (F7). Tanda 2 (V41, AP-8): la suspensión se
+    # habilita con la exportación de los datos; la propiedad queda como interruptor de emergencia.
     aplicacion-cron: "0 */15 * * * *"
     revision-cron: "0 10 5 * * *"
-    suspension-disponible: false
+    suspension-disponible: true
+    # Tanda 2 (3.11 y AP2-12): avisos de la conservación que vence y de los respaldos con datos de un colegio suprimido.
+    conservacion-cron: "0 20 5 * * *"
+  exportacion:
+    # Sprint 11, tanda 2 (3.9): los ZIP cifrados de las exportaciones viven 30 días en el disco de la VM, FUERA de los
+    # respaldos; después LimpiezaExportaciones los borra (la fila queda VENCIDA, con sus huellas).
+    directorio: ${CC_DIR_EXPORTACIONES:${java.io.tmpdir}/cc-exportaciones}
+    limpieza-cron: "0 30 3 * * *"
   conectores:
     # Sprint 8, tanda 2 (sección 3.6, decisión 118): los secretos de los conectores de cada colegio (token del OSE, llaves
     # de la pasarela) van cifrados con AES-256-GCM; la clave maestra (32 bytes en base64) vive en el gestor de secretos.

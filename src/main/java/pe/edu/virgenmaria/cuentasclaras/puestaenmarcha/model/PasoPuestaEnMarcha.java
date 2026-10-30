@@ -21,7 +21,9 @@ import static pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol.PROMOTOR;
  * Con la tanda 1c (sección 3.16), lo que hace la Promotoría se aplica directo: los textos ya no dicen «lo aprueba
  * Dirección» para la Promotoría. Lo que propone Administración sigue con dos personas.
  * <p>
- * El 16.º ({@link #AREAS_DOCENTES}, sprint 10) es un aviso: no cuenta entre los 15 ni bloquea el paso a producción.
+ * Sprint 11, tanda 2 (AP2-9): el 16.º, {@link #CONSERVACION} (la autorización de conservación del titular), es
+ * obligatorio: 16 pasos, 14 obligatorios. El 17.º ({@link #AREAS_DOCENTES}, sprint 10) es un aviso: no cuenta entre los 16
+ * ni bloquea el paso a producción.
  */
 public enum PasoPuestaEnMarcha {
 
@@ -61,15 +63,20 @@ public enum PasoPuestaEnMarcha {
 			List.of("cuenta-bancaria"), Tipo.OPCIONAL, Quien.COLEGIO, "Promotoría", null),
 	RECAUDACION(15, "recaudacion", "Recaudación bancaria", "Configurar la recaudación del banco", EnumSet.of(PROMOTOR),
 			"/conectores", List.of("cuenta-bancaria"), Tipo.OPCIONAL, Quien.COLEGIO, "Promotoría", null),
-	AREAS_DOCENTES(16, "areas-docentes", "Áreas de cada docente", "Completar las áreas de cada docente",
+	CONSERVACION(16, "conservacion", "Autorización de conservación", "Decidir la conservación de los datos",
+			EnumSet.of(PROMOTOR), "/colegio/conservacion", List.of(), Tipo.OBLIGATORIO, Quien.COLEGIO,
+			"El titular (primera Promotoría)",
+			"Con tu autorización, si el colegio deja la plataforma las familias consultan 12 meses desde la suspensión; sin "
+					+ "ella, los datos se suprimen 30 días después del cierre."),
+	AREAS_DOCENTES(17, "areas-docentes", "Áreas de cada docente", "Completar las áreas de cada docente",
 			EnumSet.of(DIRECTOR, ADMINISTRACION), "/academico/asignaciones", List.of(), Tipo.AVISO, Quien.COLEGIO,
 			"Dirección o Administración", null);
 
-	/** Los pasos que cuentan en «faltan N de 15». */
-	public static final int TOTAL = 15;
+	/** Los pasos que cuentan en «faltan N de 16». */
+	public static final int TOTAL = 16;
 
-	/** Los obligatorios: la barra del avance va sobre ellos. */
-	public static final int OBLIGATORIOS = 13;
+	/** Los obligatorios: la barra del avance va sobre ellos (tanda 2: la conservación es el 14.º). */
+	public static final int OBLIGATORIOS = 14;
 
 	/** Obligatorio para pasar a producción, opcional (pago en línea y recaudación) o un aviso que no bloquea. */
 	public enum Tipo {
