@@ -125,6 +125,10 @@ public class CambioEstadoColegio extends BaseEntity {
 	@Column(name = "objecion_resuelta_en")
 	private LocalDateTime objecionResueltaEn;
 
+	/** Sprint 11, tanda 2 (3.10 y AP2-2): la exportación que habilita el CIERRE o la BAJA de un colegio con datos. */
+	@Column(name = "exportacion_id", updatable = false)
+	private Long exportacionId;
+
 	protected CambioEstadoColegio() {
 		// requerido por JPA
 	}
@@ -168,6 +172,19 @@ public class CambioEstadoColegio extends BaseEntity {
 		c.operadorId = Objects.requireNonNull(operadorId, "operadorId");
 		c.propuestoPor = Objects.requireNonNull(operador, "operador");
 		return c;
+	}
+
+	/** Sprint 11, tanda 2: la exportación que lo habilita (obligatoria en el CIERRE; en la BAJA, si el colegio tiene datos). */
+	public CambioEstadoColegio conExportacion(Long exportacionId) {
+		this.exportacionId = exportacionId;
+		if (tipo == TipoCambioEstado.CIERRE && exportacionId == null) {
+			throw new ReglaNegocioException("El cierre exige la exportación de los datos del colegio.");
+		}
+		return this;
+	}
+
+	public Long getExportacionId() {
+		return exportacionId;
 	}
 
 	/**

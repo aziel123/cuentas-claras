@@ -17,6 +17,10 @@ public enum TipoCambioEstado {
 					MotivoCambioEstado.OTRO)),
 	REACTIVACION("Reactivar", EstadoColegio.SUSPENDIDO, EstadoColegio.PRODUCCION, AmbitoCambioEstado.ESTADO,
 			Set.of(MotivoCambioEstado.PAGO_RECIBIDO, MotivoCambioEstado.ACUERDO, MotivoCambioEstado.OTRO)),
+	/** Sprint 11, tanda 2 (sección 3.10): de SUSPENDIDO a CERRADO, con la exportación del colegio. */
+	CIERRE("Cerrar", EstadoColegio.SUSPENDIDO, EstadoColegio.CERRADO, AmbitoCambioEstado.ESTADO,
+			Set.of(MotivoCambioEstado.FIN_CONTRATO, MotivoCambioEstado.FALTA_PAGO, MotivoCambioEstado.PEDIDO_COLEGIO,
+					MotivoCambioEstado.OTRO)),
 	BLOQUEO_FACULTAD("Bloquear la facultad del titular", null, null, AmbitoCambioEstado.FACULTAD,
 			Set.of(MotivoCambioEstado.SEGURIDAD, MotivoCambioEstado.PEDIDO_COLEGIO, MotivoCambioEstado.OTRO)),
 	DESBLOQUEO_FACULTAD("Desbloquear la facultad del titular", null, null, AmbitoCambioEstado.FACULTAD,

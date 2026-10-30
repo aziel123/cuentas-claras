@@ -307,6 +307,23 @@ public class DespachoMensajes {
 					guardados.size() > 2 ? guardados.get(2) : "", guardados.size() > 3 ? guardados.get(3) : "");
 			return new Envio(parametros, null, mensaje.getPlantilla().componer(parametros) + pieDelCorreo(colegio));
 		}
+		if (mensaje.getTipo() == TipoMensaje.CODIGO_EXPORTACION) {
+			// Sprint 11, tanda 2 (AP2-4): el código de la entrega se deriva AQUÍ (la base guarda solo su SHA-256).
+			List<String> guardados = mensaje.parametrosLista();
+			List<String> parametros = List.of(colegio, derivador.codigoExportacion(ContextoColegio.actual(),
+					mensaje.getClave()), guardados.size() > 2 ? guardados.get(2) : "");
+			return new Envio(parametros, null, mensaje.getPlantilla().componer(parametros) + pieDelCorreo(colegio));
+		}
+		if (mensaje.getTipo() == TipoMensaje.EXPORTACION_ENLACE) {
+			// Sprint 11, tanda 2 (AP2-4): el enlace se deriva AQUÍ de la clave del mensaje (solo por correo).
+			List<String> parametros = mensaje.parametrosLista();
+			String ruta = "/exportacion/" + derivador.tokenExportacion(ContextoColegio.actual(), mensaje.getClave());
+			String cuerpo = mensaje.getPlantilla().componer(parametros) + "
+
+" + propiedades.urlPublica() + ruta
+					+ pieDelCorreo(colegio);
+			return new Envio(parametros, ruta, cuerpo);
+		}
 		if (mensaje.getTipo() != TipoMensaje.ACTIVACION_CUENTA) {
 			List<String> parametros = mensaje.parametrosLista();
 			String cuerpo = mensaje.getPlantilla().componer(parametros)

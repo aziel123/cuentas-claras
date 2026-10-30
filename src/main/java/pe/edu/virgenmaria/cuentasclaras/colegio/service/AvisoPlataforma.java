@@ -61,7 +61,17 @@ public record AvisoPlataforma(Long colegioId, Tipo tipo, List<String> parametros
 		/** Tanda 1c: se frenó un cambio que esperaba. */
 		DIRECTA_FRENADA,
 		/** Tanda 1c (A1c-4): quien cambió la cuenta intentó confirmar la conciliación (alerta CRÍTICA). */
-		CONCILIACION_BLOQUEADA;
+		CONCILIACION_BLOQUEADA,
+		/** Sprint 11, tanda 2 (3.9): la exportación está lista (sus huellas, al control). */
+		EXPORTACION_LISTA,
+		/** Tanda 2 (AP2-13): una descarga, la clave vista o el archivo borrado. */
+		EXPORTACION_MOVIMIENTO,
+		/** Tanda 2 (AP2-13): la exportación falló (alerta CRÍTICA). */
+		EXPORTACION_FALLIDA,
+		/** Tanda 2 (AP-11, AP2-9 y AP2-10): la autorización de conservación, la retención legal y el vencimiento. */
+		CONSERVACION,
+		/** Tanda 2 (3.11): el acta de supresión (propuesta, aprobada, ejecutada). */
+		ACTA_SUPRESION;
 
 		/**
 		 * Lo que distingue la clave idempotente de cada tipo. Los del sprint 8 conservan sus cuatro letras (las claves ya

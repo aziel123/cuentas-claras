@@ -133,6 +133,9 @@ class ReglasArquitecturaTest {
 	@ArchTest
 	static final ArchRule soloVerificadorPermisosUsaJdbcTemplate = noClasses()
 			.that().doNotHaveFullyQualifiedName(VERIFICADOR_PERMISOS)
+			// Sprint 11, tanda 2 (3.9): la exportación lee por JDBC, en flujo, las tablas de tablas.txt; cada consulta
+			// lleva su WHERE por colegio (TablasExportacion.Tabla.where) y corre como sistema.exportacion.
+			.and().doNotHaveFullyQualifiedName(BASE + ".exportacion.service.LectorTablas")
 			.should().dependOnClassesThat().belongToAnyOf(JdbcTemplate.class, JdbcOperations.class,
 					NamedParameterJdbcTemplate.class, NamedParameterJdbcOperations.class, JdbcClient.class)
 			.because("JDBC directo no pasa por el filtro por colegio ni por la auditoría");

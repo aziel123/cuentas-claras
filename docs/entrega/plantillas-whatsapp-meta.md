@@ -730,6 +730,103 @@
 | `{{2}}` | María Torres |
 | `{{3}}` | el extracto del 25/10/2026 |
 
+## 49. `cc_exportacion_lista_v1` · Los datos del colegio están listos
+
+> Sprint 11, tanda 2 (sección 3.9). Al titular, a la Promotoría y al correo de control: las dos huellas SHA-256 con que se comprueba que el archivo no cambió. Nunca el enlace ni la clave.
+
+```text
+{{1}}: la exportación de los datos del colegio ({{2}}) está lista. Huella del ZIP: {{3}}. Huella del manifiesto: {{4}}. Guárdelas para comprobar el archivo.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | por la suspensión |
+| `{{3}}` | 9f2c…a71b (64 caracteres) |
+| `{{4}}` | 4be0…19c2 (64 caracteres) |
+
+## 50. `cc_exportacion_enlace_v1` · Descargue los datos del colegio
+
+> Sprint 11, tanda 2 (AP2-4). SOLO por correo, al titular: el enlace de un solo uso lo agrega el envío (la base no lo ve). El código va aparte, solo por WhatsApp.
+
+```text
+{{1}}: los datos del colegio están listos para descargar hasta el {{2}}. Abra el enlace de este correo, escriba su DNI y el código que le llegará por WhatsApp.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | 25/11/2026 |
+
+## 51. `cc_codigo_exportacion_v1` · Su código para descargar los datos del colegio
+
+> Sprint 11, tanda 2 (AP2-4). SOLO por WhatsApp, al titular, después de escribir su DNI. Atado a esa exportación; el mensaje guarda solo su SHA-256.
+
+```text
+{{1}}: código {{2}} para descargar los datos del colegio. Vence a las {{3}}. Si usted no lo pidió, no lo comparta y escriba hoy al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | 482913 |
+| `{{3}}` | 10:45 |
+
+## 52. `cc_exportacion_movimiento_v1` · Movimiento en la exportación de los datos
+
+> Sprint 11, tanda 2 (AP2-13). Cada descarga, cada vez que se ve la clave y el borrado del archivo a los 30 días avisan al correo de control y al titular.
+
+```text
+{{1}}: en la exportación de los datos del colegio: {{2}} ({{3}}). Si no lo reconoce, escriba hoy al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | se descargó el archivo |
+| `{{3}}` | descarga 1 de 3 |
+
+## 53. `cc_exportacion_fallida_v1` · Alerta: la exportación de los datos falló
+
+> Sprint 11, tanda 2 (AP2-13). Alerta CRÍTICA: una libreta no coincide con su huella (o el archivo no se pudo generar). No se entrega algo distinto de lo que vio la familia.
+
+```text
+{{1}}: la exportación de los datos del colegio no se entregó: {{2}}. Se revisa hoy y se genera otra.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | una libreta no coincide con su huella |
+
+## 54. `cc_conservacion_v1` · Conservación de los datos del colegio
+
+> Sprint 11, tanda 2 (AP-11, AP2-9 y AP2-10). La autorización de conservar 12 meses (o su retiro), la retención legal y el aviso de que la conservación vence.
+
+```text
+{{1}}: {{2}}: {{3}}. Si no lo reconoce, escriba hoy al proveedor.
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | el titular autorizó conservar los datos |
+| `{{3}}` | 12 meses después de una suspensión |
+
+## 55. `cc_acta_supresion_v1` · Acta de supresión de los datos del colegio
+
+> Sprint 11, tanda 2 (sección 3.11, L6). Al correo institucional y al de control: la propuesta, la aprobación y la ejecución del acta.
+
+```text
+{{1}}: {{2}} el acta de supresión de los datos del colegio ({{3}}).
+```
+
+| Variable | Ejemplo (ficticio) |
+|---|---|
+| `{{1}}` | Colegio San Martín (ejemplo) |
+| `{{2}}` | se ejecutó |
+| `{{3}}` | acta 12, 3 de marzo de 2027 |
+
 ## Después de la aprobación
 1. Anotar en `docs/estado-del-proyecto.md` la fecha de aprobación de cada plantilla.
 2. Con el número de WhatsApp Business de la plataforma verificado, cargar su id y su token en Secret Manager (`whatsapp-token`, `whatsapp-secreto-app`, `whatsapp-token-verificacion`) y `WHATSAPP_NUMERO_ID` en `/etc/cc/instalacion.env` (docs/operacion/despliegue-gcp.md).

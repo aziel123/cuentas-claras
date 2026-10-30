@@ -170,7 +170,22 @@ public enum PlantillaMensaje {
 	DIRECTA_FRENADA("cc_directa_frenada_v2", "Se frenó un cambio en espera", 4, false,
 			"{{1}}: {{2}} frenó {{3}}. Motivo: {{4}}. No se aplica: se puede volver a pedir."),
 	CONCILIACION_BLOQUEADA("cc_conciliacion_bloqueada_v2", "Alerta: confirmación rechazada", 3, false,
-			"{{1}}: {{2}} intentó confirmar {{3}} después de cambiar la cuenta del colegio. Se rechazó: la confirma otra persona. Revíselo hoy.");
+			"{{1}}: {{2}} intentó confirmar {{3}} después de cambiar la cuenta del colegio. Se rechazó: la confirma otra persona. Revíselo hoy."),
+	// Sprint 11, tanda 2 (secciones 3.9 a 3.11): la exportación, la conservación y el acta de supresión.
+	EXPORTACION_LISTA("cc_exportacion_lista_v1", "Los datos del colegio están listos", 4, false,
+			"{{1}}: la exportación de los datos del colegio ({{2}}) está lista. Huella del ZIP: {{3}}. Huella del manifiesto: {{4}}. Guárdelas para comprobar el archivo."),
+	EXPORTACION_ENLACE("cc_exportacion_enlace_v1", "Descargue los datos del colegio", 2, false,
+			"{{1}}: los datos del colegio están listos para descargar hasta el {{2}}. Abra el enlace de este correo, escriba su DNI y el código que le llegará por WhatsApp."),
+	CODIGO_EXPORTACION("cc_codigo_exportacion_v1", "Su código para descargar los datos del colegio", 3, false,
+			"{{1}}: código {{2}} para descargar los datos del colegio. Vence a las {{3}}. Si usted no lo pidió, no lo comparta y escriba hoy al proveedor."),
+	EXPORTACION_MOVIMIENTO("cc_exportacion_movimiento_v1", "Movimiento en la exportación de los datos", 3, false,
+			"{{1}}: en la exportación de los datos del colegio: {{2}} ({{3}}). Si no lo reconoce, escriba hoy al proveedor."),
+	EXPORTACION_FALLIDA("cc_exportacion_fallida_v1", "Alerta: la exportación de los datos falló", 2, false,
+			"{{1}}: la exportación de los datos del colegio no se entregó: {{2}}. Se revisa hoy y se genera otra."),
+	CONSERVACION("cc_conservacion_v1", "Conservación de los datos del colegio", 3, false,
+			"{{1}}: {{2}}: {{3}}. Si no lo reconoce, escriba hoy al proveedor."),
+	ACTA_SUPRESION("cc_acta_supresion_v1", "Acta de supresión de los datos del colegio", 3, false,
+			"{{1}}: {{2}} el acta de supresión de los datos del colegio ({{3}}).");
 
 	/** Sprint 10, tanda 3: las plantillas de libretas (botón a {@code /familia/libretas}). */
 	public boolean deLibretas() {

@@ -386,6 +386,7 @@ public class CambiosEstadoColegio {
 			case BAJA -> "dar de baja el colegio";
 			case SUSPENSION -> "suspender el acceso del personal";
 			case REACTIVACION -> "reactivar el acceso del personal";
+			case CIERRE -> "cerrar el colegio (las familias consultan hasta la fecha de supresión)";
 			case BLOQUEO_FACULTAD -> "bloquear la facultad del titular";
 			case DESBLOQUEO_FACULTAD -> "desbloquear la facultad del titular";
 		};

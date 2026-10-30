@@ -71,7 +71,12 @@ public enum ActorSistema {
 	 * Promotoría cuando vencen sus 24 horas de espera sin freno (dar Promotoría en producción, quitarla y desactivar a una
 	 * Promotoría). Con {@code cc_sistema}: trg_usuario_rol_* y trg_usuario_identidad lo exigen.
 	 */
-	ROLES("sistema.roles");
+	ROLES("sistema.roles"),
+	/**
+	 * Sprint 11, tanda 2 (sección 3.9): genera la exportación completa de los datos de un colegio (al aplicarse una
+	 * suspensión, antes de un cierre o a pedido), la entrega al titular y borra el archivo a los 30 días. Con cc_sistema.
+	 */
+	EXPORTACION("sistema.exportacion");
 
 	/** Prefijo reservado: ninguna persona puede tener un nombre de usuario que empiece así. */
 	public static final String PREFIJO_RESERVADO = "sistema";

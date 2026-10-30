@@ -144,6 +144,11 @@ public class AvisosPlataforma {
 			case DIRECTA_EN_ESPERA -> PlantillaMensaje.DIRECTA_EN_ESPERA;
 			case DIRECTA_FRENADA -> PlantillaMensaje.DIRECTA_FRENADA;
 			case CONCILIACION_BLOQUEADA -> PlantillaMensaje.CONCILIACION_BLOQUEADA;
+			case EXPORTACION_LISTA -> PlantillaMensaje.EXPORTACION_LISTA;
+			case EXPORTACION_MOVIMIENTO -> PlantillaMensaje.EXPORTACION_MOVIMIENTO;
+			case EXPORTACION_FALLIDA -> PlantillaMensaje.EXPORTACION_FALLIDA;
+			case CONSERVACION -> PlantillaMensaje.CONSERVACION;
+			case ACTA_SUPRESION -> PlantillaMensaje.ACTA_SUPRESION;
 		};
 	}
 

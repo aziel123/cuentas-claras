@@ -65,6 +65,24 @@ public class DerivadorSecreto {
 		return String.format("%06d", valor % 1_000_000L);
 	}
 
+	/** Sprint 11, tanda 2 (AP2-4): el código de 6 dígitos de la entrega de una exportación (lo deriva el envío). */
+	public String codigoExportacion(long colegioId, String claveMensaje) {
+		Objects.requireNonNull(claveMensaje, "claveMensaje");
+		byte[] huella = hmac("codigo_exportacion|" + colegioId + "|" + claveMensaje);
+		long valor = ByteBuffer.wrap(huella, 0, Long.BYTES).getLong() & Long.MAX_VALUE;
+		return String.format("%06d", valor % 1_000_000L);
+	}
+
+	/**
+	 * Sprint 11, tanda 2 (AP2-4): el token del enlace de la entrega de una exportación, derivado de la clave del mensaje
+	 * que lo lleva (solo por correo). La base guarda solo su SHA-256 ({@code exportacion_colegio.token_hash}).
+	 */
+	public String tokenExportacion(long colegioId, String claveMensaje) {
+		Objects.requireNonNull(claveMensaje, "claveMensaje");
+		return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+				hmac("token_exportacion|" + colegioId + "|" + claveMensaje));
+	}
+
 	private byte[] hmac(String mensaje) {
 		try {
 			Mac mac = Mac.getInstance(ALGORITMO);

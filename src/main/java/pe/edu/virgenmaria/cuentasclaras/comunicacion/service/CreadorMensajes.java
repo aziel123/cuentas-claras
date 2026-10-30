@@ -231,6 +231,21 @@ public class CreadorMensajes {
 		return Optional.of(mensajes.saveAndFlush(mensaje.conCodigo(shaDelCodigo.apply(mensaje.getClave()), huella)));
 	}
 
+	/**
+	 * Sprint 11, tanda 2 (AP2-4): el enlace de la entrega de una exportación, SOLO por correo al titular. Devuelve el mensaje
+	 * (su clave deriva el token: la base guarda solo su SHA-256 en la exportación).
+	 */
+	public Optional<Mensaje> enlaceExportacionPorCorreo(Usuario titular, Contenido contenido, String claveBase) {
+		String destino = titular.getCorreo();
+		if (destino == null || destino.isBlank()) {
+			return Optional.empty();
+		}
+		String clave = claveBase + ":U" + titular.getId() + ":" + CanalMensaje.CORREO.name();
+		return Optional.of(mensajes.saveAndFlush(Mensaje.nuevo(clave, contenido.tipo(), contenido.plantilla(),
+				new Mensaje.Destinatario(DestinatarioTipo.USUARIO, null, null, titular.getId(), CanalMensaje.CORREO, destino),
+				conNombreDelColegio(contenido.parametros()), contenido.entidad(), contenido.entidadId(), null, null)));
+	}
+
 	/** Sprint 6: si a esa persona ya se le creó el mensaje de esa clave por algún canal (se avisa una sola vez). */
 	@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
 	public boolean yaExisteParaUsuario(String claveBase, Long usuarioId) {

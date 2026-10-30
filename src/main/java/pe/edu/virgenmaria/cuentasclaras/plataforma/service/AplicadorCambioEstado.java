@@ -13,6 +13,7 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoCambioEstado;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.CambioEstadoColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.AvisoPlataforma;
+import pe.edu.virgenmaria.cuentasclaras.colegio.service.SuspensionAplicada;
 import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraPromotoriaRepository;
@@ -77,6 +78,11 @@ public class AplicadorCambioEstado {
 					accion = AccionAuditoria.COLEGIO_DADO_DE_BAJA;
 					texto = "el colegio quedó dado de baja: nadie ingresa";
 				}
+				case CIERRE -> {
+					accion = AccionAuditoria.COLEGIO_CERRADO;
+					texto = "el colegio quedó cerrado: las familias consultan su estado de cuenta, sus comprobantes, sus "
+							+ "libretas y sus comunicados hasta la fecha de supresión";
+				}
 				case SUSPENSION -> {
 					accion = AccionAuditoria.COLEGIO_SUSPENDIDO;
 					texto = "el acceso del personal quedó en pausa; las familias ven su estado de cuenta, sus comprobantes, "
@@ -93,6 +99,10 @@ public class AplicadorCambioEstado {
 		}
 		cambio.aplicar(ahora);
 		cambios.saveAndFlush(cambio);
+		if (cambio.getTipo() == TipoCambioEstado.SUSPENSION) {
+			// Tanda 2 (3.9): tras el commit, sistema.exportacion genera la exportación de los datos del colegio.
+			eventos.publishEvent(new SuspensionAplicada(colegio.getId(), cambio.getId()));
+		}
 		avisarAlColegio(colegio.getId(), AvisoPlataforma.Tipo.CAMBIO_ESTADO_APLICADO,
 				List.of(texto, Calendario.formatear(ahora.toLocalDate())), cambio, "X");
 		auditoria.registrar(accion, "colegio", colegio.getId().toString(), cambio.getEstadoOrigen().name(),

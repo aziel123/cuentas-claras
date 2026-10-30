@@ -85,6 +85,14 @@
 			<version>${pdfbox.version}</version>
 		</dependency>
 
+		<!-- Sprint 11, tanda 2 (decisión 198 y 199): el ZIP cifrado con AES-256 (WinZip AE-2) de la exportación de los datos
+		     de un colegio (se abre con 7-Zip o el Explorador de Windows 11). Apache 2.0. Solo lo usa exportacion.service. -->
+		<dependency>
+			<groupId>net.lingala.zip4j</groupId>
+			<artifactId>zip4j</artifactId>
+			<version>2.11.5</version>
+		</dependency>
+
 		<!-- Base de datos: MySQL en producción, H2 (modo MySQL) en desarrollo y pruebas -->
 		<dependency>
 			<groupId>com.mysql</groupId>

@@ -55,7 +55,11 @@ public enum TipoMensaje {
 	 */
 	CODIGO_PROMOTORIA("Código de una acción de Promotoría", false),
 	/** Sprint 11, tanda 1c (A1c-1): el código al contacto ANTERIOR de una cuenta directiva que cambia su contacto. */
-	CODIGO_CONTACTO("Código para confirmar el cambio de contacto", false);
+	CODIGO_CONTACTO("Código para confirmar el cambio de contacto", false),
+	/** Sprint 11, tanda 2 (AP2-4): el enlace de la entrega de la exportación, solo por correo al titular. */
+	EXPORTACION_ENLACE("Enlace para descargar los datos del colegio", false),
+	/** Sprint 11, tanda 2 (AP2-4): el código de la entrega, solo por WhatsApp al titular (guarda solo su SHA-256). */
+	CODIGO_EXPORTACION("Código para descargar los datos del colegio", false);
 
 	private final String etiqueta;
 

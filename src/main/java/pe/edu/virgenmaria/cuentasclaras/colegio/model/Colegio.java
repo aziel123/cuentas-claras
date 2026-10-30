@@ -133,6 +133,39 @@ public class Colegio {
 	@Column(name = "facultad_cambio_id")
 	private Long facultadCambioId;
 
+	/** Sprint 11, tanda 2 (AP-11 y AP2-9): el titular autorizó conservar los datos 12 meses (con su firma). */
+	@Column(name = "conservacion_autorizada_por", length = 60)
+	private String conservacionAutorizadaPor;
+
+	/** La hora la pone la base (trg_colegio_cambio); en H2, la aplicación. */
+	@Column(name = "conservacion_autorizada_en")
+	private LocalDateTime conservacionAutorizadaEn;
+
+	/** Sprint 11, tanda 2 (AP2-10): la retención legal (un operador la pone y otro la quita). */
+	@Column(name = "retencion_legal_motivo", length = 500)
+	private String retencionLegalMotivo;
+
+	@Column(name = "retencion_legal_desde")
+	private LocalDateTime retencionLegalDesde;
+
+	@Column(name = "retencion_legal_por", length = 60)
+	private String retencionLegalPor;
+
+	/** Sprint 11, tanda 2 (AP2-7): el acta EJECUTADA de un colegio SUPRIMIDO (la anota el DBA). */
+	@Column(name = "acta_supresion_id", insertable = false, updatable = false)
+	private Long actaSupresionId;
+
+	/** Columna generada: cuándo se cerró (el estado_desde del CERRADO). Nadie la escribe. */
+	@Column(name = "cerrado_en", insertable = false, updatable = false)
+	private LocalDateTime cerradoEn;
+
+	/**
+	 * Columna generada (AP-7 y AP-11): hasta cuándo se conservan los datos. Con la autorización del titular, la suspensión
+	 * + 12 meses; sin ella, el cierre + 30 días; una BAJA, + 30 días. Nadie la escribe.
+	 */
+	@Column(name = "conservar_hasta", insertable = false, updatable = false)
+	private java.time.LocalDate conservarHasta;
+
 	@CreatedBy
 	@Column(name = "creado_por", nullable = false, updatable = false, length = 60)
 	private String creadoPor;
@@ -259,6 +292,64 @@ public class Colegio {
 		}
 	}
 
+	/**
+	 * Sprint 11, tanda 2 (AP-11 y AP2-9): el titular autoriza conservar los datos 12 meses después de la suspensión. Solo
+	 * mientras el colegio opera: desde la suspensión queda congelada (también en la base).
+	 */
+	public void autorizarConservacion(String titular, LocalDateTime ahora) {
+		exigirConservacionEditable();
+		if (conservacionAutorizadaPor != null) {
+			throw new ReglaNegocioException("La conservación ya está autorizada.");
+		}
+		this.conservacionAutorizadaPor = Objects.requireNonNull(titular, "titular");
+		this.conservacionAutorizadaEn = Objects.requireNonNull(ahora, "ahora");
+	}
+
+	/** Sprint 11, tanda 2 (AP2-9): el titular la retira con su firma (se avisa al correo de control). */
+	public void retirarConservacion() {
+		exigirConservacionEditable();
+		if (conservacionAutorizadaPor == null) {
+			throw new ReglaNegocioException("La conservación no está autorizada.");
+		}
+		this.conservacionAutorizadaPor = null;
+		this.conservacionAutorizadaEn = null;
+	}
+
+	private void exigirConservacionEditable() {
+		if (estado != EstadoColegio.PREPARACION && estado != EstadoColegio.PRODUCCION) {
+			throw new ReglaNegocioException("Desde la suspensión, la autorización de conservación queda como estaba.");
+		}
+	}
+
+	/** Sprint 11, tanda 2 (AP2-10): un operador pone la retención legal (un pedido escrito de una autoridad o un litigio). */
+	public void ponerRetencionLegal(String motivo, String operador, LocalDateTime ahora) {
+		String texto = motivo == null ? "" : motivo.strip();
+		if (texto.length() < 20 || texto.length() > 500) {
+			throw new ReglaNegocioException("Escribe el motivo de la retención legal (de 20 a 500 caracteres): qué autoridad "
+					+ "o qué proceso lo pide y su referencia.");
+		}
+		if (retencionLegalPor != null) {
+			throw new ReglaNegocioException("El colegio ya tiene una retención legal.");
+		}
+		this.retencionLegalMotivo = texto;
+		this.retencionLegalPor = Objects.requireNonNull(operador, "operador");
+		this.retencionLegalDesde = ahora;
+	}
+
+	/** La quita OTRO operador (con su firma; queda como actualizado_por). */
+	public void quitarRetencionLegal(String operador) {
+		if (retencionLegalPor == null) {
+			throw new ReglaNegocioException("El colegio no tiene retención legal.");
+		}
+		if (Objects.equals(operador, retencionLegalPor)) {
+			throw new ReglaNegocioException("Tú pusiste la retención legal: la quita otro operador, con su propia sesión.");
+		}
+		this.retencionLegalMotivo = null;
+		this.retencionLegalPor = null;
+		this.retencionLegalDesde = null;
+		this.actualizadoPor = operador;
+	}
+
 	/** Sprint 11, tanda 1 (AP-2): bloquea o desbloquea la facultad del titular con su cambio aprobado por dos operadores. */
 	public void cambiarFacultad(boolean bloqueada, Long cambioId) {
 		if (this.facultadBloqueada == bloqueada) {
@@ -359,6 +450,46 @@ public class Colegio {
 
 	public LocalDateTime getSuspendidoEn() {
 		return suspendidoEn;
+	}
+
+	public String getConservacionAutorizadaPor() {
+		return conservacionAutorizadaPor;
+	}
+
+	public LocalDateTime getConservacionAutorizadaEn() {
+		return conservacionAutorizadaEn;
+	}
+
+	public boolean conservacionAutorizada() {
+		return conservacionAutorizadaPor != null;
+	}
+
+	public String getRetencionLegalMotivo() {
+		return retencionLegalMotivo;
+	}
+
+	public LocalDateTime getRetencionLegalDesde() {
+		return retencionLegalDesde;
+	}
+
+	public String getRetencionLegalPor() {
+		return retencionLegalPor;
+	}
+
+	public boolean conRetencionLegal() {
+		return retencionLegalPor != null;
+	}
+
+	public Long getActaSupresionId() {
+		return actaSupresionId;
+	}
+
+	public LocalDateTime getCerradoEn() {
+		return cerradoEn;
+	}
+
+	public java.time.LocalDate getConservarHasta() {
+		return conservarHasta;
 	}
 
 	public boolean isFacultadBloqueada() {

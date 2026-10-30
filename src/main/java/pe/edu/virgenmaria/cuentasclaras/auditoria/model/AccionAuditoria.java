@@ -529,6 +529,44 @@ public enum AccionAuditoria {
 	/** A1c-4: quien cambió la cuenta intentó confirmar la conciliación dentro de los 30 días. */
 	CONCILIACION_TRAS_CAMBIO_RECHAZADA("Quien cambió la cuenta intentó confirmar la conciliación (se rechazó)", true),
 
+	// Sprint 11, tanda 2 (V41): exportación, cierre, conservación, retención legal y supresión
+	/** sistema.plataforma aplicó el cierre del colegio (dos operadores, con su exportación). */
+	COLEGIO_CERRADO("El colegio fue cerrado", true),
+	/** sistema.exportacion generó la exportación completa de los datos del colegio (con sus huellas). */
+	EXPORTACION_COLEGIO_GENERADA("Se generó la exportación de los datos del colegio", false),
+	/** AP2-13: la exportación falló (una libreta no coincide con su huella, o el archivo no se pudo generar). */
+	EXPORTACION_FALLIDA("La exportación de los datos del colegio falló", true),
+	/** AP2-4: empezó la entrega al titular (el enlace, solo por correo). */
+	EXPORTACION_ENTREGA_INICIADA("Se envió el enlace de la exportación al titular", false),
+	/** AP2-4: un intento fallido de DNI o código en la entrega (al quinto se anula el enlace). */
+	EXPORTACION_INTENTO_FALLIDO("Intento fallido en la entrega de la exportación", true),
+	/** AP2-4: el código de la entrega salió por WhatsApp al titular. */
+	EXPORTACION_CODIGO_ENVIADO("Se envió el código de la entrega de la exportación", false),
+	/** AP2-13: el titular vio la clave del ZIP (una vez): se descifró y se borró de la base. */
+	EXPORTACION_CLAVE_DESCIFRADA("Se descifró la clave de la exportación", true),
+	/** AP2-13: una descarga del ZIP (hasta 3). */
+	EXPORTACION_DESCARGADA("Se descargó la exportación", false),
+	/** AP2-13: LimpiezaExportaciones borró el archivo a los 30 días (la fila queda VENCIDA). */
+	EXPORTACION_BORRADA("Se borró el archivo de la exportación vencida", false),
+	/** AP-11: el titular autorizó conservar los datos 12 meses después de la suspensión. */
+	CONSERVACION_AUTORIZADA("El titular autorizó la conservación de los datos", false),
+	/** AP2-9: el titular retiró la autorización de conservación. */
+	CONSERVACION_RETIRADA("El titular retiró la autorización de conservación", true),
+	/** RevisionConservacion: la conservación vence (30 días antes y el día). */
+	CONSERVACION_POR_VENCER("La conservación de los datos del colegio vence", true),
+	/** AP2-10: un operador puso la retención legal (no se suprime). */
+	RETENCION_LEGAL_PUESTA("Se puso la retención legal del colegio", true),
+	/** AP2-10: otro operador quitó la retención legal. */
+	RETENCION_LEGAL_QUITADA("Se quitó la retención legal del colegio", true),
+	/** Un operador propuso el acta de supresión del colegio. */
+	ACTA_SUPRESION_PROPUESTA("Se propuso el acta de supresión", true),
+	/** Otro operador aprobó el acta de supresión. */
+	ACTA_SUPRESION_APROBADA("Se aprobó el acta de supresión", true),
+	/** AP2-8: sistema.auditoria verificó la cadena completa para el acta. */
+	ACTA_CADENA_VERIFICADA("Se verificó la cadena para el acta de supresión", false),
+	/** AP2-12: los respaldos con datos de un colegio suprimido llegan a su límite de 24 meses. */
+	RESPALDOS_CON_DATOS_POR_VENCER("Quedan respaldos con datos de un colegio suprimido", true),
+
 	// Control de segregación de funciones
 	/** Se resalta: alguien intentó aprobar o confirmar lo que él mismo hizo. */
 	AUTOAPROBACION_RECHAZADA("Intentó aprobar algo que él mismo hizo", true);

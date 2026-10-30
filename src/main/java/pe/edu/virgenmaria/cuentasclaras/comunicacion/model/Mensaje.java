@@ -156,7 +156,8 @@ public class Mensaje extends BaseEntity {
 		if (getId() != null) {
 			throw new IllegalStateException("El código va al crear el mensaje");
 		}
-		if (tipo != TipoMensaje.CODIGO_PROMOTORIA && tipo != TipoMensaje.CODIGO_CONTACTO) {
+		if (tipo != TipoMensaje.CODIGO_PROMOTORIA && tipo != TipoMensaje.CODIGO_CONTACTO
+				&& tipo != TipoMensaje.CODIGO_EXPORTACION) {
 			throw new IllegalArgumentException("Solo un código de Promotoría o de contacto lleva código");
 		}
 		this.codigoSha256 = Objects.requireNonNull(sha256, "sha256");
