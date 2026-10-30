@@ -115,4 +115,13 @@ Los marcados con **(nueva)** son pruebas de este QA; los demás ya estaban cubie
 
 ## 5. Resultados
 
-(Se completan abajo con lo que se corrió de verdad.)
+| Qué | Resultado |
+|---|---|
+| `QaSprint11EntregaTest` contra `0798691` (sin la corrección) | **Falla 3 de 5**: «expected: 5 but was: 0» (2) y «Este enlace no existe o ya no sirve» tras un solo error de tipeo (1). Las otras 2 (IDOR y bitácora) pasan |
+| `QaSprint11CicloCompletoTest` y `GuiaPreparacionWebTest` contra `0798691` | Pasan (no encontraron errores: el modo consulta con familia real y los «Ir» pintados funcionan) |
+| `./mvnw -B verify` (una vez, con la corrección, `8a615e1`) | **BUILD SUCCESS**: 3341 pruebas, 0 fallas, 0 errores, 306 omitidas (las de MySQL real, sin `CC_PRUEBA_MYSQL`); 19:23 min |
+| Pruebas nuevas y `EntregaIntentosTest` con `-Duser.timezone=America/Los_Angeles` | 17 de 17 en verde |
+| MySQL 8.4.11 real, contenedor propio (puerto 3317, borrado al terminar): 41 migraciones, 02, 03 (124 triggers) y `MigracionMySqlTest`, `PermisosMySqlTest` y `AuditoriaSprint11FinColegioMySqlTest` | En verde (2, 94 y 7 pruebas; la nueva incluida). Las huellas esperadas salen del `03` corregido |
+| Demo `dev,persistente` desde un JAR, dos arranques seguidos sobre la misma `.demo-db/` (puerto 8131) | Arranque 1: crea los datos, `/login` 200, 0 errores. Arranque 2: «Ya hay usuarios», `/login` 200, 0 errores. Un primer intento que mató el proceso mientras cargaba los datos dejó la base inconsistente: QA-S11-06 |
+
+No se tocaron el puerto 8098, `.claude/worktrees/demo` ni los contenedores existentes; solo se detuvieron los PID lanzados en este QA.
