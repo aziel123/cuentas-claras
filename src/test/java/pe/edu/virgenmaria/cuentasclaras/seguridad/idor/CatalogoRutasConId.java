@@ -263,12 +263,15 @@ final class CatalogoRutasConId {
 					Recurso.CAMBIO_ESTADO);
 		}
 		r("POST /colegio/estado/{id:\\d+}/objecion", "id", Recurso.CAMBIO_ESTADO);
+		// Correcciones del sprint 11 (A2): el retiro de la conservación con el código que le llegó al titular.
+		r("POST /colegio/conservacion/retirar", "mensajeId", Recurso.MENSAJE);
 		// Sprint 11, tanda 2: el fin del colegio (solo el operador; la exportación y el acta son de ese colegio).
 		for (String paso : new String[] { "GET /plataforma/colegios/{id:\\d+}/fin",
 				"GET /plataforma/colegios/{id:\\d+}/fin/acta.pdf", "POST /plataforma/colegios/{id:\\d+}/fin/acta",
 				"POST /plataforma/colegios/{id:\\d+}/fin/acta/cadena", "POST /plataforma/colegios/{id:\\d+}/fin/exportacion",
 				"POST /plataforma/colegios/{id:\\d+}/fin/exportacion-cierre", "POST /plataforma/colegios/{id:\\d+}/fin/retencion",
-				"POST /plataforma/colegios/{id:\\d+}/fin/retencion/quitar" }) {
+				"POST /plataforma/colegios/{id:\\d+}/fin/retencion/quitar",
+				"POST /plataforma/colegios/{id:\\d+}/fin/conservacion/frenar" }) {
 			r(paso, "id", Recurso.COLEGIO);
 		}
 		r("POST /plataforma/colegios/{id:\\d+}/fin/acta/{acta:\\d+}/aprobar", "id", Recurso.COLEGIO, "acta", Recurso.COLEGIO);

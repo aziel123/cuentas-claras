@@ -22,8 +22,15 @@ class LibretaEnCerradoTest extends PruebaLibretas {
 		cerrarYEmitir();
 		Long id = libreta(mateo);
 		// El colegio 1 en CERRADO (como lo deja el cierre: la suspensión y el estado desde hoy; conservar_hasta, la base).
-		jdbc.update("UPDATE colegio SET estado = 'CERRADO', estado_desde = CURRENT_TIMESTAMP, suspendido_en = "
-				+ "CURRENT_TIMESTAMP WHERE id = 1");
+		// (Sin las FK un momento: el cambio de estado que lo cerró no hace falta para esta prueba de H2.)
+		jdbc.execute("SET REFERENTIAL_INTEGRITY FALSE");
+		try {
+			jdbc.update("UPDATE colegio SET estado = 'CERRADO', estado_desde = CURRENT_TIMESTAMP, suspendido_en = "
+					+ "CURRENT_TIMESTAMP, cambio_estado_id = 999999 WHERE id = 1");
+		}
+		finally {
+			jdbc.execute("SET REFERENTIAL_INTEGRITY TRUE");
+		}
 		jdbc.update("UPDATE calificacion SET nivel_logro = 'C' WHERE id = ?", vigente(mateo, competencias("MAT").get(0)));
 		hoyEs(LocalDate.of(2026, 5, 7));
 		long mensajesAntes = contar("SELECT COUNT(*) FROM mensaje");

@@ -41,7 +41,7 @@ class MigradorBaseDatosTest {
 			assertThat(consulta.next()).isTrue();
 			assertThat(consulta.getInt(1)).isEqualTo(23);
 		}
-		assertThat(MigradorBaseDatos.migrar(url, "sa", "x").migrationsExecuted).isEqualTo(18);
+		assertThat(MigradorBaseDatos.migrar(url, "sa", "x").migrationsExecuted).isEqualTo(19);
 	}
 
 	@Test
