@@ -1,0 +1,22 @@
+# Cuentas Claras · correcciones del sprint 11 (A1): antes de arrancar la aplicación, copia las actas de supresión del
+# depósito con bloqueo de objetos (prefijo actas/, las escribe exportar-acta.sh) a /var/lib/cuentasclaras/actas, que la
+# aplicación lee como CC_DIR_ACTAS (VerificadorSupresion no la deja arrancar si un acta no está aplicada en la base). Si
+# la copia falla, la aplicación no arranca (Requires=). El destino del depósito va en /etc/cc/instalacion.env
+# (CC_ACTAS_DEPOSITO, por ejemplo «gcs:<deposito-respaldos>/actas»), con el remoto de rclone de los respaldos.
+[Unit]
+Description=Cuentas Claras: copia local de las actas de supresión del depósito
+Wants=network-online.target
+After=network-online.target cc-secretos.service
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/cc/instalacion.env
+ExecStartPre=/bin/mkdir -p /var/lib/cuentasclaras/actas /var/lib/cuentasclaras/exportaciones
+ExecStartPre=/bin/chown 10001:10001 /var/lib/cuentasclaras/exportaciones
+ExecStart=/usr/bin/rclone sync --checksum ${CC_ACTAS_DEPOSITO} /var/lib/cuentasclaras/actas
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=docker.service

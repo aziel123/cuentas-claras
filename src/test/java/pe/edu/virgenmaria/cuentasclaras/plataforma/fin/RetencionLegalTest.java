@@ -41,7 +41,7 @@ class RetencionLegalTest extends BaseFinColegio {
 				MOTIVO_RETENCION);
 		assertThat(c.get("retencion_legal_desde")).isNotNull();
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM firma_operacion WHERE clave = ?", Long.class,
-				"colegio:" + colegio + ":RETENCION_LEGAL")).isEqualTo(1L);
+				"colegio:" + colegio + ":RETENCION_LEGAL:1")).isEqualTo(1L);
 		assertThatThrownBy(() -> fin.proponerActa(colegio, MOTIVO_ACTA, respaldos)).isInstanceOf(ReglaNegocioException.class)
 				.hasMessageContaining("retención legal");
 		// Quien la puso no la quita.
@@ -54,6 +54,16 @@ class RetencionLegalTest extends BaseFinColegio {
 				.isNull();
 		assertThat(jdbc.queryForList("SELECT accion FROM evento_auditoria WHERE colegio_id = ?", String.class, colegio))
 				.contains("RETENCION_LEGAL_PUESTA", "RETENCION_LEGAL_QUITADA");
+
+		// M1: claves numeradas: se vuelve a poner (vez 2) y a quitar (vez 2) con firmas nuevas.
+		como(beto);
+		fin.ponerRetencion(colegio, MOTIVO_RETENCION + " Segundo oficio.");
+		como(ana);
+		fin.quitarRetencion(colegio);
+		assertThat(jdbc.queryForList("SELECT clave FROM firma_operacion WHERE clave LIKE ? ORDER BY id", String.class,
+				"colegio:" + colegio + ":RETENCION_LEGAL%")).containsExactly("colegio:" + colegio + ":RETENCION_LEGAL:1",
+						"colegio:" + colegio + ":RETENCION_LEGAL_RETIRADA:1", "colegio:" + colegio + ":RETENCION_LEGAL:2",
+						"colegio:" + colegio + ":RETENCION_LEGAL_RETIRADA:2");
 	}
 
 	@Test

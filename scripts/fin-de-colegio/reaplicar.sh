@@ -17,10 +17,12 @@ for archivo in "$dir"/acta-*.json; do
 		echo "ERROR: la SHA-256 del acta $(basename "$archivo") no coincide" >&2
 		exit 1
 	fi
-	json=$(sed "s/'/''/g" "$archivo")
+	# Correcciones del sprint 11 (B2): el JSON va en hexadecimal (UNHEX): ni una comilla ni una barra invertida del acta
+	# cambian lo que lee MySQL (con o sin NO_BACKSLASH_ESCAPES).
+	hex=$(od -An -v -tx1 "$archivo" | tr -d ' ' | tr -d '\n')
 	cat <<SQL
 -- $(basename "$archivo")
-SET @cc_json = '$json';
+SET @cc_json = CONVERT(UNHEX('$hex') USING utf8mb4);
 SET @cc_colegio = CAST(JSON_EXTRACT(@cc_json, '\$.colegio_id') AS UNSIGNED);
 SET @cc_acta = CAST(JSON_EXTRACT(@cc_json, '\$.id') AS UNSIGNED);
 $borrados

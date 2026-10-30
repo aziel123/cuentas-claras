@@ -47,6 +47,7 @@ SPRING_PROFILES_ACTIVE=dev,persistente java -jar target/cuentas-claras-*.jar
 ```
 - El primer arranque crea los usuarios y los datos de demostración. Espera a que el log termine de cargarlos antes de detener la aplicación. Los siguientes arranques los detectan («Ya hay usuarios») y no duplican nada.
 - **Empezar de cero:** detén la aplicación y borra la carpeta `.demo-db/` (`rm -rf .demo-db`).
+- **Detenla siempre con Ctrl+C** (o el botón Stop del IDE), nunca matando el proceso: si se corta mientras crea los datos de la demo la primera vez, el arranque siguiente choca con la llave del colegio B y no arranca. En ese caso, borra `.demo-db/` y vuelve a arrancar (QA-S11-06).
 - El perfil `persistente` solo va junto a `dev`: con `prod`, `piloto`, `demo` o `test` la aplicación no arranca.
 - **Respaldo en la demo:** en `dev` (en memoria o persistente) la aplicación registra un respaldo *simulado* al arrancar y cada hora revisa si hace falta otro, para que siga al día según `respaldo-max-horas`. Así, el paso «Respaldo» de la Puesta en marcha sale «Hecho» y un colegio nuevo puede pasar a producción. En `prod` no existe (y `aceptar-respaldo-simulado` es `false`).
 

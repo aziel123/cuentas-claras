@@ -426,8 +426,8 @@ GRANT INSERT ON cuentasclaras.uso_facultad_titular TO 'cc_sistema'@'%';
 --    (1143); que las huellas del ZIP no cambien una vez puestas lo exige trg_exportacion_colegio_cambio.
 GRANT INSERT, UPDATE (estado, vigente, archivo, archivos, filas, bytes, sha256_zip, sha256_manifiesto, clave_cifrada,
     clave_version, clave_vista_en, token_hash, token_vence_en, dni_confirmado_en, codigo_hash, codigo_vence_en,
-    intentos_fallidos, descargas, detalle_fallo, generada_en, vence_en, entregada_en, actualizado_en, version)
-    ON cuentasclaras.exportacion_colegio TO 'cc_sistema'@'%';
+    intentos_fallidos, intentos_totales, descargas, detalle_fallo, generada_en, vence_en, entregada_en, actualizado_en,
+    version) ON cuentasclaras.exportacion_colegio TO 'cc_sistema'@'%';
 GRANT INSERT ON cuentasclaras.descarga_exportacion TO 'cc_sistema'@'%';            -- solo inserción
 --    El acta de supresión la proponen y aprueban dos operadores (cc_sistema); sistema.auditoria pone cadena_verificada_en.
 --    EJECUTANDO y EJECUTADA las escribe SOLO el DBA (cc_migrador) con suprimir.sql (trg_acta_supresion_estado).
@@ -435,6 +435,12 @@ GRANT INSERT, UPDATE (estado, aprobado_por, aprobador_id, aprobado_en, cadena_ve
     ON cuentasclaras.acta_supresion TO 'cc_sistema'@'%';
 --    La retención legal (AP2-10): la pone un operador y la quita otro, cada uno con su firma.
 GRANT UPDATE (retencion_legal_motivo, retencion_legal_desde, retencion_legal_por) ON cuentasclaras.colegio TO 'cc_sistema'@'%';
+--    Correcciones del sprint 11 (A2, V42): el titular PIDE el retiro de la conservación (cc_negocio, con su firma y su
+--    código); sistema.plataforma lo aplica a las 24 horas y un operador lo frena (cc_sistema). Las fechas, la base.
+GRANT UPDATE (conservacion_retiro_por, conservacion_retiro_pedido_en, conservacion_retiro_aplica_desde,
+    conservacion_codigo_mensaje_id, conservacion_codigo_sha256) ON cuentasclaras.colegio TO 'cc_negocio';
+GRANT UPDATE (conservacion_autorizada_por, conservacion_autorizada_en, conservacion_retiro_por,
+    conservacion_retiro_pedido_en, conservacion_retiro_aplica_desde) ON cuentasclaras.colegio TO 'cc_sistema'@'%';
 --    Escrituras que solo hace un proceso: con cc_app, 1142.
 GRANT INSERT ON cuentasclaras.semilla_muestreo TO 'cc_sistema'@'%';               -- sistema.muestreo, solo inserción
 GRANT INSERT ON cuentasclaras.muestra_llamada TO 'cc_sistema'@'%';                -- sistema.panel, solo inserción
@@ -463,14 +469,19 @@ GRANT UPDATE (estado, proveedor, proveedor_mensaje_id, intentos, proximo_intento
 --    comentarios y el 8.4 los deja; el archivo puede tener CRLF). Al arrancar, VerificadorPermisosBaseDatos compara este
 --    JSON con las huellas calculadas desde 03-triggers.sql y este archivo, empaquetados en el jar: falta, sobra o difiere
 --    un objeto y prod no arranca. El patrón del comentario se arma con CONCAT para que este cuerpo no contenga «--».
+--    Correcciones del sprint 11 (M2): un trigger creado más de 2 minutos después del primero de 03 (un DROP/CREATE
+--    posterior a la carga, aunque deje el mismo texto) devuelve «recreado <fecha>» en vez de su huella: no arranca. Cargar
+--    03 completo vuelve a crearlos todos juntos.
 --    Residual: un DBA puede reemplazar esta función por otra que devuelva lo esperado (lo cubre el simulacro semanal,
 --    que lee information_schema como administrador: docs/operacion/respaldos.md).
 DROP FUNCTION IF EXISTS cuentasclaras.huellas_objetos;
 CREATE FUNCTION cuentasclaras.huellas_objetos() RETURNS JSON READS SQL DATA SQL SECURITY DEFINER
     RETURN (SELECT JSON_OBJECTAGG(o.nombre, o.huella) FROM (
-        SELECT t.TRIGGER_NAME AS nombre, SHA2(CONCAT_WS('|', t.ACTION_TIMING, t.EVENT_MANIPULATION, t.EVENT_OBJECT_TABLE,
+        SELECT t.TRIGGER_NAME AS nombre, IF(t.CREATED > (SELECT MIN(p.CREATED) FROM information_schema.TRIGGERS p
+                WHERE p.TRIGGER_SCHEMA = 'cuentasclaras') + INTERVAL 2 MINUTE, CONCAT('recreado ', t.CREATED),
+            SHA2(CONCAT_WS('|', t.ACTION_TIMING, t.EVENT_MANIPULATION, t.EVENT_OBJECT_TABLE,
             TRIM(REGEXP_REPLACE(REGEXP_REPLACE(t.ACTION_STATEMENT, CONCAT('-', '-[^\n]*'), ''), '[[:space:]]+', ' '))),
-            256) AS huella
+            256)) AS huella
           FROM information_schema.TRIGGERS t WHERE t.TRIGGER_SCHEMA = 'cuentasclaras'
         UNION ALL
         SELECT r.ROUTINE_NAME, SHA2(CONCAT_WS('|', r.ROUTINE_TYPE,

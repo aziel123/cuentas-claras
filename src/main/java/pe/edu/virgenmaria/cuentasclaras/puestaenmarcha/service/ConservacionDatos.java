@@ -10,13 +10,19 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.model.AccionAuditoria;
 import pe.edu.virgenmaria.cuentasclaras.auditoria.service.AuditoriaService;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.Colegio;
+import pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoCambioEstado;
+import pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoCambioEstado;
+import pe.edu.virgenmaria.cuentasclaras.colegio.repository.CambioEstadoColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
 import pe.edu.virgenmaria.cuentasclaras.colegio.service.AvisoPlataforma;
+import pe.edu.virgenmaria.cuentasclaras.comun.cripto.Sha256;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.RecursoNoEncontradoException;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
+import pe.edu.virgenmaria.cuentasclaras.comun.fecha.Calendario;
 import pe.edu.virgenmaria.cuentasclaras.comun.multicolegio.ContextoColegio;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.FirmaOperacionRepository;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.repository.PrimeraPromotoriaRepository;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.CodigoPromotoria;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.UsuarioAutenticado;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.ClaveFirma;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.service.sesion.FirmaSesion;
@@ -27,25 +33,31 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Sprint 11, tanda 2 (AP-11 y AP2-9): la autorización expresa del titular (la cuenta de la primera Promotoría) para que la
- * plataforma conserve los datos del colegio 12 meses desde que se aplica una suspensión (si no, se suprimen 30 días después
- * del cierre). Es el paso 16 de la Puesta en marcha, obligatorio. La da o la retira SOLO el titular, con la firma de su
- * sesión ({@code colegio:{id}:CONSERVACION} y {@code :CONSERVACION_RETIRADA}, una vez cada una), mientras el colegio opera;
- * desde SUSPENDIDO queda congelada. Cada cambio avisa al correo de control. La base lo exige igual (trg_colegio_cambio).
+ * Sprint 11, tanda 2 (AP-11 y AP2-9) y correcciones de la auditoría del código (A2): la autorización expresa del titular
+ * (la cuenta de la primera Promotoría) para que la plataforma conserve los datos del colegio 12 meses desde que se aplica
+ * una suspensión. Es el paso 16 de la Puesta en marcha, obligatorio.
+ * <ul>
+ * <li>La da SOLO el titular, con su firma numerada ({@code colegio:{id}:CONSERVACION:{n}}: puede volver a darla).</li>
+ * <li>El RETIRO no es inmediato: lo pide el titular con su firma ({@code :CONSERVACION_RETIRADA:{n}}) y el código que le
+ * llega por WhatsApp para ESA acción; se aplica a las 24 horas ({@code AplicacionRetirosConservacion}) y un operador puede
+ * frenarlo antes.</li>
+ * <li>Con una suspensión aprobada (o desde la suspensión) no cambia.</li>
+ * </ul>
+ * Cada paso avisa al correo de control. La base lo exige igual (trg_colegio_cambio).
  */
 @Service
 @PreAuthorize("hasRole('PROMOTOR')")
 @Transactional
 public class ConservacionDatos {
 
-	// La vista la ven también Dirección y Administración (la Puesta en marcha les muestra el paso); firmar, solo el titular.
-
-	/** Lo que ve el titular en la pantalla. */
+	/** Lo que ve la pantalla. */
 	public record Vista(boolean esTitular, boolean autorizada, String autorizadaPor, LocalDateTime autorizadaEn,
-			boolean editable, boolean puedeAutorizar, boolean puedeRetirar) {
+			boolean editable, boolean puedeAutorizar, boolean puedeRetirar, LocalDateTime retiroAplicaDesde) {
 	}
 
 	private final ColegioRepository colegios;
+
+	private final CambioEstadoColegioRepository cambios;
 
 	private final PrimeraPromotoriaRepository primeras;
 
@@ -53,18 +65,23 @@ public class ConservacionDatos {
 
 	private final FirmaOperacionRepository firmas;
 
+	private final CodigoPromotoria codigos;
+
 	private final AuditoriaService auditoria;
 
 	private final ApplicationEventPublisher eventos;
 
 	private final Clock reloj;
 
-	public ConservacionDatos(ColegioRepository colegios, PrimeraPromotoriaRepository primeras, FirmaSesion firma,
-			FirmaOperacionRepository firmas, AuditoriaService auditoria, ApplicationEventPublisher eventos, Clock reloj) {
+	public ConservacionDatos(ColegioRepository colegios, CambioEstadoColegioRepository cambios,
+			PrimeraPromotoriaRepository primeras, FirmaSesion firma, FirmaOperacionRepository firmas,
+			CodigoPromotoria codigos, AuditoriaService auditoria, ApplicationEventPublisher eventos, Clock reloj) {
 		this.colegios = colegios;
+		this.cambios = cambios;
 		this.primeras = primeras;
 		this.firma = firma;
 		this.firmas = firmas;
+		this.codigos = codigos;
 		this.auditoria = auditoria;
 		this.eventos = eventos;
 		this.reloj = reloj;
@@ -75,47 +92,62 @@ public class ConservacionDatos {
 	public Vista vista() {
 		Colegio c = colegio();
 		boolean titular = esTitular();
-		boolean editable = c.getEstado().opera();
+		boolean editable = c.getEstado().opera() && !suspensionAprobada();
 		return new Vista(titular, c.conservacionAutorizada(), c.getConservacionAutorizadaPor(),
-				c.getConservacionAutorizadaEn(), editable,
-				titular && editable && !c.conservacionAutorizada() && !firmas.existsByClave(ClaveFirma.conservacion(c.getId())),
-				titular && editable && c.conservacionAutorizada()
-						&& !firmas.existsByClave(ClaveFirma.conservacionRetirada(c.getId())));
+				c.getConservacionAutorizadaEn(), editable, titular && editable && !c.conservacionAutorizada(),
+				titular && editable && c.conservacionAutorizada() && c.getConservacionRetiroPor() == null,
+				c.getConservacionRetiroAplicaDesde());
 	}
 
 	public void autorizar() {
 		Colegio c = colegio();
 		UsuarioAutenticado titular = titular();
-		String clave = ClaveFirma.conservacion(c.getId());
-		if (firmas.existsByClave(clave)) {
-			throw new ReglaNegocioException("La autorización de conservación ya se firmó una vez en este colegio: para "
-					+ "volver a darla, pídelo a la plataforma por escrito.");
-		}
+		exigirSinSuspensionAprobada();
+		long n = firmas.countByClaveStartingWith(ClaveFirma.prefijoColegio(c.getId(), "CONSERVACION")) + 1;
 		c.autorizarConservacion(titular.getUsername(), LocalDateTime.now(reloj));
-		firma.firmar(clave);
+		firma.firmar(ClaveFirma.conservacion(c.getId(), n));
 		colegios.saveAndFlush(c);
 		auditoria.registrar(AccionAuditoria.CONSERVACION_AUTORIZADA, "colegio", c.getId().toString(), null, "AUTORIZADA",
-				titular.nombreCompleto() + ", titular del colegio, autorizó con su firma que la plataforma conserve los "
-						+ "datos 12 meses desde que se aplique una suspensión (las familias consultan hasta entonces). Se "
-						+ "avisó al correo de control.");
-		avisar("el titular autorizó conservar los datos", "12 meses desde una suspensión", "AUTORIZADA");
+				titular.nombreCompleto() + ", titular del colegio, autorizó con su firma (vez " + n + ") que la plataforma "
+						+ "conserve los datos 12 meses desde que se aplique una suspensión. Se avisó al correo de control.");
+		avisar("el titular autorizó conservar los datos", "12 meses desde una suspensión", "AUTORIZADA:" + n);
 	}
 
-	public void retirar() {
+	/** La acción que firma el código de WhatsApp del retiro (la misma huella que calcula la base). */
+	public CodigoPromotoria.Accion accionRetiro() {
+		Colegio c = colegio();
+		long n = firmas.countByClaveStartingWith(ClaveFirma.prefijoColegio(c.getId(), "CONSERVACION_RETIRADA")) + 1;
+		return new CodigoPromotoria.Accion(Sha256.hex("CONSERVACION_RETIRADA|" + c.getId() + "|" + n),
+				"Retirar la autorización de conservar los datos del colegio (se aplica a las 24 horas)");
+	}
+
+	/** El titular pide el código de WhatsApp para retirar la autorización (la identidad abre su propia transacción). */
+	@Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+	public CodigoPromotoria.Pedido pedirCodigoRetiro() {
+		titular();
+		exigirSinSuspensionAprobada();
+		return codigos.pedir(accionRetiro());
+	}
+
+	/** El titular PIDE el retiro con su firma y el código: se aplica a las 24 horas si un operador no lo frena. */
+	public LocalDateTime pedirRetiro(CodigoPromotoria.Escrito escrito) {
 		Colegio c = colegio();
 		UsuarioAutenticado titular = titular();
-		String clave = ClaveFirma.conservacionRetirada(c.getId());
-		if (firmas.existsByClave(clave)) {
-			throw new ReglaNegocioException("La autorización ya se retiró una vez en este colegio.");
-		}
-		c.retirarConservacion();
-		firma.firmar(clave);
+		exigirSinSuspensionAprobada();
+		CodigoPromotoria.Accion accion = accionRetiro();
+		CodigoPromotoria.Valido valido = codigos.exigir(escrito, accion.huella());
+		long n = firmas.countByClaveStartingWith(ClaveFirma.prefijoColegio(c.getId(), "CONSERVACION_RETIRADA")) + 1;
+		c.pedirRetiroConservacion(titular.getUsername(), valido.mensajeId(), valido.sha256(), LocalDateTime.now(reloj));
+		firma.firmar(ClaveFirma.conservacionRetirada(c.getId(), n));
 		colegios.saveAndFlush(c);
-		auditoria.registrar(AccionAuditoria.CONSERVACION_RETIRADA, "colegio", c.getId().toString(), "AUTORIZADA", null,
-				titular.nombreCompleto() + ", titular del colegio, retiró con su firma la autorización de conservación: "
-						+ "al cerrar, los datos se suprimen 30 días después. Se avisó al correo de control.");
-		avisar("el titular retiró la autorización de conservar los datos", "se suprimen 30 días después del cierre",
-				"RETIRADA");
+		LocalDateTime aplica = c.getConservacionRetiroAplicaDesde();
+		auditoria.registrar(AccionAuditoria.CONSERVACION_RETIRO_PEDIDO, "colegio", c.getId().toString(), "AUTORIZADA",
+				"RETIRO " + aplica, titular.nombreCompleto() + ", titular del colegio, pidió con su firma y su código retirar "
+						+ "la autorización de conservación. Se aplica a las 24 horas si un operador no lo frena. Se avisó al "
+						+ "correo de control.");
+		avisar("el titular pidió retirar la autorización de conservar los datos",
+				"se aplica el " + Calendario.formatear(aplica.toLocalDate()) + " si nadie lo frena", "RETIRO:" + n);
+		return aplica;
 	}
 
 	private void avisar(String que, String detalle, String sufijo) {
@@ -123,6 +155,17 @@ public class ConservacionDatos {
 		Long titularId = primeras.findFirstByIdNotNull().map(p -> p.getUsuarioId()).orElse(null);
 		eventos.publishEvent(new AvisoPlataforma(colegioId, AvisoPlataforma.Tipo.CONSERVACION, List.of(que, detalle),
 				"colegio", colegioId, sufijo, titularId, true, true, true));
+	}
+
+	private boolean suspensionAprobada() {
+		return !cambios.findByTipoAndEstadoOrderByIdAsc(TipoCambioEstado.SUSPENSION, EstadoCambioEstado.APROBADO).isEmpty();
+	}
+
+	private void exigirSinSuspensionAprobada() {
+		if (suspensionAprobada()) {
+			throw new ReglaNegocioException("El colegio tiene una suspensión aprobada: la autorización de conservación queda "
+					+ "como está.");
+		}
 	}
 
 	private boolean esTitular() {

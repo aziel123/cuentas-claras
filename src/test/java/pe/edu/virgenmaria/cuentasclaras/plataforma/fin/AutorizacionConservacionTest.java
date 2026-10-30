@@ -16,6 +16,9 @@ import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.ConservacionDatos
 import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.EstadoPuestaEnMarcha;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Rol;
 import pe.edu.virgenmaria.cuentasclaras.seguridad.model.Usuario;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.CodigoPromotoria;
+import pe.edu.virgenmaria.cuentasclaras.comun.prueba.CodigosDePrueba;
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,6 +37,9 @@ class AutorizacionConservacionTest extends BaseFinColegio {
 
 	@Autowired
 	private EstadoPuestaEnMarcha estadoPuestaEnMarcha;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.plataforma.proceso.AplicacionRetirosConservacion retiros;
 
 	@Autowired
 	private PasswordEncoder codificadorClaves;
@@ -63,16 +69,71 @@ class AutorizacionConservacionTest extends BaseFinColegio {
 		assertThat(jdbc.queryForObject("SELECT conservacion_autorizada_por FROM colegio WHERE id = ?", String.class, colegio))
 				.isEqualTo("titular.conserva");
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM firma_operacion WHERE colegio_id = ? AND clave = ?", Long.class,
-				colegio, "colegio:" + colegio + ":CONSERVACION")).isEqualTo(1L);
+				colegio, "colegio:" + colegio + ":CONSERVACION:1")).isEqualTo(1L);
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mensaje WHERE colegio_id = ? AND plantilla = 'CONSERVACION' "
 				+ "AND destinatario_tipo = 'EXTERNO'", Long.class, colegio)).isPositive();
 
+		// A2: el retiro pide el código de WhatsApp de ESA acción; sin él, nada.
 		ingresar(titular);
-		ContextoColegio.en(colegio, () -> conservacion.retirar());
+		assertThatThrownBy(() -> ContextoColegio.en(colegio, () -> conservacion.pedirRetiro(null)))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("código");
+		pedirRetiro(colegio, titular);
+		// Pedido, no aplicado: la autorización sigue 24 horas y un operador lo frena.
+		assertThat(jdbc.queryForObject("SELECT conservacion_autorizada_por FROM colegio WHERE id = ?", String.class, colegio))
+				.isEqualTo("titular.conserva");
+		como(ana);
+		fin.frenarRetiroConservacion(colegio);
+		assertThat(jdbc.queryForObject("SELECT conservacion_retiro_por FROM colegio WHERE id = ?", String.class, colegio))
+				.isNull();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM firma_operacion WHERE clave = ?", Long.class,
+				"colegio:" + colegio + ":CONSERVACION_FRENADA:1")).isEqualTo(1L);
+
+		// Se vuelve a pedir (firma :2); a las 24 horas la aplica sistema.plataforma (antes, no).
+		pedirRetiro(colegio, titular);
+		SecurityContextHolder.clearContext();
+		reloj.mover(Duration.ofHours(23));
+		assertThat(retiros.enColegio(colegio)).isFalse();
+		reloj.mover(Duration.ofHours(1).plusMinutes(1));
+		assertThat(retiros.enColegio(colegio)).isTrue();
 		assertThat(jdbc.queryForObject("SELECT conservacion_autorizada_en FROM colegio WHERE id = ?", Object.class, colegio))
 				.isNull();
 		assertThat(jdbc.queryForList("SELECT accion FROM evento_auditoria WHERE colegio_id = ?", String.class, colegio))
-				.contains("CONSERVACION_AUTORIZADA", "CONSERVACION_RETIRADA");
+				.contains("CONSERVACION_AUTORIZADA", "CONSERVACION_RETIRO_PEDIDO", "CONSERVACION_RETIRO_FRENADO",
+						"CONSERVACION_RETIRADA");
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM firma_operacion WHERE clave = ?", Long.class,
+				"colegio:" + colegio + ":CONSERVACION_RETIRADA:2")).isEqualTo(1L);
+
+		// Clave numerada: el titular la puede volver a dar (CONSERVACION:2).
+		ingresar(titular);
+		ContextoColegio.en(colegio, () -> conservacion.autorizar());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM firma_operacion WHERE clave = ?", Long.class,
+				"colegio:" + colegio + ":CONSERVACION:2")).isEqualTo(1L);
+	}
+
+	@Test
+	void conUnaSuspensionAprobadaNoCambia() {
+		long colegio = colegioEnProduccion("Colegio Aprobada", EscenarioPlataforma.RUC_C, "titular.aprobada", "45678983",
+				"987650083");
+		Usuario titular = usuario(colegio, "titular.aprobada");
+		ingresar(titular);
+		ContextoColegio.en(colegio, () -> conservacion.autorizar());
+		como(ana);
+		Long id = cambios.proponer(colegio, pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoCambioEstado.SUSPENSION,
+				pe.edu.virgenmaria.cuentasclaras.colegio.model.MotivoCambioEstado.FALTA_PAGO, MOTIVO_SUSPENSION, REFERENCIA);
+		como(beto);
+		cambios.aprobar(colegio, id);
+		ingresar(titular);
+		assertThatThrownBy(() -> ContextoColegio.en(colegio, () -> conservacion.pedirCodigoRetiro()))
+				.isInstanceOf(ReglaNegocioException.class).hasMessageContaining("suspensión aprobada");
+		SecurityContextHolder.clearContext();
+	}
+
+	private void pedirRetiro(long colegio, Usuario titular) {
+		ingresar(titular);
+		CodigoPromotoria.Pedido pedido = ContextoColegio.en(colegio, () -> conservacion.pedirCodigoRetiro());
+		String codigo = CodigosDePrueba.codigo(jdbc, derivador, colegio, pedido.mensajeId());
+		ingresar(titular);
+		ContextoColegio.en(colegio, () -> conservacion.pedirRetiro(new CodigoPromotoria.Escrito(pedido.mensajeId(), codigo)));
 	}
 
 	@Test

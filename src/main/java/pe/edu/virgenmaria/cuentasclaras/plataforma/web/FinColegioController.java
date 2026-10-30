@@ -65,6 +65,12 @@ public class FinColegioController {
 				+ "otro operador.");
 	}
 
+	@PostMapping("/conservacion/frenar")
+	public String frenarRetiro(@PathVariable Long id, RedirectAttributes avisos) {
+		return hacer(id, avisos, () -> fin.frenarRetiroConservacion(id), "Listo: frenaste el retiro. La autorización de "
+				+ "conservación sigue.");
+	}
+
 	@PostMapping("/retencion/quitar")
 	public String quitarRetencion(@PathVariable Long id, RedirectAttributes avisos) {
 		return hacer(id, avisos, () -> fin.quitarRetencion(id), "Listo: quitaste la retención legal.");

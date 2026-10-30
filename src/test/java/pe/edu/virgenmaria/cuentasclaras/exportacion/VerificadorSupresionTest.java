@@ -8,6 +8,7 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.model.Colegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoColegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoColegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
+import pe.edu.virgenmaria.cuentasclaras.exportacion.service.ActasEnDirectorio;
 import pe.edu.virgenmaria.cuentasclaras.exportacion.service.LectorTablas;
 import pe.edu.virgenmaria.cuentasclaras.exportacion.service.TablasExportacion;
 import pe.edu.virgenmaria.cuentasclaras.exportacion.service.VerificadorSupresion;
@@ -71,10 +72,31 @@ class VerificadorSupresionTest {
 		prod.afterPropertiesSet();
 	}
 
+	/** Correcciones (A1 y B3): en prod, sin CC_DIR_ACTAS o sin CC_DIR_EXPORTACIONES no arranca. */
+	@Test
+	void enProdLosDirectoriosSonObligatorios() {
+		when(colegios.findByTipoOrderByIdAsc(TipoColegio.COLEGIO)).thenReturn(List.of());
+		MockEnvironment prod = new MockEnvironment();
+		prod.setActiveProfiles("prod");
+		assertThatThrownBy(() -> new VerificadorSupresion(colegios, lector, prod, new ActasEnDirectorio(""), "/tmp/x")
+				.afterPropertiesSet()).isInstanceOf(IllegalStateException.class).hasMessageContaining("CC_DIR_ACTAS");
+		assertThatThrownBy(() -> new VerificadorSupresion(colegios, lector, prod, new ActasEnDirectorio(actas.toString()),
+				" ").afterPropertiesSet()).isInstanceOf(IllegalStateException.class).hasMessageContaining(
+						"CC_DIR_EXPORTACIONES");
+		// Un directorio de actas que no existe tampoco (la copia del depósito no se hizo).
+		assertThatThrownBy(() -> new VerificadorSupresion(colegios, lector, prod, new ActasEnDirectorio(
+				actas.resolve("no-existe").toString()), "/tmp/x").afterPropertiesSet())
+				.isInstanceOf(IllegalStateException.class).hasMessageContaining("No existe");
+		new VerificadorSupresion(colegios, lector, prod, new ActasEnDirectorio(actas.toString()), "/tmp/x")
+				.afterPropertiesSet();
+		// En dev, sin ellos arranca.
+		new VerificadorSupresion(colegios, lector, new MockEnvironment(), new ActasEnDirectorio(""), "").afterPropertiesSet();
+	}
+
 	private VerificadorSupresion verificador(String perfil) {
 		MockEnvironment entorno = new MockEnvironment();
 		entorno.setActiveProfiles(perfil);
-		return new VerificadorSupresion(colegios, lector, entorno, actas.toString());
+		return new VerificadorSupresion(colegios, lector, entorno, new ActasEnDirectorio(actas.toString()), "/tmp/x");
 	}
 
 	private static Colegio colegio(Long id, EstadoColegio estado, Long acta) {

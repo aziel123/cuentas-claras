@@ -12,30 +12,20 @@ import pe.edu.virgenmaria.cuentasclaras.colegio.model.EstadoColegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.model.TipoColegio;
 import pe.edu.virgenmaria.cuentasclaras.colegio.repository.ColegioRepository;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
- * Sprint 11, tanda 2 (AP2-3 y AP2-11): al arrancar, la base no tiene nada de un colegio suprimido y tiene aplicada cada acta
- * ejecutada que vive FUERA de ella ({@code CC_DIR_ACTAS}, las que escribe {@code exportar-acta.sh}). Un respaldo restaurado
- * sin {@code reaplicar.sh} «resucita» los datos de un colegio: en prod y en el piloto la aplicación NO arranca; en dev y en
- * las pruebas, avisa en el log.
- * <ul>
- * <li>cada {@code acta-{colegio}-{id}.json} del directorio: ese colegio está SUPRIMIDO con esa acta;</li>
- * <li>cada colegio SUPRIMIDO: 0 filas en las tablas de {@code exportacion/tablas.txt} que se suprimen.</li>
- * </ul>
+ * Sprint 11, tanda 2 (AP2-3 y AP2-11) y correcciones (A1 y B3): al arrancar, la base no tiene nada de un colegio suprimido
+ * y tiene aplicada cada acta ejecutada que vive FUERA de ella ({@link FuenteActasExternas}). En prod además son
+ * obligatorios {@code CC_DIR_ACTAS} y {@code CC_DIR_EXPORTACIONES}: sin ellos (o vacíos) la aplicación NO arranca. Un respaldo
+ * restaurado sin {@code reaplicar.sh} «resucita» los datos de un colegio: en prod y en el piloto la aplicación NO arranca; en
+ * dev y en las pruebas, avisa en el log.
  */
 @Component
 public class VerificadorSupresion implements InitializingBean {
@@ -43,8 +33,6 @@ public class VerificadorSupresion implements InitializingBean {
 	/** Las tablas de la exportación que NO se suprimen (la evidencia: exclusiones.txt). */
 	static final Set<String> NO_SE_SUPRIMEN = Set.of("evento_auditoria", "huella_bitacora", "huella_hora",
 			"cambio_estado_colegio", "exportacion_colegio", "descarga_exportacion", "acta_supresion");
-
-	private static final Pattern ACTA = Pattern.compile("acta-(\\d+)-(\\d+)\\.json");
 
 	private static final Logger LOG = LoggerFactory.getLogger(VerificadorSupresion.class);
 
@@ -54,19 +42,41 @@ public class VerificadorSupresion implements InitializingBean {
 
 	private final Environment entorno;
 
-	private final String actasDir;
+	private final FuenteActasExternas fuente;
+
+	private final String directorioExportaciones;
 
 	public VerificadorSupresion(ColegioRepository colegios, LectorTablas lector, Environment entorno,
-			@Value("${cuentasclaras.supresion.actas-dir:}") String actasDir) {
+			FuenteActasExternas fuente,
+			@Value("${cuentasclaras.exportacion.directorio:}") String directorioExportaciones) {
 		this.colegios = colegios;
 		this.lector = lector;
 		this.entorno = entorno;
-		this.actasDir = actasDir;
+		this.fuente = fuente;
+		this.directorioExportaciones = directorioExportaciones == null ? "" : directorioExportaciones.strip();
 	}
 
 	@Override
 	public void afterPropertiesSet() {
+		if (entorno.acceptsProfiles(Profiles.of("prod"))) {
+			exigirConfiguracion();
+		}
 		exigir(problemas());
+	}
+
+	/** A1 y B3: en prod, los dos directorios son obligatorios (sin valor por defecto). */
+	void exigirConfiguracion() {
+		List<String> faltan = new ArrayList<>();
+		if (fuente.origen() == null || fuente.origen().isBlank()) {
+			faltan.add("CC_DIR_ACTAS (cuentasclaras.supresion.actas-dir: la copia local de las actas del depósito)");
+		}
+		if (directorioExportaciones.isEmpty()) {
+			faltan.add("CC_DIR_EXPORTACIONES (cuentasclaras.exportacion.directorio: los ZIP de las exportaciones)");
+		}
+		if (!faltan.isEmpty()) {
+			throw new IllegalStateException("En prod son obligatorios: " + String.join("; ", faltan)
+					+ ". Revisa docs/operacion/fin-de-un-colegio.md.");
+		}
 	}
 
 	/** Lo que no está en orden (vacío si todo). */
@@ -74,11 +84,12 @@ public class VerificadorSupresion implements InitializingBean {
 		List<String> problemas = new ArrayList<>();
 		Map<Long, Colegio> porId = colegios.findByTipoOrderByIdAsc(TipoColegio.COLEGIO).stream()
 				.collect(Collectors.toMap(Colegio::getId, Function.identity()));
-		for (long[] acta : actasExternas()) {
-			Colegio c = porId.get(acta[0]);
-			if (c == null || c.getEstado() != EstadoColegio.SUPRIMIDO || !Objects.equals(c.getActaSupresionId(), acta[1])) {
-				problemas.add("El acta de supresión " + acta[1] + " del colegio " + acta[0] + " está fuera de la base y la "
-						+ "base no la tiene aplicada: corre reaplicar.sh antes de abrir la aplicación.");
+		for (FuenteActasExternas.ActaExterna acta : fuente.actas()) {
+			Colegio c = porId.get(acta.colegioId());
+			if (c == null || c.getEstado() != EstadoColegio.SUPRIMIDO
+					|| !Objects.equals(c.getActaSupresionId(), acta.actaId())) {
+				problemas.add("El acta de supresión " + acta.actaId() + " del colegio " + acta.colegioId() + " está fuera de "
+						+ "la base y la base no la tiene aplicada: corre reaplicar.sh antes de abrir la aplicación.");
 			}
 		}
 		List<TablasExportacion.Tabla> tablas = TablasExportacion.cargar().stream()
@@ -107,23 +118,5 @@ public class VerificadorSupresion implements InitializingBean {
 			throw new IllegalStateException(mensaje);
 		}
 		LOG.warn("{} (en prod la aplicación no arrancaría).", mensaje);
-	}
-
-	/** {colegio, acta} de cada archivo {@code acta-{colegio}-{id}.json} del directorio (vacío si no hay directorio). */
-	List<long[]> actasExternas() {
-		if (actasDir == null || actasDir.isBlank()) {
-			return List.of();
-		}
-		Path dir = Path.of(actasDir);
-		if (!Files.isDirectory(dir)) {
-			return List.of();
-		}
-		try (Stream<Path> archivos = Files.list(dir)) {
-			return archivos.map(p -> ACTA.matcher(p.getFileName().toString())).filter(Matcher::matches)
-					.map(m -> new long[] { Long.parseLong(m.group(1)), Long.parseLong(m.group(2)) }).toList();
-		}
-		catch (IOException e) {
-			throw new UncheckedIOException(e);
-		}
 	}
 }

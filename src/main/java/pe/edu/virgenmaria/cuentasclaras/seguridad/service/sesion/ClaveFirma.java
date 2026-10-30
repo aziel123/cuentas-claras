@@ -351,24 +351,34 @@ public final class ClaveFirma {
 		return "exportacion_colegio:" + id(colegioId) + ":" + numero;
 	}
 
-	/** Sprint 11, tanda 2 (AP-11 y AP2-9): el titular autoriza conservar 12 meses (en su colegio). */
-	public static String conservacion(Long colegioId) {
-		return "colegio:" + id(colegioId) + ":CONSERVACION";
+	/** El prefijo de una clave numerada del colegio (las firmas anteriores con él cuentan el número siguiente). */
+	public static String prefijoColegio(Long colegioId, String accion) {
+		return "colegio:" + id(colegioId) + ":" + Objects.requireNonNull(accion, "accion") + ":";
 	}
 
-	/** Sprint 11, tanda 2 (AP2-9): el titular retira la autorización de conservar (en su colegio). */
-	public static String conservacionRetirada(Long colegioId) {
-		return "colegio:" + id(colegioId) + ":CONSERVACION_RETIRADA";
+	/** Sprint 11, tanda 2 (AP-11) y correcciones (A2): la vez {@code n} que el titular autoriza conservar 12 meses. */
+	public static String conservacion(Long colegioId, long n) {
+		return prefijoColegio(colegioId, "CONSERVACION") + n;
 	}
 
-	/** Sprint 11, tanda 2 (AP2-10): un operador pone la retención legal (en el colegio de plataforma). */
-	public static String retencionLegal(Long colegioId) {
-		return "colegio:" + id(colegioId) + ":RETENCION_LEGAL";
+	/** Correcciones (A2): la vez {@code n} que el titular pide retirar la autorización (se aplica a las 24 horas). */
+	public static String conservacionRetirada(Long colegioId, long n) {
+		return prefijoColegio(colegioId, "CONSERVACION_RETIRADA") + n;
 	}
 
-	/** Sprint 11, tanda 2 (AP2-10): OTRO operador quita la retención legal (en el colegio de plataforma). */
-	public static String retencionLegalRetirada(Long colegioId) {
-		return "colegio:" + id(colegioId) + ":RETENCION_LEGAL_RETIRADA";
+	/** Correcciones (A2): la vez {@code n} que un operador frena un retiro pedido (en el colegio de plataforma). */
+	public static String conservacionFrenada(Long colegioId, long n) {
+		return prefijoColegio(colegioId, "CONSERVACION_FRENADA") + n;
+	}
+
+	/** Sprint 11, tanda 2 (AP2-10) y correcciones (M1): la vez {@code n} que un operador pone la retención legal. */
+	public static String retencionLegal(Long colegioId, long n) {
+		return prefijoColegio(colegioId, "RETENCION_LEGAL") + n;
+	}
+
+	/** Correcciones (M1): la vez {@code n} que OTRO operador quita la retención legal (en el colegio de plataforma). */
+	public static String retencionLegalRetirada(Long colegioId, long n) {
+		return prefijoColegio(colegioId, "RETENCION_LEGAL_RETIRADA") + n;
 	}
 
 	/** Sprint 11, tanda 2 (3.11): un operador propone el acta de supresión del colegio (en el colegio de plataforma). */

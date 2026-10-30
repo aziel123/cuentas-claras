@@ -40,6 +40,10 @@ public interface MensajeRepository extends Repository<Mensaje, Long> {
 	/** Sprint 9, tanda 3: cuantos mensajes de un tipo se crearon desde una fecha (el consumo del mes). */
 	long countByTipoAndCreadoEnGreaterThanEqual(TipoMensaje tipo, LocalDateTime desde);
 
+	/** Correcciones del sprint 11 (QA-S11-02): los códigos de una entrega en la última hora. */
+	long countByTipoAndEntidadAndEntidadIdAndCreadoEnGreaterThanEqual(TipoMensaje tipo, String entidad, Long entidadId,
+			LocalDateTime desde);
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select m from Mensaje m where m.id = :id")
 	Optional<Mensaje> bloquear(@Param("id") Long id);

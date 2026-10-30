@@ -44,6 +44,9 @@ public class Colegio {
 
 	public static final int MAX_NOMBRE = 150;
 
+	/** Correcciones del sprint 11 (A2): el retiro de la autorización de conservación espera 24 horas. */
+	public static final int HORAS_RETIRO_CONSERVACION = 24;
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -142,6 +145,22 @@ public class Colegio {
 	private LocalDateTime conservacionAutorizadaEn;
 
 	/** Sprint 11, tanda 2 (AP2-10): la retención legal (un operador la pone y otro la quita). */
+	/** Correcciones del sprint 11 (A2, V42): el retiro pedido por el titular; se aplica a las 24 horas (la base). */
+	@Column(name = "conservacion_retiro_por", length = 60)
+	private String conservacionRetiroPor;
+
+	@Column(name = "conservacion_retiro_pedido_en")
+	private LocalDateTime conservacionRetiroPedidoEn;
+
+	@Column(name = "conservacion_retiro_aplica_desde")
+	private LocalDateTime conservacionRetiroAplicaDesde;
+
+	@Column(name = "conservacion_codigo_mensaje_id")
+	private Long conservacionCodigoMensajeId;
+
+	@Column(name = "conservacion_codigo_sha256", length = 64)
+	private String conservacionCodigoSha256;
+
 	@Column(name = "retencion_legal_motivo", length = 500)
 	private String retencionLegalMotivo;
 
@@ -305,14 +324,53 @@ public class Colegio {
 		this.conservacionAutorizadaEn = Objects.requireNonNull(ahora, "ahora");
 	}
 
-	/** Sprint 11, tanda 2 (AP2-9): el titular la retira con su firma (se avisa al correo de control). */
-	public void retirarConservacion() {
+	/** Correcciones (A2): el titular PIDE el retiro (con su firma y su código); se aplica a las 24 horas si nadie lo frena. */
+	public void pedirRetiroConservacion(String titular, Long codigoMensajeId, String codigoSha256, LocalDateTime ahora) {
 		exigirConservacionEditable();
 		if (conservacionAutorizadaPor == null) {
 			throw new ReglaNegocioException("La conservación no está autorizada.");
 		}
+		if (conservacionRetiroPor != null) {
+			throw new ReglaNegocioException("Ya pediste retirar la autorización: se aplica el "
+					+ conservacionRetiroAplicaDesde + " si nadie lo frena.");
+		}
+		this.conservacionRetiroPor = Objects.requireNonNull(titular, "titular");
+		this.conservacionCodigoMensajeId = Objects.requireNonNull(codigoMensajeId, "codigoMensajeId");
+		this.conservacionCodigoSha256 = Objects.requireNonNull(codigoSha256, "codigoSha256");
+		this.conservacionRetiroPedidoEn = ahora;
+		this.conservacionRetiroAplicaDesde = ahora.plusHours(HORAS_RETIRO_CONSERVACION);
+	}
+
+	/** Correcciones (A2): sistema.plataforma aplica el retiro vencido (24 horas). */
+	public void aplicarRetiroConservacion(LocalDateTime ahora) {
+		if (conservacionRetiroPor == null || conservacionRetiroAplicaDesde == null
+				|| conservacionRetiroAplicaDesde.isAfter(ahora)) {
+			throw new ReglaNegocioException("El retiro de la conservación todavía no se aplica.");
+		}
 		this.conservacionAutorizadaPor = null;
 		this.conservacionAutorizadaEn = null;
+		this.conservacionRetiroPor = null;
+		this.conservacionRetiroPedidoEn = null;
+		this.conservacionRetiroAplicaDesde = null;
+	}
+
+	/** Correcciones (A2): un operador frena el retiro pedido (la autorización sigue). */
+	public void frenarRetiroConservacion(String operador) {
+		if (conservacionRetiroPor == null) {
+			throw new ReglaNegocioException("No hay un retiro de la conservación por frenar.");
+		}
+		this.conservacionRetiroPor = null;
+		this.conservacionRetiroPedidoEn = null;
+		this.conservacionRetiroAplicaDesde = null;
+		this.actualizadoPor = Objects.requireNonNull(operador, "operador");
+	}
+
+	public String getConservacionRetiroPor() {
+		return conservacionRetiroPor;
+	}
+
+	public LocalDateTime getConservacionRetiroAplicaDesde() {
+		return conservacionRetiroAplicaDesde;
 	}
 
 	private void exigirConservacionEditable() {

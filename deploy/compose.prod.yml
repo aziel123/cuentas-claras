@@ -33,6 +33,11 @@ services:
     mem_limit: 1400m
     volumes:
       - /etc/cc/certs:/certs:ro
+      # Correcciones del sprint 11 (A1 y B3): los ZIP de las exportaciones (escritura, fuera de los respaldos) y la copia
+      # de las actas de supresión que cc-actas.service sincroniza del depósito con bloqueo de objetos antes de arrancar
+      # (solo lectura para la aplicación).
+      - /var/lib/cuentasclaras/exportaciones:/var/lib/cuentasclaras/exportaciones
+      - /var/lib/cuentasclaras/actas:/var/lib/cuentasclaras/actas:ro
     # 8080 NO se publica: solo Caddy lo alcanza por la red de Docker.
     networks: [cc]
     logging:

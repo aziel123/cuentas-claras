@@ -554,6 +554,10 @@ public enum AccionAuditoria {
 	CONSERVACION_AUTORIZADA("El titular autorizó la conservación de los datos", false),
 	/** AP2-9: el titular retiró la autorización de conservación. */
 	CONSERVACION_RETIRADA("El titular retiró la autorización de conservación", true),
+	/** Correcciones (A2): el titular pidió el retiro (con su código); se aplica a las 24 horas. */
+	CONSERVACION_RETIRO_PEDIDO("El titular pidió retirar la autorización de conservación", true),
+	/** Correcciones (A2): un operador frenó el retiro pedido. */
+	CONSERVACION_RETIRO_FRENADO("Un operador frenó el retiro de la autorización de conservación", true),
 	/** RevisionConservacion: la conservación vence (30 días antes y el día). */
 	CONSERVACION_POR_VENCER("La conservación de los datos del colegio vence", true),
 	/** AP2-10: un operador puso la retención legal (no se suprime). */

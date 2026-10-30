@@ -25,6 +25,9 @@ public interface ColegioRepository extends JpaRepository<Colegio, Long> {
 
 	List<Colegio> findByTipoOrderByIdAsc(TipoColegio tipo);
 
+	/** Correcciones (A2): los retiros de la conservación que ya cumplieron sus 24 horas. */
+	List<Colegio> findByConservacionRetiroAplicaDesdeLessThanEqualOrderByIdAsc(java.time.LocalDateTime hasta);
+
 	/** La única fila PLATAFORMA (V28). */
 	Optional<Colegio> findFirstByTipo(TipoColegio tipo);
 

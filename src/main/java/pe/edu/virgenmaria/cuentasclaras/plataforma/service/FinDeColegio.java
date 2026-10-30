@@ -77,6 +77,11 @@ public class FinDeColegio {
 
 	private final FirmaSesion firma;
 
+	private final pe.edu.virgenmaria.cuentasclaras.seguridad.repository.FirmaOperacionRepository firmas;
+
+	/** Correcciones (B1): con tantos intentos fallidos en total, ya no se manda otro enlace: se pide otra exportación. */
+	public static final int MAX_INTENTOS_TOTALES = 15;
+
 	private final AuditoriaService auditoria;
 
 	private final ApplicationEventPublisher eventos;
@@ -92,7 +97,9 @@ public class FinDeColegio {
 	public FinDeColegio(ColegioRepository colegios, ExportacionColegioRepository exportaciones,
 			ActaSupresionRepository actas, CambioEstadoColegioRepository cambios, TareasFinDeColegio tareas,
 			EjecucionPlataforma plataforma, FirmaSesion firma, AuditoriaService auditoria, ApplicationEventPublisher eventos,
-			DocumentoTextoPdf pdf, PlatformTransactionManager transacciones, Clock reloj) {
+			DocumentoTextoPdf pdf, PlatformTransactionManager transacciones, Clock reloj,
+			pe.edu.virgenmaria.cuentasclaras.seguridad.repository.FirmaOperacionRepository firmas) {
+		this.firmas = firmas;
 		this.colegios = colegios;
 		this.exportaciones = exportaciones;
 		this.actas = actas;
@@ -138,7 +145,7 @@ public class FinDeColegio {
 				EstadoColegio.CERRADO)
 						.contains(c.getEstado()),
 				!vigente && c.getEstado() == EstadoColegio.SUSPENDIDO, vistaActa,
-				acta.isEmpty() && finDeVida && !c.conRetencionLegal());
+				acta.isEmpty() && finDeVida && !c.conRetencionLegal(), c.getConservacionRetiroAplicaDesde());
 	}
 
 	/** Un pedido escrito del colegio: el operador la pide con su firma y la genera {@code sistema.exportacion}. */
@@ -201,6 +208,13 @@ public class FinDeColegio {
 	public void reenviarEntrega(long colegioId, long exportacionId) {
 		UsuarioAutenticado operador = operador();
 		Colegio colegio = colegio(colegioId);
+		int totales = ContextoColegio.en(colegioId, () -> lectura.execute(t -> exportaciones.findById(exportacionId)
+				.map(ExportacionColegio::getIntentosTotales).orElseThrow(() -> new RecursoNoEncontradoException(
+						"Exportación no encontrada"))));
+		if (totales >= MAX_INTENTOS_TOTALES) {
+			throw new ReglaNegocioException("Esta exportación ya acumuló " + totales + " intentos fallidos: no se manda otro "
+					+ "enlace. Pide otra exportación.");
+		}
 		if (!tareas.reenviarEntrega(colegioId, exportacionId)) {
 			throw new ReglaNegocioException("El titular no tiene correo registrado: el enlace va solo por correo. Corrige "
 					+ "su contacto (dos operadores) y vuelve a mandarlo.");
@@ -220,7 +234,8 @@ public class FinDeColegio {
 		}
 		// Antes de firmar: el motivo y que no haya otra.
 		leido.ponerRetencionLegal(motivo, operador.getUsername(), LocalDateTime.now(reloj));
-		transaccion.executeWithoutResult(t -> firma.firmar(ClaveFirma.retencionLegal(colegioId)));
+		transaccion.executeWithoutResult(t -> firma.firmar(ClaveFirma.retencionLegal(colegioId,
+				firmas.countByClaveStartingWith(ClaveFirma.prefijoColegio(colegioId, "RETENCION_LEGAL")) + 1)));
 		ContextoColegio.en(colegioId, () -> plataforma.ejecutar(() -> {
 			Colegio c = colegios.findById(colegioId).orElseThrow();
 			c.ponerRetencionLegal(motivo, operador.getUsername(), LocalDateTime.now(reloj));
@@ -242,7 +257,8 @@ public class FinDeColegio {
 		UsuarioAutenticado operador = operador();
 		Colegio leido = colegio(colegioId);
 		leido.quitarRetencionLegal(operador.getUsername());
-		transaccion.executeWithoutResult(t -> firma.firmar(ClaveFirma.retencionLegalRetirada(colegioId)));
+		transaccion.executeWithoutResult(t -> firma.firmar(ClaveFirma.retencionLegalRetirada(colegioId,
+				firmas.countByClaveStartingWith(ClaveFirma.prefijoColegio(colegioId, "RETENCION_LEGAL_RETIRADA")) + 1)));
 		ContextoColegio.en(colegioId, () -> plataforma.ejecutar(() -> {
 			Colegio c = colegios.findById(colegioId).orElseThrow();
 			String antes = c.getRetencionLegalMotivo();
@@ -257,6 +273,36 @@ public class FinDeColegio {
 		enLaPlataforma(AvisoPlataforma.Tipo.CONSERVACION, List.of("se quitó la retención legal (" + leido.getNombre() + ")",
 				"por " + operador.getUsername()), "colegio", colegioId, "RETENCION_QUITADA:" + System.nanoTime(),
 				AccionAuditoria.RETENCION_LEGAL_QUITADA, "Fin de la retención legal del colegio " + leido.getNombre() + ".");
+	}
+
+	/**
+	 * Correcciones (A2): un operador FRENA el retiro de la autorización de conservación que pidió el titular (antes de sus
+	 * 24 horas), con su firma numerada. La autorización sigue.
+	 */
+	public void frenarRetiroConservacion(long colegioId) {
+		UsuarioAutenticado operador = operador();
+		Colegio leido = colegio(colegioId);
+		if (leido.getConservacionRetiroPor() == null) {
+			throw new ReglaNegocioException("No hay un retiro de la conservación por frenar.");
+		}
+		transaccion.executeWithoutResult(t -> firma.firmar(ClaveFirma.conservacionFrenada(colegioId,
+				firmas.countByClaveStartingWith(ClaveFirma.prefijoColegio(colegioId, "CONSERVACION_FRENADA")) + 1)));
+		ContextoColegio.en(colegioId, () -> plataforma.ejecutar(() -> {
+			Colegio c = colegios.findById(colegioId).orElseThrow();
+			String titular = c.getConservacionRetiroPor();
+			c.frenarRetiroConservacion(operador.getUsername());
+			colegios.saveAndFlush(c);
+			auditoria.registrar(AccionAuditoria.CONSERVACION_RETIRO_FRENADO, "colegio", c.getId().toString(), "RETIRO",
+					"AUTORIZADA", "El operador " + operador.getUsername() + " frenó el retiro de la autorización de "
+							+ "conservación que pidió " + titular + ": la autorización sigue.");
+			eventos.publishEvent(new AvisoPlataforma(colegioId, AvisoPlataforma.Tipo.CONSERVACION,
+					List.of("un operador frenó el retiro de la autorización de conservar los datos", "la autorización sigue"),
+					"colegio", colegioId, "FRENADO:" + System.nanoTime(), null, true, true, true));
+		}));
+		enLaPlataforma(AvisoPlataforma.Tipo.CONSERVACION, List.of("se frenó el retiro de la conservación ("
+				+ leido.getNombre() + ")", "por " + operador.getUsername()), "colegio", colegioId,
+				"FRENADO:" + System.nanoTime(), AccionAuditoria.CONSERVACION_RETIRO_FRENADO, "Freno del retiro de la "
+						+ "conservación del colegio " + leido.getNombre() + ".");
 	}
 
 	/** 3.11: un operador propone el acta de supresión de un colegio CERRADO o en BAJA. */

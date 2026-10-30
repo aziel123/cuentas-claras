@@ -96,6 +96,10 @@ public class ExportacionColegio extends BaseEntity {
 	@Column(nullable = false)
 	private int descargas;
 
+	/** Correcciones (B1): los intentos fallidos de TODOS los enlaces de esta exportación (solo sube). */
+	@Column(name = "intentos_totales", nullable = false)
+	private int intentosTotales;
+
 	@Column(name = "detalle_fallo", length = 500)
 	private String detalleFallo;
 
@@ -181,6 +185,9 @@ public class ExportacionColegio extends BaseEntity {
 
 	/** AP2-4: un intento fallido de DNI o código. Al quinto se anula el enlace: hay que pedir otra entrega. */
 	public boolean intentoFallido() {
+		if (intentosFallidos < MAX_INTENTOS) {
+			intentosTotales++;
+		}
 		this.intentosFallidos = Math.min(MAX_INTENTOS, intentosFallidos + 1);
 		if (intentosFallidos >= MAX_INTENTOS) {
 			this.tokenHash = null;
@@ -321,6 +328,10 @@ public class ExportacionColegio extends BaseEntity {
 
 	public int getIntentosFallidos() {
 		return intentosFallidos;
+	}
+
+	public int getIntentosTotales() {
+		return intentosTotales;
 	}
 
 	public int getDescargas() {

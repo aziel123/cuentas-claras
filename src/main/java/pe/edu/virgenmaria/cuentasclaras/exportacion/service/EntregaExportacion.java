@@ -85,10 +85,17 @@ public class EntregaExportacion {
 
 	private final Clock reloj;
 
+	private final pe.edu.virgenmaria.cuentasclaras.comunicacion.repository.MensajeRepository mensajes;
+
+	/** Correcciones del sprint 11 (QA-S11-02): códigos de WhatsApp por hora y por exportación (también en la base). */
+	public static final int MAX_CODIGOS_POR_HORA = 3;
+
 	public EntregaExportacion(ExportacionColegioRepository exportaciones, DescargaExportacionRepository descargas,
 			ColegioRepository colegios, PrimeraPromotoriaRepository primeras, UsuarioRepository usuarios,
 			CreadorMensajes creador, DerivadorSecreto derivador, SecretosConectores secretos, AuditoriaService auditoria,
-			ApplicationEventPublisher eventos, Clock reloj) {
+			ApplicationEventPublisher eventos, Clock reloj,
+			pe.edu.virgenmaria.cuentasclaras.comunicacion.repository.MensajeRepository mensajes) {
+		this.mensajes = mensajes;
 		this.exportaciones = exportaciones;
 		this.descargas = descargas;
 		this.colegios = colegios;
@@ -160,6 +167,11 @@ public class EntregaExportacion {
 			fallido(e, "el DNI no coincide con el del contrato");
 		}
 		LocalDateTime ahora = LocalDateTime.now(reloj);
+		if (mensajes.countByTipoAndEntidadAndEntidadIdAndCreadoEnGreaterThanEqual(TipoMensaje.CODIGO_EXPORTACION,
+				"exportacion_colegio", e.getId(), ahora.minusHours(1)) >= MAX_CODIGOS_POR_HORA) {
+			throw new ReglaNegocioException("Ya te enviamos " + MAX_CODIGOS_POR_HORA + " códigos en la última hora: usa el "
+					+ "último que te llegó o vuelve a intentarlo más tarde.");
+		}
 		e.dniConfirmado(ahora);
 		Usuario titular = titular();
 		String huella = Sha256.hex("exportacion|" + e.getId());

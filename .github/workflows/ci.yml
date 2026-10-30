@@ -303,6 +303,9 @@ jobs:
       # Sprint 8, tanda 2 (decisión 118): la clave de los secretos de los conectores SOLO de este job (32 bytes en base64,
       # no es la de desarrollo). Las pruebas cifran con ella y prod arranca verificando que los descifra todos.
       CC_CLAVE_CONECTORES: "Y2ktY29uZWN0b3Jlcy1zb2xvLWRlbC1qb2ItbXlzcWw="
+      # Correcciones del sprint 11 (A1 y B3): obligatorios en prod (la copia local de las actas y los ZIP).
+      CC_DIR_ACTAS: "/tmp"
+      CC_DIR_EXPORTACIONES: "/tmp/cc-exportaciones"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -1314,6 +1317,9 @@ jobs:
       # Sprint 8, tanda 2: la clave de los secretos de los conectores (la de este job); el arranque de prod sobre la copia
       # verifica que los descifra.
       CC_CLAVE_CONECTORES: "Y2ktY29uZWN0b3Jlcy1kZWwtam9iLXJlc3BhbGRvLTE="
+      # Correcciones del sprint 11 (A1 y B3): obligatorios en prod.
+      CC_DIR_ACTAS: "/tmp"
+      CC_DIR_EXPORTACIONES: "/tmp/cc-exportaciones"
       # La clave HMAC con la que las pruebas sellaron la bitácora (perfil test): la verificación recalcula toda la cadena.
       CLAVE_HMAC_PRUEBAS: "clave-hmac-de-pruebas-no-usar-en-produccion-0001"
     steps:

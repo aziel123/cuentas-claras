@@ -18,6 +18,7 @@
 			<span th:text="|Firmada por ${conservacion.autorizadaPor} el ${#temporals.format(conservacion.autorizadaEn, 'dd/MM/yyyy HH:mm')}.|">Firmada por titular el 01/03/2027 10:00.</span>
 		</p>
 		<p data-conservacion="pendiente" th:unless="${conservacion.autorizada}"><strong>Sin autorizar.</strong></p>
+		<p data-conservacion="retiro" th:if="${conservacion.retiroAplicaDesde != null}" th:text="|Pediste retirarla: se aplica el ${#temporals.format(conservacion.retiroAplicaDesde, 'dd/MM/yyyy HH:mm')} si nadie lo frena.|">Retiro pedido.</p>
 		<ul class="lista-simple">
 			<li>Con tu autorización: las familias consultan hasta 12 meses desde que se aplica una suspensión.</li>
 			<li>Sin ella: los datos se suprimen 30 días después del cierre.</li>
@@ -32,9 +33,22 @@
 			<form method="post" th:if="${conservacion.puedeAutorizar}" th:action="@{/colegio/conservacion/autorizar}">
 				<button th:replace="~{fragments/componentes :: boton('Autorizar con mi firma', 'primario')}">Autorizar con mi firma</button>
 			</form>
-			<form method="post" th:if="${conservacion.puedeRetirar}" th:action="@{/colegio/conservacion/retirar}">
+			<form method="post" th:if="${conservacion.puedeRetirar and pedido == null}" th:action="@{/colegio/conservacion/codigo}">
 				<button th:replace="~{fragments/componentes :: boton('Retirar la autorización', 'secundario')}">Retirar la autorización</button>
 			</form>
+		</div>
+		<form class="formulario formulario-angosto" method="post" th:if="${pedido != null}" th:action="@{/colegio/conservacion/retirar}" data-conservacion="codigo">
+			<input type="hidden" name="mensajeId" th:value="${pedido.mensajeId}">
+			<div class="campo">
+				<label for="codigo">Código de WhatsApp</label>
+				<input type="text" class="input" id="codigo" name="codigo" inputmode="numeric" maxlength="6" required autocomplete="one-time-code">
+				<p class="ayuda">El retiro se aplica a las 24 horas; en ese tiempo la plataforma puede frenarlo.</p>
+			</div>
+			<div class="acciones acciones-izquierda">
+				<button th:replace="~{fragments/componentes :: boton('Pedir el retiro con mi firma', 'secundario')}">Pedir el retiro con mi firma</button>
+			</div>
+		</form>
+		<div>
 		</div>
 	</section>
 </main>

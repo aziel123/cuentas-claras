@@ -20,6 +20,12 @@
 		<h2 id="titulo-plazos">Plazos</h2>
 		<p data-conservar-hasta th:text="${fin.conservarHasta != null} ? |Las familias consultan hasta el ${#temporals.format(fin.conservarHasta, 'dd/MM/yyyy')}.| : 'Sin fecha de supresión todavía.'">Sin fecha.</p>
 		<p class="secundario" th:text="${fin.conservacionAutorizada} ? 'El titular autorizó conservar 12 meses desde la suspensión.' : 'Sin autorización: 30 días después del cierre.'">Sin autorización.</p>
+		<th:block th:if="${fin.retiroConservacionDesde != null}">
+			<p data-retiro-conservacion th:text="|El titular pidió retirar la autorización: se aplica el ${#temporals.format(fin.retiroConservacionDesde, 'dd/MM/yyyy HH:mm')}.|">Retiro pedido.</p>
+			<form method="post" th:action="@{/plataforma/colegios/{id}/fin/conservacion/frenar(id=${fin.colegioId})}">
+				<button th:replace="~{fragments/componentes :: boton('Frenar el retiro', 'secundario')}">Frenar el retiro</button>
+			</form>
+		</th:block>
 	</section>
 
 	<section class="tarjeta" aria-labelledby="titulo-exportaciones">

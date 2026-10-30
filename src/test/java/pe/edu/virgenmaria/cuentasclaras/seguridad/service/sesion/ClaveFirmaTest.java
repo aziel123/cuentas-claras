@@ -80,8 +80,9 @@ class ClaveFirmaTest {
 				ClaveFirma.cambioEstadoPropuesto(1L, 1), ClaveFirma.cambioEstado(1L, "APROBADO"),
 				ClaveFirma.anioEscolarCreado(2027), ClaveFirma.anioEscolarCambiado(1L, 0), ClaveFirma.facultadTitular(1L, 1),
 				// Sprint 11, tanda 2 (V41): la exportación a pedido, la conservación, la retención legal y el acta.
-				ClaveFirma.exportacionPedida(1L, 1), ClaveFirma.conservacion(1L), ClaveFirma.conservacionRetirada(1L),
-				ClaveFirma.retencionLegal(1L), ClaveFirma.retencionLegalRetirada(1L), ClaveFirma.actaSupresion(1L),
+				ClaveFirma.exportacionPedida(1L, 1), ClaveFirma.conservacion(1L, 1), ClaveFirma.conservacionRetirada(1L, 1),
+				ClaveFirma.conservacionFrenada(1L, 1), ClaveFirma.retencionLegal(1L, 1),
+				ClaveFirma.retencionLegalRetirada(1L, 1), ClaveFirma.actaSupresion(1L),
 				ClaveFirma.actaSupresionAprobada(1L))
 				.forEach(clave -> {
 					// El CHECK de V25 (firma_operacion.clave) y el largo de la columna.

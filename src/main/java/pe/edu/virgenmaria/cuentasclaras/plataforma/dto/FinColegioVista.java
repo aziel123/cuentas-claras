@@ -11,7 +11,7 @@ import java.util.List;
 public record FinColegioVista(Long colegioId, String colegio, String estado, LocalDate conservarHasta,
 		boolean conservacionAutorizada, String retencionMotivo, String retencionPor, LocalDateTime retencionDesde,
 		boolean puedeQuitarRetencion, List<Exportacion> exportaciones, boolean puedePedirExportacion,
-		boolean puedeExportarParaCierre, Acta acta, boolean puedeProponerActa) {
+		boolean puedeExportarParaCierre, Acta acta, boolean puedeProponerActa, LocalDateTime retiroConservacionDesde) {
 
 	public record Exportacion(Long id, String motivo, String estado, LocalDateTime generadaEn, LocalDateTime venceEn,
 			Long filas, Long bytes, String sha256Zip, String sha256Manifiesto, int descargas, String detalleFallo,

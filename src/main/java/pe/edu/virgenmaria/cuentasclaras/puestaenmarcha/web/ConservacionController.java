@@ -4,6 +4,8 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import pe.edu.virgenmaria.cuentasclaras.seguridad.service.CodigoPromotoria;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import pe.edu.virgenmaria.cuentasclaras.comun.error.ReglaNegocioException;
 import pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.ConservacionDatos;
@@ -40,11 +42,27 @@ public class ConservacionController {
 		return "redirect:/colegio/conservacion";
 	}
 
-	@PostMapping("/colegio/conservacion/retirar")
-	public String retirar(RedirectAttributes avisos) {
+	/** Correcciones (A2): el retiro pide primero el código de WhatsApp atado a esta acción. */
+	@PostMapping("/colegio/conservacion/codigo")
+	public String codigo(RedirectAttributes avisos) {
 		try {
-			conservacion.retirar();
-			avisos.addFlashAttribute("exito", "Listo: retiraste la autorización. Se avisó al correo de control.");
+			avisos.addFlashAttribute("pedido", conservacion.pedirCodigoRetiro());
+			avisos.addFlashAttribute("exito", "Te enviamos un código por WhatsApp. Vale 10 minutos.");
+		}
+		catch (ReglaNegocioException e) {
+			avisos.addFlashAttribute("error", e.getMessage());
+		}
+		return "redirect:/colegio/conservacion";
+	}
+
+	@PostMapping("/colegio/conservacion/retirar")
+	public String retirar(@RequestParam(required = false) Long mensajeId, @RequestParam(required = false) String codigo,
+			RedirectAttributes avisos) {
+		try {
+			java.time.LocalDateTime aplica = conservacion.pedirRetiro(CodigoPromotoria.Escrito.de(mensajeId, codigo));
+			avisos.addFlashAttribute("exito", "Listo: pediste retirar la autorización. Se aplica a las 24 horas ("
+					+ java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").format(aplica)
+					+ ") si nadie lo frena. Se avisó al correo de control.");
 		}
 		catch (ReglaNegocioException e) {
 			avisos.addFlashAttribute("error", e.getMessage());
