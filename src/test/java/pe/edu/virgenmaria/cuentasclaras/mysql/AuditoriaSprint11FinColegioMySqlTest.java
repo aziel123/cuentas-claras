@@ -70,6 +70,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * vuelto a crear desde 03 (es lo único que el DBA no puede mover: AP2-1). Usa nombres únicos y no limpia.
  */
 @SpringBootTest(properties = "cuentasclaras.plataforma.max-colegios=120")
+@org.springframework.context.annotation.Import(AuditoriaSprint11FinColegioMySqlTest.RelojDeHoy.class)
 @ActiveProfiles({ "test", "mysql" })
 @EnabledIfEnvironmentVariable(named = "CC_PRUEBA_MYSQL", matches = "true")
 class AuditoriaSprint11FinColegioMySqlTest {
@@ -89,6 +90,9 @@ class AuditoriaSprint11FinColegioMySqlTest {
 
 	@Autowired
 	private FinDeColegio fin;
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.puestaenmarcha.service.ConservacionDatos conservacion;
 
 	@Autowired
 	private EntregaPublica entrega;
@@ -123,6 +127,30 @@ class AuditoriaSprint11FinColegioMySqlTest {
 	@Autowired
 	private javax.sql.DataSource fuenteDatos;
 
+	/** El reloj ajustable de la aplicación, desde HOY (la base exige «ahora» en las sesiones que abre el arranque). */
+	@org.springframework.boot.test.context.TestConfiguration
+	static class RelojDeHoy {
+
+		@org.springframework.context.annotation.Bean
+		@org.springframework.context.annotation.Primary
+		pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable relojAjustable() {
+			return new pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable(java.time.Instant.now(),
+					ConfiguracionTiempo.ZONA_LIMA);
+		}
+	}
+
+	@Autowired
+	private pe.edu.virgenmaria.cuentasclaras.comun.prueba.RelojAjustable reloj;
+
+	/** El reloj de la APLICACIÓN va con el real; solo el cierre «de hace N días» lo atrasa (M2: la hora de la bitácora). */
+	private java.time.Duration desfase = java.time.Duration.ZERO;
+
+	@org.junit.jupiter.api.BeforeEach
+	void alDia() {
+		desfase = java.time.Duration.ZERO;
+		reloj.fijar(java.time.Instant.now());
+	}
+
 	@AfterEach
 	void limpiar() {
 		SecurityContextHolder.clearContext();
@@ -133,13 +161,14 @@ class AuditoriaSprint11FinColegioMySqlTest {
 	/** Del alta a la supresión: exportación, entrega, cierre, acta, suprimir.sql y la cadena que sigue verificando. */
 	@Test
 	void suprimirSqlDeUnColegioNoTocaAOtro() throws Exception {
-		Colegio a = cerrado("20600000501", "987681001");
+		// M2: el plazo se cuenta desde la hora del evento COLEGIO_CERRADO de la bitácora (encadenado): el cierre ocurrió
+		// hace 45 días en el reloj de la aplicación. Ya no hace falta (ni se puede sin que lo vea la huella) tocar triggers.
+		Colegio a = cerrado("20600000501", "987681001", 45);
 		Colegio b = suspendido("20600000502", "987681002");
 		// conservarHastaExacto (sin autorización): el cierre + 30 días.
 		assertThat(jdbc.queryForObject("SELECT conservar_hasta = DATE(cerrado_en) + INTERVAL 30 DAY AND cerrado_en = "
 				+ "estado_desde FROM colegio WHERE id = ?", Boolean.class, a.id())).isTrue();
 
-		envejecer(a.id(), 45);
 		Long acta = proponerYAprobar(a.id());
 		// actaSinCadenaVerificadaFalla: sin la verificación completa de la cadena, el DBA no la ejecuta.
 		assertThat(codigoEjecutar(acta)).isEqualTo(1644);
@@ -361,6 +390,56 @@ class AuditoriaSprint11FinColegioMySqlTest {
 				a.get("propuesto_por")))).isIn(3819, 1644, 1062);
 	}
 
+	// --------------------------------------------------------------------------- la conservación (correcciones, A2 y M1)
+
+	/** A2: la autorización con firma numerada; el retiro con firma y código, a las 24 horas, y el freno del operador. */
+	@Test
+	void elRetiroDeLaConservacionEsperaYSeFrena() {
+		Colegio c = enProduccion("20600000510", "987681010");
+		como(c.titular(), () -> ContextoColegio.en(c.id(), () -> conservacion.autorizar()));
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM firma_operacion WHERE colegio_id = ? AND clave = ?", Long.class,
+				c.id(), "colegio:" + c.id() + ":CONSERVACION:1")).isEqualTo(1L);
+		// Quitarla de un golpe: ni cc_app (el trigger: se pide, no se edita) ni cc_sistema.
+		assertThat(codigoAl(() -> jdbc.update("UPDATE colegio SET conservacion_autorizada_por = NULL, "
+				+ "conservacion_autorizada_en = NULL WHERE id = ?", c.id()))).isEqualTo(1644);
+		pe.edu.virgenmaria.cuentasclaras.seguridad.service.CodigoPromotoria.Pedido pedido = como(c.titular(),
+				() -> ContextoColegio.en(c.id(), () -> conservacion.pedirCodigoRetiro()));
+		String codigoRetiro = pe.edu.virgenmaria.cuentasclaras.comun.prueba.CodigosDePrueba.codigo(jdbc, derivador, c.id(),
+				pedido.mensajeId());
+		como(c.titular(), () -> ContextoColegio.en(c.id(), () -> conservacion.pedirRetiro(
+				new pe.edu.virgenmaria.cuentasclaras.seguridad.service.CodigoPromotoria.Escrito(pedido.mensajeId(),
+						codigoRetiro))));
+		assertThat(DbaMySql.exigir().queryForObject("SELECT conservacion_retiro_aplica_desde > cc_ahora_lima_real() + INTERVAL 23 HOUR "
+				+ "AND conservacion_autorizada_por IS NOT NULL FROM colegio WHERE id = ?", Boolean.class, c.id())).isTrue();
+		// sistema.plataforma no lo aplica antes de las 24 horas (1644).
+		assertThat(codigoAl(() -> sistema().update("UPDATE colegio SET conservacion_autorizada_por = NULL, "
+				+ "conservacion_retiro_por = NULL WHERE id = ?", c.id()))).isEqualTo(1644);
+		// Un operador lo frena con su firma numerada; la autorización sigue.
+		como(operadorA(), () -> fin.frenarRetiroConservacion(c.id()));
+		assertThat(jdbc.queryForMap("SELECT conservacion_retiro_por, conservacion_autorizada_por FROM colegio WHERE id = ?",
+				c.id())).containsEntry("conservacion_retiro_por", null).containsEntry("conservacion_autorizada_por",
+						c.titular().getNombreUsuario());
+		// M1: la retención legal con su firma numerada (dos veces) en el colegio de plataforma.
+		como(operadorA(), () -> fin.ponerRetencion(c.id(), "Oficio 245-2027 del Juzgado Civil de Lima: conservar."));
+		como(operadorB(), () -> fin.quitarRetencion(c.id()));
+		como(operadorB(), () -> fin.ponerRetencion(c.id(), "Oficio 246-2027 del Juzgado Civil de Lima: conservar."));
+		assertThat(jdbc.queryForList("SELECT clave FROM firma_operacion WHERE clave LIKE ? ORDER BY id", String.class,
+				"colegio:" + c.id() + ":RETENCION_LEGAL%")).containsExactly("colegio:" + c.id() + ":RETENCION_LEGAL:1",
+						"colegio:" + c.id() + ":RETENCION_LEGAL_RETIRADA:1", "colegio:" + c.id() + ":RETENCION_LEGAL:2");
+	}
+
+	/** B3: cadena_verificada_en solo con la verificación ÍNTEGRA de sistema.auditoria de hace 10 minutos o menos. */
+	@Test
+	void laCadenaDelActaLaAnotaSoloSistemaAuditoria() {
+		Colegio c = cerrado("20600000511", "987681011");
+		Long acta = proponerYAprobar(c.id());
+		assertThat(codigoAl(() -> sistema().update("UPDATE acta_supresion SET cadena_verificada_en = NOW(6) WHERE id = ?",
+				acta))).isEqualTo(1644);
+		como(operadorB(), () -> fin.verificarCadena(c.id()));
+		assertThat(jdbc.queryForObject("SELECT cadena_verificada_en IS NOT NULL FROM acta_supresion WHERE id = ?",
+				Boolean.class, acta)).isTrue();
+	}
+
 	// ------------------------------------------------------------------------------------------ la suspensión (1c)
 
 	/** f1SuspensionAntesDe30DiasFalla: la espera de 30 días la pone la base; antes, ni sistema.plataforma la aplica. */
@@ -438,12 +517,21 @@ class AuditoriaSprint11FinColegioMySqlTest {
 		Long id = suspensionAprobada(c.id());
 		DbaMySql.exigir().update("UPDATE cambio_estado_colegio SET efectiva_desde = cc_ahora_lima_real() - INTERVAL 1 MINUTE WHERE id = ?",
 				id);
+		reloj.fijar(java.time.Instant.now());
 		assertThat(aplicacion.enColegio(c.id())).isEqualTo(1);
 		return c;
 	}
 
-	/** Suspendido, la exportación entregada al titular (DNI, código y una descarga) y cerrado por dos operadores. */
 	private Colegio cerrado(String ruc, String celular) {
+		return cerrado(ruc, celular, 0);
+	}
+
+	/**
+	 * Suspendido, la exportación entregada al titular (DNI, código y una descarga) y cerrado por dos operadores. Con
+	 * {@code haceDias}, el cierre lo aplica la aplicación con su reloj atrasado (las sesiones de los operadores ya están
+	 * abiertas) y el DBA mueve la fecha efectiva, como en las demás pruebas: el evento COLEGIO_CERRADO queda de esa fecha.
+	 */
+	private Colegio cerrado(String ruc, String celular, int haceDias) {
 		Colegio c = suspendido(ruc, celular);
 		String token = token(c.id());
 		entrega.confirmarDni(token, c.dni());
@@ -452,8 +540,30 @@ class AuditoriaSprint11FinColegioMySqlTest {
 		entrega.descargar(token, codigo, "203.0.113.9");
 		Long cierre = como(operadorA(), () -> cambios.proponer(c.id(), TipoCambioEstado.CIERRE, MotivoCambioEstado.FALTA_PAGO,
 				"El colegio no pagó y recibió su exportación: se cierra.", "Carta 2027-" + c.id()));
-		como(operadorB(), () -> cambios.aprobar(c.id(), cierre));
+		if (haceDias > 0) {
+			ingresar(operadorB());
+			SecurityContextHolder.clearContext();
+			desfase = java.time.Duration.ofDays(haceDias);
+		}
+		try {
+			como(operadorB(), () -> cambios.aprobar(c.id(), cierre));
+			if (!"CERRADO".equals(jdbc.queryForObject("SELECT estado FROM colegio WHERE id = ?", String.class, c.id()))) {
+				DbaMySql.exigir().update("UPDATE cambio_estado_colegio SET efectiva_desde = cc_ahora_lima_real() - INTERVAL "
+						+ (haceDias + 1) + " DAY WHERE id = ?", cierre);
+				reloj.fijar(java.time.Instant.now().minus(desfase));
+				assertThat(aplicacion.enColegio(c.id())).isEqualTo(1);
+			}
+		}
+		finally {
+			desfase = java.time.Duration.ZERO;
+			reloj.fijar(java.time.Instant.now());
+		}
 		assertThat(jdbc.queryForObject("SELECT estado FROM colegio WHERE id = ?", String.class, c.id())).isEqualTo("CERRADO");
+		if (haceDias > 0) {
+			assertThat(DbaMySql.exigir().queryForObject("SELECT MAX(ocurrido_en) < cc_ahora_lima_real() - INTERVAL " + (haceDias - 1)
+					+ " DAY FROM evento_auditoria WHERE colegio_id = ? AND accion = 'COLEGIO_CERRADO'", Boolean.class, c.id()))
+					.isTrue();
+		}
 		return c;
 	}
 
@@ -464,28 +574,49 @@ class AuditoriaSprint11FinColegioMySqlTest {
 		return acta;
 	}
 
-	/**
-	 * Como el DBA de las pruebas: los cambios aplicados del colegio, {@code dias} atrás. El trigger que lo impide (AP2-1) se
-	 * retira un momento y se vuelve a crear con su texto de 03 (su huella no cambia).
-	 */
-	private void envejecer(long colegio, int dias) throws Exception {
-		String cuerpo = trigger("trg_cambio_estado_colegio_estado");
-		JdbcTemplate dba = DbaMySql.exigir();
-		dba.execute("DROP TRIGGER IF EXISTS trg_cambio_estado_colegio_estado");
-		try {
-			dba.update("UPDATE cambio_estado_colegio SET aplicado_en = aplicado_en - INTERVAL " + dias + " DAY WHERE "
-					+ "colegio_id = ? AND estado = 'APLICADO'", colegio);
+	/** Los triggers de 03 (nombre y su CREATE), como los vuelve a crear el DBA al cargar 03 completo. */
+	private static Map<String, String> triggers() throws Exception {
+		String texto = Files.readString(Path.of("scripts", "mysql", "03-triggers.sql"), StandardCharsets.UTF_8);
+		Map<String, String> cuerpos = new LinkedHashMap<>();
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?m)^CREATE TRIGGER (\\w+) ").matcher(texto);
+		while (m.find()) {
+			int hasta = texto.indexOf("END$$", m.start());
+			cuerpos.put(m.group(1), texto.substring(m.start(), hasta + 3));
 		}
-		finally {
-			dba.execute(cuerpo);
-		}
+		return cuerpos;
 	}
 
-	private static String trigger(String nombre) throws Exception {
-		String texto = Files.readString(Path.of("scripts", "mysql", "03-triggers.sql"), StandardCharsets.UTF_8);
-		int desde = texto.indexOf("CREATE TRIGGER " + nombre + " ");
-		int hasta = texto.indexOf("END$$", desde);
-		return texto.substring(desde, hasta + 3);
+	/**
+	 * M2: un trigger que el DBA vuelve a crear DESPUÉS de cargar 03 (DROP/CREATE, aunque sea con el mismo texto) ya no da su
+	 * huella en huellas_objetos(): da «recreado <fecha>» y prod no arranca. Cargar todos juntos (como 03) lo arregla.
+	 */
+	@Test
+	void unTriggerRecreadoDespuesDeCargar03NoPasaLasHuellas() throws Exception {
+		JdbcTemplate dba = DbaMySql.exigir();
+		// Los segundos desde el primer trigger de 03, en el reloj y la zona de la base.
+		Long desde = dba.queryForObject("SELECT TIMESTAMPDIFF(SECOND, MIN(CREATED), NOW()) FROM information_schema.TRIGGERS "
+				+ "WHERE TRIGGER_SCHEMA = 'cuentasclaras'", Long.class);
+		long espera = (125 - desde) * 1000;
+		if (espera > 0) {
+			Thread.sleep(espera);
+		}
+		Map<String, String> cuerpos = triggers();
+		assertThat(cuerpos).hasSize(124);
+		String nombre = "trg_mensaje_envio";
+		try {
+			dba.execute("DROP TRIGGER " + nombre);
+			dba.execute(cuerpos.get(nombre));
+			String huellas = jdbc.queryForObject("SELECT huellas_objetos()", String.class);
+			assertThat(huellas).contains("\"" + nombre + "\": \"recreado ");
+		}
+		finally {
+			// Como cargar 03 completo: todos se vuelven a crear juntos y las huellas vuelven a ser las del jar.
+			for (Map.Entry<String, String> t : cuerpos.entrySet()) {
+				dba.execute("DROP TRIGGER IF EXISTS " + t.getKey());
+				dba.execute(t.getValue());
+			}
+		}
+		assertThat(jdbc.queryForObject("SELECT huellas_objetos()", String.class)).doesNotContain("recreado");
 	}
 
 	/** El código de error al pasar el acta a EJECUTANDO como el DBA (0 si pasó). */
@@ -590,7 +721,14 @@ class AuditoriaSprint11FinColegioMySqlTest {
 	}
 
 	private <T> T como(Usuario quien, java.util.function.Supplier<T> accion) {
-		ingresar(quien);
+		reloj.fijar(java.time.Instant.now().minus(desfase));
+		if (desfase.isZero()) {
+			ingresar(quien);
+		}
+		else {
+			// Con el reloj atrasado no nace una sesión (la base exige «ahora»): se usa la que ya está abierta.
+			UsuariosDePrueba.iniciarSesion(quien);
+		}
 		try {
 			return accion.get();
 		}

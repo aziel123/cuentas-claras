@@ -25,6 +25,15 @@ exportación. Con **retención legal** (pedido escrito de una autoridad o un lit
 
 El ZIP vive en `CC_DIR_EXPORTACIONES` (fuera de los respaldos). Se abre con 7-Zip o con el Explorador de Windows 11.
 
+**Despliegue (correcciones del sprint 11, A1 y B3):** en prod `CC_DIR_EXPORTACIONES` y `CC_DIR_ACTAS` son obligatorios (sin
+ellos no arranca). En la VM, `/etc/cc/instalacion.env` lleva `CC_ACTAS_DEPOSITO` (el remoto de rclone del depósito de los
+respaldos, prefijo `actas/`) y se habilita `deploy/systemd/cc-actas.service`, que antes de Docker copia las actas a
+`/var/lib/cuentasclaras/actas` (la aplicación la monta de solo lectura).
+
+**Conservación (correcciones, A2):** el titular la autoriza con su firma (se puede volver a dar). Para retirarla pide un
+código por WhatsApp y firma: el retiro se aplica a las 24 horas. En ese tiempo un operador puede **Frenar el retiro**
+(Exportación y supresión). Con una suspensión aprobada no cambia.
+
 ## 3. Cierre
 Dos operadores proponen y aprueban **Cerrar** (SUSPENDIDO → CERRADO). La base exige la exportación del mismo colegio,
 generada después de la suspensión, ENTREGADA o con 30 días. Se avisa al titular, a la Promotoría, al correo institucional y
